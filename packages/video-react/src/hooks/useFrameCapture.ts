@@ -437,7 +437,7 @@ interface CaptureRasterSize {
   height: number;
 }
 
-type CaptureImageDataUrlCache = Map<string, Promise<string | null>>;
+type CaptureImageDataUrlCache = Map<string, Promise<string>>;
 
 function parseAbsoluteSvgLength(value: string | null): number {
   if (!value) return 0;
@@ -530,16 +530,16 @@ function blobToDataUrl(blob: Blob, source: string): Promise<string> {
 function resolveCaptureImageDataUrl(
   source: string,
   cache: CaptureImageDataUrlCache,
-): Promise<string | null> {
+): Promise<string> {
   const cached = cache.get(source);
   if (cached) return cached;
 
-  const pending = fetch(source)
-    .then(async (response) => {
-      if (!response.ok) return null;
-      return blobToDataUrl(await response.blob(), source);
-    })
-    .catch(() => null);
+  const pending = fetch(source).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(`Image could not be loaded for SVG capture: ${source}`);
+    }
+    return blobToDataUrl(await response.blob(), source);
+  });
   cache.set(source, pending);
   return pending;
 }
@@ -582,7 +582,7 @@ function captureImageReference(element: Element): {
 async function embedCaptureSvgImages(
   svg: SVGSVGElement,
   cache: CaptureImageDataUrlCache,
-): Promise<boolean> {
+): Promise<void> {
   const references = Array.from(svg.querySelectorAll('image, img'))
     .map(captureImageReference)
     .filter((reference): reference is NonNullable<typeof reference> => reference !== null);
@@ -590,20 +590,20 @@ async function embedCaptureSvgImages(
   for (const reference of references) {
     if (/^data:/i.test(reference.source) || reference.source.startsWith('#')) continue;
     const dataUrl = await resolveCaptureImageDataUrl(reference.source, cache);
-    if (!dataUrl) return false;
     reference.replace(dataUrl);
   }
-  return true;
 }
 
 /**
  * Replace full-slide SVGs in html2canvas's disposable document clone with
- * ordinary canvases backed by closeable ImageBitmaps.
+ * ordinary canvases decoded through short-lived HTMLImageElements.
  *
  * Without this step html2canvas serializes every SVG to a unique data URL and
  * asks Chromium to decode it as a new full-resolution image on every frame.
  * Chromium can retain those decoded native surfaces long after the clone iframe
- * is removed, so long exports grow by several megabytes per frame.
+ * is removed, so long exports grow by several megabytes per frame. Chromium
+ * cannot decode serialized SVG Blobs directly with createImageBitmap, so the
+ * browser-compatible image decoder must run first.
  */
 export async function rasterizeCaptureSvgClones(
   originalRoot: HTMLElement,
@@ -611,8 +611,6 @@ export async function rasterizeCaptureSvgClones(
   transientCanvases: HTMLCanvasElement[] = [],
   imageDataUrls: CaptureImageDataUrlCache = new Map(),
 ): Promise<HTMLCanvasElement[]> {
-  if (typeof createImageBitmap !== 'function') return transientCanvases;
-
   const originalSvgs = Array.from(
     originalRoot.querySelectorAll<SVGSVGElement>(CAPTURE_SVG_SELECTOR),
   );
@@ -626,32 +624,52 @@ export async function rasterizeCaptureSvgClones(
 
     let bitmap: ImageBitmap | null = null;
     let replacement: HTMLCanvasElement | null = null;
+    let image: HTMLImageElement | null = null;
     try {
-      if (!(await embedCaptureSvgImages(svg, imageDataUrls))) continue;
+      await embedCaptureSvgImages(svg, imageDataUrls);
+      const containsForeignObject = svg.querySelector('foreignObject') !== null;
       const serializedSvg = new XMLSerializer().serializeToString(svg);
-      bitmap = await createImageBitmap(new Blob([serializedSvg], { type: 'image/svg+xml' }));
+      image = svg.ownerDocument.createElement('img');
+      image.decoding = 'sync';
+      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serializedSvg)}`;
+      await waitForImageDecode(image);
+
+      // A closeable bitmap gives Chromium an explicit lifetime for its native
+      // decoded surface. Drawing the already-decoded image remains a bounded
+      // fallback for browsers that cannot create a bitmap from it.
+      //
+      // Chromium taints ImageBitmaps created from SVGs containing foreignObject,
+      // even though drawing the decoded HTMLImageElement directly remains
+      // origin-clean.
+      if (!containsForeignObject && typeof createImageBitmap === 'function') {
+        try {
+          bitmap = await createImageBitmap(image);
+        } catch {
+          bitmap = null;
+        }
+      }
+
       replacement = svg.ownerDocument.createElement('canvas');
       replacement.width = width;
       replacement.height = height;
       copyCaptureSvgPresentation(svg, replacement);
       const context = replacement.getContext('2d');
       if (!context) {
-        replacement.width = 0;
-        replacement.height = 0;
-        continue;
+        throw new Error('Could not create the SVG capture canvas context');
       }
-      context.drawImage(bitmap, 0, 0, width, height);
+      context.drawImage(bitmap ?? image, 0, 0, width, height);
       svg.replaceWith(replacement);
       transientCanvases.push(replacement);
-    } catch {
-      // If this browser cannot decode a particular SVG as an ImageBitmap,
-      // leave that SVG in place and let html2canvas use its normal fallback.
+    } catch (error) {
       if (replacement && !replacement.isConnected) {
         replacement.width = 0;
         replacement.height = 0;
       }
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Could not rasterize a full-slide SVG for frame capture: ${detail}`);
     } finally {
       bitmap?.close();
+      image?.removeAttribute('src');
     }
   }
 

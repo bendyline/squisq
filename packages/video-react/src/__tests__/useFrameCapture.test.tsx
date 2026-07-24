@@ -32,11 +32,32 @@ vi.mock('@bendyline/squisq-react', () => ({
 }));
 vi.mock('html2canvas', () => ({ default: frameCaptureMocks.html2canvas }));
 
+const originalImageDecodeDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLImageElement.prototype,
+  'decode',
+);
+
+function stubImageDecode(implementation: (image: HTMLImageElement) => Promise<void>) {
+  const decode = vi.fn(function (this: HTMLImageElement) {
+    return implementation(this);
+  });
+  Object.defineProperty(HTMLImageElement.prototype, 'decode', {
+    configurable: true,
+    value: decode,
+  });
+  return decode;
+}
+
 beforeEach(() => vi.clearAllMocks());
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  if (originalImageDecodeDescriptor) {
+    Object.defineProperty(HTMLImageElement.prototype, 'decode', originalImageDecodeDescriptor);
+  } else {
+    Reflect.deleteProperty(HTMLImageElement.prototype, 'decode');
+  }
 });
 
 describe('waitForVisualUpdate', () => {
@@ -204,8 +225,13 @@ describe('capture clone raster lifetime', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       drawImage,
     } as unknown as CanvasRenderingContext2D);
+    const decode = stubImageDecode(async () => undefined);
     const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
-    const createBitmap = vi.fn(async () => bitmap);
+    let decodedSvgSource = '';
+    const createBitmap = vi.fn(async (source: HTMLImageElement) => {
+      decodedSvgSource = source.src;
+      return bitmap;
+    });
     vi.stubGlobal('createImageBitmap', createBitmap);
 
     const transientCanvases = await rasterizeCaptureSvgClones(originalRoot, clonedRoot);
@@ -218,9 +244,12 @@ describe('capture clone raster lifetime', () => {
     expect(replacement.style.opacity).toBe('0.75');
     expect(replacement.width).toBe(800);
     expect(replacement.height).toBe(450);
-    expect(createBitmap).toHaveBeenCalledWith(expect.any(Blob));
+    expect(decode).toHaveBeenCalledOnce();
+    expect(decodedSvgSource).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+    expect(createBitmap).toHaveBeenCalledWith(expect.any(HTMLImageElement));
     expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 800, 450);
     expect(bitmap.close).toHaveBeenCalledOnce();
+    expect((createBitmap.mock.calls[0][0] as HTMLImageElement).getAttribute('src')).toBeNull();
     expect(transientCanvases).toEqual([replacement]);
 
     releaseCaptureCloneCanvases(transientCanvases);
@@ -247,23 +276,17 @@ describe('capture clone raster lifetime', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
       drawImage: vi.fn(),
     } as unknown as CanvasRenderingContext2D);
-    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
     let serializedSvg = '';
-    vi.stubGlobal(
-      'createImageBitmap',
-      vi.fn(async (source: Blob) => {
-        serializedSvg = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.addEventListener('load', () => resolve(String(reader.result)), { once: true });
-          reader.addEventListener('error', () => reject(reader.error), { once: true });
-          reader.readAsText(source);
-        });
-        return bitmap;
-      }),
-    );
+    stubImageDecode(async (image) => {
+      const separator = image.src.indexOf(',');
+      serializedSvg = decodeURIComponent(image.src.slice(separator + 1));
+    });
+    const createBitmap = vi.fn();
+    vi.stubGlobal('createImageBitmap', createBitmap);
 
     await rasterizeCaptureSvgClones(originalRoot, clonedRoot);
 
+    expect(createBitmap).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith('blob:pasted-screen-clip');
     expect(serializedSvg).toContain('data:image/png;base64,AQID');
@@ -271,10 +294,15 @@ describe('capture clone raster lifetime', () => {
     expect(clonedRoot.querySelector('canvas[data-svg-capture-clone="true"]')).not.toBeNull();
   });
 
-  it('leaves an SVG for html2canvas when the browser cannot decode its bitmap', async () => {
+  it('draws the decoded image when the browser cannot create an ImageBitmap from it', async () => {
     const originalRoot = document.createElement('div');
     originalRoot.innerHTML = '<svg class="block-svg" viewBox="0 0 640 360"></svg>';
     const clonedRoot = originalRoot.cloneNode(true) as HTMLElement;
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    stubImageDecode(async () => undefined);
     vi.stubGlobal(
       'createImageBitmap',
       vi.fn(async () => {
@@ -284,8 +312,48 @@ describe('capture clone raster lifetime', () => {
 
     const transientCanvases = await rasterizeCaptureSvgClones(originalRoot, clonedRoot);
 
+    expect(clonedRoot.querySelector('svg.block-svg')).toBeNull();
+    expect(transientCanvases).toHaveLength(1);
+    expect(drawImage).toHaveBeenCalledWith(expect.any(HTMLImageElement), 0, 0, 640, 360);
+  });
+
+  it('rejects instead of returning to html2canvas when an SVG image cannot be embedded', async () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML =
+      '<svg class="block-svg" viewBox="0 0 640 360">' +
+      '<image href="blob:missing-screen-clip"></image></svg>';
+    const clonedRoot = originalRoot.cloneNode(true) as HTMLElement;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+    } as Response);
+    const createBitmap = vi.fn();
+    vi.stubGlobal('createImageBitmap', createBitmap);
+
+    await expect(rasterizeCaptureSvgClones(originalRoot, clonedRoot)).rejects.toThrow(
+      'Could not rasterize a full-slide SVG for frame capture: ' +
+        'Image could not be loaded for SVG capture: blob:missing-screen-clip',
+    );
+
+    expect(createBitmap).not.toHaveBeenCalled();
     expect(clonedRoot.querySelector('svg.block-svg')).not.toBeNull();
-    expect(transientCanvases).toEqual([]);
+  });
+
+  it('rejects instead of returning to html2canvas when the standalone SVG cannot decode', async () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML = '<svg class="block-svg" viewBox="0 0 640 360"></svg>';
+    const clonedRoot = originalRoot.cloneNode(true) as HTMLElement;
+    stubImageDecode(async () => {
+      throw new Error('SVG image decode unavailable');
+    });
+    const createBitmap = vi.fn();
+    vi.stubGlobal('createImageBitmap', createBitmap);
+
+    await expect(rasterizeCaptureSvgClones(originalRoot, clonedRoot)).rejects.toThrow(
+      'Could not rasterize a full-slide SVG for frame capture: SVG image decode unavailable',
+    );
+
+    expect(createBitmap).not.toHaveBeenCalled();
+    expect(clonedRoot.querySelector('svg.block-svg')).not.toBeNull();
   });
 });
 
