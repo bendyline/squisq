@@ -69,4 +69,14 @@ describe('createMp4Muxer audio track', () => {
     const mp4 = muxer.finalize();
     expect(containsFourCC(mp4, 'mp4a')).toBe(false);
   });
+
+  it('finalizes the streamed chunks directly into an MP4 Blob', () => {
+    const muxer = createMp4Muxer({ width: 320, height: 240, fps: 30 });
+    addStubVideoSample(muxer);
+
+    const blob = muxer.finalizeBlob();
+
+    expect(blob.type).toBe('video/mp4');
+    expect(blob.size).toBeGreaterThan(0);
+  });
 });

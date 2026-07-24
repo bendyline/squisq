@@ -52,6 +52,8 @@ export interface MainThreadEncoder {
   addAudioChunk?(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata): void;
   /** Flush pending frames and finalize the MP4. Returns the MP4 ArrayBuffer. */
   finalize(): Promise<ArrayBuffer>;
+  /** Finalize directly into a Blob, avoiding a second full-file allocation. */
+  finalizeBlob?(): Promise<Blob>;
   /** Close the encoder without producing output (e.g., on cancel). */
   close(): void;
 }
@@ -195,6 +197,39 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
 
   encoder = createConfiguredVideoEncoder();
 
+  async function finishVideoEncoding(): Promise<void> {
+    if (closed) throw new Error('Encoder already closed');
+    let recoveryAttempts = 0;
+    while (true) {
+      if (fatalError) throw fail(fatalError);
+      if (recoverableError) {
+        if (recoveryAttempts >= MAX_CODEC_RECOVERY_ATTEMPTS) {
+          throw fail(recoverableError);
+        }
+        recoverCodec();
+        recoveryAttempts++;
+      }
+      try {
+        await encoder.flush();
+      } catch (caught: unknown) {
+        const error = toError(caught);
+        if (!recoverableError && isReclaimedCodecError(error)) {
+          recoverableError = error;
+        }
+        // `flush()` commonly rejects with a generic InvalidStateError after
+        // the error callback reported the recoverable inactivity cause.
+        if (recoverableError && recoveryAttempts < MAX_CODEC_RECOVERY_ATTEMPTS) continue;
+        throw fail(fatalError ?? recoverableError ?? error);
+      }
+      // Either callback can fire while in-flight frames drain.
+      if (fatalError) throw fail(fatalError);
+      if (recoverableError) continue;
+      break;
+    }
+    encoder.close();
+    closed = true;
+  }
+
   return {
     async encodeFrame(source: EncoderFrameSource, frameIndex: number): Promise<void> {
       try {
@@ -264,37 +299,13 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
     },
 
     async finalize(): Promise<ArrayBuffer> {
-      if (closed) throw new Error('Encoder already closed');
-      let recoveryAttempts = 0;
-      while (true) {
-        if (fatalError) throw fail(fatalError);
-        if (recoverableError) {
-          if (recoveryAttempts >= MAX_CODEC_RECOVERY_ATTEMPTS) {
-            throw fail(recoverableError);
-          }
-          recoverCodec();
-          recoveryAttempts++;
-        }
-        try {
-          await encoder.flush();
-        } catch (caught: unknown) {
-          const error = toError(caught);
-          if (!recoverableError && isReclaimedCodecError(error)) {
-            recoverableError = error;
-          }
-          // `flush()` commonly rejects with a generic InvalidStateError after
-          // the error callback reported the recoverable inactivity cause.
-          if (recoverableError && recoveryAttempts < MAX_CODEC_RECOVERY_ATTEMPTS) continue;
-          throw fail(fatalError ?? recoverableError ?? error);
-        }
-        // Either callback can fire while in-flight frames drain.
-        if (fatalError) throw fail(fatalError);
-        if (recoverableError) continue;
-        break;
-      }
-      encoder.close();
-      closed = true;
+      await finishVideoEncoding();
       return muxer.finalize();
+    },
+
+    async finalizeBlob(): Promise<Blob> {
+      await finishVideoEncoding();
+      return muxer.finalizeBlob();
     },
 
     close() {

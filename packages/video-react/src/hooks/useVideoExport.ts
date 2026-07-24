@@ -635,8 +635,10 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         // entire workspace; downloading that workspace makes export memory scale
         // with unrelated customer files instead of with the exported document.
         let images = config.images;
+        let ownsLoadedImages = false;
         if (!images && config.mediaProvider) {
           images = new Map<string, ArrayBuffer>();
+          ownsLoadedImages = true;
           const entries = await config.mediaProvider.listMedia();
           const references = collectDocumentMediaReferences(doc);
           const neededEntries = entries.filter(
@@ -748,29 +750,33 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
               mediaProvider: config.mediaProvider,
               resourcePolicy: config.resourcePolicy,
             });
-            const missingSources = [...new Set(timeline.map((clip) => clip.src))].filter(
-              (src) => !buffers.has(src),
-            );
-            if (missingSources.length > 0) {
-              audioReasonLocal = `Audio files could not be loaded: ${missingSources.join(', ')}`;
-              if (audioPolicy === 'require') throw new Error(audioReasonLocal);
-            }
-            if (buffers.size === 0) {
-              audioReasonLocal ??= 'Audio files for this document could not be loaded.';
-            } else {
-              const totalAudioDur = timeline.reduce(
-                (max, c) => Math.max(max, c.startSec + c.durationSec),
-                exportDuration,
+            try {
+              const missingSources = [...new Set(timeline.map((clip) => clip.src))].filter(
+                (src) => !buffers.has(src),
               );
-              renderedAudio = await renderAudioTimeline(
-                timeline,
-                buffers,
-                totalAudioDur,
-                EXPORT_AUDIO_SAMPLE_RATE,
-              );
-              if (!renderedAudio) {
-                audioReasonLocal = 'No included video source contained a decodable audio track.';
+              if (missingSources.length > 0) {
+                audioReasonLocal = `Audio files could not be loaded: ${missingSources.join(', ')}`;
+                if (audioPolicy === 'require') throw new Error(audioReasonLocal);
               }
+              if (buffers.size === 0) {
+                audioReasonLocal ??= 'Audio files for this document could not be loaded.';
+              } else {
+                const totalAudioDur = timeline.reduce(
+                  (max, c) => Math.max(max, c.startSec + c.durationSec),
+                  exportDuration,
+                );
+                renderedAudio = await renderAudioTimeline(
+                  timeline,
+                  buffers,
+                  totalAudioDur,
+                  EXPORT_AUDIO_SAMPLE_RATE,
+                );
+                if (!renderedAudio) {
+                  audioReasonLocal = 'No included video source contained a decodable audio track.';
+                }
+              }
+            } finally {
+              buffers.clear();
             }
           } catch (audioErr: unknown) {
             renderedAudio = null;
@@ -833,6 +839,35 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
               'fallback requires SharedArrayBuffer (Cross-Origin-Isolation headers).',
           );
         }
+
+        // Encode inline AAC before frame capture, then drop the multi-minute
+        // mixed PCM buffer. Holding it throughout thousands of frames adds
+        // roughly 90 MiB for a four-minute stereo export and keeps decoded
+        // source buffers alive under memory pressure.
+        if (useInlineAudio && renderedAudio && encoder.addAudioChunk) {
+          setPhase('Encoding audio…');
+          try {
+            await encodeAacTrack(
+              renderedAudio,
+              { addAudioChunk: encoder.addAudioChunk.bind(encoder) },
+              audioBitrate,
+            );
+            audioIncludedLocal = true;
+          } catch (audioErr: unknown) {
+            audioIncludedLocal = false;
+            audioReasonLocal = `Audio encoding failed: ${
+              audioErr instanceof Error ? audioErr.message : String(audioErr)
+            }`;
+            if (audioPolicy === 'require') throw new Error(audioReasonLocal);
+          } finally {
+            renderedAudio = null;
+          }
+        }
+
+        // The capture provider now owns Blob URLs and independent size
+        // metadata, so provider-loaded byte arrays are no longer needed.
+        if (ownsLoadedImages) images?.clear();
+        images = undefined;
 
         if (cancelledRef.current) return;
 
@@ -927,33 +962,17 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
 
         if (cancelledRef.current) return;
 
-        // ── Step 4a: Inline audio (tier 1) ────────────────────────
-        // Encode the rendered audio into the same muxer before finalizing.
-        if (useInlineAudio && renderedAudio && encoder.addAudioChunk) {
-          setState('encoding');
-          setPhase('Encoding audio…');
-          try {
-            await encodeAacTrack(
-              renderedAudio,
-              { addAudioChunk: encoder.addAudioChunk.bind(encoder) },
-              audioBitrate,
-            );
-            audioIncludedLocal = true;
-          } catch (audioErr: unknown) {
-            audioIncludedLocal = false;
-            audioReasonLocal = `Audio encoding failed: ${
-              audioErr instanceof Error ? audioErr.message : String(audioErr)
-            }`;
-            if (audioPolicy === 'require') throw new Error(audioReasonLocal);
-          }
-        }
-
         // ── Step 4: Finalize MP4 (or GIF's MP4 intermediate) ─────
         setState('encoding');
         setPhase(effectiveOutputFormat === 'gif' ? 'Finalizing GIF frames…' : 'Finalizing video…');
         setProgress(95);
 
-        let outputBytes: ArrayBuffer | Uint8Array = await encoder.finalize();
+        // Normal MP4 downloads can keep the muxer's exact-sized chunks as Blob
+        // parts. GIF and ffmpeg audio muxing still require contiguous bytes.
+        let outputBytes: ArrayBuffer | Uint8Array | Blob =
+          effectiveOutputFormat === 'mp4' && !useFfmpegAudio && encoder.finalizeBlob
+            ? await encoder.finalizeBlob()
+            : await encoder.finalize();
         encoderRef.current = null;
 
         if (cancelledRef.current) return;
@@ -962,7 +981,11 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         if (effectiveOutputFormat === 'gif') {
           setPhase('Generating GIF palette…');
           const videoOnly =
-            outputBytes instanceof Uint8Array ? outputBytes : new Uint8Array(outputBytes);
+            outputBytes instanceof Blob
+              ? new Uint8Array(await outputBytes.arrayBuffer())
+              : outputBytes instanceof Uint8Array
+                ? outputBytes
+                : new Uint8Array(outputBytes);
           const gifAbort = new AbortController();
           gifAbortRef.current = gifAbort;
           try {
@@ -981,7 +1004,11 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
           try {
             const wav = audioBufferToWav(renderedAudio);
             const videoOnly =
-              outputBytes instanceof Uint8Array ? outputBytes : new Uint8Array(outputBytes);
+              outputBytes instanceof Blob
+                ? new Uint8Array(await outputBytes.arrayBuffer())
+                : outputBytes instanceof Uint8Array
+                  ? outputBytes
+                  : new Uint8Array(outputBytes);
             outputBytes = await muxAudioWithFfmpegWasm(
               videoOnly,
               wav,
@@ -1001,18 +1028,27 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         if (cancelledRef.current) return;
 
         // ── Step 5: Create download URL ───────────────────────────
-        // Normalize to a plain ArrayBuffer-backed view for Blob (ffmpeg.wasm
-        // output may be typed over SharedArrayBuffer).
-        const finalBytes =
-          outputBytes instanceof Uint8Array ? outputBytes.slice() : new Uint8Array(outputBytes);
         const mimeType = effectiveOutputFormat === 'gif' ? 'image/gif' : 'video/mp4';
-        const blob = new Blob([finalBytes], { type: mimeType });
+        // The main MP4 path is already a Blob over exact-sized streamed
+        // chunks. Byte-based fallbacks are normalized because ffmpeg.wasm may
+        // return a view over SharedArrayBuffer.
+        const blob =
+          outputBytes instanceof Blob
+            ? outputBytes
+            : new Blob(
+                [
+                  outputBytes instanceof Uint8Array
+                    ? outputBytes.slice()
+                    : new Uint8Array(outputBytes),
+                ],
+                { type: mimeType },
+              );
         const url = URL.createObjectURL(blob);
         downloadUrlRef.current = url;
 
         setDownloadUrl(url);
         setOutputBlob(blob);
-        setFileSize(finalBytes.byteLength);
+        setFileSize(blob.size);
         setAudioIncluded(audioIncludedLocal);
         setAudioSkippedReason(
           effectiveOutputFormat === 'gif' || audioIncludedLocal ? null : audioReasonLocal,

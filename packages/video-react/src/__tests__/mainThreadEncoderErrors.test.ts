@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const muxerState = vi.hoisted(() => ({
   finalize: vi.fn(() => new ArrayBuffer(8)),
+  finalizeBlob: vi.fn(() => new Blob(['video'], { type: 'video/mp4' })),
   addVideoChunk: vi.fn(),
   create: vi.fn(),
 }));
@@ -29,6 +30,7 @@ vi.mock('../mp4Mux.js', () => ({
       addAudioChunk: vi.fn(),
       hasAudioTrack: false,
       finalize: muxerState.finalize,
+      finalizeBlob: muxerState.finalizeBlob,
     };
   },
 }));
@@ -99,6 +101,7 @@ describe('mainThreadEncoder error propagation', () => {
     flushBehavior = async () => {};
     muxerState.create.mockClear();
     muxerState.finalize.mockClear();
+    muxerState.finalizeBlob.mockClear();
     muxerState.addVideoChunk.mockClear();
     vi.stubGlobal('VideoEncoder', FakeVideoEncoder);
     vi.stubGlobal('VideoFrame', FakeVideoFrame);
@@ -234,6 +237,16 @@ describe('mainThreadEncoder error propagation', () => {
     await encoder.encodeFrame(fakeBitmap(), 0);
     await expect(encoder.finalize()).resolves.toBeInstanceOf(ArrayBuffer);
     expect(muxerState.finalize).toHaveBeenCalledOnce();
+  });
+
+  it('finalizes directly to a Blob without requesting an ArrayBuffer copy', async () => {
+    const encoder = createEncoder(CONFIG);
+    await encoder.encodeFrame(fakeBitmap(), 0);
+
+    await expect(encoder.finalizeBlob?.()).resolves.toBeInstanceOf(Blob);
+
+    expect(muxerState.finalizeBlob).toHaveBeenCalledOnce();
+    expect(muxerState.finalize).not.toHaveBeenCalled();
   });
 
   it('encodes a reusable canvas without treating it as a disposable bitmap', async () => {

@@ -310,11 +310,13 @@ export async function primeIndeterminateCaptureVideos(
 export function createInlineProvider(images: Map<string, ArrayBuffer>): MediaProvider {
   const blobUrls = new Map<string, string>();
   const mimeTypes = new Map<string, string>();
+  const sizes = new Map<string, number>();
   for (const [path, buffer] of images) {
     const ext = path.split('.').pop()?.toLowerCase() ?? '';
     const mime = MIME_MAP[ext] ?? 'application/octet-stream';
     blobUrls.set(path, URL.createObjectURL(new Blob([buffer], { type: mime })));
     mimeTypes.set(path, mime);
+    sizes.set(path, buffer.byteLength);
   }
 
   return {
@@ -325,7 +327,7 @@ export function createInlineProvider(images: Map<string, ArrayBuffer>): MediaPro
       return [...blobUrls.keys()].map((name) => ({
         name,
         mimeType: mimeTypes.get(name) ?? 'application/octet-stream',
-        size: images.get(name)?.byteLength ?? 0,
+        size: sizes.get(name) ?? 0,
       }));
     },
     async addMedia() {
@@ -337,6 +339,7 @@ export function createInlineProvider(images: Map<string, ArrayBuffer>): MediaPro
     dispose() {
       blobUrls.forEach((url) => URL.revokeObjectURL(url));
       blobUrls.clear();
+      sizes.clear();
     },
   };
 }
