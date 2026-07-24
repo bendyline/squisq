@@ -6,6 +6,8 @@ import {
   coverSourceRect,
   createCaptureSvgRasterCache,
   createInlineProvider,
+  canCompositeScheduledPipVideos,
+  compositeScheduledPipVideos,
   getFrameVisualStateKey,
   prepareScheduledVideoClones,
   primeIndeterminateCaptureVideos,
@@ -294,6 +296,30 @@ describe('getFrameVisualStateKey', () => {
     progress = 1;
     expect(getFrameVisualStateKey(root, 1)).toBe(getFrameVisualStateKey(root, 3));
   });
+
+  it('can exclude scheduled video clocks from a separately-composited base raster', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="picture-in-picture">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>';
+    const video = root.querySelector('video')!;
+    let currentTime = 1;
+    Object.defineProperties(video, {
+      currentTime: { configurable: true, get: () => currentTime },
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+      readyState: { configurable: true, value: HTMLMediaElement.HAVE_CURRENT_DATA },
+    });
+
+    const fullAtOne = getFrameVisualStateKey(root, 1);
+    const baseAtOne = getFrameVisualStateKey(root, 1, {
+      ignoreScheduledVideoFrames: true,
+    });
+    currentTime = 2;
+
+    expect(getFrameVisualStateKey(root, 2)).not.toBe(fullAtOne);
+    expect(getFrameVisualStateKey(root, 2, { ignoreScheduledVideoFrames: true })).toBe(baseAtOne);
+  });
 });
 
 describe('capture clone raster lifetime', () => {
@@ -522,6 +548,107 @@ describe('scheduled video capture clones', () => {
       sw: 1080,
       sh: 607.5,
     });
+  });
+
+  it('uses the bounded compositor only when every active visual scheduled video is PIP', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="picture-in-picture">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>' +
+      '<div class="doc-player__media-clips" data-presentation="background">' +
+      '<video data-clip-id="audio-only" data-active="true"></video></div>';
+    const [camera, audioOnly] = Array.from(root.querySelectorAll('video'));
+    Object.defineProperties(camera, {
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+    });
+    Object.defineProperties(audioOnly, {
+      videoWidth: { configurable: true, value: 0 },
+      videoHeight: { configurable: true, value: 0 },
+    });
+
+    expect(canCompositeScheduledPipVideos(root)).toBe(true);
+    Object.defineProperties(audioOnly, {
+      videoWidth: { configurable: true, value: 1920 },
+      videoHeight: { configurable: true, value: 1080 },
+    });
+    expect(canCompositeScheduledPipVideos(root)).toBe(false);
+  });
+
+  it('draws a cropped scheduled PIP frame over the cached base raster', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="picture-in-picture">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>';
+    const video = root.querySelector<HTMLVideoElement>('video')!;
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+      getBoundingClientRect: {
+        configurable: true,
+        value: () => ({
+          x: 480,
+          y: 260,
+          left: 480,
+          top: 260,
+          right: 630,
+          bottom: 350,
+          width: 150,
+          height: 90,
+          toJSON: () => ({}),
+        }),
+      },
+    });
+    Object.defineProperty(root, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: 640,
+        bottom: 360,
+        width: 640,
+        height: 360,
+        toJSON: () => ({}),
+      }),
+    });
+    const destination = document.createElement('canvas');
+    destination.width = 640;
+    destination.height = 360;
+    const drawImage = vi.fn();
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      objectFit: 'cover',
+      borderLeftWidth: '0px',
+      borderRightWidth: '0px',
+      borderTopWidth: '0px',
+      borderBottomWidth: '0px',
+      borderTopLeftRadius: '0px',
+      borderTopStyle: 'none',
+      borderTopColor: 'rgba(0, 0, 0, 0)',
+      boxShadow: 'none',
+    } as CSSStyleDeclaration);
+    vi.spyOn(destination, 'getContext').mockReturnValue({
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      fill: vi.fn(),
+      clip: vi.fn(),
+      drawImage,
+      shadowColor: '',
+      shadowOffsetX: 0,
+      shadowOffsetY: 0,
+      shadowBlur: 0,
+      globalAlpha: 1,
+      fillStyle: '',
+    } as unknown as CanvasRenderingContext2D);
+
+    expect(compositeScheduledPipVideos(root, destination)).toBe(1);
+    expect(drawImage).toHaveBeenCalledWith(video, 0, 48, 640, 384, 480, 260, 150, 90);
   });
 
   it('restores PIP presentation on html2canvas video replacements', () => {

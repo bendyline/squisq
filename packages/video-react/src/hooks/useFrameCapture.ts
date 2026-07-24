@@ -78,6 +78,8 @@ const POTENTIALLY_ANIMATED_IMAGE_URL =
 const CAPTURE_SVG_SELECTOR = 'svg.block-svg';
 const CAPTURE_VIDEO_READINESS_POLL_MS = 16;
 const CAPTURE_VIDEO_END_PROBE_TIME = 1e101;
+const SCHEDULED_MEDIA_SELECTOR = '.doc-player__media-clips';
+const SCHEDULED_VIDEO_SELECTOR = `${SCHEDULED_MEDIA_SELECTOR} video[data-clip-id]`;
 
 /**
  * Let React and the browser present DOM changes without waiting forever for
@@ -903,13 +905,189 @@ export function releaseCaptureCloneCanvases(canvases: HTMLCanvasElement[]): void
   });
 }
 
+function scheduledVideoIsVisual(video: HTMLVideoElement): boolean {
+  return video.videoWidth > 0 && video.videoHeight > 0 && video.dataset.active === 'true';
+}
+
+function scheduledVideoPresentation(video: HTMLVideoElement): string | undefined {
+  return video.closest<HTMLElement>(SCHEDULED_MEDIA_SELECTOR)?.dataset.presentation;
+}
+
+/**
+ * Whether changing scheduled-video pixels can be drawn after the static player
+ * raster without changing stacking order.
+ */
+export function canCompositeScheduledPipVideos(captureRoot: HTMLElement): boolean {
+  const activeVisualVideos = Array.from(
+    captureRoot.querySelectorAll<HTMLVideoElement>(SCHEDULED_VIDEO_SELECTOR),
+  ).filter(scheduledVideoIsVisual);
+  return (
+    activeVisualVideos.length > 0 &&
+    activeVisualVideos.every((video) => scheduledVideoPresentation(video) === 'picture-in-picture')
+  );
+}
+
+function cssPixelValue(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function cssRadius(value: string, width: number, height: number): number {
+  if (value.trim().endsWith('%')) {
+    return (cssPixelValue(value) / 100) * Math.min(width, height);
+  }
+  return cssPixelValue(value);
+}
+
+function applyFirstBoxShadow(
+  context: CanvasRenderingContext2D,
+  boxShadow: string,
+  scaleX: number,
+  scaleY: number,
+): void {
+  if (!boxShadow || boxShadow === 'none') return;
+  const color = boxShadow.match(/rgba?\([^)]*\)|#[0-9a-f]{3,8}\b/i)?.[0];
+  if (!color) return;
+  const lengths = Array.from(
+    boxShadow.replace(color, '').matchAll(/(-?\d+(?:\.\d+)?)px/g),
+    (match) => Number.parseFloat(match[1]),
+  );
+  context.shadowColor = color;
+  context.shadowOffsetX = (lengths[0] ?? 0) * scaleX;
+  context.shadowOffsetY = (lengths[1] ?? 0) * scaleY;
+  context.shadowBlur = (lengths[2] ?? 0) * Math.max(scaleX, scaleY);
+}
+
+function addRoundedRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  context.beginPath();
+  if (typeof context.roundRect === 'function') {
+    context.roundRect(x, y, width, height, Math.max(0, radius));
+  } else {
+    context.rect(x, y, width, height);
+  }
+}
+
+/**
+ * Draw active scheduled PiP frames over an already-rasterized player.
+ *
+ * The destination is reused for the export session, so both the background
+ * and live overlay keep bounded native canvas storage.
+ */
+export function compositeScheduledPipVideos(
+  captureRoot: HTMLElement,
+  destination: HTMLCanvasElement,
+): number {
+  const context = destination.getContext('2d');
+  if (!context) throw new Error('Could not create the PiP compositor canvas context');
+  const rootRect = captureRoot.getBoundingClientRect();
+  if (rootRect.width <= 0 || rootRect.height <= 0) return 0;
+  const scaleX = destination.width / rootRect.width;
+  const scaleY = destination.height / rootRect.height;
+  const videos = Array.from(
+    captureRoot.querySelectorAll<HTMLVideoElement>(SCHEDULED_VIDEO_SELECTOR),
+  ).filter(
+    (video) =>
+      scheduledVideoIsVisual(video) && scheduledVideoPresentation(video) === 'picture-in-picture',
+  );
+
+  for (const video of videos) {
+    const rect = video.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    const style = video.ownerDocument.defaultView?.getComputedStyle(video);
+    if (
+      !style ||
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.visibility === 'collapse'
+    ) {
+      continue;
+    }
+    const opacity = Number.parseFloat(style.opacity || '1');
+    if (opacity <= 0) continue;
+
+    const borderLeft = cssPixelValue(style.borderLeftWidth);
+    const borderRight = cssPixelValue(style.borderRightWidth);
+    const borderTop = cssPixelValue(style.borderTopWidth);
+    const borderBottom = cssPixelValue(style.borderBottomWidth);
+    const contentWidth = Math.max(1, rect.width - borderLeft - borderRight);
+    const contentHeight = Math.max(1, rect.height - borderTop - borderBottom);
+    const outerX = (rect.left - rootRect.left) * scaleX;
+    const outerY = (rect.top - rootRect.top) * scaleY;
+    const outerWidth = rect.width * scaleX;
+    const outerHeight = rect.height * scaleY;
+    const innerX = outerX + borderLeft * scaleX;
+    const innerY = outerY + borderTop * scaleY;
+    const innerWidth = contentWidth * scaleX;
+    const innerHeight = contentHeight * scaleY;
+    const outerRadius =
+      cssRadius(style.borderTopLeftRadius, rect.width, rect.height) * Math.max(scaleX, scaleY);
+    const innerRadius = Math.max(
+      0,
+      outerRadius - Math.max(borderLeft * scaleX, borderTop * scaleY),
+    );
+    const source = videoFrameRect(
+      video.videoWidth,
+      video.videoHeight,
+      contentWidth,
+      contentHeight,
+      style.objectFit || 'fill',
+    );
+
+    context.save();
+    context.globalAlpha = Number.isFinite(opacity) ? opacity : 1;
+    applyFirstBoxShadow(context, style.boxShadow, scaleX, scaleY);
+    addRoundedRect(context, outerX, outerY, outerWidth, outerHeight, outerRadius);
+    context.fillStyle =
+      style.borderTopStyle === 'none' || borderTop <= 0
+        ? 'rgba(0, 0, 0, 0.001)'
+        : style.borderTopColor;
+    context.fill();
+    context.shadowColor = 'rgba(0, 0, 0, 0)';
+    context.shadowBlur = 0;
+    context.shadowOffsetX = 0;
+    context.shadowOffsetY = 0;
+    addRoundedRect(context, innerX, innerY, innerWidth, innerHeight, innerRadius);
+    context.clip();
+    context.drawImage(
+      video,
+      source.sx,
+      source.sy,
+      source.sw,
+      source.sh,
+      innerX,
+      innerY,
+      innerWidth,
+      innerHeight,
+    );
+    context.restore();
+  }
+
+  return videos.length;
+}
+
+export interface FrameVisualStateKeyOptions {
+  /** Ignore player-level scheduled video clocks composited after the base raster. */
+  ignoreScheduledVideoFrames?: boolean;
+}
+
 /**
  * Describe everything in the capture subtree that can affect its pixels at a
  * point on the document timeline. Equal keys mean the previous raster can be
  * reused safely. This is deliberately conservative for visual sources whose
  * internal state cannot be inspected (animated images, canvas, embeds, SMIL).
  */
-export function getFrameVisualStateKey(captureRoot: HTMLElement, timelineTime: number): string {
+export function getFrameVisualStateKey(
+  captureRoot: HTMLElement,
+  timelineTime: number,
+  options: FrameVisualStateKeyOptions = {},
+): string {
   const markup = captureRoot.innerHTML;
   let needsTimelineKey = false;
 
@@ -943,11 +1121,18 @@ export function getFrameVisualStateKey(captureRoot: HTMLElement, timelineTime: n
   });
   if (POTENTIALLY_ANIMATED_IMAGE_URL.test(markup)) needsTimelineKey = true;
 
-  const videoStates = Array.from(captureRoot.querySelectorAll('video')).map(
-    (video) =>
-      `${video.currentSrc || video.src}:${finiteMediaTime(video.currentTime)}:${video.readyState}:` +
-      `${video.videoWidth}x${video.videoHeight}`,
-  );
+  const videoStates = Array.from(captureRoot.querySelectorAll('video'))
+    .filter(
+      (video) =>
+        video.videoWidth > 0 &&
+        video.videoHeight > 0 &&
+        (!options.ignoreScheduledVideoFrames || !video.closest(SCHEDULED_MEDIA_SELECTOR)),
+    )
+    .map(
+      (video) =>
+        `${video.currentSrc || video.src}:${finiteMediaTime(video.currentTime)}:${video.readyState}:` +
+        `${video.videoWidth}x${video.videoHeight}`,
+    );
 
   if (
     captureRoot.querySelector(
@@ -977,6 +1162,7 @@ export function useFrameCapture(): FrameCaptureHandle {
   const renderAPIRef = useRef<SquisqRenderAPI | null>(null);
   const mediaProviderRef = useRef<MediaProvider | null>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const captureBaseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastVisualStateKeyRef = useRef<string | null>(null);
   const hasCapturedFrameRef = useRef(false);
   const decodedImagesRef = useRef(new WeakSet<HTMLImageElement>());
@@ -998,17 +1184,20 @@ export function useFrameCapture(): FrameCaptureHandle {
         rootRef.current ||
         containerRef.current ||
         mediaProviderRef.current ||
-        captureCanvasRef.current
+        captureCanvasRef.current ||
+        captureBaseCanvasRef.current
       ) {
         const oldRoot = rootRef.current;
         const oldContainer = containerRef.current;
         const oldMediaProvider = mediaProviderRef.current;
         const oldCaptureCanvas = captureCanvasRef.current;
+        const oldCaptureBaseCanvas = captureBaseCanvasRef.current;
         rootRef.current = null;
         containerRef.current = null;
         renderAPIRef.current = null;
         mediaProviderRef.current = null;
         captureCanvasRef.current = null;
+        captureBaseCanvasRef.current = null;
         lastVisualStateKeyRef.current = null;
         hasCapturedFrameRef.current = false;
         decodedImagesRef.current = new WeakSet<HTMLImageElement>();
@@ -1024,6 +1213,10 @@ export function useFrameCapture(): FrameCaptureHandle {
             if (oldCaptureCanvas) {
               oldCaptureCanvas.width = 0;
               oldCaptureCanvas.height = 0;
+            }
+            if (oldCaptureBaseCanvas) {
+              oldCaptureBaseCanvas.width = 0;
+              oldCaptureBaseCanvas.height = 0;
             }
             resolve();
           }, 0);
@@ -1046,6 +1239,12 @@ export function useFrameCapture(): FrameCaptureHandle {
       captureCanvas.style.width = `${width}px`;
       captureCanvas.style.height = `${height}px`;
       captureCanvasRef.current = captureCanvas;
+      const captureBaseCanvas = document.createElement('canvas');
+      captureBaseCanvas.width = width;
+      captureBaseCanvas.height = height;
+      captureBaseCanvas.style.width = `${width}px`;
+      captureBaseCanvas.style.height = `${height}px`;
+      captureBaseCanvasRef.current = captureBaseCanvas;
       lastVisualStateKeyRef.current = null;
       hasCapturedFrameRef.current = false;
       decodedImagesRef.current = new WeakSet<HTMLImageElement>();
@@ -1171,7 +1370,8 @@ export function useFrameCapture(): FrameCaptureHandle {
       const container = containerRef.current;
       const api = renderAPIRef.current;
       const captureCanvas = captureCanvasRef.current;
-      if (!container || !api || !captureCanvas) {
+      const captureBaseCanvas = captureBaseCanvasRef.current;
+      if (!container || !api || !captureCanvas || !captureBaseCanvas) {
         throw new Error('Frame capture not initialized — call init() first');
       }
 
@@ -1199,61 +1399,82 @@ export function useFrameCapture(): FrameCaptureHandle {
       }
       await waitForCaptureAssets(root, decodedImagesRef.current);
 
-      const visualStateKey = options.reuseIfUnchanged ? getFrameVisualStateKey(root, time) : null;
-      if (
-        visualStateKey !== null &&
-        hasCapturedFrameRef.current &&
-        lastVisualStateKeyRef.current === visualStateKey
-      ) {
-        return captureCanvas;
-      }
+      const compositePip = canCompositeScheduledPipVideos(root);
+      const visualStateKey = options.reuseIfUnchanged
+        ? `${compositePip ? 'base' : 'full'}:${getFrameVisualStateKey(root, time, {
+            ignoreScheduledVideoFrames: compositePip,
+          })}`
+        : null;
+      const shouldRasterize =
+        visualStateKey === null ||
+        !hasCapturedFrameRef.current ||
+        lastVisualStateKeyRef.current !== visualStateKey;
+      if (!shouldRasterize && !compositePip) return captureCanvas;
+      const rasterCanvas = compositePip ? captureBaseCanvas : captureCanvas;
 
       // html2canvas scales/translates a supplied context but does not reset it
       // between calls. Restore the reusable surface to its initial state and
       // clear the previous frame before rendering the next one.
-      const captureContext = captureCanvas.getContext('2d');
+      const captureContext = rasterCanvas.getContext('2d');
       if (!captureContext) throw new Error('Could not create the frame capture canvas context');
-      captureContext.setTransform(1, 0, 0, 1, 0, 0);
-      captureContext.clearRect(0, 0, width, height);
+      if (shouldRasterize) {
+        captureContext.setTransform(1, 0, 0, 1, 0, 0);
+        captureContext.clearRect(0, 0, width, height);
+      }
 
       // Render the DOM to the bounded, reusable canvas via html2canvas.
       // We're in the same document (no iframe), so COEP doesn't block cloning.
       const transientCloneCanvases: HTMLCanvasElement[] = [];
-      let canvas: HTMLCanvasElement;
-      try {
-        canvas = await html2canvas(root, {
-          canvas: captureCanvas,
-          width,
-          height,
-          scale: 1,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#000000',
-          logging: false,
-          onclone: async (_clonedDocument, clonedRoot) => {
-            transientCloneCanvases.push(...prepareScheduledVideoClones(root, clonedRoot));
-            await rasterizeCaptureSvgClones(
-              root,
-              clonedRoot,
-              transientCloneCanvases,
-              captureImageDataUrlsRef.current,
-              captureSvgRasterCacheRef.current,
-            );
-          },
-          // html2canvas starts cloning at documentElement. Do not clone the rest
-          // of the editor/site UI on every frame; only the capture root, its
-          // ancestors, descendants, and document styles can affect this render.
-          ignoreElements: (element) => shouldIgnoreCaptureSibling(element, root),
-        });
-      } finally {
-        releaseCaptureCloneCanvases(transientCloneCanvases);
+      if (shouldRasterize) {
+        try {
+          await html2canvas(root, {
+            canvas: rasterCanvas,
+            width,
+            height,
+            scale: 1,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#000000',
+            logging: false,
+            onclone: async (_clonedDocument, clonedRoot) => {
+              if (compositePip) {
+                clonedRoot
+                  .querySelectorAll(SCHEDULED_MEDIA_SELECTOR)
+                  .forEach((element) => element.remove());
+              }
+              transientCloneCanvases.push(...prepareScheduledVideoClones(root, clonedRoot));
+              await rasterizeCaptureSvgClones(
+                root,
+                clonedRoot,
+                transientCloneCanvases,
+                captureImageDataUrlsRef.current,
+                captureSvgRasterCacheRef.current,
+              );
+            },
+            // html2canvas starts cloning at documentElement. Do not clone the rest
+            // of the editor/site UI on every frame; only the capture root, its
+            // ancestors, descendants, and document styles can affect this render.
+            ignoreElements: (element) => shouldIgnoreCaptureSibling(element, root),
+          });
+        } finally {
+          releaseCaptureCloneCanvases(transientCloneCanvases);
+        }
+
+        hasCapturedFrameRef.current = true;
+        lastVisualStateKeyRef.current = visualStateKey;
       }
 
-      hasCapturedFrameRef.current = true;
-      lastVisualStateKeyRef.current = visualStateKey;
+      if (compositePip) {
+        const outputContext = captureCanvas.getContext('2d');
+        if (!outputContext) throw new Error('Could not create the frame output canvas context');
+        outputContext.setTransform(1, 0, 0, 1, 0, 0);
+        outputContext.clearRect(0, 0, width, height);
+        outputContext.drawImage(captureBaseCanvas, 0, 0);
+        compositeScheduledPipVideos(root, captureCanvas);
+      }
 
       // The reusable canvas is returned directly for the main-thread encoder.
-      return canvas;
+      return captureCanvas;
     },
     [],
   );
@@ -1281,6 +1502,11 @@ export function useFrameCapture(): FrameCaptureHandle {
       captureCanvasRef.current.width = 0;
       captureCanvasRef.current.height = 0;
       captureCanvasRef.current = null;
+    }
+    if (captureBaseCanvasRef.current) {
+      captureBaseCanvasRef.current.width = 0;
+      captureBaseCanvasRef.current.height = 0;
+      captureBaseCanvasRef.current = null;
     }
     lastVisualStateKeyRef.current = null;
     hasCapturedFrameRef.current = false;
