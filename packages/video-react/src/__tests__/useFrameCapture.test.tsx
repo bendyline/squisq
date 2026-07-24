@@ -4,11 +4,14 @@ import { resolveTheme } from '@bendyline/squisq/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   coverSourceRect,
+  createCaptureSvgRasterCache,
   createInlineProvider,
   getFrameVisualStateKey,
   prepareScheduledVideoClones,
+  primeIndeterminateCaptureVideos,
   rasterizeCaptureSvgClones,
   releaseCaptureCloneCanvases,
+  releaseCaptureSvgRasterCache,
   useFrameCapture,
   waitForCaptureAssets,
   waitForVisualUpdate,
@@ -163,6 +166,72 @@ describe('waitForCaptureAssets', () => {
   });
 });
 
+describe('primeIndeterminateCaptureVideos', () => {
+  it('indexes a recorder WebM once and restores its current frame', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<video src="camera.webm"></video>';
+    const video = root.querySelector('video')!;
+    let duration = Number.POSITIVE_INFINITY;
+    let currentTime = 12.5;
+    let seeking = false;
+    const assignments: number[] = [];
+    Object.defineProperties(video, {
+      currentSrc: { configurable: true, get: () => 'blob:camera-webm' },
+      duration: { configurable: true, get: () => duration },
+      currentTime: {
+        configurable: true,
+        get: () => currentTime,
+        set: (value: number) => {
+          assignments.push(value);
+          seeking = true;
+          queueMicrotask(() => {
+            if (value > 1e100) {
+              duration = 304.534;
+              currentTime = duration;
+              video.dispatchEvent(new Event('durationchange'));
+            } else {
+              currentTime = value;
+            }
+            seeking = false;
+            video.dispatchEvent(new Event('seeked'));
+          });
+        },
+      },
+      readyState: { configurable: true, get: () => HTMLMediaElement.HAVE_ENOUGH_DATA },
+      seeking: { configurable: true, get: () => seeking },
+      pause: { configurable: true, value: vi.fn() },
+    });
+    const primed = new WeakSet<HTMLVideoElement>();
+
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(1);
+    expect(assignments).toEqual([1e101, 12.5]);
+    expect(video.pause).toHaveBeenCalledOnce();
+    expect(currentTime).toBe(12.5);
+    expect(video.dataset.captureSequential).toBe('true');
+
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+    expect(assignments).toEqual([1e101, 12.5]);
+  });
+
+  it('leaves ordinary finite-duration video at its current frame', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<video src="indexed.mp4"></video>';
+    const video = root.querySelector('video')!;
+    const setCurrentTime = vi.fn();
+    Object.defineProperties(video, {
+      currentSrc: { configurable: true, get: () => 'blob:indexed-mp4' },
+      duration: { configurable: true, value: 30 },
+      currentTime: { configurable: true, get: () => 4, set: setCurrentTime },
+      readyState: { configurable: true, value: HTMLMediaElement.HAVE_METADATA },
+      pause: { configurable: true, value: vi.fn() },
+    });
+
+    expect(await primeIndeterminateCaptureVideos(root)).toBe(0);
+    expect(setCurrentTime).not.toHaveBeenCalled();
+    expect(video.pause).not.toHaveBeenCalled();
+  });
+});
+
 describe('getFrameVisualStateKey', () => {
   it('reuses static DOM but invalidates for DOM changes and opaque animated media', () => {
     const root = document.createElement('div');
@@ -223,6 +292,7 @@ describe('capture clone raster lifetime', () => {
     });
     const drawImage = vi.fn();
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
       drawImage,
     } as unknown as CanvasRenderingContext2D);
     const decode = stubImageDecode(async () => undefined);
@@ -247,7 +317,8 @@ describe('capture clone raster lifetime', () => {
     expect(decode).toHaveBeenCalledOnce();
     expect(decodedSvgSource).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
     expect(createBitmap).toHaveBeenCalledWith(expect.any(HTMLImageElement));
-    expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 800, 450);
+    expect(drawImage).toHaveBeenNthCalledWith(1, bitmap, 0, 0, 800, 450);
+    expect(drawImage).toHaveBeenNthCalledWith(2, expect.any(HTMLCanvasElement), 0, 0, 800, 450);
     expect(bitmap.close).toHaveBeenCalledOnce();
     expect((createBitmap.mock.calls[0][0] as HTMLImageElement).getAttribute('src')).toBeNull();
     expect(transientCanvases).toEqual([replacement]);
@@ -256,6 +327,57 @@ describe('capture clone raster lifetime', () => {
 
     expect(replacement.width).toBe(0);
     expect(replacement.height).toBe(0);
+  });
+
+  it('reuses an unchanged slide raster while per-frame overlays advance', async () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML =
+      '<svg class="block-svg" viewBox="0 0 640 360" data-block-id="intro">' +
+      '<text x="20" y="40">Static slide</text></svg>';
+    const firstClone = originalRoot.cloneNode(true) as HTMLElement;
+    const secondClone = originalRoot.cloneNode(true) as HTMLElement;
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    const decode = stubImageDecode(async () => undefined);
+    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
+    const createBitmap = vi.fn(async (_source: HTMLImageElement) => bitmap);
+    vi.stubGlobal('createImageBitmap', createBitmap);
+    const rasterCache = createCaptureSvgRasterCache();
+
+    const firstTransient = await rasterizeCaptureSvgClones(
+      originalRoot,
+      firstClone,
+      [],
+      new Map(),
+      rasterCache,
+    );
+    releaseCaptureCloneCanvases(firstTransient);
+    const secondTransient = await rasterizeCaptureSvgClones(
+      originalRoot,
+      secondClone,
+      [],
+      new Map(),
+      rasterCache,
+    );
+
+    expect(decode).toHaveBeenCalledOnce();
+    expect(createBitmap).toHaveBeenCalledOnce();
+    expect(bitmap.close).toHaveBeenCalledOnce();
+    expect(drawImage).toHaveBeenCalledTimes(3);
+    expect(rasterCache.size).toBe(1);
+    const cachedCanvas = [...rasterCache.values()][0].canvas;
+    expect(cachedCanvas.width).toBe(640);
+    expect(cachedCanvas.height).toBe(360);
+
+    releaseCaptureCloneCanvases(secondTransient);
+    releaseCaptureSvgRasterCache(rasterCache);
+
+    expect(rasterCache.size).toBe(0);
+    expect(cachedCanvas.width).toBe(0);
+    expect(cachedCanvas.height).toBe(0);
   });
 
   it('embeds blob-backed image layers before decoding the standalone SVG', async () => {
@@ -274,6 +396,7 @@ describe('capture clone raster lifetime', () => {
       blob: async () => png,
     } as Response);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
       drawImage: vi.fn(),
     } as unknown as CanvasRenderingContext2D);
     let serializedSvg = '';
@@ -300,6 +423,7 @@ describe('capture clone raster lifetime', () => {
     const clonedRoot = originalRoot.cloneNode(true) as HTMLElement;
     const drawImage = vi.fn();
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
       drawImage,
     } as unknown as CanvasRenderingContext2D);
     stubImageDecode(async () => undefined);

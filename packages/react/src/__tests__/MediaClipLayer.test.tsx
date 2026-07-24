@@ -114,6 +114,46 @@ describe('MediaClipLayer', () => {
     expect(video.currentTime).toBe(1.1);
   });
 
+  it('leaves capture-marked recorder WebMs for the sequential frame barrier', () => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const clip: ScheduledClip = {
+      id: 'recorder-video',
+      kind: 'video',
+      src: 'recorder.webm',
+      absoluteStart: 0,
+      absoluteEnd: 10,
+      sourceIn: 0,
+      anchor: 'document',
+    };
+    const { container, rerender } = render(
+      <MediaClipLayer
+        schedule={[clip]}
+        currentTime={1}
+        isPlaying={false}
+        renderMode
+        basePath="."
+        muted
+      />,
+    );
+    const video = container.querySelector('video')!;
+    expect(video.currentTime).toBe(1);
+    video.dataset.captureSequential = 'true';
+    vi.mocked(video.pause).mockClear();
+
+    rerender(
+      <MediaClipLayer
+        schedule={[clip]}
+        currentTime={1.1}
+        isPlaying={false}
+        renderMode
+        basePath="."
+        muted
+      />,
+    );
+    expect(video.currentTime).toBe(1);
+    expect(video.pause).not.toHaveBeenCalled();
+  });
+
   it('groups authored PIP and overlay clips independently of the player default', () => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     const base: ScheduledClip = {

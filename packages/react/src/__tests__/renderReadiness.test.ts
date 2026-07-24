@@ -10,17 +10,21 @@ function controllableVideo(options: { duration?: number; clampToDuration?: boole
   video: HTMLVideoElement;
   setSeeking: (value: boolean) => void;
   setReadyState: (value: number) => void;
+  advanceTime: (value: number) => void;
+  assignedTimes: number[];
 } {
   const video = document.createElement('video');
   const duration = options.duration ?? Number.NaN;
   let currentTime = 0;
   let seeking = false;
   let readyState: number = HTMLMediaElement.HAVE_NOTHING;
+  const assignedTimes: number[] = [];
   Object.defineProperties(video, {
     currentTime: {
       configurable: true,
       get: () => currentTime,
       set: (value: number) => {
+        assignedTimes.push(value);
         currentTime =
           options.clampToDuration && Number.isFinite(duration) ? Math.min(value, duration) : value;
         seeking = true;
@@ -39,6 +43,10 @@ function controllableVideo(options: { duration?: number; clampToDuration?: boole
     setReadyState: (value) => {
       readyState = value;
     },
+    advanceTime: (value) => {
+      currentTime = value;
+    },
+    assignedTimes,
   };
 }
 
@@ -121,6 +129,43 @@ describe('seekVideoToFrame', () => {
     await vi.advanceTimersByTimeAsync(16);
     await expect(pending).resolves.toBeUndefined();
     captureSurface.remove();
+  });
+
+  it('advances a capture-marked recorder WebM without assigning currentTime', async () => {
+    vi.useFakeTimers();
+    const { video, setReadyState, advanceTime, assignedTimes } = controllableVideo({
+      duration: 304.534,
+    });
+    // Chromium can leave play() pending after playback has already advanced.
+    // The frame monitor must not await this promise before it starts polling.
+    const play = vi.spyOn(video, 'play').mockImplementation(() => new Promise<void>(() => {}));
+    video.dataset.captureSequential = 'true';
+    setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
+
+    const pending = seekVideoToFrame(video, 1 / 30, 250);
+    await Promise.resolve();
+    expect(play).toHaveBeenCalledOnce();
+    expect(assignedTimes).toEqual([]);
+
+    advanceTime(0.034);
+    await vi.advanceTimersByTimeAsync(16);
+    await expect(pending).resolves.toBeUndefined();
+    expect(assignedTimes).toEqual([]);
+    expect(video.playbackRate).toBe(0.2);
+  });
+
+  it('pauses an ahead recorder WebM instead of seeking it backward', async () => {
+    const { video, setReadyState, advanceTime, assignedTimes } = controllableVideo({
+      duration: 304.534,
+    });
+    video.dataset.captureSequential = 'true';
+    setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
+    advanceTime(2.2);
+
+    await expect(seekVideoToFrame(video, 2)).resolves.toBeUndefined();
+
+    expect(video.pause).toHaveBeenCalledOnce();
+    expect(assignedTimes).toEqual([]);
   });
 
   it('accepts the terminal frame when the requested time exceeds the exact media duration', async () => {

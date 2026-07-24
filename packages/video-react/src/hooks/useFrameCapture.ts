@@ -76,6 +76,8 @@ const RENDER_TIME_EPSILON_SECONDS = 0.000_001;
 const POTENTIALLY_ANIMATED_IMAGE_URL =
   /(?:^data:image\/(?:gif|webp|avif)[;,]|\.(?:gif|webp|avif)(?:[?#]|$))/i;
 const CAPTURE_SVG_SELECTOR = 'svg.block-svg';
+const CAPTURE_VIDEO_READINESS_POLL_MS = 16;
+const CAPTURE_VIDEO_END_PROBE_TIME = 1e101;
 
 /**
  * Let React and the browser present DOM changes without waiting forever for
@@ -163,6 +165,135 @@ export async function waitForCaptureAssets(
       decodedImages.add(image);
     }),
   );
+}
+
+function waitForCaptureVideoState(
+  video: HTMLVideoElement,
+  description: string,
+  isReady: () => boolean,
+  update?: () => void,
+): Promise<void> {
+  if (isReady()) return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const events = ['loadedmetadata', 'durationchange', 'loadeddata', 'canplay', 'seeked'] as const;
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      clearInterval(poll);
+      events.forEach((eventName) => video.removeEventListener(eventName, check));
+      video.removeEventListener('error', fail);
+    };
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const fail = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(
+        new Error(
+          `Video did not become ready while ${description} within 15s: ` +
+            `${video.currentSrc || video.src}`,
+        ),
+      );
+    };
+    function check(): void {
+      if (isReady()) finish();
+    }
+
+    const timeout = setTimeout(fail, CAPTURE_ASSET_TIMEOUT_MS);
+    const poll = setInterval(check, CAPTURE_VIDEO_READINESS_POLL_MS);
+    events.forEach((eventName) => video.addEventListener(eventName, check));
+    video.addEventListener('error', fail, { once: true });
+
+    try {
+      update?.();
+      queueMicrotask(check);
+    } catch (error) {
+      settled = true;
+      cleanup();
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Make recorder-produced WebM video deterministic and fast to seek before
+ * accelerated frame capture starts.
+ *
+ * MediaRecorder WebMs commonly omit a finite Duration/Cues index. Chromium
+ * then exposes `duration === Infinity` and buffers only a short window ahead
+ * of a paused video. An export that advances faster than realtime eventually
+ * catches that frontier and every subsequent frame waits for another tiny
+ * buffer extension. A single end probe makes Chromium scan the local/blob
+ * resource, establishes its finite duration and seek index, and avoids that
+ * timestamp-specific collapse. The original frame is restored before return.
+ */
+export async function primeIndeterminateCaptureVideos(
+  captureRoot: HTMLElement,
+  primedVideos: WeakSet<HTMLVideoElement> = new WeakSet(),
+): Promise<number> {
+  const videos = Array.from(captureRoot.querySelectorAll('video')).filter(
+    (video) => !primedVideos.has(video),
+  );
+  let primedCount = 0;
+
+  await Promise.all(
+    videos.map(async (video) => {
+      const source = video.currentSrc || video.src;
+      if (!source) {
+        primedVideos.add(video);
+        return;
+      }
+
+      await waitForCaptureVideoState(
+        video,
+        'loading capture metadata',
+        () => video.readyState >= HTMLMediaElement.HAVE_METADATA,
+      );
+      if (Number.isFinite(video.duration)) {
+        primedVideos.add(video);
+        return;
+      }
+
+      const restoreTime = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0;
+      video.pause();
+      await waitForCaptureVideoState(
+        video,
+        'indexing an indeterminate-duration capture source',
+        () =>
+          Number.isFinite(video.duration) &&
+          video.duration > 0 &&
+          !video.seeking &&
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
+        () => {
+          video.currentTime = CAPTURE_VIDEO_END_PROBE_TIME;
+        },
+      );
+
+      const reachableRestoreTime = Math.min(restoreTime, video.duration);
+      await waitForCaptureVideoState(
+        video,
+        'restoring the capture source after indexing',
+        () =>
+          !video.seeking &&
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          Math.abs(video.currentTime - reachableRestoreTime) <= 0.01,
+        () => {
+          video.currentTime = reachableRestoreTime;
+        },
+      );
+      video.dataset.captureSequential = 'true';
+      primedVideos.add(video);
+      primedCount += 1;
+    }),
+  );
+
+  return primedCount;
 }
 
 /**
@@ -439,6 +570,30 @@ interface CaptureRasterSize {
 
 type CaptureImageDataUrlCache = Map<string, Promise<string>>;
 
+interface CaptureSvgRasterCacheEntry {
+  serializedSvg: string;
+  width: number;
+  height: number;
+  canvas: HTMLCanvasElement;
+}
+
+export type CaptureSvgRasterCache = Map<string, CaptureSvgRasterCacheEntry>;
+
+export function createCaptureSvgRasterCache(): CaptureSvgRasterCache {
+  return new Map();
+}
+
+function releaseCaptureSvgRasterEntry(entry: CaptureSvgRasterCacheEntry): void {
+  entry.canvas.width = 0;
+  entry.canvas.height = 0;
+}
+
+/** Release persistent slide rasters retained for a frame-capture session. */
+export function releaseCaptureSvgRasterCache(cache: CaptureSvgRasterCache): void {
+  cache.forEach(releaseCaptureSvgRasterEntry);
+  cache.clear();
+}
+
 function parseAbsoluteSvgLength(value: string | null): number {
   if (!value) return 0;
   const match = /^\s*(\d+(?:\.\d+)?|\.\d+)(?:px)?\s*$/i.exec(value);
@@ -594,6 +749,11 @@ async function embedCaptureSvgImages(
   }
 }
 
+function captureSvgRasterCacheKey(svg: SVGSVGElement, index: number): string {
+  const blockId = svg.dataset.blockId;
+  return blockId ? `block:${blockId}` : `index:${index}`;
+}
+
 /**
  * Replace full-slide SVGs in html2canvas's disposable document clone with
  * ordinary canvases decoded through short-lived HTMLImageElements.
@@ -604,76 +764,125 @@ async function embedCaptureSvgImages(
  * is removed, so long exports grow by several megabytes per frame. Chromium
  * cannot decode serialized SVG Blobs directly with createImageBitmap, so the
  * browser-compatible image decoder must run first.
+ *
+ * The slide raster cache is load-bearing for video exports: a moving PiP video
+ * invalidates the complete frame on every tick, but the underlying slide SVG is
+ * usually unchanged. Decode that 1080p surface once and reuse its canvas.
  */
 export async function rasterizeCaptureSvgClones(
   originalRoot: HTMLElement,
   clonedRoot: HTMLElement,
   transientCanvases: HTMLCanvasElement[] = [],
   imageDataUrls: CaptureImageDataUrlCache = new Map(),
+  rasterCache?: CaptureSvgRasterCache,
 ): Promise<HTMLCanvasElement[]> {
+  const cache = rasterCache ?? createCaptureSvgRasterCache();
+  const ownsRasterCache = rasterCache === undefined;
   const originalSvgs = Array.from(
     originalRoot.querySelectorAll<SVGSVGElement>(CAPTURE_SVG_SELECTOR),
   );
   const clonedSvgs = Array.from(clonedRoot.querySelectorAll<SVGSVGElement>(CAPTURE_SVG_SELECTOR));
+  const activeCacheKeys = new Set<string>();
 
-  for (const [index, svg] of clonedSvgs.entries()) {
-    const { width, height } = captureSvgRasterSize(svg, originalSvgs[index]);
-    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    svg.setAttribute('width', String(width));
-    svg.setAttribute('height', String(height));
+  try {
+    for (const [index, svg] of clonedSvgs.entries()) {
+      const originalSvg = originalSvgs[index];
+      const { width, height } = captureSvgRasterSize(svg, originalSvg);
+      const cacheKey = captureSvgRasterCacheKey(originalSvg ?? svg, index);
+      activeCacheKeys.add(cacheKey);
+      svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      svg.setAttribute('width', String(width));
+      svg.setAttribute('height', String(height));
 
-    let bitmap: ImageBitmap | null = null;
-    let replacement: HTMLCanvasElement | null = null;
-    let image: HTMLImageElement | null = null;
-    try {
-      await embedCaptureSvgImages(svg, imageDataUrls);
-      const containsForeignObject = svg.querySelector('foreignObject') !== null;
-      const serializedSvg = new XMLSerializer().serializeToString(svg);
-      image = svg.ownerDocument.createElement('img');
-      image.decoding = 'sync';
-      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serializedSvg)}`;
-      await waitForImageDecode(image);
+      let bitmap: ImageBitmap | null = null;
+      let replacement: HTMLCanvasElement | null = null;
+      let image: HTMLImageElement | null = null;
+      let rasterCanvas: HTMLCanvasElement | null = null;
+      try {
+        await embedCaptureSvgImages(svg, imageDataUrls);
+        const serializedSvg = new XMLSerializer().serializeToString(svg);
+        let entry = cache.get(cacheKey);
 
-      // A closeable bitmap gives Chromium an explicit lifetime for its native
-      // decoded surface. Drawing the already-decoded image remains a bounded
-      // fallback for browsers that cannot create a bitmap from it.
-      //
-      // Chromium taints ImageBitmaps created from SVGs containing foreignObject,
-      // even though drawing the decoded HTMLImageElement directly remains
-      // origin-clean.
-      if (!containsForeignObject && typeof createImageBitmap === 'function') {
-        try {
-          bitmap = await createImageBitmap(image);
-        } catch {
-          bitmap = null;
+        if (
+          !entry ||
+          entry.serializedSvg !== serializedSvg ||
+          entry.width !== width ||
+          entry.height !== height
+        ) {
+          const containsForeignObject = svg.querySelector('foreignObject') !== null;
+          image = svg.ownerDocument.createElement('img');
+          image.decoding = 'sync';
+          image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serializedSvg)}`;
+          await waitForImageDecode(image);
+
+          // A closeable bitmap gives Chromium an explicit lifetime for its native
+          // decoded surface. Drawing the already-decoded image remains a bounded
+          // fallback for browsers that cannot create a bitmap from it.
+          //
+          // Chromium taints ImageBitmaps created from SVGs containing foreignObject,
+          // even though drawing the decoded HTMLImageElement directly remains
+          // origin-clean.
+          if (!containsForeignObject && typeof createImageBitmap === 'function') {
+            try {
+              bitmap = await createImageBitmap(image);
+            } catch {
+              bitmap = null;
+            }
+          }
+
+          rasterCanvas = entry?.canvas ?? originalRoot.ownerDocument.createElement('canvas');
+          if (rasterCanvas.width !== width || rasterCanvas.height !== height) {
+            rasterCanvas.width = width;
+            rasterCanvas.height = height;
+          }
+          const rasterContext = rasterCanvas.getContext('2d');
+          if (!rasterContext) {
+            throw new Error('Could not create the cached SVG raster canvas context');
+          }
+          rasterContext.clearRect(0, 0, width, height);
+          rasterContext.drawImage(bitmap ?? image, 0, 0, width, height);
+          entry = { serializedSvg, width, height, canvas: rasterCanvas };
+          cache.set(cacheKey, entry);
         }
-      }
 
-      replacement = svg.ownerDocument.createElement('canvas');
-      replacement.width = width;
-      replacement.height = height;
-      copyCaptureSvgPresentation(svg, replacement);
-      const context = replacement.getContext('2d');
-      if (!context) {
-        throw new Error('Could not create the SVG capture canvas context');
+        replacement = svg.ownerDocument.createElement('canvas');
+        replacement.width = width;
+        replacement.height = height;
+        copyCaptureSvgPresentation(svg, replacement);
+        const context = replacement.getContext('2d');
+        if (!context) {
+          throw new Error('Could not create the SVG capture canvas context');
+        }
+        context.drawImage(entry.canvas, 0, 0, width, height);
+        svg.replaceWith(replacement);
+        transientCanvases.push(replacement);
+      } catch (error) {
+        if (replacement && !replacement.isConnected) {
+          replacement.width = 0;
+          replacement.height = 0;
+        }
+        if (rasterCanvas && cache.get(cacheKey)?.canvas !== rasterCanvas) {
+          rasterCanvas.width = 0;
+          rasterCanvas.height = 0;
+        }
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Could not rasterize a full-slide SVG for frame capture: ${detail}`);
+      } finally {
+        bitmap?.close();
+        image?.removeAttribute('src');
       }
-      context.drawImage(bitmap ?? image, 0, 0, width, height);
-      svg.replaceWith(replacement);
-      transientCanvases.push(replacement);
-    } catch (error) {
-      if (replacement && !replacement.isConnected) {
-        replacement.width = 0;
-        replacement.height = 0;
-      }
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new Error(`Could not rasterize a full-slide SVG for frame capture: ${detail}`);
-    } finally {
-      bitmap?.close();
-      image?.removeAttribute('src');
     }
-  }
 
-  return transientCanvases;
+    for (const [cacheKey, entry] of cache) {
+      if (activeCacheKeys.has(cacheKey)) continue;
+      releaseCaptureSvgRasterEntry(entry);
+      cache.delete(cacheKey);
+    }
+
+    return transientCanvases;
+  } finally {
+    if (ownsRasterCache) releaseCaptureSvgRasterCache(cache);
+  }
 }
 
 /** Release backing stores retained by canvases in html2canvas's clone iframe. */
@@ -762,6 +971,8 @@ export function useFrameCapture(): FrameCaptureHandle {
   const hasCapturedFrameRef = useRef(false);
   const decodedImagesRef = useRef(new WeakSet<HTMLImageElement>());
   const captureImageDataUrlsRef = useRef<CaptureImageDataUrlCache>(new Map());
+  const captureSvgRasterCacheRef = useRef<CaptureSvgRasterCache>(createCaptureSvgRasterCache());
+  const primedCaptureVideosRef = useRef(new WeakSet<HTMLVideoElement>());
   const dimensionsRef = useRef<{ width: number; height: number }>({ width: 1920, height: 1080 });
 
   const init = useCallback(
@@ -792,6 +1003,9 @@ export function useFrameCapture(): FrameCaptureHandle {
         hasCapturedFrameRef.current = false;
         decodedImagesRef.current = new WeakSet<HTMLImageElement>();
         captureImageDataUrlsRef.current.clear();
+        releaseCaptureSvgRasterCache(captureSvgRasterCacheRef.current);
+        captureSvgRasterCacheRef.current = createCaptureSvgRasterCache();
+        primedCaptureVideosRef.current = new WeakSet<HTMLVideoElement>();
         await new Promise<void>((resolve) => {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
@@ -826,6 +1040,9 @@ export function useFrameCapture(): FrameCaptureHandle {
       hasCapturedFrameRef.current = false;
       decodedImagesRef.current = new WeakSet<HTMLImageElement>();
       captureImageDataUrlsRef.current.clear();
+      releaseCaptureSvgRasterCache(captureSvgRasterCacheRef.current);
+      captureSvgRasterCacheRef.current = createCaptureSvgRasterCache();
+      primedCaptureVideosRef.current = new WeakSet<HTMLVideoElement>();
 
       // Create a hidden container
       const container = document.createElement('div');
@@ -916,6 +1133,7 @@ export function useFrameCapture(): FrameCaptureHandle {
               throw new Error('Capture root element not found after player initialization.');
             }
             await waitForCaptureAssets(captureRoot, decodedImagesRef.current);
+            await primeIndeterminateCaptureVideos(captureRoot, primedCaptureVideosRef.current);
             clearTimeout(timeout);
             resolve(api.getDuration());
           } catch (assetError) {
@@ -952,16 +1170,22 @@ export function useFrameCapture(): FrameCaptureHandle {
       // Seek the player to the target time
       await api.seekTo(time);
 
+      const root = container.querySelector('#squisq-capture-root') as HTMLElement;
+      if (!root) {
+        throw new Error('Capture root element not found');
+      }
+      if (await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current)) {
+        // A newly mounted recorder WebM was restored to this time, but run the
+        // player barrier once more so its React clock and media readiness stay
+        // authoritative together.
+        await api.seekTo(time);
+      }
+
       const renderedTime = api.getRenderedTime();
       if (Math.abs(renderedTime - time) > RENDER_TIME_EPSILON_SECONDS) {
         throw new Error(
           `Player committed ${renderedTime.toFixed(6)}s while capture requested ${time.toFixed(6)}s.`,
         );
-      }
-
-      const root = container.querySelector('#squisq-capture-root') as HTMLElement;
-      if (!root) {
-        throw new Error('Capture root element not found');
       }
       await waitForCaptureAssets(root, decodedImagesRef.current);
 
@@ -1003,6 +1227,7 @@ export function useFrameCapture(): FrameCaptureHandle {
               clonedRoot,
               transientCloneCanvases,
               captureImageDataUrlsRef.current,
+              captureSvgRasterCacheRef.current,
             );
           },
           // html2canvas starts cloning at documentElement. Do not clone the rest
@@ -1051,6 +1276,9 @@ export function useFrameCapture(): FrameCaptureHandle {
     hasCapturedFrameRef.current = false;
     decodedImagesRef.current = new WeakSet<HTMLImageElement>();
     captureImageDataUrlsRef.current.clear();
+    releaseCaptureSvgRasterCache(captureSvgRasterCacheRef.current);
+    captureSvgRasterCacheRef.current = createCaptureSvgRasterCache();
+    primedCaptureVideosRef.current = new WeakSet<HTMLVideoElement>();
     renderAPIRef.current = null;
   }, []);
 

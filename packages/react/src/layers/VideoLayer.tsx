@@ -125,7 +125,10 @@ export function VideoLayer({
     const targetTime = gated
       ? content.clipStart
       : Math.min(content.clipEnd, content.clipStart + Math.max(0, blockTime - startAt));
-    if (Math.abs(video.currentTime - targetTime) > VIDEO_SYNC_DRIFT_SECONDS) {
+    if (
+      video.dataset.captureSequential !== 'true' &&
+      Math.abs(video.currentTime - targetTime) > VIDEO_SYNC_DRIFT_SECONDS
+    ) {
       video.currentTime = targetTime;
     }
 
@@ -146,7 +149,7 @@ export function VideoLayer({
       if (playPromise) {
         playPromise.catch(() => {});
       }
-    } else {
+    } else if (video.dataset.captureSequential !== 'true') {
       video.pause();
     }
   }, [isPlaying, gated, blockTime, startAt, src, content.clipStart, content.clipEnd]);

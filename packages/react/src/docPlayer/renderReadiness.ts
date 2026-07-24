@@ -1,6 +1,8 @@
 const DEFAULT_VIDEO_FRAME_TIMEOUT_MS = 2_000;
 const VIDEO_FRAME_READINESS_POLL_MS = 16;
 const VIDEO_TIME_TOLERANCE_SECONDS = 0.01;
+const MAX_SEQUENTIAL_CAPTURE_STEP_SECONDS = 0.5;
+const SEQUENTIAL_CAPTURE_PLAYBACK_RATE = 0.2;
 
 function formatMediaTime(time: number): string {
   return Number.isFinite(time) ? `${time.toFixed(3)}s` : String(time);
@@ -37,29 +39,12 @@ function isVisiblyPresented(video: HTMLVideoElement): boolean {
   return true;
 }
 
-/**
- * Seek a paused video and resolve only when its target frame is decodable.
- *
- * Assigning `currentTime` updates that property synchronously, before the
- * browser has decoded the requested frame. A visibly presented video also
- * waits for requestVideoFrameCallback where available. Invisible capture
- * surfaces cannot receive that compositor callback, so `seeked` plus
- * HAVE_CURRENT_DATA is authoritative there. A timeout rejects instead of
- * silently capturing the previous frame.
- */
-export function seekVideoToFrame(
+function seekVideoByAssignment(
   video: HTMLVideoElement,
   targetTime: number,
   timeoutMs = DEFAULT_VIDEO_FRAME_TIMEOUT_MS,
 ): Promise<void> {
   video.pause();
-
-  const alreadyReady =
-    !video.seeking &&
-    video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-    isAtReachableMediaTime(video, targetTime);
-  if (alreadyReady) return Promise.resolve();
-
   return new Promise<void>((resolve, reject) => {
     let settled = false;
     let videoFrameRequest: number | null = null;
@@ -143,4 +128,121 @@ export function seekVideoToFrame(
       reject(error);
     }
   });
+}
+
+function advanceSequentialCaptureVideo(
+  video: HTMLVideoElement,
+  targetTime: number,
+  timeoutMs: number,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      clearInterval(readinessPoll);
+      video.removeEventListener('timeupdate', check);
+      video.removeEventListener('loadeddata', check);
+      video.removeEventListener('canplay', check);
+      video.removeEventListener('error', fail);
+    };
+    const finish = (): void => {
+      if (!settled) {
+        settled = true;
+        cleanup();
+        resolve();
+      }
+    };
+    const fallbackToSeek = (): void => {
+      if (settled) return;
+      settled = true;
+      video.pause();
+      cleanup();
+      // Autoplay policy or an engine-specific playback failure must not make
+      // an otherwise seekable source unusable.
+      void seekVideoByAssignment(video, targetTime, timeoutMs).then(resolve, reject);
+    };
+    const fail = (): void => {
+      if (settled) return;
+      settled = true;
+      video.pause();
+      cleanup();
+      reject(
+        new Error(
+          `Video frame did not advance to ${formatMediaTime(targetTime)} ` +
+            `within ${timeoutMs}ms (currentTime=${formatMediaTime(video.currentTime)}, ` +
+            `readyState=${video.readyState}).`,
+        ),
+      );
+    };
+    function check(): void {
+      if (
+        video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+        video.currentTime >= reachableMediaTime(video, targetTime)
+      ) {
+        finish();
+      }
+    }
+
+    const timeout = setTimeout(fail, timeoutMs);
+    const readinessPoll = setInterval(check, VIDEO_FRAME_READINESS_POLL_MS);
+    video.addEventListener('timeupdate', check);
+    video.addEventListener('loadeddata', check);
+    video.addEventListener('canplay', check);
+    video.addEventListener('error', fail, { once: true });
+    try {
+      // Install the frame monitor before play(): Chromium may advance a hidden
+      // video substantially before the play promise itself resolves.
+      video.playbackRate = SEQUENTIAL_CAPTURE_PLAYBACK_RATE;
+      if (video.paused) {
+        void video.play().catch(fallbackToSeek);
+      }
+    } catch {
+      fallbackToSeek();
+    }
+    queueMicrotask(check);
+  });
+}
+
+/**
+ * Select a video frame and resolve only when it is decodable.
+ *
+ * Indexed sources use an exact currentTime seek. Capture-marked recorder WebMs
+ * advance short monotonic steps through playback instead: those files commonly
+ * lack Cues, so assigning currentTime for every output frame becomes
+ * progressively slower even when all bytes are locally buffered.
+ */
+export function seekVideoToFrame(
+  video: HTMLVideoElement,
+  targetTime: number,
+  timeoutMs = DEFAULT_VIDEO_FRAME_TIMEOUT_MS,
+): Promise<void> {
+  const reachableTargetTime = reachableMediaTime(video, targetTime);
+  const step = reachableTargetTime - video.currentTime;
+  if (video.dataset.captureSequential === 'true') {
+    if (
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      step <= VIDEO_TIME_TOLERANCE_SECONDS
+    ) {
+      // Continuous low-rate playback normally advances less than one source
+      // frame during html2canvas. If a slow render lets it get ahead, pause and
+      // let the document clock catch up without ever seeking backward.
+      if (step < -VIDEO_TIME_TOLERANCE_SECONDS) video.pause();
+      return Promise.resolve();
+    }
+    if (
+      step > 0 &&
+      step <= MAX_SEQUENTIAL_CAPTURE_STEP_SECONDS &&
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
+    ) {
+      return advanceSequentialCaptureVideo(video, targetTime, timeoutMs);
+    }
+  }
+
+  video.pause();
+  const alreadyReady =
+    !video.seeking &&
+    video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+    isAtReachableMediaTime(video, targetTime);
+  if (alreadyReady) return Promise.resolve();
+  return seekVideoByAssignment(video, targetTime, timeoutMs);
 }
