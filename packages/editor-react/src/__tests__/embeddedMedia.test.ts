@@ -30,9 +30,38 @@ describe('collectEmbeddedMedia', () => {
     expect(found).toEqual([{ src: 'video/recording.webm', kind: 'video', sourceLine: 3 }]);
   });
 
+  it('reads timeline timing attributes from an inline video', () => {
+    const found = collectEmbeddedMedia(
+      block(
+        '# Tips\n\n<video src="video/recording.webm" data-squisq-video-start-at="2.5" data-squisq-video-clip-start="1" data-squisq-video-clip-end="4"></video>\n',
+      ),
+    );
+    expect(found[0]).toMatchObject({
+      src: 'video/recording.webm',
+      startAt: 2.5,
+      clipStart: 1,
+      clipEnd: 4,
+    });
+  });
+
   it('finds an <audio> tag', () => {
     const found = collectEmbeddedMedia(block('# Intro\n\n<audio src="audio/take.mp3"></audio>\n'));
     expect(found[0]).toMatchObject({ src: 'audio/take.mp3', kind: 'audio' });
+  });
+
+  it('reads timing attributes from an inline audio element', () => {
+    const found = collectEmbeddedMedia(
+      block(
+        '# Intro\n\n<audio src="audio/take.mp3" data-squisq-audio-start-at="2" data-squisq-audio-clip-start="1" data-squisq-audio-clip-end="5"></audio>\n',
+      ),
+    );
+    expect(found[0]).toMatchObject({
+      src: 'audio/take.mp3',
+      kind: 'audio',
+      startAt: 2,
+      clipStart: 1,
+      clipEnd: 5,
+    });
   });
 
   it('finds a markdown link/image to media', () => {
@@ -75,6 +104,26 @@ describe('collectEmbeddedVideoSchedule', () => {
     ]);
   });
 
+  it('applies inline video timing attributes without promoting the video', () => {
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '# First {duration=8}\n\nIntro\n\n# Second {duration=10}\n\n<video src="video/take.webm" data-squisq-video-start-at="2" data-squisq-video-clip-start="1" data-squisq-video-clip-end="4"></video>\n',
+      ),
+      { articleId: 't' },
+    );
+
+    expect(doc.blocks[1].media).toBeUndefined();
+    expect(collectEmbeddedVideoSchedule(doc)).toEqual([
+      expect.objectContaining({
+        src: 'video/take.webm',
+        absoluteStart: 10,
+        absoluteEnd: 13,
+        sourceIn: 1,
+        blockId: doc.blocks[1].id,
+      }),
+    ]);
+  });
+
   it('does not duplicate embedded audio in the video monitor', () => {
     const doc = markdownToDoc(parseMarkdown('# Intro\n\n<audio src="take.mp3"></audio>\n'), {
       articleId: 't',
@@ -101,6 +150,25 @@ describe('collectTimelinePlaybackSchedule', () => {
     expect(playback).toEqual([
       expect.objectContaining({ kind: 'audio', src: 'audio/music.mp3' }),
       expect.objectContaining({ kind: 'video', src: 'video/camera.webm' }),
+    ]);
+  });
+
+  it('schedules inline audio from its HTML timing attributes', () => {
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '# Intro {duration=10}\n\n<audio src="audio/music.mp3" data-squisq-audio-start-at="2" data-squisq-audio-clip-start="1" data-squisq-audio-clip-end="5"></audio>\n',
+      ),
+      { articleId: 't' },
+    );
+
+    expect(collectEmbeddedMediaSchedule(doc)).toEqual([
+      expect.objectContaining({
+        kind: 'audio',
+        src: 'audio/music.mp3',
+        absoluteStart: 2,
+        absoluteEnd: 6,
+        sourceIn: 1,
+      }),
     ]);
   });
 

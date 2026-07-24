@@ -92,4 +92,38 @@ describe('listBlock', () => {
       'Visit <a href="https://example.com/docs" title="Read docs">Docs</a>',
     );
   });
+
+  it('renders authored inline icons in rich slideshow list items', () => {
+    const context = {
+      ...createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape),
+      block: {
+        id: 'icon-list',
+        startTime: 0,
+        duration: 10,
+        audioSegment: 0,
+        contents: parseMarkdown(
+          '- {[github]} [GitHub repository](https://github.com/bendyline/squisq)',
+        ).children,
+      },
+    };
+    const layers = listBlock(
+      {
+        template: 'list',
+        id: 'icon-list',
+        duration: 10,
+        audioSegment: 0,
+        items: ['GitHub repository'],
+      },
+      context,
+    );
+    const item = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'item-0',
+    );
+
+    expect(item?.content.html).toBe(
+      '<i class="fa-brands fa-github" aria-hidden="true"></i> ' +
+        '<a href="https://github.com/bendyline/squisq">GitHub repository</a>',
+    );
+    expect(item?.content.html).not.toContain('{[github]}');
+  });
 });

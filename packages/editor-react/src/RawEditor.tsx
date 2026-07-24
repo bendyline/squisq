@@ -13,7 +13,11 @@ import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
 import { suggestIcons, resolveIcon, iconGlyph } from '@bendyline/squisq/icons';
 import { BLOCK_META_KEY_DESCRIPTORS, tokenizeAttrTokens } from '@bendyline/squisq/markdown';
-import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
+import {
+  SQUISQ_MEDIA_MIME,
+  buildSquisqMediaReference,
+  parseSquisqMediaPayload,
+} from './mediaDragMime';
 import {
   canHandleSquisqMediaDrop,
   getCachedMarkdownFencedCodeLineMask,
@@ -538,7 +542,7 @@ export function RawEditor({
 
       // Attach native drop listeners for in-app MediaBin drags. Monaco's own
       // drop handling doesn't know about our custom MIME type, so we insert
-      // markdown image syntax explicitly in the capture phase.
+      // the appropriate image, playable-media, or file reference explicitly.
       dropCleanupRef.current?.();
       const domNode = editor.getDomNode();
       if (domNode) {
@@ -556,7 +560,7 @@ export function RawEditor({
           const raw = dt.getData(SQUISQ_MEDIA_MIME);
           if (!raw) return;
           const payload = parseSquisqMediaPayload(raw);
-          if (!payload || !payload.mimeType.startsWith('image/')) return;
+          if (!payload) return;
 
           e.preventDefault();
           e.stopPropagation();
@@ -565,7 +569,7 @@ export function RawEditor({
           const position = target?.position ?? editor.getPosition();
           if (!position) return;
 
-          const markdown = `![${payload.alt}](${payload.name})`;
+          const markdown = buildSquisqMediaReference(payload);
           editor.executeEdits('squisq-media-drop', [
             {
               range: new monaco.Range(

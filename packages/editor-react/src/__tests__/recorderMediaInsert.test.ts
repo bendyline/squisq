@@ -13,6 +13,7 @@ import { buildDualClipInsertion } from '../recorder/dualClipInsertion';
 import type { RecorderSaveResult } from '../recorder/RecorderModal';
 import { collectEmbeddedMedia } from '../embeddedMedia';
 import { TiptapVideo } from '../tiptap/TiptapVideo';
+import { TiptapAudio } from '../tiptap/TiptapAudio';
 
 /**
  * Regression: a recorded clip used to vanish from the markdown source
@@ -67,6 +68,21 @@ describe('recorder media insertion (caret inside a list)', () => {
     expect(md).toContain('1. First');
     expect(md).toContain('2. Second');
     expect(md).toMatch(/^<video src="video\/clip\.webm"/m);
+  });
+});
+
+describe('inline audio timing round-trip', () => {
+  it('keeps timeline data attributes on the Tiptap audio node', () => {
+    const editor = new Editor({
+      extensions: [Document, Paragraph, Text, TiptapAudio],
+      content:
+        '<audio src="audio/take.webm" controls data-squisq-audio-start-at="3" data-squisq-audio-clip-start="1" data-squisq-audio-clip-end="8"></audio>',
+    });
+
+    expect(editor.getHTML()).toContain('data-squisq-audio-start-at="3"');
+    expect(editor.getHTML()).toContain('data-squisq-audio-clip-start="1"');
+    expect(editor.getHTML()).toContain('data-squisq-audio-clip-end="8"');
+    editor.destroy();
   });
 });
 

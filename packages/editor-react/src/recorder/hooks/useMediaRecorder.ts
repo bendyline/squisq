@@ -36,6 +36,17 @@ import { requestSystemAudioStream, mixSystemAudio } from '../sources/systemAudio
  * separate files in lockstep.
  */
 export type RecorderSource = 'mic' | 'camera' | 'screen' | 'screen+mic' | 'screen+camera';
+export type RecorderAudioBitrateMode = 'constant' | 'variable';
+
+/**
+ * MediaRecorder options standardized after the DOM library fields currently
+ * shipped by TypeScript. They are passed through only when explicitly set.
+ */
+export interface RecorderExtendedMediaOptions {
+  audioBitrateMode?: RecorderAudioBitrateMode;
+  videoKeyFrameIntervalDuration?: number;
+  videoKeyFrameIntervalCount?: number;
+}
 
 /** Discriminated state describing what the recorder is currently doing. */
 export type RecorderState =
@@ -71,8 +82,19 @@ export interface UseMediaRecorderOptions {
    * the hook probes a built-in priority list.
    */
   mimeType?: string;
-  /** Video track constraints for camera / screen sources. */
+  /**
+   * Video track constraints for camera sources. Also used for screen capture
+   * when `screenVideoConstraints` is omitted, preserving the original API.
+   */
   videoConstraints?: MediaTrackConstraints | boolean;
+  /**
+   * Display-video constraints for screen sources. Keeping this independent
+   * lets a dual screen+camera take request different dimensions/aspect ratios
+   * for each lane.
+   */
+  screenVideoConstraints?: MediaTrackConstraints | boolean;
+  /** Audio-track constraints specific to getDisplayMedia system audio. */
+  screenAudioConstraints?: MediaTrackConstraints;
   /** Audio track constraints for mic / camera / screen+mic sources. */
   audioConstraints?: MediaTrackConstraints | boolean;
   /**
@@ -81,6 +103,16 @@ export interface UseMediaRecorderOptions {
    * fine.
    */
   bitsPerSecond?: number;
+  /** Audio bitrate hint passed to `MediaRecorder`. */
+  audioBitsPerSecond?: number;
+  /** Video bitrate hint passed to `MediaRecorder`. */
+  videoBitsPerSecond?: number;
+  /** Constant/variable audio encoder preference, when supported. */
+  audioBitrateMode?: RecorderAudioBitrateMode;
+  /** Requested milliseconds between video keyframes. Mutually exclusive with count. */
+  videoKeyFrameIntervalDuration?: number;
+  /** Requested frames between video keyframes. Mutually exclusive with duration. */
+  videoKeyFrameIntervalCount?: number;
   /**
    * Whether to capture system (tab/monitor) audio. Browser support is limited
    * (desktop Chromium only); when unsupported the resulting stream simply omits
@@ -192,7 +224,7 @@ async function acquireStream(
       if (opts.systemAudio) {
         // System audio only comes from a display capture — take it FIRST (it
         // needs the click's transient activation), then the mic, then mix.
-        const systemAudio = await requestSystemAudioStream();
+        const systemAudio = await requestSystemAudioStream(opts.screenAudioConstraints);
         let base: MediaStream;
         try {
           base = await requestMicStream(audio);
@@ -210,7 +242,7 @@ async function acquireStream(
       const video = opts.videoConstraints ?? true;
       const audio = opts.includeMicrophone === false ? false : (opts.audioConstraints ?? true);
       if (opts.systemAudio) {
-        const systemAudio = await requestSystemAudioStream();
+        const systemAudio = await requestSystemAudioStream(opts.screenAudioConstraints);
         let base: MediaStream;
         try {
           base = await requestCameraStream({ video, audio });
@@ -227,8 +259,9 @@ async function acquireStream(
     case 'screen':
     case 'screen+mic': {
       const handle: ScreenStreamHandle = await requestScreenStream({
-        video: opts.videoConstraints ?? true,
+        video: opts.screenVideoConstraints ?? opts.videoConstraints ?? true,
         systemAudio: opts.systemAudio ?? false,
+        systemAudioConstraints: opts.screenAudioConstraints,
         includeMicrophone: source === 'screen+mic',
         microphoneConstraints:
           typeof opts.audioConstraints === 'object' ? opts.audioConstraints : undefined,
@@ -256,8 +289,9 @@ async function acquireDualStreams(
   isStale: () => boolean,
 ): Promise<DualStreams | null> {
   const screen = await requestScreenStream({
-    video: opts.videoConstraints ?? true,
+    video: opts.screenVideoConstraints ?? opts.videoConstraints ?? true,
     systemAudio: opts.systemAudio ?? false,
+    systemAudioConstraints: opts.screenAudioConstraints,
     includeMicrophone: false,
   });
   const releaseScreen = () => {
@@ -272,7 +306,7 @@ async function acquireDualStreams(
   let camera: MediaStream;
   try {
     camera = await requestCameraStream({
-      video: true,
+      video: opts.videoConstraints ?? true,
       audio: opts.includeMicrophone === false ? false : (opts.audioConstraints ?? true),
     });
   } catch (err: unknown) {
@@ -484,10 +518,26 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
       try {
         const source = optionsRef.current.source ?? 'mic';
         const resolved = resolveFormat(captureKindFor(source), optionsRef.current.mimeType);
-        const recorderOptions: MediaRecorderOptions = {};
+        const recorderOptions: MediaRecorderOptions & RecorderExtendedMediaOptions = {};
         if (resolved.mimeType) recorderOptions.mimeType = resolved.mimeType;
         if (optionsRef.current.bitsPerSecond) {
           recorderOptions.bitsPerSecond = optionsRef.current.bitsPerSecond;
+        }
+        if (optionsRef.current.audioBitsPerSecond) {
+          recorderOptions.audioBitsPerSecond = optionsRef.current.audioBitsPerSecond;
+        }
+        if (optionsRef.current.videoBitsPerSecond) {
+          recorderOptions.videoBitsPerSecond = optionsRef.current.videoBitsPerSecond;
+        }
+        if (optionsRef.current.audioBitrateMode) {
+          recorderOptions.audioBitrateMode = optionsRef.current.audioBitrateMode;
+        }
+        if (optionsRef.current.videoKeyFrameIntervalDuration) {
+          recorderOptions.videoKeyFrameIntervalDuration =
+            optionsRef.current.videoKeyFrameIntervalDuration;
+        } else if (optionsRef.current.videoKeyFrameIntervalCount) {
+          recorderOptions.videoKeyFrameIntervalCount =
+            optionsRef.current.videoKeyFrameIntervalCount;
         }
 
         if (source === 'screen+camera') {

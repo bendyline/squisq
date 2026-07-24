@@ -19,7 +19,13 @@ export interface TiptapAudioOptions {
 declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     audio: {
-      setAudio: (attrs: { src: string; controls?: boolean }) => ReturnType;
+      setAudio: (attrs: {
+        src: string;
+        controls?: boolean;
+        startAt?: number | string | null;
+        clipStart?: number | string | null;
+        clipEnd?: number | string | null;
+      }) => ReturnType;
     };
   }
 }
@@ -57,6 +63,26 @@ export const TiptapAudio = Node.create<TiptapAudioOptions>({
         default: true,
         parseHTML: (el) => el.hasAttribute('controls'),
         renderHTML: (attrs) => (attrs.controls ? { controls: '' } : {}),
+      },
+      startAt: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-squisq-audio-start-at'),
+        renderHTML: (attrs) =>
+          attrs.startAt != null ? { 'data-squisq-audio-start-at': String(attrs.startAt) } : {},
+      },
+      clipStart: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-squisq-audio-clip-start'),
+        renderHTML: (attrs) =>
+          attrs.clipStart != null
+            ? { 'data-squisq-audio-clip-start': String(attrs.clipStart) }
+            : {},
+      },
+      clipEnd: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-squisq-audio-clip-end'),
+        renderHTML: (attrs) =>
+          attrs.clipEnd != null ? { 'data-squisq-audio-clip-end': String(attrs.clipEnd) } : {},
       },
     };
   },

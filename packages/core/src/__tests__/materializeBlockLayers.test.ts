@@ -438,6 +438,25 @@ Supporting copy.
     });
   });
 
+  it('applies inline video timing data to the rendered video layer', () => {
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '# Demo\n\n<video src="clips/demo.mp4" data-squisq-video-start-at="3" data-squisq-video-clip-start="1" data-squisq-video-clip-end="7"></video>',
+      ),
+      { generateCoverBlock: false },
+    );
+    const source = doc.blocks[0] as DocBlock;
+    const materialized = materializeBlockLayers(source, { persistentLayers: false });
+    const video = materialized.layers.find((layer): layer is VideoLayer => layer.type === 'video');
+
+    expect(video?.content).toMatchObject({
+      src: 'clips/demo.mp4',
+      startAt: 3,
+      clipStart: 1,
+      clipEnd: 7,
+    });
+  });
+
   it('resolves document-scoped custom templates in the on-demand API', () => {
     const customTemplate: CustomTemplateDefinition = {
       name: 'hero',

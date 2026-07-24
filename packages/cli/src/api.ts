@@ -56,20 +56,29 @@ import type { GifFormatOptions, Mp4FormatOptions } from './registry.js';
 
 let playerBundlePromise: Promise<string> | undefined;
 let fullPlayerBundlePromise: Promise<string> | undefined;
+let playerIconBootstrapPromise: Promise<string> | undefined;
 
-function loadPlayerBundle(): Promise<string> {
-  playerBundlePromise ??= readFile(
-    new URL('../dist/squisq-player.global.js', import.meta.url),
+function loadPlayerIconBootstrap(): Promise<string> {
+  playerIconBootstrapPromise ??= readFile(
+    new URL('../dist/squisq-player-icons.global.js', import.meta.url),
     'utf8',
   );
+  return playerIconBootstrapPromise;
+}
+
+function loadPlayerBundle(): Promise<string> {
+  playerBundlePromise ??= Promise.all([
+    loadPlayerIconBootstrap(),
+    readFile(new URL('../dist/squisq-player.global.js', import.meta.url), 'utf8'),
+  ]).then(([icons, player]) => `${icons}${player}`);
   return playerBundlePromise;
 }
 
 function loadFullPlayerBundle(): Promise<string> {
-  fullPlayerBundlePromise ??= readFile(
-    new URL('../dist/squisq-player.full.global.js', import.meta.url),
-    'utf8',
-  );
+  fullPlayerBundlePromise ??= Promise.all([
+    loadPlayerIconBootstrap(),
+    readFile(new URL('../dist/squisq-player.full.global.js', import.meta.url), 'utf8'),
+  ]).then(([icons, player]) => `${icons}${player}`);
   return fullPlayerBundlePromise;
 }
 

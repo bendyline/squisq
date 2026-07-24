@@ -55,9 +55,10 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   '@bendyline/squisq-video': 35_000,
   '@bendyline/squisq-video-react': 75_000,
   '@bendyline/squisq-editor-react': 1_000_000,
-  // Includes compressed light and full standalone players so CLI video export
-  // can render Mermaid without pulling the React/Mermaid dependency graph.
-  '@bendyline/squisq-cli': 2_000_000,
+  // Includes compressed light and full standalone players plus one shared
+  // Font Awesome webfont payload so CLI video export remains self-contained
+  // without duplicating the fonts into both player variants.
+  '@bendyline/squisq-cli': 2_250_000,
 };
 
 function dryRunPack(directory: string, cache: string): PackResult {

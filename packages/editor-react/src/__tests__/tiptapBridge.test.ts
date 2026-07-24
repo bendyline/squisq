@@ -497,12 +497,32 @@ describe('tiptapToMarkdown', () => {
     expect(markdownToTiptap(md)).toContain('data-squisq-video-lock-to-block="false"');
   });
 
+  it('preserves timing data attributes on an in-layout video', () => {
+    const source =
+      '<video src="video/inline.webm" controls data-squisq-video-start-at="4" data-squisq-video-clip-start="1" data-squisq-video-clip-end="12"></video>';
+    const md = tiptapToMarkdown(source);
+    expect(md).toContain('data-squisq-video-start-at="4"');
+    expect(md).toContain('data-squisq-video-clip-start="1"');
+    expect(md).toContain('data-squisq-video-clip-end="12"');
+    expect(markdownToTiptap(md)).toContain('data-squisq-video-start-at="4"');
+  });
+
   it('keeps an <audio> nested in a list item', () => {
     const md = tiptapToMarkdown(
       '<ul><li><p>Note</p><audio src="audio/take.webm" controls=""></audio></li></ul>',
     );
     expect(md).toContain('- Note');
     expect(md).toContain('  <audio src="audio/take.webm" controls></audio>');
+  });
+
+  it('preserves timing data attributes on an inline audio element', () => {
+    const source =
+      '<audio src="audio/take.webm" controls data-squisq-audio-start-at="3" data-squisq-audio-clip-start="1" data-squisq-audio-clip-end="8"></audio>';
+    const md = tiptapToMarkdown(source);
+    expect(md).toContain('data-squisq-audio-start-at="3"');
+    expect(md).toContain('data-squisq-audio-clip-start="1"');
+    expect(md).toContain('data-squisq-audio-clip-end="8"');
+    expect(markdownToTiptap(md)).toContain('data-squisq-audio-start-at="3"');
   });
 
   it('keeps a media-only list item (first tag takes the bullet)', () => {

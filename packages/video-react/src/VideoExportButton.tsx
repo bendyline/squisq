@@ -9,7 +9,11 @@ import { useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
-import { VideoExportModal, type VideoExportPalette } from './VideoExportModal.js';
+import {
+  VideoExportModal,
+  type VideoExportModalProps,
+  type VideoExportPalette,
+} from './VideoExportModal.js';
 import type { VideoExportConfig } from './hooks/useVideoExport.js';
 
 export interface VideoExportButtonProps {
@@ -37,6 +41,10 @@ export interface VideoExportButtonProps {
   colorScheme?: 'light' | 'dark';
   /** Optional host palette overrides forwarded to the portaled modal. */
   uiPalette?: Partial<VideoExportPalette>;
+  /** Optional host save flow forwarded to the portaled modal. */
+  saveOutput?: VideoExportModalProps['saveOutput'];
+  /** Host-aware completed-export action label forwarded to the modal. */
+  saveActionLabel?: VideoExportModalProps['saveActionLabel'];
   /** Button label (defaults to "Export Video", or "Export GIF" for a GIF default config) */
   label?: string;
   /** Additional inline styles for the button */
@@ -54,6 +62,8 @@ export function VideoExportButton({
   defaultConfig,
   colorScheme,
   uiPalette,
+  saveOutput,
+  saveActionLabel,
   label,
   style,
   disabled,
@@ -82,6 +92,8 @@ export function VideoExportButton({
             defaultConfig={defaultConfig}
             colorScheme={colorScheme}
             uiPalette={uiPalette}
+            saveOutput={saveOutput}
+            saveActionLabel={saveActionLabel}
             onClose={handleClose}
           />,
           document.body,

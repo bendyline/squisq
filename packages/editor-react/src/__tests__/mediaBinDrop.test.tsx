@@ -6,8 +6,11 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { MediaEntry, MediaProvider } from '@bendyline/squisq/schemas';
 import { MediaBin } from '../MediaBin.js';
 
-function createProvider(): { provider: MediaProvider; added: string[] } {
-  const entries: MediaEntry[] = [];
+function createProvider(initialEntries: MediaEntry[] = []): {
+  provider: MediaProvider;
+  added: string[];
+} {
+  const entries: MediaEntry[] = [...initialEntries];
   const added: string[] = [];
   return {
     added,
@@ -102,5 +105,38 @@ describe('MediaBin image drop target', () => {
     expect(bin.classList.contains('squisq-media-bin--drop-active')).toBe(false);
     expect(screen.queryByText('Drop images here')).toBeNull();
     await waitFor(() => expect(added).toEqual([]));
+  });
+
+  it('makes video and audio entries draggable with playable-media source', async () => {
+    const { provider } = createProvider([
+      { name: 'video/screen.webm', mimeType: 'video/webm', size: 1200 },
+      { name: 'audio/narration.ogg', mimeType: 'audio/ogg', size: 800 },
+    ]);
+    render(<MediaBin mediaProvider={provider} isDark={false} />);
+
+    const videoItem = (await screen.findByText('screen.webm')).closest(
+      '.squisq-media-bin-item',
+    ) as HTMLElement;
+    const audioItem = screen
+      .getByText('narration.ogg')
+      .closest('.squisq-media-bin-item') as HTMLElement;
+    expect(videoItem.getAttribute('draggable')).toBe('true');
+    expect(audioItem.getAttribute('draggable')).toBe('true');
+
+    const values = new Map<string, string>();
+    const transfer = {
+      setData: vi.fn((type: string, value: string) => values.set(type, value)),
+      effectAllowed: 'none',
+    };
+    fireEvent.dragStart(videoItem, { dataTransfer: transfer });
+
+    expect(values.get('text/plain')).toBe(
+      '<video src="video/screen.webm" controls width="480"></video>',
+    );
+    expect(JSON.parse(values.get('application/x-squisq-media') ?? '{}')).toMatchObject({
+      name: 'video/screen.webm',
+      mimeType: 'video/webm',
+    });
+    expect(transfer.effectAllowed).toBe('copy');
   });
 });

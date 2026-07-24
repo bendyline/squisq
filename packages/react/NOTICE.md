@@ -6,12 +6,13 @@ Third-party components remain under their respective license terms.
 
 ## Runtime, peer, and bundled dependencies
 
-| Package            | Version              | License | Repository                            |
-| ------------------ | -------------------- | ------- | ------------------------------------- |
-| mermaid            | 11.16.0              | MIT     | https://github.com/mermaid-js/mermaid |
-| preact _(bundled)_ | 10.29.0              | MIT     | https://github.com/preactjs/preact    |
-| react _(peer)_     | ^18.0.0 \|\| ^19.0.0 | MIT     | https://github.com/facebook/react     |
-| react-dom _(peer)_ | ^18.0.0 \|\| ^19.0.0 | MIT     | https://github.com/facebook/react     |
+| Package                       | Version              | License                       | Repository                                  |
+| ----------------------------- | -------------------- | ----------------------------- | ------------------------------------------- |
+| @fortawesome/fontawesome-free | 7.2.0                | CC-BY-4.0 AND OFL-1.1 AND MIT | https://github.com/FortAwesome/Font-Awesome |
+| mermaid                       | 11.16.0              | MIT                           | https://github.com/mermaid-js/mermaid       |
+| preact _(bundled)_            | 10.29.0              | MIT                           | https://github.com/preactjs/preact          |
+| react _(peer)_                | ^18.0.0 \|\| ^19.0.0 | MIT                           | https://github.com/facebook/react           |
+| react-dom _(peer)_            | ^18.0.0 \|\| ^19.0.0 | MIT                           | https://github.com/facebook/react           |
 
 Mermaid is Copyright (c) 2014-2022 Knut Sveidqvist and is distributed under
 the MIT License. Preact is used by the standalone browser bundles. Exact

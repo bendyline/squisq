@@ -10,7 +10,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, renderHook } from '@testing-library/react';
 import axe from 'axe-core';
 import { VideoExportButton } from '../VideoExportButton';
-import { VideoExportModal } from '../VideoExportModal';
+import { resolveVideoSaveActionLabel, VideoExportModal } from '../VideoExportModal';
 import { useVideoExport } from '../hooks/useVideoExport';
 import type { Doc } from '@bendyline/squisq/schemas';
 
@@ -60,6 +60,12 @@ describe('VideoExportButton', () => {
 });
 
 describe('VideoExportModal', () => {
+  it('describes the default browser action as saving to Downloads', () => {
+    expect(resolveVideoSaveActionLabel('mp4')).toBe('Save MP4 to Downloads');
+    expect(resolveVideoSaveActionLabel('gif')).toBe('Save GIF to Downloads');
+    expect(resolveVideoSaveActionLabel('mp4', () => 'Save MP4 as...')).toBe('Save MP4 as...');
+  });
+
   it('is only dismissed by explicit controls and has no automated WCAG A/AA violations', async () => {
     const onClose = vi.fn();
     const { container, getByRole } = render(
@@ -240,12 +246,27 @@ describe('VideoExportModal', () => {
     expect(primary.style.borderColor).toBe('rgb(69, 103, 137)');
     expect(primary.style.color).toBe('rgb(241, 242, 243)');
   });
+
+  it('accepts a host save flow and action-label formatter', () => {
+    const saveOutput = vi.fn();
+    const { container } = render(
+      <VideoExportModal
+        doc={minimalDoc()}
+        saveOutput={saveOutput}
+        saveActionLabel={(format) => `Save ${format.toUpperCase()} as...`}
+        onClose={() => {}}
+      />,
+    );
+
+    expect(container.textContent).toContain('Export Video');
+  });
 });
 
 describe('useVideoExport result shape', () => {
   it('exposes the additive audio result fields, defaulted for idle', () => {
     const { result } = renderHook(() => useVideoExport());
     expect(result.current.outputFormat).toBe('mp4');
+    expect(result.current.outputBlob).toBeNull();
     expect(result.current.audioIncluded).toBe(false);
     expect(result.current.audioSkippedReason).toBeNull();
   });

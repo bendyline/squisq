@@ -64,13 +64,18 @@ import { useEditorContext } from './EditorContext';
 import { buildMentionExtension } from './MentionExtension';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
 import { looksLikeMarkdown } from './detectMarkdown';
-import { SQUISQ_MEDIA_MIME, parseSquisqMediaPayload } from './mediaDragMime';
+import {
+  SQUISQ_MEDIA_MIME,
+  parseSquisqMediaPayload,
+  squisqMediaKind,
+  type SquisqMediaDragPayload,
+} from './mediaDragMime';
 import { usePreviewSettingsOptional } from './PreviewControls';
 import { uploadAndInsertImages } from './wysiwygImageUpload';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { FindHighlightExtension } from './find/FindHighlightExtension';
 
-type ImageMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
+type MediaMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
 
 /**
  * Rotating placeholder prompts shown when the editor is empty. One is
@@ -95,8 +100,8 @@ export const LinkWithTitle = Link.extend({
 });
 
 const EMPTY_PROMPTS = [
-  'Start typing your content, or drop images on top of me...',
-  'Write anything -- paste markdown, drag in images, or just start typing...',
+  'Start typing your content, or drop files on top of me...',
+  'Write anything -- paste markdown, drag in media, or just start typing...',
   'Type away. Markdown syntax works too...',
   'Chapter 1 begins here...',
   'Once upon a time...',
@@ -434,8 +439,8 @@ export function WysiwygEditor({
       },
       // When image files are dropped onto the editor, upload them via the
       // MediaProvider and insert <img> nodes referencing the relative paths.
-      // Also handles drags from the MediaBin, which reference existing
-      // entries via a custom MIME type and skip the upload step.
+      // Drags from the MediaBin can also insert existing image, video, audio,
+      // or generic-file references without uploading them again.
       // Falls through to default handling for non-image drops or when no
       // MediaProvider is available.
       handleDrop: (view, event, _slice, moved) => {
@@ -456,11 +461,10 @@ export function WysiwygEditor({
         const squisqRaw = dt.getData(SQUISQ_MEDIA_MIME);
         if (squisqRaw) {
           const payload = parseSquisqMediaPayload(squisqRaw);
-          if (payload && payload.mimeType.startsWith('image/')) {
+          if (payload) {
             event.preventDefault();
             moveSelectionToDropPoint(view, event);
-            insertImageNode(view, payload.name, payload.alt);
-            return true;
+            return insertExistingMediaReference(view, payload);
           }
         }
 
@@ -868,13 +872,47 @@ function filesFromClipboard(clipboard: DataTransfer): File[] {
 }
 
 /** Insert an image node at the current selection using the schema image type. */
-function insertImageNode(view: ImageMutationView, src: string, alt: string): void {
+function insertImageNode(view: MediaMutationView, src: string, alt: string): void {
   const { schema } = view.state;
   const imageType = schema.nodes.image;
   if (!imageType) return;
   const node = imageType.create({ src, alt });
   const tr = view.state.tr.replaceSelectionWith(node);
   view.dispatch(tr);
+}
+
+/** Insert an existing Files-panel entry using its native editable node type. */
+function insertExistingMediaReference(
+  view: MediaMutationView,
+  payload: SquisqMediaDragPayload,
+): boolean {
+  const kind = squisqMediaKind(payload.mimeType);
+  if (kind === 'image') {
+    insertImageNode(view, payload.name, payload.alt);
+    return true;
+  }
+
+  const { state } = view;
+  if (kind === 'video' || kind === 'audio') {
+    const nodeType = state.schema.nodes[kind];
+    if (!nodeType) return false;
+    const attrs =
+      kind === 'video'
+        ? { src: payload.name, controls: true, width: 480 }
+        : { src: payload.name, controls: true };
+    const node = nodeType.create(attrs);
+    const { $from } = state.selection;
+    const pos = $from.depth >= 1 ? $from.after(1) : state.doc.content.size;
+    view.dispatch(state.tr.insert(pos, node).scrollIntoView());
+    return true;
+  }
+
+  const linkType = state.schema.marks.link;
+  if (!linkType) return false;
+  const label = payload.alt || payload.name;
+  const node = state.schema.text(label, [linkType.create({ href: payload.name })]);
+  view.dispatch(state.tr.replaceSelectionWith(node).scrollIntoView());
+  return true;
 }
 
 /** Move the selection to the document position under the drop event's coordinates. */

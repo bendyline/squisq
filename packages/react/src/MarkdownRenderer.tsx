@@ -161,6 +161,16 @@ function renderInline(
           </code>
         );
 
+      case 'inlineIcon':
+        return (
+          <i
+            key={key}
+            className={`fa-${node.family} fa-${node.name}`}
+            data-icon={node.token}
+            aria-hidden="true"
+          />
+        );
+
       case 'htmlInline':
         if (ctx.htmlPolicy === 'strip') return null;
         // Reconstruct every subtree as React. Besides routing media through

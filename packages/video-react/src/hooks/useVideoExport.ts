@@ -363,6 +363,8 @@ export interface VideoExportResult {
   backend: 'webcodecs' | 'ffmpeg-wasm' | null;
   /** Blob download URL (populated when state === 'complete') */
   downloadUrl: string | null;
+  /** Completed output Blob for host-provided save flows. */
+  outputBlob: Blob | null;
   /** File size in bytes (populated when state === 'complete') */
   fileSize: number;
   /**
@@ -426,6 +428,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
   const [outputFormat, setOutputFormat] = useState<VideoOutputFormat>('mp4');
   const [backend, setBackend] = useState<'webcodecs' | 'ffmpeg-wasm' | null>(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [outputBlob, setOutputBlob] = useState<Blob | null>(null);
   const [fileSize, setFileSize] = useState(0);
   const [audioIncluded, setAudioIncluded] = useState(false);
   const [audioSkippedReason, setAudioSkippedReason] = useState<string | null>(null);
@@ -481,6 +484,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
     setOutputFormat('mp4');
     setBackend(null);
     setDownloadUrl(null);
+    setOutputBlob(null);
     setFileSize(0);
     setAudioIncluded(false);
     setAudioSkippedReason(null);
@@ -515,6 +519,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         downloadUrlRef.current = null;
       }
       setDownloadUrl(null);
+      setOutputBlob(null);
       setFileSize(0);
       setAudioIncluded(false);
       setAudioSkippedReason(null);
@@ -961,6 +966,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         downloadUrlRef.current = url;
 
         setDownloadUrl(url);
+        setOutputBlob(blob);
         setFileSize(finalBytes.byteLength);
         setAudioIncluded(audioIncludedLocal);
         setAudioSkippedReason(
@@ -1005,6 +1011,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
     outputFormat,
     backend,
     downloadUrl,
+    outputBlob,
     fileSize,
     audioIncluded,
     audioSkippedReason,

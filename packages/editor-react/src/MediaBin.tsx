@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MediaProvider, MediaEntry } from '@bendyline/squisq/schemas';
-import { SQUISQ_MEDIA_MIME } from './mediaDragMime';
+import { SQUISQ_MEDIA_MIME, buildSquisqMediaReference } from './mediaDragMime';
 import { filterVisibleMediaEntries } from './mediaEntries';
 
 // ============================================
@@ -472,19 +472,17 @@ export function MediaBin({
         {entries.map((entry) => {
           const thumb = thumbUrls[entry.name];
           const basename = basenameForPath(entry.name);
-          const isImage = isImageMime(entry.mimeType);
           const altText = basename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
           const isUnused = !!usedMediaPaths && !usedMediaPaths.has(entry.name);
 
           const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-            if (!isImage) return;
-            const payload = JSON.stringify({
+            const payload = {
               name: entry.name,
               mimeType: entry.mimeType,
               alt: altText,
-            });
-            e.dataTransfer.setData(SQUISQ_MEDIA_MIME, payload);
-            e.dataTransfer.setData('text/plain', `![${altText}](${entry.name})`);
+            };
+            e.dataTransfer.setData(SQUISQ_MEDIA_MIME, JSON.stringify(payload));
+            e.dataTransfer.setData('text/plain', buildSquisqMediaReference(payload));
             e.dataTransfer.effectAllowed = 'copy';
           };
 
@@ -493,7 +491,7 @@ export function MediaBin({
               key={entry.name}
               className="squisq-media-bin-item"
               title={`${entry.name}\n${entry.mimeType}\n${formatSize(entry.size)}`}
-              draggable={isImage}
+              draggable
               tabIndex={0}
               onContextMenu={(e) => {
                 e.preventDefault();

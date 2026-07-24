@@ -139,6 +139,94 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     expect((center as HTMLElement).style.background).toBe('var(--squisq-recorder-danger)');
   });
 
+  it('applies advanced device, format, and processing settings to camera capture', async () => {
+    const getUserMedia = vi.fn(async () => new FakeStream());
+    Object.defineProperty(globalThis.navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia,
+        getDisplayMedia: vi.fn(async () => new FakeStream([new FakeTrack('video')])),
+        getSupportedConstraints: () => ({
+          aspectRatio: true,
+          autoGainControl: true,
+          channelCount: true,
+          deviceId: true,
+          echoCancellation: true,
+          frameRate: true,
+          height: true,
+          noiseSuppression: true,
+          sampleRate: true,
+          sampleSize: true,
+          width: true,
+        }),
+        enumerateDevices: vi.fn(async () => [
+          {
+            deviceId: 'mic-studio',
+            groupId: 'desk-rig',
+            kind: 'audioinput',
+            label: 'Studio microphone',
+            toJSON: () => ({}),
+          },
+          {
+            deviceId: 'camera-wide',
+            groupId: 'desk-rig',
+            kind: 'videoinput',
+            label: 'Wide camera',
+            toJSON: () => ({}),
+          },
+        ]),
+      },
+    });
+
+    render(<RecorderModal initialMode="camera" mediaProvider={mediaProvider} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByText('Advanced device settings'));
+
+    await screen.findByRole('option', { name: 'Studio microphone' });
+    fireEvent.change(screen.getByLabelText('Recording microphone'), {
+      target: { value: 'mic-studio' },
+    });
+    fireEvent.change(screen.getByLabelText('Recording camera'), {
+      target: { value: 'camera-wide' },
+    });
+    fireEvent.change(screen.getByLabelText('Sample rate (Hz)'), {
+      target: { value: '48000' },
+    });
+    fireEvent.change(screen.getByLabelText('Echo cancellation'), {
+      target: { value: 'false' },
+    });
+    fireEvent.change(screen.getByLabelText('Width (px)'), {
+      target: { value: '1920' },
+    });
+    fireEvent.change(screen.getByLabelText('Height (px)'), {
+      target: { value: '1080' },
+    });
+    fireEvent.change(screen.getByLabelText('Aspect ratio (width / height)'), {
+      target: { value: String(16 / 9) },
+    });
+    fireEvent.change(screen.getByLabelText('Frame rate (fps)'), {
+      target: { value: '30' },
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start preview' }));
+    });
+
+    expect(getUserMedia).toHaveBeenCalledWith({
+      audio: expect.objectContaining({
+        deviceId: { exact: 'mic-studio' },
+        echoCancellation: false,
+        sampleRate: { ideal: 48_000 },
+      }),
+      video: expect.objectContaining({
+        deviceId: { exact: 'camera-wide' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        aspectRatio: { ideal: 16 / 9 },
+        frameRate: { ideal: 30 },
+      }),
+    });
+  });
+
   it('locks the capture-source toggles while an unsaved take is in review', async () => {
     render(<RecorderModal mediaProvider={mediaProvider} onClose={vi.fn()} />);
 

@@ -290,7 +290,16 @@ function mermaidSources(block: Block): string[] {
 
 type RichMediaItem =
   | { kind: 'image'; src: string; alt: string; aspectRatio?: number }
-  | { kind: 'video'; src: string; posterSrc?: string; alt: string; aspectRatio: number }
+  | {
+      kind: 'video';
+      src: string;
+      posterSrc?: string;
+      alt: string;
+      aspectRatio: number;
+      startAt?: number;
+      clipStart?: number;
+      clipEnd?: number;
+    }
   | { kind: 'mermaid'; source: string; aspectRatio: number }
   | {
       kind: 'spatial';
@@ -394,6 +403,9 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
         ...(video.posterSrc ? { posterSrc: video.posterSrc } : {}),
         alt: video.alt,
         aspectRatio: 16 / 9,
+        ...(video.startAt != null ? { startAt: video.startAt } : {}),
+        ...(video.clipStart != null ? { clipStart: video.clipStart } : {}),
+        ...(video.clipEnd != null ? { clipEnd: video.clipEnd } : {}),
       }),
     ),
     ...sources.map((source): RichMediaItem => ({ kind: 'mermaid', source, aspectRatio: 16 / 9 })),
@@ -465,6 +477,7 @@ function richMediaLayers(
     ];
   }
   if (item.kind === 'video') {
+    const clipStart = Math.max(0, item.clipStart ?? 0);
     return [
       {
         id: `${block.id}-embedded-video-${kindIndex}`,
@@ -475,8 +488,9 @@ function richMediaLayers(
           ...(item.posterSrc ? { posterSrc: item.posterSrc } : {}),
           alt: item.alt || block.title || 'Embedded video',
           fit: 'contain',
-          clipStart: 0,
-          clipEnd: Math.max(0, block.duration),
+          clipStart,
+          clipEnd: Math.max(clipStart, item.clipEnd ?? clipStart + Math.max(0, block.duration)),
+          ...(item.startAt != null ? { startAt: Math.max(0, item.startAt) } : {}),
         },
       },
     ];
@@ -524,6 +538,38 @@ function richMediaLayers(
   );
 }
 
+/** Apply inline-video timing attributes to a template-produced video layer. */
+function applyEmbeddedVideoTiming(layers: Layer[], block: Block): Layer[] {
+  const timedBySrc = new Map(
+    extractEmbeddedVideos(block.contents)
+      .filter((video) => video.startAt != null || video.clipStart != null || video.clipEnd != null)
+      .map((video) => [video.src, video]),
+  );
+  if (timedBySrc.size === 0) return layers;
+
+  return layers.map((layer) => {
+    if (layer.type !== 'video') return layer;
+    const video = timedBySrc.get(layer.content.src);
+    if (!video) return layer;
+    const clipStart = Math.max(0, video.clipStart ?? layer.content.clipStart);
+    return {
+      ...layer,
+      content: {
+        ...layer.content,
+        clipStart,
+        clipEnd: Math.max(
+          clipStart,
+          video.clipEnd ??
+            (video.clipStart != null
+              ? clipStart + Math.max(0, block.duration)
+              : layer.content.clipEnd),
+        ),
+        ...(video.startAt != null ? { startAt: Math.max(0, video.startAt) } : {}),
+      },
+    };
+  });
+}
+
 /** Promote unconsumed images, videos, and rich diagram fences through one layout path. */
 function appendRichContentLayers(
   layers: Layer[],
@@ -531,11 +577,12 @@ function appendRichContentLayers(
   theme: Theme,
   viewport: ViewportConfig,
 ): Layer[] {
-  const items = collectRichMediaItems(layers, block);
-  if (items.length === 0) return layers;
+  const timedLayers = applyEmbeddedVideoTiming(layers, block);
+  const items = collectRichMediaItems(timedLayers, block);
+  if (items.length === 0) return timedLayers;
 
   const layout = resolveSupplementalMediaLayout(
-    layers,
+    timedLayers,
     block.template ? resolveTemplateName(block.template) : undefined,
     viewport,
     items.length,

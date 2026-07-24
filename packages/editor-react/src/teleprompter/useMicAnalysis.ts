@@ -46,13 +46,18 @@ interface LiveGraph {
   sink: GainNode | null;
 }
 
-export function useMicAnalysis(): MicAnalysisHandle {
+export function useMicAnalysis(constraints?: MediaTrackConstraints): MicAnalysisHandle {
   const [status, setStatus] = useState<MicAnalysisStatus>('idle');
   const [error, setError] = useState<Error | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [sampleRate, setSampleRate] = useState<number | null>(null);
   const graphRef = useRef<LiveGraph | null>(null);
+  const constraintsRef = useRef<MediaTrackConstraints | undefined>(constraints);
+  constraintsRef.current = constraints;
+  const constraintKey = JSON.stringify(constraints ?? {});
+  const previousConstraintKeyRef = useRef(constraintKey);
+  const currentDeviceIdRef = useRef<string | null>(null);
   const listenersRef = useRef<Set<PcmHopListener>>(new Set());
   const generationRef = useRef(0);
 
@@ -104,13 +109,16 @@ export function useMicAnalysis(): MicAnalysisHandle {
   const start = useCallback(
     async (deviceId: string | null): Promise<MediaStream | null> => {
       const generation = ++generationRef.current;
+      currentDeviceIdRef.current = deviceId;
       teardown();
       setStatus('starting');
       setError(null);
       try {
-        const micStream = await requestMicStream(
-          deviceId ? { deviceId: { exact: deviceId } } : undefined,
-        );
+        const baseConstraints = constraintsRef.current;
+        const micStream = await requestMicStream({
+          ...(baseConstraints ?? {}),
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+        });
         if (generation !== generationRef.current) {
           for (const track of micStream.getTracks()) track.stop();
           return null;
@@ -198,6 +206,15 @@ export function useMicAnalysis(): MicAnalysisHandle {
       listenersRef.current.delete(listener);
     };
   }, []);
+
+  // Advanced settings can change after a preview is live. Re-acquire on the
+  // same device so the new constraints affect both voice analysis and the
+  // narration recording stream.
+  useEffect(() => {
+    if (previousConstraintKeyRef.current === constraintKey) return;
+    previousConstraintKeyRef.current = constraintKey;
+    if (graphRef.current) void start(currentDeviceIdRef.current);
+  }, [constraintKey, start]);
 
   // Full teardown when the owning view unmounts.
   useEffect(() => {

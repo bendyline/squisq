@@ -22,6 +22,7 @@ import { useFloatingWindow, type FloatingWindowHandle } from './useFloatingWindo
 import { TELEPROMPTER_CSS } from './teleprompterTheme';
 import {
   useNarrationRecorder,
+  type NarrationMediaRecorderOptions,
   type NarrationRecorderController,
 } from './recording/useNarrationRecorder';
 import {
@@ -46,6 +47,14 @@ export interface UseNarrationStageOptions {
   recording?: TeleprompterRecordingDeps | null;
   /** Optional user-chosen filename base threaded into the save plan. */
   getAudioBasename?: () => string | undefined;
+  /** Microphone constraints shared by voice analysis and audio recording. */
+  micConstraints?: MediaTrackConstraints;
+  /** Constraints for the optional narration camera lane. */
+  cameraConstraints?: MediaTrackConstraints;
+  /** MediaRecorder hints for the narration audio file. */
+  audioRecorderOptions?: NarrationMediaRecorderOptions;
+  /** MediaRecorder hints for the optional narration camera file. */
+  cameraRecorderOptions?: NarrationMediaRecorderOptions;
 }
 
 export interface NarrationStageHandle {
@@ -65,7 +74,7 @@ export interface NarrationStageHandle {
 
 export function useNarrationStage(opts: UseNarrationStageOptions): NarrationStageHandle {
   const { doc, recording = null, getAudioBasename } = opts;
-  const controller = useTeleprompter({ doc });
+  const controller = useTeleprompter({ doc, micConstraints: opts.micConstraints });
   const float = useFloatingWindow(TELEPROMPTER_CSS);
   const controllerRef = useRef(controller);
   controllerRef.current = controller;
@@ -77,6 +86,9 @@ export function useNarrationStage(opts: UseNarrationStageOptions): NarrationStag
     getScript: () => controllerRef.current.script,
     getWordPos: () => controllerRef.current.wordPos,
     getMicDeviceId: () => controllerRef.current.prefs.micDeviceId,
+    cameraConstraints: opts.cameraConstraints,
+    audioRecorderOptions: opts.audioRecorderOptions,
+    cameraRecorderOptions: opts.cameraRecorderOptions,
     onRecordingStart: () => controllerRef.current.play(),
     onRecordingStop: () => controllerRef.current.pause(),
   });

@@ -60,4 +60,16 @@ describe('TiptapVideo placement toolbar', () => {
     expect(editor.getHTML()).toContain('data-squisq-video-pip-position="top-left"');
     editor.destroy();
   });
+
+  it('preserves timing attributes while the video remains in layout', () => {
+    const editor = new Editor({
+      extensions: [StarterKit, TiptapVideo],
+      content:
+        '<video src="video/inline.webm" data-squisq-video-start-at="3" data-squisq-video-clip-start="1" data-squisq-video-clip-end="7"></video>',
+    });
+    expect(editor.getHTML()).toContain('data-squisq-video-start-at="3"');
+    expect(editor.getHTML()).toContain('data-squisq-video-clip-start="1"');
+    expect(editor.getHTML()).toContain('data-squisq-video-clip-end="7"');
+    editor.destroy();
+  });
 });

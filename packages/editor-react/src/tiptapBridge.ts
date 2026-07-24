@@ -1225,12 +1225,10 @@ function serializeMediaTag(tag: 'video' | 'audio', attrs: string): string {
     tag === 'video' ? /\bdata-squisq-video-pip-shape="([^"]*)"/i.exec(attrs)?.[1] : undefined;
   const pipPosition =
     tag === 'video' ? /\bdata-squisq-video-pip-position="([^"]*)"/i.exec(attrs)?.[1] : undefined;
-  const startAt =
-    tag === 'video' ? /\bdata-squisq-video-start-at="([^"]*)"/i.exec(attrs)?.[1] : undefined;
-  const clipStart =
-    tag === 'video' ? /\bdata-squisq-video-clip-start="([^"]*)"/i.exec(attrs)?.[1] : undefined;
-  const clipEnd =
-    tag === 'video' ? /\bdata-squisq-video-clip-end="([^"]*)"/i.exec(attrs)?.[1] : undefined;
+  const timingPrefix = `data-squisq-${tag}`;
+  const startAt = new RegExp(`\\b${timingPrefix}-start-at="([^"]*)"`, 'i').exec(attrs)?.[1];
+  const clipStart = new RegExp(`\\b${timingPrefix}-clip-start="([^"]*)"`, 'i').exec(attrs)?.[1];
+  const clipEnd = new RegExp(`\\b${timingPrefix}-clip-end="([^"]*)"`, 'i').exec(attrs)?.[1];
   const parts = [`<${tag} src="${src}"`];
   if (controls) parts.push(' controls');
   if (width) parts.push(` width="${width}"`);
@@ -1254,9 +1252,9 @@ function serializeMediaTag(tag: 'video' | 'audio', attrs: string): string {
   ) {
     parts.push(` data-squisq-video-pip-position="${pipPosition}"`);
   }
-  if (startAt != null) parts.push(` data-squisq-video-start-at="${startAt}"`);
-  if (clipStart != null) parts.push(` data-squisq-video-clip-start="${clipStart}"`);
-  if (clipEnd != null) parts.push(` data-squisq-video-clip-end="${clipEnd}"`);
+  if (startAt != null) parts.push(` ${timingPrefix}-start-at="${startAt}"`);
+  if (clipStart != null) parts.push(` ${timingPrefix}-clip-start="${clipStart}"`);
+  if (clipEnd != null) parts.push(` ${timingPrefix}-clip-end="${clipEnd}"`);
   parts.push(`></${tag}>`);
   return parts.join('');
 }

@@ -26,6 +26,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -35,6 +36,16 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useMediaRecorder, type RecorderSource } from './hooks/useMediaRecorder.js';
 import { useStreamPreview } from './hooks/useStreamPreview.js';
 import { requestCameraStream } from './sources/cameraStream.js';
+import { RecorderDeviceSettingsPanel } from './RecorderDeviceSettingsPanel.js';
+import {
+  DEFAULT_RECORDER_DEVICE_SETTINGS,
+  buildRecorderAudioConstraints,
+  buildRecorderCameraConstraints,
+  buildRecorderScreenAudioConstraints,
+  buildRecorderScreenConstraints,
+  recorderBitsPerSecond,
+  type RecorderDeviceSettings,
+} from './deviceSettings.js';
 import {
   buildFilename,
   supportsSystemAudioCapture,
@@ -170,6 +181,7 @@ function recorderThemeStyle(colorScheme: RecorderColorScheme): CSSProperties {
   return {
     colorScheme,
     '--squisq-recorder-surface': `var(--squisq-bg, ${dark ? '#1f2937' : '#fffdf7'})`,
+    '--squisq-recorder-surface-muted': `var(--squisq-panel-bg, ${dark ? '#111827' : '#f8f4e8'})`,
     '--squisq-recorder-input': `var(--squisq-input-bg, ${dark ? '#374151' : '#fff'})`,
     '--squisq-recorder-border': `var(--squisq-border, ${dark ? '#4b5563' : '#c9b98a'})`,
     '--squisq-recorder-text': `var(--squisq-text, ${dark ? '#e5e7eb' : '#4a3c1f'})`,
@@ -633,6 +645,14 @@ export function RecorderModal({
   const [narrationOn, setNarrationOn] = useState(false);
   const [narrationRequesting, setNarrationRequesting] = useState(false);
   const [narrationPreview, setNarrationPreview] = useState<MediaStream | null>(null);
+  const [deviceSettings, setDeviceSettings] = useState<RecorderDeviceSettings>(() => ({
+    ...DEFAULT_RECORDER_DEVICE_SETTINGS,
+    audio: { ...DEFAULT_RECORDER_DEVICE_SETTINGS.audio },
+    camera: { ...DEFAULT_RECORDER_DEVICE_SETTINGS.camera },
+    screen: { ...DEFAULT_RECORDER_DEVICE_SETTINGS.screen },
+    screenAudio: { ...DEFAULT_RECORDER_DEVICE_SETTINGS.screenAudio },
+    encoding: { ...DEFAULT_RECORDER_DEVICE_SETTINGS.encoding },
+  }));
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -648,10 +668,39 @@ export function RecorderModal({
   const source: RecorderSource = derivedSource ?? 'mic';
   const isDual = source === 'screen+camera';
   const canIncludeSystemAudio = supportsSystemAudioCapture();
+  const audioConstraints = useMemo(
+    () => buildRecorderAudioConstraints(deviceSettings),
+    [deviceSettings],
+  );
+  const cameraConstraints = useMemo(
+    () => buildRecorderCameraConstraints(deviceSettings),
+    [deviceSettings],
+  );
+  const screenConstraints = useMemo(
+    () => buildRecorderScreenConstraints(deviceSettings),
+    [deviceSettings],
+  );
+  const screenAudioConstraints = useMemo(
+    () => buildRecorderScreenAudioConstraints(deviceSettings),
+    [deviceSettings],
+  );
+  const encoding = deviceSettings.encoding;
 
   const recorder = useMediaRecorder({
     source,
     includeMicrophone: cameraOn ? micOn : undefined,
+    audioConstraints,
+    videoConstraints: cameraConstraints,
+    screenVideoConstraints: screenConstraints,
+    screenAudioConstraints,
+    mimeType:
+      (source === 'mic' ? encoding.audioMimeType : encoding.videoMimeType).trim() || undefined,
+    bitsPerSecond: recorderBitsPerSecond(encoding.bitsPerSecond),
+    audioBitsPerSecond: recorderBitsPerSecond(encoding.audioBitsPerSecond),
+    videoBitsPerSecond: recorderBitsPerSecond(encoding.videoBitsPerSecond),
+    audioBitrateMode: encoding.audioBitrateMode,
+    videoKeyFrameIntervalDuration: encoding.videoKeyFrameIntervalDuration,
+    videoKeyFrameIntervalCount: encoding.videoKeyFrameIntervalCount,
     // System audio rides the screen capture when Screen is on, and is otherwise
     // captured via a separate (video-discarded) display capture mixed into the
     // mic/camera file — so it is no longer gated on Screen.
@@ -669,9 +718,50 @@ export function RecorderModal({
     doc: narration?.doc ?? null,
     recording: narration?.recording ?? null,
     getAudioBasename: () => basenameRef.current.trim() || undefined,
+    micConstraints: audioConstraints,
+    cameraConstraints,
+    audioRecorderOptions: {
+      mimeType: encoding.audioMimeType.trim() || undefined,
+      bitsPerSecond: recorderBitsPerSecond(encoding.bitsPerSecond),
+      audioBitsPerSecond: recorderBitsPerSecond(encoding.audioBitsPerSecond),
+      audioBitrateMode: encoding.audioBitrateMode,
+    },
+    cameraRecorderOptions: {
+      mimeType: encoding.videoMimeType.trim() || undefined,
+      bitsPerSecond: recorderBitsPerSecond(encoding.bitsPerSecond),
+      videoBitsPerSecond: recorderBitsPerSecond(encoding.videoBitsPerSecond),
+      videoKeyFrameIntervalDuration: encoding.videoKeyFrameIntervalDuration,
+      videoKeyFrameIntervalCount: encoding.videoKeyFrameIntervalCount,
+    },
   });
   const stageRef = useRef(stage);
   stageRef.current = stage;
+  const handleDeviceSettingsChange = useCallback(
+    (next: RecorderDeviceSettings) => {
+      setDeviceSettings(next);
+      if (narrationOn) {
+        stageRef.current.controller.setPrefs({
+          micDeviceId: next.audio.deviceId || null,
+        });
+      }
+    },
+    [narrationOn],
+  );
+
+  // The narration controls also expose a compact mic selector. Keep that
+  // existing control and the advanced panel on the same source of truth.
+  const narrationMicDeviceId = stage.controller.prefs.micDeviceId ?? '';
+  useEffect(() => {
+    if (!narrationOn) return;
+    setDeviceSettings((current) =>
+      current.audio.deviceId === narrationMicDeviceId
+        ? current
+        : {
+            ...current,
+            audio: { ...current.audio, deviceId: narrationMicDeviceId },
+          },
+    );
+  }, [narrationMicDeviceId, narrationOn]);
 
   // Mode edges. Entering narration releases the simple recorder's stream
   // (no double mic capture); leaving quiets the prompter and its mic/float.
@@ -726,20 +816,23 @@ export function RecorderModal({
     stage.recorder.state !== 'saving';
   const narrationPreviewRef = useRef<MediaStream | null>(null);
   useEffect(() => {
-    if (!narrationPreviewWanted) {
-      const existing = narrationPreviewRef.current;
-      if (existing) {
-        for (const track of existing.getTracks()) track.stop();
-        narrationPreviewRef.current = null;
-        setNarrationPreview(null);
-      }
-      return;
+    const existing = narrationPreviewRef.current;
+    if (existing) {
+      for (const track of existing.getTracks()) track.stop();
+      narrationPreviewRef.current = null;
+      setNarrationPreview(null);
     }
-    if (narrationPreviewRef.current) return;
+    if (!narrationPreviewWanted) return;
+
     let cancelled = false;
+    let owned: MediaStream | null = null;
     void (async () => {
       try {
-        const stream = await requestCameraStream({ video: true, audio: false });
+        const stream = await requestCameraStream({
+          video: cameraConstraints,
+          audio: false,
+        });
+        owned = stream;
         if (cancelled) {
           for (const track of stream.getTracks()) track.stop();
           return;
@@ -753,14 +846,13 @@ export function RecorderModal({
     })();
     return () => {
       cancelled = true;
+      if (owned && narrationPreviewRef.current === owned) {
+        for (const track of owned.getTracks()) track.stop();
+        narrationPreviewRef.current = null;
+        setNarrationPreview(null);
+      }
     };
-  }, [narrationPreviewWanted]);
-  useEffect(() => {
-    return () => {
-      const existing = narrationPreviewRef.current;
-      if (existing) for (const track of existing.getTracks()) track.stop();
-    };
-  }, []);
+  }, [cameraConstraints, narrationPreviewWanted]);
 
   // "Start preview" in narration mode = turn the mic analysis on (permission
   // prompt + level meter); the camera-preview effect above follows suit when
@@ -832,7 +924,7 @@ export function RecorderModal({
   // the camera microphone and screen system-audio flags, which don't
   // change `source` on their own. The hook handles its own teardown on
   // unmount; cancel() here covers in-place changes.
-  const captureKey = `${source}:${cameraOn ? micOn : ''}:${includeSystemAudio}`;
+  const captureKey = `${source}:${cameraOn ? micOn : ''}:${includeSystemAudio}:${JSON.stringify(deviceSettings)}`;
   const previousKeyRef = useRef(captureKey);
   // Retry-safe record of which dual files have already been written this save,
   // so a second `addMedia` that fails doesn't re-upload (and orphan) the first.
@@ -1142,6 +1234,7 @@ export function RecorderModal({
     recorder.blob !== null || recorder.camera?.blob != null,
     stage.recorder.state,
   );
+  const deviceSettingsLocked = narrationOn ? !narrationRecorderIdle : togglesLocked;
   const narrationToggleFor = (key: ToggleKey) => {
     switch (key) {
       case 'mic':
@@ -1259,6 +1352,19 @@ export function RecorderModal({
                 Show narration mode
               </label>
             )}
+
+            <RecorderDeviceSettingsPanel
+              value={deviceSettings}
+              onChange={handleDeviceSettingsChange}
+              disabled={deviceSettingsLocked}
+              microphoneEnabled={narrationOn ? true : micOn}
+              cameraEnabled={narrationOn ? stage.recorder.withCamera : cameraOn}
+              screenEnabled={narrationOn ? false : screenOn}
+              systemAudioEnabled={!narrationOn && includeSystemAudio}
+              separateAudioRecorder={narrationOn}
+              primaryStream={narrationOn ? stage.controller.mic.stream : recorder.stream}
+              cameraStream={narrationOn ? narrationCameraStream : (recorder.camera?.stream ?? null)}
+            />
 
             {!narrationOn && recorder.error && (
               <div style={errorStyle}>{recorder.error.message}</div>

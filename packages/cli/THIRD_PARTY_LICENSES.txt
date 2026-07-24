@@ -1,6 +1,6 @@
 THIRD-PARTY LICENSES FOR @bendyline/squisq-cli
 
-The inventory below covers the bundled light and full standalone player artifacts.
+The inventory below covers the bundled light and full standalone player artifacts and their shared icon styles.
 
 Generated from the actual esbuild input graph. Package-local license, copying,
 and notice files are reproduced verbatim. When an npm tarball omits its

@@ -70,6 +70,10 @@
     },
     "./standalone": "./dist/squisq-player.global.js",
     "./standalone/full": "./dist/squisq-player.full.global.js",
+    "./standalone/icon-styles": {
+      "types": "./dist/standalone-icon-styles.d.ts",
+      "import": "./dist/standalone-icon-styles.js"
+    },
     "./standalone-source": {
       "types": "./dist/standalone-source.d.ts",
       "import": "./dist/standalone-source.js"
@@ -88,6 +92,7 @@
   },
   "dependencies": {
     "@bendyline/squisq": "2.4.3",
+    "@fortawesome/fontawesome-free": "7.2.0",
     "mermaid": "11.16.0"
   },
   "devDependencies": {

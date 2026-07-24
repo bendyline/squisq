@@ -37,6 +37,9 @@ declare module '@tiptap/core' {
         pipSize?: VideoPipSize;
         pipShape?: VideoPipShape;
         pipPosition?: VideoPipPosition;
+        startAt?: number | string | null;
+        clipStart?: number | string | null;
+        clipEnd?: number | string | null;
       }) => ReturnType;
     };
   }
@@ -212,32 +215,35 @@ export const TiptapVideo = Node.create<TiptapVideoOptions>({
       startAt: {
         default: null,
         parseHTML: (el) => el.getAttribute('data-squisq-video-start-at'),
-        renderHTML: (attrs) =>
-          normalizeVideoPlacement(attrs.placement) !== 'content' &&
-          !normalizeLockToBlock(attrs.lockToBlock) &&
-          attrs.startAt != null
+        renderHTML: (attrs) => {
+          const placement = normalizeVideoPlacement(attrs.placement);
+          return (placement === 'content' || !normalizeLockToBlock(attrs.lockToBlock)) &&
+            attrs.startAt != null
             ? { 'data-squisq-video-start-at': String(attrs.startAt) }
-            : {},
+            : {};
+        },
       },
       clipStart: {
         default: null,
         parseHTML: (el) => el.getAttribute('data-squisq-video-clip-start'),
-        renderHTML: (attrs) =>
-          normalizeVideoPlacement(attrs.placement) !== 'content' &&
-          !normalizeLockToBlock(attrs.lockToBlock) &&
-          attrs.clipStart != null
+        renderHTML: (attrs) => {
+          const placement = normalizeVideoPlacement(attrs.placement);
+          return (placement === 'content' || !normalizeLockToBlock(attrs.lockToBlock)) &&
+            attrs.clipStart != null
             ? { 'data-squisq-video-clip-start': String(attrs.clipStart) }
-            : {},
+            : {};
+        },
       },
       clipEnd: {
         default: null,
         parseHTML: (el) => el.getAttribute('data-squisq-video-clip-end'),
-        renderHTML: (attrs) =>
-          normalizeVideoPlacement(attrs.placement) !== 'content' &&
-          !normalizeLockToBlock(attrs.lockToBlock) &&
-          attrs.clipEnd != null
+        renderHTML: (attrs) => {
+          const placement = normalizeVideoPlacement(attrs.placement);
+          return (placement === 'content' || !normalizeLockToBlock(attrs.lockToBlock)) &&
+            attrs.clipEnd != null
             ? { 'data-squisq-video-clip-end': String(attrs.clipEnd) }
-            : {},
+            : {};
+        },
       },
       // The HTML5 `controls` attribute is boolean-presence; parse its
       // existence (even with an empty string value) as `true`, otherwise

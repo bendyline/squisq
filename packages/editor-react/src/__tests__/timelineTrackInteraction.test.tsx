@@ -1,10 +1,9 @@
 /**
  * TimelineTrack pointer-interaction contract.
  *
- * Regression: clicking (as opposed to dragging) an embedded `<video>` clip in
- * the timeline used to commit the drag on pointer-up, which rewrote the inline
- * video into a `{[video …]}` annotation — the "video turned into a tag" bug. A
- * bare click must never mutate the source; only an actual drag may.
+ * Regression: timeline interaction used to rewrite embedded HTML media into
+ * `{[video …]}` / `{[audio …]}` annotations. Clicks must not mutate source,
+ * while timing drags must preserve the original playable HTML element.
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -159,15 +158,42 @@ describe('TimelineTrack embedded-clip interaction', () => {
     expect(latestSource).not.toContain('{[video');
   });
 
-  it('still converts the embed to a timed clip annotation on an actual drag', () => {
+  it('keeps the inline video playable and writes timing attributes on a drag', () => {
     const clip = renderTimeline();
 
     firePointer(clip, 'pointerdown', 100);
     firePointer(window, 'pointermove', 160); // 60px ≫ threshold → a real drag
     firePointer(window, 'pointerup', 160);
 
-    expect(latestSource).toContain('{[video');
-    expect(latestSource).toContain('rec.webm');
+    expect(latestSource).toContain('<video src="video/rec.webm"');
+    expect(latestSource).toContain('data-squisq-video-start-at=');
+    expect(latestSource).toContain('data-squisq-video-clip-end="12"');
+    expect(latestSource).not.toContain('{[video');
+  });
+
+  it('keeps inline audio as HTML when its start is dragged', () => {
+    const audioMarkdown = [
+      '# Intro {[duration=12]}',
+      '',
+      '<audio src="audio/take.webm" controls></audio>',
+      '',
+    ].join('\n');
+    render(
+      <EditorProvider initialMarkdown={audioMarkdown} initialView="wysiwyg">
+        <SourceProbe />
+        <TimelineTrack />
+      </EditorProvider>,
+    );
+    const clip = screen.getByText('take.webm').closest('.squisq-timeline-clip') as HTMLElement;
+
+    firePointer(clip, 'pointerdown', 100);
+    firePointer(window, 'pointermove', 160);
+    firePointer(window, 'pointerup', 160);
+
+    expect(latestSource).toContain('<audio src="audio/take.webm" controls');
+    expect(latestSource).toContain('data-squisq-audio-start-at=');
+    expect(latestSource).toContain('data-squisq-audio-clip-end="12"');
+    expect(latestSource).not.toContain('{[audio');
   });
 });
 

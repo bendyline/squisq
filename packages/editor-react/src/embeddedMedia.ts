@@ -5,9 +5,10 @@
  * (`<video src="…">` / `<audio src="…">` HTML tags), dropped files, or markdown
  * links/images to a media file — as opposed to authored `{[audio …]}` clip
  * annotations. The timeline surfaces these so authors see (and can re-time) the
- * media they inserted; editing one converts it to a timed clip annotation.
+ * media they inserted. Inline media keeps its HTML tag when re-timed.
  */
 
+import { parseTimeSeconds } from '@bendyline/squisq/markdown';
 import type { Block, Doc, ScheduledClip } from '@bendyline/squisq/schemas';
 
 const VIDEO_EXT = new Set(['webm', 'mp4', 'mov', 'm4v', 'ogv']);
@@ -27,6 +28,21 @@ export interface EmbeddedMedia {
   kind: 'audio' | 'video';
   /** 1-based source line of the embed, for re-timing / relocation. */
   sourceLine?: number;
+  /** Block-relative delay authored on an inline media element. */
+  startAt?: number;
+  /** Source-media in/out points authored on an inline media element. */
+  clipStart?: number;
+  clipEnd?: number;
+}
+
+function mediaTimeAttribute(
+  attributes: Record<string, string> | undefined,
+  kind: EmbeddedMedia['kind'],
+  name: string,
+): number | undefined {
+  const raw = attributes?.[`data-squisq-${kind}-${name}`];
+  if (raw == null) return undefined;
+  return parseTimeSeconds(raw) ?? undefined;
 }
 
 /** Recursively collect embedded audio/video from a block's body content. */
@@ -66,7 +82,19 @@ export function collectEmbeddedMedia(block: Block): EmbeddedMedia[] {
           }
         }
       }
-      if (src) out.push({ src, kind, sourceLine: here });
+      if (src) {
+        const startAt = mediaTimeAttribute(n.attributes, kind, 'start-at');
+        const clipStart = mediaTimeAttribute(n.attributes, kind, 'clip-start');
+        const clipEnd = mediaTimeAttribute(n.attributes, kind, 'clip-end');
+        out.push({
+          src,
+          kind,
+          sourceLine: here,
+          ...(startAt != null ? { startAt } : {}),
+          ...(clipStart != null ? { clipStart } : {}),
+          ...(clipEnd != null ? { clipEnd } : {}),
+        });
+      }
     }
 
     if (Array.isArray(n.children)) n.children.forEach((c) => visit(c, here));
@@ -77,10 +105,29 @@ export function collectEmbeddedMedia(block: Block): EmbeddedMedia[] {
   return out;
 }
 
+/** Resolve the timeline window represented by an inline media element. */
+export function resolveEmbeddedMediaTiming(
+  block: Block,
+  media: EmbeddedMedia,
+): Pick<ScheduledClip, 'absoluteStart' | 'absoluteEnd' | 'sourceIn'> {
+  const startAt = Math.max(0, media.startAt ?? 0);
+  const sourceIn = Math.max(0, media.clipStart ?? 0);
+  const absoluteStart = block.startTime + startAt;
+  const blockEnd = block.startTime + block.duration;
+  const authoredLength = media.clipEnd == null ? null : Math.max(0, media.clipEnd - sourceIn);
+  const absoluteEnd =
+    authoredLength == null ? blockEnd : Math.min(blockEnd, absoluteStart + authoredLength);
+  return {
+    absoluteStart,
+    absoluteEnd: Math.max(absoluteStart, absoluteEnd),
+    sourceIn,
+  };
+}
+
 /**
  * Adapt body-embedded audio/video to the scheduled-clip shape consumed by
- * timeline playback. Embedded media is block-scoped, so it starts with its
- * owning block and stays active for that block's authored duration.
+ * timeline playback. Embedded media is block-scoped; timing data attributes
+ * can delay/trim a clip while keeping its HTML element in the document.
  */
 export function collectEmbeddedMediaSchedule(doc: Doc): ScheduledClip[] {
   const schedule: ScheduledClip[] = [];
@@ -88,13 +135,12 @@ export function collectEmbeddedMediaSchedule(doc: Doc): ScheduledClip[] {
   const visit = (blocks: Block[]): void => {
     for (const block of blocks) {
       collectEmbeddedMedia(block).forEach((media, index) => {
+        const timing = resolveEmbeddedMediaTiming(block, media);
         schedule.push({
           id: `embedded:${block.id}:${index}`,
           kind: media.kind,
           src: media.src,
-          absoluteStart: block.startTime,
-          absoluteEnd: block.startTime + block.duration,
-          sourceIn: 0,
+          ...timing,
           anchor: 'block',
           blockId: block.id,
           ...(media.sourceLine != null ? { sourceLine: media.sourceLine } : {}),
