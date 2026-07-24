@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.4.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.4.3...@bendyline/squisq@2.4.4) (2026-07-24)
+
+### Bug Fixes
+
+* Video export and embedding fixes ([#38](https://github.com/bendyline/squisq/issues/38)) ([8e9a9a6](https://github.com/bendyline/squisq/commit/8e9a9a608125c9ed79636585827033a664258129))
+
 ## @bendyline/squisq [2.4.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.4.2...@bendyline/squisq@2.4.3) (2026-07-23)
 
 ### Bug Fixes
