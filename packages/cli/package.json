@@ -52,7 +52,7 @@
     "THIRD_PARTY_LICENSES.txt"
   ],
   "scripts": {
-    "build": "tsup && node ../../scripts/generate-bundle-licenses.mjs . && node scripts/copy-player-bundle.mjs && node ../../scripts/remove-empty-chunks.mjs dist",
+    "build": "tsup && node scripts/copy-player-bundle.mjs && node ../../scripts/remove-empty-chunks.mjs dist",
     "typecheck": "tsc --noEmit",
     "test": "mocha",
     "test:native": "mocha --grep \"flagship pptx|native animated GIF\""

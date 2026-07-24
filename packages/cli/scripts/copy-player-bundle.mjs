@@ -2,6 +2,7 @@ import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { stdout } from 'node:process';
+import { removeGeneratedLicenseMetadata } from '../../../scripts/remove-license-metadata.mjs';
 
 const cliDir = resolve(import.meta.dirname, '..');
 const reactDir = resolve(cliDir, '..', 'react');
@@ -27,6 +28,7 @@ const cliLicenses = reactLicenses.replace(
   'THIRD-PARTY LICENSES FOR @bendyline/squisq-cli\n\nThe inventory below covers the bundled light and full standalone player artifacts and their shared icon styles.',
 );
 await writeFile(resolve(cliDir, 'THIRD_PARTY_LICENSES.txt'), cliLicenses, 'utf8');
+await removeGeneratedLicenseMetadata(cliDir);
 
 stdout.write(
   'Copied the light and full standalone players, shared icon styles, and bundle-derived licenses into the CLI\n',
