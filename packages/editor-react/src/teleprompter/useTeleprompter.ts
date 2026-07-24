@@ -136,7 +136,10 @@ function spokenWordTarget(
   return index;
 }
 
-export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterController {
+export function useTeleprompter(opts: {
+  doc: Doc | null;
+  micConstraints?: MediaTrackConstraints;
+}): TeleprompterController {
   const { doc } = opts;
   const script = useMemo(
     () => (doc && doc.blocks.length > 0 ? buildNarrationScript(doc) : null),
@@ -148,7 +151,7 @@ export function useTeleprompter(opts: { doc: Doc | null }): TeleprompterControll
   const [countdownRemaining, setCountdownRemaining] = useState<number | null>(null);
   const [view, setView] = useState({ wordPos: 0, micLevel: 0, voiceActive: false });
 
-  const mic = useMicAnalysis();
+  const mic = useMicAnalysis(opts.micConstraints);
 
   const scriptRef = useRef(script);
   const prefsRef = useRef(prefs);

@@ -23,6 +23,7 @@ import {
 } from '@bendyline/squisq/narration';
 import { resolveFormat } from '../../recorder/formats';
 import { requestCameraStream } from '../../recorder/sources/cameraStream';
+import type { RecorderExtendedMediaOptions } from '../../recorder/hooks/useMediaRecorder';
 import type { MicAnalysisHandle } from '../useMicAnalysis';
 
 export type NarrationRecorderState =
@@ -33,6 +34,8 @@ export type NarrationRecorderState =
   | 'review'
   | 'saving'
   | 'error';
+
+export type NarrationMediaRecorderOptions = MediaRecorderOptions & RecorderExtendedMediaOptions;
 
 export interface NarrationTake {
   audioBlob: Blob;
@@ -54,6 +57,12 @@ export interface UseNarrationRecorderOptions {
   /** Live prompter position, sampled into the trace while recording. */
   getWordPos: () => number;
   getMicDeviceId: () => string | null;
+  /** Constraints for the optional, video-only camera companion. */
+  cameraConstraints?: MediaTrackConstraints | boolean;
+  /** MediaRecorder hints for the primary narration audio file. */
+  audioRecorderOptions?: NarrationMediaRecorderOptions;
+  /** MediaRecorder hints for the camera companion file. */
+  cameraRecorderOptions?: NarrationMediaRecorderOptions;
   /** Fired when capture actually starts (View starts the prompter). */
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
@@ -239,24 +248,45 @@ export function useNarrationRecorder(
       if (superseded()) throw new StartAborted();
       if (!micStream) throw opts.mic.error ?? new Error('Microphone unavailable');
 
-      const audioFormat = resolveFormat('audio');
+      const audioFormat = resolveFormat('audio', opts.audioRecorderOptions?.mimeType);
+      const audioRecorderOptions: NarrationMediaRecorderOptions = {
+        ...opts.audioRecorderOptions,
+      };
+      if (audioFormat.mimeType) audioRecorderOptions.mimeType = audioFormat.mimeType;
+      else delete audioRecorderOptions.mimeType;
       audioRecorder = new MediaRecorder(
         micStream,
-        audioFormat.mimeType ? { mimeType: audioFormat.mimeType } : undefined,
+        Object.keys(audioRecorderOptions).length > 0 ? audioRecorderOptions : undefined,
       );
 
       let cameraMime: string | null = null;
       let cameraExt: string | null = null;
       if (withCamera) {
-        camera = await requestCameraStream({ video: true, audio: false });
+        camera = await requestCameraStream({
+          video: opts.cameraConstraints ?? true,
+          audio: false,
+        });
         // Stop pressed (or unmounted) while the camera permission was
         // pending: release the tracks we just took instead of lighting the
         // indicator for a recording nobody is going to make.
         if (superseded()) throw new StartAborted();
-        const videoFormat = resolveFormat('video');
+        const videoFormat = resolveFormat('video', opts.cameraRecorderOptions?.mimeType);
+        const cameraRecorderOptions: NarrationMediaRecorderOptions = {
+          ...opts.cameraRecorderOptions,
+        };
+        if (
+          cameraRecorderOptions.videoKeyFrameIntervalDuration !== undefined &&
+          cameraRecorderOptions.videoKeyFrameIntervalCount !== undefined
+        ) {
+          // The recording spec rejects a constructor request containing both.
+          // Duration wins, matching the primary recorder hook's precedence.
+          delete cameraRecorderOptions.videoKeyFrameIntervalCount;
+        }
+        if (videoFormat.mimeType) cameraRecorderOptions.mimeType = videoFormat.mimeType;
+        else delete cameraRecorderOptions.mimeType;
         cameraRecorder = new MediaRecorder(
           camera,
-          videoFormat.mimeType ? { mimeType: videoFormat.mimeType } : undefined,
+          Object.keys(cameraRecorderOptions).length > 0 ? cameraRecorderOptions : undefined,
         );
         cameraMime = videoFormat.mimeType;
         cameraExt = videoFormat.extension;

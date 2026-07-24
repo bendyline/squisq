@@ -3,10 +3,8 @@
  *
  * Line-level markdown rewrites for the timeline editor: set a block's
  * `duration` on its heading's Pandoc attribute block, and patch a media
- * clip's `startAt` / `clipStart` / `clipEnd` / `spillover` on its `{[audio …]}`
- * / `{[video …]}` annotation line. Both preserve everything else on the line
- * (template annotations, ids, classes, other params) by reusing the shared
- * tokenizers rather than regex-replacing values.
+ * clip's timing on either a `{[audio …]}` / `{[video …]}` annotation or the
+ * equivalent standalone HTML element. Rewrites preserve unrelated source.
  */
 
 import {
@@ -174,63 +172,66 @@ function setHtmlAttribute(openingTag: string, name: string, value: string | null
   return openingTag.replace(/\s*\/?>(?=$)/, (end) => ` ${name}="${value}"${end.trimStart()}`);
 }
 
-/** Patch timeline timing data on a toolbar-authored standalone HTML video. */
-function setHtmlVideoClipInLine(original: string, patch: MediaClipPatch): string | null {
-  if (!/^\s*<video\b/i.test(original)) return null;
-  const opening = /<video\b[^>]*>/i.exec(original);
+/** Patch timeline timing data on a standalone HTML audio/video element. */
+function setHtmlMediaClipInLine(original: string, patch: MediaClipPatch): string | null {
+  const tagMatch = /^\s*<(video|audio)\b/i.exec(original);
+  if (!tagMatch) return null;
+  const tag = tagMatch[1].toLowerCase() as 'video' | 'audio';
+  const opening = new RegExp(`<${tag}\\b[^>]*>`, 'i').exec(original);
   if (!opening) return null;
   let next = opening[0];
+  const timingPrefix = `data-squisq-${tag}`;
   if (patch.startAt !== undefined) {
     next = setHtmlAttribute(
       next,
-      'data-squisq-video-start-at',
+      `${timingPrefix}-start-at`,
       patch.startAt == null ? null : formatSeconds(patch.startAt),
     );
   }
   if (patch.clipStart !== undefined) {
     next = setHtmlAttribute(
       next,
-      'data-squisq-video-clip-start',
+      `${timingPrefix}-clip-start`,
       patch.clipStart == null ? null : formatSeconds(patch.clipStart),
     );
   }
   if (patch.clipEnd !== undefined) {
     next = setHtmlAttribute(
       next,
-      'data-squisq-video-clip-end',
+      `${timingPrefix}-clip-end`,
       patch.clipEnd == null ? null : formatSeconds(patch.clipEnd),
     );
   }
-  if (patch.placement !== undefined) {
+  if (tag === 'video' && patch.placement !== undefined) {
     next = setHtmlAttribute(
       next,
       'data-squisq-video-placement',
       patch.placement == null || patch.placement === 'content' ? null : patch.placement,
     );
   }
-  if (patch.lockToBlock !== undefined) {
+  if (tag === 'video' && patch.lockToBlock !== undefined) {
     next = setHtmlAttribute(
       next,
       'data-squisq-video-lock-to-block',
       patch.lockToBlock == null || patch.lockToBlock ? null : 'false',
     );
   }
-  if (patch.pipSize !== undefined) {
+  if (tag === 'video' && patch.pipSize !== undefined) {
     next = setHtmlAttribute(next, 'data-squisq-video-pip-size', patch.pipSize);
   }
-  if (patch.pipShape !== undefined) {
+  if (tag === 'video' && patch.pipShape !== undefined) {
     next = setHtmlAttribute(next, 'data-squisq-video-pip-shape', patch.pipShape);
   }
-  if (patch.pipPosition !== undefined) {
+  if (tag === 'video' && patch.pipPosition !== undefined) {
     next = setHtmlAttribute(next, 'data-squisq-video-pip-position', patch.pipPosition);
   }
   return `${original.slice(0, opening.index)}${next}${original.slice(opening.index + opening[0].length)}`;
 }
 
 /**
- * Patch the `{[audio …]}` / `{[video …]}` annotation at 1-based `line`.
- * Preserves the template name and any params not in the patch. Returns the
- * new full source, or null when the line isn't a media annotation.
+ * Patch a `{[audio …]}` / `{[video …]}` annotation or standalone HTML media
+ * element at 1-based `line`. Preserves unrelated parameters and attributes.
+ * Returns the new full source, or null when the line is not recognized.
  */
 export function setMediaClipInSource(
   source: string,
@@ -241,9 +242,9 @@ export function setMediaClipInSource(
   const idx = line - 1;
   if (idx < 0 || idx >= lines.length) return null;
   const original = lines[idx];
-  const htmlVideo = setHtmlVideoClipInLine(original, patch);
-  if (htmlVideo != null) {
-    lines[idx] = htmlVideo;
+  const htmlMedia = setHtmlMediaClipInLine(original, patch);
+  if (htmlMedia != null) {
+    lines[idx] = htmlMedia;
     return lines.join('\n');
   }
   const m = matchTrailingTemplateAnnotation(original);
@@ -344,10 +345,10 @@ function headingIndexAbove(lines: string[], idx: number): number {
 
 /**
  * Place a timed clip into the block whose heading is at 1-based
- * `targetHeadingLine`, written as a `{[…]}` annotation. The clip's current
- * authoring line at 1-based `fromLine` (a media embed or an existing
- * annotation) is removed; when the target is the same block the line is
- * rewritten in place. Returns the new source, or null on bad input.
+ * `targetHeadingLine`. Inline HTML audio/video keeps its element and receives
+ * timing data attributes; annotations and other embeds use `{[media …]}`.
+ * The current authoring line is moved between block bodies or rewritten in
+ * place when the target remains the same block.
  *
  * This is what lets a clip be dragged from one block into another on the
  * timeline: its representation relocates to the target block's body.
@@ -365,10 +366,35 @@ export function placeClipInBlock(
   const targetIdx0 = targetHeadingLine - 1;
   if (targetIdx0 < 0 || targetIdx0 >= lines.length) return null;
 
-  const annotation = buildClipAnnotation(spec, Math.max(0, startAt));
+  const normalizedStartAt = Math.max(0, startAt);
+  const sameBlock = headingIndexAbove(lines, fromIdx) === targetIdx0;
+
+  // Keep a body-authored inline audio/video element as playable HTML. Timeline
+  // values live in data attributes, preserving controls and other authored
+  // attributes while the whole line moves between blocks.
+  if (/^\s*<(?:video|audio)\b/i.test(lines[fromIdx])) {
+    const html = setHtmlMediaClipInLine(lines[fromIdx], {
+      startAt: normalizedStartAt > 0 ? normalizedStartAt : null,
+      ...(spec.clipStart !== undefined ? { clipStart: spec.clipStart } : {}),
+      ...(spec.clipEnd !== undefined ? { clipEnd: spec.clipEnd } : {}),
+    });
+    if (html == null) return null;
+    if (sameBlock) {
+      lines[fromIdx] = html;
+      return lines.join('\n');
+    }
+
+    lines.splice(fromIdx, 1);
+    let targetIdx = targetIdx0;
+    if (fromIdx < targetIdx) targetIdx -= 1;
+    lines.splice(targetIdx + 1, 0, '', html);
+    return lines.join('\n');
+  }
+
+  const annotation = buildClipAnnotation(spec, normalizedStartAt);
 
   // Same block → rewrite the line in place (preserves position).
-  if (headingIndexAbove(lines, fromIdx) === targetIdx0) {
+  if (sameBlock) {
     lines[fromIdx] = annotation;
     return lines.join('\n');
   }

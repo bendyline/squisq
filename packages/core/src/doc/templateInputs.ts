@@ -25,6 +25,7 @@ import type {
   MarkdownList,
   MarkdownTable,
 } from '../markdown/types.js';
+import { parseTimeSeconds } from '../markdown/annotationCoercion.js';
 import { sanitizeUrl } from '../markdown/sanitize.js';
 import { extractPlainText } from '../markdown/utils.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
@@ -52,6 +53,11 @@ export interface EmbeddedVideo {
   src: string;
   posterSrc?: string;
   alt: string;
+  /** Delay within the owning block before playback begins. */
+  startAt?: number;
+  /** Source-media in/out points carried by inline video data attributes. */
+  clipStart?: number;
+  clipEnd?: number;
 }
 
 const VIDEO_FILE_RE = /\.(?:webm|mp4|mov|m4v|ogv)(?:[?#].*)?$/i;
@@ -124,7 +130,7 @@ function renderInlineHtml(nodes: MarkdownInlineNode[]): string {
         case 'mention':
           return escapeInlineHtml(`@${node.displayName}`);
         case 'inlineIcon':
-          return escapeInlineHtml(`{[${node.token}]}`);
+          return `<i class="fa-${node.family} fa-${node.name}" aria-hidden="true"></i>`;
         case 'htmlInline':
           return escapeInlineHtml(node.rawHtml);
       }
@@ -279,10 +285,22 @@ export function extractEmbeddedVideos(
       const attrs = n.attributes as Record<string, string> | undefined;
       const src = attrs?.src || nestedSource(n.children);
       if (src) {
+        const startAt = attrs?.['data-squisq-video-start-at']
+          ? parseTimeSeconds(attrs['data-squisq-video-start-at'])
+          : null;
+        const clipStart = attrs?.['data-squisq-video-clip-start']
+          ? parseTimeSeconds(attrs['data-squisq-video-clip-start'])
+          : null;
+        const clipEnd = attrs?.['data-squisq-video-clip-end']
+          ? parseTimeSeconds(attrs['data-squisq-video-clip-end'])
+          : null;
         add({
           src,
           ...(attrs?.poster ? { posterSrc: attrs.poster } : {}),
           alt: attrs?.['aria-label'] || attrs?.title || attrs?.alt || '',
+          ...(startAt != null ? { startAt } : {}),
+          ...(clipStart != null ? { clipStart } : {}),
+          ...(clipEnd != null ? { clipEnd } : {}),
         });
       }
     } else if (

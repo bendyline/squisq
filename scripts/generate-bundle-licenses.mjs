@@ -1,5 +1,6 @@
-import { readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { removeGeneratedLicenseMetadata } from './remove-license-metadata.mjs';
 
 const repoRoot = resolve(import.meta.dirname, '..');
 const packageDir = resolve(process.argv[2] ?? '.');
@@ -26,7 +27,7 @@ for (const name of extraPackages) {
 const sorted = [...components.values()].sort((a, b) => a.key.localeCompare(b.key));
 const output = renderLicenseFile(packageManifest.name, sorted);
 await writeFile(resolve(packageDir, 'THIRD_PARTY_LICENSES.txt'), output, 'utf8');
-await rm(metadataDir, { recursive: true, force: true });
+await removeGeneratedLicenseMetadata(packageDir);
 console.log(`Generated ${packageManifest.name} license inventory (${sorted.length} components)`);
 
 async function componentFromInput(absWorkingDir, input) {

@@ -76,6 +76,7 @@ let lastRecorder: FakeRecorderHandle | null = null;
 let lastStream: FakeMediaStream | null = null;
 /** Every FakeMediaRecorder constructed this test, in order (0 = primary lane). */
 let recorders: FakeRecorderHandle[] = [];
+let recorderConstructionOptions: Array<Record<string, unknown>> = [];
 
 class FakeMediaRecorder implements FakeRecorderHandle {
   state: 'recording' | 'inactive' = 'inactive';
@@ -95,6 +96,7 @@ class FakeMediaRecorder implements FakeRecorderHandle {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     lastRecorder = this;
     recorders.push(this);
+    recorderConstructionOptions.push({ ...(options ?? {}) });
   }
   static isTypeSupported(mime: string): boolean {
     return mime.startsWith('audio/webm') || mime.startsWith('video/webm');
@@ -128,6 +130,7 @@ function restore(name: 'MediaRecorder' | 'MediaStream' | 'AudioContext', origina
 beforeEach(() => {
   lastRecorder = null;
   recorders = [];
+  recorderConstructionOptions = [];
   (globalThis as { MediaRecorder?: unknown }).MediaRecorder = FakeMediaRecorder;
   (globalThis as { MediaStream?: unknown }).MediaStream = FakeMediaStream;
   (globalThis as { AudioContext?: unknown }).AudioContext = FakeAudioContext;
@@ -251,6 +254,30 @@ describe('useMediaRecorder lifecycle', () => {
     expect(getUserMedia).toHaveBeenCalledWith(
       expect.objectContaining({ video: true, audio: false }),
     );
+  });
+
+  it('passes all MediaRecorder encoding hints through to the browser', async () => {
+    const { result } = renderHook(() =>
+      useMediaRecorder({
+        source: 'camera',
+        bitsPerSecond: 4_000_000,
+        audioBitsPerSecond: 192_000,
+        videoBitsPerSecond: 3_800_000,
+        audioBitrateMode: 'constant',
+        videoKeyFrameIntervalCount: 60,
+      }),
+    );
+    await act(async () => {
+      await result.current.request();
+    });
+
+    expect(recorderConstructionOptions[0]).toMatchObject({
+      bitsPerSecond: 4_000_000,
+      audioBitsPerSecond: 192_000,
+      videoBitsPerSecond: 3_800_000,
+      audioBitrateMode: 'constant',
+      videoKeyFrameIntervalCount: 60,
+    });
   });
 
   it('cancel() tears down state and stops the stream tracks', async () => {
@@ -429,6 +456,46 @@ describe('useMediaRecorder — screen + camera (dual lane)', () => {
     // Screen must be requested first (it consumes the click's transient activation).
     expect(getDisplayMedia.mock.invocationCallOrder[0]).toBeLessThan(
       getUserMedia.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('applies independent display and camera constraints to the two lanes', async () => {
+    const screen = new FakeMediaStream([new FakeMediaStreamTrack('video')]);
+    const camera = new FakeMediaStream([new FakeMediaStreamTrack('video')]);
+    const { getDisplayMedia, getUserMedia } = stubDualStreams(screen, camera);
+    const cameraConstraints = {
+      deviceId: { exact: 'camera-2' },
+      aspectRatio: { exact: 4 / 3 },
+    };
+    const screenConstraints = {
+      displaySurface: { ideal: 'window' },
+      frameRate: { ideal: 60 },
+    };
+    const screenAudioConstraints = {
+      suppressLocalAudioPlayback: true,
+    } as MediaTrackConstraints;
+
+    const { result } = renderHook(() =>
+      useMediaRecorder({
+        source: 'screen+camera',
+        videoConstraints: cameraConstraints,
+        screenVideoConstraints: screenConstraints,
+        screenAudioConstraints,
+        systemAudio: true,
+      }),
+    );
+    await act(async () => {
+      await result.current.request();
+    });
+
+    expect(getDisplayMedia).toHaveBeenCalledWith(
+      expect.objectContaining({
+        video: screenConstraints,
+        audio: screenAudioConstraints,
+      }),
+    );
+    expect(getUserMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ video: cameraConstraints }),
     );
   });
 

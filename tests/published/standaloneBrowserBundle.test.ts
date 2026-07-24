@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { loadPublicPackages } from './_packages';
@@ -41,6 +42,21 @@ describe('@bendyline/squisq-react standalone browser contract', () => {
     const full = readFileSync(resolve(pkg.dist, 'squisq-player.full.global.js'));
     expect(light.byteLength).toBeLessThan(2_000_000);
     expect(full.byteLength).toBeGreaterThan(light.byteLength);
+  });
+
+  it('stores icon webfonts once while keeping embedded exports self-contained', async () => {
+    const light = readFileSync(resolve(pkg.dist, 'squisq-player.global.js'), 'utf8');
+    const full = readFileSync(resolve(pkg.dist, 'squisq-player.full.global.js'), 'utf8');
+    const iconStyles = readFileSync(resolve(pkg.dist, 'standalone-icon-styles.js'), 'utf8');
+
+    expect(light).not.toContain('data:font/woff2;base64');
+    expect(full).not.toContain('data:font/woff2;base64');
+    expect(iconStyles).toContain('data:font/woff2;base64');
+
+    const sourceUrl = pathToFileURL(resolve(pkg.dist, 'standalone-source.js')).href;
+    const { PLAYER_BUNDLE } = (await import(sourceUrl)) as { PLAYER_BUNDLE: string };
+    expect(PLAYER_BUNDLE).toContain('globalThis.__SQUISQ_PLAYER_ICON_STYLES__=');
+    expect(PLAYER_BUNDLE).toContain('data:font/woff2;base64');
   });
 
   it.each(['squisq-player.global.js', 'squisq-player.full.global.js'])(

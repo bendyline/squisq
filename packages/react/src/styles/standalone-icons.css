@@ -1,11 +1,11 @@
 /**
- * @bendyline/squisq-react — bundled stylesheet entry.
- * Aggregates all CSS shipped with this package.
+ * Font Awesome styles embedded once for standalone-source and CLI rendering.
+ *
+ * Keep this separate from standalone-entry: the light and full IIFEs share
+ * this payload instead of each embedding its own copy of the webfonts.
  */
 
 @import '@fortawesome/fontawesome-free/css/fontawesome.min.css';
 @import '@fortawesome/fontawesome-free/css/brands.min.css';
 @import '@fortawesome/fontawesome-free/css/regular.min.css';
 @import '@fortawesome/fontawesome-free/css/solid.min.css';
-@import './doc-animations.css';
-@import '../jsonView/json-view.css';

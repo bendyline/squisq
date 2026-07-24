@@ -36,11 +36,16 @@ export interface SystemAudioMixHandle {
  * Call this BEFORE acquiring the mic/camera: `getDisplayMedia` needs transient
  * user activation, which the initiating click still holds on the first await.
  */
-export async function requestSystemAudioStream(): Promise<MediaStream | null> {
+export async function requestSystemAudioStream(
+  audioConstraints?: MediaTrackConstraints,
+): Promise<MediaStream | null> {
   if (!supportsDisplayMedia()) {
     throw new Error('navigator.mediaDevices.getDisplayMedia is not available in this environment.');
   }
-  const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+  const display = await navigator.mediaDevices.getDisplayMedia({
+    video: true,
+    audio: audioConstraints ?? true,
+  });
   // We only wanted the audio — release the shared surface immediately. The
   // audio track stays live; that alone keeps the browser's share indicator lit
   // until `dispose()` stops it.

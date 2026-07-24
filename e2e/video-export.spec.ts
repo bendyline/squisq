@@ -223,9 +223,10 @@ test.describe('Video export', () => {
     if (result !== 'success') console.error(consoleLogs.join('\n'));
     expect(result).toBe('success');
 
-    const downloadPromise = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Download GIF' }).click();
-    const download = await downloadPromise;
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Save GIF to Downloads' }).click(),
+    ]);
     expect(download.suggestedFilename()).toMatch(/\.gif$/i);
     const path = await download.path();
     expect(path).not.toBeNull();

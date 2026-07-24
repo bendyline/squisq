@@ -9,8 +9,29 @@ export { RecorderButton } from '../recorder/RecorderButton.js';
 export type { RecorderButtonProps } from '../recorder/RecorderButton.js';
 export { RecorderPanel } from '../recorder/RecorderPanel.js';
 export type { RecorderPanelProps } from '../recorder/RecorderPanel.js';
+export { RecorderDeviceSettingsPanel } from '../recorder/RecorderDeviceSettingsPanel.js';
+export type { RecorderDeviceSettingsPanelProps } from '../recorder/RecorderDeviceSettingsPanel.js';
+export {
+  DEFAULT_RECORDER_DEVICE_SETTINGS,
+  buildRecorderAudioConstraints,
+  buildRecorderCameraConstraints,
+  buildRecorderScreenConstraints,
+  buildRecorderScreenAudioConstraints,
+  recorderBitsPerSecond,
+} from '../recorder/deviceSettings.js';
+export type {
+  RecorderConstraintMode,
+  RecorderAudioDeviceSettings,
+  RecorderCameraDeviceSettings,
+  RecorderScreenDeviceSettings,
+  RecorderScreenAudioSettings,
+  RecorderEncodingSettings,
+  RecorderDeviceSettings,
+} from '../recorder/deviceSettings.js';
 export { useMediaRecorder, getCaptureKind } from '../recorder/hooks/useMediaRecorder.js';
 export type {
+  RecorderAudioBitrateMode,
+  RecorderExtendedMediaOptions,
   UseMediaRecorderOptions,
   UseMediaRecorderResult,
   RecorderSource,

@@ -10,6 +10,7 @@ import {
   buildClipAnnotation,
   placeClipInBlock,
 } from '../timelineSource';
+import { collectEmbeddedMedia } from '../embeddedMedia';
 
 /** Re-parse and read a block's duration to confirm the edit took effect. */
 function durationOf(source: string, blockIndex: number): number {
@@ -128,6 +129,20 @@ describe('setMediaClipInSource', () => {
     expect(doc.documentMedia?.[0]).toMatchObject({ startAt: 6, clipEnd: 14 });
   });
 
+  it('patches timing attributes on an inline HTML audio element', () => {
+    const html = '# B {duration=20}\n\n<audio src="a.webm" controls></audio>\n';
+    const next = setMediaClipInSource(html, 3, {
+      startAt: 6,
+      clipStart: 1,
+      clipEnd: 14,
+    })!;
+    expect(next).toContain('<audio src="a.webm" controls');
+    expect(next).toContain('data-squisq-audio-start-at="6"');
+    expect(next).toContain('data-squisq-audio-clip-start="1"');
+    expect(next).toContain('data-squisq-audio-clip-end="14"');
+    expect(next).not.toContain('{[audio');
+  });
+
   it('patches video composition properties on annotations', () => {
     const video = '# B {duration=20}\n\n{[video src=v.mp4 pip=true]}\n';
     const next = setMediaClipInSource(video, 3, {
@@ -195,26 +210,44 @@ describe('placeClipInBlock', () => {
   const src =
     '# One {duration=10}\n\n<video src="r.webm"></video>\n\n# Two {duration=10}\n\nbody\n';
 
-  it('converts an embed to an annotation in place (same block)', () => {
+  it('adds timing attributes to an inline video in place (same block)', () => {
     const next = placeClipInBlock(src, 3, 1, { kind: 'video', src: 'r.webm', clipEnd: 10 }, 0)!;
-    expect(next).toContain('{[video src=r.webm clipEnd=10]}');
-    expect(next).not.toContain('<video');
+    expect(next).toContain('<video src="r.webm" data-squisq-video-clip-end="10"></video>');
+    expect(next).not.toContain('{[video');
     // Still under block One (line 1), before block Two.
-    expect(next.indexOf('{[video')).toBeLessThan(next.indexOf('# Two'));
+    expect(next.indexOf('<video')).toBeLessThan(next.indexOf('# Two'));
   });
 
-  it('relocates the clip into a different (earlier/later) block', () => {
+  it('relocates an inline video without changing its representation', () => {
     // Move the embed (line 3, in block One) into block Two (heading line 5).
     const next = placeClipInBlock(src, 3, 5, { kind: 'video', src: 'r.webm', clipEnd: 4 }, 2)!;
-    expect(next).not.toContain('<video');
-    // The annotation now sits after block Two's heading.
+    expect(next).not.toContain('{[video');
+    // The video now sits after block Two's heading with timeline attributes.
     const twoIdx = next.indexOf('# Two');
-    const clipIdx = next.indexOf('{[video');
+    const clipIdx = next.indexOf('<video');
     expect(clipIdx).toBeGreaterThan(twoIdx);
-    expect(next).toContain('startAt=2');
-    // Re-parsing attaches it to block Two as a media clip.
+    expect(next).toContain('data-squisq-video-start-at="2"');
+    expect(next).toContain('data-squisq-video-clip-end="4"');
+    // Re-parsing keeps it as block content rather than an opaque media tag.
     const doc = markdownToDoc(parseMarkdown(next), { articleId: 't' });
-    expect(doc.blocks[1].media?.[0]).toMatchObject({ src: 'r.webm', startAt: 2, anchor: 'block' });
+    expect(doc.blocks[1].media).toBeUndefined();
+    expect(collectEmbeddedMedia(doc.blocks[1])[0]).toMatchObject({
+      src: 'r.webm',
+      startAt: 2,
+      clipEnd: 4,
+    });
     expect(doc.blocks[0].media).toBeUndefined();
+  });
+
+  it('relocates an inline audio element without converting it to an annotation', () => {
+    const audio =
+      '# One {duration=10}\n\n<audio src="a.webm" controls></audio>\n\n# Two {duration=10}\n\nbody\n';
+    const next = placeClipInBlock(audio, 3, 5, { kind: 'audio', src: 'a.webm', clipEnd: 4 }, 2)!;
+
+    expect(next).toContain('<audio src="a.webm" controls');
+    expect(next).toContain('data-squisq-audio-start-at="2"');
+    expect(next).toContain('data-squisq-audio-clip-end="4"');
+    expect(next).not.toContain('{[audio');
+    expect(next.indexOf('<audio')).toBeGreaterThan(next.indexOf('# Two'));
   });
 });

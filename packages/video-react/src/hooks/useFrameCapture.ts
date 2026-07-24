@@ -75,6 +75,7 @@ const CAPTURE_ASSET_TIMEOUT_MS = 15_000;
 const RENDER_TIME_EPSILON_SECONDS = 0.000_001;
 const POTENTIALLY_ANIMATED_IMAGE_URL =
   /(?:^data:image\/(?:gif|webp|avif)[;,]|\.(?:gif|webp|avif)(?:[?#]|$))/i;
+const CAPTURE_SVG_SELECTOR = 'svg.block-svg';
 
 /**
  * Let React and the browser present DOM changes without waiting forever for
@@ -318,7 +319,7 @@ function videoFrameRect(
 export function prepareScheduledVideoClones(
   originalRoot: HTMLElement,
   clonedRoot: HTMLElement,
-): void {
+): HTMLCanvasElement[] {
   const captureFamilies = [
     {
       original: '.doc-player__media-clips video[data-clip-id]',
@@ -338,6 +339,7 @@ export function prepareScheduledVideoClones(
       return canvas ? [{ video, canvas }] : [];
     });
   });
+  const preparedCanvases = pairs.map(({ canvas }) => canvas);
 
   pairs.forEach(({ video, canvas }) => {
     canvas.className = video.className;
@@ -370,13 +372,11 @@ export function prepareScheduledVideoClones(
         destinationHeight,
         objectFit,
       );
-      const stagingCanvas = canvas.ownerDocument.createElement('canvas');
-      stagingCanvas.width = destinationWidth;
-      stagingCanvas.height = destinationHeight;
-      const stagingContext = stagingCanvas.getContext('2d');
       const context = canvas.getContext('2d');
-      if (!stagingContext || !context) return;
-      stagingContext.drawImage(
+      if (!context) return;
+      canvas.width = destinationWidth;
+      canvas.height = destinationHeight;
+      context.drawImage(
         video,
         frame.sx,
         frame.sy,
@@ -387,9 +387,6 @@ export function prepareScheduledVideoClones(
         frame.dw,
         frame.dh,
       );
-      canvas.width = destinationWidth;
-      canvas.height = destinationHeight;
-      context.drawImage(stagingCanvas, 0, 0);
 
       // html2canvas treats the DocPlayer's outer <svg> as one replaced image
       // and serializes its subtree. Canvas bitmap pixels are not part of DOM
@@ -430,6 +427,242 @@ export function prepareScheduledVideoClones(
       // Keep html2canvas's original clone if this browser cannot redraw the
       // current video frame (for example, a not-yet-decodable media source).
     }
+  });
+
+  return preparedCanvases;
+}
+
+interface CaptureRasterSize {
+  width: number;
+  height: number;
+}
+
+type CaptureImageDataUrlCache = Map<string, Promise<string | null>>;
+
+function parseAbsoluteSvgLength(value: string | null): number {
+  if (!value) return 0;
+  const match = /^\s*(\d+(?:\.\d+)?|\.\d+)(?:px)?\s*$/i.exec(value);
+  return match ? Number.parseFloat(match[1]) : 0;
+}
+
+function svgViewBoxSize(svg: SVGSVGElement): CaptureRasterSize {
+  const values = (svg.getAttribute('viewBox') ?? '')
+    .trim()
+    .split(/[\s,]+/)
+    .map(Number);
+  if (values.length === 4 && values.every(Number.isFinite)) {
+    return { width: Math.max(0, values[2]), height: Math.max(0, values[3]) };
+  }
+  return { width: 0, height: 0 };
+}
+
+function captureSvgRasterSize(
+  clonedSvg: SVGSVGElement,
+  originalSvg?: SVGSVGElement,
+): CaptureRasterSize {
+  const clonedRect = clonedSvg.getBoundingClientRect();
+  const originalRect = originalSvg?.getBoundingClientRect();
+  const clonedViewBox = svgViewBoxSize(clonedSvg);
+  const originalViewBox = originalSvg ? svgViewBoxSize(originalSvg) : { width: 0, height: 0 };
+  const width =
+    clonedRect.width ||
+    originalRect?.width ||
+    parseAbsoluteSvgLength(clonedSvg.getAttribute('width')) ||
+    (originalSvg ? parseAbsoluteSvgLength(originalSvg.getAttribute('width')) : 0) ||
+    clonedViewBox.width ||
+    originalViewBox.width;
+  const height =
+    clonedRect.height ||
+    originalRect?.height ||
+    parseAbsoluteSvgLength(clonedSvg.getAttribute('height')) ||
+    (originalSvg ? parseAbsoluteSvgLength(originalSvg.getAttribute('height')) : 0) ||
+    clonedViewBox.height ||
+    originalViewBox.height;
+  return {
+    width: Math.max(1, Math.round(width)),
+    height: Math.max(1, Math.round(height)),
+  };
+}
+
+function copyCaptureSvgPresentation(svg: SVGSVGElement, canvas: HTMLCanvasElement): void {
+  for (const attribute of Array.from(svg.attributes)) {
+    if (
+      attribute.name === 'id' ||
+      attribute.name === 'class' ||
+      attribute.name === 'style' ||
+      attribute.name.startsWith('data-') ||
+      attribute.name.startsWith('aria-')
+    ) {
+      canvas.setAttribute(attribute.name, attribute.value);
+    }
+  }
+  canvas.dataset.svgCaptureClone = 'true';
+}
+
+function captureImageMimeType(source: string, blob: Blob): string {
+  if (blob.type) return blob.type;
+  const path = source.split(/[?#]/, 1)[0];
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  return MIME_MAP[ext] ?? 'application/octet-stream';
+}
+
+function blobToDataUrl(blob: Blob, source: string): Promise<string> {
+  const typedBlob = blob.type ? blob : blob.slice(0, blob.size, captureImageMimeType(source, blob));
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener(
+      'load',
+      () => {
+        if (typeof reader.result === 'string') resolve(reader.result);
+        else reject(new Error(`Image could not be embedded for SVG capture: ${source}`));
+      },
+      { once: true },
+    );
+    reader.addEventListener(
+      'error',
+      () => reject(reader.error ?? new Error(`Image could not be read for SVG capture: ${source}`)),
+      { once: true },
+    );
+    reader.readAsDataURL(typedBlob);
+  });
+}
+
+function resolveCaptureImageDataUrl(
+  source: string,
+  cache: CaptureImageDataUrlCache,
+): Promise<string | null> {
+  const cached = cache.get(source);
+  if (cached) return cached;
+
+  const pending = fetch(source)
+    .then(async (response) => {
+      if (!response.ok) return null;
+      return blobToDataUrl(await response.blob(), source);
+    })
+    .catch(() => null);
+  cache.set(source, pending);
+  return pending;
+}
+
+function captureImageReference(element: Element): {
+  source: string;
+  replace: (dataUrl: string) => void;
+} | null {
+  if (element.localName === 'img') {
+    const source = element.getAttribute('src') ?? '';
+    return source
+      ? {
+          source,
+          replace: (dataUrl) => element.setAttribute('src', dataUrl),
+        }
+      : null;
+  }
+
+  const xlinkNamespace = 'http://www.w3.org/1999/xlink';
+  const source =
+    element.getAttribute('href') ?? element.getAttributeNS(xlinkNamespace, 'href') ?? '';
+  return source
+    ? {
+        source,
+        replace: (dataUrl) => {
+          if (element.hasAttribute('href')) element.setAttribute('href', dataUrl);
+          if (element.hasAttributeNS(xlinkNamespace, 'href')) {
+            element.setAttributeNS(xlinkNamespace, 'href', dataUrl);
+          }
+        },
+      }
+    : null;
+}
+
+/**
+ * A serialized SVG is a new, standalone image document. Convert its external
+ * image references to data URLs so provider-backed blob URLs (including pasted
+ * screen clips) remain available while Chromium decodes that document.
+ */
+async function embedCaptureSvgImages(
+  svg: SVGSVGElement,
+  cache: CaptureImageDataUrlCache,
+): Promise<boolean> {
+  const references = Array.from(svg.querySelectorAll('image, img'))
+    .map(captureImageReference)
+    .filter((reference): reference is NonNullable<typeof reference> => reference !== null);
+
+  for (const reference of references) {
+    if (/^data:/i.test(reference.source) || reference.source.startsWith('#')) continue;
+    const dataUrl = await resolveCaptureImageDataUrl(reference.source, cache);
+    if (!dataUrl) return false;
+    reference.replace(dataUrl);
+  }
+  return true;
+}
+
+/**
+ * Replace full-slide SVGs in html2canvas's disposable document clone with
+ * ordinary canvases backed by closeable ImageBitmaps.
+ *
+ * Without this step html2canvas serializes every SVG to a unique data URL and
+ * asks Chromium to decode it as a new full-resolution image on every frame.
+ * Chromium can retain those decoded native surfaces long after the clone iframe
+ * is removed, so long exports grow by several megabytes per frame.
+ */
+export async function rasterizeCaptureSvgClones(
+  originalRoot: HTMLElement,
+  clonedRoot: HTMLElement,
+  transientCanvases: HTMLCanvasElement[] = [],
+  imageDataUrls: CaptureImageDataUrlCache = new Map(),
+): Promise<HTMLCanvasElement[]> {
+  if (typeof createImageBitmap !== 'function') return transientCanvases;
+
+  const originalSvgs = Array.from(
+    originalRoot.querySelectorAll<SVGSVGElement>(CAPTURE_SVG_SELECTOR),
+  );
+  const clonedSvgs = Array.from(clonedRoot.querySelectorAll<SVGSVGElement>(CAPTURE_SVG_SELECTOR));
+
+  for (const [index, svg] of clonedSvgs.entries()) {
+    const { width, height } = captureSvgRasterSize(svg, originalSvgs[index]);
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    svg.setAttribute('width', String(width));
+    svg.setAttribute('height', String(height));
+
+    let bitmap: ImageBitmap | null = null;
+    let replacement: HTMLCanvasElement | null = null;
+    try {
+      if (!(await embedCaptureSvgImages(svg, imageDataUrls))) continue;
+      const serializedSvg = new XMLSerializer().serializeToString(svg);
+      bitmap = await createImageBitmap(new Blob([serializedSvg], { type: 'image/svg+xml' }));
+      replacement = svg.ownerDocument.createElement('canvas');
+      replacement.width = width;
+      replacement.height = height;
+      copyCaptureSvgPresentation(svg, replacement);
+      const context = replacement.getContext('2d');
+      if (!context) {
+        replacement.width = 0;
+        replacement.height = 0;
+        continue;
+      }
+      context.drawImage(bitmap, 0, 0, width, height);
+      svg.replaceWith(replacement);
+      transientCanvases.push(replacement);
+    } catch {
+      // If this browser cannot decode a particular SVG as an ImageBitmap,
+      // leave that SVG in place and let html2canvas use its normal fallback.
+      if (replacement && !replacement.isConnected) {
+        replacement.width = 0;
+        replacement.height = 0;
+      }
+    } finally {
+      bitmap?.close();
+    }
+  }
+
+  return transientCanvases;
+}
+
+/** Release backing stores retained by canvases in html2canvas's clone iframe. */
+export function releaseCaptureCloneCanvases(canvases: HTMLCanvasElement[]): void {
+  canvases.forEach((canvas) => {
+    canvas.width = 0;
+    canvas.height = 0;
   });
 }
 
@@ -510,6 +743,7 @@ export function useFrameCapture(): FrameCaptureHandle {
   const lastVisualStateKeyRef = useRef<string | null>(null);
   const hasCapturedFrameRef = useRef(false);
   const decodedImagesRef = useRef(new WeakSet<HTMLImageElement>());
+  const captureImageDataUrlsRef = useRef<CaptureImageDataUrlCache>(new Map());
   const dimensionsRef = useRef<{ width: number; height: number }>({ width: 1920, height: 1080 });
 
   const init = useCallback(
@@ -539,6 +773,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         lastVisualStateKeyRef.current = null;
         hasCapturedFrameRef.current = false;
         decodedImagesRef.current = new WeakSet<HTMLImageElement>();
+        captureImageDataUrlsRef.current.clear();
         await new Promise<void>((resolve) => {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
@@ -572,6 +807,7 @@ export function useFrameCapture(): FrameCaptureHandle {
       lastVisualStateKeyRef.current = null;
       hasCapturedFrameRef.current = false;
       decodedImagesRef.current = new WeakSet<HTMLImageElement>();
+      captureImageDataUrlsRef.current.clear();
 
       // Create a hidden container
       const container = document.createElement('div');
@@ -730,23 +966,35 @@ export function useFrameCapture(): FrameCaptureHandle {
 
       // Render the DOM to the bounded, reusable canvas via html2canvas.
       // We're in the same document (no iframe), so COEP doesn't block cloning.
-      const canvas = await html2canvas(root, {
-        canvas: captureCanvas,
-        width,
-        height,
-        scale: 1,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#000000',
-        logging: false,
-        onclone: (_clonedDocument, clonedRoot) => {
-          prepareScheduledVideoClones(root, clonedRoot);
-        },
-        // html2canvas starts cloning at documentElement. Do not clone the rest
-        // of the editor/site UI on every frame; only the capture root, its
-        // ancestors, descendants, and document styles can affect this render.
-        ignoreElements: (element) => shouldIgnoreCaptureSibling(element, root),
-      });
+      const transientCloneCanvases: HTMLCanvasElement[] = [];
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = await html2canvas(root, {
+          canvas: captureCanvas,
+          width,
+          height,
+          scale: 1,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#000000',
+          logging: false,
+          onclone: async (_clonedDocument, clonedRoot) => {
+            transientCloneCanvases.push(...prepareScheduledVideoClones(root, clonedRoot));
+            await rasterizeCaptureSvgClones(
+              root,
+              clonedRoot,
+              transientCloneCanvases,
+              captureImageDataUrlsRef.current,
+            );
+          },
+          // html2canvas starts cloning at documentElement. Do not clone the rest
+          // of the editor/site UI on every frame; only the capture root, its
+          // ancestors, descendants, and document styles can affect this render.
+          ignoreElements: (element) => shouldIgnoreCaptureSibling(element, root),
+        });
+      } finally {
+        releaseCaptureCloneCanvases(transientCloneCanvases);
+      }
 
       hasCapturedFrameRef.current = true;
       lastVisualStateKeyRef.current = visualStateKey;
@@ -784,6 +1032,7 @@ export function useFrameCapture(): FrameCaptureHandle {
     lastVisualStateKeyRef.current = null;
     hasCapturedFrameRef.current = false;
     decodedImagesRef.current = new WeakSet<HTMLImageElement>();
+    captureImageDataUrlsRef.current.clear();
     renderAPIRef.current = null;
   }, []);
 

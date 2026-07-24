@@ -7,6 +7,8 @@ import {
   createInlineProvider,
   getFrameVisualStateKey,
   prepareScheduledVideoClones,
+  rasterizeCaptureSvgClones,
+  releaseCaptureCloneCanvases,
   useFrameCapture,
   waitForCaptureAssets,
   waitForVisualUpdate,
@@ -177,6 +179,116 @@ describe('getFrameVisualStateKey', () => {
   });
 });
 
+describe('capture clone raster lifetime', () => {
+  it('replaces full-slide SVGs with closeable bitmaps and releases their canvas stores', async () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML =
+      '<svg class="block-svg" viewBox="0 0 1920 1080" data-block-id="intro"></svg>';
+    const clonedRoot = document.createElement('div');
+    clonedRoot.innerHTML =
+      '<svg class="block-svg" viewBox="0 0 1920 1080" data-block-id="intro" ' +
+      'style="display:block;opacity:0.75"></svg>';
+    const originalSvg = originalRoot.querySelector<SVGSVGElement>('svg')!;
+    vi.spyOn(originalSvg, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      right: 800,
+      bottom: 450,
+      left: 0,
+      width: 800,
+      height: 450,
+      toJSON: () => ({}),
+    });
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
+    const createBitmap = vi.fn(async () => bitmap);
+    vi.stubGlobal('createImageBitmap', createBitmap);
+
+    const transientCanvases = await rasterizeCaptureSvgClones(originalRoot, clonedRoot);
+
+    const replacement = clonedRoot.querySelector<HTMLCanvasElement>('canvas')!;
+    expect(clonedRoot.querySelector('svg.block-svg')).toBeNull();
+    expect(replacement.className).toBe('block-svg');
+    expect(replacement.dataset.blockId).toBe('intro');
+    expect(replacement.dataset.svgCaptureClone).toBe('true');
+    expect(replacement.style.opacity).toBe('0.75');
+    expect(replacement.width).toBe(800);
+    expect(replacement.height).toBe(450);
+    expect(createBitmap).toHaveBeenCalledWith(expect.any(Blob));
+    expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 800, 450);
+    expect(bitmap.close).toHaveBeenCalledOnce();
+    expect(transientCanvases).toEqual([replacement]);
+
+    releaseCaptureCloneCanvases(transientCanvases);
+
+    expect(replacement.width).toBe(0);
+    expect(replacement.height).toBe(0);
+  });
+
+  it('embeds blob-backed image layers before decoding the standalone SVG', async () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML =
+      '<svg class="block-svg" viewBox="0 0 640 360">' +
+      '<image href="blob:pasted-screen-clip" width="320" height="180"></image>' +
+      '<foreignObject x="320" width="320" height="180">' +
+      '<img xmlns="http://www.w3.org/1999/xhtml" src="blob:pasted-screen-clip">' +
+      '</foreignObject>' +
+      '</svg>';
+    const clonedRoot = originalRoot.cloneNode(true) as HTMLElement;
+    const png = new window.Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      blob: async () => png,
+    } as Response);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
+    let serializedSvg = '';
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async (source: Blob) => {
+        serializedSvg = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.addEventListener('load', () => resolve(String(reader.result)), { once: true });
+          reader.addEventListener('error', () => reject(reader.error), { once: true });
+          reader.readAsText(source);
+        });
+        return bitmap;
+      }),
+    );
+
+    await rasterizeCaptureSvgClones(originalRoot, clonedRoot);
+
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith('blob:pasted-screen-clip');
+    expect(serializedSvg).toContain('data:image/png;base64,AQID');
+    expect(serializedSvg).not.toContain('blob:pasted-screen-clip');
+    expect(clonedRoot.querySelector('canvas[data-svg-capture-clone="true"]')).not.toBeNull();
+  });
+
+  it('leaves an SVG for html2canvas when the browser cannot decode its bitmap', async () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML = '<svg class="block-svg" viewBox="0 0 640 360"></svg>';
+    const clonedRoot = originalRoot.cloneNode(true) as HTMLElement;
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async () => {
+        throw new Error('SVG bitmap decode unavailable');
+      }),
+    );
+
+    const transientCanvases = await rasterizeCaptureSvgClones(originalRoot, clonedRoot);
+
+    expect(clonedRoot.querySelector('svg.block-svg')).not.toBeNull();
+    expect(transientCanvases).toEqual([]);
+  });
+});
+
 describe('scheduled video capture clones', () => {
   it('calculates a centered cover crop without stretching', () => {
     expect(coverSourceRect(1920, 1080, 200, 200)).toEqual({
@@ -216,7 +328,7 @@ describe('scheduled video capture clones', () => {
       drawImage,
     } as unknown as CanvasRenderingContext2D);
 
-    prepareScheduledVideoClones(originalRoot, clonedRoot);
+    const preparedCanvases = prepareScheduledVideoClones(originalRoot, clonedRoot);
 
     const canvas = clonedRoot.querySelector<HTMLCanvasElement>('canvas')!;
     expect(canvas.className).toBe('doc-player__media-video doc-player__media-video--active');
@@ -229,7 +341,8 @@ describe('scheduled video capture clones', () => {
     expect(canvas.width).toBe(200);
     expect(canvas.height).toBe(200);
     expect(drawImage).toHaveBeenNthCalledWith(1, video, 420, 0, 1080, 1080, 0, 0, 200, 200);
-    expect(drawImage).toHaveBeenCalledTimes(2);
+    expect(drawImage).toHaveBeenCalledOnce();
+    expect(preparedCanvases).toEqual([canvas]);
   });
 
   it('serializes an embedded block frame alongside a scheduled PIP video', () => {

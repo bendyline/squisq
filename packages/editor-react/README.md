@@ -69,7 +69,14 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   (`versioningPrunePolicy`, default keep-last-50); a Version History panel
   appears in the toolbar.
 - **Recording** — with a `mediaProvider` wired, a record button appears in the
-  toolbar (`allowRecording`, default `true`).
+  toolbar (`allowRecording`, default `true`). The recorder's Advanced device
+  settings expando discovers microphones/cameras, shows only capture
+  constraints advertised by the browser, separates camera and screen
+  constraints for dual recordings, and exposes MediaRecorder codec, bitrate,
+  and keyframe hints. Preferred constraints use the closest available setting;
+  Required microphone/camera constraints fail when the selected input cannot
+  satisfy them (screen settings remain preferences, as required by
+  `getDisplayMedia`).
 - **Presentation mode** — every Use view can fill the Squisq control, open a
   synchronized audience window, or take over the entire screen. Slideshow/video
   playback, Page/Document scrolling, and the Narrate surface remain linked to

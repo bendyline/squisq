@@ -45,7 +45,10 @@ Both components also accept `colorScheme="light" | "dark"` so their portaled
 modal can match the host application; the default remains `light`. Hosts with
 their own theme tokens can pass `uiPalette?: Partial<VideoExportPalette>` to
 override dialog surfaces, controls, status colors, and the shared primary color
-used by the export action and progress bar.
+used by the export action and progress bar. By default the completed action is
+labelled **Save MP4/GIF to Downloads** and uses the browser download directory.
+Hosts with a native or File System Access picker can provide `saveOutput` and
+`saveActionLabel` to offer a **Save … as...** flow instead.
 
 ### Full Export Modal
 
@@ -112,6 +115,7 @@ function CustomExport({ doc, images, audio }) {
     elapsed,
     estimatedRemaining,
     downloadUrl,
+    outputBlob, // completed Blob for host-provided save flows
     fileSize,
     audioIncluded, // whether an audio track was muxed in
     audioSkippedReason, // null when the doc had no audio; a string explains a shortfall

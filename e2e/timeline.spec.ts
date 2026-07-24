@@ -66,19 +66,33 @@ test.describe('Timeline view', () => {
     const embedded = page.locator('.squisq-timeline-clip--embedded');
     await expect(embedded).toHaveCount(1);
 
-    // Drag it far left (well before block One) — it should relocate/convert.
+    // Drag it into block Two so the source element is relocated between block
+    // bodies, not merely retimed within block One.
     const box = await embedded.boundingBox();
     if (!box) throw new Error('no embedded clip box');
+    const targetBlock = page.locator('.squisq-timeline-block').nth(1);
+    const targetBox = await targetBlock.boundingBox();
+    if (!targetBox) throw new Error('no target block box');
+    const targetX = targetBox.x + targetBox.width / 4 + box.width / 2;
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x - 60, box.y + box.height / 2, { steps: 8 });
+    await page.mouse.move(targetX, box.y + box.height / 2, { steps: 8 });
     await page.mouse.up();
 
-    // It is now an authored video clip annotation in the markdown.
+    await expect
+      .poll(async () => (await embedded.boundingBox())?.x ?? 0)
+      .toBeGreaterThan(targetBox.x);
+
+    // Timeline mode scopes Source view to the selected block. Select block Two
+    // and verify the playable HTML element moved there with authored timing.
+    await targetBlock.click();
     await switchView(page, 'Markdown');
     await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
-    await expect(page.locator('.monaco-editor').first()).toContainText('{[video');
-    await expect(page.locator('.monaco-editor').first()).not.toContainText('<video');
+    const source = page.locator('.monaco-editor').first();
+    await expect(source).toContainText('<video');
+    await expect(source).toContainText('data-squisq-video-start-at=');
+    await expect(source).toContainText('data-squisq-video-clip-end="10"');
+    await expect(source).not.toContainText('{[video');
   });
 
   test('returning to document view preserves embedded video', async ({ page }) => {

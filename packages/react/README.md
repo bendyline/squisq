@@ -91,9 +91,10 @@ useDocPlayback(doc, currentTime, { viewport, theme, onSeek });
 
 ## Standalone Player
 
-A self-contained global build is available for non-React environments. It
-exposes a `SquisqPlayer` global with `mount`, `getHandle`, `unmount`, and
-`version`. `mount` returns an instance handle.
+A global build is available for non-React environments. It exposes a
+`SquisqPlayer` global with `mount`, `getHandle`, `unmount`, and `version`.
+`mount` returns an instance handle. Load the package stylesheet alongside the
+raw global build so authored Font Awesome icons can use the shared webfonts.
 
 The default build is the light player and omits Mermaid's multi-megabyte parser
 and layout engines. Documents that contain Mermaid fences should use the full
@@ -108,6 +109,7 @@ top-level `window.seekTo` / `window.getDuration` properties.
 Interactive mount:
 
 ```html
+<link rel="stylesheet" href="https://unpkg.com/@bendyline/squisq-react/dist/styles/index.css" />
 <script src="https://unpkg.com/@bendyline/squisq-react/dist/squisq-player.global.js"></script>
 <div id="player"></div>
 <script>
@@ -138,12 +140,13 @@ content. Embedded video, timed media, captions, audio, and document timing stay
 active; this makes the option suitable for compact MP4 and animated-GIF export.
 
 For build-time embedding, `@bendyline/squisq-react/standalone-source` exports
-the same bundle as a string constant (`PLAYER_BUNDLE`) — used by
-`@bendyline/squisq-formats` and the CLI to produce single-file HTML exports.
+the player as a self-contained string constant (`PLAYER_BUNDLE`) with the
+shared icon styles composed once. It is used by `@bendyline/squisq-formats`
+and the CLI to produce single-file HTML and rendered video exports.
 
 ## Styles
 
-Import the animation CSS for block transitions:
+Import the package CSS for block transitions and Font Awesome inline icons:
 
 ```ts
 import '@bendyline/squisq-react/styles';

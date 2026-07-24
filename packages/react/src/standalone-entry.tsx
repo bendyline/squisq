@@ -2,8 +2,9 @@
  * Standalone Entry Point — IIFE bundle for self-contained HTML rendering.
  *
  * This file is the entry point for the standalone `squisq-player.iife.js` bundle.
- * It bundles Preact (via preact/compat), squisq core, and all rendering components
- * into a single self-contained script that can be loaded in any HTML page.
+ * It bundles Preact (via preact/compat), squisq core, rendering components, and
+ * animation CSS. Raw-script consumers load the package stylesheet for shared
+ * icon webfonts; standalone-source and the CLI compose those styles once.
  *
  * The bundle exposes a global `SquisqPlayer` object with methods to mount
  * interactive or static document views into any DOM element.
@@ -37,8 +38,10 @@ import { DocPlayer } from './DocPlayer';
 import { LinearDocView } from './LinearDocView';
 import { MediaContext } from './hooks/MediaContext';
 
-// CSS is loaded as text via esbuild's text loader (configured in tsup.standalone.config.ts)
-// @ts-expect-error — .css import returns a string when esbuild uses 'text' loader (standalone build only)
+// Animation CSS is loaded as text and injected into the standalone player.
+// Font Awesome's webfonts remain in the package stylesheet instead of being
+// duplicated into the light bundle, full bundle, and standalone-source module.
+// @ts-expect-error — .css imports return text in the standalone build
 import animationCss from './styles/doc-animations.css';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -111,7 +114,13 @@ function injectCss(): void {
   if (cssInjected || typeof document === 'undefined') return;
   const style = document.createElement('style');
   style.setAttribute('data-squisq-player', 'animations');
+  const iconCss = (
+    globalThis as typeof globalThis & {
+      __SQUISQ_PLAYER_ICON_STYLES__?: string;
+    }
+  ).__SQUISQ_PLAYER_ICON_STYLES__;
   style.textContent = animationCss;
+  if (iconCss) style.textContent += `\n${iconCss}`;
   document.head.appendChild(style);
   cssInjected = true;
 }

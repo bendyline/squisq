@@ -22,6 +22,8 @@ export interface ScreenStreamOptions {
    * the system audio track.
    */
   systemAudio?: boolean;
+  /** Constraints for the display stream's system-audio track. */
+  systemAudioConstraints?: MediaTrackConstraints;
   /**
    * Whether to also pull the microphone via `getUserMedia` and mix it
    * into the resulting stream's audio track. When both `systemAudio` and
@@ -101,7 +103,7 @@ export async function requestScreenStream(
 
   const displayStream = await navigator.mediaDevices.getDisplayMedia({
     video,
-    audio: systemAudio,
+    audio: systemAudio ? (options?.systemAudioConstraints ?? true) : false,
   });
 
   if (!includeMic) {

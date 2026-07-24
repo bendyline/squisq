@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import type { VideoExportResult } from '../hooks/useVideoExport';
 import type { Doc } from '@bendyline/squisq/schemas';
 
@@ -18,9 +18,11 @@ const doc: Doc = {
   audio: { segments: [] },
 };
 
+let currentResult: VideoExportResult;
+
 describe('VideoExportModal progress palette', () => {
   beforeEach(() => {
-    const result: VideoExportResult = {
+    currentResult = {
       state: 'encoding',
       progress: 37,
       phase: 'Encoding',
@@ -30,6 +32,7 @@ describe('VideoExportModal progress palette', () => {
       outputFormat: 'mp4',
       backend: 'webcodecs',
       downloadUrl: null,
+      outputBlob: null,
       fileSize: 0,
       audioIncluded: false,
       audioSkippedReason: null,
@@ -40,7 +43,7 @@ describe('VideoExportModal progress palette', () => {
       cancel: vi.fn(),
       reset: vi.fn(),
     };
-    useVideoExportMock.mockReturnValue(result);
+    useVideoExportMock.mockReturnValue(currentResult);
   });
 
   it('uses the host accent for the progress fill and tint for its track', () => {
@@ -79,6 +82,34 @@ describe('VideoExportModal progress palette', () => {
     expect(container.textContent).not.toContain('Encoder:');
     expect(container.textContent).not.toContain('H.264');
     expect(container.textContent).not.toContain('ffmpeg.wasm');
+  });
+
+  it('passes the completed Blob to a host save flow', async () => {
+    const outputBlob = new Blob(['video'], { type: 'video/mp4' });
+    const saveOutput = vi.fn(async (_blob: Blob, _filename: string) => true);
+    useVideoExportMock.mockReturnValue({
+      ...currentResult,
+      state: 'complete',
+      progress: 100,
+      phase: 'Export complete',
+      downloadUrl: 'blob:completed-video',
+      outputBlob,
+      fileSize: outputBlob.size,
+    });
+
+    const { getByRole } = render(
+      <VideoExportModal
+        doc={doc}
+        saveOutput={saveOutput}
+        saveActionLabel={() => 'Save MP4 as...'}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.click(getByRole('button', { name: 'Save MP4 as...' }));
+
+    await waitFor(() => expect(saveOutput).toHaveBeenCalledOnce());
+    expect(saveOutput.mock.calls[0]?.[0]).toBe(outputBlob);
+    expect(saveOutput.mock.calls[0]?.[1]).toMatch(/^document-\d{4}-\d{2}-\d{2}\.mp4$/);
   });
 
   it('letterboxes portrait previews instead of stretching them', () => {

@@ -49,6 +49,10 @@ export interface VideoExportModalProps {
   colorScheme?: 'light' | 'dark';
   /** Optional host overrides for dialog surfaces, controls, status, and accent colors. */
   uiPalette?: Partial<VideoExportPalette>;
+  /** Optional host save flow. Return false when the user cancels a picker. */
+  saveOutput?: (blob: Blob, filename: string) => boolean | void | Promise<boolean | void>;
+  /** Host-aware label for the completed export action. */
+  saveActionLabel?: (format: VideoOutputFormat) => string;
   /** Called when the modal should close */
   onClose: () => void;
 }
@@ -68,6 +72,13 @@ function formatProcessingFps(framesPerSecond: number): string {
 
 function formatRealtimeMultiplier(processingFps: number, outputFps: number): string {
   return `${(processingFps / outputFps).toFixed(2)}× realtime`;
+}
+
+export function resolveVideoSaveActionLabel(
+  format: VideoOutputFormat,
+  formatter?: (format: VideoOutputFormat) => string,
+): string {
+  return formatter?.(format) ?? `Save ${format.toUpperCase()} to Downloads`;
 }
 
 const FRAME_PREVIEW_INTERVAL = 15;
@@ -251,6 +262,8 @@ export function VideoExportModal({
   defaultConfig,
   colorScheme = 'light',
   uiPalette,
+  saveOutput,
+  saveActionLabel,
   onClose,
 }: VideoExportModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -320,6 +333,7 @@ export function VideoExportModal({
     processingFps,
     outputFormat: completedOutputFormat,
     downloadUrl,
+    outputBlob,
     fileSize,
     audioIncluded,
     audioSkippedReason,
@@ -385,16 +399,33 @@ export function VideoExportModal({
     startExport,
   ]);
 
-  const handleDownload = useCallback(() => {
-    if (!downloadUrl) return;
-    const a = document.createElement('a');
-    a.href = downloadUrl;
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const handleSave = useCallback(async () => {
+    if (!downloadUrl || !outputBlob) return;
     const ts = new Date().toISOString().slice(0, 10);
-    a.download = `document-${ts}.${completedOutputFormat}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }, [downloadUrl, completedOutputFormat]);
+    const filename = `document-${ts}.${completedOutputFormat}`;
+    setSaveError(null);
+
+    if (!saveOutput) {
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await saveOutput(outputBlob, filename);
+    } catch (caught: unknown) {
+      setSaveError(caught instanceof Error ? caught.message : 'The export could not be saved.');
+    } finally {
+      setSaving(false);
+    }
+  }, [completedOutputFormat, downloadUrl, outputBlob, saveOutput]);
 
   const handleClose = useCallback(() => {
     if (state === 'capturing' || state === 'encoding' || state === 'preparing') {
@@ -685,10 +716,21 @@ export function VideoExportModal({
               <button style={themedSecondaryButtonStyle} onClick={handleClose}>
                 Close
               </button>
-              <button style={themedPrimaryButtonStyle} onClick={handleDownload}>
-                Download {completedOutputFormat.toUpperCase()}
+              <button
+                style={themedPrimaryButtonStyle}
+                onClick={() => void handleSave()}
+                disabled={saving}
+              >
+                {saving
+                  ? 'Saving...'
+                  : resolveVideoSaveActionLabel(completedOutputFormat, saveActionLabel)}
               </button>
             </div>
+            {saveError && (
+              <p role="alert" style={{ fontSize: 12, color: palette.danger, margin: '8px 0 0 0' }}>
+                {saveError}
+              </p>
+            )}
           </>
         )}
 

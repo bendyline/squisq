@@ -34,7 +34,11 @@ import {
   type ClipSpec,
   type MediaClipPatch,
 } from './timelineSource';
-import { collectEmbeddedMedia, collectTimelinePlaybackSchedule } from './embeddedMedia';
+import {
+  collectEmbeddedMedia,
+  collectTimelinePlaybackSchedule,
+  resolveEmbeddedMediaTiming,
+} from './embeddedMedia';
 import { BlockThumbnail } from './TimelineBlockPreview';
 import { resolveBlockVisual } from './resolveBlockVisual';
 import { useTimelineClock, type TimelineClock } from './useTimelineClock';
@@ -382,9 +386,9 @@ export function TimelineTrack({
     [blockAtTime, markdownSource, setMarkdownSource],
   );
 
-  // Convert a body-embedded media tag into a timed clip annotation at
-  // `newAbsStart` (relocating to the landing block). Always writes an
-  // annotation, since the embed isn't one yet.
+  // Time or relocate a body-embedded media element. Inline `<video>`/`<audio>`
+  // elements keep their HTML representation and receive data-squisq timing
+  // attributes; other embed forms continue to use media annotations.
   const placeEmbeddedClip = useCallback(
     (sourceLine: number | undefined, spec: ClipSpec, newAbsStart: number) => {
       if (sourceLine == null) return;
@@ -841,22 +845,37 @@ export function TimelineTrack({
               );
             })}
 
-            {/* Media embedded in a block's body (recordings, dropped files):
-                locked to the parent block. Editing one converts it to a timed
-                clip annotation and relocates it to wherever it's dragged. */}
+            {/* Media embedded in a block's body (recordings, dropped files).
+                HTML media retains its element when timed or moved. */}
             {blocks.flatMap((b, i) =>
               collectEmbeddedMedia(b).map((m, j) => {
                 const id = `embed:${b.id}:${j}`;
-                const absStart = b.startTime;
-                const length = b.duration;
+                const timing = resolveEmbeddedMediaTiming(b, m);
+                const absStart = timing.absoluteStart;
+                const length = timing.absoluteEnd - timing.absoluteStart;
+                const sourceIn = timing.sourceIn ?? 0;
+                const startAt = Math.max(0, m.startAt ?? 0);
+                const authoredLength = m.clipEnd == null ? null : Math.max(0, m.clipEnd - sourceIn);
+                const previewBlockRemainder = Math.max(0, previewWidth(i) / pxPerSecond - startAt);
+                const previewLength =
+                  authoredLength == null
+                    ? previewBlockRemainder
+                    : Math.min(authoredLength, previewBlockRemainder);
                 let left = previewLeft(i);
                 let clipWidth = previewWidth(i);
+                left += startAt * pxPerSecond;
+                clipWidth = Math.max(previewLength * pxPerSecond, 4);
                 if (drag?.targetId === id && drag.kind === 'embed-move') {
                   left = drag.preview * pxPerSecond;
                 } else if (drag?.targetId === id && drag.kind === 'embed-right') {
                   clipWidth = Math.max(drag.preview * pxPerSecond, 4);
                 }
-                const spec: ClipSpec = { kind: m.kind, src: m.src };
+                const spec: ClipSpec = {
+                  kind: m.kind,
+                  src: m.src,
+                  ...(m.clipStart != null ? { clipStart: m.clipStart } : {}),
+                  ...(m.clipEnd != null ? { clipEnd: m.clipEnd } : {}),
+                };
                 return (
                   <div
                     key={`embedded:${id}`}
@@ -878,7 +897,7 @@ export function TimelineTrack({
                           (newAbsStart) => {
                             placeEmbeddedClip(
                               m.sourceLine,
-                              { ...spec, clipEnd: length },
+                              { ...spec, clipEnd: sourceIn + length },
                               newAbsStart,
                             );
                           },
@@ -889,7 +908,7 @@ export function TimelineTrack({
                       {m.kind === 'video' && (
                         <TimelineVideoFilmstrip
                           src={m.src}
-                          sourceStart={0}
+                          sourceStart={sourceIn}
                           sourceLength={length}
                           width={clipWidth}
                         />
@@ -927,7 +946,11 @@ export function TimelineTrack({
                           className="squisq-timeline-edge squisq-timeline-edge--right"
                           onPointerDown={(e) =>
                             beginDrag(e, 'embed-right', id, length, (len) => {
-                              placeEmbeddedClip(m.sourceLine, { ...spec, clipEnd: len }, absStart);
+                              placeEmbeddedClip(
+                                m.sourceLine,
+                                { ...spec, clipEnd: sourceIn + len },
+                                absStart,
+                              );
                             })
                           }
                         />

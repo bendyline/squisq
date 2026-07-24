@@ -86,6 +86,17 @@ describe('MarkdownRenderer', () => {
     expect(code?.textContent).toBe('npm install');
   });
 
+  it('renders inline icons as FontAwesome elements', () => {
+    const { container } = render(<MarkdownRenderer nodes={parseNodes('Open {[github]} repo')} />);
+    const icon = container.querySelector('i.fa-brands.fa-github');
+
+    expect(icon).toBeTruthy();
+    expect(icon?.getAttribute('data-icon')).toBe('github');
+    expect(icon?.getAttribute('aria-hidden')).toBe('true');
+    expect(container.textContent).toBe('Open  repo');
+    expect(container.innerHTML).not.toContain('{[github]}');
+  });
+
   it('renders a link with target _blank', () => {
     const nodes: MarkdownBlockNode[] = [
       paragraph({

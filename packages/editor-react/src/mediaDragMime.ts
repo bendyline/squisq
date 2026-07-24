@@ -6,6 +6,8 @@
  */
 export const SQUISQ_MEDIA_MIME = 'application/x-squisq-media';
 
+export type SquisqMediaKind = 'image' | 'video' | 'audio' | 'file';
+
 export interface SquisqMediaDragPayload {
   /** Relative path / filename as stored in the MediaProvider. */
   name: string;
@@ -29,4 +31,40 @@ export function parseSquisqMediaPayload(raw: string): SquisqMediaDragPayload | n
     // fall through
   }
   return null;
+}
+
+/** Choose the document representation used when a Files-panel item is inserted. */
+export function squisqMediaKind(mimeType: string): SquisqMediaKind {
+  const normalized = mimeType.toLowerCase();
+  if (normalized.startsWith('image/')) return 'image';
+  if (normalized.startsWith('video/')) return 'video';
+  if (normalized.startsWith('audio/')) return 'audio';
+  return 'file';
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Build the source-form reference for an existing Files-panel entry.
+ *
+ * Images retain native Markdown syntax, playable media uses the same HTML
+ * representation as recorder output, and other files remain ordinary links.
+ */
+export function buildSquisqMediaReference(payload: SquisqMediaDragPayload): string {
+  switch (squisqMediaKind(payload.mimeType)) {
+    case 'image':
+      return `![${payload.alt}](${payload.name})`;
+    case 'video':
+      return `<video src="${escapeHtmlAttribute(payload.name)}" controls width="480"></video>`;
+    case 'audio':
+      return `<audio src="${escapeHtmlAttribute(payload.name)}" controls></audio>`;
+    default:
+      return `[${payload.alt}](${payload.name})`;
+  }
 }
