@@ -32,7 +32,7 @@ async function cleanupFixture(packageDir: string, metadataDir: string): Promise<
     }
     await rmdir(metadataDir);
   } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
   await rmdir(join(packageDir, 'dist'));
   await rmdir(packageDir);
@@ -77,7 +77,7 @@ describe('removeGeneratedLicenseMetadata', () => {
       await expect(removeGeneratedLicenseMetadata(packageDir)).rejects.toThrow(
         /Refusing to clean unexpected license metadata entry/,
       );
-      await expect(lstat(unexpected)).resolves.toMatchObject({});
+      expect((await lstat(unexpected)).isDirectory()).toBe(true);
     } finally {
       await cleanupFixture(packageDir, metadataDir);
     }
