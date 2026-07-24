@@ -1,5 +1,9 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { seekVideoToFrame } from '../docPlayer/renderReadiness';
+
+beforeEach(() => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -151,12 +155,37 @@ describe('seekVideoToFrame', () => {
     await vi.advanceTimersByTimeAsync(16);
     await expect(pending).resolves.toBeUndefined();
     expect(assignedTimes).toEqual([]);
-    expect(video.playbackRate).toBe(0.2);
+    expect(video.playbackRate).toBe(1);
+    expect(video.pause).toHaveBeenCalledOnce();
   });
 
-  it('keeps advancing recorder video while hidden when background playback is permitted', async () => {
+  it('holds each recorder frame stable between monotonic playback steps', async () => {
     vi.useFakeTimers();
-    const visibilityState: DocumentVisibilityState = 'hidden';
+    const { video, setReadyState, advanceTime, assignedTimes } = controllableVideo({
+      duration: 304.534,
+    });
+    const play = vi.spyOn(video, 'play').mockResolvedValue(undefined);
+    video.dataset.captureSequential = 'true';
+    setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
+
+    const first = seekVideoToFrame(video, 1 / 24, 250);
+    advanceTime(0.042);
+    video.dispatchEvent(new Event('timeupdate'));
+    await expect(first).resolves.toBeUndefined();
+
+    const second = seekVideoToFrame(video, 2 / 24, 250);
+    advanceTime(0.084);
+    video.dispatchEvent(new Event('timeupdate'));
+    await expect(second).resolves.toBeUndefined();
+
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(video.pause).toHaveBeenCalledTimes(2);
+    expect(assignedTimes).toEqual([]);
+  });
+
+  it('waits while hidden so recorder playback cannot run ahead of the export timeline', async () => {
+    vi.useFakeTimers();
+    let visibilityState: DocumentVisibilityState = 'hidden';
     vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState);
     const { video, setReadyState, advanceTime, assignedTimes } = controllableVideo({
       duration: 304.534,
@@ -167,26 +196,29 @@ describe('seekVideoToFrame', () => {
 
     const pending = seekVideoToFrame(video, 1 / 30, 250);
     await Promise.resolve();
-    expect(play).toHaveBeenCalledOnce();
+    expect(play).not.toHaveBeenCalled();
     expect(assignedTimes).toEqual([]);
 
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(play).not.toHaveBeenCalled();
+
+    visibilityState = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(play).toHaveBeenCalledOnce();
     advanceTime(0.034);
     video.dispatchEvent(new Event('timeupdate'));
     await expect(pending).resolves.toBeUndefined();
-    expect(visibilityState).toBe('hidden');
+    expect(video.pause).toHaveBeenCalledOnce();
   });
 
-  it('waits for visibility when Chromium rejects background playback', async () => {
+  it('waits for focus when a covered browser window suspends playback', async () => {
     vi.useFakeTimers();
-    let visibilityState: DocumentVisibilityState = 'hidden';
-    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState);
+    let focused = false;
+    vi.spyOn(document, 'hasFocus').mockImplementation(() => focused);
     const { video, setReadyState, advanceTime } = controllableVideo({
       duration: 304.534,
     });
-    const play = vi
-      .spyOn(video, 'play')
-      .mockRejectedValueOnce(new Error('Background playback suspended'))
-      .mockResolvedValue(undefined);
+    const play = vi.spyOn(video, 'play').mockResolvedValue(undefined);
     video.dataset.captureSequential = 'true';
     setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
     let settled = false;
@@ -201,16 +233,14 @@ describe('seekVideoToFrame', () => {
       },
     );
     await Promise.resolve();
-    await Promise.resolve();
-    expect(play).toHaveBeenCalledOnce();
+    expect(play).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(2_000);
     expect(settled).toBe(false);
 
-    visibilityState = 'visible';
-    document.dispatchEvent(new Event('visibilitychange'));
-    await Promise.resolve();
-    expect(play).toHaveBeenCalledTimes(2);
+    focused = true;
+    window.dispatchEvent(new Event('focus'));
+    expect(play).toHaveBeenCalledOnce();
     advanceTime(0.034);
     video.dispatchEvent(new Event('timeupdate'));
     await expect(pending).resolves.toBeUndefined();
@@ -256,6 +286,7 @@ describe('seekVideoToFrame', () => {
 
     visibilityState = 'hidden';
     document.dispatchEvent(new Event('visibilitychange'));
+    expect(video.pause).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(2_000);
     expect(settled).toBe(false);
 
@@ -265,6 +296,7 @@ describe('seekVideoToFrame', () => {
     advanceTime(0.034);
     video.dispatchEvent(new Event('timeupdate'));
     await expect(pending).resolves.toBeUndefined();
+    expect(video.pause).toHaveBeenCalledTimes(2);
   });
 
   it('accepts the terminal frame when the requested time exceeds the exact media duration', async () => {

@@ -2,7 +2,7 @@ const DEFAULT_VIDEO_FRAME_TIMEOUT_MS = 2_000;
 const VIDEO_FRAME_READINESS_POLL_MS = 16;
 const VIDEO_TIME_TOLERANCE_SECONDS = 0.01;
 const MAX_SEQUENTIAL_CAPTURE_STEP_SECONDS = 0.5;
-const SEQUENTIAL_CAPTURE_PLAYBACK_RATE = 0.2;
+const SEQUENTIAL_CAPTURE_PLAYBACK_RATE = 1;
 
 function formatMediaTime(time: number): string {
   return Number.isFinite(time) ? `${time.toFixed(3)}s` : String(time);
@@ -139,6 +139,9 @@ function advanceSequentialCaptureVideo(
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
     const ownerDocument = video.ownerDocument;
+    const ownerWindow = ownerDocument.defaultView;
+    let blurred = ownerWindow ? !ownerDocument.hasFocus() : false;
+    const isInactive = (): boolean => ownerDocument.visibilityState !== 'visible' || blurred;
     const clearWatchdog = (): void => {
       if (timeout === null) return;
       clearTimeout(timeout);
@@ -152,6 +155,8 @@ function advanceSequentialCaptureVideo(
       video.removeEventListener('canplay', check);
       video.removeEventListener('error', fail);
       ownerDocument.removeEventListener('visibilitychange', handleVisibilityChange);
+      ownerWindow?.removeEventListener('blur', handleBlur);
+      ownerWindow?.removeEventListener('focus', handleFocus);
     };
     const finish = (): void => {
       if (!settled) {
@@ -187,15 +192,19 @@ function advanceSequentialCaptureVideo(
         video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
         video.currentTime >= reachableMediaTime(video, targetTime)
       ) {
+        // Hold this decoded source frame stable while html2canvas rasterizes
+        // and the encoder consumes it. Wall-clock capture time must never
+        // advance an embedded video's document-timeline position.
+        video.pause();
         finish();
       }
     }
     const handlePlaybackFailure = (): void => {
-      if (settled || ownerDocument.visibilityState === 'hidden') return;
+      if (settled || isInactive()) return;
       fallbackToSeek();
     };
     const startPlayback = (): void => {
-      if (settled) return;
+      if (settled || isInactive()) return;
       try {
         video.playbackRate = SEQUENTIAL_CAPTURE_PLAYBACK_RATE;
         if (video.paused) {
@@ -207,24 +216,38 @@ function advanceSequentialCaptureVideo(
     };
     const armWatchdog = (): void => {
       clearWatchdog();
-      if (settled || ownerDocument.visibilityState === 'hidden') return;
+      if (settled || isInactive()) return;
       timeout = setTimeout(fail, timeoutMs);
     };
-    function handleVisibilityChange(): void {
-      if (ownerDocument.visibilityState === 'hidden') {
-        clearWatchdog();
-        // Keep playback running when the engine permits background media.
-        // If Chromium suspends it, the pending frame simply waits without a
-        // failure deadline until visibility returns.
-        return;
-      }
-      // Chromium can leave a media element logically playing but with its
-      // decoder suspended after a hidden/minimized interval. Restart playback
-      // and grant a fresh visible-time watchdog window.
+    const pauseWhileInactive = (): void => {
       video.pause();
+      clearWatchdog();
+    };
+    const resumeWhenActive = (): void => {
+      if (settled || isInactive()) return;
+      // The media clock may have crossed the requested timestamp just before
+      // Chromium delivered blur/visibility suspension. Capture that frame
+      // without briefly restarting playback and introducing another jump.
+      check();
+      if (settled) return;
       startPlayback();
       armWatchdog();
-      queueMicrotask(check);
+    };
+    function handleVisibilityChange(): void {
+      if (ownerDocument.visibilityState !== 'visible') {
+        pauseWhileInactive();
+        return;
+      }
+      blurred = !ownerDocument.hasFocus();
+      resumeWhenActive();
+    }
+    function handleBlur(): void {
+      blurred = true;
+      pauseWhileInactive();
+    }
+    function handleFocus(): void {
+      blurred = false;
+      resumeWhenActive();
     }
 
     const readinessPoll = setInterval(check, VIDEO_FRAME_READINESS_POLL_MS);
@@ -233,11 +256,11 @@ function advanceSequentialCaptureVideo(
     video.addEventListener('canplay', check);
     video.addEventListener('error', fail, { once: true });
     ownerDocument.addEventListener('visibilitychange', handleVisibilityChange);
-    // Install the frame monitor before play(): Chromium may advance a video
-    // substantially before the play promise itself resolves.
-    startPlayback();
-    armWatchdog();
-    queueMicrotask(check);
+    ownerWindow?.addEventListener('blur', handleBlur);
+    ownerWindow?.addEventListener('focus', handleFocus);
+    // Install every frame and activity monitor before play(). Each short
+    // monotonic playback step ends by pausing at its requested timestamp.
+    resumeWhenActive();
   });
 }
 
@@ -245,9 +268,10 @@ function advanceSequentialCaptureVideo(
  * Select a video frame and resolve only when it is decodable.
  *
  * Indexed sources use an exact currentTime seek. Capture-marked recorder WebMs
- * advance short monotonic steps through playback instead: those files commonly
- * lack Cues, so assigning currentTime for every output frame becomes
- * progressively slower even when all bytes are locally buffered.
+ * advance short monotonic playback steps and pause at each requested frame:
+ * those files commonly lack Cues, so assigning currentTime for every output
+ * frame becomes progressively slower even when all bytes are locally buffered,
+ * while continuous wall-clock playback produces irregular repeated/skipped frames.
  */
 export function seekVideoToFrame(
   video: HTMLVideoElement,

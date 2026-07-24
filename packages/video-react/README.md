@@ -94,7 +94,7 @@ The `VideoExportModal` lets users configure:
 
 - **Format:** MP4 video or animated GIF
 - **Quality:** draft, normal, or high
-- **FPS:** 10, 15, 24, or 30
+- **FPS:** 10, 15, 24, or 30; MP4 defaults to 30 fps and GIF to 10 fps
 - **Orientation:** MP4 defaults to 1920x1080/1080x1920; GIF defaults to 960x540/540x960
 - **Captions:** off, standard, or social
 - **Animations & transitions:** enabled by default for MP4 and disabled by default for GIF

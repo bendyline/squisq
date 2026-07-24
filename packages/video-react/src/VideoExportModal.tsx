@@ -273,7 +273,7 @@ export function VideoExportModal({
   const initialOutputFormat = defaultConfig?.outputFormat ?? 'mp4';
   const [outputFormat, setOutputFormat] = useState<VideoOutputFormat>(initialOutputFormat);
   const [quality, setQuality] = useState<VideoQuality>(defaultConfig?.quality ?? 'normal');
-  const [fps, setFps] = useState(defaultConfig?.fps ?? (initialOutputFormat === 'gif' ? 10 : 24));
+  const [fps, setFps] = useState(defaultConfig?.fps ?? (initialOutputFormat === 'gif' ? 10 : 30));
   const [orientation, setOrientation] = useState<VideoOrientation>(
     defaultConfig?.orientation ?? 'landscape',
   );
@@ -352,7 +352,7 @@ export function VideoExportModal({
       setAnimationsEnabled(false);
       setCaptionMode('standard');
     } else {
-      setFps(24);
+      setFps(30);
       setAnimationsEnabled(true);
       setCaptionMode('off');
     }

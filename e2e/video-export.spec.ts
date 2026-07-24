@@ -179,6 +179,7 @@ test.describe('Video export', () => {
     const animations = page.locator('select[aria-label="Animations and transitions"]');
 
     await expect(format).toHaveValue('mp4');
+    await expect(frameRate).toHaveValue('30');
     await expect(animations).toHaveValue('enabled');
 
     await format.selectOption('gif');
