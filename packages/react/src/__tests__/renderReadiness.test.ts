@@ -154,6 +154,68 @@ describe('seekVideoToFrame', () => {
     expect(video.playbackRate).toBe(0.2);
   });
 
+  it('keeps advancing recorder video while hidden when background playback is permitted', async () => {
+    vi.useFakeTimers();
+    const visibilityState: DocumentVisibilityState = 'hidden';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState);
+    const { video, setReadyState, advanceTime, assignedTimes } = controllableVideo({
+      duration: 304.534,
+    });
+    const play = vi.spyOn(video, 'play').mockResolvedValue(undefined);
+    video.dataset.captureSequential = 'true';
+    setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
+
+    const pending = seekVideoToFrame(video, 1 / 30, 250);
+    await Promise.resolve();
+    expect(play).toHaveBeenCalledOnce();
+    expect(assignedTimes).toEqual([]);
+
+    advanceTime(0.034);
+    video.dispatchEvent(new Event('timeupdate'));
+    await expect(pending).resolves.toBeUndefined();
+    expect(visibilityState).toBe('hidden');
+  });
+
+  it('waits for visibility when Chromium rejects background playback', async () => {
+    vi.useFakeTimers();
+    let visibilityState: DocumentVisibilityState = 'hidden';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState);
+    const { video, setReadyState, advanceTime } = controllableVideo({
+      duration: 304.534,
+    });
+    const play = vi
+      .spyOn(video, 'play')
+      .mockRejectedValueOnce(new Error('Background playback suspended'))
+      .mockResolvedValue(undefined);
+    video.dataset.captureSequential = 'true';
+    setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
+    let settled = false;
+
+    const pending = seekVideoToFrame(video, 1 / 30, 250);
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(play).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(settled).toBe(false);
+
+    visibilityState = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+    await Promise.resolve();
+    expect(play).toHaveBeenCalledTimes(2);
+    advanceTime(0.034);
+    video.dispatchEvent(new Event('timeupdate'));
+    await expect(pending).resolves.toBeUndefined();
+  });
+
   it('pauses an ahead recorder WebM instead of seeking it backward', async () => {
     const { video, setReadyState, advanceTime, assignedTimes } = controllableVideo({
       duration: 304.534,
@@ -166,6 +228,43 @@ describe('seekVideoToFrame', () => {
 
     expect(video.pause).toHaveBeenCalledOnce();
     expect(assignedTimes).toEqual([]);
+  });
+
+  it('pauses its watchdog while the capture document is hidden and resumes visibly', async () => {
+    vi.useFakeTimers();
+    let visibilityState: DocumentVisibilityState = 'visible';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState);
+    const { video, setReadyState, advanceTime } = controllableVideo({
+      duration: 304.534,
+    });
+    const play = vi.spyOn(video, 'play').mockResolvedValue(undefined);
+    video.dataset.captureSequential = 'true';
+    setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
+    let settled = false;
+
+    const pending = seekVideoToFrame(video, 1 / 30, 250);
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    await Promise.resolve();
+    expect(play).toHaveBeenCalledOnce();
+
+    visibilityState = 'hidden';
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(settled).toBe(false);
+
+    visibilityState = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(play).toHaveBeenCalledTimes(2);
+    advanceTime(0.034);
+    video.dispatchEvent(new Event('timeupdate'));
+    await expect(pending).resolves.toBeUndefined();
   });
 
   it('accepts the terminal frame when the requested time exceeds the exact media duration', async () => {

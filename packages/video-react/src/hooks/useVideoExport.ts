@@ -99,19 +99,71 @@ function releaseEncoderFrame(frame: EncoderFrameSource): void {
  * Bound browser APIs whose promises are allowed to remain pending forever.
  * Late results are observed (and optionally disposed) so a timed-out export
  * cannot create an unhandled rejection or leak an ImageBitmap.
+ *
+ * When an activity document is supplied, the deadline counts only time while
+ * its window is focused and visible. Chromium may suspend media, canvas, or
+ * WebCodecs work when a browser window is covered, backgrounded, or minimized;
+ * that temporary suspension must not discard a long-running export.
  */
 export function settleWithin<T>(
   operation: Promise<T>,
   timeoutMs: number,
   timeoutMessage: string,
   onLateResult?: (value: T) => void,
+  activityDocument?: Document,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     let settled = false;
-    const timeout = globalThis.setTimeout(() => {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const activityWindow = activityDocument?.defaultView ?? null;
+    let blurred = activityDocument ? !activityDocument.hasFocus() : false;
+
+    const isInactive = (): boolean =>
+      activityDocument !== undefined && (activityDocument.visibilityState !== 'visible' || blurred);
+    const clearDeadline = (): void => {
+      if (timeout === null) return;
+      globalThis.clearTimeout(timeout);
+      timeout = null;
+    };
+    const cleanup = (): void => {
+      clearDeadline();
+      activityDocument?.removeEventListener('visibilitychange', handleVisibilityChange);
+      activityWindow?.removeEventListener('blur', handleBlur);
+      activityWindow?.removeEventListener('focus', handleFocus);
+    };
+    const fail = (): void => {
+      timeout = null;
+      if (settled || isInactive()) return;
       settled = true;
+      cleanup();
       reject(new Error(timeoutMessage));
-    }, timeoutMs);
+    };
+    const armDeadline = (): void => {
+      clearDeadline();
+      if (settled || isInactive()) return;
+      timeout = globalThis.setTimeout(fail, timeoutMs);
+    };
+    function handleVisibilityChange(): void {
+      if (activityDocument?.visibilityState !== 'visible') {
+        clearDeadline();
+        return;
+      }
+      blurred = !activityDocument.hasFocus();
+      armDeadline();
+    }
+    function handleBlur(): void {
+      blurred = true;
+      clearDeadline();
+    }
+    function handleFocus(): void {
+      blurred = false;
+      armDeadline();
+    }
+
+    activityDocument?.addEventListener('visibilitychange', handleVisibilityChange);
+    activityWindow?.addEventListener('blur', handleBlur);
+    activityWindow?.addEventListener('focus', handleFocus);
+    armDeadline();
 
     void operation.then(
       (value) => {
@@ -120,13 +172,13 @@ export function settleWithin<T>(
           return;
         }
         settled = true;
-        globalThis.clearTimeout(timeout);
+        cleanup();
         resolve(value);
       },
       (caught: unknown) => {
         if (settled) return;
         settled = true;
-        globalThis.clearTimeout(timeout);
+        cleanup();
         reject(caught);
       },
     );
@@ -666,6 +718,8 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             supportsWebCodecsH264({ width, height, fps, quality }),
             ENCODER_PROBE_TIMEOUT_MS,
             'The browser did not finish checking WebCodecs support.',
+            undefined,
+            document,
           ).catch(() => false));
 
         // ── Audio: tier selection + render ───────────────────────
@@ -783,6 +837,8 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             workerEncoder.ready,
             ENCODER_START_TIMEOUT_MS,
             'The browser export engine did not start within 60 seconds.',
+            undefined,
+            document,
           );
           setBackend(selectedBackend);
         } else {
@@ -822,6 +878,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             FRAME_CAPTURE_TIMEOUT_MS,
             `Frame capture stopped responding at frame ${i + 1}/${totalFrames}.`,
             releaseEncoderFrame,
+            document,
           );
 
           if (cancelledRef.current) {
@@ -851,6 +908,8 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             encoder.encodeFrame(frame, i),
             FRAME_ENCODE_TIMEOUT_MS,
             `Video encoding stopped responding at frame ${i + 1}/${totalFrames}.`,
+            undefined,
+            document,
           );
 
           // Progress represents completed work, not the frame we are about to

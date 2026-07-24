@@ -137,13 +137,21 @@ function advanceSequentialCaptureVideo(
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let settled = false;
-    const cleanup = (): void => {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    const ownerDocument = video.ownerDocument;
+    const clearWatchdog = (): void => {
+      if (timeout === null) return;
       clearTimeout(timeout);
+      timeout = null;
+    };
+    const cleanup = (): void => {
+      clearWatchdog();
       clearInterval(readinessPoll);
       video.removeEventListener('timeupdate', check);
       video.removeEventListener('loadeddata', check);
       video.removeEventListener('canplay', check);
       video.removeEventListener('error', fail);
+      ownerDocument.removeEventListener('visibilitychange', handleVisibilityChange);
     };
     const finish = (): void => {
       if (!settled) {
@@ -182,23 +190,53 @@ function advanceSequentialCaptureVideo(
         finish();
       }
     }
+    const handlePlaybackFailure = (): void => {
+      if (settled || ownerDocument.visibilityState === 'hidden') return;
+      fallbackToSeek();
+    };
+    const startPlayback = (): void => {
+      if (settled) return;
+      try {
+        video.playbackRate = SEQUENTIAL_CAPTURE_PLAYBACK_RATE;
+        if (video.paused) {
+          void video.play().catch(handlePlaybackFailure);
+        }
+      } catch {
+        handlePlaybackFailure();
+      }
+    };
+    const armWatchdog = (): void => {
+      clearWatchdog();
+      if (settled || ownerDocument.visibilityState === 'hidden') return;
+      timeout = setTimeout(fail, timeoutMs);
+    };
+    function handleVisibilityChange(): void {
+      if (ownerDocument.visibilityState === 'hidden') {
+        clearWatchdog();
+        // Keep playback running when the engine permits background media.
+        // If Chromium suspends it, the pending frame simply waits without a
+        // failure deadline until visibility returns.
+        return;
+      }
+      // Chromium can leave a media element logically playing but with its
+      // decoder suspended after a hidden/minimized interval. Restart playback
+      // and grant a fresh visible-time watchdog window.
+      video.pause();
+      startPlayback();
+      armWatchdog();
+      queueMicrotask(check);
+    }
 
-    const timeout = setTimeout(fail, timeoutMs);
     const readinessPoll = setInterval(check, VIDEO_FRAME_READINESS_POLL_MS);
     video.addEventListener('timeupdate', check);
     video.addEventListener('loadeddata', check);
     video.addEventListener('canplay', check);
     video.addEventListener('error', fail, { once: true });
-    try {
-      // Install the frame monitor before play(): Chromium may advance a hidden
-      // video substantially before the play promise itself resolves.
-      video.playbackRate = SEQUENTIAL_CAPTURE_PLAYBACK_RATE;
-      if (video.paused) {
-        void video.play().catch(fallbackToSeek);
-      }
-    } catch {
-      fallbackToSeek();
-    }
+    ownerDocument.addEventListener('visibilitychange', handleVisibilityChange);
+    // Install the frame monitor before play(): Chromium may advance a video
+    // substantially before the play promise itself resolves.
+    startPlayback();
+    armWatchdog();
     queueMicrotask(check);
   });
 }
