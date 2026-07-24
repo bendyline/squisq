@@ -18,25 +18,33 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const muxerState = vi.hoisted(() => ({
   finalize: vi.fn(() => new ArrayBuffer(8)),
   addVideoChunk: vi.fn(),
+  create: vi.fn(),
 }));
 
 vi.mock('../mp4Mux.js', () => ({
-  createMp4Muxer: () => ({
-    addVideoChunk: muxerState.addVideoChunk,
-    addAudioChunk: vi.fn(),
-    hasAudioTrack: false,
-    finalize: muxerState.finalize,
-  }),
+  createMp4Muxer: () => {
+    muxerState.create();
+    return {
+      addVideoChunk: muxerState.addVideoChunk,
+      addAudioChunk: vi.fn(),
+      hasAudioTrack: false,
+      finalize: muxerState.finalize,
+    };
+  },
 }));
 
 import { createEncoder } from '../mainThreadEncoder.js';
 
-/** Captured constructor callbacks for the most recently created encoder. */
-let errorCallback: ((err: DOMException) => void) | null = null;
+type EncoderErrorCallback = (err: DOMException) => void;
+
+/** Captured constructor callbacks, including replaced encoder generations. */
+let errorCallbacks: EncoderErrorCallback[] = [];
 let flushBehavior: () => Promise<void> = async () => {};
 let encoderState: 'unconfigured' | 'configured' | 'closed' = 'unconfigured';
 let encodeQueueSize = 0;
 let flushCount = 0;
+let encodeOptions: VideoEncoderEncodeOptions[] = [];
+let encoderCount = 0;
 
 class FakeVideoEncoder {
   state = 'unconfigured';
@@ -44,14 +52,16 @@ class FakeVideoEncoder {
     return encodeQueueSize;
   }
   constructor(init: { output: (chunk: unknown) => void; error: (err: DOMException) => void }) {
-    errorCallback = init.error;
+    errorCallbacks.push(init.error);
+    encoderCount++;
   }
   configure() {
     this.state = 'configured';
     encoderState = 'configured';
   }
-  encode() {
+  encode(_frame: unknown, options?: VideoEncoderEncodeOptions) {
     encodeQueueSize++;
+    encodeOptions.push(options ?? {});
   }
   async flush() {
     flushCount++;
@@ -80,11 +90,14 @@ const CONFIG = { width: 640, height: 480, fps: 30, quality: 'normal' as const };
 
 describe('mainThreadEncoder error propagation', () => {
   beforeEach(() => {
-    errorCallback = null;
+    errorCallbacks = [];
     encoderState = 'unconfigured';
     encodeQueueSize = 0;
     flushCount = 0;
+    encodeOptions = [];
+    encoderCount = 0;
     flushBehavior = async () => {};
+    muxerState.create.mockClear();
     muxerState.finalize.mockClear();
     muxerState.addVideoChunk.mockClear();
     vi.stubGlobal('VideoEncoder', FakeVideoEncoder);
@@ -97,7 +110,7 @@ describe('mainThreadEncoder error propagation', () => {
 
   it('surfaces an encoder error from the next encodeFrame instead of logging it', async () => {
     const encoder = createEncoder(CONFIG);
-    errorCallback!(new DOMException('Encoding failed', 'EncodingError'));
+    errorCallbacks[0](new DOMException('Encoding failed', 'EncodingError'));
 
     await expect(encoder.encodeFrame(fakeBitmap(), 1)).rejects.toThrow(
       'WebCodecs encoder error: Encoding failed',
@@ -106,7 +119,7 @@ describe('mainThreadEncoder error propagation', () => {
 
   it('closes the bitmap it was handed even when it rejects', async () => {
     const encoder = createEncoder(CONFIG);
-    errorCallback!(new DOMException('Encoding failed', 'EncodingError'));
+    errorCallbacks[0](new DOMException('Encoding failed', 'EncodingError'));
 
     const bitmap = fakeBitmap();
     await expect(encoder.encodeFrame(bitmap, 1)).rejects.toThrow();
@@ -119,7 +132,7 @@ describe('mainThreadEncoder error propagation', () => {
    */
   it('fails finalize — never returns a truncated MP4 — after a non-fatal error', async () => {
     const encoder = createEncoder(CONFIG);
-    errorCallback!(new DOMException('Frame dropped', 'EncodingError'));
+    errorCallbacks[0](new DOMException('Frame dropped', 'EncodingError'));
 
     await expect(encoder.finalize()).rejects.toThrow('WebCodecs encoder error: Frame dropped');
     expect(muxerState.finalize).not.toHaveBeenCalled();
@@ -128,7 +141,7 @@ describe('mainThreadEncoder error propagation', () => {
   it('fails finalize when the error arrives during flush', async () => {
     const encoder = createEncoder(CONFIG);
     flushBehavior = async () => {
-      errorCallback!(new DOMException('Died mid-flush', 'EncodingError'));
+      errorCallbacks[0](new DOMException('Died mid-flush', 'EncodingError'));
     };
 
     await expect(encoder.finalize()).rejects.toThrow('WebCodecs encoder error: Died mid-flush');
@@ -137,7 +150,7 @@ describe('mainThreadEncoder error propagation', () => {
 
   it('prefers the latched encoder error over a generic flush rejection', async () => {
     const encoder = createEncoder(CONFIG);
-    errorCallback!(new DOMException('Real cause', 'EncodingError'));
+    errorCallbacks[0](new DOMException('Real cause', 'EncodingError'));
     flushBehavior = async () => {
       throw new DOMException('Cannot call flush on a closed codec', 'InvalidStateError');
     };
@@ -148,7 +161,7 @@ describe('mainThreadEncoder error propagation', () => {
 
   it('tears the encoder down when it fails', async () => {
     const encoder = createEncoder(CONFIG);
-    errorCallback!(new DOMException('Encoding failed', 'EncodingError'));
+    errorCallbacks[0](new DOMException('Encoding failed', 'EncodingError'));
 
     await expect(encoder.finalize()).rejects.toThrow();
     expect(encoderState).toBe('closed');
@@ -156,10 +169,64 @@ describe('mainThreadEncoder error propagation', () => {
 
   it('reports the first error when several arrive', async () => {
     const encoder = createEncoder(CONFIG);
-    errorCallback!(new DOMException('First failure', 'EncodingError'));
-    errorCallback!(new DOMException('Cascading follow-up', 'InvalidStateError'));
+    errorCallbacks[0](new DOMException('First failure', 'EncodingError'));
+    errorCallbacks[0](new DOMException('Cascading follow-up', 'InvalidStateError'));
 
     await expect(encoder.finalize()).rejects.toThrow('First failure');
+  });
+
+  it('recreates a codec reclaimed during inactivity and forces a keyframe', async () => {
+    const encoder = createEncoder(CONFIG);
+    await encoder.encodeFrame(fakeBitmap(), 1);
+    errorCallbacks[0](new DOMException('Codec reclaimed due to inactivity.', 'EncodingError'));
+
+    await expect(encoder.encodeFrame(fakeBitmap(), 2)).resolves.toBeUndefined();
+
+    expect(encoderCount).toBe(2);
+    expect(muxerState.create).toHaveBeenCalledOnce();
+    expect(encodeOptions).toEqual([{ keyFrame: false }, { keyFrame: true }]);
+    await expect(encoder.finalize()).resolves.toBeInstanceOf(ArrayBuffer);
+  });
+
+  it('recovers when reclamation interrupts a backpressure flush', async () => {
+    const encoder = createEncoder({ ...CONFIG, width: 1920, height: 1080 });
+    for (let i = 0; i < 8; i++) await encoder.encodeFrame(fakeBitmap(), i);
+
+    let interrupted = false;
+    flushBehavior = async () => {
+      if (interrupted) return;
+      interrupted = true;
+      errorCallbacks[0](new DOMException('Codec reclaimed due to inactivity.', 'EncodingError'));
+      throw new DOMException('Cannot flush a closed codec', 'InvalidStateError');
+    };
+
+    await expect(encoder.encodeFrame(fakeBitmap(), 8)).resolves.toBeUndefined();
+
+    expect(encoderCount).toBe(2);
+    expect(encodeOptions.at(-1)).toEqual({ keyFrame: true });
+  });
+
+  it('recovers an idle reclaimed codec before finalizing existing muxed chunks', async () => {
+    const encoder = createEncoder(CONFIG);
+    await encoder.encodeFrame(fakeBitmap(), 0);
+    errorCallbacks[0](new DOMException('Codec reclaimed due to inactivity.', 'EncodingError'));
+
+    await expect(encoder.finalize()).resolves.toBeInstanceOf(ArrayBuffer);
+
+    expect(encoderCount).toBe(2);
+    expect(muxerState.create).toHaveBeenCalledOnce();
+    expect(muxerState.finalize).toHaveBeenCalledOnce();
+  });
+
+  it('ignores a stale callback from a replaced codec generation', async () => {
+    const encoder = createEncoder(CONFIG);
+    errorCallbacks[0](new DOMException('Codec reclaimed due to inactivity.', 'EncodingError'));
+    await encoder.encodeFrame(fakeBitmap(), 1);
+
+    errorCallbacks[0](new DOMException('Stale failure', 'EncodingError'));
+
+    await expect(encoder.encodeFrame(fakeBitmap(), 2)).resolves.toBeUndefined();
+    expect(encoderCount).toBe(2);
   });
 
   it('still finalizes normally when no error occurs', async () => {
