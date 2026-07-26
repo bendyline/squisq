@@ -7,7 +7,7 @@
  * byte-identical to the video-only path.
  */
 
-import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { Muxer, StreamTarget } from 'mp4-muxer';
 
 export interface Mp4MuxerOptions {
   width: number;
@@ -55,13 +55,102 @@ export interface Mp4MuxerHandle {
   readonly hasAudioTrack: boolean;
   /** Finalize and return the MP4 as an ArrayBuffer. */
   finalize(): ArrayBuffer;
+  /**
+   * Finalize directly into a Blob without assembling another contiguous copy.
+   * Prefer this for browser downloads; byte consumers can still use finalize().
+   */
+  finalizeBlob(): Blob;
+}
+
+interface BufferedWrite {
+  position: number;
+  data: Uint8Array<ArrayBuffer>;
+}
+
+/**
+ * Sparse stream sink for mp4-muxer.
+ *
+ * ArrayBufferTarget grows one contiguous buffer by powers of two. A long
+ * export crossing 64 MiB therefore briefly needs the old 64 MiB allocation
+ * and a new 128 MiB allocation at the same time. Keep exact-sized streaming
+ * writes instead, while still supporting the small header patches that MP4
+ * finalization writes back over earlier offsets.
+ */
+class ChunkedMp4Output {
+  private writes: BufferedWrite[] = [];
+  private length = 0;
+
+  write(data: Uint8Array, position: number): void {
+    const owned = new Uint8Array(data);
+    const end = position + owned.byteLength;
+
+    if (position >= this.length) {
+      this.writes.push({ position, data: owned });
+      this.length = end;
+      return;
+    }
+
+    const updated: BufferedWrite[] = [];
+    for (const existing of this.writes) {
+      const existingEnd = existing.position + existing.data.byteLength;
+      if (existingEnd <= position || existing.position >= end) {
+        updated.push(existing);
+        continue;
+      }
+      if (existing.position < position) {
+        updated.push({
+          position: existing.position,
+          data: existing.data.subarray(0, position - existing.position),
+        });
+      }
+      if (existingEnd > end) {
+        updated.push({
+          position: end,
+          data: existing.data.subarray(end - existing.position),
+        });
+      }
+    }
+    updated.push({ position, data: owned });
+    updated.sort((left, right) => left.position - right.position);
+    this.writes = updated;
+    this.length = Math.max(this.length, end);
+  }
+
+  toArrayBuffer(): ArrayBuffer {
+    const output = new Uint8Array(this.length);
+    for (const write of this.writes) output.set(write.data, write.position);
+    this.release();
+    return output.buffer;
+  }
+
+  toBlob(): Blob {
+    const parts: BlobPart[] = [];
+    let position = 0;
+    for (const write of this.writes) {
+      if (write.position > position) parts.push(new Uint8Array(write.position - position));
+      parts.push(write.data);
+      position = write.position + write.data.byteLength;
+    }
+    if (position < this.length) parts.push(new Uint8Array(this.length - position));
+    const blob = new Blob(parts, { type: 'video/mp4' });
+    this.release();
+    return blob;
+  }
+
+  private release(): void {
+    this.writes = [];
+    this.length = 0;
+  }
 }
 
 /**
  * Create an MP4 muxer configured for H.264 video, plus an optional AAC track.
  */
 export function createMp4Muxer(options: Mp4MuxerOptions): Mp4MuxerHandle {
-  const target = new ArrayBufferTarget();
+  const output = new ChunkedMp4Output();
+  const target = new StreamTarget({
+    onData: (data, position) => output.write(data, position),
+  });
 
   const muxer = new Muxer({
     target,
@@ -88,6 +177,13 @@ export function createMp4Muxer(options: Mp4MuxerOptions): Mp4MuxerHandle {
     // releases the sample payload immediately.
     fastStart: false,
   });
+
+  let finalized = false;
+  const finalizeMuxer = (): void => {
+    if (finalized) throw new Error('MP4 muxer already finalized');
+    muxer.finalize();
+    finalized = true;
+  };
 
   return {
     hasAudioTrack: options.audio !== undefined,
@@ -121,8 +217,13 @@ export function createMp4Muxer(options: Mp4MuxerOptions): Mp4MuxerHandle {
     },
 
     finalize(): ArrayBuffer {
-      muxer.finalize();
-      return target.buffer;
+      finalizeMuxer();
+      return output.toArrayBuffer();
+    },
+
+    finalizeBlob(): Blob {
+      finalizeMuxer();
+      return output.toBlob();
     },
   };
 }

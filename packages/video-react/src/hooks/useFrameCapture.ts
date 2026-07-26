@@ -76,6 +76,10 @@ const RENDER_TIME_EPSILON_SECONDS = 0.000_001;
 const POTENTIALLY_ANIMATED_IMAGE_URL =
   /(?:^data:image\/(?:gif|webp|avif)[;,]|\.(?:gif|webp|avif)(?:[?#]|$))/i;
 const CAPTURE_SVG_SELECTOR = 'svg.block-svg';
+const CAPTURE_VIDEO_READINESS_POLL_MS = 16;
+const CAPTURE_VIDEO_END_PROBE_TIME = 1e101;
+const SCHEDULED_MEDIA_SELECTOR = '.doc-player__media-clips';
+const SCHEDULED_VIDEO_SELECTOR = `${SCHEDULED_MEDIA_SELECTOR} video[data-clip-id]`;
 
 /**
  * Let React and the browser present DOM changes without waiting forever for
@@ -165,6 +169,142 @@ export async function waitForCaptureAssets(
   );
 }
 
+function waitForCaptureVideoState(
+  video: HTMLVideoElement,
+  description: string,
+  isReady: () => boolean,
+  update?: () => void,
+): Promise<void> {
+  if (isReady()) return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const events = ['loadedmetadata', 'durationchange', 'loadeddata', 'canplay', 'seeked'] as const;
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      clearInterval(poll);
+      events.forEach((eventName) => video.removeEventListener(eventName, check));
+      video.removeEventListener('error', fail);
+    };
+    const finish = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const fail = (): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(
+        new Error(
+          `Video did not become ready while ${description} within 15s: ` +
+            `${video.currentSrc || video.src}`,
+        ),
+      );
+    };
+    function check(): void {
+      if (isReady()) finish();
+    }
+
+    const timeout = setTimeout(fail, CAPTURE_ASSET_TIMEOUT_MS);
+    const poll = setInterval(check, CAPTURE_VIDEO_READINESS_POLL_MS);
+    events.forEach((eventName) => video.addEventListener(eventName, check));
+    video.addEventListener('error', fail, { once: true });
+
+    try {
+      update?.();
+      queueMicrotask(check);
+    } catch (error) {
+      settled = true;
+      cleanup();
+      reject(error);
+    }
+  });
+}
+
+/**
+ * Make recorder-produced WebM video deterministic and fast to seek before
+ * accelerated frame capture starts.
+ *
+ * MediaRecorder WebMs commonly omit a finite Duration/Cues index. Chromium
+ * then exposes `duration === Infinity` and buffers only a short window ahead
+ * of a paused video. An export that advances faster than realtime eventually
+ * catches that frontier and every subsequent frame waits for another tiny
+ * buffer extension. A single end probe makes Chromium scan the local/blob
+ * resource, establishes its finite duration and seek index, and avoids that
+ * timestamp-specific collapse. The original frame is restored before return.
+ */
+export async function primeIndeterminateCaptureVideos(
+  captureRoot: HTMLElement,
+  primedVideos: WeakSet<HTMLVideoElement> = new WeakSet(),
+): Promise<number> {
+  const videos = Array.from(captureRoot.querySelectorAll('video')).filter(
+    (video) => !primedVideos.has(video),
+  );
+  let primedCount = 0;
+
+  await Promise.all(
+    videos.map(async (video) => {
+      const source = video.currentSrc || video.src;
+      if (!source) {
+        primedVideos.add(video);
+        return;
+      }
+
+      await waitForCaptureVideoState(
+        video,
+        'loading capture metadata',
+        () => video.readyState >= HTMLMediaElement.HAVE_METADATA,
+      );
+      if (video.videoWidth <= 0 && video.videoHeight <= 0) {
+        // Legacy narration saves could author an Opus-only WebM as <video>.
+        // Audio is mixed by the export timeline; there is no visual frame to
+        // index, seek, clone, or include in the render-readiness barrier.
+        primedVideos.add(video);
+        return;
+      }
+      if (Number.isFinite(video.duration)) {
+        primedVideos.add(video);
+        return;
+      }
+
+      const restoreTime = Number.isFinite(video.currentTime) ? Math.max(0, video.currentTime) : 0;
+      video.pause();
+      await waitForCaptureVideoState(
+        video,
+        'indexing an indeterminate-duration capture source',
+        () =>
+          Number.isFinite(video.duration) &&
+          video.duration > 0 &&
+          !video.seeking &&
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
+        () => {
+          video.currentTime = CAPTURE_VIDEO_END_PROBE_TIME;
+        },
+      );
+
+      const reachableRestoreTime = Math.min(restoreTime, video.duration);
+      await waitForCaptureVideoState(
+        video,
+        'restoring the capture source after indexing',
+        () =>
+          !video.seeking &&
+          video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+          Math.abs(video.currentTime - reachableRestoreTime) <= 0.01,
+        () => {
+          video.currentTime = reachableRestoreTime;
+        },
+      );
+      video.dataset.captureSequential = 'true';
+      primedVideos.add(video);
+      primedCount += 1;
+    }),
+  );
+
+  return primedCount;
+}
+
 /**
  * Create a temporary MediaProvider backed by blob URLs. This avoids retaining
  * a second, base64-expanded copy of every export asset in JavaScript strings.
@@ -172,11 +312,13 @@ export async function waitForCaptureAssets(
 export function createInlineProvider(images: Map<string, ArrayBuffer>): MediaProvider {
   const blobUrls = new Map<string, string>();
   const mimeTypes = new Map<string, string>();
+  const sizes = new Map<string, number>();
   for (const [path, buffer] of images) {
     const ext = path.split('.').pop()?.toLowerCase() ?? '';
     const mime = MIME_MAP[ext] ?? 'application/octet-stream';
     blobUrls.set(path, URL.createObjectURL(new Blob([buffer], { type: mime })));
     mimeTypes.set(path, mime);
+    sizes.set(path, buffer.byteLength);
   }
 
   return {
@@ -187,7 +329,7 @@ export function createInlineProvider(images: Map<string, ArrayBuffer>): MediaPro
       return [...blobUrls.keys()].map((name) => ({
         name,
         mimeType: mimeTypes.get(name) ?? 'application/octet-stream',
-        size: images.get(name)?.byteLength ?? 0,
+        size: sizes.get(name) ?? 0,
       }));
     },
     async addMedia() {
@@ -199,6 +341,7 @@ export function createInlineProvider(images: Map<string, ArrayBuffer>): MediaPro
     dispose() {
       blobUrls.forEach((url) => URL.revokeObjectURL(url));
       blobUrls.clear();
+      sizes.clear();
     },
   };
 }
@@ -437,7 +580,31 @@ interface CaptureRasterSize {
   height: number;
 }
 
-type CaptureImageDataUrlCache = Map<string, Promise<string | null>>;
+type CaptureImageDataUrlCache = Map<string, Promise<string>>;
+
+interface CaptureSvgRasterCacheEntry {
+  serializedSvg: string;
+  width: number;
+  height: number;
+  canvas: HTMLCanvasElement;
+}
+
+export type CaptureSvgRasterCache = Map<string, CaptureSvgRasterCacheEntry>;
+
+export function createCaptureSvgRasterCache(): CaptureSvgRasterCache {
+  return new Map();
+}
+
+function releaseCaptureSvgRasterEntry(entry: CaptureSvgRasterCacheEntry): void {
+  entry.canvas.width = 0;
+  entry.canvas.height = 0;
+}
+
+/** Release persistent slide rasters retained for a frame-capture session. */
+export function releaseCaptureSvgRasterCache(cache: CaptureSvgRasterCache): void {
+  cache.forEach(releaseCaptureSvgRasterEntry);
+  cache.clear();
+}
 
 function parseAbsoluteSvgLength(value: string | null): number {
   if (!value) return 0;
@@ -530,16 +697,16 @@ function blobToDataUrl(blob: Blob, source: string): Promise<string> {
 function resolveCaptureImageDataUrl(
   source: string,
   cache: CaptureImageDataUrlCache,
-): Promise<string | null> {
+): Promise<string> {
   const cached = cache.get(source);
   if (cached) return cached;
 
-  const pending = fetch(source)
-    .then(async (response) => {
-      if (!response.ok) return null;
-      return blobToDataUrl(await response.blob(), source);
-    })
-    .catch(() => null);
+  const pending = fetch(source).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(`Image could not be loaded for SVG capture: ${source}`);
+    }
+    return blobToDataUrl(await response.blob(), source);
+  });
   cache.set(source, pending);
   return pending;
 }
@@ -582,7 +749,7 @@ function captureImageReference(element: Element): {
 async function embedCaptureSvgImages(
   svg: SVGSVGElement,
   cache: CaptureImageDataUrlCache,
-): Promise<boolean> {
+): Promise<void> {
   const references = Array.from(svg.querySelectorAll('image, img'))
     .map(captureImageReference)
     .filter((reference): reference is NonNullable<typeof reference> => reference !== null);
@@ -590,72 +757,144 @@ async function embedCaptureSvgImages(
   for (const reference of references) {
     if (/^data:/i.test(reference.source) || reference.source.startsWith('#')) continue;
     const dataUrl = await resolveCaptureImageDataUrl(reference.source, cache);
-    if (!dataUrl) return false;
     reference.replace(dataUrl);
   }
-  return true;
+}
+
+function captureSvgRasterCacheKey(svg: SVGSVGElement, index: number): string {
+  const blockId = svg.dataset.blockId;
+  return blockId ? `block:${blockId}` : `index:${index}`;
 }
 
 /**
  * Replace full-slide SVGs in html2canvas's disposable document clone with
- * ordinary canvases backed by closeable ImageBitmaps.
+ * ordinary canvases decoded through short-lived HTMLImageElements.
  *
  * Without this step html2canvas serializes every SVG to a unique data URL and
  * asks Chromium to decode it as a new full-resolution image on every frame.
  * Chromium can retain those decoded native surfaces long after the clone iframe
- * is removed, so long exports grow by several megabytes per frame.
+ * is removed, so long exports grow by several megabytes per frame. Chromium
+ * cannot decode serialized SVG Blobs directly with createImageBitmap, so the
+ * browser-compatible image decoder must run first.
+ *
+ * The slide raster cache is load-bearing for video exports: a moving PiP video
+ * invalidates the complete frame on every tick, but the underlying slide SVG is
+ * usually unchanged. Decode that 1080p surface once and reuse its canvas.
  */
 export async function rasterizeCaptureSvgClones(
   originalRoot: HTMLElement,
   clonedRoot: HTMLElement,
   transientCanvases: HTMLCanvasElement[] = [],
   imageDataUrls: CaptureImageDataUrlCache = new Map(),
+  rasterCache?: CaptureSvgRasterCache,
 ): Promise<HTMLCanvasElement[]> {
-  if (typeof createImageBitmap !== 'function') return transientCanvases;
-
+  const cache = rasterCache ?? createCaptureSvgRasterCache();
+  const ownsRasterCache = rasterCache === undefined;
   const originalSvgs = Array.from(
     originalRoot.querySelectorAll<SVGSVGElement>(CAPTURE_SVG_SELECTOR),
   );
   const clonedSvgs = Array.from(clonedRoot.querySelectorAll<SVGSVGElement>(CAPTURE_SVG_SELECTOR));
+  const activeCacheKeys = new Set<string>();
 
-  for (const [index, svg] of clonedSvgs.entries()) {
-    const { width, height } = captureSvgRasterSize(svg, originalSvgs[index]);
-    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-    svg.setAttribute('width', String(width));
-    svg.setAttribute('height', String(height));
+  try {
+    for (const [index, svg] of clonedSvgs.entries()) {
+      const originalSvg = originalSvgs[index];
+      const { width, height } = captureSvgRasterSize(svg, originalSvg);
+      const cacheKey = captureSvgRasterCacheKey(originalSvg ?? svg, index);
+      activeCacheKeys.add(cacheKey);
+      svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      svg.setAttribute('width', String(width));
+      svg.setAttribute('height', String(height));
 
-    let bitmap: ImageBitmap | null = null;
-    let replacement: HTMLCanvasElement | null = null;
-    try {
-      if (!(await embedCaptureSvgImages(svg, imageDataUrls))) continue;
-      const serializedSvg = new XMLSerializer().serializeToString(svg);
-      bitmap = await createImageBitmap(new Blob([serializedSvg], { type: 'image/svg+xml' }));
-      replacement = svg.ownerDocument.createElement('canvas');
-      replacement.width = width;
-      replacement.height = height;
-      copyCaptureSvgPresentation(svg, replacement);
-      const context = replacement.getContext('2d');
-      if (!context) {
-        replacement.width = 0;
-        replacement.height = 0;
-        continue;
+      let bitmap: ImageBitmap | null = null;
+      let replacement: HTMLCanvasElement | null = null;
+      let image: HTMLImageElement | null = null;
+      let rasterCanvas: HTMLCanvasElement | null = null;
+      try {
+        await embedCaptureSvgImages(svg, imageDataUrls);
+        const serializedSvg = new XMLSerializer().serializeToString(svg);
+        let entry = cache.get(cacheKey);
+
+        if (
+          !entry ||
+          entry.serializedSvg !== serializedSvg ||
+          entry.width !== width ||
+          entry.height !== height
+        ) {
+          const containsForeignObject = svg.querySelector('foreignObject') !== null;
+          image = svg.ownerDocument.createElement('img');
+          image.decoding = 'sync';
+          image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serializedSvg)}`;
+          await waitForImageDecode(image);
+
+          // A closeable bitmap gives Chromium an explicit lifetime for its native
+          // decoded surface. Drawing the already-decoded image remains a bounded
+          // fallback for browsers that cannot create a bitmap from it.
+          //
+          // Chromium taints ImageBitmaps created from SVGs containing foreignObject,
+          // even though drawing the decoded HTMLImageElement directly remains
+          // origin-clean.
+          if (!containsForeignObject && typeof createImageBitmap === 'function') {
+            try {
+              bitmap = await createImageBitmap(image);
+            } catch {
+              bitmap = null;
+            }
+          }
+
+          rasterCanvas = entry?.canvas ?? originalRoot.ownerDocument.createElement('canvas');
+          if (rasterCanvas.width !== width || rasterCanvas.height !== height) {
+            rasterCanvas.width = width;
+            rasterCanvas.height = height;
+          }
+          const rasterContext = rasterCanvas.getContext('2d');
+          if (!rasterContext) {
+            throw new Error('Could not create the cached SVG raster canvas context');
+          }
+          rasterContext.clearRect(0, 0, width, height);
+          rasterContext.drawImage(bitmap ?? image, 0, 0, width, height);
+          entry = { serializedSvg, width, height, canvas: rasterCanvas };
+          cache.set(cacheKey, entry);
+        }
+
+        replacement = svg.ownerDocument.createElement('canvas');
+        replacement.width = width;
+        replacement.height = height;
+        copyCaptureSvgPresentation(svg, replacement);
+        const context = replacement.getContext('2d');
+        if (!context) {
+          throw new Error('Could not create the SVG capture canvas context');
+        }
+        context.drawImage(entry.canvas, 0, 0, width, height);
+        svg.replaceWith(replacement);
+        transientCanvases.push(replacement);
+      } catch (error) {
+        if (replacement && !replacement.isConnected) {
+          replacement.width = 0;
+          replacement.height = 0;
+        }
+        if (rasterCanvas && cache.get(cacheKey)?.canvas !== rasterCanvas) {
+          rasterCanvas.width = 0;
+          rasterCanvas.height = 0;
+        }
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Could not rasterize a full-slide SVG for frame capture: ${detail}`);
+      } finally {
+        bitmap?.close();
+        image?.removeAttribute('src');
       }
-      context.drawImage(bitmap, 0, 0, width, height);
-      svg.replaceWith(replacement);
-      transientCanvases.push(replacement);
-    } catch {
-      // If this browser cannot decode a particular SVG as an ImageBitmap,
-      // leave that SVG in place and let html2canvas use its normal fallback.
-      if (replacement && !replacement.isConnected) {
-        replacement.width = 0;
-        replacement.height = 0;
-      }
-    } finally {
-      bitmap?.close();
     }
-  }
 
-  return transientCanvases;
+    for (const [cacheKey, entry] of cache) {
+      if (activeCacheKeys.has(cacheKey)) continue;
+      releaseCaptureSvgRasterEntry(entry);
+      cache.delete(cacheKey);
+    }
+
+    return transientCanvases;
+  } finally {
+    if (ownsRasterCache) releaseCaptureSvgRasterCache(cache);
+  }
 }
 
 /** Release backing stores retained by canvases in html2canvas's clone iframe. */
@@ -666,13 +905,189 @@ export function releaseCaptureCloneCanvases(canvases: HTMLCanvasElement[]): void
   });
 }
 
+function scheduledVideoIsVisual(video: HTMLVideoElement): boolean {
+  return video.videoWidth > 0 && video.videoHeight > 0 && video.dataset.active === 'true';
+}
+
+function scheduledVideoPresentation(video: HTMLVideoElement): string | undefined {
+  return video.closest<HTMLElement>(SCHEDULED_MEDIA_SELECTOR)?.dataset.presentation;
+}
+
+/**
+ * Whether changing scheduled-video pixels can be drawn after the static player
+ * raster without changing stacking order.
+ */
+export function canCompositeScheduledPipVideos(captureRoot: HTMLElement): boolean {
+  const activeVisualVideos = Array.from(
+    captureRoot.querySelectorAll<HTMLVideoElement>(SCHEDULED_VIDEO_SELECTOR),
+  ).filter(scheduledVideoIsVisual);
+  return (
+    activeVisualVideos.length > 0 &&
+    activeVisualVideos.every((video) => scheduledVideoPresentation(video) === 'picture-in-picture')
+  );
+}
+
+function cssPixelValue(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function cssRadius(value: string, width: number, height: number): number {
+  if (value.trim().endsWith('%')) {
+    return (cssPixelValue(value) / 100) * Math.min(width, height);
+  }
+  return cssPixelValue(value);
+}
+
+function applyFirstBoxShadow(
+  context: CanvasRenderingContext2D,
+  boxShadow: string,
+  scaleX: number,
+  scaleY: number,
+): void {
+  if (!boxShadow || boxShadow === 'none') return;
+  const color = boxShadow.match(/rgba?\([^)]*\)|#[0-9a-f]{3,8}\b/i)?.[0];
+  if (!color) return;
+  const lengths = Array.from(
+    boxShadow.replace(color, '').matchAll(/(-?\d+(?:\.\d+)?)px/g),
+    (match) => Number.parseFloat(match[1]),
+  );
+  context.shadowColor = color;
+  context.shadowOffsetX = (lengths[0] ?? 0) * scaleX;
+  context.shadowOffsetY = (lengths[1] ?? 0) * scaleY;
+  context.shadowBlur = (lengths[2] ?? 0) * Math.max(scaleX, scaleY);
+}
+
+function addRoundedRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  context.beginPath();
+  if (typeof context.roundRect === 'function') {
+    context.roundRect(x, y, width, height, Math.max(0, radius));
+  } else {
+    context.rect(x, y, width, height);
+  }
+}
+
+/**
+ * Draw active scheduled PiP frames over an already-rasterized player.
+ *
+ * The destination is reused for the export session, so both the background
+ * and live overlay keep bounded native canvas storage.
+ */
+export function compositeScheduledPipVideos(
+  captureRoot: HTMLElement,
+  destination: HTMLCanvasElement,
+): number {
+  const context = destination.getContext('2d');
+  if (!context) throw new Error('Could not create the PiP compositor canvas context');
+  const rootRect = captureRoot.getBoundingClientRect();
+  if (rootRect.width <= 0 || rootRect.height <= 0) return 0;
+  const scaleX = destination.width / rootRect.width;
+  const scaleY = destination.height / rootRect.height;
+  const videos = Array.from(
+    captureRoot.querySelectorAll<HTMLVideoElement>(SCHEDULED_VIDEO_SELECTOR),
+  ).filter(
+    (video) =>
+      scheduledVideoIsVisual(video) && scheduledVideoPresentation(video) === 'picture-in-picture',
+  );
+
+  for (const video of videos) {
+    const rect = video.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) continue;
+    const style = video.ownerDocument.defaultView?.getComputedStyle(video);
+    if (
+      !style ||
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.visibility === 'collapse'
+    ) {
+      continue;
+    }
+    const opacity = Number.parseFloat(style.opacity || '1');
+    if (opacity <= 0) continue;
+
+    const borderLeft = cssPixelValue(style.borderLeftWidth);
+    const borderRight = cssPixelValue(style.borderRightWidth);
+    const borderTop = cssPixelValue(style.borderTopWidth);
+    const borderBottom = cssPixelValue(style.borderBottomWidth);
+    const contentWidth = Math.max(1, rect.width - borderLeft - borderRight);
+    const contentHeight = Math.max(1, rect.height - borderTop - borderBottom);
+    const outerX = (rect.left - rootRect.left) * scaleX;
+    const outerY = (rect.top - rootRect.top) * scaleY;
+    const outerWidth = rect.width * scaleX;
+    const outerHeight = rect.height * scaleY;
+    const innerX = outerX + borderLeft * scaleX;
+    const innerY = outerY + borderTop * scaleY;
+    const innerWidth = contentWidth * scaleX;
+    const innerHeight = contentHeight * scaleY;
+    const outerRadius =
+      cssRadius(style.borderTopLeftRadius, rect.width, rect.height) * Math.max(scaleX, scaleY);
+    const innerRadius = Math.max(
+      0,
+      outerRadius - Math.max(borderLeft * scaleX, borderTop * scaleY),
+    );
+    const source = videoFrameRect(
+      video.videoWidth,
+      video.videoHeight,
+      contentWidth,
+      contentHeight,
+      style.objectFit || 'fill',
+    );
+
+    context.save();
+    context.globalAlpha = Number.isFinite(opacity) ? opacity : 1;
+    applyFirstBoxShadow(context, style.boxShadow, scaleX, scaleY);
+    addRoundedRect(context, outerX, outerY, outerWidth, outerHeight, outerRadius);
+    context.fillStyle =
+      style.borderTopStyle === 'none' || borderTop <= 0
+        ? 'rgba(0, 0, 0, 0.001)'
+        : style.borderTopColor;
+    context.fill();
+    context.shadowColor = 'rgba(0, 0, 0, 0)';
+    context.shadowBlur = 0;
+    context.shadowOffsetX = 0;
+    context.shadowOffsetY = 0;
+    addRoundedRect(context, innerX, innerY, innerWidth, innerHeight, innerRadius);
+    context.clip();
+    context.drawImage(
+      video,
+      source.sx,
+      source.sy,
+      source.sw,
+      source.sh,
+      innerX,
+      innerY,
+      innerWidth,
+      innerHeight,
+    );
+    context.restore();
+  }
+
+  return videos.length;
+}
+
+export interface FrameVisualStateKeyOptions {
+  /** Ignore player-level scheduled video clocks composited after the base raster. */
+  ignoreScheduledVideoFrames?: boolean;
+}
+
 /**
  * Describe everything in the capture subtree that can affect its pixels at a
  * point on the document timeline. Equal keys mean the previous raster can be
  * reused safely. This is deliberately conservative for visual sources whose
  * internal state cannot be inspected (animated images, canvas, embeds, SMIL).
  */
-export function getFrameVisualStateKey(captureRoot: HTMLElement, timelineTime: number): string {
+export function getFrameVisualStateKey(
+  captureRoot: HTMLElement,
+  timelineTime: number,
+  options: FrameVisualStateKeyOptions = {},
+): string {
   const markup = captureRoot.innerHTML;
   let needsTimelineKey = false;
 
@@ -706,11 +1121,18 @@ export function getFrameVisualStateKey(captureRoot: HTMLElement, timelineTime: n
   });
   if (POTENTIALLY_ANIMATED_IMAGE_URL.test(markup)) needsTimelineKey = true;
 
-  const videoStates = Array.from(captureRoot.querySelectorAll('video')).map(
-    (video) =>
-      `${video.currentSrc || video.src}:${finiteMediaTime(video.currentTime)}:${video.readyState}:` +
-      `${video.videoWidth}x${video.videoHeight}`,
-  );
+  const videoStates = Array.from(captureRoot.querySelectorAll('video'))
+    .filter(
+      (video) =>
+        video.videoWidth > 0 &&
+        video.videoHeight > 0 &&
+        (!options.ignoreScheduledVideoFrames || !video.closest(SCHEDULED_MEDIA_SELECTOR)),
+    )
+    .map(
+      (video) =>
+        `${video.currentSrc || video.src}:${finiteMediaTime(video.currentTime)}:${video.readyState}:` +
+        `${video.videoWidth}x${video.videoHeight}`,
+    );
 
   if (
     captureRoot.querySelector(
@@ -740,10 +1162,13 @@ export function useFrameCapture(): FrameCaptureHandle {
   const renderAPIRef = useRef<SquisqRenderAPI | null>(null);
   const mediaProviderRef = useRef<MediaProvider | null>(null);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const captureBaseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastVisualStateKeyRef = useRef<string | null>(null);
   const hasCapturedFrameRef = useRef(false);
   const decodedImagesRef = useRef(new WeakSet<HTMLImageElement>());
   const captureImageDataUrlsRef = useRef<CaptureImageDataUrlCache>(new Map());
+  const captureSvgRasterCacheRef = useRef<CaptureSvgRasterCache>(createCaptureSvgRasterCache());
+  const primedCaptureVideosRef = useRef(new WeakSet<HTMLVideoElement>());
   const dimensionsRef = useRef<{ width: number; height: number }>({ width: 1920, height: 1080 });
 
   const init = useCallback(
@@ -759,21 +1184,27 @@ export function useFrameCapture(): FrameCaptureHandle {
         rootRef.current ||
         containerRef.current ||
         mediaProviderRef.current ||
-        captureCanvasRef.current
+        captureCanvasRef.current ||
+        captureBaseCanvasRef.current
       ) {
         const oldRoot = rootRef.current;
         const oldContainer = containerRef.current;
         const oldMediaProvider = mediaProviderRef.current;
         const oldCaptureCanvas = captureCanvasRef.current;
+        const oldCaptureBaseCanvas = captureBaseCanvasRef.current;
         rootRef.current = null;
         containerRef.current = null;
         renderAPIRef.current = null;
         mediaProviderRef.current = null;
         captureCanvasRef.current = null;
+        captureBaseCanvasRef.current = null;
         lastVisualStateKeyRef.current = null;
         hasCapturedFrameRef.current = false;
         decodedImagesRef.current = new WeakSet<HTMLImageElement>();
         captureImageDataUrlsRef.current.clear();
+        releaseCaptureSvgRasterCache(captureSvgRasterCacheRef.current);
+        captureSvgRasterCacheRef.current = createCaptureSvgRasterCache();
+        primedCaptureVideosRef.current = new WeakSet<HTMLVideoElement>();
         await new Promise<void>((resolve) => {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
@@ -782,6 +1213,10 @@ export function useFrameCapture(): FrameCaptureHandle {
             if (oldCaptureCanvas) {
               oldCaptureCanvas.width = 0;
               oldCaptureCanvas.height = 0;
+            }
+            if (oldCaptureBaseCanvas) {
+              oldCaptureBaseCanvas.width = 0;
+              oldCaptureBaseCanvas.height = 0;
             }
             resolve();
           }, 0);
@@ -804,10 +1239,19 @@ export function useFrameCapture(): FrameCaptureHandle {
       captureCanvas.style.width = `${width}px`;
       captureCanvas.style.height = `${height}px`;
       captureCanvasRef.current = captureCanvas;
+      const captureBaseCanvas = document.createElement('canvas');
+      captureBaseCanvas.width = width;
+      captureBaseCanvas.height = height;
+      captureBaseCanvas.style.width = `${width}px`;
+      captureBaseCanvas.style.height = `${height}px`;
+      captureBaseCanvasRef.current = captureBaseCanvas;
       lastVisualStateKeyRef.current = null;
       hasCapturedFrameRef.current = false;
       decodedImagesRef.current = new WeakSet<HTMLImageElement>();
       captureImageDataUrlsRef.current.clear();
+      releaseCaptureSvgRasterCache(captureSvgRasterCacheRef.current);
+      captureSvgRasterCacheRef.current = createCaptureSvgRasterCache();
+      primedCaptureVideosRef.current = new WeakSet<HTMLVideoElement>();
 
       // Create a hidden container
       const container = document.createElement('div');
@@ -898,6 +1342,7 @@ export function useFrameCapture(): FrameCaptureHandle {
               throw new Error('Capture root element not found after player initialization.');
             }
             await waitForCaptureAssets(captureRoot, decodedImagesRef.current);
+            await primeIndeterminateCaptureVideos(captureRoot, primedCaptureVideosRef.current);
             clearTimeout(timeout);
             resolve(api.getDuration());
           } catch (assetError) {
@@ -925,7 +1370,8 @@ export function useFrameCapture(): FrameCaptureHandle {
       const container = containerRef.current;
       const api = renderAPIRef.current;
       const captureCanvas = captureCanvasRef.current;
-      if (!container || !api || !captureCanvas) {
+      const captureBaseCanvas = captureBaseCanvasRef.current;
+      if (!container || !api || !captureCanvas || !captureBaseCanvas) {
         throw new Error('Frame capture not initialized — call init() first');
       }
 
@@ -934,73 +1380,101 @@ export function useFrameCapture(): FrameCaptureHandle {
       // Seek the player to the target time
       await api.seekTo(time);
 
+      const root = container.querySelector('#squisq-capture-root') as HTMLElement;
+      if (!root) {
+        throw new Error('Capture root element not found');
+      }
+      if (await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current)) {
+        // A newly mounted recorder WebM was restored to this time, but run the
+        // player barrier once more so its React clock and media readiness stay
+        // authoritative together.
+        await api.seekTo(time);
+      }
+
       const renderedTime = api.getRenderedTime();
       if (Math.abs(renderedTime - time) > RENDER_TIME_EPSILON_SECONDS) {
         throw new Error(
           `Player committed ${renderedTime.toFixed(6)}s while capture requested ${time.toFixed(6)}s.`,
         );
       }
-
-      const root = container.querySelector('#squisq-capture-root') as HTMLElement;
-      if (!root) {
-        throw new Error('Capture root element not found');
-      }
       await waitForCaptureAssets(root, decodedImagesRef.current);
 
-      const visualStateKey = options.reuseIfUnchanged ? getFrameVisualStateKey(root, time) : null;
-      if (
-        visualStateKey !== null &&
-        hasCapturedFrameRef.current &&
-        lastVisualStateKeyRef.current === visualStateKey
-      ) {
-        return captureCanvas;
-      }
+      const compositePip = canCompositeScheduledPipVideos(root);
+      const visualStateKey = options.reuseIfUnchanged
+        ? `${compositePip ? 'base' : 'full'}:${getFrameVisualStateKey(root, time, {
+            ignoreScheduledVideoFrames: compositePip,
+          })}`
+        : null;
+      const shouldRasterize =
+        visualStateKey === null ||
+        !hasCapturedFrameRef.current ||
+        lastVisualStateKeyRef.current !== visualStateKey;
+      if (!shouldRasterize && !compositePip) return captureCanvas;
+      const rasterCanvas = compositePip ? captureBaseCanvas : captureCanvas;
 
       // html2canvas scales/translates a supplied context but does not reset it
       // between calls. Restore the reusable surface to its initial state and
       // clear the previous frame before rendering the next one.
-      const captureContext = captureCanvas.getContext('2d');
+      const captureContext = rasterCanvas.getContext('2d');
       if (!captureContext) throw new Error('Could not create the frame capture canvas context');
-      captureContext.setTransform(1, 0, 0, 1, 0, 0);
-      captureContext.clearRect(0, 0, width, height);
+      if (shouldRasterize) {
+        captureContext.setTransform(1, 0, 0, 1, 0, 0);
+        captureContext.clearRect(0, 0, width, height);
+      }
 
       // Render the DOM to the bounded, reusable canvas via html2canvas.
       // We're in the same document (no iframe), so COEP doesn't block cloning.
       const transientCloneCanvases: HTMLCanvasElement[] = [];
-      let canvas: HTMLCanvasElement;
-      try {
-        canvas = await html2canvas(root, {
-          canvas: captureCanvas,
-          width,
-          height,
-          scale: 1,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#000000',
-          logging: false,
-          onclone: async (_clonedDocument, clonedRoot) => {
-            transientCloneCanvases.push(...prepareScheduledVideoClones(root, clonedRoot));
-            await rasterizeCaptureSvgClones(
-              root,
-              clonedRoot,
-              transientCloneCanvases,
-              captureImageDataUrlsRef.current,
-            );
-          },
-          // html2canvas starts cloning at documentElement. Do not clone the rest
-          // of the editor/site UI on every frame; only the capture root, its
-          // ancestors, descendants, and document styles can affect this render.
-          ignoreElements: (element) => shouldIgnoreCaptureSibling(element, root),
-        });
-      } finally {
-        releaseCaptureCloneCanvases(transientCloneCanvases);
+      if (shouldRasterize) {
+        try {
+          await html2canvas(root, {
+            canvas: rasterCanvas,
+            width,
+            height,
+            scale: 1,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#000000',
+            logging: false,
+            onclone: async (_clonedDocument, clonedRoot) => {
+              if (compositePip) {
+                clonedRoot
+                  .querySelectorAll(SCHEDULED_MEDIA_SELECTOR)
+                  .forEach((element) => element.remove());
+              }
+              transientCloneCanvases.push(...prepareScheduledVideoClones(root, clonedRoot));
+              await rasterizeCaptureSvgClones(
+                root,
+                clonedRoot,
+                transientCloneCanvases,
+                captureImageDataUrlsRef.current,
+                captureSvgRasterCacheRef.current,
+              );
+            },
+            // html2canvas starts cloning at documentElement. Do not clone the rest
+            // of the editor/site UI on every frame; only the capture root, its
+            // ancestors, descendants, and document styles can affect this render.
+            ignoreElements: (element) => shouldIgnoreCaptureSibling(element, root),
+          });
+        } finally {
+          releaseCaptureCloneCanvases(transientCloneCanvases);
+        }
+
+        hasCapturedFrameRef.current = true;
+        lastVisualStateKeyRef.current = visualStateKey;
       }
 
-      hasCapturedFrameRef.current = true;
-      lastVisualStateKeyRef.current = visualStateKey;
+      if (compositePip) {
+        const outputContext = captureCanvas.getContext('2d');
+        if (!outputContext) throw new Error('Could not create the frame output canvas context');
+        outputContext.setTransform(1, 0, 0, 1, 0, 0);
+        outputContext.clearRect(0, 0, width, height);
+        outputContext.drawImage(captureBaseCanvas, 0, 0);
+        compositeScheduledPipVideos(root, captureCanvas);
+      }
 
       // The reusable canvas is returned directly for the main-thread encoder.
-      return canvas;
+      return captureCanvas;
     },
     [],
   );
@@ -1029,10 +1503,18 @@ export function useFrameCapture(): FrameCaptureHandle {
       captureCanvasRef.current.height = 0;
       captureCanvasRef.current = null;
     }
+    if (captureBaseCanvasRef.current) {
+      captureBaseCanvasRef.current.width = 0;
+      captureBaseCanvasRef.current.height = 0;
+      captureBaseCanvasRef.current = null;
+    }
     lastVisualStateKeyRef.current = null;
     hasCapturedFrameRef.current = false;
     decodedImagesRef.current = new WeakSet<HTMLImageElement>();
     captureImageDataUrlsRef.current.clear();
+    releaseCaptureSvgRasterCache(captureSvgRasterCacheRef.current);
+    captureSvgRasterCacheRef.current = createCaptureSvgRasterCache();
+    primedCaptureVideosRef.current = new WeakSet<HTMLVideoElement>();
     renderAPIRef.current = null;
   }, []);
 

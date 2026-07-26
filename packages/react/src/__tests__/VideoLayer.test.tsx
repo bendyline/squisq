@@ -96,6 +96,37 @@ describe('VideoLayer playback synchronization', () => {
     expect(video.pause).toHaveBeenCalled();
   });
 
+  it('leaves capture-marked recorder WebMs for the sequential frame barrier', async () => {
+    const { container, rerender } = render(
+      <svg>
+        <VideoLayer
+          layer={layer}
+          basePath="/media"
+          viewport={{ width: 640, height: 360 }}
+          blockTime={4}
+        />
+      </svg>,
+    );
+    const video = container.querySelector('video')!;
+    await waitFor(() => expect(video.currentTime).toBe(5));
+    video.dataset.captureSequential = 'true';
+    vi.mocked(video.pause).mockClear();
+
+    rerender(
+      <svg>
+        <VideoLayer
+          layer={layer}
+          basePath="/media"
+          viewport={{ width: 640, height: 360 }}
+          blockTime={6}
+        />
+      </svg>,
+    );
+
+    expect(video.currentTime).toBe(5);
+    expect(video.pause).not.toHaveBeenCalled();
+  });
+
   it('holds at the in-point until startAt', async () => {
     const { container } = render(
       <svg>

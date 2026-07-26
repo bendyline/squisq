@@ -176,6 +176,58 @@ describe('useVideoExport GIF flow', () => {
     expect(lateBitmap.close).toHaveBeenCalledOnce();
   });
 
+  it('continues a browser-operation deadline while its visible window is unfocused', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    const operation = new Promise<ImageBitmap>(() => undefined);
+    const bounded = settleWithin(operation, 1_000, 'Frame timed out', undefined, document);
+    let settled = false;
+    void bounded.then(
+      () => {},
+      () => {
+        settled = true;
+      },
+    );
+    const rejection = expect(bounded).rejects.toThrow('Frame timed out');
+
+    await vi.advanceTimersByTimeAsync(500);
+    window.dispatchEvent(new Event('blur'));
+    await vi.advanceTimersByTimeAsync(499);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await rejection;
+  });
+
+  it('does not spend a browser-operation deadline while its document is hidden', async () => {
+    vi.useFakeTimers();
+    let visibilityState: DocumentVisibilityState = 'visible';
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState);
+    const operation = new Promise<ImageBitmap>(() => undefined);
+    const bounded = settleWithin(operation, 1_000, 'Frame timed out', undefined, document);
+    let settled = false;
+    void bounded.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    const rejection = expect(bounded).rejects.toThrow('Frame timed out');
+
+    visibilityState = 'hidden';
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(settled).toBe(false);
+
+    visibilityState = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(1_000);
+    await rejection;
+  });
+
   it('uses compact/static defaults, skips audio, and emits an image/gif Blob', async () => {
     const { result, unmount } = renderHook(() => useVideoExport());
 

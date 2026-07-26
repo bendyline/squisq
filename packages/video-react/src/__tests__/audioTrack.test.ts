@@ -15,6 +15,7 @@ import {
   REASON_NO_AAC_NO_SAB,
   audioBufferToWav,
   renderAudioTimeline,
+  encodeAacTrack,
 } from '../audioTrack.js';
 
 afterEach(() => {
@@ -122,6 +123,7 @@ describe('renderAudioTimeline', () => {
     ]);
     const output = { id: 'mixed' } as unknown as AudioBuffer;
     const starts: Array<{ buffer: AudioBuffer | null; args: number[] }> = [];
+    const nodes: Array<{ buffer: AudioBuffer | null; disconnect: ReturnType<typeof vi.fn> }> = [];
 
     class SelectiveOfflineAudioContext {
       destination = {};
@@ -137,8 +139,10 @@ describe('renderAudioTimeline', () => {
         const node = {
           buffer: null as AudioBuffer | null,
           connect: vi.fn(),
+          disconnect: vi.fn(),
           start: (...args: number[]) => starts.push({ buffer: node.buffer, args }),
         };
+        nodes.push(node);
         return node as unknown as AudioBufferSourceNode;
       }
 
@@ -185,6 +189,57 @@ describe('renderAudioTimeline', () => {
       { buffer: decoded.get(1), args: [0, 0, 5] },
       { buffer: decoded.get(2), args: [2, 1, 3] },
     ]);
+    expect(nodes.every((node) => node.buffer === null)).toBe(true);
+    expect(nodes.every((node) => node.disconnect.mock.calls.length === 1)).toBe(true);
+  });
+});
+
+describe('encodeAacTrack', () => {
+  it('flushes a long narration in bounded queue batches', async () => {
+    let queueSize = 0;
+    let maxQueueSize = 0;
+    let flushCount = 0;
+
+    class FakeAudioEncoder {
+      state: 'unconfigured' | 'configured' | 'closed' = 'unconfigured';
+      get encodeQueueSize(): number {
+        return queueSize;
+      }
+      configure(): void {
+        this.state = 'configured';
+      }
+      encode(): void {
+        queueSize++;
+        maxQueueSize = Math.max(maxQueueSize, queueSize);
+      }
+      async flush(): Promise<void> {
+        flushCount++;
+        queueSize = 0;
+      }
+      close(): void {
+        this.state = 'closed';
+      }
+    }
+    class FakeAudioData {
+      close(): void {}
+    }
+    vi.stubGlobal('AudioEncoder', FakeAudioEncoder);
+    vi.stubGlobal('AudioData', FakeAudioData);
+
+    const sampleRate = 48_000;
+    const length = sampleRate * 3;
+    const channels = [new Float32Array(length), new Float32Array(length)];
+    const audioBuffer = {
+      sampleRate,
+      numberOfChannels: channels.length,
+      length,
+      getChannelData: (channel: number) => channels[channel],
+    } as unknown as AudioBuffer;
+
+    await encodeAacTrack(audioBuffer, { addAudioChunk: vi.fn() }, 128_000);
+
+    expect(maxQueueSize).toBeLessThan(100);
+    expect(flushCount).toBeGreaterThan(1);
   });
 });
 

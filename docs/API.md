@@ -2661,6 +2661,8 @@ in-page `DocPlayer`, so the IIFE bundle is only forwarded for CLI/Playwright-sty
 pipelines. A new `defaultConfig?: Partial<VideoExportConfig>` prop seeds the
 modal's initial settings and is merged as a base into the export config.
 
+Browser MP4 export defaults to 30 fps to match typical camera and screen recordings.
+
 Animated GIF export defaults to 10 fps, 960×540 landscape (540×960 portrait),
 and `animationsEnabled: false` for compact output. It skips audio entirely and
 uses ffmpeg.wasm for the final palette pass, so it requires cross-origin

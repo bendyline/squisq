@@ -4,11 +4,16 @@ import { resolveTheme } from '@bendyline/squisq/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   coverSourceRect,
+  createCaptureSvgRasterCache,
   createInlineProvider,
+  canCompositeScheduledPipVideos,
+  compositeScheduledPipVideos,
   getFrameVisualStateKey,
   prepareScheduledVideoClones,
+  primeIndeterminateCaptureVideos,
   rasterizeCaptureSvgClones,
   releaseCaptureCloneCanvases,
+  releaseCaptureSvgRasterCache,
   useFrameCapture,
   waitForCaptureAssets,
   waitForVisualUpdate,
@@ -32,11 +37,32 @@ vi.mock('@bendyline/squisq-react', () => ({
 }));
 vi.mock('html2canvas', () => ({ default: frameCaptureMocks.html2canvas }));
 
+const originalImageDecodeDescriptor = Object.getOwnPropertyDescriptor(
+  HTMLImageElement.prototype,
+  'decode',
+);
+
+function stubImageDecode(implementation: (image: HTMLImageElement) => Promise<void>) {
+  const decode = vi.fn(function (this: HTMLImageElement) {
+    return implementation(this);
+  });
+  Object.defineProperty(HTMLImageElement.prototype, 'decode', {
+    configurable: true,
+    value: decode,
+  });
+  return decode;
+}
+
 beforeEach(() => vi.clearAllMocks());
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  if (originalImageDecodeDescriptor) {
+    Object.defineProperty(HTMLImageElement.prototype, 'decode', originalImageDecodeDescriptor);
+  } else {
+    Reflect.deleteProperty(HTMLImageElement.prototype, 'decode');
+  }
 });
 
 describe('waitForVisualUpdate', () => {
@@ -142,6 +168,99 @@ describe('waitForCaptureAssets', () => {
   });
 });
 
+describe('primeIndeterminateCaptureVideos', () => {
+  it('indexes a recorder WebM once and restores its current frame', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<video src="camera.webm"></video>';
+    const video = root.querySelector('video')!;
+    let duration = Number.POSITIVE_INFINITY;
+    let currentTime = 12.5;
+    let seeking = false;
+    const assignments: number[] = [];
+    Object.defineProperties(video, {
+      currentSrc: { configurable: true, get: () => 'blob:camera-webm' },
+      duration: { configurable: true, get: () => duration },
+      currentTime: {
+        configurable: true,
+        get: () => currentTime,
+        set: (value: number) => {
+          assignments.push(value);
+          seeking = true;
+          queueMicrotask(() => {
+            if (value > 1e100) {
+              duration = 304.534;
+              currentTime = duration;
+              video.dispatchEvent(new Event('durationchange'));
+            } else {
+              currentTime = value;
+            }
+            seeking = false;
+            video.dispatchEvent(new Event('seeked'));
+          });
+        },
+      },
+      readyState: { configurable: true, get: () => HTMLMediaElement.HAVE_ENOUGH_DATA },
+      seeking: { configurable: true, get: () => seeking },
+      pause: { configurable: true, value: vi.fn() },
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+    });
+    const primed = new WeakSet<HTMLVideoElement>();
+
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(1);
+    expect(assignments).toEqual([1e101, 12.5]);
+    expect(video.pause).toHaveBeenCalledOnce();
+    expect(currentTime).toBe(12.5);
+    expect(video.dataset.captureSequential).toBe('true');
+
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+    expect(assignments).toEqual([1e101, 12.5]);
+  });
+
+  it('skips an Opus-only source authored with a video element', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<video src="audio/narration.webm"></video>';
+    const video = root.querySelector('video')!;
+    const setCurrentTime = vi.fn();
+    Object.defineProperties(video, {
+      currentSrc: { configurable: true, get: () => 'blob:narration-webm' },
+      duration: { configurable: true, value: Number.POSITIVE_INFINITY },
+      currentTime: { configurable: true, get: () => 66, set: setCurrentTime },
+      readyState: { configurable: true, value: HTMLMediaElement.HAVE_METADATA },
+      videoWidth: { configurable: true, value: 0 },
+      videoHeight: { configurable: true, value: 0 },
+      pause: { configurable: true, value: vi.fn() },
+    });
+    const primed = new WeakSet<HTMLVideoElement>();
+
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+    expect(setCurrentTime).not.toHaveBeenCalled();
+    expect(video.pause).not.toHaveBeenCalled();
+    expect(video.dataset.captureSequential).toBeUndefined();
+  });
+
+  it('leaves ordinary finite-duration video at its current frame', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<video src="indexed.mp4"></video>';
+    const video = root.querySelector('video')!;
+    const setCurrentTime = vi.fn();
+    Object.defineProperties(video, {
+      currentSrc: { configurable: true, get: () => 'blob:indexed-mp4' },
+      duration: { configurable: true, value: 30 },
+      currentTime: { configurable: true, get: () => 4, set: setCurrentTime },
+      readyState: { configurable: true, value: HTMLMediaElement.HAVE_METADATA },
+      pause: { configurable: true, value: vi.fn() },
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+    });
+
+    expect(await primeIndeterminateCaptureVideos(root)).toBe(0);
+    expect(setCurrentTime).not.toHaveBeenCalled();
+    expect(video.pause).not.toHaveBeenCalled();
+  });
+});
+
 describe('getFrameVisualStateKey', () => {
   it('reuses static DOM but invalidates for DOM changes and opaque animated media', () => {
     const root = document.createElement('div');
@@ -177,6 +296,30 @@ describe('getFrameVisualStateKey', () => {
     progress = 1;
     expect(getFrameVisualStateKey(root, 1)).toBe(getFrameVisualStateKey(root, 3));
   });
+
+  it('can exclude scheduled video clocks from a separately-composited base raster', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="picture-in-picture">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>';
+    const video = root.querySelector('video')!;
+    let currentTime = 1;
+    Object.defineProperties(video, {
+      currentTime: { configurable: true, get: () => currentTime },
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+      readyState: { configurable: true, value: HTMLMediaElement.HAVE_CURRENT_DATA },
+    });
+
+    const fullAtOne = getFrameVisualStateKey(root, 1);
+    const baseAtOne = getFrameVisualStateKey(root, 1, {
+      ignoreScheduledVideoFrames: true,
+    });
+    currentTime = 2;
+
+    expect(getFrameVisualStateKey(root, 2)).not.toBe(fullAtOne);
+    expect(getFrameVisualStateKey(root, 2, { ignoreScheduledVideoFrames: true })).toBe(baseAtOne);
+  });
 });
 
 describe('capture clone raster lifetime', () => {
@@ -202,10 +345,16 @@ describe('capture clone raster lifetime', () => {
     });
     const drawImage = vi.fn();
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
       drawImage,
     } as unknown as CanvasRenderingContext2D);
+    const decode = stubImageDecode(async () => undefined);
     const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
-    const createBitmap = vi.fn(async () => bitmap);
+    let decodedSvgSource = '';
+    const createBitmap = vi.fn(async (source: HTMLImageElement) => {
+      decodedSvgSource = source.src;
+      return bitmap;
+    });
     vi.stubGlobal('createImageBitmap', createBitmap);
 
     const transientCanvases = await rasterizeCaptureSvgClones(originalRoot, clonedRoot);
@@ -218,15 +367,70 @@ describe('capture clone raster lifetime', () => {
     expect(replacement.style.opacity).toBe('0.75');
     expect(replacement.width).toBe(800);
     expect(replacement.height).toBe(450);
-    expect(createBitmap).toHaveBeenCalledWith(expect.any(Blob));
-    expect(drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 800, 450);
+    expect(decode).toHaveBeenCalledOnce();
+    expect(decodedSvgSource).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
+    expect(createBitmap).toHaveBeenCalledWith(expect.any(HTMLImageElement));
+    expect(drawImage).toHaveBeenNthCalledWith(1, bitmap, 0, 0, 800, 450);
+    expect(drawImage).toHaveBeenNthCalledWith(2, expect.any(HTMLCanvasElement), 0, 0, 800, 450);
     expect(bitmap.close).toHaveBeenCalledOnce();
+    expect((createBitmap.mock.calls[0][0] as HTMLImageElement).getAttribute('src')).toBeNull();
     expect(transientCanvases).toEqual([replacement]);
 
     releaseCaptureCloneCanvases(transientCanvases);
 
     expect(replacement.width).toBe(0);
     expect(replacement.height).toBe(0);
+  });
+
+  it('reuses an unchanged slide raster while per-frame overlays advance', async () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML =
+      '<svg class="block-svg" viewBox="0 0 640 360" data-block-id="intro">' +
+      '<text x="20" y="40">Static slide</text></svg>';
+    const firstClone = originalRoot.cloneNode(true) as HTMLElement;
+    const secondClone = originalRoot.cloneNode(true) as HTMLElement;
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    const decode = stubImageDecode(async () => undefined);
+    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
+    const createBitmap = vi.fn(async (_source: HTMLImageElement) => bitmap);
+    vi.stubGlobal('createImageBitmap', createBitmap);
+    const rasterCache = createCaptureSvgRasterCache();
+
+    const firstTransient = await rasterizeCaptureSvgClones(
+      originalRoot,
+      firstClone,
+      [],
+      new Map(),
+      rasterCache,
+    );
+    releaseCaptureCloneCanvases(firstTransient);
+    const secondTransient = await rasterizeCaptureSvgClones(
+      originalRoot,
+      secondClone,
+      [],
+      new Map(),
+      rasterCache,
+    );
+
+    expect(decode).toHaveBeenCalledOnce();
+    expect(createBitmap).toHaveBeenCalledOnce();
+    expect(bitmap.close).toHaveBeenCalledOnce();
+    expect(drawImage).toHaveBeenCalledTimes(3);
+    expect(rasterCache.size).toBe(1);
+    const cachedCanvas = [...rasterCache.values()][0].canvas;
+    expect(cachedCanvas.width).toBe(640);
+    expect(cachedCanvas.height).toBe(360);
+
+    releaseCaptureCloneCanvases(secondTransient);
+    releaseCaptureSvgRasterCache(rasterCache);
+
+    expect(rasterCache.size).toBe(0);
+    expect(cachedCanvas.width).toBe(0);
+    expect(cachedCanvas.height).toBe(0);
   });
 
   it('embeds blob-backed image layers before decoding the standalone SVG', async () => {
@@ -245,25 +449,20 @@ describe('capture clone raster lifetime', () => {
       blob: async () => png,
     } as Response);
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
       drawImage: vi.fn(),
     } as unknown as CanvasRenderingContext2D);
-    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
     let serializedSvg = '';
-    vi.stubGlobal(
-      'createImageBitmap',
-      vi.fn(async (source: Blob) => {
-        serializedSvg = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.addEventListener('load', () => resolve(String(reader.result)), { once: true });
-          reader.addEventListener('error', () => reject(reader.error), { once: true });
-          reader.readAsText(source);
-        });
-        return bitmap;
-      }),
-    );
+    stubImageDecode(async (image) => {
+      const separator = image.src.indexOf(',');
+      serializedSvg = decodeURIComponent(image.src.slice(separator + 1));
+    });
+    const createBitmap = vi.fn();
+    vi.stubGlobal('createImageBitmap', createBitmap);
 
     await rasterizeCaptureSvgClones(originalRoot, clonedRoot);
 
+    expect(createBitmap).not.toHaveBeenCalled();
     expect(fetch).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith('blob:pasted-screen-clip');
     expect(serializedSvg).toContain('data:image/png;base64,AQID');
@@ -271,10 +470,16 @@ describe('capture clone raster lifetime', () => {
     expect(clonedRoot.querySelector('canvas[data-svg-capture-clone="true"]')).not.toBeNull();
   });
 
-  it('leaves an SVG for html2canvas when the browser cannot decode its bitmap', async () => {
+  it('draws the decoded image when the browser cannot create an ImageBitmap from it', async () => {
     const originalRoot = document.createElement('div');
     originalRoot.innerHTML = '<svg class="block-svg" viewBox="0 0 640 360"></svg>';
     const clonedRoot = originalRoot.cloneNode(true) as HTMLElement;
+    const drawImage = vi.fn();
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+    stubImageDecode(async () => undefined);
     vi.stubGlobal(
       'createImageBitmap',
       vi.fn(async () => {
@@ -284,8 +489,48 @@ describe('capture clone raster lifetime', () => {
 
     const transientCanvases = await rasterizeCaptureSvgClones(originalRoot, clonedRoot);
 
+    expect(clonedRoot.querySelector('svg.block-svg')).toBeNull();
+    expect(transientCanvases).toHaveLength(1);
+    expect(drawImage).toHaveBeenCalledWith(expect.any(HTMLImageElement), 0, 0, 640, 360);
+  });
+
+  it('rejects instead of returning to html2canvas when an SVG image cannot be embedded', async () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML =
+      '<svg class="block-svg" viewBox="0 0 640 360">' +
+      '<image href="blob:missing-screen-clip"></image></svg>';
+    const clonedRoot = originalRoot.cloneNode(true) as HTMLElement;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+    } as Response);
+    const createBitmap = vi.fn();
+    vi.stubGlobal('createImageBitmap', createBitmap);
+
+    await expect(rasterizeCaptureSvgClones(originalRoot, clonedRoot)).rejects.toThrow(
+      'Could not rasterize a full-slide SVG for frame capture: ' +
+        'Image could not be loaded for SVG capture: blob:missing-screen-clip',
+    );
+
+    expect(createBitmap).not.toHaveBeenCalled();
     expect(clonedRoot.querySelector('svg.block-svg')).not.toBeNull();
-    expect(transientCanvases).toEqual([]);
+  });
+
+  it('rejects instead of returning to html2canvas when the standalone SVG cannot decode', async () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML = '<svg class="block-svg" viewBox="0 0 640 360"></svg>';
+    const clonedRoot = originalRoot.cloneNode(true) as HTMLElement;
+    stubImageDecode(async () => {
+      throw new Error('SVG image decode unavailable');
+    });
+    const createBitmap = vi.fn();
+    vi.stubGlobal('createImageBitmap', createBitmap);
+
+    await expect(rasterizeCaptureSvgClones(originalRoot, clonedRoot)).rejects.toThrow(
+      'Could not rasterize a full-slide SVG for frame capture: SVG image decode unavailable',
+    );
+
+    expect(createBitmap).not.toHaveBeenCalled();
+    expect(clonedRoot.querySelector('svg.block-svg')).not.toBeNull();
   });
 });
 
@@ -303,6 +548,107 @@ describe('scheduled video capture clones', () => {
       sw: 1080,
       sh: 607.5,
     });
+  });
+
+  it('uses the bounded compositor only when every active visual scheduled video is PIP', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="picture-in-picture">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>' +
+      '<div class="doc-player__media-clips" data-presentation="background">' +
+      '<video data-clip-id="audio-only" data-active="true"></video></div>';
+    const [camera, audioOnly] = Array.from(root.querySelectorAll('video'));
+    Object.defineProperties(camera, {
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+    });
+    Object.defineProperties(audioOnly, {
+      videoWidth: { configurable: true, value: 0 },
+      videoHeight: { configurable: true, value: 0 },
+    });
+
+    expect(canCompositeScheduledPipVideos(root)).toBe(true);
+    Object.defineProperties(audioOnly, {
+      videoWidth: { configurable: true, value: 1920 },
+      videoHeight: { configurable: true, value: 1080 },
+    });
+    expect(canCompositeScheduledPipVideos(root)).toBe(false);
+  });
+
+  it('draws a cropped scheduled PIP frame over the cached base raster', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="picture-in-picture">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>';
+    const video = root.querySelector<HTMLVideoElement>('video')!;
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+      getBoundingClientRect: {
+        configurable: true,
+        value: () => ({
+          x: 480,
+          y: 260,
+          left: 480,
+          top: 260,
+          right: 630,
+          bottom: 350,
+          width: 150,
+          height: 90,
+          toJSON: () => ({}),
+        }),
+      },
+    });
+    Object.defineProperty(root, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: 640,
+        bottom: 360,
+        width: 640,
+        height: 360,
+        toJSON: () => ({}),
+      }),
+    });
+    const destination = document.createElement('canvas');
+    destination.width = 640;
+    destination.height = 360;
+    const drawImage = vi.fn();
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      objectFit: 'cover',
+      borderLeftWidth: '0px',
+      borderRightWidth: '0px',
+      borderTopWidth: '0px',
+      borderBottomWidth: '0px',
+      borderTopLeftRadius: '0px',
+      borderTopStyle: 'none',
+      borderTopColor: 'rgba(0, 0, 0, 0)',
+      boxShadow: 'none',
+    } as CSSStyleDeclaration);
+    vi.spyOn(destination, 'getContext').mockReturnValue({
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      fill: vi.fn(),
+      clip: vi.fn(),
+      drawImage,
+      shadowColor: '',
+      shadowOffsetX: 0,
+      shadowOffsetY: 0,
+      shadowBlur: 0,
+      globalAlpha: 1,
+      fillStyle: '',
+    } as unknown as CanvasRenderingContext2D);
+
+    expect(compositeScheduledPipVideos(root, destination)).toBe(1);
+    expect(drawImage).toHaveBeenCalledWith(video, 0, 48, 640, 384, 480, 260, 150, 90);
   });
 
   it('restores PIP presentation on html2canvas video replacements', () => {

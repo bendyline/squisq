@@ -164,30 +164,44 @@ export async function renderAudioTimeline(
     throw new Error(`No decodable audio track was found in: ${requiredFailures.join(', ')}`);
   }
 
-  let scheduledNodes = 0;
-  for (const clip of clips) {
-    const buffer = decoded.get(clip.src);
-    if (!buffer) {
-      // A video can legitimately have no audio stream. Its visual frames still
-      // export; this source simply contributes silence to the mixed track.
-      if (clip.sourceKind === 'video') continue;
-      throw new Error(`Audio source was not decoded: ${clip.src}`);
+  const scheduledNodes: AudioBufferSourceNode[] = [];
+  try {
+    for (const clip of clips) {
+      const buffer = decoded.get(clip.src);
+      if (!buffer) {
+        // A video can legitimately have no audio stream. Its visual frames
+        // still export; this source simply contributes silence to the mix.
+        if (clip.sourceKind === 'video') continue;
+        throw new Error(`Audio source was not decoded: ${clip.src}`);
+      }
+      const node = ctx.createBufferSource();
+      node.buffer = buffer;
+      node.connect(ctx.destination);
+      const when = Math.max(0, clip.startSec);
+      const offset = Math.max(0, clip.sourceInSec);
+      const duration = Math.max(0, clip.durationSec);
+      node.start(when, offset, duration);
+      scheduledNodes.push(node);
     }
-    const node = ctx.createBufferSource();
-    node.buffer = buffer;
-    node.connect(ctx.destination);
-    const when = Math.max(0, clip.startSec);
-    const offset = Math.max(0, clip.sourceInSec);
-    const duration = Math.max(0, clip.durationSec);
-    node.start(when, offset, duration);
-    scheduledNodes++;
-  }
 
-  if (scheduledNodes === 0) return null;
-  return ctx.startRendering();
+    if (scheduledNodes.length === 0) return null;
+    return await ctx.startRendering();
+  } finally {
+    // OfflineAudioContext retains scheduled sources and their decoded PCM.
+    // Disconnect and detach them as soon as the mixed result exists so only
+    // that one output buffer survives into the export pipeline.
+    for (const node of scheduledNodes) {
+      node.disconnect();
+      node.buffer = null;
+    }
+    decoded.clear();
+  }
 }
 
 // ── WebCodecs AAC encode (tier 1) ──────────────────────────────────
+
+const AAC_FRAME_SAMPLES = 1024;
+const MAX_AAC_QUEUE_SECONDS = 2;
 
 /** Minimal muxer surface {@link encodeAacTrack} needs. */
 export interface AudioChunkSink {
@@ -222,37 +236,54 @@ export async function encodeAacTrack(
 
   encoder.configure({ codec: 'mp4a.40.2', sampleRate, numberOfChannels: channels, bitrate });
 
-  const FRAME = 1024; // samples per AudioData chunk
   const total = audioBuffer.length;
+  const queueLimit = Math.max(
+    1,
+    Math.ceil((sampleRate * MAX_AAC_QUEUE_SECONDS) / AAC_FRAME_SAMPLES),
+  );
   const channelData: Float32Array[] = [];
   for (let ch = 0; ch < channels; ch++) {
     channelData.push(audioBuffer.getChannelData(ch));
   }
 
-  for (let offset = 0; offset < total; offset += FRAME) {
-    if (encodeError) break;
-    const count = Math.min(FRAME, total - offset);
-    // Planar layout: all of channel 0, then all of channel 1, …
-    const planar = new Float32Array(count * channels);
-    for (let ch = 0; ch < channels; ch++) {
-      planar.set(channelData[ch].subarray(offset, offset + count), ch * count);
-    }
-    const timestamp = Math.round((offset / sampleRate) * 1_000_000);
-    const audioData = new AudioData({
-      format: 'f32-planar',
-      sampleRate,
-      numberOfFrames: count,
-      numberOfChannels: channels,
-      timestamp,
-      data: planar,
-    });
-    encoder.encode(audioData);
-    audioData.close();
-  }
+  try {
+    for (let offset = 0; offset < total; offset += AAC_FRAME_SAMPLES) {
+      if (encodeError) throw encodeError;
+      // Closing AudioData does not guarantee Chromium has released the native
+      // PCM surface. Drain at a short timeline bound rather than queueing a
+      // multi-minute narration in one burst.
+      if (encoder.encodeQueueSize >= queueLimit) {
+        await encoder.flush();
+        if (encodeError) throw encodeError;
+      }
 
-  await encoder.flush();
-  encoder.close();
-  if (encodeError) throw encodeError;
+      const count = Math.min(AAC_FRAME_SAMPLES, total - offset);
+      // Planar layout: all of channel 0, then all of channel 1, …
+      const planar = new Float32Array(count * channels);
+      for (let ch = 0; ch < channels; ch++) {
+        planar.set(channelData[ch].subarray(offset, offset + count), ch * count);
+      }
+      const timestamp = Math.round((offset / sampleRate) * 1_000_000);
+      const audioData = new AudioData({
+        format: 'f32-planar',
+        sampleRate,
+        numberOfFrames: count,
+        numberOfChannels: channels,
+        timestamp,
+        data: planar,
+      });
+      try {
+        encoder.encode(audioData);
+      } finally {
+        audioData.close();
+      }
+    }
+
+    await encoder.flush();
+    if (encodeError) throw encodeError;
+  } finally {
+    if (encoder.state !== 'closed') encoder.close();
+  }
 }
 
 // ── WAV serialization (tier 2 input) ───────────────────────────────

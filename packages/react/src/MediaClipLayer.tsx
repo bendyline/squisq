@@ -254,7 +254,10 @@ function MediaClipElement({
     // natural playback. Always select the exact requested frame in that case;
     // the drift tolerance remains useful while playing to avoid fighting the
     // media element's own clock on every animation frame.
-    if (renderMode || !isPlaying || Math.abs(el.currentTime - target) > DRIFT) {
+    if (
+      el.dataset.captureSequential !== 'true' &&
+      (renderMode || !isPlaying || Math.abs(el.currentTime - target) > DRIFT)
+    ) {
       try {
         el.currentTime = target;
       } catch {
@@ -264,7 +267,7 @@ function MediaClipElement({
     if (isPlaying && !renderMode) {
       const p = el.play();
       if (p) p.catch(() => {});
-    } else {
+    } else if (el.dataset.captureSequential !== 'true') {
       el.pause();
     }
   }, [active, currentTime, isPlaying, renderMode, clip.sourceIn, clip.absoluteStart, src]);

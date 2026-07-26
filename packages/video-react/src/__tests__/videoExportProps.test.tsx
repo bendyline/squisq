@@ -102,6 +102,13 @@ describe('VideoExportModal', () => {
     expect(container.textContent).toContain('Export Video');
   });
 
+  it('defaults MP4 export to 30fps', () => {
+    const { container } = render(<VideoExportModal doc={minimalDoc()} onClose={() => {}} />);
+    expect((container.querySelector('[aria-label="Frame Rate"]') as HTMLSelectElement).value).toBe(
+      '30',
+    );
+  });
+
   it('seeds the initial selections from defaultConfig', () => {
     const { container } = render(
       <VideoExportModal
@@ -179,9 +186,10 @@ describe('VideoExportModal', () => {
     expect(getByRole('button', { name: 'Export GIF' })).toBeTruthy();
   });
 
-  it('applies GIF recommendations when the format selection changes', () => {
+  it('applies format recommendations when the format selection changes', () => {
     const { container } = render(<VideoExportModal doc={minimalDoc()} onClose={() => {}} />);
-    fireEvent.change(container.querySelector('[aria-label="Format"]')!, {
+    const format = container.querySelector('[aria-label="Format"]')!;
+    fireEvent.change(format, {
       target: { value: 'gif' },
     });
 
@@ -194,6 +202,21 @@ describe('VideoExportModal', () => {
     ).toBe('disabled');
     expect((container.querySelector('[aria-label="Captions"]') as HTMLSelectElement).value).toBe(
       'standard',
+    );
+
+    fireEvent.change(format, {
+      target: { value: 'mp4' },
+    });
+
+    expect((container.querySelector('[aria-label="Frame Rate"]') as HTMLSelectElement).value).toBe(
+      '30',
+    );
+    expect(
+      (container.querySelector('[aria-label="Animations and transitions"]') as HTMLSelectElement)
+        .value,
+    ).toBe('enabled');
+    expect((container.querySelector('[aria-label="Captions"]') as HTMLSelectElement).value).toBe(
+      'off',
     );
   });
 

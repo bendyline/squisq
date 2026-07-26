@@ -69,7 +69,7 @@ describe('VideoExportModal progress palette', () => {
     );
     expect(
       container.querySelector<HTMLElement>('[data-squisq-video-export-phase]')?.textContent,
-    ).toBe('Encoding - 0.63 fps · 0.03× realtime');
+    ).toBe('Encoding - 0.63 fps · 0.02× realtime');
     expect(
       container.querySelector<HTMLElement>('[data-squisq-video-export-progress-label]')
         ?.textContent,
