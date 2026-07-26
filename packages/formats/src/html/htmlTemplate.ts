@@ -46,6 +46,14 @@ export interface HtmlExportOptions {
   autoPlay?: boolean;
 
   /**
+   * Caption rendering for slideshow playback. Passed through to
+   * `SquisqPlayer.mount` — 'social' shows the large centered 3-5 word
+   * captions with the active word highlighted; 'standard' the classic
+   * lower-third. Omitted = captions off (mount default).
+   */
+  captionStyle?: 'standard' | 'social';
+
+  /**
    * Squisq theme ID to apply (e.g., 'documentary', 'cinematic').
    * When set, the theme is assigned to the Doc before rendering,
    * so the SquisqPlayer renders with that theme's colors and typography.
@@ -296,6 +304,7 @@ export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string
     mode = 'slideshow',
     title = 'Squisq Document',
     autoPlay = false,
+    captionStyle,
     themeId,
     themeRegistry,
   } = options;
@@ -340,7 +349,7 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
   SquisqPlayer.mount(document.getElementById("squisq-root"), doc, {
     mode: ${JSON.stringify(mode)},
     images: images,
-    autoPlay: ${JSON.stringify(autoPlay)},
+    autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}
     basePath: "."
   });
 })();
@@ -359,7 +368,10 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
  */
 export function generateExternalHtml(
   doc: Doc,
-  options: Pick<HtmlExportOptions, 'mode' | 'title' | 'autoPlay' | 'themeId' | 'themeRegistry'> & {
+  options: Pick<
+    HtmlExportOptions,
+    'mode' | 'title' | 'autoPlay' | 'captionStyle' | 'themeId' | 'themeRegistry'
+  > & {
     /** Relative path to the player JS file (e.g., 'squisq-player.js') */
     playerScriptPath: string;
     /** Map of original image paths to their rewritten relative paths in the ZIP */
@@ -375,6 +387,7 @@ export function generateExternalHtml(
     mode = 'slideshow',
     title = 'Squisq Document',
     autoPlay = false,
+    captionStyle,
     themeId,
     themeRegistry,
   } = options;
@@ -411,7 +424,7 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
     mode: ${JSON.stringify(mode)},
     images: images,
     audio: audio,
-    autoPlay: ${JSON.stringify(autoPlay)},
+    autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}
     basePath: "."
   });
 })();

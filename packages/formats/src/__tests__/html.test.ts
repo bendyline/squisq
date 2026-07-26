@@ -9,7 +9,7 @@ import { describe, it, expect, vi } from 'vitest';
 import JSZip from 'jszip';
 import type { Doc, Block, ImageLayer } from '@bendyline/squisq/schemas';
 import { compileTheme, createThemeRegistry } from '@bendyline/squisq/schemas';
-import { docToHtml, docToHtmlZip, collectImagePaths } from '../html/index';
+import { docToHtml, docToHtmlZip, collectImagePaths, generateExternalHtml } from '../html/index';
 import { inferMimeType, arrayBufferToBase64DataUrl, extractFilename } from '../html/imageUtils';
 
 // ============================================
@@ -234,6 +234,33 @@ describe('docToHtml', () => {
     const html = docToHtml(doc, { playerScript: MOCK_PLAYER_SCRIPT });
 
     expect(html).toContain('test-doc');
+  });
+
+  it('passes captionStyle through to the mount options', () => {
+    const doc = makeDoc();
+    const html = docToHtml(doc, { playerScript: MOCK_PLAYER_SCRIPT, captionStyle: 'social' });
+
+    expect(html).toContain('captionStyle: "social"');
+  });
+
+  it('omits captionStyle from the mount options when not requested', () => {
+    const doc = makeDoc();
+    const html = docToHtml(doc, { playerScript: MOCK_PLAYER_SCRIPT });
+
+    expect(html).not.toContain('captionStyle');
+  });
+
+  it('generateExternalHtml is public and references the player by path', () => {
+    const doc = makeDoc();
+    const html = generateExternalHtml(doc, {
+      playerScriptPath: '../assets/squisq-player.js',
+      mode: 'static',
+      captionStyle: 'social',
+    });
+
+    expect(html).toContain('<script src="../assets/squisq-player.js"></script>');
+    expect(html).not.toContain(MOCK_PLAYER_SCRIPT);
+    expect(html).toContain('captionStyle: "social"');
   });
 
   it('embeds an explicitly registered theme selected by the document', () => {

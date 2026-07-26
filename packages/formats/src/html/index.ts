@@ -236,7 +236,7 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
 
 // ── Re-exports ─────────────────────────────────────────────────────
 
-export { collectImagePaths } from './htmlTemplate.js';
+export { collectImagePaths, generateExternalHtml } from './htmlTemplate.js';
 export { inferMimeType, arrayBufferToBase64DataUrl, extractFilename } from './imageUtils.js';
 export { markdownDocToPlainHtml } from './plainHtml.js';
 export type { PlainHtmlExportOptions } from './plainHtml.js';
