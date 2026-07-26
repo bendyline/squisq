@@ -1,3 +1,9 @@
+## @bendyline/squisq-formats [2.3.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.3.8...@bendyline/squisq-formats@2.3.9) (2026-07-26)
+
+### Bug Fixes
+
+* More export perf fixes ([#39](https://github.com/bendyline/squisq/issues/39)) ([cd53ce8](https://github.com/bendyline/squisq/commit/cd53ce8ed62edd0eca21e0b09f2f475dc7b67d07))
+
 ## @bendyline/squisq-formats [2.3.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.3.7...@bendyline/squisq-formats@2.3.8) (2026-07-24)
 
 
