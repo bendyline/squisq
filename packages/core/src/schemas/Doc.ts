@@ -897,6 +897,15 @@ export interface TextStyle {
   padding?: number;
   /** Maximum number of lines before truncation (adds "..." to last line) */
   maxLines?: number;
+  /**
+   * Fit the rendered text to the layer's box: the renderer measures the
+   * real glyphs and scales the text down (never up) to stay inside the box,
+   * and — when vertically centered — centers the whole wrapped block on the
+   * anchor instead of hanging extra lines below it. For display type sized
+   * from estimates (e.g. the bigText template), where the actual font can
+   * run wider than any pure width model.
+   */
+  shrinkToFit?: boolean;
 }
 
 // ============================================

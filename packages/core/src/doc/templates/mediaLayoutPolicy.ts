@@ -161,6 +161,16 @@ export const BLOCK_MEDIA_LAYOUT_POLICIES = {
     unconsumedMedia: 'reserve-when-no-native-media',
     variants: TITLE_VARIANTS,
   },
+  bigText: {
+    summary:
+      'Uses its authored background image (behind a contrast bloom) when present; otherwise renders gigantic text on the theme surface.',
+    noMedia: 'template-without-optional-media',
+    ownership: 'optional-native',
+    nativeLayout: 'background-image',
+    additionalMediaLayout: 'overlay-inset',
+    unconsumedMedia: 'reserve-when-no-native-media',
+    variants: TITLE_VARIANTS,
+  },
   content: {
     summary:
       'Preserves the complete heading and body; supplemental media receives a companion field.',

@@ -31,6 +31,11 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     label: 'Section Header',
     description: 'A clean section break with a prominent title and optional background image.',
   },
+  bigText: {
+    label: 'Big Text',
+    description:
+      'Gigantic uppercase display text — thumbnail-style — on a theme surface or over an image with a contrast bloom.',
+  },
   content: {
     label: 'Content',
     description: 'Shows a heading and the complete body in a loss-averse content-first layout.',

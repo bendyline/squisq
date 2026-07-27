@@ -6,7 +6,13 @@
  */
 
 /** Built-in visual treatments that can render a document start block. */
-export type CoverSlideTemplate = 'cover' | 'title' | 'sectionHeader' | 'imageWithCaption';
+export type CoverSlideTemplate =
+  | 'cover'
+  | 'title'
+  | 'sectionHeader'
+  | 'imageWithCaption'
+  | 'bigText'
+  | 'bigTextImage';
 
 /** How an exported video's story clock behaves while the cover is visible. */
 export type CoverSlidePlayback = 'overlay' | 'preroll';
@@ -45,6 +51,18 @@ export const COVER_SLIDE_TEMPLATE_OPTIONS: readonly CoverSlideTemplateOption[] =
     id: 'imageWithCaption',
     label: 'Image with title',
     description: 'A full-bleed image with the title and subtitle overlaid.',
+    requiresHeroImage: true,
+  },
+  {
+    id: 'bigText',
+    label: 'Big text',
+    description: 'The title in gigantic uppercase type on a clean theme surface — thumbnail-ready.',
+  },
+  {
+    id: 'bigTextImage',
+    label: 'Big text on image',
+    description:
+      'The title in gigantic uppercase type over the hero image, with a contrast bloom behind the text.',
     requiresHeroImage: true,
   },
 ]);
@@ -102,6 +120,14 @@ function resolveTemplate(value: unknown): CoverSlideTemplate | undefined {
   ) {
     return 'imageWithCaption';
   }
+  if (
+    normalized === 'bigtextimage' ||
+    normalized === 'largetextimage' ||
+    normalized === 'bigtextonimage'
+  ) {
+    return 'bigTextImage';
+  }
+  if (normalized === 'bigtext' || normalized === 'largetext') return 'bigText';
   return undefined;
 }
 

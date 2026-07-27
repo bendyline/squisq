@@ -21,6 +21,7 @@ import { getThemeFont, themedFontSize, themedImageTreatment } from '../utils/the
 import { relativeLuminance, withAlpha } from '../../schemas/colorUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 import type { CoverSlideTemplate } from '../coverSlideSettings.js';
+import { bigText } from './bigText.js';
 import { imageWithCaption } from './imageWithCaption.js';
 import { sectionHeader } from './sectionHeader.js';
 import { titleBlock } from './titleBlock.js';
@@ -346,6 +347,27 @@ export function expandCoverBlock(
         imageSrc: input.heroSrc,
         imageAlt: input.heroAlt,
         ambientMotion: input.ambientMotion,
+      },
+      context,
+    );
+  }
+
+  if (template === 'bigText' || template === 'bigTextImage') {
+    // The image variant needs a hero; without one it degrades to the clean
+    // text-only card rather than rendering an empty image layer.
+    const useHero = template === 'bigTextImage' && !!input.heroSrc;
+    return bigText(
+      {
+        ...base,
+        template: 'bigText',
+        title: input.title,
+        ...(useHero
+          ? {
+              imageSrc: input.heroSrc,
+              imageAlt: input.heroAlt ?? input.title,
+              ambientMotion: input.ambientMotion,
+            }
+          : {}),
       },
       context,
     );

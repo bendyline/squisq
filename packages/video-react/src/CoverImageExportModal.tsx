@@ -48,6 +48,17 @@ const MIN_DIMENSION = 64;
 const MAX_DIMENSION = 7680;
 const MAX_PIXELS = 33_177_600;
 
+/**
+ * Named output sizes offered alongside the 1×/2× viewport scales. These are
+ * platform targets, so they set absolute pixels regardless of the document's
+ * viewport.
+ */
+export const COVER_IMAGE_SIZE_PRESETS: readonly {
+  label: string;
+  width: number;
+  height: number;
+}[] = [{ label: 'YouTube cover', width: 1280, height: 720 }];
+
 const FORMAT_DETAILS: Record<
   CoverImageExportFormat,
   { extension: string; mime: string; label: string }
@@ -388,7 +399,7 @@ export function CoverImageExportModal({
           </label>
         </div>
 
-        <div style={{ display: 'flex', gap: 8, margin: '-2px 0 14px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, margin: '-2px 0 14px' }}>
           <button
             type="button"
             disabled={busy}
@@ -409,6 +420,20 @@ export function CoverImageExportModal({
           >
             2×
           </button>
+          {COVER_IMAGE_SIZE_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              disabled={busy}
+              title={`${preset.width} × ${preset.height} pixels`}
+              onClick={() => {
+                setWidth(preset.width);
+                setHeight(preset.height);
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
           <span style={{ alignSelf: 'center', color: muted, fontSize: 12 }}>
             {width.toLocaleString()} × {height.toLocaleString()} pixels
           </span>

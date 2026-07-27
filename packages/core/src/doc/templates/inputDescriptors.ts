@@ -195,6 +195,12 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
     { key: 'imageAlt', description: 'Alt text for the background image' },
     { key: 'ambientMotion', description: 'Slow zoom/pan effect', values: AMBIENT_MOTION_VALUES },
   ],
+  bigText: [
+    { key: 'title', description: 'The display text (rendered uppercase)' },
+    { key: 'imageSrc', description: 'Optional full-bleed background image path' },
+    { key: 'imageAlt', description: 'Alt text for the background image' },
+    { key: 'ambientMotion', description: 'Slow zoom/pan effect', values: AMBIENT_MOTION_VALUES },
+  ],
   content: [{ key: 'title', description: 'Heading shown above the complete body' }],
   statHighlight: [
     { key: 'stat', description: 'The statistic (e.g. "89%", "2x")' },

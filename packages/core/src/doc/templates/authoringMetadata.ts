@@ -46,6 +46,12 @@ export const TEMPLATE_AUTHORING_METADATA = {
     safeForContentFirst: false,
     placement: 'heading',
   },
+  bigText: {
+    role: 'opener',
+    bodyPolicy: 'ignored',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
   content: {
     role: 'content',
     bodyPolicy: 'complete',

@@ -651,6 +651,46 @@ describe('PreviewToolbarControls', () => {
     }
   });
 
+  it('previews the managed cover inside the cover-slide menu', async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class ResizeObserverStub implements ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    globalThis.ResizeObserver = ResizeObserverStub;
+    try {
+      // The zero-width jsdom toolbar folds every control into the overflow
+      // probe, so locate the trigger by class rather than accessible role.
+      renderPreviewToolbar('# Hello');
+      fireEvent.click(document.querySelector('.squisq-cover-slide-trigger')!);
+      await waitFor(() => {
+        expect(
+          document.querySelector('.squisq-cover-slide-preview-frame .block-svg'),
+        ).not.toBeNull();
+      });
+      expect(document.querySelector('.squisq-cover-slide-preview-empty')).toBeNull();
+
+      cleanup();
+
+      // Without a level-1 heading there is no generated cover; the menu
+      // explains how to get one instead of showing an empty thumbnail.
+      renderPreviewToolbar('No heading here, just prose.');
+      fireEvent.click(document.querySelector('.squisq-cover-slide-trigger')!);
+      await waitFor(() => {
+        expect(document.querySelector('.squisq-cover-slide-preview-empty')).not.toBeNull();
+      });
+      expect(document.querySelector('.squisq-cover-slide-preview-frame')).toBeNull();
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      }
+    }
+  });
+
   it('shows Loop only in Video mode', () => {
     const originalResizeObserver = globalThis.ResizeObserver;
     class ResizeObserverStub implements ResizeObserver {

@@ -164,6 +164,26 @@ export interface SectionHeaderInput extends BaseTemplateBlock {
 }
 
 /**
+ * Big text - thumbnail-style display card with the title in gigantic
+ * uppercase type, sized to fill the frame minus a small padding margin.
+ * With an image, the title sits over a full-bleed photo with a theme-tinted
+ * contrast bloom behind the text; without one, it sits on a clean theme
+ * surface. Shows nothing but the title — body content feeds narration only.
+ * Built for YouTube covers and social thumbnails.
+ */
+export interface BigTextInput extends BaseTemplateBlock {
+  template: 'bigText';
+  /** The display text (rendered uppercase). */
+  title: string;
+  /** Optional full-bleed background image path. */
+  imageSrc?: string;
+  /** Alt text for the background image. */
+  imageAlt?: string;
+  /** Ambient motion for the background image. */
+  ambientMotion?: 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight';
+}
+
+/**
  * Content block - loss-averse heading and body layout.
  *
  * This is the safe default for agent-authored presentation drafts: it renders
@@ -814,6 +834,7 @@ export type ChartTemplateInput =
 export type TemplateBlock =
   | TitleBlockInput
   | SectionHeaderInput
+  | BigTextInput
   | ContentBlockInput
   | StatHighlightInput
   | QuoteBlockInput

@@ -263,10 +263,14 @@
   cursor: pointer;
 }
 
+/* Hover/open surface falls back to --squisq-bg (defined for both color
+   schemes) rather than a hard-coded light gray: in dark mode the light
+   fallback erased the contrast between the trigger's light text/status
+   circle and its background while the menu was open. */
 .squisq-cover-slide-trigger:hover,
 .squisq-cover-slide-trigger--open {
   border-color: var(--squisq-accent, #2563eb);
-  background: var(--squisq-hover-bg, #f3f4f6);
+  background: var(--squisq-hover-bg, var(--squisq-bg, #f3f4f6));
 }
 
 .squisq-cover-slide-status {
@@ -344,6 +348,46 @@
 .squisq-cover-slide-switch input,
 .squisq-cover-slide-timing input {
   accent-color: var(--squisq-accent, #2563eb);
+}
+
+/* Live thumbnail of the managed cover with the selected appearance. The
+   box keeps the active viewport's aspect ratio (set inline) and the
+   BlockRenderer SVG scales into it via its viewBox. */
+.squisq-cover-slide-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  margin: 0 0 12px;
+  overflow: hidden;
+  border: 1px solid var(--cover-border);
+  border-radius: 6px;
+  background: var(--cover-control);
+}
+
+.squisq-cover-slide-preview--disabled {
+  opacity: 0.45;
+}
+
+.squisq-cover-slide-preview-frame {
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+.squisq-cover-slide-preview-frame .block-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.squisq-cover-slide-preview-empty {
+  margin: 0;
+  padding: 10px 14px;
+  color: var(--cover-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: center;
 }
 
 .squisq-cover-slide-field {

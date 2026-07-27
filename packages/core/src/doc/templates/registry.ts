@@ -11,6 +11,7 @@ import { makeCustomTemplateFn } from './customTemplate.js';
 
 import { titleBlock } from './titleBlock.js';
 import { sectionHeader } from './sectionHeader.js';
+import { bigText } from './bigText.js';
 import { contentBlock } from './contentBlock.js';
 import { statHighlight } from './statHighlight.js';
 import { quoteBlock } from './quoteBlock.js';
@@ -48,6 +49,7 @@ import { layoutBlock } from './layoutBlock.js';
 export const templateRegistry: TemplateRegistry = {
   title: titleBlock,
   sectionHeader,
+  bigText,
   content: contentBlock,
   statHighlight,
   quote: quoteBlock,

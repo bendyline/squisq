@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { coverImageFilename, validateCoverImageDimensions } from '../CoverImageExportModal';
+import {
+  COVER_IMAGE_SIZE_PRESETS,
+  coverImageFilename,
+  validateCoverImageDimensions,
+} from '../CoverImageExportModal';
 
 describe('cover image export configuration', () => {
   it('builds a safe filename with the selected extension', () => {
@@ -14,5 +18,15 @@ describe('cover image export configuration', () => {
     expect(validateCoverImageDimensions(63, 1080)).toContain('between 64 and 7680');
     expect(validateCoverImageDimensions(7680, 7680)).toContain('33 megapixels');
     expect(validateCoverImageDimensions(1920.5, 1080)).toContain('whole numbers');
+  });
+
+  it('offers a valid YouTube cover size preset', () => {
+    const youtube = COVER_IMAGE_SIZE_PRESETS.find((preset) => preset.label === 'YouTube cover');
+    expect(youtube).toBeDefined();
+    expect(youtube!.width).toBe(1280);
+    expect(youtube!.height).toBe(720);
+    for (const preset of COVER_IMAGE_SIZE_PRESETS) {
+      expect(validateCoverImageDimensions(preset.width, preset.height)).toBeNull();
+    }
   });
 });

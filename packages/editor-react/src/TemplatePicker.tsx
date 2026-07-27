@@ -129,6 +129,20 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
     ),
   },
   {
+    name: 'bigText',
+    label: 'Big Text',
+    description:
+      'Gigantic uppercase display text — thumbnail-style — on a theme surface or over an image with a contrast bloom.',
+    icon: (
+      <TemplateIcon>
+        <rect x={4} y={4} width={48} height={32} rx={2} fill={F1} opacity={0.25} />
+        <ellipse cx={28} cy={20} rx={22} ry={13} fill={F1} opacity={0.35} />
+        <rect x={8} y={12} width={40} height={10} rx={2} fill={FA} />
+        <rect x={16} y={26} width={24} height={4} rx={1} fill={F2} />
+      </TemplateIcon>
+    ),
+  },
+  {
     name: 'content',
     label: 'Content',
     description: 'Shows a heading and the complete body in a loss-averse content-first layout.',

@@ -31,13 +31,14 @@ import type {
   PipSize,
   VideoPresentation,
 } from '@bendyline/squisq-react';
+import { BlockRenderer, MediaContext } from '@bendyline/squisq-react';
 import type { ViewportPreset, ViewportConfig } from '@bendyline/squisq/schemas';
 import {
   VIEWPORT_PRESETS,
   getThemeSummaries,
   resolveMediaSchedule,
 } from '@bendyline/squisq/schemas';
-import type { CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
+import type { Block, CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
 import { ThemePicker } from './ThemePicker';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import type { Doc } from '@bendyline/squisq/schemas';
@@ -55,6 +56,8 @@ import {
   FRONTMATTER_CUSTOM_THEMES_KEY,
   FRONTMATTER_CUSTOM_TEMPLATES_KEY,
   COVER_SLIDE_TEMPLATE_OPTIONS,
+  createTemplateContext,
+  expandCoverBlock,
   resolveCoverSlideSettings,
   type CoverSlidePlayback,
   type CoverSlideTemplate,
@@ -1212,6 +1215,28 @@ function CoverSlideMenuControl({ compact }: { compact: boolean }) {
   }, [closeMenu, open, updatePosition]);
 
   const coverExists = !!doc?.startBlock;
+
+  // Static, animation-free expansion of the managed cover so the menu can show
+  // a live thumbnail of what the selected appearance produces. Only computed
+  // while the menu is open.
+  const coverPreviewBlock = useMemo((): Block | null => {
+    if (!open || !doc?.startBlock) return null;
+    const context = createTemplateContext(settings.activeTheme, 0, 1, settings.activeViewport);
+    return {
+      id: 'cover-slide-menu-preview',
+      startTime: -1,
+      duration: 0,
+      audioSegment: -1,
+      layers: expandCoverBlock(doc.startBlock, context, settings.activeCoverSlideTemplate),
+    };
+  }, [
+    open,
+    doc?.startBlock,
+    settings.activeTheme,
+    settings.activeViewport,
+    settings.activeCoverSlideTemplate,
+  ]);
+
   return (
     <div
       className={`squisq-preview-control squisq-cover-slide-control${compact ? ' squisq-preview-control--compact' : ''}`}
@@ -1266,6 +1291,36 @@ function CoverSlideMenuControl({ compact }: { compact: boolean }) {
                 />
                 <span>{settings.activeCoverSlide ? 'Shown' : 'Hidden'}</span>
               </label>
+            </div>
+
+            <div
+              className={`squisq-cover-slide-preview${
+                settings.activeCoverSlide ? '' : ' squisq-cover-slide-preview--disabled'
+              }`}
+              style={{
+                aspectRatio: `${settings.activeViewport.width} / ${settings.activeViewport.height}`,
+              }}
+            >
+              {coverPreviewBlock ? (
+                <MediaContext.Provider value={mediaProvider ?? null}>
+                  <div className="squisq-cover-slide-preview-frame" aria-hidden="true">
+                    <BlockRenderer
+                      block={coverPreviewBlock}
+                      blockTime={0}
+                      basePath="."
+                      viewport={settings.activeViewport}
+                      animationsEnabled={false}
+                      muted
+                      theme={settings.activeTheme}
+                    />
+                  </div>
+                </MediaContext.Provider>
+              ) : (
+                <p className="squisq-cover-slide-preview-empty">
+                  No cover to preview yet — start the document with a level-1 heading (
+                  <code>#&nbsp;Title</code>) to generate one.
+                </p>
+              )}
             </div>
 
             <label className="squisq-cover-slide-field">
@@ -1346,7 +1401,11 @@ function CoverSlideMenuControl({ compact }: { compact: boolean }) {
               type="button"
               className="squisq-cover-slide-export"
               disabled={!coverExists}
-              title={coverExists ? undefined : 'This document has no generated cover slide.'}
+              title={
+                coverExists
+                  ? undefined
+                  : 'No cover slide to export — start the document with a level-1 heading (# Title) to generate one.'
+              }
               onClick={() => {
                 closeMenu();
                 setExportOpen(true);
