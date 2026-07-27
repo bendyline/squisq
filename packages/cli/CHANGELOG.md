@@ -1,3 +1,16 @@
+## @bendyline/squisq-cli [2.5.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.4.5...@bendyline/squisq-cli@2.5.0) (2026-07-27)
+
+### Features
+
+* Cover slide work ([#40](https://github.com/bendyline/squisq/issues/40)) ([96b7dd8](https://github.com/bendyline/squisq/commit/96b7dd890f67f8749e982f88dca4524c1bc4556e))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.5.0
+* **@bendyline/squisq-formats:** upgraded to 2.3.10
+* **@bendyline/squisq-video:** upgraded to 2.2.9
+
 ## @bendyline/squisq-cli [2.4.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.4.4...@bendyline/squisq-cli@2.4.5) (2026-07-26)
 
 
