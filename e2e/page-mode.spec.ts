@@ -77,6 +77,7 @@ test.describe('Page mode', () => {
 
     await expect(page.locator('[data-block-id="cover"]')).toHaveCount(1);
 
+    await page.getByRole('button', { name: 'Cover slide settings' }).click();
     const coverToggle = page.getByRole('checkbox', { name: 'Cover slide' });
     await coverToggle.uncheck();
     await expect(page.locator('[data-block-id="cover"]')).toHaveCount(0);

@@ -76,10 +76,15 @@ function App() {
 
 ## Components
 
-| Component           | Description                                                                        |
-| ------------------- | ---------------------------------------------------------------------------------- |
-| `VideoExportModal`  | Full modal UI — configure MP4/GIF, captions, motion, quality, fps, and orientation |
-| `VideoExportButton` | Drop-in button that opens the export modal via portal                              |
+| Component               | Description                                                                        |
+| ----------------------- | ---------------------------------------------------------------------------------- |
+| `VideoExportModal`      | Full modal UI — configure MP4/GIF, captions, motion, quality, fps, and orientation |
+| `VideoExportButton`     | Drop-in button that opens the export modal via portal                              |
+| `CoverImageExportModal` | Save the managed cover as PNG, JPEG, or WebP with bounded resolution controls      |
+
+Import `CoverImageExportModal` from
+`@bendyline/squisq-video-react/cover-image` when a surface only needs cover
+capture. This entry point excludes the MP4/GIF encoder worker graph.
 
 ## Hooks
 
@@ -98,6 +103,11 @@ The `VideoExportModal` lets users configure:
 - **Orientation:** MP4 defaults to 1920x1080/1080x1920; GIF defaults to 960x540/540x960
 - **Captions:** off, standard, or social
 - **Animations & transitions:** enabled by default for MP4 and disabled by default for GIF
+
+Managed covers inherit `squisq-cover-duration` and `squisq-cover-playback`
+from document frontmatter. `preroll` adds the cover before story frame zero
+and shifts audio; `overlay` keeps the exported duration unchanged while the
+story and audio advance underneath the visible cover.
 
 ## Using the Hook Directly
 

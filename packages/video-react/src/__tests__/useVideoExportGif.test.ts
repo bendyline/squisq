@@ -77,6 +77,7 @@ vi.mock('@bendyline/squisq-video', async () => {
 import {
   calculateRollingFramesPerSecond,
   DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
+  resolveVideoCoverFramePlan,
   resolveVideoExportCover,
   settleWithin,
   useVideoExport,
@@ -148,6 +149,8 @@ describe('useVideoExport GIF flow', () => {
     };
     expect(resolveVideoExportCover(coveredDoc)).toEqual({
       showCoverSlide: true,
+      coverDuration: DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
+      coverPlayback: 'preroll',
       coverPreRoll: DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
     });
     expect(
@@ -155,7 +158,40 @@ describe('useVideoExport GIF flow', () => {
         ...coveredDoc,
         frontmatter: { 'squisq-cover-slide': false },
       }),
-    ).toEqual({ showCoverSlide: false, coverPreRoll: 0 });
+    ).toEqual({
+      showCoverSlide: false,
+      coverDuration: 0,
+      coverPlayback: 'preroll',
+      coverPreRoll: 0,
+    });
+  });
+
+  it('builds distinct overlay and preroll frame plans', () => {
+    const overlay = resolveVideoCoverFramePlan(5, 10, {
+      showCoverSlide: true,
+      coverDuration: 2,
+      coverPlayback: 'overlay',
+      coverPreRoll: 0,
+    });
+    expect(overlay.coverFrameCount).toBe(20);
+    expect(overlay.storyFrameCount).toBe(50);
+    expect(overlay.totalFrames).toBe(50);
+    expect(overlay.totalDuration).toBe(5);
+    expect(overlay.audioOffset).toBe(0);
+    expect(overlay.captureTimeForFrame(19)).toBe(1.9);
+    expect(overlay.captureTimeForFrame(20)).toBe(2);
+
+    const preroll = resolveVideoCoverFramePlan(5, 10, {
+      showCoverSlide: true,
+      coverDuration: 2,
+      coverPlayback: 'preroll',
+      coverPreRoll: 2,
+    });
+    expect(preroll.totalFrames).toBe(70);
+    expect(preroll.totalDuration).toBe(7);
+    expect(preroll.audioOffset).toBe(2);
+    expect(preroll.captureTimeForFrame(19)).toBe(0);
+    expect(preroll.captureTimeForFrame(20)).toBe(0);
   });
 
   it('bounds a hung browser operation and disposes its late result', async () => {
@@ -306,6 +342,42 @@ describe('useVideoExport GIF flow', () => {
     });
 
     expect(mocks.computeAudioTimeline).toHaveBeenCalledWith(coveredDoc, 0.2);
+    expect(result.current.duration).toBe(0.3);
+    unmount();
+  });
+
+  it('lets story video and audio advance underneath an overlay cover', async () => {
+    const coveredDoc: Doc = {
+      ...doc,
+      duration: 0.3,
+      blocks: [{ ...doc.blocks[0], duration: 0.3 }],
+      startBlock: { title: 'Managed cover' },
+      frontmatter: {
+        'squisq-cover-duration': 0.2,
+        'squisq-cover-playback': 'overlay',
+      },
+    };
+    mocks.frameInit.mockResolvedValueOnce(0.3);
+    const { result, unmount } = renderHook(() => useVideoExport());
+
+    await act(async () => {
+      await result.current.startExport(coveredDoc, {
+        outputFormat: 'mp4',
+        fps: 10,
+      });
+    });
+
+    expect(mocks.computeAudioTimeline).toHaveBeenCalledWith(coveredDoc, 0);
+    expect(mocks.setCoverVisible.mock.calls).toEqual([[true], [false]]);
+    expect(mocks.captureCanvasFrame).toHaveBeenNthCalledWith(1, 0, {
+      reuseIfUnchanged: true,
+    });
+    expect(mocks.captureCanvasFrame).toHaveBeenNthCalledWith(2, 0.1, {
+      reuseIfUnchanged: true,
+    });
+    expect(mocks.captureCanvasFrame).toHaveBeenNthCalledWith(3, 0.2, {
+      reuseIfUnchanged: true,
+    });
     expect(result.current.duration).toBe(0.3);
     unmount();
   });

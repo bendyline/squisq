@@ -1,5 +1,10 @@
 import type { Doc, Theme } from '@bendyline/squisq/schemas';
-import { resolveThemeForDoc } from '@bendyline/squisq/doc';
+import {
+  resolveCoverSlideSettings,
+  resolveThemeForDoc,
+  type CoverSlidePlayback,
+  type CoverSlideTemplate,
+} from '@bendyline/squisq/doc';
 import type { PipPosition, PipShape, PipSize, VideoPresentation } from '../types.js';
 
 export interface DocPlayerAppearanceOverrides {
@@ -9,6 +14,9 @@ export interface DocPlayerAppearanceOverrides {
   pipShape?: PipShape;
   pipPosition?: PipPosition;
   showCoverSlide?: boolean;
+  coverSlideTemplate?: CoverSlideTemplate;
+  coverSlideDuration?: number;
+  coverSlidePlayback?: CoverSlidePlayback;
 }
 
 export interface ResolvedDocPlayerAppearance {
@@ -18,6 +26,9 @@ export interface ResolvedDocPlayerAppearance {
   pipShape: PipShape;
   pipPosition: PipPosition;
   showCoverSlide: boolean;
+  coverSlideTemplate: CoverSlideTemplate;
+  coverSlideDuration: number;
+  coverSlidePlayback: CoverSlidePlayback;
 }
 
 function readFrontmatterSetting(
@@ -86,37 +97,24 @@ function resolvePipPosition(value: unknown): PipPosition | undefined {
   return aliases[normalized];
 }
 
-function resolveBoolean(value: unknown): boolean | undefined {
-  if (typeof value === 'boolean') return value;
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.trim().toLowerCase();
-  if (
-    normalized === 'true' ||
-    normalized === 'yes' ||
-    normalized === 'on' ||
-    normalized === 'show' ||
-    normalized === 'visible'
-  ) {
-    return true;
-  }
-  if (
-    normalized === 'false' ||
-    normalized === 'no' ||
-    normalized === 'off' ||
-    normalized === 'hide' ||
-    normalized === 'hidden'
-  ) {
-    return false;
-  }
-  return undefined;
-}
-
 /** Resolve the visual settings a standalone/export player must inherit from its Doc. */
 export function resolveDocPlayerAppearance(
   doc: Doc,
   overrides: DocPlayerAppearanceOverrides = {},
 ): ResolvedDocPlayerAppearance {
   const frontmatter = doc.frontmatter;
+  const cover = resolveCoverSlideSettings(frontmatter, {
+    ...(overrides.showCoverSlide !== undefined ? { enabled: overrides.showCoverSlide } : {}),
+    ...(overrides.coverSlideTemplate !== undefined
+      ? { template: overrides.coverSlideTemplate }
+      : {}),
+    ...(overrides.coverSlideDuration !== undefined
+      ? { duration: overrides.coverSlideDuration }
+      : {}),
+    ...(overrides.coverSlidePlayback !== undefined
+      ? { playback: overrides.coverSlidePlayback }
+      : {}),
+  });
   return {
     theme: overrides.theme ?? resolveThemeForDoc(doc),
     videoPresentation:
@@ -139,9 +137,9 @@ export function resolveDocPlayerAppearance(
         readFrontmatterSetting(frontmatter, 'squisq-pip-position', 'pip-position'),
       ) ??
       'bottom-right',
-    showCoverSlide:
-      overrides.showCoverSlide ??
-      resolveBoolean(readFrontmatterSetting(frontmatter, 'squisq-cover-slide', 'cover-slide')) ??
-      true,
+    showCoverSlide: cover.enabled,
+    coverSlideTemplate: cover.template,
+    coverSlideDuration: cover.duration,
+    coverSlidePlayback: cover.playback,
   };
 }

@@ -213,8 +213,15 @@ describe('primeIndeterminateCaptureVideos', () => {
     expect(currentTime).toBe(12.5);
     expect(video.dataset.captureSequential).toBe('true');
 
+    // An unchanged primed element remains a no-op.
     expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
     expect(assignments).toEqual([1e101, 12.5]);
+
+    // React may keep this element while its src reloads. The new resource
+    // starts indeterminate again and must not be skipped because of WeakSet.
+    duration = Number.POSITIVE_INFINITY;
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(1);
+    expect(assignments).toEqual([1e101, 12.5, 1e101, 12.5]);
   });
 
   it('skips an Opus-only source authored with a video element', async () => {
@@ -774,6 +781,91 @@ describe('useFrameCapture', () => {
     await expect(result.current.captureFrame(0)).rejects.toThrow(/not initialized/i);
     await expect(result.current.setCoverVisible(true)).rejects.toThrow(/not initialized/i);
     expect(() => result.current.destroy()).not.toThrow();
+  });
+
+  it('primes a recorder WebM mounted after initialization before its first seek', async () => {
+    let renderedTime = 0;
+    let video: HTMLVideoElement | null = null;
+    const api = {
+      getDuration: vi.fn(() => 4.5),
+      getRenderedTime: vi.fn(() => renderedTime),
+      seekTo: vi.fn(async (time: number) => {
+        expect(video?.dataset.captureSequential).toBe('true');
+        expect(Number.isFinite(video?.duration)).toBe(true);
+        renderedTime = time;
+      }),
+      showCover: vi.fn(async () => {}),
+      hideCover: vi.fn(async () => {}),
+    };
+    frameCaptureMocks.render.mockImplementation((node: unknown) => {
+      const element = node as { props: Record<string, unknown> };
+      const ready = element.props.onRenderAPIReady as (value: typeof api) => void;
+      ready(api);
+    });
+    frameCaptureMocks.html2canvas.mockImplementation(
+      async (_root: HTMLElement, options: { canvas: HTMLCanvasElement }) => options.canvas,
+    );
+    const captureContext = {
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+    } as unknown as CanvasRenderingContext2D;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(captureContext);
+    const doc = {
+      articleId: 'late-recorder-test',
+      duration: 4.5,
+      blocks: [],
+      audio: { segments: [] },
+    } as Doc;
+    const { result } = renderHook(() => useFrameCapture());
+
+    expect(await result.current.init(doc, { width: 640, height: 360 })).toBe(4.5);
+    const root = document.querySelector<HTMLElement>('#squisq-capture-root')!;
+    video = document.createElement('video');
+    root.appendChild(video);
+
+    let duration = Number.POSITIVE_INFINITY;
+    let currentTime = 0;
+    let seeking = false;
+    const assignments: number[] = [];
+    Object.defineProperties(video, {
+      currentSrc: { configurable: true, get: () => 'blob:late-recorder-webm' },
+      duration: { configurable: true, get: () => duration },
+      currentTime: {
+        configurable: true,
+        get: () => currentTime,
+        set: (value: number) => {
+          assignments.push(value);
+          seeking = true;
+          queueMicrotask(() => {
+            if (value > 1e100) {
+              duration = 304.534;
+              currentTime = duration;
+              video?.dispatchEvent(new Event('durationchange'));
+            } else {
+              currentTime = value;
+            }
+            seeking = false;
+            video?.dispatchEvent(new Event('seeked'));
+          });
+        },
+      },
+      readyState: { configurable: true, get: () => HTMLMediaElement.HAVE_ENOUGH_DATA },
+      seeking: { configurable: true, get: () => seeking },
+      pause: { configurable: true, value: vi.fn() },
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+    });
+
+    await expect(result.current.captureCanvasFrame(0.03)).resolves.toBeInstanceOf(
+      HTMLCanvasElement,
+    );
+
+    expect(assignments).toEqual([1e101, 0]);
+    expect(api.seekTo).toHaveBeenCalledOnce();
+    expect(api.seekTo).toHaveBeenCalledWith(0.03);
+    expect(video.dataset.captureSequential).toBe('true');
+
+    result.current.destroy();
   });
 
   it('initializes, replaces an existing player, captures a frame, and destroys resources', async () => {

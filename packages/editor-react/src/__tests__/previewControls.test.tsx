@@ -139,7 +139,16 @@ function LibraryThemeHarness() {
 }
 
 function CoverSlideProbe() {
-  const { activeCoverSlide, setCoverSlideEnabled } = usePreviewSettings();
+  const {
+    activeCoverSlide,
+    activeCoverSlideDuration,
+    activeCoverSlidePlayback,
+    activeCoverSlideTemplate,
+    setCoverSlideDuration,
+    setCoverSlideEnabled,
+    setCoverSlidePlayback,
+    setCoverSlideTemplate,
+  } = usePreviewSettings();
   const { markdownSource } = useEditorContext();
   return (
     <>
@@ -149,7 +158,23 @@ function CoverSlideProbe() {
       <button type="button" onClick={() => setCoverSlideEnabled(true)}>
         Use default cover slide
       </button>
-      <div data-testid="active-cover-slide">{String(activeCoverSlide)}</div>
+      <button type="button" onClick={() => setCoverSlideTemplate('sectionHeader')}>
+        Use section header cover
+      </button>
+      <button type="button" onClick={() => setCoverSlideDuration(4.5)}>
+        Use longer cover
+      </button>
+      <button type="button" onClick={() => setCoverSlidePlayback('overlay')}>
+        Play video underneath
+      </button>
+      <div
+        data-testid="active-cover-slide"
+        data-template={activeCoverSlideTemplate}
+        data-duration={activeCoverSlideDuration}
+        data-playback={activeCoverSlidePlayback}
+      >
+        {String(activeCoverSlide)}
+      </div>
       <pre data-testid="markdown-source">{markdownSource}</pre>
     </>
   );
@@ -451,6 +476,43 @@ describe('cover-slide frontmatter', () => {
       expect(source).toContain('title: Hello');
     });
     expect(screen.getByTestId('active-cover-slide').textContent).toBe('true');
+  });
+
+  it('persists appearance, duration, and overlay timing with typed values', async () => {
+    render(
+      <EditorProvider initialMarkdown="# Hello">
+        <CoverSlideHarness />
+      </EditorProvider>,
+    );
+
+    const probe = screen.getByTestId('active-cover-slide');
+    expect(probe.getAttribute('data-template')).toBe('cover');
+    expect(probe.getAttribute('data-duration')).toBe('2');
+    expect(probe.getAttribute('data-playback')).toBe('preroll');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use section header cover' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('markdown-source').textContent ?? '').toContain(
+        'squisq-cover-template: sectionHeader',
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Use longer cover' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('markdown-source').textContent ?? '').toContain(
+        'squisq-cover-duration: 4.5',
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Play video underneath' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).toContain('squisq-cover-template: sectionHeader');
+      expect(source).toContain('squisq-cover-duration: 4.5');
+      expect(source).toContain('squisq-cover-playback: overlay');
+    });
+    expect(probe.getAttribute('data-template')).toBe('sectionHeader');
+    expect(probe.getAttribute('data-duration')).toBe('4.5');
+    expect(probe.getAttribute('data-playback')).toBe('overlay');
   });
 });
 

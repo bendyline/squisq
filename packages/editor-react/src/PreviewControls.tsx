@@ -54,7 +54,12 @@ import {
   writeCustomTemplatesToFrontmatter,
   FRONTMATTER_CUSTOM_THEMES_KEY,
   FRONTMATTER_CUSTOM_TEMPLATES_KEY,
+  COVER_SLIDE_TEMPLATE_OPTIONS,
+  resolveCoverSlideSettings,
+  type CoverSlidePlayback,
+  type CoverSlideTemplate,
 } from '@bendyline/squisq/doc';
+import { CoverImageExportModal } from '@bendyline/squisq-video-react/cover-image';
 import { useEditorContext } from './EditorContext';
 import {
   useCustomThemes,
@@ -108,6 +113,12 @@ export interface PreviewSettings {
   activeCoverSlide: boolean;
   /** Enable/disable the managed cover slide. */
   setCoverSlideEnabled: (enabled: boolean) => void;
+  activeCoverSlideTemplate: CoverSlideTemplate;
+  setCoverSlideTemplate: (template: CoverSlideTemplate) => void;
+  activeCoverSlideDuration: number;
+  setCoverSlideDuration: (duration: number) => void;
+  activeCoverSlidePlayback: CoverSlidePlayback;
+  setCoverSlidePlayback: (playback: CoverSlidePlayback) => void;
   /** Whether Video mode restarts automatically when playback ends. */
   activeVideoLoop: boolean;
   /** Enable/disable automatic Video-mode playback restart. */
@@ -757,21 +768,14 @@ export function PreviewSettingsProvider({
 
   // Managed cover slide — generated from the document startBlock. Defaults on
   // for existing documents; authors can persist an explicit off switch.
-  const fmCoverSlide = useMemo(
-    () =>
-      resolveFrontmatterBoolean(
-        readFrontmatterKey(
-          frontmatter,
-          FRONTMATTER_SETTING_KEYS.coverSlide.canonical,
-          FRONTMATTER_SETTING_KEYS.coverSlide.legacy,
-        ),
-      ),
+  const resolvedCoverSettings = useMemo(
+    () => resolveCoverSlideSettings(frontmatter),
     [frontmatter],
   );
+  const fmCoverSlide = resolvedCoverSettings.enabled;
   const [selectedCoverSlide, setSelectedCoverSlide] = useState<boolean | null>(null);
   useEffect(() => setSelectedCoverSlide(null), [fmCoverSlide]);
-  const activeCoverSlide =
-    selectedCoverSlide ?? fmCoverSlide ?? FRONTMATTER_SETTING_DEFAULTS.coverSlide;
+  const activeCoverSlide = selectedCoverSlide ?? fmCoverSlide;
   const handleSetCoverSlideEnabled = useCallback(
     (enabled: boolean) => {
       setSelectedCoverSlide(enabled);
@@ -784,6 +788,60 @@ export function PreviewSettingsProvider({
           FRONTMATTER_SETTING_DEFAULTS.coverSlide,
         ),
         [FRONTMATTER_SETTING_KEYS.coverSlide.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
+  const [selectedCoverSlideTemplate, setSelectedCoverSlideTemplate] =
+    useState<CoverSlideTemplate | null>(null);
+  useEffect(() => setSelectedCoverSlideTemplate(null), [resolvedCoverSettings.template]);
+  const activeCoverSlideTemplate = selectedCoverSlideTemplate ?? resolvedCoverSettings.template;
+  const handleSetCoverSlideTemplate = useCallback(
+    (template: CoverSlideTemplate) => {
+      setSelectedCoverSlideTemplate(template);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.coverTemplate.canonical]: omitFrontmatterDefault(
+          template,
+          FRONTMATTER_SETTING_DEFAULTS.coverTemplate,
+        ),
+        [FRONTMATTER_SETTING_KEYS.coverTemplate.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
+  const [selectedCoverSlideDuration, setSelectedCoverSlideDuration] = useState<number | null>(null);
+  useEffect(() => setSelectedCoverSlideDuration(null), [resolvedCoverSettings.duration]);
+  const activeCoverSlideDuration = selectedCoverSlideDuration ?? resolvedCoverSettings.duration;
+  const handleSetCoverSlideDuration = useCallback(
+    (duration: number) => {
+      if (!Number.isFinite(duration) || duration < 0 || duration > 60) return;
+      setSelectedCoverSlideDuration(duration);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.coverDuration.canonical]: omitFrontmatterDefault(
+          duration,
+          FRONTMATTER_SETTING_DEFAULTS.coverDuration,
+        ),
+        [FRONTMATTER_SETTING_KEYS.coverDuration.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
+  const [selectedCoverSlidePlayback, setSelectedCoverSlidePlayback] =
+    useState<CoverSlidePlayback | null>(null);
+  useEffect(() => setSelectedCoverSlidePlayback(null), [resolvedCoverSettings.playback]);
+  const activeCoverSlidePlayback = selectedCoverSlidePlayback ?? resolvedCoverSettings.playback;
+  const handleSetCoverSlidePlayback = useCallback(
+    (playback: CoverSlidePlayback) => {
+      setSelectedCoverSlidePlayback(playback);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.coverPlayback.canonical]: omitFrontmatterDefault(
+          playback,
+          FRONTMATTER_SETTING_DEFAULTS.coverPlayback,
+        ),
+        [FRONTMATTER_SETTING_KEYS.coverPlayback.legacy]: null,
       });
     },
     [persistFrontmatter],
@@ -832,6 +890,12 @@ export function PreviewSettingsProvider({
       setVideoLoopEnabled: handleSetVideoLoopEnabled,
       activeCoverSlide,
       setCoverSlideEnabled: handleSetCoverSlideEnabled,
+      activeCoverSlideTemplate,
+      setCoverSlideTemplate: handleSetCoverSlideTemplate,
+      activeCoverSlideDuration,
+      setCoverSlideDuration: handleSetCoverSlideDuration,
+      activeCoverSlidePlayback,
+      setCoverSlidePlayback: handleSetCoverSlidePlayback,
       customThemes,
       openThemeDesigner,
       deleteCustomTheme,
@@ -854,6 +918,9 @@ export function PreviewSettingsProvider({
       activePipPosition,
       activeVideoLoop,
       activeCoverSlide,
+      activeCoverSlideTemplate,
+      activeCoverSlideDuration,
+      activeCoverSlidePlayback,
       handleSetThemeId,
       handleSetTransformStyle,
       handleSetCaptionMode,
@@ -863,6 +930,9 @@ export function PreviewSettingsProvider({
       handlePipPosition,
       handleSetVideoLoopEnabled,
       handleSetCoverSlideEnabled,
+      handleSetCoverSlideTemplate,
+      handleSetCoverSlideDuration,
+      handleSetCoverSlidePlayback,
       customThemes,
       openThemeDesigner,
       deleteCustomTheme,
@@ -1087,6 +1157,228 @@ const selectStyle: React.CSSProperties = {
  * inline row and the menu, so the available space is always well used and the
  * row never wraps onto a second line.
  */
+const COVER_MENU_WIDTH = 336;
+const COVER_MENU_GAP = 4;
+const COVER_MENU_MARGIN = 8;
+
+function CoverSlideMenuControl({ compact }: { compact: boolean }) {
+  const settings = usePreviewSettings();
+  const { colorScheme, doc, fileName, mediaProvider } = useEditorContext();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+
+  const updatePosition = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const width = Math.min(COVER_MENU_WIDTH, window.innerWidth - COVER_MENU_MARGIN * 2);
+    setAnchor({
+      top: rect.bottom + COVER_MENU_GAP,
+      left: clampPreviewPopoverLeft(rect, width, window.innerWidth),
+    });
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setOpen(false);
+    setAnchor(null);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      closeMenu();
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      closeMenu();
+      triggerRef.current?.focus();
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [closeMenu, open, updatePosition]);
+
+  const coverExists = !!doc?.startBlock;
+  return (
+    <div
+      className={`squisq-preview-control squisq-cover-slide-control${compact ? ' squisq-preview-control--compact' : ''}`}
+    >
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`squisq-cover-slide-trigger${open ? ' squisq-cover-slide-trigger--open' : ''}`}
+        aria-label="Cover slide settings"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => {
+          if (open) {
+            closeMenu();
+          } else {
+            updatePosition();
+            setOpen(true);
+          }
+        }}
+      >
+        <span
+          className={`squisq-cover-slide-status${settings.activeCoverSlide ? ' squisq-cover-slide-status--enabled' : ''}`}
+          aria-hidden="true"
+        >
+          <Icon icon={settings.activeCoverSlide ? 'fa-solid fa-check' : 'fa-solid fa-minus'} />
+        </span>
+        <span>Cover slide</span>
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+          <path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+        </svg>
+      </button>
+
+      {open &&
+        anchor &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="squisq-cover-slide-menu"
+            data-theme={colorScheme}
+            role="dialog"
+            aria-label="Cover slide settings"
+            style={{ top: anchor.top, left: anchor.left }}
+          >
+            <div className="squisq-cover-slide-menu-heading">
+              <span>Cover slide</span>
+              <label className="squisq-cover-slide-switch">
+                <input
+                  type="checkbox"
+                  aria-label="Cover slide"
+                  checked={settings.activeCoverSlide}
+                  onChange={(event) => settings.setCoverSlideEnabled(event.target.checked)}
+                />
+                <span>{settings.activeCoverSlide ? 'Shown' : 'Hidden'}</span>
+              </label>
+            </div>
+
+            <label className="squisq-cover-slide-field">
+              <span>Appearance</span>
+              <select
+                aria-label="Cover slide appearance"
+                value={settings.activeCoverSlideTemplate}
+                onChange={(event) =>
+                  settings.setCoverSlideTemplate(event.target.value as CoverSlideTemplate)
+                }
+              >
+                {COVER_SLIDE_TEMPLATE_OPTIONS.map((option) => (
+                  <option
+                    key={option.id}
+                    value={option.id}
+                    disabled={option.requiresHeroImage && !doc?.startBlock?.heroSrc}
+                  >
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="squisq-cover-slide-help">
+              {
+                COVER_SLIDE_TEMPLATE_OPTIONS.find(
+                  (option) => option.id === settings.activeCoverSlideTemplate,
+                )?.description
+              }
+            </p>
+
+            <label className="squisq-cover-slide-field">
+              <span>
+                Duration
+                <output>{settings.activeCoverSlideDuration.toFixed(1)}s</output>
+              </span>
+              <input
+                aria-label="Cover slide duration"
+                type="range"
+                min={0}
+                max={10}
+                step={0.5}
+                value={settings.activeCoverSlideDuration}
+                onChange={(event) => settings.setCoverSlideDuration(Number(event.target.value))}
+              />
+            </label>
+
+            <fieldset className="squisq-cover-slide-timing">
+              <legend>Exported video timing</legend>
+              <label>
+                <input
+                  type="radio"
+                  name="squisq-cover-playback"
+                  value="preroll"
+                  checked={settings.activeCoverSlidePlayback === 'preroll'}
+                  onChange={() => settings.setCoverSlidePlayback('preroll')}
+                />
+                <span>
+                  Delay video
+                  <small>Start the story after the cover.</small>
+                </span>
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="squisq-cover-playback"
+                  value="overlay"
+                  checked={settings.activeCoverSlidePlayback === 'overlay'}
+                  onChange={() => settings.setCoverSlidePlayback('overlay')}
+                />
+                <span>
+                  Play underneath
+                  <small>Let the story advance behind the cover.</small>
+                </span>
+              </label>
+            </fieldset>
+
+            <button
+              type="button"
+              className="squisq-cover-slide-export"
+              disabled={!coverExists}
+              title={coverExists ? undefined : 'This document has no generated cover slide.'}
+              onClick={() => {
+                closeMenu();
+                setExportOpen(true);
+              }}
+            >
+              <Icon icon="fa-solid fa-image" />
+              Export cover as image…
+            </button>
+          </div>,
+          document.body,
+        )}
+
+      {exportOpen &&
+        doc &&
+        createPortal(
+          <CoverImageExportModal
+            doc={doc}
+            mediaProvider={mediaProvider}
+            theme={settings.activeTheme}
+            coverSlideTemplate={settings.activeCoverSlideTemplate}
+            defaultWidth={settings.activeViewport.width}
+            defaultHeight={settings.activeViewport.height}
+            defaultFileName={fileName}
+            colorScheme={colorScheme}
+            onClose={() => setExportOpen(false)}
+          />,
+          document.body,
+        )}
+    </div>
+  );
+}
+
 export interface PreviewToolbarControlsProps {
   /**
    * Display mode whose applicable control set should be rendered. Defaults to
@@ -1406,21 +1698,7 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
           </div>
         );
       case 'cover':
-        return (
-          <div
-            key="cover"
-            className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}
-          >
-            <label className="squisq-preview-checkbox">
-              <input
-                type="checkbox"
-                checked={s.activeCoverSlide}
-                onChange={(e) => s.setCoverSlideEnabled(e.target.checked)}
-              />
-              <span>Cover slide</span>
-            </label>
-          </div>
-        );
+        return <CoverSlideMenuControl key="cover" compact={compact} />;
     }
   };
 
@@ -1574,8 +1852,13 @@ export function PreviewModeMenu({ openRequest = 0 }: PreviewModeMenuProps) {
   useEffect(() => {
     if (!open) return;
     const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (triggerRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      const eventPath = event.composedPath();
+      if (
+        (triggerRef.current && eventPath.includes(triggerRef.current)) ||
+        (menuRef.current && eventPath.includes(menuRef.current))
+      ) {
+        return;
+      }
       closeMenu();
     };
     const handleKeyDown = (event: KeyboardEvent) => {

@@ -31,6 +31,10 @@ export interface FrameCaptureOptions {
 export interface FrameCaptureRenderOptions extends Omit<RenderHtmlOptions, 'playerScript'> {
   /** Whether the hidden player should materialize its managed cover. */
   showCoverSlide?: boolean;
+  /** Visual template used to materialize the managed cover. */
+  coverSlideTemplate?: import('@bendyline/squisq/doc').CoverSlideTemplate;
+  /** Existing provider to use for media resolution. It remains caller-owned. */
+  mediaProvider?: MediaProvider;
 }
 
 export interface FrameCaptureHandle {
@@ -240,7 +244,12 @@ export async function primeIndeterminateCaptureVideos(
   primedVideos: WeakSet<HTMLVideoElement> = new WeakSet(),
 ): Promise<number> {
   const videos = Array.from(captureRoot.querySelectorAll('video')).filter(
-    (video) => !primedVideos.has(video),
+    (video) =>
+      !primedVideos.has(video) ||
+      // React can retain the element while replacing/reloading its src. A
+      // recorder WebM then returns to duration=Infinity even though this DOM
+      // node was primed earlier, so it must be indexed again before seeking.
+      (video.dataset.captureSequential === 'true' && !Number.isFinite(video.duration)),
   );
   let primedCount = 0;
 
@@ -1161,6 +1170,7 @@ export function useFrameCapture(): FrameCaptureHandle {
   const rootRef = useRef<Root | null>(null);
   const renderAPIRef = useRef<SquisqRenderAPI | null>(null);
   const mediaProviderRef = useRef<MediaProvider | null>(null);
+  const ownsMediaProviderRef = useRef(false);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const captureBaseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastVisualStateKeyRef = useRef<string | null>(null);
@@ -1190,12 +1200,14 @@ export function useFrameCapture(): FrameCaptureHandle {
         const oldRoot = rootRef.current;
         const oldContainer = containerRef.current;
         const oldMediaProvider = mediaProviderRef.current;
+        const oldOwnsMediaProvider = ownsMediaProviderRef.current;
         const oldCaptureCanvas = captureCanvasRef.current;
         const oldCaptureBaseCanvas = captureBaseCanvasRef.current;
         rootRef.current = null;
         containerRef.current = null;
         renderAPIRef.current = null;
         mediaProviderRef.current = null;
+        ownsMediaProviderRef.current = false;
         captureCanvasRef.current = null;
         captureBaseCanvasRef.current = null;
         lastVisualStateKeyRef.current = null;
@@ -1209,7 +1221,7 @@ export function useFrameCapture(): FrameCaptureHandle {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
             if (oldContainer) oldContainer.remove();
-            oldMediaProvider?.dispose();
+            if (oldOwnsMediaProvider) oldMediaProvider?.dispose();
             if (oldCaptureCanvas) {
               oldCaptureCanvas.width = 0;
               oldCaptureCanvas.height = 0;
@@ -1270,8 +1282,9 @@ export function useFrameCapture(): FrameCaptureHandle {
       // Build media provider from images
       const mediaProvider = renderOptions.images
         ? createInlineProvider(renderOptions.images)
-        : null;
+        : (renderOptions.mediaProvider ?? null);
       mediaProviderRef.current = mediaProvider;
+      ownsMediaProviderRef.current = !!renderOptions.images;
 
       // Mount DocPlayer in renderMode via React
       const root = createRoot(renderRoot);
@@ -1299,6 +1312,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         pipShape: renderOptions.pipShape,
         pipPosition: renderOptions.pipPosition,
         showCoverSlide: renderOptions.showCoverSlide,
+        coverSlideTemplate: renderOptions.coverSlideTemplate,
         captionsEnabled,
         captionStyle,
         onRenderAPIReady: (api: SquisqRenderAPI | null) => {
@@ -1377,17 +1391,21 @@ export function useFrameCapture(): FrameCaptureHandle {
 
       const { width, height } = dimensionsRef.current;
 
-      // Seek the player to the target time
-      await api.seekTo(time);
-
       const root = container.querySelector('#squisq-capture-root') as HTMLElement;
       if (!root) {
         throw new Error('Capture root element not found');
       }
+
+      // Prime before seeking. Media URL resolution and cover transitions can
+      // mount or reload a recorder WebM after init(); seeking that unindexed
+      // duration=Infinity source first fails before the old post-seek repair
+      // ever gets a chance to run.
+      await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current);
+      await api.seekTo(time);
+
       if (await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current)) {
-        // A newly mounted recorder WebM was restored to this time, but run the
-        // player barrier once more so its React clock and media readiness stay
-        // authoritative together.
+        // A video mounted during the seek was restored to its prior frame.
+        // Run the barrier again so it reaches the requested document time.
         await api.seekTo(time);
       }
 
@@ -1496,8 +1514,9 @@ export function useFrameCapture(): FrameCaptureHandle {
       containerRef.current.remove();
       containerRef.current = null;
     }
-    mediaProviderRef.current?.dispose();
+    if (ownsMediaProviderRef.current) mediaProviderRef.current?.dispose();
     mediaProviderRef.current = null;
+    ownsMediaProviderRef.current = false;
     if (captureCanvasRef.current) {
       captureCanvasRef.current.width = 0;
       captureCanvasRef.current.height = 0;

@@ -19,14 +19,26 @@ export type { VideoExportModalProps, VideoExportPalette } from './VideoExportMod
 export { VideoExportButton } from './VideoExportButton.js';
 export type { VideoExportButtonProps } from './VideoExportButton.js';
 
+export {
+  CoverImageExportModal,
+  coverImageFilename,
+  validateCoverImageDimensions,
+} from './CoverImageExportModal.js';
+export type {
+  CoverImageExportFormat,
+  CoverImageExportModalProps,
+} from './CoverImageExportModal.js';
+
 // ── Hooks ──────────────────────────────────────────────────────────
 export {
   DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
+  resolveVideoCoverFramePlan,
   resolveVideoExportCover,
   useVideoExport,
 } from './hooks/useVideoExport.js';
 export type {
   ResolvedVideoExportCover,
+  VideoCoverFramePlan,
   VideoExportState,
   VideoExportConfig,
   VideoExportResult,

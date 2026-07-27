@@ -243,6 +243,213 @@
   color: #93c5fd;
 }
 
+/* Managed cover-slide dropdown. It is portaled to the document body, so the
+   panel owns its light/dark surface tokens instead of depending on shell
+   ancestry. */
+.squisq-cover-slide-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--squisq-border, #d1d5db);
+  border-radius: 5px;
+  background: var(--squisq-input-bg, #fff);
+  color: var(--squisq-text, #1f2937);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.squisq-cover-slide-trigger:hover,
+.squisq-cover-slide-trigger--open {
+  border-color: var(--squisq-accent, #2563eb);
+  background: var(--squisq-hover-bg, #f3f4f6);
+}
+
+.squisq-cover-slide-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--squisq-border, #d1d5db);
+  color: var(--squisq-text-muted, #6b7280);
+  font-size: 8px;
+}
+
+.squisq-cover-slide-status--enabled {
+  background: var(--squisq-accent, #2563eb);
+  color: var(--squisq-text-on-accent, #fff);
+}
+
+.squisq-cover-slide-menu {
+  --cover-bg: #fff;
+  --cover-control: #fff;
+  --cover-border: #d1d5db;
+  --cover-text: #1f2937;
+  --cover-muted: #6b7280;
+  position: fixed;
+  z-index: 120;
+  box-sizing: border-box;
+  width: min(336px, calc(100vw - 16px));
+  padding: 14px;
+  border: 1px solid var(--cover-border);
+  border-radius: 8px;
+  background: var(--cover-bg);
+  color: var(--cover-text);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+  color-scheme: light;
+}
+
+.squisq-cover-slide-menu[data-theme='dark'] {
+  --cover-bg: #111827;
+  --cover-control: #0f172a;
+  --cover-border: #475569;
+  --cover-text: #f8fafc;
+  --cover-muted: #94a3b8;
+  color-scheme: dark;
+}
+
+.squisq-cover-slide-menu-heading,
+.squisq-cover-slide-field > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.squisq-cover-slide-menu-heading {
+  margin-bottom: 14px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.squisq-cover-slide-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.squisq-cover-slide-switch input,
+.squisq-cover-slide-timing input {
+  accent-color: var(--squisq-accent, #2563eb);
+}
+
+.squisq-cover-slide-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+  color: var(--cover-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.squisq-cover-slide-field select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid var(--cover-border);
+  border-radius: 4px;
+  background: var(--cover-control);
+  color: var(--cover-text);
+  font: inherit;
+}
+
+.squisq-cover-slide-field output {
+  color: var(--cover-muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.squisq-cover-slide-field input[type='range'] {
+  width: 100%;
+  margin: 3px 0;
+  accent-color: var(--squisq-accent, #2563eb);
+}
+
+.squisq-cover-slide-help {
+  min-height: 30px;
+  margin: -4px 0 12px;
+  color: var(--cover-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.squisq-cover-slide-timing {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 14px;
+  padding: 10px;
+  border: 1px solid var(--cover-border);
+  border-radius: 5px;
+}
+
+.squisq-cover-slide-timing legend {
+  padding: 0 4px;
+  color: var(--cover-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.squisq-cover-slide-timing label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.squisq-cover-slide-timing label > span {
+  display: grid;
+  gap: 2px;
+  font-weight: 600;
+}
+
+.squisq-cover-slide-timing small {
+  color: var(--cover-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.squisq-cover-slide-export {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--cover-border);
+  border-radius: 5px;
+  background: var(--cover-control);
+  color: var(--cover-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.squisq-cover-slide-export:hover:not(:disabled) {
+  border-color: var(--squisq-accent, #2563eb);
+}
+
+.squisq-cover-slide-export:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* When the outline pane is visible, anchor the toolbar's view-tabs section
  * to the outline pane's width so their right-edge dividers line up
  * vertically — otherwise the view-tabs border and the outline's right edge

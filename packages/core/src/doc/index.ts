@@ -5,6 +5,7 @@ export * from './utils/applyRenderStyle.js';
 export * from './utils/imageTreatment.js';
 export * from './utils/diagramText.js';
 export * from './templateInputs.js';
+export * from './coverSlideSettings.js';
 export * from './utils/shapeGeometry.js';
 export {
   markdownToDoc,
