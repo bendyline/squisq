@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.5.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.4.4...@bendyline/squisq@2.5.0) (2026-07-27)
+
+### Features
+
+* Cover slide work ([#40](https://github.com/bendyline/squisq/issues/40)) ([96b7dd8](https://github.com/bendyline/squisq/commit/96b7dd890f67f8749e982f88dca4524c1bc4556e))
+
 ## @bendyline/squisq [2.4.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.4.3...@bendyline/squisq@2.4.4) (2026-07-24)
 
 ### Bug Fixes
