@@ -39,6 +39,43 @@ function isVisiblyPresented(video: HTMLVideoElement): boolean {
   return true;
 }
 
+interface CaptureWatchdog {
+  /** (Re)start the budget, but only while the capture document is serviced. */
+  arm: () => void;
+  /** Stop the budget without failing, e.g. while suspended or once settled. */
+  clear: () => void;
+}
+
+/**
+ * A frame-readiness budget that runs only while the capture document is
+ * visible.
+ *
+ * A backgrounded window can have its media pipeline suspended for far longer
+ * than any per-frame budget. That idle wall-clock is not evidence that a source
+ * cannot produce the requested frame, so it must never fail an export; the
+ * budget restarts when the browser services the document again.
+ */
+function createCaptureWatchdog(
+  ownerDocument: Document,
+  timeoutMs: number,
+  expire: () => void,
+): CaptureWatchdog {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  const clear = (): void => {
+    if (timeout === null) return;
+    clearTimeout(timeout);
+    timeout = null;
+  };
+  return {
+    arm: (): void => {
+      clear();
+      if (ownerDocument.visibilityState !== 'visible') return;
+      timeout = setTimeout(expire, timeoutMs);
+    },
+    clear,
+  };
+}
+
 function seekVideoByAssignment(
   video: HTMLVideoElement,
   targetTime: number,
@@ -48,13 +85,16 @@ function seekVideoByAssignment(
   return new Promise<void>((resolve, reject) => {
     let settled = false;
     let videoFrameRequest: number | null = null;
+    const ownerDocument = video.ownerDocument;
+    const isInactive = (): boolean => ownerDocument.visibilityState !== 'visible';
 
     const cleanup = (): void => {
-      clearTimeout(timeout);
+      watchdog.clear();
       clearInterval(readinessPoll);
       video.removeEventListener('seeked', handleMediaReady);
       video.removeEventListener('loadeddata', handleMediaReady);
       video.removeEventListener('canplay', handleMediaReady);
+      ownerDocument.removeEventListener('visibilitychange', handleVisibilityChange);
       if (videoFrameRequest !== null && typeof video.cancelVideoFrameCallback === 'function') {
         video.cancelVideoFrameCallback(videoFrameRequest);
       }
@@ -105,8 +145,39 @@ function seekVideoByAssignment(
     function handleMediaReady(): void {
       requestPresentedFrame();
     }
+    const watchdog = createCaptureWatchdog(ownerDocument, timeoutMs, fail);
+    const assignTargetTime = (): boolean => {
+      try {
+        video.currentTime = reachableMediaTime(video, targetTime);
+        // Some engines complete an in-buffer seek synchronously without firing
+        // another event. The microtask observes the final seeking/readyState.
+        queueMicrotask(requestPresentedFrame);
+        return true;
+      } catch (error) {
+        settled = true;
+        cleanup();
+        reject(error);
+        return false;
+      }
+    };
+    function handleVisibilityChange(): void {
+      if (settled) return;
+      if (isInactive()) {
+        watchdog.clear();
+        return;
+      }
+      // The seek may have completed while the document was hidden, or Chromium
+      // may have dropped it when it suspended the pipeline. Take the finished
+      // frame if there is one, otherwise re-issue the seek on the resumed
+      // browser and give it a full budget to present it.
+      requestPresentedFrame();
+      if (settled) return;
+      if (!video.seeking && !isAtReachableMediaTime(video, targetTime) && !assignTargetTime()) {
+        return;
+      }
+      watchdog.arm();
+    }
 
-    const timeout = setTimeout(fail, timeoutMs);
     // Chromium can complete an in-buffer seek without dispatching another
     // media readiness event, particularly when the export player lives under
     // an opacity-zero capture root. Polling is only a missed-event fallback:
@@ -116,17 +187,10 @@ function seekVideoByAssignment(
     video.addEventListener('seeked', handleMediaReady);
     video.addEventListener('loadeddata', handleMediaReady);
     video.addEventListener('canplay', handleMediaReady);
+    ownerDocument.addEventListener('visibilitychange', handleVisibilityChange);
 
-    try {
-      video.currentTime = reachableMediaTime(video, targetTime);
-      // Some engines complete an in-buffer seek synchronously without firing
-      // another event. The microtask observes the final seeking/readyState.
-      queueMicrotask(requestPresentedFrame);
-    } catch (error) {
-      settled = true;
-      cleanup();
-      reject(error);
-    }
+    watchdog.arm();
+    assignTargetTime();
   });
 }
 
@@ -137,16 +201,10 @@ function advanceSequentialCaptureVideo(
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     let settled = false;
-    let timeout: ReturnType<typeof setTimeout> | null = null;
     const ownerDocument = video.ownerDocument;
     const isInactive = (): boolean => ownerDocument.visibilityState !== 'visible';
-    const clearWatchdog = (): void => {
-      if (timeout === null) return;
-      clearTimeout(timeout);
-      timeout = null;
-    };
     const cleanup = (): void => {
-      clearWatchdog();
+      watchdog.clear();
       clearInterval(readinessPoll);
       video.removeEventListener('timeupdate', check);
       video.removeEventListener('loadeddata', check);
@@ -210,14 +268,10 @@ function advanceSequentialCaptureVideo(
         handlePlaybackFailure();
       }
     };
-    const armWatchdog = (): void => {
-      clearWatchdog();
-      if (settled || isInactive()) return;
-      timeout = setTimeout(fail, timeoutMs);
-    };
+    const watchdog = createCaptureWatchdog(ownerDocument, timeoutMs, fail);
     const pauseWhileInactive = (): void => {
       video.pause();
-      clearWatchdog();
+      watchdog.clear();
     };
     const resumeWhenActive = (): void => {
       if (settled || isInactive()) return;
@@ -227,7 +281,7 @@ function advanceSequentialCaptureVideo(
       check();
       if (settled) return;
       startPlayback();
-      armWatchdog();
+      watchdog.arm();
     };
     function handleVisibilityChange(): void {
       if (ownerDocument.visibilityState !== 'visible') {

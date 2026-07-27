@@ -43,6 +43,9 @@ export function TimelineCompositionPanel({
     activePipShape,
     activePipPosition,
     activeCoverSlide,
+    activeCoverSlideTemplate,
+    activeCoverSlideDuration,
+    activeCoverSlidePlayback,
   } = usePreviewSettings();
   const { fileName } = useEditorContext();
   const projection = usePreviewProjection(
@@ -139,6 +142,9 @@ export function TimelineCompositionPanel({
               captionStyle={activeCaptionStyle}
               captionsEnabled={activeCaptionsEnabled}
               showCoverSlide={activeCoverSlide}
+              coverSlideTemplate={activeCoverSlideTemplate}
+              coverSlideDuration={activeCoverSlideDuration}
+              coverSlidePlayback={activeCoverSlidePlayback}
               enableSwipe={false}
               globalKeyboardShortcuts={false}
             />

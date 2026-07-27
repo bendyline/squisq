@@ -13,7 +13,11 @@
 
 import { bitrateForQuality, validateVideoExportOptions } from '@bendyline/squisq-video';
 
-import { createMp4Muxer, type Mp4MuxerHandle } from './mp4Mux.js';
+import {
+  createMp4Muxer,
+  DEFAULT_MP4_SPILL_THRESHOLD_BYTES,
+  type Mp4MuxerHandle,
+} from './mp4Mux.js';
 import { applyWebCodecsBackpressure, resolveWebCodecsQueueLimit } from './encoderMemory.js';
 
 export interface EncoderConfig {
@@ -37,6 +41,13 @@ export interface EncoderConfig {
     numberOfChannels: number;
     sampleRate: number;
   };
+  /**
+   * Allow the muxer to spill settled output bytes into Blob storage so a long
+   * export does not hold the whole MP4 in JS memory. Only valid when the
+   * caller will finalize via {@link MainThreadEncoder.finalizeBlob} — byte
+   * consumers (GIF transcode, ffmpeg audio muxing) must leave this off.
+   */
+  spillOutputToBlob?: boolean;
 }
 
 export type EncoderFrameSource = ImageBitmap | HTMLCanvasElement;
@@ -117,6 +128,9 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
     height: config.height,
     fps: config.fps,
     ...(config.audio ? { audio: config.audio } : {}),
+    ...(config.spillOutputToBlob
+      ? { spillToBlobThresholdBytes: DEFAULT_MP4_SPILL_THRESHOLD_BYTES }
+      : {}),
   });
 
   let closed = false;

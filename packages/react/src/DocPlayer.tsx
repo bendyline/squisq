@@ -182,6 +182,9 @@ function DocPlayerContent({
   forceViewport,
   displayMode = 'video',
   showCoverSlide,
+  coverSlideTemplate,
+  coverSlideDuration,
+  coverSlidePlayback,
   coverVisible,
   theme,
   surface,
@@ -405,8 +408,22 @@ function DocPlayerContent({
         pipShape,
         pipPosition,
         showCoverSlide,
+        coverSlideTemplate,
+        coverSlideDuration,
+        coverSlidePlayback,
       }),
-    [doc, theme, videoPresentation, pipSize, pipShape, pipPosition, showCoverSlide],
+    [
+      doc,
+      theme,
+      videoPresentation,
+      pipSize,
+      pipShape,
+      pipPosition,
+      showCoverSlide,
+      coverSlideTemplate,
+      coverSlideDuration,
+      coverSlidePlayback,
+    ],
   );
   const effectiveTheme = useMemo(() => {
     const base = appearance.theme;
@@ -457,7 +474,7 @@ function DocPlayerContent({
     if (!startBlockConfig) return null;
 
     const context = createTemplateContext(effectiveTheme, 0, 1, activeViewport);
-    const layers = expandCoverBlock(startBlockConfig, context);
+    const layers = expandCoverBlock(startBlockConfig, context, appearance.coverSlideTemplate);
 
     return {
       id: 'cover-block',
@@ -466,7 +483,13 @@ function DocPlayerContent({
       audioSegment: -1,
       layers,
     };
-  }, [doc.startBlock, activeViewport, effectiveTheme, appearance.showCoverSlide]);
+  }, [
+    doc.startBlock,
+    activeViewport,
+    effectiveTheme,
+    appearance.showCoverSlide,
+    appearance.coverSlideTemplate,
+  ]);
 
   // Slideshow mode treats the managed cover as a static slide before block 1.
   // It has no timeline startTime, so keep its visibility separate from audio.
@@ -492,7 +515,7 @@ function DocPlayerContent({
   // Render-mode cover block control: allows Playwright to force-show the cover block
   const [coverForced, setCoverForced] = useState(false);
 
-  // Grace period: keep cover block visible for 3s after first play press
+  // Grace period: keep the cover block visible for the configured duration.
   const [coverGraceActive, setCoverGraceActive] = useState(false);
   const coverGraceTimer = useRef<ReturnType<typeof setTimeout>>();
   const coverWasShowing = useRef(false);
@@ -529,9 +552,12 @@ function DocPlayerContent({
       // mid-grace (e.g., due to a preview re-render), clearing the timer would
       // leave coverGraceActive stuck at true because the effect body won't
       // re-run (coverWasShowing.current is now false).
-      coverGraceTimer.current = setTimeout(() => setCoverGraceActive(false), 3000);
+      coverGraceTimer.current = setTimeout(
+        () => setCoverGraceActive(false),
+        appearance.coverSlideDuration * 1000,
+      );
     }
-  }, [isPlaying, coverBlock, renderMode, isSlideshowMode]);
+  }, [isPlaying, coverBlock, renderMode, isSlideshowMode, appearance.coverSlideDuration]);
 
   // Always clear the grace timer on unmount
   useEffect(() => () => clearTimeout(coverGraceTimer.current), []);

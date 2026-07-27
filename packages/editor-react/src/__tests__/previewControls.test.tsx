@@ -139,7 +139,16 @@ function LibraryThemeHarness() {
 }
 
 function CoverSlideProbe() {
-  const { activeCoverSlide, setCoverSlideEnabled } = usePreviewSettings();
+  const {
+    activeCoverSlide,
+    activeCoverSlideDuration,
+    activeCoverSlidePlayback,
+    activeCoverSlideTemplate,
+    setCoverSlideDuration,
+    setCoverSlideEnabled,
+    setCoverSlidePlayback,
+    setCoverSlideTemplate,
+  } = usePreviewSettings();
   const { markdownSource } = useEditorContext();
   return (
     <>
@@ -149,7 +158,23 @@ function CoverSlideProbe() {
       <button type="button" onClick={() => setCoverSlideEnabled(true)}>
         Use default cover slide
       </button>
-      <div data-testid="active-cover-slide">{String(activeCoverSlide)}</div>
+      <button type="button" onClick={() => setCoverSlideTemplate('sectionHeader')}>
+        Use section header cover
+      </button>
+      <button type="button" onClick={() => setCoverSlideDuration(4.5)}>
+        Use longer cover
+      </button>
+      <button type="button" onClick={() => setCoverSlidePlayback('overlay')}>
+        Play video underneath
+      </button>
+      <div
+        data-testid="active-cover-slide"
+        data-template={activeCoverSlideTemplate}
+        data-duration={activeCoverSlideDuration}
+        data-playback={activeCoverSlidePlayback}
+      >
+        {String(activeCoverSlide)}
+      </div>
       <pre data-testid="markdown-source">{markdownSource}</pre>
     </>
   );
@@ -452,6 +477,43 @@ describe('cover-slide frontmatter', () => {
     });
     expect(screen.getByTestId('active-cover-slide').textContent).toBe('true');
   });
+
+  it('persists appearance, duration, and overlay timing with typed values', async () => {
+    render(
+      <EditorProvider initialMarkdown="# Hello">
+        <CoverSlideHarness />
+      </EditorProvider>,
+    );
+
+    const probe = screen.getByTestId('active-cover-slide');
+    expect(probe.getAttribute('data-template')).toBe('cover');
+    expect(probe.getAttribute('data-duration')).toBe('2');
+    expect(probe.getAttribute('data-playback')).toBe('preroll');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use section header cover' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('markdown-source').textContent ?? '').toContain(
+        'squisq-cover-template: sectionHeader',
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Use longer cover' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('markdown-source').textContent ?? '').toContain(
+        'squisq-cover-duration: 4.5',
+      ),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Play video underneath' }));
+
+    await waitFor(() => {
+      const source = screen.getByTestId('markdown-source').textContent ?? '';
+      expect(source).toContain('squisq-cover-template: sectionHeader');
+      expect(source).toContain('squisq-cover-duration: 4.5');
+      expect(source).toContain('squisq-cover-playback: overlay');
+    });
+    expect(probe.getAttribute('data-template')).toBe('sectionHeader');
+    expect(probe.getAttribute('data-duration')).toBe('4.5');
+    expect(probe.getAttribute('data-playback')).toBe('overlay');
+  });
 });
 
 describe('video-loop frontmatter', () => {
@@ -580,6 +642,46 @@ describe('PreviewToolbarControls', () => {
       expect(screen.getAllByText('Captions:').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Loop').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Cover slide').length).toBeGreaterThan(0);
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      }
+    }
+  });
+
+  it('previews the managed cover inside the cover-slide menu', async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class ResizeObserverStub implements ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    globalThis.ResizeObserver = ResizeObserverStub;
+    try {
+      // The zero-width jsdom toolbar folds every control into the overflow
+      // probe, so locate the trigger by class rather than accessible role.
+      renderPreviewToolbar('# Hello');
+      fireEvent.click(document.querySelector('.squisq-cover-slide-trigger')!);
+      await waitFor(() => {
+        expect(
+          document.querySelector('.squisq-cover-slide-preview-frame .block-svg'),
+        ).not.toBeNull();
+      });
+      expect(document.querySelector('.squisq-cover-slide-preview-empty')).toBeNull();
+
+      cleanup();
+
+      // Without a level-1 heading there is no generated cover; the menu
+      // explains how to get one instead of showing an empty thumbnail.
+      renderPreviewToolbar('No heading here, just prose.');
+      fireEvent.click(document.querySelector('.squisq-cover-slide-trigger')!);
+      await waitFor(() => {
+        expect(document.querySelector('.squisq-cover-slide-preview-empty')).not.toBeNull();
+      });
+      expect(document.querySelector('.squisq-cover-slide-preview-frame')).toBeNull();
     } finally {
       if (originalResizeObserver) {
         globalThis.ResizeObserver = originalResizeObserver;

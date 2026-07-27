@@ -20,6 +20,11 @@ import type { StartBlockConfig } from '../../schemas/Doc.js';
 import { getThemeFont, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
 import { relativeLuminance, withAlpha } from '../../schemas/colorUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
+import type { CoverSlideTemplate } from '../coverSlideSettings.js';
+import { bigText } from './bigText.js';
+import { imageWithCaption } from './imageWithCaption.js';
+import { sectionHeader } from './sectionHeader.js';
+import { titleBlock } from './titleBlock.js';
 
 /**
  * Input for coverBlock template - matches StartBlockConfig
@@ -309,7 +314,95 @@ export function startBlockToCoverInput(config: StartBlockConfig): CoverBlockInpu
  * Expand a StartBlockConfig into a renderable Block.
  * This is used by the player to render the cover block at rest.
  */
-export function expandCoverBlock(config: StartBlockConfig, context: TemplateContext): Layer[] {
+export function expandCoverBlock(
+  config: StartBlockConfig,
+  context: TemplateContext,
+  template: CoverSlideTemplate = 'cover',
+): Layer[] {
   const input = startBlockToCoverInput(config);
+  const base = {
+    id: 'cover-block',
+    duration: 0,
+    audioSegment: -1,
+  };
+
+  if (template === 'title') {
+    return titleBlock(
+      {
+        ...base,
+        template: 'title',
+        title: input.title,
+        subtitle: input.subtitle,
+      },
+      context,
+    );
+  }
+
+  if (template === 'sectionHeader') {
+    return sectionHeader(
+      {
+        ...base,
+        template: 'sectionHeader',
+        title: input.title,
+        imageSrc: input.heroSrc,
+        imageAlt: input.heroAlt,
+        ambientMotion: input.ambientMotion,
+      },
+      context,
+    );
+  }
+
+  if (template === 'bigText' || template === 'bigTextImage') {
+    // The image variant needs a hero; without one it degrades to the clean
+    // text-only card rather than rendering an empty image layer.
+    const useHero = template === 'bigTextImage' && !!input.heroSrc;
+    return bigText(
+      {
+        ...base,
+        template: 'bigText',
+        title: input.title,
+        ...(useHero
+          ? {
+              imageSrc: input.heroSrc,
+              imageAlt: input.heroAlt ?? input.title,
+              ambientMotion: input.ambientMotion,
+            }
+          : {}),
+      },
+      context,
+    );
+  }
+
+  if (template === 'imageWithCaption') {
+    // This appearance fundamentally needs an image. Documents without one
+    // retain a useful title card instead of rendering an empty image layer.
+    if (!input.heroSrc) {
+      return titleBlock(
+        {
+          ...base,
+          template: 'title',
+          title: input.title,
+          subtitle: input.subtitle,
+        },
+        context,
+      );
+    }
+    return imageWithCaption(
+      {
+        ...base,
+        template: 'imageWithCaption',
+        imageSrc: input.heroSrc,
+        imageAlt: input.heroAlt ?? input.title,
+        caption: input.title,
+        subtitle: input.subtitle,
+        ambientMotion: input.ambientMotion,
+        imageCredit: input.heroCredit,
+        imageLicense: input.heroLicense,
+        isTitle: true,
+      },
+      context,
+    );
+  }
+
   return coverBlock(input, context);
 }

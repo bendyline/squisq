@@ -17,7 +17,14 @@ export default defineConfig({
   sourcemap: false,
   clean: true,
   esbuildPlugins: [bundleLicenseMetadata(import.meta.dirname, 'esm')],
-  external: ['react', 'react-dom', '@bendyline/squisq', '@bendyline/squisq-react', 'monaco-editor'],
+  external: [
+    'react',
+    'react-dom',
+    '@bendyline/squisq',
+    '@bendyline/squisq-react',
+    '@bendyline/squisq-video-react',
+    'monaco-editor',
+  ],
   // Bundle the React adapter and loader. Keeping them as a runtime dependency
   // makes npm auto-install Monaco (and its nested DOMPurify) even for hosts
   // that never open the raw editor.

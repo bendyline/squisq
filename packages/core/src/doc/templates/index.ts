@@ -631,6 +631,7 @@ export {
 // Re-export individual templates for direct access
 export { titleBlock } from './titleBlock.js';
 export { sectionHeader } from './sectionHeader.js';
+export { bigText, fitBigTextSize } from './bigText.js';
 export { contentBlock } from './contentBlock.js';
 export { statHighlight } from './statHighlight.js';
 export { quoteBlock } from './quoteBlock.js';

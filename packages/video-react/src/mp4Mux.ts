@@ -22,6 +22,13 @@ export interface Mp4MuxerOptions {
     numberOfChannels: number;
     sampleRate: number;
   };
+  /**
+   * Consolidate settled output regions into Blob parts once buffered bytes
+   * exceed this threshold, bounding JS memory for long exports. Only valid
+   * when the caller finalizes via {@link Mp4MuxerHandle.finalizeBlob};
+   * {@link Mp4MuxerHandle.finalize} throws once bytes have spilled.
+   */
+  spillToBlobThresholdBytes?: number;
 }
 
 export interface Mp4MuxerHandle {
@@ -67,6 +74,18 @@ interface BufferedWrite {
   data: Uint8Array<ArrayBuffer>;
 }
 
+interface SpilledPart {
+  position: number;
+  size: number;
+  blob: Blob;
+}
+
+/**
+ * In-memory bytes retained before settled regions are consolidated into Blob
+ * parts (browsers page large Blobs out of the JS heap, typically to disk).
+ */
+export const DEFAULT_MP4_SPILL_THRESHOLD_BYTES = 32 * 1024 * 1024;
+
 /**
  * Sparse stream sink for mp4-muxer.
  *
@@ -75,10 +94,22 @@ interface BufferedWrite {
  * and a new 128 MiB allocation at the same time. Keep exact-sized streaming
  * writes instead, while still supporting the small header patches that MP4
  * finalization writes back over earlier offsets.
+ *
+ * With a spill threshold, buffered writes are additionally consolidated into
+ * Blob parts once they exceed it, so a long export's JS memory stays bounded
+ * instead of holding the whole MP4 (~2 MB/s of 1080p output). Correctness
+ * does not depend on where the muxer patches: a later write that overlaps a
+ * spilled region is kept in memory and layered over the Blob at assembly via
+ * cheap Blob.slice, so finalization's mdat-size patch works even after its
+ * bytes were spilled. Spilled output must finalize through {@link toBlob}.
  */
 class ChunkedMp4Output {
   private writes: BufferedWrite[] = [];
+  private spilled: SpilledPart[] = [];
+  private bufferedBytes = 0;
   private length = 0;
+
+  constructor(private readonly spillThresholdBytes: number | null = null) {}
 
   write(data: Uint8Array, position: number): void {
     const owned = new Uint8Array(data);
@@ -86,7 +117,9 @@ class ChunkedMp4Output {
 
     if (position >= this.length) {
       this.writes.push({ position, data: owned });
+      this.bufferedBytes += owned.byteLength;
       this.length = end;
+      this.maybeSpill();
       return;
     }
 
@@ -113,10 +146,97 @@ class ChunkedMp4Output {
     updated.push({ position, data: owned });
     updated.sort((left, right) => left.position - right.position);
     this.writes = updated;
+    this.bufferedBytes = updated.reduce((sum, write) => sum + write.data.byteLength, 0);
     this.length = Math.max(this.length, end);
+    this.maybeSpill();
+  }
+
+  private overlapsSpilled(write: BufferedWrite): boolean {
+    const end = write.position + write.data.byteLength;
+    return this.spilled.some(
+      (part) => part.position < end && part.position + part.size > write.position,
+    );
+  }
+
+  /**
+   * Consolidate buffered writes into Blob parts once they exceed the
+   * threshold. Writes overlapping an already-spilled region are patches over
+   * Blob bytes; they stay in memory (they are tiny) and win at assembly.
+   */
+  private maybeSpill(): void {
+    if (this.spillThresholdBytes === null || this.bufferedBytes < this.spillThresholdBytes) return;
+
+    const spillable = this.writes
+      .filter((write) => !this.overlapsSpilled(write))
+      .sort((left, right) => left.position - right.position);
+    if (spillable.length === 0) return;
+
+    const keep = new Set(spillable);
+    let run: BufferedWrite[] = [];
+    const flushRun = (): void => {
+      if (run.length === 0) return;
+      const position = run[0].position;
+      const size = run.reduce((sum, write) => sum + write.data.byteLength, 0);
+      this.spilled.push({
+        position,
+        size,
+        blob: new Blob(run.map((write) => write.data)),
+      });
+      run = [];
+    };
+    for (const write of spillable) {
+      const previous = run[run.length - 1];
+      if (previous && previous.position + previous.data.byteLength !== write.position) flushRun();
+      run.push(write);
+    }
+    flushRun();
+    this.spilled.sort((left, right) => left.position - right.position);
+    this.writes = this.writes.filter((write) => !keep.has(write));
+    this.bufferedBytes = this.writes.reduce((sum, write) => sum + write.data.byteLength, 0);
+  }
+
+  /** Regions in position order; in-memory writes take precedence over Blobs. */
+  private assembleParts(): BlobPart[] {
+    const boundaries = new Set<number>([0, this.length]);
+    for (const write of this.writes) {
+      boundaries.add(write.position);
+      boundaries.add(write.position + write.data.byteLength);
+    }
+    for (const part of this.spilled) {
+      boundaries.add(part.position);
+      boundaries.add(part.position + part.size);
+    }
+    const sorted = [...boundaries].sort((left, right) => left - right);
+
+    const parts: BlobPart[] = [];
+    for (let i = 0; i + 1 < sorted.length; i++) {
+      const start = sorted[i];
+      const end = sorted[i + 1];
+      if (end <= start) continue;
+      const write = this.writes.find(
+        (candidate) =>
+          candidate.position <= start && candidate.position + candidate.data.byteLength >= end,
+      );
+      if (write) {
+        parts.push(write.data.subarray(start - write.position, end - write.position));
+        continue;
+      }
+      const part = this.spilled.find(
+        (candidate) => candidate.position <= start && candidate.position + candidate.size >= end,
+      );
+      if (part) {
+        parts.push(part.blob.slice(start - part.position, end - part.position));
+        continue;
+      }
+      parts.push(new Uint8Array(end - start));
+    }
+    return parts;
   }
 
   toArrayBuffer(): ArrayBuffer {
+    if (this.spilled.length > 0) {
+      throw new Error('Spilled MP4 output can only finalize to a Blob');
+    }
     const output = new Uint8Array(this.length);
     for (const write of this.writes) output.set(write.data, write.position);
     this.release();
@@ -124,21 +244,15 @@ class ChunkedMp4Output {
   }
 
   toBlob(): Blob {
-    const parts: BlobPart[] = [];
-    let position = 0;
-    for (const write of this.writes) {
-      if (write.position > position) parts.push(new Uint8Array(write.position - position));
-      parts.push(write.data);
-      position = write.position + write.data.byteLength;
-    }
-    if (position < this.length) parts.push(new Uint8Array(this.length - position));
-    const blob = new Blob(parts, { type: 'video/mp4' });
+    const blob = new Blob(this.assembleParts(), { type: 'video/mp4' });
     this.release();
     return blob;
   }
 
   private release(): void {
     this.writes = [];
+    this.spilled = [];
+    this.bufferedBytes = 0;
     this.length = 0;
   }
 }
@@ -147,7 +261,7 @@ class ChunkedMp4Output {
  * Create an MP4 muxer configured for H.264 video, plus an optional AAC track.
  */
 export function createMp4Muxer(options: Mp4MuxerOptions): Mp4MuxerHandle {
-  const output = new ChunkedMp4Output();
+  const output = new ChunkedMp4Output(options.spillToBlobThresholdBytes ?? null);
   const target = new StreamTarget({
     onData: (data, position) => output.write(data, position),
   });

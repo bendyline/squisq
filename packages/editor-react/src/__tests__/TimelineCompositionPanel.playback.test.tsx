@@ -20,6 +20,9 @@ vi.mock('../PreviewControls', () => ({
     activePipShape: 'square',
     activePipPosition: 'bottom-right',
     activeCoverSlide: false,
+    activeCoverSlideTemplate: 'cover',
+    activeCoverSlideDuration: 2,
+    activeCoverSlidePlayback: 'preroll',
   }),
 }));
 

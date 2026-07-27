@@ -31,6 +31,9 @@ describe('resolveDocPlayerAppearance', () => {
     expect(appearance.pipShape).toBe('wide');
     expect(appearance.pipPosition).toBe('bottom-right');
     expect(appearance.showCoverSlide).toBe(true);
+    expect(appearance.coverSlideTemplate).toBe('cover');
+    expect(appearance.coverSlideDuration).toBe(2);
+    expect(appearance.coverSlidePlayback).toBe('preroll');
   });
 
   it('keeps explicit player/export overrides above document settings', () => {
@@ -49,6 +52,9 @@ describe('resolveDocPlayerAppearance', () => {
         pipShape: 'wide',
         pipPosition: 'bottom-left',
         showCoverSlide: false,
+        coverSlideTemplate: 'title',
+        coverSlideDuration: 4,
+        coverSlidePlayback: 'overlay',
       },
     );
 
@@ -59,6 +65,9 @@ describe('resolveDocPlayerAppearance', () => {
       pipShape: 'wide',
       pipPosition: 'bottom-left',
       showCoverSlide: false,
+      coverSlideTemplate: 'title',
+      coverSlideDuration: 4,
+      coverSlidePlayback: 'overlay',
     });
   });
 
@@ -96,6 +105,22 @@ describe('resolveDocPlayerAppearance', () => {
       pipShape: 'square',
       pipPosition: 'bottom-right',
       showCoverSlide: true,
+    });
+  });
+
+  it('inherits managed cover appearance, duration, and video timing', () => {
+    expect(
+      resolveDocPlayerAppearance(
+        doc({
+          'squisq-cover-template': 'section-header',
+          'squisq-cover-duration': 5.5,
+          'squisq-cover-playback': 'play over',
+        }),
+      ),
+    ).toMatchObject({
+      coverSlideTemplate: 'sectionHeader',
+      coverSlideDuration: 5.5,
+      coverSlidePlayback: 'overlay',
     });
   });
 });

@@ -328,6 +328,72 @@ describe('seekVideoToFrame', () => {
     captureSurface.remove();
   });
 
+  it('holds its seek watchdog while the capture document is hidden and re-seeks on resume', async () => {
+    vi.useFakeTimers();
+    let visibilityState: DocumentVisibilityState = 'visible';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState);
+    const { video, setSeeking, setReadyState, advanceTime, assignedTimes } = controllableVideo();
+    const captureSurface = document.createElement('div');
+    captureSurface.style.opacity = '0';
+    captureSurface.appendChild(video);
+    document.body.appendChild(captureSurface);
+    let settled = false;
+
+    const pending = seekVideoToFrame(video, 3, 250);
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    expect(assignedTimes).toEqual([3]);
+
+    // Chromium suspends the media pipeline for a backgrounded export window and
+    // drops the pending seek. Idle wall-clock is not a decode failure.
+    visibilityState = 'hidden';
+    document.dispatchEvent(new Event('visibilitychange'));
+    setSeeking(false);
+    advanceTime(0);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(settled).toBe(false);
+
+    visibilityState = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+    expect(assignedTimes).toEqual([3, 3]);
+
+    setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
+    setSeeking(false);
+    advanceTime(3);
+    await vi.advanceTimersByTimeAsync(16);
+    await expect(pending).resolves.toBeUndefined();
+    captureSurface.remove();
+  });
+
+  it('takes a seek that completed while the document was hidden', async () => {
+    vi.useFakeTimers();
+    let visibilityState: DocumentVisibilityState = 'hidden';
+    vi.spyOn(document, 'visibilityState', 'get').mockImplementation(() => visibilityState);
+    const { video, setSeeking, setReadyState, advanceTime, assignedTimes } = controllableVideo();
+    const captureSurface = document.createElement('div');
+    captureSurface.style.opacity = '0';
+    captureSurface.appendChild(video);
+    document.body.appendChild(captureSurface);
+
+    const pending = seekVideoToFrame(video, 3, 250);
+    advanceTime(3);
+    setSeeking(false);
+    setReadyState(HTMLMediaElement.HAVE_ENOUGH_DATA);
+
+    visibilityState = 'visible';
+    document.dispatchEvent(new Event('visibilitychange'));
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(assignedTimes).toEqual([3]);
+    captureSurface.remove();
+  });
+
   it('reports a video that never produces the requested frame', async () => {
     vi.useFakeTimers();
     const { video } = controllableVideo();

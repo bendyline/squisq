@@ -84,12 +84,21 @@ export interface MarkdownToDocOptions {
   generateId?: (heading: MarkdownHeading, index: number) => string;
 
   /**
-   * Whether to auto-generate a cover startBlock from the first H1 heading.
-   * When true (default), a StartBlockConfig is created using the first H1's
-   * text as the title. If the document contains an image, the first image
-   * is used as the hero. Set to false to suppress automatic cover generation.
+   * Whether to auto-generate a cover startBlock. When true (default), a
+   * StartBlockConfig is created with a title resolved in priority order:
+   * frontmatter `title:`, the first occurrence of the shallowest heading
+   * (H1, else H2, else H3, …), then {@link fileName}. If the document
+   * contains an image, the first image is used as the hero. Set to false to
+   * suppress automatic cover generation.
    */
   generateCoverBlock?: boolean;
+
+  /**
+   * Name of the file this markdown came from (path and extension are
+   * stripped). Used as the last-resort cover title when the document has no
+   * frontmatter `title:` and no headings.
+   */
+  fileName?: string;
 
   /**
    * Timestamp recorded as `captions.generatedAt`. When omitted, the field
@@ -715,9 +724,10 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     ...(documentMedia.length > 0 ? { documentMedia } : {}),
   };
 
-  // Auto-generate cover startBlock from the first H1 heading
+  // Auto-generate the cover startBlock (frontmatter title → shallowest
+  // heading → file name)
   if (options?.generateCoverBlock ?? true) {
-    const coverConfig = buildStartBlock(markdownDoc, rootBlocks);
+    const coverConfig = buildStartBlock(markdownDoc, rootBlocks, options?.fileName);
     if (coverConfig) {
       doc.startBlock = coverConfig;
     }
@@ -1126,23 +1136,70 @@ function findFirstImage(node: MarkdownNode): ImageRef | undefined {
 }
 
 /**
- * Build a StartBlockConfig from the document's first H1 heading and optional
- * first image. Returns undefined if the document has no H1 heading.
+ * The heading block that best represents the document for its cover: the
+ * first block carrying the shallowest heading depth. A document's shallowest
+ * heading is always a root block (nothing shallower precedes it to nest it),
+ * so scanning rootBlocks is sufficient.
+ */
+function shallowestHeadingBlock(rootBlocks: Block[]): Block | undefined {
+  let best: Block | undefined;
+  for (const block of rootBlocks) {
+    const depth = block.sourceHeading?.depth;
+    if (depth === undefined) continue;
+    const title = block.title ?? extractPlainText(block.sourceHeading!);
+    if (!title) continue;
+    if (!best || depth < best.sourceHeading!.depth) {
+      best = block;
+      if (depth === 1) break;
+    }
+  }
+  return best;
+}
+
+/** Derive a human-readable cover title from a document's file name. */
+function fileNameCoverTitle(fileName: string | undefined): string | undefined {
+  if (!fileName) return undefined;
+  const base = fileName.split(/[\\/]/).pop() ?? '';
+  const stem = base
+    .replace(/\.[^.]+$/, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!stem) return undefined;
+  return stem.charAt(0).toUpperCase() + stem.slice(1);
+}
+
+/**
+ * Build a StartBlockConfig for the document's cover. The title is resolved in
+ * priority order: frontmatter `title:`, then the first occurrence of the
+ * shallowest heading (H1, else H2, else H3, …), then a caller-provided file
+ * name. Returns undefined only when none of those yields a usable title.
  */
 function buildStartBlock(
   markdownDoc: MarkdownDocument,
   rootBlocks: Block[],
+  fileName?: string,
 ): StartBlockConfig | undefined {
-  // Find the first H1 block — it provides the cover title
-  const firstH1 = rootBlocks.find((b) => b.sourceHeading?.depth === 1);
-  if (!firstH1) return undefined;
+  const frontmatterTitle =
+    typeof markdownDoc.frontmatter?.title === 'string'
+      ? markdownDoc.frontmatter.title.trim()
+      : undefined;
+  const headingBlock = shallowestHeadingBlock(rootBlocks);
+  const headingTitle = headingBlock
+    ? (headingBlock.title ?? extractPlainText(headingBlock.sourceHeading!))
+    : undefined;
 
-  const title = firstH1.title ?? extractPlainText(firstH1.sourceHeading!);
+  const title = frontmatterTitle || headingTitle || fileNameCoverTitle(fileName);
   if (!title) return undefined;
 
-  // Look for the first paragraph immediately after the H1 to use as subtitle
+  // Subtitle: the first paragraph directly under the title-bearing heading —
+  // or under the leading block when the title came from frontmatter or the
+  // file name and the document has no heading at all.
+  const subtitleBlock = headingBlock ?? rootBlocks[0];
   const subtitle =
-    firstH1.contents?.[0]?.type === 'paragraph' ? extractPlainText(firstH1.contents[0]) : undefined;
+    subtitleBlock?.contents?.[0]?.type === 'paragraph'
+      ? extractPlainText(subtitleBlock.contents[0])
+      : undefined;
 
   // Scan the whole document for the first image to use as the hero
   const firstImage = findFirstImage(markdownDoc);

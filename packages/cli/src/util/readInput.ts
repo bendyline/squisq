@@ -239,7 +239,7 @@ async function readUtf8File(filePath: string, signal?: AbortSignal): Promise<str
 async function readMarkdownFile(filePath: string, signal?: AbortSignal): Promise<ReadInputResult> {
   const content = await readUtf8File(filePath, signal);
   const markdownDoc = parseMarkdown(content);
-  const doc = markdownToDoc(markdownDoc);
+  const doc = markdownToDoc(markdownDoc, { fileName: basename(filePath) });
   const container = await buildBareMarkdownContainer(filePath, content, doc, signal);
   return { doc, container, markdownDoc, sourceFormat: 'md' };
 }
@@ -526,7 +526,12 @@ async function readViaImporter(
     container = mem;
   }
 
-  return { doc: markdownToDoc(markdownDoc), container, markdownDoc, sourceFormat: def.id };
+  return {
+    doc: markdownToDoc(markdownDoc, { fileName: basename(filePath) }),
+    container,
+    markdownDoc,
+    sourceFormat: def.id,
+  };
 }
 
 /**
@@ -541,6 +546,7 @@ async function resolveContainer(
   sourceFormat: FormatId,
   missingMessage: string,
   signal?: AbortSignal,
+  coverFileName?: string,
 ): Promise<ReadInputResult> {
   // Check for Doc JSON first.
   for (const name of DOC_JSON_NAMES) {
@@ -561,7 +567,12 @@ async function resolveContainer(
   }
 
   const markdownDoc = parseMarkdown(markdown);
-  return { doc: markdownToDoc(markdownDoc), container, markdownDoc, sourceFormat };
+  return {
+    doc: markdownToDoc(markdownDoc, { fileName: coverFileName }),
+    container,
+    markdownDoc,
+    sourceFormat,
+  };
 }
 
 async function readContainer(filePath: string, signal?: AbortSignal): Promise<ReadInputResult> {
@@ -573,6 +584,7 @@ async function readContainer(filePath: string, signal?: AbortSignal): Promise<Re
     'dbk',
     `No markdown document or doc.json found in container: ${filePath}`,
     signal,
+    basename(filePath),
   );
 }
 
@@ -600,6 +612,7 @@ async function readFolder(dirPath: string, signal?: AbortSignal): Promise<ReadIn
     'folder',
     `No markdown document or doc.json found in folder: ${dirPath}`,
     signal,
+    basename(dirPath),
   );
 }
 

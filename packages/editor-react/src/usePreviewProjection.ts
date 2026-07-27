@@ -88,17 +88,16 @@ export function usePreviewProjection(
           if (!cancelled) commit(immediate);
         },
       );
-      // Audio discovery is authoritative for workspace previews. While it is
-      // in flight, update the visible content but retain the last resolved
-      // track so a transient synthetic track cannot rewind the player. The
-      // success/failure branch above commits the authoritative next track.
-      setProjection((previous) => {
-        if (!previous) return immediate;
-        return {
-          ...immediate,
-          playerDoc: { ...immediate.playerDoc, audio: previous.playerDoc.audio },
-        };
-      });
+      // Audio discovery is authoritative for workspace previews. On first
+      // projection show the un-timed build immediately rather than an empty
+      // pane; on re-parses keep the previous (narration-timed) projection on
+      // screen until discovery lands. Committing the un-timed build here made
+      // every timeline edit double-jump: raw sequential geometry for a beat,
+      // then the narration-timed layout snapping in. Retaining the previous
+      // projection whole also keeps the resolved audio track, so a transient
+      // synthetic track cannot rewind the player. The success/failure branch
+      // above commits the authoritative next projection.
+      setProjection((previous) => previous ?? immediate);
       return () => {
         cancelled = true;
       };

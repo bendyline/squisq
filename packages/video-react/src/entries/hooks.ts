@@ -1,10 +1,12 @@
 export {
   DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
+  resolveVideoCoverFramePlan,
   resolveVideoExportCover,
   useVideoExport,
 } from '../hooks/useVideoExport.js';
 export type {
   ResolvedVideoExportCover,
+  VideoCoverFramePlan,
   VideoExportState,
   VideoExportConfig,
   VideoExportResult,

@@ -654,6 +654,15 @@ export function deriveTemplateInputs(
       if (!img) return placeholders ? { caption: headingText } : null;
       return { imageSrc: img.src, imageAlt: img.alt || headingText, caption: headingText };
     }
+    case 'bigText': {
+      // The heading is the display text; a body image (when present) becomes
+      // the full-bleed background behind the contrast bloom.
+      const img = extractFirstImage(contents);
+      return {
+        title: headingText,
+        ...(img ? { imageSrc: img.src, imageAlt: img.alt || headingText } : {}),
+      };
+    }
     case 'photoGrid': {
       const images = extractImages(contents, 4);
       if (images.length < 2) return placeholders ? {} : null;

@@ -5,6 +5,7 @@ export default defineConfig({
   entry: {
     index: 'src/index.ts',
     'components/index': 'src/entries/components.ts',
+    'cover-image/index': 'src/entries/cover-image.ts',
     'hooks/index': 'src/entries/hooks.ts',
     'encoder/index': 'src/entries/encoder.ts',
     // The encoder worker is loaded at runtime via `new URL('./workers/encode.worker.js', import.meta.url)`

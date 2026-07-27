@@ -77,7 +77,9 @@ vi.mock('@bendyline/squisq-video', async () => {
 import {
   calculateRollingFramesPerSecond,
   DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
+  resolveVideoCoverFramePlan,
   resolveVideoExportCover,
+  settleFrameCaptureWithRecovery,
   settleWithin,
   useVideoExport,
 } from '../hooks/useVideoExport.js';
@@ -148,6 +150,8 @@ describe('useVideoExport GIF flow', () => {
     };
     expect(resolveVideoExportCover(coveredDoc)).toEqual({
       showCoverSlide: true,
+      coverDuration: DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
+      coverPlayback: 'preroll',
       coverPreRoll: DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
     });
     expect(
@@ -155,7 +159,40 @@ describe('useVideoExport GIF flow', () => {
         ...coveredDoc,
         frontmatter: { 'squisq-cover-slide': false },
       }),
-    ).toEqual({ showCoverSlide: false, coverPreRoll: 0 });
+    ).toEqual({
+      showCoverSlide: false,
+      coverDuration: 0,
+      coverPlayback: 'preroll',
+      coverPreRoll: 0,
+    });
+  });
+
+  it('builds distinct overlay and preroll frame plans', () => {
+    const overlay = resolveVideoCoverFramePlan(5, 10, {
+      showCoverSlide: true,
+      coverDuration: 2,
+      coverPlayback: 'overlay',
+      coverPreRoll: 0,
+    });
+    expect(overlay.coverFrameCount).toBe(20);
+    expect(overlay.storyFrameCount).toBe(50);
+    expect(overlay.totalFrames).toBe(50);
+    expect(overlay.totalDuration).toBe(5);
+    expect(overlay.audioOffset).toBe(0);
+    expect(overlay.captureTimeForFrame(19)).toBe(1.9);
+    expect(overlay.captureTimeForFrame(20)).toBe(2);
+
+    const preroll = resolveVideoCoverFramePlan(5, 10, {
+      showCoverSlide: true,
+      coverDuration: 2,
+      coverPlayback: 'preroll',
+      coverPreRoll: 2,
+    });
+    expect(preroll.totalFrames).toBe(70);
+    expect(preroll.totalDuration).toBe(7);
+    expect(preroll.audioOffset).toBe(2);
+    expect(preroll.captureTimeForFrame(19)).toBe(0);
+    expect(preroll.captureTimeForFrame(20)).toBe(0);
   });
 
   it('bounds a hung browser operation and disposes its late result', async () => {
@@ -226,6 +263,76 @@ describe('useVideoExport GIF flow', () => {
     document.dispatchEvent(new Event('visibilitychange'));
     await vi.advanceTimersByTimeAsync(1_000);
     await rejection;
+  });
+
+  it('grants a slow frame one grace period and uses its late result', async () => {
+    vi.useFakeTimers();
+    let resolveOperation!: (value: string) => void;
+    const operation = new Promise<string>((resolve) => {
+      resolveOperation = resolve;
+    });
+    const onRecoveryWait = vi.fn();
+    const onLateResult = vi.fn();
+    const bounded = settleFrameCaptureWithRecovery({
+      operation,
+      frameNumber: 8312,
+      totalFrames: 9175,
+      onLateResult,
+      onRecoveryWait,
+      primaryTimeoutMs: 1_000,
+      graceTimeoutMs: 2_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(onRecoveryWait).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1_500);
+    resolveOperation('frame');
+    await expect(bounded).resolves.toBe('frame');
+    expect(onLateResult).not.toHaveBeenCalled();
+  });
+
+  it('fails a frame with remediation guidance only after the grace period also expires', async () => {
+    vi.useFakeTimers();
+    let resolveOperation!: (value: { close: () => void }) => void;
+    const operation = new Promise<{ close: () => void }>((resolve) => {
+      resolveOperation = resolve;
+    });
+    const late = { close: vi.fn() };
+    const bounded = settleFrameCaptureWithRecovery({
+      operation,
+      frameNumber: 3,
+      totalFrames: 10,
+      onLateResult: (value) => value.close(),
+      primaryTimeoutMs: 1_000,
+      graceTimeoutMs: 2_000,
+    });
+    const rejection = expect(bounded).rejects.toThrow(
+      'Frame capture stopped responding at frame 3/10 (no frame after 3s). ' +
+        'The browser is likely under memory pressure — try a lower export quality, ' +
+        'close the preview panes, and keep this tab visible.',
+    );
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    await rejection;
+    resolveOperation(late);
+    await Promise.resolve();
+    expect(late.close).toHaveBeenCalledOnce();
+  });
+
+  it('propagates a genuine capture error without granting the grace period', async () => {
+    const onRecoveryWait = vi.fn();
+    const failure = new Error('Player committed 1.000000s while capture requested 2.000000s.');
+    await expect(
+      settleFrameCaptureWithRecovery({
+        operation: Promise.reject(failure),
+        frameNumber: 1,
+        totalFrames: 10,
+        onRecoveryWait,
+        primaryTimeoutMs: 1_000,
+        graceTimeoutMs: 2_000,
+      }),
+    ).rejects.toBe(failure);
+    expect(onRecoveryWait).not.toHaveBeenCalled();
   });
 
   it('uses compact/static defaults, skips audio, and emits an image/gif Blob', async () => {
@@ -306,6 +413,42 @@ describe('useVideoExport GIF flow', () => {
     });
 
     expect(mocks.computeAudioTimeline).toHaveBeenCalledWith(coveredDoc, 0.2);
+    expect(result.current.duration).toBe(0.3);
+    unmount();
+  });
+
+  it('lets story video and audio advance underneath an overlay cover', async () => {
+    const coveredDoc: Doc = {
+      ...doc,
+      duration: 0.3,
+      blocks: [{ ...doc.blocks[0], duration: 0.3 }],
+      startBlock: { title: 'Managed cover' },
+      frontmatter: {
+        'squisq-cover-duration': 0.2,
+        'squisq-cover-playback': 'overlay',
+      },
+    };
+    mocks.frameInit.mockResolvedValueOnce(0.3);
+    const { result, unmount } = renderHook(() => useVideoExport());
+
+    await act(async () => {
+      await result.current.startExport(coveredDoc, {
+        outputFormat: 'mp4',
+        fps: 10,
+      });
+    });
+
+    expect(mocks.computeAudioTimeline).toHaveBeenCalledWith(coveredDoc, 0);
+    expect(mocks.setCoverVisible.mock.calls).toEqual([[true], [false]]);
+    expect(mocks.captureCanvasFrame).toHaveBeenNthCalledWith(1, 0, {
+      reuseIfUnchanged: true,
+    });
+    expect(mocks.captureCanvasFrame).toHaveBeenNthCalledWith(2, 0.1, {
+      reuseIfUnchanged: true,
+    });
+    expect(mocks.captureCanvasFrame).toHaveBeenNthCalledWith(3, 0.2, {
+      reuseIfUnchanged: true,
+    });
     expect(result.current.duration).toBe(0.3);
     unmount();
   });

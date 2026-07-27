@@ -272,3 +272,61 @@ describe('TimelineTrack narration-timed geometry', () => {
     expect(screen.queryByTitle(/Intro/)).toBeNull();
   });
 });
+
+describe('TimelineTrack block-edge drags', () => {
+  // All pixel math uses the default 18 px/s ruler scale.
+  it('writes a duration pin when a block right edge is dragged', () => {
+    renderTimeline();
+    const intro = screen.getByTitle(/Intro/) as HTMLElement;
+    const edge = intro.querySelector('.squisq-timeline-edge--right') as HTMLElement;
+
+    firePointer(edge, 'pointerdown', 300);
+    firePointer(window, 'pointermove', 336); // +36px = +2s
+    firePointer(window, 'pointerup', 336);
+
+    expect(latestSource.split('\n')[0]).toBe('# Intro {[duration=14]}');
+  });
+
+  it('live-previews the ripple: the following bar tracks the dragged edge', () => {
+    renderTimeline();
+    const intro = screen.getByTitle(/Intro/) as HTMLElement;
+    const next = screen.getByTitle(/Next/) as HTMLElement;
+    expect(next.style.left).toBe(`${12 * 18}px`);
+
+    const edge = intro.querySelector('.squisq-timeline-edge--right') as HTMLElement;
+    firePointer(edge, 'pointerdown', 300);
+    firePointer(window, 'pointermove', 336); // +2s
+    // The dragged bar previews at 14s and the next bar follows its end — the
+    // same contiguous layout the committed narration ripple produces, so the
+    // preview is WYSIWYG rather than a re-flow the commit walks back.
+    expect(intro.style.width).toBe(`${14 * 18}px`);
+    expect(next.style.left).toBe(`${14 * 18}px`);
+    firePointer(window, 'pointerup', 336);
+  });
+
+  it('dragging a block left edge resizes the previous block (boundary move)', () => {
+    renderTimeline();
+    const next = screen.getByTitle(/Next/) as HTMLElement;
+    const edge = next.querySelector('.squisq-timeline-edge--left') as HTMLElement;
+
+    firePointer(edge, 'pointerdown', 216);
+    firePointer(window, 'pointermove', 198); // −18px = −1s
+    firePointer(window, 'pointerup', 198);
+
+    expect(latestSource.split('\n')[0]).toBe('# Intro {[duration=11]}');
+    // The boundary belongs to the previous block; the dragged block keeps its pin.
+    expect(latestSource).toContain('# Next {[duration=8]}');
+  });
+
+  it('a bare click on a block edge never writes a pin', () => {
+    renderTimeline();
+    const before = latestSource;
+    const intro = screen.getByTitle(/Intro/) as HTMLElement;
+    const edge = intro.querySelector('.squisq-timeline-edge--right') as HTMLElement;
+
+    firePointer(edge, 'pointerdown', 300);
+    firePointer(window, 'pointerup', 302); // < 4px travel — a click, not a drag
+
+    expect(latestSource).toBe(before);
+  });
+});

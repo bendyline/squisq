@@ -465,4 +465,43 @@ describe('expandCoverBlock', () => {
     expect(layers.some((l) => l.id === 'cover-title')).toBe(true);
     expect(layers.some((l) => l.id === 'cover-hero')).toBe(false);
   });
+
+  it('renders the title block appearance', () => {
+    const layers = expandCoverBlock(
+      { title: 'Title Card', subtitle: 'Supporting line', heroSrc: 'ignored.jpg' },
+      landscapeContext,
+      'title',
+    );
+    expect(layers.some((layer) => layer.id === 'title')).toBe(true);
+    expect(layers.some((layer) => layer.id === 'subtitle')).toBe(true);
+    expect(layers.some((layer) => layer.id === 'cover-hero')).toBe(false);
+  });
+
+  it('renders the section-header appearance with the hero image', () => {
+    const layers = expandCoverBlock(
+      { title: 'Chapter One', heroSrc: 'chapter.jpg', heroAlt: 'Chapter art' },
+      landscapeContext,
+      'sectionHeader',
+    );
+    expect(layers.some((layer) => layer.id === 'bg-image')).toBe(true);
+    expect(layers.some((layer) => layer.id === 'title')).toBe(true);
+  });
+
+  it('renders the image-title appearance and falls back safely without a hero', () => {
+    const imageLayers = expandCoverBlock(
+      { title: 'Image title', subtitle: 'Subtitle', heroSrc: 'hero.jpg' },
+      landscapeContext,
+      'imageWithCaption',
+    );
+    expect(imageLayers.some((layer) => layer.id === 'bg-image')).toBe(true);
+    expect(imageLayers.some((layer) => layer.id === 'title')).toBe(true);
+
+    const fallbackLayers = expandCoverBlock(
+      { title: 'No image', subtitle: 'Still useful' },
+      landscapeContext,
+      'imageWithCaption',
+    );
+    expect(fallbackLayers.some((layer) => layer.id === 'bg')).toBe(true);
+    expect(fallbackLayers.some((layer) => layer.id === 'title')).toBe(true);
+  });
 });

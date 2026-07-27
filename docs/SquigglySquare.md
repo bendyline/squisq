@@ -406,14 +406,17 @@ These are read by core and every export path (not just the editor preview):
 | `squisq-auto-templates`   | Kill-switch for content-aware auto-templating in `markdownToDoc`. Disabled when the value is `false`/`off`/`no`/`0`.                                       |
 | `title`                   | Document title. Preferred over the first heading by `inferDocumentTitle()`.                                                                                |
 
-These are read only by the editor's Preview controls (like `document-render-as` / `display-mode`):
+These are managed by the editor's Preview controls and consumed by the player/export paths:
 
-| Key                                           | Purpose                                                                                                     |
-| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `squisq-transform` (legacy `transform-style`) | Slideshow transform style id applied in preview. Omitted for the default of no transform.                   |
-| `squisq-captions` (legacy `caption-style`)    | Caption mode — `off`, `standard`, or `social` (`instagram`/`tiktok`/`reels` → social). Default: `standard`. |
-| `squisq-cover-slide` (legacy `cover-slide`)   | Whether to show the generated cover slide. Default: `true`.                                                 |
-| `squisq-video-loop` (legacy `video-loop`)     | Whether Video mode restarts automatically after playback ends. Default: `false`.                            |
+| Key                                               | Purpose                                                                                                     |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `squisq-transform` (legacy `transform-style`)     | Slideshow transform style id applied in preview. Omitted for the default of no transform.                   |
+| `squisq-captions` (legacy `caption-style`)        | Caption mode — `off`, `standard`, or `social` (`instagram`/`tiktok`/`reels` → social). Default: `standard`. |
+| `squisq-cover-slide` (legacy `cover-slide`)       | Whether to show the generated cover slide. Default: `true`.                                                 |
+| `squisq-cover-template` (legacy `cover-template`) | Cover appearance: `cover`, `title`, `sectionHeader`, or `imageWithCaption`. Default: `cover`.               |
+| `squisq-cover-duration` (legacy `cover-duration`) | Seconds the cover remains visible in Video/export (0-60). Default: `2`.                                     |
+| `squisq-cover-playback` (legacy `cover-playback`) | `preroll` delays the story; `overlay` advances video/audio beneath the cover. Default: `preroll`.           |
+| `squisq-video-loop` (legacy `video-loop`)         | Whether Video mode restarts automatically after playback ends. Default: `false`.                            |
 
 When the editor writes these settings, values matching their runtime defaults are omitted rather than persisted. The same applies to the default `standard` theme. Choosing a default also removes any legacy alias; non-default values use the canonical `squisq-*` key.
 

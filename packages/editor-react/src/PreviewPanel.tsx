@@ -82,6 +82,9 @@ export function PreviewPanel({
     activePipPosition,
     activeVideoLoop,
     activeCoverSlide,
+    activeCoverSlideTemplate,
+    activeCoverSlideDuration,
+    activeCoverSlidePlayback,
   } = usePreviewSettings();
   const mainSurfaceRef = useRef<HTMLDivElement>(null);
   const popupSurfaceRef = useRef<HTMLDivElement>(null);
@@ -367,6 +370,9 @@ export function PreviewPanel({
           audience && audienceCaptionMode ? audienceCaptionMode !== 'off' : activeCaptionsEnabled
         }
         showCoverSlide={activeCoverSlide}
+        coverSlideTemplate={activeCoverSlideTemplate}
+        coverSlideDuration={activeCoverSlideDuration}
+        coverSlidePlayback={activeCoverSlidePlayback}
         coverVisible={audience ? playbackState?.isCoverVisible : undefined}
         audioController={audience ? followerAudioController! : undefined}
         enableSwipe={!audience}

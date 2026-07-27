@@ -22,6 +22,7 @@ import type {
   DefinitionCardInput,
   FactCardInput,
   FullBleedQuoteInput,
+  BigTextInput,
   ImageWithCaptionInput,
   LeftFeatureInput,
   ListBlockInput,
@@ -137,6 +138,23 @@ const sectionHeader: SectionExtractor = (input) => {
     slots: { title: s.title, media },
     colorScheme: s.colorScheme,
     mediaBackground: !!s.imageSrc,
+  };
+};
+
+const bigText: SectionExtractor = (input) => {
+  const b = input as BigTextInput;
+  const media: PageMedia | undefined = b.imageSrc
+    ? { type: 'image', src: b.imageSrc, alt: b.imageAlt ?? '' }
+    : undefined;
+  // On a page the gigantic slide type reads as a lead hero band; the image
+  // variant keeps its full-bleed background. Like the slide, it carries the
+  // title alone — body content is narration, not page copy.
+  return {
+    kind: 'hero',
+    variant: media ? 'media' : 'title',
+    slots: { title: b.title, media },
+    emphasis: 'lead',
+    mediaBackground: !!media,
   };
 };
 
@@ -477,6 +495,7 @@ const layout: SectionExtractor = (input, ctx) =>
 export const sectionExtractors: Record<string, SectionExtractor> = {
   title,
   sectionHeader,
+  bigText,
   content,
   statHighlight,
   quote,

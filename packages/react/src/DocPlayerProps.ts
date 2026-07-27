@@ -1,5 +1,6 @@
 import type { Doc, SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/doc';
+import type { CoverSlidePlayback, CoverSlideTemplate } from '@bendyline/squisq/doc';
 import type { AudioController } from './hooks/AudioController';
 import type {
   BlockMarker,
@@ -52,6 +53,12 @@ export interface DocPlayerProps {
   /** Video, manual slideshow, or long-scrolling linear rendition. */
   displayMode?: DisplayMode;
   showCoverSlide?: boolean;
+  /** Visual template used to materialize the managed cover. */
+  coverSlideTemplate?: CoverSlideTemplate;
+  /** Seconds the cover remains visible after Video playback starts. */
+  coverSlideDuration?: number;
+  /** Whether video export advances or delays the story while the cover is visible. */
+  coverSlidePlayback?: CoverSlidePlayback;
   coverVisible?: boolean;
   captionStyle?: CaptionStyle;
   /**

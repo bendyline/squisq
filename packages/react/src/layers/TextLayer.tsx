@@ -16,7 +16,7 @@
  *    PDF bypasses SVG) and already used by Video/Table layers.
  */
 
-import { useId, useMemo, type CSSProperties } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { TextLayer as TextLayerType } from '@bendyline/squisq/schemas';
 import { DEFAULT_DOC_FONT } from '@bendyline/squisq/schemas';
 import {
@@ -215,6 +215,72 @@ function PlainTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   const lineHeight = style.lineHeight || 1.4;
   const lineHeightPx = style.fontSize * lineHeight;
 
+  // shrinkToFit: measure the real glyphs and scale the text down (never up)
+  // so it stays inside the layer box. Wrapping only picks line breaks from a
+  // width *estimate* — SVG text still renders at natural glyph width, so a
+  // wide display face can overflow the box without this guard. The block
+  // also centers on the anchor: with dominant-baseline middle, extra wrapped
+  // lines normally hang below the pivot, pushing the block off-center.
+  const shrinkToFit = style.shrinkToFit === true;
+  const centerBlock = shrinkToFit && dominantBaseline === 'middle';
+  const firstLineDy = centerBlock ? -((lines.length - 1) / 2) * lineHeightPx : 0;
+  const textRef = useRef<SVGTextElement | null>(null);
+  const [fit, setFit] = useState<{ scale: number; cx: number; cy: number } | null>(null);
+  const linesKey = lines.join('\n');
+  useLayoutEffect(() => {
+    if (!shrinkToFit) {
+      setFit(null);
+      return;
+    }
+    const element = textRef.current;
+    // getBBox is unavailable in non-visual test DOMs; the guard is a
+    // progressive enhancement there.
+    if (!element || typeof element.getBBox !== 'function') return;
+    const measure = (): void => {
+      try {
+        // getBBox reports local user space, unaffected by this element's own
+        // transform — measuring after a shrink cannot feed back into itself.
+        const bbox = element.getBBox();
+        if (bbox.width <= 0 || bbox.height <= 0) return;
+        const maxW = boxWidth ?? viewport.width;
+        const maxH = boxHeight ?? viewport.height;
+        const scale = Math.min(1, maxW / bbox.width, maxH / bbox.height);
+        setFit(
+          scale < 0.995
+            ? { scale, cx: bbox.x + bbox.width / 2, cy: bbox.y + bbox.height / 2 }
+            : null,
+        );
+      } catch {
+        // Detached node (e.g. mid-unmount) — keep the previous fit.
+      }
+    };
+    measure();
+    // Webfonts change glyph metrics; re-measure once they are ready.
+    const fonts = element.ownerDocument?.fonts;
+    if (fonts && fonts.status !== 'loaded') {
+      let cancelled = false;
+      void fonts.ready.then(() => {
+        if (!cancelled) measure();
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+  }, [
+    shrinkToFit,
+    linesKey,
+    boxWidth,
+    boxHeight,
+    viewport.width,
+    viewport.height,
+    style.fontSize,
+    style.fontFamily,
+    style.fontWeight,
+  ]);
+  const fitTransform = fit
+    ? `translate(${fit.cx} ${fit.cy}) scale(${fit.scale}) translate(${-fit.cx} ${-fit.cy})`
+    : undefined;
+
   // Build text styles
   const textStyles: Record<string, string | number> = {
     fontSize: `${style.fontSize}px`,
@@ -266,15 +332,17 @@ function PlainTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
 
       {/* Text element with tspans for each line */}
       <text
+        ref={textRef}
         x={x}
         y={y}
         textAnchor={textAnchor as 'start' | 'middle' | 'end'}
         dominantBaseline={dominantBaseline as 'text-before-edge' | 'middle' | 'text-after-edge'}
         style={textStyles}
         filter={filterId ? `url(#${filterId})` : undefined}
+        transform={fitTransform}
       >
         {lines.map((line, i) => (
-          <tspan key={i} x={x} dy={i === 0 ? 0 : lineHeightPx}>
+          <tspan key={i} x={x} dy={i === 0 ? firstLineDy : lineHeightPx}>
             {line || '\u00A0'} {/* Non-breaking space for empty lines */}
           </tspan>
         ))}

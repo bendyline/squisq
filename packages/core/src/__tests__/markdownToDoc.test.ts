@@ -718,8 +718,52 @@ describe('auto cover block generation', () => {
     expect(doc.startBlock!.ambientMotion).toBe('zoomIn');
   });
 
-  it('does not create startBlock when no H1 exists', () => {
+  it('prefers a frontmatter title over the first H1', () => {
+    const md = parseMarkdown('---\ntitle: Declared Title\n---\n\n# Heading Title\n\nIntro.');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.title).toBe('Declared Title');
+    // The subtitle still comes from the heading's first paragraph.
+    expect(doc.startBlock!.subtitle).toBe('Intro.');
+  });
+
+  it('falls back to the first H2 when no H1 exists', () => {
     const md = parseMarkdown('## Section A\n\nText A\n\n## Section B\n\nText B');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.title).toBe('Section A');
+    expect(doc.startBlock!.subtitle).toBe('Text A');
+  });
+
+  it('falls back to the first H3 when no H1 or H2 exists', () => {
+    const md = parseMarkdown('### Deep Section\n\nText');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.title).toBe('Deep Section');
+  });
+
+  it('uses the shallowest heading even when a deeper one comes first', () => {
+    const md = parseMarkdown('### Preface\n\nText\n\n## Main Section\n\nBody');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.title).toBe('Main Section');
+  });
+
+  it('falls back to the provided file name when the document has no title source', () => {
+    const md = parseMarkdown('Just some prose without headings.');
+    const doc = markdownToDoc(md, { fileName: 'notes/my-great_article.md' });
+
+    expect(doc.startBlock).toBeDefined();
+    expect(doc.startBlock!.title).toBe('My great article');
+    expect(doc.startBlock!.subtitle).toBe('Just some prose without headings.');
+  });
+
+  it('does not create startBlock when there is no title source at all', () => {
+    const md = parseMarkdown('Just some prose without headings.');
     const doc = markdownToDoc(md);
 
     expect(doc.startBlock).toBeUndefined();

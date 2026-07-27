@@ -30,6 +30,12 @@ import {
   fetchResourceBytes,
   type ResourcePolicy,
 } from '@bendyline/squisq/markdown';
+import {
+  DEFAULT_COVER_SLIDE_SETTINGS,
+  MAX_COVER_SLIDE_DURATION_SECONDS,
+  resolveCoverSlideSettings,
+  type CoverSlidePlayback,
+} from '@bendyline/squisq/doc';
 import type {
   VideoQuality,
   VideoOrientation,
@@ -68,11 +74,18 @@ const MAX_EXPORT_MEDIA_FILES = 256;
 const ENCODER_PROBE_TIMEOUT_MS = 5_000;
 const ENCODER_START_TIMEOUT_MS = 60_000;
 const FRAME_CAPTURE_TIMEOUT_MS = 60_000;
+/**
+ * One extra, longer wait granted to a frame that missed the primary capture
+ * deadline. Late-export memory pressure can stretch a single raster pass far
+ * past its usual cost and then recover; a 20-minute export must not be thrown
+ * away for one degenerate frame.
+ */
+const FRAME_CAPTURE_RECOVERY_TIMEOUT_MS = 120_000;
 const FRAME_ENCODE_TIMEOUT_MS = 60_000;
 const CAPTURE_PROGRESS_START = 7;
 const CAPTURE_PROGRESS_END = 95;
 const FRAME_RATE_WINDOW_SIZE = 30;
-export const DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS = 2;
+export const DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS = DEFAULT_COVER_SLIDE_SETTINGS.duration;
 
 /**
  * Calculate throughput from frame-boundary timestamps in milliseconds.
@@ -169,6 +182,65 @@ export function settleWithin<T>(
       },
     );
   });
+}
+
+export interface FrameCaptureRecoveryOptions<T> {
+  /** The already-started capture for this frame. */
+  operation: Promise<T>;
+  /** 1-based frame number, for error messages. */
+  frameNumber: number;
+  totalFrames: number;
+  /** Dispose a result that arrives after the frame is finally abandoned. */
+  onLateResult?: (value: T) => void;
+  /** Document whose visibility gates the deadline (see {@link settleWithin}). */
+  activityDocument?: Document;
+  /** Invoked when the primary deadline passes and the grace wait begins. */
+  onRecoveryWait?: () => void;
+  /** Injectable budgets for tests. */
+  primaryTimeoutMs?: number;
+  graceTimeoutMs?: number;
+}
+
+/**
+ * Bound one frame's capture with a primary deadline plus a single grace
+ * period. The same pending operation is awaited across both waits — a capture
+ * player cannot service two overlapping captures, so "retry" here means
+ * granting the in-flight raster more time, not starting a second one. Late
+ * results are disposed only after the frame is truly abandoned.
+ */
+export async function settleFrameCaptureWithRecovery<T>({
+  operation,
+  frameNumber,
+  totalFrames,
+  onLateResult,
+  activityDocument,
+  onRecoveryWait,
+  primaryTimeoutMs = FRAME_CAPTURE_TIMEOUT_MS,
+  graceTimeoutMs = FRAME_CAPTURE_RECOVERY_TIMEOUT_MS,
+}: FrameCaptureRecoveryOptions<T>): Promise<T> {
+  const primaryMessage = `Frame capture stopped responding at frame ${frameNumber}/${totalFrames}.`;
+  try {
+    return await settleWithin(
+      operation,
+      primaryTimeoutMs,
+      primaryMessage,
+      undefined,
+      activityDocument,
+    );
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== primaryMessage) throw error;
+    onRecoveryWait?.();
+    const totalSeconds = Math.round((primaryTimeoutMs + graceTimeoutMs) / 1000);
+    return await settleWithin(
+      operation,
+      graceTimeoutMs,
+      `Frame capture stopped responding at frame ${frameNumber}/${totalFrames} ` +
+        `(no frame after ${totalSeconds}s). The browser is likely under memory pressure — ` +
+        `try a lower export quality, close the preview panes, and keep this tab visible.`,
+      onLateResult,
+      activityDocument,
+    );
+  }
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -321,7 +393,17 @@ export interface VideoExportConfig {
   pipPosition?: VideoPipPosition;
   /** Managed-cover visibility override. Omitted values resolve from Doc frontmatter. */
   showCoverSlide?: boolean;
-  /** Seconds to hold an enabled managed cover before story frame zero (default: 2). */
+  /**
+   * Seconds to show an enabled managed cover. Omitted values resolve from Doc
+   * frontmatter, then fall back to 2 seconds.
+   */
+  coverDuration?: number;
+  /** Whether the story advances under the cover or starts after it. */
+  coverPlayback?: CoverSlidePlayback;
+  /**
+   * @deprecated Use `coverDuration` plus `coverPlayback: 'preroll'`.
+   * Seconds to hold an enabled managed cover before story frame zero.
+   */
   coverPreRoll?: number;
   /** Player IIFE bundle (unused in browser export, kept for CLI/Playwright path) */
   playerScript?: string;
@@ -331,54 +413,80 @@ export interface VideoExportConfig {
 
 export interface ResolvedVideoExportCover {
   showCoverSlide: boolean;
+  coverDuration: number;
+  coverPlayback: CoverSlidePlayback;
+  /** Audio/story offset introduced by preroll mode. */
   coverPreRoll: number;
-}
-
-function resolveFrontmatterBoolean(value: unknown): boolean | undefined {
-  if (typeof value === 'boolean') return value;
-  if (typeof value !== 'string') return undefined;
-  const normalized = value.trim().toLowerCase();
-  if (
-    normalized === 'true' ||
-    normalized === 'yes' ||
-    normalized === 'on' ||
-    normalized === 'show' ||
-    normalized === 'visible'
-  ) {
-    return true;
-  }
-  if (
-    normalized === 'false' ||
-    normalized === 'no' ||
-    normalized === 'off' ||
-    normalized === 'hide' ||
-    normalized === 'hidden'
-  ) {
-    return false;
-  }
-  return undefined;
 }
 
 /** Resolve the cover segment shared by browser MP4/GIF capture. */
 export function resolveVideoExportCover(
   doc: Doc,
-  config: Pick<VideoExportConfig, 'showCoverSlide' | 'coverPreRoll'> = {},
+  config: Pick<
+    VideoExportConfig,
+    'showCoverSlide' | 'coverDuration' | 'coverPlayback' | 'coverPreRoll'
+  > = {},
 ): ResolvedVideoExportCover {
-  const frontmatter = doc.frontmatter;
-  const frontmatterValue = frontmatter
-    ? Object.prototype.hasOwnProperty.call(frontmatter, 'squisq-cover-slide')
-      ? frontmatter['squisq-cover-slide']
-      : frontmatter['cover-slide']
-    : undefined;
-  const showCoverSlide =
-    config.showCoverSlide ?? resolveFrontmatterBoolean(frontmatterValue) ?? true;
-  const requestedPreRoll = config.coverPreRoll ?? DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS;
-  if (!Number.isFinite(requestedPreRoll) || requestedPreRoll < 0) {
-    throw new Error('Cover pre-roll must be a finite number of seconds greater than or equal to 0');
+  const legacyPreRollOverride = config.coverPreRoll;
+  const requestedDuration = config.coverDuration ?? legacyPreRollOverride;
+  if (
+    requestedDuration !== undefined &&
+    (!Number.isFinite(requestedDuration) ||
+      requestedDuration < 0 ||
+      requestedDuration > MAX_COVER_SLIDE_DURATION_SECONDS)
+  ) {
+    throw new Error(
+      `Cover duration must be a finite number of seconds between 0 and ${MAX_COVER_SLIDE_DURATION_SECONDS}`,
+    );
   }
+  const settings = resolveCoverSlideSettings(doc.frontmatter, {
+    ...(config.showCoverSlide !== undefined ? { enabled: config.showCoverSlide } : {}),
+    ...(requestedDuration !== undefined ? { duration: requestedDuration } : {}),
+    ...(config.coverPlayback !== undefined
+      ? { playback: config.coverPlayback }
+      : legacyPreRollOverride !== undefined
+        ? { playback: 'preroll' as const }
+        : {}),
+  });
+  const showCoverSlide = settings.enabled && !!doc.startBlock;
+  const coverDuration = showCoverSlide ? settings.duration : 0;
   return {
     showCoverSlide,
-    coverPreRoll: showCoverSlide && !!doc.startBlock ? requestedPreRoll : 0,
+    coverDuration,
+    coverPlayback: settings.playback,
+    coverPreRoll: settings.playback === 'preroll' ? coverDuration : 0,
+  };
+}
+
+export interface VideoCoverFramePlan {
+  coverFrameCount: number;
+  storyFrameCount: number;
+  totalFrames: number;
+  totalDuration: number;
+  audioOffset: number;
+  captureTimeForFrame: (frameIndex: number) => number;
+}
+
+/** Build the exact frame/audio schedule for overlay and preroll cover timing. */
+export function resolveVideoCoverFramePlan(
+  docDuration: number,
+  fps: number,
+  cover: ResolvedVideoExportCover,
+): VideoCoverFramePlan {
+  const coverFrameCount = Math.ceil(cover.coverDuration * fps);
+  const storyFrameCount = Math.ceil(docDuration * fps);
+  const prerollFrameCount = cover.coverPlayback === 'preroll' ? coverFrameCount : 0;
+  const totalFrames = prerollFrameCount + storyFrameCount;
+  return {
+    coverFrameCount,
+    storyFrameCount,
+    totalFrames,
+    totalDuration: totalFrames / fps,
+    audioOffset: prerollFrameCount / fps,
+    captureTimeForFrame: (frameIndex: number) =>
+      cover.coverPlayback === 'preroll' && frameIndex < coverFrameCount
+        ? 0
+        : (frameIndex - prerollFrameCount) / fps,
   };
 }
 
@@ -684,12 +792,11 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
           throw new Error('Document has zero duration — nothing to export');
         }
 
-        // Keep the two segments separate so rounding cannot steal a story
-        // frame or drift the audio offset at the cover/story boundary.
-        const coverFrameCount = Math.ceil(cover.coverPreRoll * fps);
-        const storyFrameCount = Math.ceil(docDuration * fps);
-        const totalFrames = coverFrameCount + storyFrameCount;
-        const exportDuration = totalFrames / fps;
+        // Keep cover and story scheduling in one plan so overlay mode advances
+        // the story clock while preroll mode shifts both story and audio.
+        const coverPlan = resolveVideoCoverFramePlan(docDuration, fps, cover);
+        const { coverFrameCount, totalFrames } = coverPlan;
+        const exportDuration = coverPlan.totalDuration;
         setDuration(exportDuration);
 
         // ── Step 2: Create encoder ────────────────────────────────
@@ -720,7 +827,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         // muxing without reporting the format limitation as an export error.
         const timeline =
           effectiveOutputFormat === 'mp4' && audioPolicy !== 'omit'
-            ? computeAudioTimeline(doc, coverFrameCount / fps)
+            ? computeAudioTimeline(doc, coverPlan.audioOffset)
             : [];
         const aacSupported =
           timeline.length > 0
@@ -807,6 +914,10 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
                   },
                 }
               : {}),
+            // Plain MP4 downloads finalize to a Blob, so the muxer may spill
+            // settled bytes out of JS memory as it goes. GIF transcode and
+            // ffmpeg audio muxing need contiguous bytes — keep those in memory.
+            spillOutputToBlob: effectiveOutputFormat === 'mp4' && !useFfmpegAudio,
           });
           encoderRef.current = encoder;
           setBackend('webcodecs');
@@ -889,18 +1000,20 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             await frameCapture.setCoverVisible(false);
           }
           const time = i / fps;
-          const captureTime = i < coverFrameCount ? 0 : (i - coverFrameCount) / fps;
+          const captureTime = coverPlan.captureTimeForFrame(i);
 
           const captureOperation: Promise<EncoderFrameSource> = canUseWebCodecs
             ? frameCapture.captureCanvasFrame(captureTime, { reuseIfUnchanged: true })
             : frameCapture.captureFrame(captureTime, { reuseIfUnchanged: true });
-          const frame = await settleWithin(
-            captureOperation,
-            FRAME_CAPTURE_TIMEOUT_MS,
-            `Frame capture stopped responding at frame ${i + 1}/${totalFrames}.`,
-            releaseEncoderFrame,
-            document,
-          );
+          const frame = await settleFrameCaptureWithRecovery({
+            operation: captureOperation,
+            frameNumber: i + 1,
+            totalFrames,
+            onLateResult: releaseEncoderFrame,
+            activityDocument: document,
+            onRecoveryWait: () =>
+              setPhase(`Frame ${i + 1}/${totalFrames} is taking unusually long — still waiting…`),
+          });
 
           if (cancelledRef.current) {
             releaseEncoderFrame(frame);

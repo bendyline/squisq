@@ -38,6 +38,10 @@
       "types": "./dist/components/index.d.ts",
       "import": "./dist/components/index.js"
     },
+    "./cover-image": {
+      "types": "./dist/cover-image/index.d.ts",
+      "import": "./dist/cover-image/index.js"
+    },
     "./hooks": {
       "types": "./dist/hooks/index.d.ts",
       "import": "./dist/hooks/index.js"

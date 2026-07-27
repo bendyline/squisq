@@ -940,6 +940,11 @@ export function EditorProvider({
   const articleIdRef = useRef(articleId);
   articleIdRef.current = articleId;
 
+  // Last-resort cover title for documents with no frontmatter title and no
+  // headings. Ref-read inside the stable parse callbacks.
+  const fileNameRef = useRef(fileName);
+  fileNameRef.current = fileName;
+
   // Sync color scheme when prop changes
   useEffect(() => {
     setColorScheme(initialColorScheme);
@@ -960,6 +965,7 @@ export function EditorProvider({
       try {
         const generatedDoc = markdownToDoc(parsed, {
           articleId: articleIdRef.current,
+          fileName: fileNameRef.current,
         });
         setDoc(generatedDoc);
       } catch (docErr: unknown) {
@@ -1189,6 +1195,7 @@ export function EditorProvider({
       try {
         const generatedDoc = markdownToDoc(newDoc, {
           articleId: articleIdRef.current,
+          fileName: fileNameRef.current,
         });
         setDoc(generatedDoc);
       } catch (docErr: unknown) {

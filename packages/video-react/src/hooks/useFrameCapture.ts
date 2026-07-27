@@ -31,6 +31,10 @@ export interface FrameCaptureOptions {
 export interface FrameCaptureRenderOptions extends Omit<RenderHtmlOptions, 'playerScript'> {
   /** Whether the hidden player should materialize its managed cover. */
   showCoverSlide?: boolean;
+  /** Visual template used to materialize the managed cover. */
+  coverSlideTemplate?: import('@bendyline/squisq/doc').CoverSlideTemplate;
+  /** Existing provider to use for media resolution. It remains caller-owned. */
+  mediaProvider?: MediaProvider;
 }
 
 export interface FrameCaptureHandle {
@@ -224,6 +228,33 @@ function waitForCaptureVideoState(
 }
 
 /**
+ * Whether an element still needs an indexing pass before it can be seeked.
+ *
+ * Membership in the primed set is not sufficient on its own. A scheduled clip
+ * mounts before its MediaProvider URL resolves, and React can retain the
+ * element while replacing its src, so an already-seen node can still be holding
+ * a fresh, unindexed recorder WebM. Any visual source without a finite duration
+ * must be indexed again before the first non-zero seek, whatever the set
+ * remembers about this element.
+ */
+function captureVideoNeedsPriming(
+  video: HTMLVideoElement,
+  primedVideos: WeakSet<HTMLVideoElement>,
+): boolean {
+  // An Opus-only WebM authored as <video> keeps duration=Infinity for its whole
+  // lifetime and has no frame to index, seek, or capture. Loading another src
+  // resets readyState, so this stays accurate across replacements.
+  if (
+    video.readyState >= HTMLMediaElement.HAVE_METADATA &&
+    video.videoWidth <= 0 &&
+    video.videoHeight <= 0
+  ) {
+    return false;
+  }
+  return !primedVideos.has(video) || !Number.isFinite(video.duration);
+}
+
+/**
  * Make recorder-produced WebM video deterministic and fast to seek before
  * accelerated frame capture starts.
  *
@@ -239,8 +270,8 @@ export async function primeIndeterminateCaptureVideos(
   captureRoot: HTMLElement,
   primedVideos: WeakSet<HTMLVideoElement> = new WeakSet(),
 ): Promise<number> {
-  const videos = Array.from(captureRoot.querySelectorAll('video')).filter(
-    (video) => !primedVideos.has(video),
+  const videos = Array.from(captureRoot.querySelectorAll('video')).filter((video) =>
+    captureVideoNeedsPriming(video, primedVideos),
   );
   let primedCount = 0;
 
@@ -248,7 +279,10 @@ export async function primeIndeterminateCaptureVideos(
     videos.map(async (video) => {
       const source = video.currentSrc || video.src;
       if (!source) {
-        primedVideos.add(video);
+        // A scheduled clip is mounted before MediaProvider resolves its blob
+        // URL. Recording this empty element as primed would permanently hide
+        // the real recorder WebM that lands on it moments later, so leave it
+        // for the next capture instead.
         return;
       }
 
@@ -927,6 +961,68 @@ export function canCompositeScheduledPipVideos(captureRoot: HTMLElement): boolea
   );
 }
 
+export interface ScheduledVideoCompositePlan {
+  /** Full-bleed background clips drawn beneath the cached base raster. */
+  underlays: HTMLVideoElement[];
+  /** Corner PiP clips drawn over the cached base raster. */
+  overlays: HTMLVideoElement[];
+}
+
+/**
+ * Decide whether every active visual scheduled clip can be composited around a
+ * cached base raster instead of re-running html2canvas for each frame.
+ *
+ * `background` clips sit at the bottom of the player stack (z 0 — below blocks
+ * and captions), so they draw first with the base over them, provided the base
+ * was rasterized with a transparent backdrop (see
+ * {@link clearScheduledUnderlayBackdrops}). PiP clips sit above everything the
+ * base contains and draw last — the original fast path. `full-frame` overlay
+ * clips render above blocks but BELOW captions (z 10 vs z 50); drawing them
+ * after the caption-bearing base would cover the captions, so they keep the
+ * inline html2canvas path.
+ */
+export function planScheduledVideoComposite(
+  captureRoot: HTMLElement,
+): ScheduledVideoCompositePlan | null {
+  const activeVideos = Array.from(
+    captureRoot.querySelectorAll<HTMLVideoElement>(SCHEDULED_VIDEO_SELECTOR),
+  ).filter(scheduledVideoIsVisual);
+  if (activeVideos.length === 0) return null;
+  const underlays: HTMLVideoElement[] = [];
+  const overlays: HTMLVideoElement[] = [];
+  for (const video of activeVideos) {
+    const presentation = scheduledVideoPresentation(video);
+    if (presentation === 'background') underlays.push(video);
+    else if (presentation === 'picture-in-picture') overlays.push(video);
+    else return null;
+  }
+  return { underlays, overlays };
+}
+
+/**
+ * In html2canvas's disposable clone, strip backgrounds from every ancestor of
+ * a background-presented media group. Those backgrounds paint beneath the
+ * (removed) video in the live stacking order; left in the base they would end
+ * up ON TOP of the composited underlay. The black engine backdrop the
+ * compositor fills first stands in for them, exactly like html2canvas's own
+ * opaque backdrop does on the inline path.
+ */
+export function clearScheduledUnderlayBackdrops(clonedRoot: HTMLElement): void {
+  const groups = clonedRoot.querySelectorAll<HTMLElement>(
+    `${SCHEDULED_MEDIA_SELECTOR}[data-presentation="background"]`,
+  );
+  for (const group of Array.from(groups)) {
+    for (
+      let element: HTMLElement | null = group.parentElement;
+      element;
+      element = element === clonedRoot ? null : element.parentElement
+    ) {
+      element.style.backgroundColor = 'transparent';
+      element.style.backgroundImage = 'none';
+    }
+  }
+}
+
 function cssPixelValue(value: string): number {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -984,18 +1080,32 @@ export function compositeScheduledPipVideos(
   captureRoot: HTMLElement,
   destination: HTMLCanvasElement,
 ): number {
-  const context = destination.getContext('2d');
-  if (!context) throw new Error('Could not create the PiP compositor canvas context');
-  const rootRect = captureRoot.getBoundingClientRect();
-  if (rootRect.width <= 0 || rootRect.height <= 0) return 0;
-  const scaleX = destination.width / rootRect.width;
-  const scaleY = destination.height / rootRect.height;
   const videos = Array.from(
     captureRoot.querySelectorAll<HTMLVideoElement>(SCHEDULED_VIDEO_SELECTOR),
   ).filter(
     (video) =>
       scheduledVideoIsVisual(video) && scheduledVideoPresentation(video) === 'picture-in-picture',
   );
+  return drawScheduledVideosOnto(destination, captureRoot, videos);
+}
+
+/**
+ * Draw scheduled video frames onto the reusable output canvas with their
+ * authored CSS geometry (box, borders, radius, shadow, object-fit). Works for
+ * corner PiP boxes and full-bleed background clips alike — the caller decides
+ * stacking by when it invokes this relative to drawing the base raster.
+ */
+export function drawScheduledVideosOnto(
+  destination: HTMLCanvasElement,
+  captureRoot: HTMLElement,
+  videos: readonly HTMLVideoElement[],
+): number {
+  const context = destination.getContext('2d');
+  if (!context) throw new Error('Could not create the scheduled-video compositor canvas context');
+  const rootRect = captureRoot.getBoundingClientRect();
+  if (rootRect.width <= 0 || rootRect.height <= 0) return 0;
+  const scaleX = destination.width / rootRect.width;
+  const scaleY = destination.height / rootRect.height;
 
   for (const video of videos) {
     const rect = video.getBoundingClientRect();
@@ -1161,6 +1271,7 @@ export function useFrameCapture(): FrameCaptureHandle {
   const rootRef = useRef<Root | null>(null);
   const renderAPIRef = useRef<SquisqRenderAPI | null>(null);
   const mediaProviderRef = useRef<MediaProvider | null>(null);
+  const ownsMediaProviderRef = useRef(false);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const captureBaseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastVisualStateKeyRef = useRef<string | null>(null);
@@ -1190,12 +1301,14 @@ export function useFrameCapture(): FrameCaptureHandle {
         const oldRoot = rootRef.current;
         const oldContainer = containerRef.current;
         const oldMediaProvider = mediaProviderRef.current;
+        const oldOwnsMediaProvider = ownsMediaProviderRef.current;
         const oldCaptureCanvas = captureCanvasRef.current;
         const oldCaptureBaseCanvas = captureBaseCanvasRef.current;
         rootRef.current = null;
         containerRef.current = null;
         renderAPIRef.current = null;
         mediaProviderRef.current = null;
+        ownsMediaProviderRef.current = false;
         captureCanvasRef.current = null;
         captureBaseCanvasRef.current = null;
         lastVisualStateKeyRef.current = null;
@@ -1209,7 +1322,7 @@ export function useFrameCapture(): FrameCaptureHandle {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
             if (oldContainer) oldContainer.remove();
-            oldMediaProvider?.dispose();
+            if (oldOwnsMediaProvider) oldMediaProvider?.dispose();
             if (oldCaptureCanvas) {
               oldCaptureCanvas.width = 0;
               oldCaptureCanvas.height = 0;
@@ -1270,8 +1383,9 @@ export function useFrameCapture(): FrameCaptureHandle {
       // Build media provider from images
       const mediaProvider = renderOptions.images
         ? createInlineProvider(renderOptions.images)
-        : null;
+        : (renderOptions.mediaProvider ?? null);
       mediaProviderRef.current = mediaProvider;
+      ownsMediaProviderRef.current = !!renderOptions.images;
 
       // Mount DocPlayer in renderMode via React
       const root = createRoot(renderRoot);
@@ -1299,6 +1413,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         pipShape: renderOptions.pipShape,
         pipPosition: renderOptions.pipPosition,
         showCoverSlide: renderOptions.showCoverSlide,
+        coverSlideTemplate: renderOptions.coverSlideTemplate,
         captionsEnabled,
         captionStyle,
         onRenderAPIReady: (api: SquisqRenderAPI | null) => {
@@ -1377,17 +1492,32 @@ export function useFrameCapture(): FrameCaptureHandle {
 
       const { width, height } = dimensionsRef.current;
 
-      // Seek the player to the target time
-      await api.seekTo(time);
-
       const root = container.querySelector('#squisq-capture-root') as HTMLElement;
       if (!root) {
         throw new Error('Capture root element not found');
       }
+
+      // Prime before seeking. Media URL resolution and cover transitions can
+      // mount or reload a recorder WebM after init(); seeking that unindexed
+      // duration=Infinity source first fails before the old post-seek repair
+      // ever gets a chance to run.
+      await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current);
+      try {
+        await api.seekTo(time);
+      } catch (seekError) {
+        // A clip whose source resolved during this seek is still unindexed:
+        // Chromium clamps every seek on a duration=Infinity WebM back to zero,
+        // so the frame barrier times out. Index whatever arrived late and retry
+        // once rather than failing the whole export on a mount race.
+        if (!(await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current))) {
+          throw seekError;
+        }
+        await api.seekTo(time);
+      }
+
       if (await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current)) {
-        // A newly mounted recorder WebM was restored to this time, but run the
-        // player barrier once more so its React clock and media readiness stay
-        // authoritative together.
+        // A video mounted during the seek was restored to its prior frame.
+        // Run the barrier again so it reaches the requested document time.
         await api.seekTo(time);
       }
 
@@ -1399,18 +1529,23 @@ export function useFrameCapture(): FrameCaptureHandle {
       }
       await waitForCaptureAssets(root, decodedImagesRef.current);
 
-      const compositePip = canCompositeScheduledPipVideos(root);
+      const compositePlan = planScheduledVideoComposite(root);
+      const hasUnderlays = compositePlan !== null && compositePlan.underlays.length > 0;
+      // Distinct cache namespaces: an underlay base is rasterized transparent
+      // with ancestor backdrops stripped and must never be reused as an opaque
+      // base (or vice versa) across a presentation change.
+      const rasterMode = compositePlan ? (hasUnderlays ? 'base-underlay' : 'base') : 'full';
       const visualStateKey = options.reuseIfUnchanged
-        ? `${compositePip ? 'base' : 'full'}:${getFrameVisualStateKey(root, time, {
-            ignoreScheduledVideoFrames: compositePip,
+        ? `${rasterMode}:${getFrameVisualStateKey(root, time, {
+            ignoreScheduledVideoFrames: compositePlan !== null,
           })}`
         : null;
       const shouldRasterize =
         visualStateKey === null ||
         !hasCapturedFrameRef.current ||
         lastVisualStateKeyRef.current !== visualStateKey;
-      if (!shouldRasterize && !compositePip) return captureCanvas;
-      const rasterCanvas = compositePip ? captureBaseCanvas : captureCanvas;
+      if (!shouldRasterize && !compositePlan) return captureCanvas;
+      const rasterCanvas = compositePlan ? captureBaseCanvas : captureCanvas;
 
       // html2canvas scales/translates a supplied context but does not reset it
       // between calls. Restore the reusable surface to its initial state and
@@ -1434,10 +1569,14 @@ export function useFrameCapture(): FrameCaptureHandle {
             scale: 1,
             useCORS: true,
             allowTaint: true,
-            backgroundColor: '#000000',
+            // An underlay base must stay transparent so the background video
+            // composited beneath it shows through everything the player does
+            // not paint. The compositor restores the opaque black backdrop.
+            backgroundColor: hasUnderlays ? null : '#000000',
             logging: false,
             onclone: async (_clonedDocument, clonedRoot) => {
-              if (compositePip) {
+              if (compositePlan) {
+                if (hasUnderlays) clearScheduledUnderlayBackdrops(clonedRoot);
                 clonedRoot
                   .querySelectorAll(SCHEDULED_MEDIA_SELECTOR)
                   .forEach((element) => element.remove());
@@ -1464,13 +1603,21 @@ export function useFrameCapture(): FrameCaptureHandle {
         lastVisualStateKeyRef.current = visualStateKey;
       }
 
-      if (compositePip) {
+      if (compositePlan) {
         const outputContext = captureCanvas.getContext('2d');
         if (!outputContext) throw new Error('Could not create the frame output canvas context');
         outputContext.setTransform(1, 0, 0, 1, 0, 0);
         outputContext.clearRect(0, 0, width, height);
+        // Engine backdrop → background clips → base (blocks + captions, with
+        // alpha where underlays exist) → PiP clips. Underlays match live
+        // stacking exactly (media z 0 under blocks/captions). PiP drawn over
+        // the caption-bearing base is the fast path's long-standing trade-off:
+        // a corner PiP box virtually never intersects the top-center captions.
+        outputContext.fillStyle = '#000000';
+        outputContext.fillRect(0, 0, width, height);
+        drawScheduledVideosOnto(captureCanvas, root, compositePlan.underlays);
         outputContext.drawImage(captureBaseCanvas, 0, 0);
-        compositeScheduledPipVideos(root, captureCanvas);
+        drawScheduledVideosOnto(captureCanvas, root, compositePlan.overlays);
       }
 
       // The reusable canvas is returned directly for the main-thread encoder.
@@ -1496,8 +1643,9 @@ export function useFrameCapture(): FrameCaptureHandle {
       containerRef.current.remove();
       containerRef.current = null;
     }
-    mediaProviderRef.current?.dispose();
+    if (ownsMediaProviderRef.current) mediaProviderRef.current?.dispose();
     mediaProviderRef.current = null;
+    ownsMediaProviderRef.current = false;
     if (captureCanvasRef.current) {
       captureCanvasRef.current.width = 0;
       captureCanvasRef.current.height = 0;

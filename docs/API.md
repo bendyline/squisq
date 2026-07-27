@@ -2711,7 +2711,24 @@ interface VideoExportModalProps {
   onClose: () => void;
 }
 function VideoExportModal(props: VideoExportModalProps): JSX.Element;
+
+interface CoverImageExportModalProps {
+  doc: Doc;
+  mediaProvider?: MediaProvider | null;
+  theme?: Theme;
+  coverSlideTemplate?: 'cover' | 'title' | 'sectionHeader' | 'imageWithCaption';
+  defaultWidth?: number;
+  defaultHeight?: number;
+  defaultFileName?: string;
+  colorScheme?: 'light' | 'dark';
+  onClose: () => void;
+}
+function CoverImageExportModal(props: CoverImageExportModalProps): JSX.Element;
 ```
+
+Cover-only editor surfaces should import this component from
+`@bendyline/squisq-video-react/cover-image`; that focused entry point excludes
+the MP4/GIF encoder worker graph.
 
 ### Hooks
 
@@ -2733,6 +2750,10 @@ interface VideoExportConfig {
   audio?: Map<string, ArrayBuffer>;
   mediaProvider?: MediaProvider;
   captionMode?: CaptionMode; // MP4 default 'off'; GIF default 'standard'
+  showCoverSlide?: boolean; // defaults to document frontmatter
+  coverDuration?: number; // defaults to squisq-cover-duration, then 2
+  coverPlayback?: 'overlay' | 'preroll'; // defaults to document frontmatter, then preroll
+  coverPreRoll?: number; // deprecated compatibility alias for preroll duration
   playerScript?: string; // unused by the browser export path; kept for CLI/Playwright
   ffmpegWasm?: FfmpegWasmLoadConfig; // REQUIRED for GIF + any ffmpeg.wasm path
 }
@@ -2767,7 +2788,9 @@ interface FrameCaptureHandle {
     renderOptions: Omit<RenderHtmlOptions, 'playerScript'>,
     captionMode?: CaptionMode,
   ): Promise<number>;
+  setCoverVisible(visible: boolean): Promise<void>;
   captureFrame(time: number): Promise<ImageBitmap>;
+  captureCanvasFrame(time: number): Promise<HTMLCanvasElement>;
   destroy(): void;
 }
 ```
