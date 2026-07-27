@@ -74,6 +74,13 @@ const MAX_EXPORT_MEDIA_FILES = 256;
 const ENCODER_PROBE_TIMEOUT_MS = 5_000;
 const ENCODER_START_TIMEOUT_MS = 60_000;
 const FRAME_CAPTURE_TIMEOUT_MS = 60_000;
+/**
+ * One extra, longer wait granted to a frame that missed the primary capture
+ * deadline. Late-export memory pressure can stretch a single raster pass far
+ * past its usual cost and then recover; a 20-minute export must not be thrown
+ * away for one degenerate frame.
+ */
+const FRAME_CAPTURE_RECOVERY_TIMEOUT_MS = 120_000;
 const FRAME_ENCODE_TIMEOUT_MS = 60_000;
 const CAPTURE_PROGRESS_START = 7;
 const CAPTURE_PROGRESS_END = 95;
@@ -175,6 +182,65 @@ export function settleWithin<T>(
       },
     );
   });
+}
+
+export interface FrameCaptureRecoveryOptions<T> {
+  /** The already-started capture for this frame. */
+  operation: Promise<T>;
+  /** 1-based frame number, for error messages. */
+  frameNumber: number;
+  totalFrames: number;
+  /** Dispose a result that arrives after the frame is finally abandoned. */
+  onLateResult?: (value: T) => void;
+  /** Document whose visibility gates the deadline (see {@link settleWithin}). */
+  activityDocument?: Document;
+  /** Invoked when the primary deadline passes and the grace wait begins. */
+  onRecoveryWait?: () => void;
+  /** Injectable budgets for tests. */
+  primaryTimeoutMs?: number;
+  graceTimeoutMs?: number;
+}
+
+/**
+ * Bound one frame's capture with a primary deadline plus a single grace
+ * period. The same pending operation is awaited across both waits — a capture
+ * player cannot service two overlapping captures, so "retry" here means
+ * granting the in-flight raster more time, not starting a second one. Late
+ * results are disposed only after the frame is truly abandoned.
+ */
+export async function settleFrameCaptureWithRecovery<T>({
+  operation,
+  frameNumber,
+  totalFrames,
+  onLateResult,
+  activityDocument,
+  onRecoveryWait,
+  primaryTimeoutMs = FRAME_CAPTURE_TIMEOUT_MS,
+  graceTimeoutMs = FRAME_CAPTURE_RECOVERY_TIMEOUT_MS,
+}: FrameCaptureRecoveryOptions<T>): Promise<T> {
+  const primaryMessage = `Frame capture stopped responding at frame ${frameNumber}/${totalFrames}.`;
+  try {
+    return await settleWithin(
+      operation,
+      primaryTimeoutMs,
+      primaryMessage,
+      undefined,
+      activityDocument,
+    );
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== primaryMessage) throw error;
+    onRecoveryWait?.();
+    const totalSeconds = Math.round((primaryTimeoutMs + graceTimeoutMs) / 1000);
+    return await settleWithin(
+      operation,
+      graceTimeoutMs,
+      `Frame capture stopped responding at frame ${frameNumber}/${totalFrames} ` +
+        `(no frame after ${totalSeconds}s). The browser is likely under memory pressure — ` +
+        `try a lower export quality, close the preview panes, and keep this tab visible.`,
+      onLateResult,
+      activityDocument,
+    );
+  }
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -848,6 +914,10 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
                   },
                 }
               : {}),
+            // Plain MP4 downloads finalize to a Blob, so the muxer may spill
+            // settled bytes out of JS memory as it goes. GIF transcode and
+            // ffmpeg audio muxing need contiguous bytes — keep those in memory.
+            spillOutputToBlob: effectiveOutputFormat === 'mp4' && !useFfmpegAudio,
           });
           encoderRef.current = encoder;
           setBackend('webcodecs');
@@ -935,13 +1005,15 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
           const captureOperation: Promise<EncoderFrameSource> = canUseWebCodecs
             ? frameCapture.captureCanvasFrame(captureTime, { reuseIfUnchanged: true })
             : frameCapture.captureFrame(captureTime, { reuseIfUnchanged: true });
-          const frame = await settleWithin(
-            captureOperation,
-            FRAME_CAPTURE_TIMEOUT_MS,
-            `Frame capture stopped responding at frame ${i + 1}/${totalFrames}.`,
-            releaseEncoderFrame,
-            document,
-          );
+          const frame = await settleFrameCaptureWithRecovery({
+            operation: captureOperation,
+            frameNumber: i + 1,
+            totalFrames,
+            onLateResult: releaseEncoderFrame,
+            activityDocument: document,
+            onRecoveryWait: () =>
+              setPhase(`Frame ${i + 1}/${totalFrames} is taking unusually long — still waiting…`),
+          });
 
           if (cancelledRef.current) {
             releaseEncoderFrame(frame);

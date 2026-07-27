@@ -3,12 +3,15 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import { resolveTheme } from '@bendyline/squisq/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  clearScheduledUnderlayBackdrops,
   coverSourceRect,
   createCaptureSvgRasterCache,
   createInlineProvider,
   canCompositeScheduledPipVideos,
   compositeScheduledPipVideos,
+  drawScheduledVideosOnto,
   getFrameVisualStateKey,
+  planScheduledVideoComposite,
   prepareScheduledVideoClones,
   primeIndeterminateCaptureVideos,
   rasterizeCaptureSvgClones,
@@ -714,6 +717,140 @@ describe('scheduled video capture clones', () => {
 
     expect(compositeScheduledPipVideos(root, destination)).toBe(1);
     expect(drawImage).toHaveBeenCalledWith(video, 0, 48, 640, 384, 480, 260, 150, 90);
+  });
+
+  it('plans background clips as underlays and PIP clips as overlays', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="background">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>' +
+      '<div class="doc-player__media-clips" data-presentation="picture-in-picture">' +
+      '<video data-clip-id="screen" data-active="true"></video></div>';
+    const [camera, screen] = Array.from(root.querySelectorAll('video'));
+    for (const video of [camera, screen]) {
+      Object.defineProperties(video, {
+        videoWidth: { configurable: true, value: 640 },
+        videoHeight: { configurable: true, value: 480 },
+      });
+    }
+
+    const plan = planScheduledVideoComposite(root);
+    expect(plan).not.toBeNull();
+    expect(plan!.underlays).toEqual([camera]);
+    expect(plan!.overlays).toEqual([screen]);
+  });
+
+  it('declines a composite plan for full-frame overlay clips (they sit under captions)', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="full-frame">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>';
+    const video = root.querySelector('video')!;
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+    });
+
+    expect(planScheduledVideoComposite(root)).toBeNull();
+  });
+
+  it('plans nothing when no scheduled clip is visually active', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="background">' +
+      '<video data-clip-id="camera" data-active="false"></video></div>';
+    const video = root.querySelector('video')!;
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+    });
+
+    expect(planScheduledVideoComposite(root)).toBeNull();
+  });
+
+  it('draws a full-bleed background clip with cover cropping beneath the base', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="background">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>';
+    const video = root.querySelector<HTMLVideoElement>('video')!;
+    const fullBleed = {
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: 640,
+      bottom: 360,
+      width: 640,
+      height: 360,
+      toJSON: () => ({}),
+    };
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+      getBoundingClientRect: { configurable: true, value: () => fullBleed },
+    });
+    Object.defineProperty(root, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => fullBleed,
+    });
+    const destination = document.createElement('canvas');
+    destination.width = 640;
+    destination.height = 360;
+    const drawImage = vi.fn();
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      objectFit: 'cover',
+      borderLeftWidth: '0px',
+      borderRightWidth: '0px',
+      borderTopWidth: '0px',
+      borderBottomWidth: '0px',
+      borderTopLeftRadius: '0px',
+      borderTopStyle: 'none',
+      borderTopColor: 'rgba(0, 0, 0, 0)',
+      boxShadow: 'none',
+    } as CSSStyleDeclaration);
+    vi.spyOn(destination, 'getContext').mockReturnValue({
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      fill: vi.fn(),
+      clip: vi.fn(),
+      drawImage,
+      shadowColor: '',
+      shadowOffsetX: 0,
+      shadowOffsetY: 0,
+      shadowBlur: 0,
+      globalAlpha: 1,
+      fillStyle: '',
+    } as unknown as CanvasRenderingContext2D);
+
+    expect(drawScheduledVideosOnto(destination, root, [video])).toBe(1);
+    // 640×480 source cover-cropped into 640×360: crop 60px top and bottom.
+    expect(drawImage).toHaveBeenCalledWith(video, 0, 60, 640, 360, 0, 0, 640, 360);
+  });
+
+  it('strips backdrops only from ancestors of background media groups in the clone', () => {
+    const clonedRoot = document.createElement('div');
+    clonedRoot.style.backgroundColor = 'rgb(20, 20, 20)';
+    clonedRoot.innerHTML =
+      '<div class="doc-player" style="background-color: rgb(10, 10, 40)">' +
+      '<div class="doc-player__media-clips" data-presentation="background"></div>' +
+      '<div class="doc-player__block" style="background-color: rgb(200, 0, 0)"></div>' +
+      '</div>';
+
+    clearScheduledUnderlayBackdrops(clonedRoot);
+
+    const player = clonedRoot.querySelector<HTMLElement>('.doc-player')!;
+    const block = clonedRoot.querySelector<HTMLElement>('.doc-player__block')!;
+    expect(player.style.backgroundColor).toBe('transparent');
+    expect(clonedRoot.style.backgroundColor).toBe('transparent');
+    // A block is not an ancestor of the media group — its slide background
+    // must keep painting over the composited underlay.
+    expect(block.style.backgroundColor).toBe('rgb(200, 0, 0)');
   });
 
   it('restores PIP presentation on html2canvas video replacements', () => {

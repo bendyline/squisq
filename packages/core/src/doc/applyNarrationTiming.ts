@@ -191,7 +191,8 @@ function retimeBlocks(blocks: Block[], ctx: RetimeContext): Block[] {
         pinned.duration != null &&
         Math.abs(pinned.duration - narrDuration) > PIN_CONFLICT_TOLERANCE_SEC;
       const startConflict =
-        pinned.startTime != null && Math.abs(pinned.startTime - narrStart) > PIN_CONFLICT_TOLERANCE_SEC;
+        pinned.startTime != null &&
+        Math.abs(pinned.startTime - narrStart) > PIN_CONFLICT_TOLERANCE_SEC;
       if (durationConflict || startConflict) {
         ctx.diagnostics.push({
           severity: 'info',

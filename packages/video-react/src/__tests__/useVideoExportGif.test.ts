@@ -79,6 +79,7 @@ import {
   DEFAULT_VIDEO_COVER_PRE_ROLL_SECONDS,
   resolveVideoCoverFramePlan,
   resolveVideoExportCover,
+  settleFrameCaptureWithRecovery,
   settleWithin,
   useVideoExport,
 } from '../hooks/useVideoExport.js';
@@ -262,6 +263,76 @@ describe('useVideoExport GIF flow', () => {
     document.dispatchEvent(new Event('visibilitychange'));
     await vi.advanceTimersByTimeAsync(1_000);
     await rejection;
+  });
+
+  it('grants a slow frame one grace period and uses its late result', async () => {
+    vi.useFakeTimers();
+    let resolveOperation!: (value: string) => void;
+    const operation = new Promise<string>((resolve) => {
+      resolveOperation = resolve;
+    });
+    const onRecoveryWait = vi.fn();
+    const onLateResult = vi.fn();
+    const bounded = settleFrameCaptureWithRecovery({
+      operation,
+      frameNumber: 8312,
+      totalFrames: 9175,
+      onLateResult,
+      onRecoveryWait,
+      primaryTimeoutMs: 1_000,
+      graceTimeoutMs: 2_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(onRecoveryWait).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1_500);
+    resolveOperation('frame');
+    await expect(bounded).resolves.toBe('frame');
+    expect(onLateResult).not.toHaveBeenCalled();
+  });
+
+  it('fails a frame with remediation guidance only after the grace period also expires', async () => {
+    vi.useFakeTimers();
+    let resolveOperation!: (value: { close: () => void }) => void;
+    const operation = new Promise<{ close: () => void }>((resolve) => {
+      resolveOperation = resolve;
+    });
+    const late = { close: vi.fn() };
+    const bounded = settleFrameCaptureWithRecovery({
+      operation,
+      frameNumber: 3,
+      totalFrames: 10,
+      onLateResult: (value) => value.close(),
+      primaryTimeoutMs: 1_000,
+      graceTimeoutMs: 2_000,
+    });
+    const rejection = expect(bounded).rejects.toThrow(
+      'Frame capture stopped responding at frame 3/10 (no frame after 3s). ' +
+        'The browser is likely under memory pressure — try a lower export quality, ' +
+        'close the preview panes, and keep this tab visible.',
+    );
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    await rejection;
+    resolveOperation(late);
+    await Promise.resolve();
+    expect(late.close).toHaveBeenCalledOnce();
+  });
+
+  it('propagates a genuine capture error without granting the grace period', async () => {
+    const onRecoveryWait = vi.fn();
+    const failure = new Error('Player committed 1.000000s while capture requested 2.000000s.');
+    await expect(
+      settleFrameCaptureWithRecovery({
+        operation: Promise.reject(failure),
+        frameNumber: 1,
+        totalFrames: 10,
+        onRecoveryWait,
+        primaryTimeoutMs: 1_000,
+        graceTimeoutMs: 2_000,
+      }),
+    ).rejects.toBe(failure);
+    expect(onRecoveryWait).not.toHaveBeenCalled();
   });
 
   it('uses compact/static defaults, skips audio, and emits an image/gif Blob', async () => {

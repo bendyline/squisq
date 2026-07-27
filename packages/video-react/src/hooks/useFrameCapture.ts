@@ -961,6 +961,68 @@ export function canCompositeScheduledPipVideos(captureRoot: HTMLElement): boolea
   );
 }
 
+export interface ScheduledVideoCompositePlan {
+  /** Full-bleed background clips drawn beneath the cached base raster. */
+  underlays: HTMLVideoElement[];
+  /** Corner PiP clips drawn over the cached base raster. */
+  overlays: HTMLVideoElement[];
+}
+
+/**
+ * Decide whether every active visual scheduled clip can be composited around a
+ * cached base raster instead of re-running html2canvas for each frame.
+ *
+ * `background` clips sit at the bottom of the player stack (z 0 — below blocks
+ * and captions), so they draw first with the base over them, provided the base
+ * was rasterized with a transparent backdrop (see
+ * {@link clearScheduledUnderlayBackdrops}). PiP clips sit above everything the
+ * base contains and draw last — the original fast path. `full-frame` overlay
+ * clips render above blocks but BELOW captions (z 10 vs z 50); drawing them
+ * after the caption-bearing base would cover the captions, so they keep the
+ * inline html2canvas path.
+ */
+export function planScheduledVideoComposite(
+  captureRoot: HTMLElement,
+): ScheduledVideoCompositePlan | null {
+  const activeVideos = Array.from(
+    captureRoot.querySelectorAll<HTMLVideoElement>(SCHEDULED_VIDEO_SELECTOR),
+  ).filter(scheduledVideoIsVisual);
+  if (activeVideos.length === 0) return null;
+  const underlays: HTMLVideoElement[] = [];
+  const overlays: HTMLVideoElement[] = [];
+  for (const video of activeVideos) {
+    const presentation = scheduledVideoPresentation(video);
+    if (presentation === 'background') underlays.push(video);
+    else if (presentation === 'picture-in-picture') overlays.push(video);
+    else return null;
+  }
+  return { underlays, overlays };
+}
+
+/**
+ * In html2canvas's disposable clone, strip backgrounds from every ancestor of
+ * a background-presented media group. Those backgrounds paint beneath the
+ * (removed) video in the live stacking order; left in the base they would end
+ * up ON TOP of the composited underlay. The black engine backdrop the
+ * compositor fills first stands in for them, exactly like html2canvas's own
+ * opaque backdrop does on the inline path.
+ */
+export function clearScheduledUnderlayBackdrops(clonedRoot: HTMLElement): void {
+  const groups = clonedRoot.querySelectorAll<HTMLElement>(
+    `${SCHEDULED_MEDIA_SELECTOR}[data-presentation="background"]`,
+  );
+  for (const group of Array.from(groups)) {
+    for (
+      let element: HTMLElement | null = group.parentElement;
+      element;
+      element = element === clonedRoot ? null : element.parentElement
+    ) {
+      element.style.backgroundColor = 'transparent';
+      element.style.backgroundImage = 'none';
+    }
+  }
+}
+
 function cssPixelValue(value: string): number {
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -1018,18 +1080,32 @@ export function compositeScheduledPipVideos(
   captureRoot: HTMLElement,
   destination: HTMLCanvasElement,
 ): number {
-  const context = destination.getContext('2d');
-  if (!context) throw new Error('Could not create the PiP compositor canvas context');
-  const rootRect = captureRoot.getBoundingClientRect();
-  if (rootRect.width <= 0 || rootRect.height <= 0) return 0;
-  const scaleX = destination.width / rootRect.width;
-  const scaleY = destination.height / rootRect.height;
   const videos = Array.from(
     captureRoot.querySelectorAll<HTMLVideoElement>(SCHEDULED_VIDEO_SELECTOR),
   ).filter(
     (video) =>
       scheduledVideoIsVisual(video) && scheduledVideoPresentation(video) === 'picture-in-picture',
   );
+  return drawScheduledVideosOnto(destination, captureRoot, videos);
+}
+
+/**
+ * Draw scheduled video frames onto the reusable output canvas with their
+ * authored CSS geometry (box, borders, radius, shadow, object-fit). Works for
+ * corner PiP boxes and full-bleed background clips alike — the caller decides
+ * stacking by when it invokes this relative to drawing the base raster.
+ */
+export function drawScheduledVideosOnto(
+  destination: HTMLCanvasElement,
+  captureRoot: HTMLElement,
+  videos: readonly HTMLVideoElement[],
+): number {
+  const context = destination.getContext('2d');
+  if (!context) throw new Error('Could not create the scheduled-video compositor canvas context');
+  const rootRect = captureRoot.getBoundingClientRect();
+  if (rootRect.width <= 0 || rootRect.height <= 0) return 0;
+  const scaleX = destination.width / rootRect.width;
+  const scaleY = destination.height / rootRect.height;
 
   for (const video of videos) {
     const rect = video.getBoundingClientRect();
@@ -1453,18 +1529,23 @@ export function useFrameCapture(): FrameCaptureHandle {
       }
       await waitForCaptureAssets(root, decodedImagesRef.current);
 
-      const compositePip = canCompositeScheduledPipVideos(root);
+      const compositePlan = planScheduledVideoComposite(root);
+      const hasUnderlays = compositePlan !== null && compositePlan.underlays.length > 0;
+      // Distinct cache namespaces: an underlay base is rasterized transparent
+      // with ancestor backdrops stripped and must never be reused as an opaque
+      // base (or vice versa) across a presentation change.
+      const rasterMode = compositePlan ? (hasUnderlays ? 'base-underlay' : 'base') : 'full';
       const visualStateKey = options.reuseIfUnchanged
-        ? `${compositePip ? 'base' : 'full'}:${getFrameVisualStateKey(root, time, {
-            ignoreScheduledVideoFrames: compositePip,
+        ? `${rasterMode}:${getFrameVisualStateKey(root, time, {
+            ignoreScheduledVideoFrames: compositePlan !== null,
           })}`
         : null;
       const shouldRasterize =
         visualStateKey === null ||
         !hasCapturedFrameRef.current ||
         lastVisualStateKeyRef.current !== visualStateKey;
-      if (!shouldRasterize && !compositePip) return captureCanvas;
-      const rasterCanvas = compositePip ? captureBaseCanvas : captureCanvas;
+      if (!shouldRasterize && !compositePlan) return captureCanvas;
+      const rasterCanvas = compositePlan ? captureBaseCanvas : captureCanvas;
 
       // html2canvas scales/translates a supplied context but does not reset it
       // between calls. Restore the reusable surface to its initial state and
@@ -1488,10 +1569,14 @@ export function useFrameCapture(): FrameCaptureHandle {
             scale: 1,
             useCORS: true,
             allowTaint: true,
-            backgroundColor: '#000000',
+            // An underlay base must stay transparent so the background video
+            // composited beneath it shows through everything the player does
+            // not paint. The compositor restores the opaque black backdrop.
+            backgroundColor: hasUnderlays ? null : '#000000',
             logging: false,
             onclone: async (_clonedDocument, clonedRoot) => {
-              if (compositePip) {
+              if (compositePlan) {
+                if (hasUnderlays) clearScheduledUnderlayBackdrops(clonedRoot);
                 clonedRoot
                   .querySelectorAll(SCHEDULED_MEDIA_SELECTOR)
                   .forEach((element) => element.remove());
@@ -1518,13 +1603,21 @@ export function useFrameCapture(): FrameCaptureHandle {
         lastVisualStateKeyRef.current = visualStateKey;
       }
 
-      if (compositePip) {
+      if (compositePlan) {
         const outputContext = captureCanvas.getContext('2d');
         if (!outputContext) throw new Error('Could not create the frame output canvas context');
         outputContext.setTransform(1, 0, 0, 1, 0, 0);
         outputContext.clearRect(0, 0, width, height);
+        // Engine backdrop → background clips → base (blocks + captions, with
+        // alpha where underlays exist) → PiP clips. Underlays match live
+        // stacking exactly (media z 0 under blocks/captions). PiP drawn over
+        // the caption-bearing base is the fast path's long-standing trade-off:
+        // a corner PiP box virtually never intersects the top-center captions.
+        outputContext.fillStyle = '#000000';
+        outputContext.fillRect(0, 0, width, height);
+        drawScheduledVideosOnto(captureCanvas, root, compositePlan.underlays);
         outputContext.drawImage(captureBaseCanvas, 0, 0);
-        compositeScheduledPipVideos(root, captureCanvas);
+        drawScheduledVideosOnto(captureCanvas, root, compositePlan.overlays);
       }
 
       // The reusable canvas is returned directly for the main-thread encoder.
