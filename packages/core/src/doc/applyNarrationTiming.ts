@@ -10,9 +10,17 @@
  * `resolveAudioMapping`, so every surface that resolves audio gets it.
  *
  * Precedence: author-pinned `duration=`/`startTime=` heading attrs win
- * over narration ranges (a conflicting pin gets an `info` diagnostic);
- * narration ranges win over per-block audio-segment mapping and
- * reading-time estimates.
+ * over narration ranges PER FIELD — a `duration=` pin keeps the
+ * narration's start and a `startTime=` pin keeps the narration's length
+ * (a conflicting pin gets an `info` diagnostic); narration ranges win
+ * over per-block audio-segment mapping and reading-time estimates.
+ *
+ * Contiguity: the block strip never opens a gap (or an overlap) around a
+ * pin. When a pin moves a block's end away from the take's range
+ * boundary, every later narration anchor ripples by the same delta —
+ * the committed layout matches the timeline editor's drag preview,
+ * which re-flows following blocks live. The narration AUDIO keeps its
+ * own absolute schedule; the diagnostic records that drift.
  */
 
 import type { Block, Doc, DocDiagnostic } from '../schemas/Doc.js';
@@ -150,40 +158,53 @@ interface RetimeContext {
   diagnostics: DocDiagnostic[];
   /** Timeline cursor (doc seconds) for unmatched blocks. */
   cursor: number;
+  /**
+   * Ripple (seconds) applied to later narration anchors after a pin moved a
+   * block's end away from the take's range boundary. Stays 0 while every pin
+   * agrees with the take, so unpinned docs keep their absolute anchors.
+   */
+  shift: number;
 }
 
-/** Recursively clone blocks, applying narration ranges to matched, unpinned blocks. */
+/** Recursively clone blocks, re-timing matched blocks from their narration ranges. */
 function retimeBlocks(blocks: Block[], ctx: RetimeContext): Block[] {
   return blocks.map((block) => {
     const range = ctx.ranges.get(block.id);
     const pinned = getPinnedBlockMeta(block);
     const next: Block = { ...block };
 
-    if (range && pinned.duration == null && pinned.startTime == null) {
-      next.startTime = ctx.clipStart + range.startSec;
-      next.duration = Math.max(0, range.endSec - range.startSec);
-      ctx.cursor = Math.max(ctx.cursor, next.startTime + next.duration);
-    } else if (range) {
-      // Author pins win; surface real disagreement as an info diagnostic.
-      const pinnedStart = pinned.startTime ?? block.startTime;
-      const pinnedDuration = pinned.duration ?? block.duration;
-      const narrStart = ctx.clipStart + range.startSec;
+    if (range) {
+      const narrStart = ctx.clipStart + range.startSec + ctx.shift;
       const narrDuration = Math.max(0, range.endSec - range.startSec);
-      if (
-        Math.abs(pinnedStart - narrStart) > PIN_CONFLICT_TOLERANCE_SEC ||
-        Math.abs(pinnedDuration - narrDuration) > PIN_CONFLICT_TOLERANCE_SEC
-      ) {
+      // Per-field precedence: a pin overrides only the field it names. A
+      // dragged `duration=` keeps the narration's (rippled) start; a
+      // `startTime=` pin keeps the narration's length.
+      next.startTime = pinned.startTime ?? narrStart;
+      next.duration = pinned.duration ?? narrDuration;
+      const end = next.startTime + next.duration;
+      // Contiguity: later anchors follow this block's actual end. For an
+      // unpinned block `end` lands exactly on its shifted range boundary, so
+      // this is a no-op until a pin disagrees with the take — from then on
+      // the strip ripples instead of opening a gap or an overlap.
+      ctx.shift = end - (ctx.clipStart + range.endSec);
+      const durationConflict =
+        pinned.duration != null &&
+        Math.abs(pinned.duration - narrDuration) > PIN_CONFLICT_TOLERANCE_SEC;
+      const startConflict =
+        pinned.startTime != null && Math.abs(pinned.startTime - narrStart) > PIN_CONFLICT_TOLERANCE_SEC;
+      if (durationConflict || startConflict) {
         ctx.diagnostics.push({
           severity: 'info',
           code: 'narration-pin-conflict',
           message:
             `Block timing is pinned (duration=/startTime=) but the recorded narration says ` +
-            `~${narrDuration.toFixed(1)}s starting at ~${narrStart.toFixed(1)}s. The pin wins; ` +
-            `remove it to follow the narration.`,
+            `~${narrDuration.toFixed(1)}s starting at ~${narrStart.toFixed(1)}s. The pin wins and ` +
+            `later blocks follow it, while the recorded voice keeps its own schedule — playback ` +
+            `drifts from the take past this block. Remove the pin to follow the narration.`,
           blockId: block.id,
         });
       }
-      ctx.cursor = Math.max(ctx.cursor, pinnedStart + pinnedDuration);
+      ctx.cursor = Math.max(ctx.cursor, end);
     } else {
       // No narration range (block added after the take, or unmatched):
       // keep its duration but place it at the running cursor so the
@@ -227,6 +248,7 @@ export async function applyNarrationTiming(
       ranges,
       diagnostics: [],
       cursor: 0,
+      shift: 0,
     };
     const blocks = retimeBlocks(doc.blocks, ctx);
     const duration = Math.max(clip.startAt + timing.duration, ctx.cursor);

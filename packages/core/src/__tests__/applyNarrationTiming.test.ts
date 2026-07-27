@@ -95,12 +95,68 @@ describe('applyNarrationTiming', () => {
 
     expect(result.applied).toBe(true);
     const flat = flattenRenderableBlocks(result.doc.blocks);
-    // Pin wins (narration said 12s, pin says 3s).
+    // Pin wins (narration said 12s, pin says 3s); the start still follows the
+    // narration anchor — the pin only overrides the field it names.
     expect(flat[1].duration).toBe(3);
+    expect(flat[1].startTime).toBe(10);
+    // Contiguity: the next block follows the pinned block's actual end
+    // instead of leaving a 9s hole at its absolute narration anchor.
+    expect(flat[2].startTime).toBe(13);
+    expect(flat[2].duration).toBe(8);
+    // The take still owns the doc duration (the audio really plays 30s).
+    expect(result.doc.duration).toBe(30);
     const conflict = result.doc.diagnostics?.find((d) => d.code === 'narration-pin-conflict');
     expect(conflict).toBeTruthy();
     expect(conflict!.severity).toBe('info');
     expect(conflict!.blockId).toBe(flat[1].id);
+  });
+
+  it('ripples following blocks when a drag-style squiggly duration pin shortens a block', async () => {
+    // What the timeline editor writes when block 1's edge is dragged shorter.
+    const edited = makeDoc(MD.replace('# Intro', '# Intro {[duration=4]}'));
+    const container = await containerWith(makeSidecar(edited));
+    const result = await applyNarrationTiming(edited, container);
+
+    expect(result.applied).toBe(true);
+    const flat = flattenRenderableBlocks(result.doc.blocks);
+    expect(flat.map((b) => [b.startTime, b.duration])).toEqual([
+      [0, 4],
+      [4, 12],
+      [16, 8],
+    ]);
+    expect(result.doc.duration).toBe(30);
+    expect(result.doc.diagnostics?.some((d) => d.code === 'narration-pin-conflict')).toBe(true);
+  });
+
+  it('ripples following blocks outward when a pin lengthens a block (no overlap)', async () => {
+    const edited = makeDoc(MD.replace('# Intro', '# Intro {[duration=20]}'));
+    const container = await containerWith(makeSidecar(edited));
+    const result = await applyNarrationTiming(edited, container);
+
+    const flat = flattenRenderableBlocks(result.doc.blocks);
+    expect(flat.map((b) => [b.startTime, b.duration])).toEqual([
+      [0, 20],
+      [20, 12],
+      [32, 8],
+    ]);
+    // Blocks now outrun the take; the block strip owns the doc duration.
+    expect(result.doc.duration).toBe(40);
+  });
+
+  it('keeps the narration duration when only startTime is pinned', async () => {
+    // The timeline item menu's Start time field writes exactly this pin.
+    const edited = makeDoc(MD.replace('# Middle', '# Middle {[startTime=40]}'));
+    const container = await containerWith(makeSidecar(edited));
+    const result = await applyNarrationTiming(edited, container);
+
+    const flat = flattenRenderableBlocks(result.doc.blocks);
+    // Start pinned; length still the narration's 12s — not a reading-time
+    // estimate. Followers stay contiguous after the moved block.
+    expect(flat[1].startTime).toBe(40);
+    expect(flat[1].duration).toBe(12);
+    expect(flat[2].startTime).toBe(52);
+    expect(flat[2].duration).toBe(8);
+    expect(result.doc.duration).toBe(60);
   });
 
   it('matches a renamed heading through text similarity', async () => {

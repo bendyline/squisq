@@ -228,6 +228,33 @@ function waitForCaptureVideoState(
 }
 
 /**
+ * Whether an element still needs an indexing pass before it can be seeked.
+ *
+ * Membership in the primed set is not sufficient on its own. A scheduled clip
+ * mounts before its MediaProvider URL resolves, and React can retain the
+ * element while replacing its src, so an already-seen node can still be holding
+ * a fresh, unindexed recorder WebM. Any visual source without a finite duration
+ * must be indexed again before the first non-zero seek, whatever the set
+ * remembers about this element.
+ */
+function captureVideoNeedsPriming(
+  video: HTMLVideoElement,
+  primedVideos: WeakSet<HTMLVideoElement>,
+): boolean {
+  // An Opus-only WebM authored as <video> keeps duration=Infinity for its whole
+  // lifetime and has no frame to index, seek, or capture. Loading another src
+  // resets readyState, so this stays accurate across replacements.
+  if (
+    video.readyState >= HTMLMediaElement.HAVE_METADATA &&
+    video.videoWidth <= 0 &&
+    video.videoHeight <= 0
+  ) {
+    return false;
+  }
+  return !primedVideos.has(video) || !Number.isFinite(video.duration);
+}
+
+/**
  * Make recorder-produced WebM video deterministic and fast to seek before
  * accelerated frame capture starts.
  *
@@ -243,13 +270,8 @@ export async function primeIndeterminateCaptureVideos(
   captureRoot: HTMLElement,
   primedVideos: WeakSet<HTMLVideoElement> = new WeakSet(),
 ): Promise<number> {
-  const videos = Array.from(captureRoot.querySelectorAll('video')).filter(
-    (video) =>
-      !primedVideos.has(video) ||
-      // React can retain the element while replacing/reloading its src. A
-      // recorder WebM then returns to duration=Infinity even though this DOM
-      // node was primed earlier, so it must be indexed again before seeking.
-      (video.dataset.captureSequential === 'true' && !Number.isFinite(video.duration)),
+  const videos = Array.from(captureRoot.querySelectorAll('video')).filter((video) =>
+    captureVideoNeedsPriming(video, primedVideos),
   );
   let primedCount = 0;
 
@@ -257,7 +279,10 @@ export async function primeIndeterminateCaptureVideos(
     videos.map(async (video) => {
       const source = video.currentSrc || video.src;
       if (!source) {
-        primedVideos.add(video);
+        // A scheduled clip is mounted before MediaProvider resolves its blob
+        // URL. Recording this empty element as primed would permanently hide
+        // the real recorder WebM that lands on it moments later, so leave it
+        // for the next capture instead.
         return;
       }
 
@@ -1401,7 +1426,18 @@ export function useFrameCapture(): FrameCaptureHandle {
       // duration=Infinity source first fails before the old post-seek repair
       // ever gets a chance to run.
       await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current);
-      await api.seekTo(time);
+      try {
+        await api.seekTo(time);
+      } catch (seekError) {
+        // A clip whose source resolved during this seek is still unindexed:
+        // Chromium clamps every seek on a duration=Infinity WebM back to zero,
+        // so the frame barrier times out. Index whatever arrived late and retry
+        // once rather than failing the whole export on a mount race.
+        if (!(await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current))) {
+          throw seekError;
+        }
+        await api.seekTo(time);
+      }
 
       if (await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current)) {
         // A video mounted during the seek was restored to its prior frame.

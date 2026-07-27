@@ -224,6 +224,64 @@ describe('primeIndeterminateCaptureVideos', () => {
     expect(assignments).toEqual([1e101, 12.5, 1e101, 12.5]);
   });
 
+  it('indexes a scheduled clip whose provider URL resolves after the first pass', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<video></video>';
+    const video = root.querySelector('video')!;
+    let source = '';
+    let duration = Number.NaN;
+    let currentTime = 0;
+    let seeking = false;
+    const assignments: number[] = [];
+    Object.defineProperties(video, {
+      currentSrc: { configurable: true, get: () => source },
+      duration: { configurable: true, get: () => duration },
+      currentTime: {
+        configurable: true,
+        get: () => currentTime,
+        set: (value: number) => {
+          assignments.push(value);
+          seeking = true;
+          queueMicrotask(() => {
+            if (value > 1e100) {
+              duration = 304.534;
+              currentTime = duration;
+              video.dispatchEvent(new Event('durationchange'));
+            } else {
+              currentTime = value;
+            }
+            seeking = false;
+            video.dispatchEvent(new Event('seeked'));
+          });
+        },
+      },
+      readyState: {
+        configurable: true,
+        get: () => (source ? HTMLMediaElement.HAVE_ENOUGH_DATA : HTMLMediaElement.HAVE_NOTHING),
+      },
+      seeking: { configurable: true, get: () => seeking },
+      pause: { configurable: true, value: vi.fn() },
+      videoWidth: { configurable: true, get: () => (source ? 640 : 0) },
+      videoHeight: { configurable: true, get: () => (source ? 480 : 0) },
+    });
+    const primed = new WeakSet<HTMLVideoElement>();
+
+    // MediaClipLayer mounts the element before MediaProvider resolves its URL.
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+    expect(assignments).toEqual([]);
+
+    // The recorder WebM lands moments later. Remembering the empty element as
+    // primed would leave duration=Infinity, and Chromium clamps every seek on
+    // such a source back to zero.
+    source = 'blob:camera-webm';
+    duration = Number.POSITIVE_INFINITY;
+
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(1);
+    expect(assignments).toEqual([1e101, 0]);
+    expect(video.dataset.captureSequential).toBe('true');
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+  });
+
   it('skips an Opus-only source authored with a video element', async () => {
     const root = document.createElement('div');
     root.innerHTML = '<video src="audio/narration.webm"></video>';
@@ -864,6 +922,137 @@ describe('useFrameCapture', () => {
     expect(api.seekTo).toHaveBeenCalledOnce();
     expect(api.seekTo).toHaveBeenCalledWith(0.03);
     expect(video.dataset.captureSequential).toBe('true');
+
+    result.current.destroy();
+  });
+
+  it('recovers a refused seek by indexing a clip that resolved mid-seek', async () => {
+    let renderedTime = 0;
+    let source = '';
+    let duration = Number.NaN;
+    let seekAttempts = 0;
+    const api = {
+      getDuration: vi.fn(() => 4.5),
+      getRenderedTime: vi.fn(() => renderedTime),
+      seekTo: vi.fn(async (time: number) => {
+        seekAttempts += 1;
+        if (seekAttempts === 1) {
+          // The clip's provider URL lands while the player is seeking. Its
+          // unindexed recorder WebM reports duration=Infinity, so Chromium
+          // clamps the requested frame away and the barrier times out.
+          source = 'blob:late-clip-webm';
+          duration = Number.POSITIVE_INFINITY;
+          throw new Error(
+            'Video frame did not become ready at 0.030s within 2000ms ' +
+              '(currentTime=0.000s, duration=Infinity).',
+          );
+        }
+        renderedTime = time;
+      }),
+      showCover: vi.fn(async () => {}),
+      hideCover: vi.fn(async () => {}),
+    };
+    frameCaptureMocks.render.mockImplementation((node: unknown) => {
+      const element = node as { props: Record<string, unknown> };
+      const ready = element.props.onRenderAPIReady as (value: typeof api) => void;
+      ready(api);
+    });
+    frameCaptureMocks.html2canvas.mockImplementation(
+      async (_root: HTMLElement, options: { canvas: HTMLCanvasElement }) => options.canvas,
+    );
+    const captureContext = {
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+    } as unknown as CanvasRenderingContext2D;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(captureContext);
+    const doc = {
+      articleId: 'refused-seek-test',
+      duration: 4.5,
+      blocks: [],
+      audio: { segments: [] },
+    } as Doc;
+    const { result } = renderHook(() => useFrameCapture());
+
+    expect(await result.current.init(doc, { width: 640, height: 360 })).toBe(4.5);
+    const root = document.querySelector<HTMLElement>('#squisq-capture-root')!;
+    const video = document.createElement('video');
+    root.appendChild(video);
+
+    let currentTime = 0;
+    let seeking = false;
+    const assignments: number[] = [];
+    Object.defineProperties(video, {
+      currentSrc: { configurable: true, get: () => source },
+      duration: { configurable: true, get: () => duration },
+      currentTime: {
+        configurable: true,
+        get: () => currentTime,
+        set: (value: number) => {
+          assignments.push(value);
+          seeking = true;
+          queueMicrotask(() => {
+            if (value > 1e100) {
+              duration = 304.534;
+              currentTime = duration;
+              video.dispatchEvent(new Event('durationchange'));
+            } else {
+              currentTime = value;
+            }
+            seeking = false;
+            video.dispatchEvent(new Event('seeked'));
+          });
+        },
+      },
+      readyState: {
+        configurable: true,
+        get: () => (source ? HTMLMediaElement.HAVE_ENOUGH_DATA : HTMLMediaElement.HAVE_NOTHING),
+      },
+      seeking: { configurable: true, get: () => seeking },
+      pause: { configurable: true, value: vi.fn() },
+      videoWidth: { configurable: true, get: () => (source ? 640 : 0) },
+      videoHeight: { configurable: true, get: () => (source ? 480 : 0) },
+    });
+
+    await expect(result.current.captureCanvasFrame(0.03)).resolves.toBeInstanceOf(
+      HTMLCanvasElement,
+    );
+
+    expect(assignments).toEqual([1e101, 0]);
+    expect(api.seekTo).toHaveBeenCalledTimes(2);
+    expect(api.seekTo).toHaveBeenNthCalledWith(2, 0.03);
+    expect(video.dataset.captureSequential).toBe('true');
+
+    result.current.destroy();
+  });
+
+  it('surfaces a seek failure that indexing cannot explain', async () => {
+    const seekFailure = new Error('Player committed 0.000000s while capture requested 0.030000s.');
+    const api = {
+      getDuration: vi.fn(() => 4.5),
+      getRenderedTime: vi.fn(() => 0),
+      seekTo: vi.fn(async () => {
+        throw seekFailure;
+      }),
+      showCover: vi.fn(async () => {}),
+      hideCover: vi.fn(async () => {}),
+    };
+    frameCaptureMocks.render.mockImplementation((node: unknown) => {
+      const element = node as { props: Record<string, unknown> };
+      const ready = element.props.onRenderAPIReady as (value: typeof api) => void;
+      ready(api);
+    });
+    const doc = {
+      articleId: 'unrecoverable-seek-test',
+      duration: 4.5,
+      blocks: [],
+      audio: { segments: [] },
+    } as Doc;
+    const { result } = renderHook(() => useFrameCapture());
+
+    expect(await result.current.init(doc, { width: 640, height: 360 })).toBe(4.5);
+
+    await expect(result.current.captureCanvasFrame(0.03)).rejects.toThrow(seekFailure.message);
+    expect(api.seekTo).toHaveBeenCalledOnce();
 
     result.current.destroy();
   });
