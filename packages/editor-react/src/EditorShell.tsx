@@ -89,6 +89,7 @@ import type {
   RefObject,
 } from 'react';
 import { MediaContext, useMediaClipDurations } from '@bendyline/squisq-react';
+import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { useModalDialog } from './modal/useModalDialog';
 import type { EditorHostMode } from './editorHostMode';
@@ -126,6 +127,13 @@ export interface EditorShellProps {
    * navigation; any other return (or void) marks the link as handled.
    */
   onLinkClick?: (href: string) => boolean | undefined;
+  /** Show a Copy button on ordinary fenced code blocks (default: false). */
+  showCodeCopyButton?: boolean;
+  /**
+   * Optional host clipboard adapter. When omitted, enabled controls use the
+   * browser Clipboard API. Electron/native hosts can bridge copying here.
+   */
+  onCopyCode?: CodeBlockCopyHandler;
   /**
    * Light/dark chrome color scheme for the editor shell — toolbar, tabs,
    * status bar, and side panes (default: `'light'`). This is the editor's
@@ -508,6 +516,8 @@ export function EditorShell({
   basePath = '/',
   onChange,
   onLinkClick,
+  showCodeCopyButton = false,
+  onCopyCode,
   colorScheme = 'light',
   className,
   height = '100vh',
@@ -626,6 +636,8 @@ export function EditorShell({
           defaultViewportPreset={defaultViewportPreset}
           onChange={onChange}
           onLinkClick={onLinkClick}
+          showCodeCopyButton={showCodeCopyButton}
+          onCopyCode={onCopyCode}
           className={className}
           height={height}
           minHeight={minHeight}
@@ -672,6 +684,8 @@ interface EditorShellInnerProps {
   defaultViewportPreset: ViewportPreset;
   onChange?: (source: string) => void;
   onLinkClick?: (href: string) => boolean | undefined;
+  showCodeCopyButton: boolean;
+  onCopyCode?: CodeBlockCopyHandler;
   className?: string;
   height: string;
   minHeight?: string;
@@ -748,6 +762,8 @@ function EditorShellInner({
   defaultViewportPreset,
   onChange,
   onLinkClick,
+  showCodeCopyButton,
+  onCopyCode,
   className,
   height,
   minHeight,
@@ -1336,6 +1352,8 @@ function EditorShellInner({
                     basePath={basePath}
                     workspaceContainer={workspaceContainer}
                     onLinkClick={onLinkClick}
+                    showCodeCopyButton={showCodeCopyButton}
+                    onCopyCode={onCopyCode}
                   />
                 )}
               </div>

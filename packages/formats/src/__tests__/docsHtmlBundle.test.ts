@@ -58,6 +58,18 @@ describe('markdownDocsToHtmlBundle', () => {
     expect(html).toContain('mode: "static"');
   });
 
+  it('passes the fenced-code Copy option to every standalone page', async () => {
+    const blob = await markdownDocsToHtmlBundle({
+      entryPath: 'home.md',
+      ...makeContainer({ 'home.md': '# Home\n\n```sh\nnpm run all\n```' }),
+      playerScript: 'player();',
+      showCodeCopyButton: true,
+    });
+    const zip = await openZip(blob);
+
+    expect(await readZipPath(zip, 'home.html')).toContain('showCodeCopyButton: true');
+  });
+
   it('follows links, preserves fragments, rewrites raw HTML anchors, and handles cycles', async () => {
     const blob = await markdownDocsToHtmlBundle({
       entryPath: 'home.md',

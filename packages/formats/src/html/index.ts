@@ -155,6 +155,7 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
     mode = 'slideshow',
     title,
     autoPlay,
+    showCodeCopyButton,
     themeId,
     themeRegistry,
   } = options;
@@ -221,6 +222,7 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
     mode,
     title,
     autoPlay,
+    showCodeCopyButton,
     themeId,
     themeRegistry,
   });

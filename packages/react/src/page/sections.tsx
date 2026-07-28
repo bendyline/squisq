@@ -373,7 +373,7 @@ export function CardGridSection({ section }: SectionProps) {
 // ── Item list ──────────────────────────────────────────────────────
 
 export function ItemListSection({ section }: SectionProps) {
-  const { theme } = usePageView();
+  const { theme, showCodeCopyButton, onCopyCode } = usePageView();
   const items = section.slots.items ?? [];
   return (
     <>
@@ -383,7 +383,16 @@ export function ItemListSection({ section }: SectionProps) {
       <ol className="squisq-page-items">
         {items.map((item, i) => (
           <li key={i}>
-            {item.markdown ? <MarkdownRenderer nodes={item.markdown} theme={theme} /> : item.body}
+            {item.markdown ? (
+              <MarkdownRenderer
+                nodes={item.markdown}
+                theme={theme}
+                showCodeCopyButton={showCodeCopyButton}
+                onCopyCode={onCopyCode}
+              />
+            ) : (
+              item.body
+            )}
           </li>
         ))}
       </ol>
@@ -451,18 +460,30 @@ export function TableSection({ section }: SectionProps) {
 // ── Prose ──────────────────────────────────────────────────────────
 
 export function ProseSection({ section, block }: SectionProps) {
-  const { theme } = usePageView();
+  const { theme, showCodeCopyButton, onCopyCode } = usePageView();
   // The title slot may be deliberately suppressed (e.g. cover dedupe), so
   // gate the heading on it rather than on the source heading alone.
   const heading: ReactNode =
     section.slots.title !== undefined && block?.sourceHeading ? (
-      <MarkdownRenderer nodes={[block.sourceHeading]} theme={theme} />
+      <MarkdownRenderer
+        nodes={[block.sourceHeading]}
+        theme={theme}
+        showCodeCopyButton={showCodeCopyButton}
+        onCopyCode={onCopyCode}
+      />
     ) : null;
   const bodyNodes = section.slots.body?.markdown ?? block?.contents;
   return (
     <div className="squisq-page-prose">
       {heading}
-      {bodyNodes && bodyNodes.length > 0 && <MarkdownRenderer nodes={bodyNodes} theme={theme} />}
+      {bodyNodes && bodyNodes.length > 0 && (
+        <MarkdownRenderer
+          nodes={bodyNodes}
+          theme={theme}
+          showCodeCopyButton={showCodeCopyButton}
+          onCopyCode={onCopyCode}
+        />
+      )}
     </div>
   );
 }

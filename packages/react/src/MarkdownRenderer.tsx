@@ -14,7 +14,7 @@
  * All elements use the `squisq-md-*` CSS class prefix for styling.
  */
 
-import { Fragment } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { Theme } from '@bendyline/squisq/schemas';
 import {
   sanitizeHtmlNodes,
@@ -35,6 +35,22 @@ import { MermaidDiagram } from './mermaid/MermaidDiagram.js';
 
 // ── Props ──────────────────────────────────────────────────────────
 
+export interface CodeBlockCopyContext {
+  /** Authored fence language, when one was supplied. */
+  language?: string;
+}
+
+/**
+ * Host-owned clipboard adapter for fenced code blocks.
+ *
+ * The callback runs directly from the button's click handler so Electron
+ * bridges and browser Clipboard APIs retain their user-gesture context.
+ */
+export type CodeBlockCopyHandler = (
+  code: string,
+  context: CodeBlockCopyContext,
+) => void | Promise<void>;
+
 export interface MarkdownRendererProps {
   /** Block-level AST nodes to render */
   nodes: MarkdownBlockNode[];
@@ -53,6 +69,14 @@ export interface MarkdownRendererProps {
   linkSchemes?: readonly string[];
   /** Resolved Squisq theme inherited by embedded Mermaid diagrams. */
   theme?: Theme;
+  /** Show a subtle Copy button on ordinary fenced code blocks (default: false). */
+  showCodeCopyButton?: boolean;
+  /**
+   * Optional host clipboard adapter. When omitted, enabled copy buttons use
+   * `navigator.clipboard.writeText`. Supply this for Electron, native shells,
+   * or hosts with their own clipboard permission/error handling.
+   */
+  onCopyCode?: CodeBlockCopyHandler;
 }
 
 /** Options threaded through the recursive renderers. */
@@ -60,9 +84,92 @@ interface RenderCtx {
   htmlPolicy: HtmlPolicy;
   linkSchemes?: readonly string[];
   theme?: Theme;
+  showCodeCopyButton?: boolean;
+  onCopyCode?: CodeBlockCopyHandler;
 }
 
 const DEFAULT_CTX: RenderCtx = { htmlPolicy: 'sanitize' };
+
+type CodeCopyStatus = 'idle' | 'copying' | 'copied' | 'failed';
+
+const CODE_COPY_LABELS: Record<CodeCopyStatus, string> = {
+  idle: 'Copy',
+  copying: 'Copying\u2026',
+  copied: 'Copied',
+  failed: 'Copy failed',
+};
+
+async function writeCodeToClipboard(
+  code: string,
+  language: string | undefined,
+  onCopyCode: CodeBlockCopyHandler | undefined,
+): Promise<void> {
+  if (onCopyCode) {
+    await onCopyCode(code, language === undefined ? {} : { language });
+    return;
+  }
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+    throw new Error('Clipboard access is unavailable in this host');
+  }
+  await navigator.clipboard.writeText(code);
+}
+
+function CodeBlock({
+  value,
+  language,
+  ctx,
+}: {
+  value: string;
+  language?: string | null;
+  ctx: RenderCtx;
+}) {
+  const [status, setStatus] = useState<CodeCopyStatus>('idle');
+  const resetTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(
+    () => () => {
+      if (resetTimer.current !== undefined) clearTimeout(resetTimer.current);
+    },
+    [],
+  );
+
+  const pre = (
+    <pre className="squisq-md-code-block">
+      <code className={language ? `language-${language}` : undefined}>{value}</code>
+    </pre>
+  );
+
+  if (!ctx.showCodeCopyButton) return pre;
+
+  const handleCopy = async () => {
+    if (status === 'copying') return;
+    setStatus('copying');
+    try {
+      await writeCodeToClipboard(value, language ?? undefined, ctx.onCopyCode);
+      setStatus('copied');
+    } catch {
+      setStatus('failed');
+    }
+    if (resetTimer.current !== undefined) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setStatus('idle'), 1600);
+  };
+
+  return (
+    <div className="squisq-md-code-frame">
+      {pre}
+      <button
+        type="button"
+        className="squisq-md-code-copy"
+        data-copy-state={status}
+        disabled={status === 'copying'}
+        onClick={() => void handleCopy()}
+        aria-label="Copy code to clipboard"
+      >
+        {CODE_COPY_LABELS[status]}
+      </button>
+    </div>
+  );
+}
 
 // ── Inline Renderer ────────────────────────────────────────────────
 
@@ -289,11 +396,7 @@ function renderBlock(
           />
         );
       }
-      return (
-        <pre key={key} className="squisq-md-code-block">
-          <code className={node.lang ? `language-${node.lang}` : undefined}>{node.value}</code>
-        </pre>
-      );
+      return <CodeBlock key={key} value={node.value} language={node.lang} ctx={ctx} />;
 
     case 'thematicBreak':
       return <hr key={key} className="squisq-md-hr" />;
@@ -661,12 +764,20 @@ export function MarkdownRenderer({
   htmlPolicy = 'sanitize',
   linkSchemes,
   theme,
+  showCodeCopyButton = false,
+  onCopyCode,
 }: MarkdownRendererProps) {
   if (!nodes || nodes.length === 0) return null;
 
   return (
     <div className={`squisq-md ${className || ''}`}>
-      {renderBlocks(nodes, '', { htmlPolicy, linkSchemes, theme })}
+      {renderBlocks(nodes, '', {
+        htmlPolicy,
+        linkSchemes,
+        theme,
+        showCodeCopyButton,
+        onCopyCode,
+      })}
     </div>
   );
 }

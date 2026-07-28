@@ -450,6 +450,15 @@ describe('page CSS', () => {
     );
   });
 
+  it('uses the page theme color for links in every section kind', () => {
+    const linkRule = PAGE_BASE_CSS.match(/\.squisq-page a \{([^}]*)\}/)?.[1];
+
+    expect(linkRule).toContain('color: var(--squisq-page-primary)');
+    expect(linkRule).toContain(
+      'text-decoration-color: color-mix(in srgb, var(--squisq-page-primary) 40%, transparent)',
+    );
+  });
+
   it('resolvePageStyle derives a style for themes without pageStyle', () => {
     const theme = createTheme(DEFAULT_THEME, { id: 'legacy' });
     delete (theme as unknown as Record<string, unknown>).pageStyle;

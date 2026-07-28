@@ -195,6 +195,8 @@ function DocPlayerContent({
   pipPosition,
   enableSwipe = true,
   globalKeyboardShortcuts = false,
+  showCodeCopyButton = false,
+  onCopyCode,
 }: DocPlayerContentProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
@@ -1280,6 +1282,8 @@ function DocPlayerContent({
           theme={theme}
           surface={surface}
           animationsEnabled={animationsEnabled}
+          showCodeCopyButton={showCodeCopyButton}
+          onCopyCode={onCopyCode}
         />
       </div>
     );

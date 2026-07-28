@@ -161,6 +161,8 @@ export interface PptxExportOptions {
    * - `'heading'` — any heading (H1–H6) starts a slide
    */
   slideBreak?: 'h1' | 'h2' | 'heading';
+  /** Receives non-fatal export warnings. */
+  onWarning?: (message: string) => void;
   /** Default body font family. Default: "Calibri" */
   defaultFont?: string;
   /** Default body font size in points. Default: 18 */
@@ -204,7 +206,7 @@ export async function markdownDocToPptx(
   const themeId = options.themeId ?? readFrontmatterThemeId(doc.frontmatter);
   const style = resolveSlideStyle(themeId, options, doc);
 
-  const slides = segmentIntoSlides(doc.children, options.slideBreak ?? 'h2');
+  const slides = segmentIntoSlides(doc.children, options.slideBreak ?? 'h2', options.onWarning);
 
   // Ensure at least one slide
   if (slides.length === 0) {
@@ -427,14 +429,22 @@ interface SlideData {
 function segmentIntoSlides(
   children: MarkdownBlockNode[],
   slideBreak: 'h1' | 'h2' | 'heading',
+  onWarning?: (message: string) => void,
 ): SlideData[] {
   const maxDepth = slideBreak === 'h1' ? 1 : slideBreak === 'h2' ? 2 : 6;
   const slides: SlideData[] = [];
   let current: SlideData | undefined;
+  let redundantThematicBreaks = 0;
 
   for (const node of children) {
     if (node.type === 'heading' && node.depth <= maxDepth) {
-      if (current) slides.push(current);
+      if (current) {
+        while (current.bodyNodes[current.bodyNodes.length - 1]?.type === 'thematicBreak') {
+          current.bodyNodes.pop();
+          redundantThematicBreaks += 1;
+        }
+        if (current.title || current.bodyNodes.length > 0) slides.push(current);
+      }
       current = {
         title: node.children,
         titleDepth: node.depth,
@@ -450,6 +460,12 @@ function segmentIntoSlides(
   }
 
   if (current) slides.push(current);
+  if (redundantThematicBreaks > 0) {
+    onWarning?.(
+      `PPTX export removed ${redundantThematicBreaks} redundant thematic break(s) immediately before slide headings. ` +
+        'A heading already starts the next slide; omit --- unless a visible horizontal rule is intended.',
+    );
+  }
   return slides;
 }
 
@@ -1803,7 +1819,7 @@ function convertTableRow(row: MarkdownTableRow, ctx: SlideContext, isHeader: boo
 }
 
 function convertThematicBreak(ctx: SlideContext): string {
-  return `<a:p><a:pPr><a:spcAft><a:spcPts val="1200"/></a:spcAft></a:pPr><a:r><a:rPr lang="en-US" sz="400"><a:solidFill><a:srgbClr val="${ctx.style.mutedColor}"/></a:solidFill></a:rPr><a:t>———</a:t></a:r></a:p>`;
+  return `<a:p><a:pPr algn="ctr"><a:spcBef><a:spcPts val="600"/></a:spcBef><a:spcAft><a:spcPts val="1200"/></a:spcAft><a:buNone/></a:pPr><a:r><a:rPr lang="en-US" sz="800"><a:solidFill><a:srgbClr val="${ctx.style.mutedColor}"/></a:solidFill></a:rPr><a:t>────────────────────</a:t></a:r><a:endParaRPr lang="en-US" sz="800"/></a:p>`;
 }
 
 function convertHtmlBlock(node: MarkdownHtmlBlock, ctx: SlideContext): string {

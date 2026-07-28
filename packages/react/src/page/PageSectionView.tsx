@@ -99,7 +99,7 @@ function sectionBody(
 }
 
 export function PageSectionView({ entry, featureFlip, isLeadProse }: PageSectionViewProps) {
-  const { pageStyle, theme } = usePageView();
+  const { pageStyle, theme, showCodeCopyButton, onCopyCode } = usePageView();
   const { section } = entry;
   const richContent = section.slots.richContent?.markdown;
 
@@ -133,7 +133,12 @@ export function PageSectionView({ entry, featureFlip, isLeadProse }: PageSection
         {sectionBody(entry, featureFlip)}
         {richContent && richContent.length > 0 && (
           <div className="squisq-page-rich-content">
-            <MarkdownRenderer nodes={richContent} theme={theme} />
+            <MarkdownRenderer
+              nodes={richContent}
+              theme={theme}
+              showCodeCopyButton={showCodeCopyButton}
+              onCopyCode={onCopyCode}
+            />
           </div>
         )}
       </div>

@@ -46,6 +46,7 @@ import type {
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { PageViewContext, type PageViewContextValue } from './page/PageViewContext';
 import { PageSectionView } from './page/PageSectionView';
+import type { CodeBlockCopyHandler } from './MarkdownRenderer';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -109,6 +110,10 @@ export interface LinearDocViewProps {
    * emphasis-curve adjustments defined by `TransformStyleConfig.page`.
    */
   transformPage?: PageTransformHints;
+  /** Show a Copy button on ordinary fenced code blocks (default: false). */
+  showCodeCopyButton?: boolean;
+  /** Optional host clipboard adapter; otherwise the browser Clipboard API is used. */
+  onCopyCode?: CodeBlockCopyHandler;
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
@@ -137,6 +142,8 @@ export function LinearDocView({
   globalKeyboardShortcuts = false,
   showCover = true,
   transformPage,
+  showCodeCopyButton = false,
+  onCopyCode,
 }: LinearDocViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
@@ -194,6 +201,8 @@ export function LinearDocView({
       renderContext,
       animationsEnabled,
       imageDisplayMode,
+      showCodeCopyButton,
+      onCopyCode,
     }),
     [
       activeTheme,
@@ -203,6 +212,8 @@ export function LinearDocView({
       renderContext,
       animationsEnabled,
       imageDisplayMode,
+      showCodeCopyButton,
+      onCopyCode,
     ],
   );
 

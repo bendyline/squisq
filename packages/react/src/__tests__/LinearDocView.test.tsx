@@ -352,6 +352,21 @@ describe('LinearDocView markdown prop', () => {
     expect(container.textContent).toContain('Paragraph body.');
   });
 
+  it('threads opt-in fenced-code copying through the page renderer', () => {
+    const code = '$ node packages/tooling/dist/cli.mjs components';
+    const onCopyCode = vi.fn();
+    const { getByRole } = render(
+      <LinearDocView
+        markdown={`# Commands\n\n\`\`\`shell\n${code}\n\`\`\``}
+        showCodeCopyButton
+        onCopyCode={onCopyCode}
+      />,
+    );
+
+    fireEvent.click(getByRole('button', { name: 'Copy code to clipboard' }));
+    expect(onCopyCode).toHaveBeenCalledWith(code, { language: 'shell' });
+  });
+
   it('adds extra spacing between blank-line-separated paragraphs', () => {
     const { container } = render(
       <LinearDocView markdown={'First paragraph.\n\nSecond paragraph.'} />,

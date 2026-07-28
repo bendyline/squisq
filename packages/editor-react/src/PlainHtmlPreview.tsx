@@ -21,6 +21,7 @@ import type { CSSProperties } from 'react';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
+import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 import { collectInlineFontAwesomeCss } from './utils/collectInlineFontAwesomeCss';
 
@@ -77,6 +78,10 @@ export interface PlainHtmlPreviewProps {
    * Return `false` to allow the iframe's default navigation.
    */
   onLinkClick?: (href: string) => boolean | undefined;
+  /** Show a Copy button on ordinary fenced code blocks (default: false). */
+  showCodeCopyButton?: boolean;
+  /** Optional host clipboard adapter; otherwise the browser Clipboard API is used. */
+  onCopyCode?: CodeBlockCopyHandler;
 }
 
 const IFRAME_STYLE: CSSProperties = {
@@ -99,9 +104,12 @@ export function PlainHtmlPreview({
   globalKeyboardShortcuts = false,
   onFrameChange,
   onLinkClick,
+  showCodeCopyButton = false,
+  onCopyCode,
 }: PlainHtmlPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const removeFrameLinkHandlerRef = useRef<() => void>(() => undefined);
+  const removeFrameCodeCopyControlsRef = useRef<() => void>(() => undefined);
   const setIframeRef = useCallback(
     (frame: HTMLIFrameElement | null) => {
       iframeRef.current = frame;
@@ -211,6 +219,114 @@ export function PlainHtmlPreview({
     return () => removeFrameLinkHandlerRef.current();
   }, [html, installFrameLinkHandler]);
 
+  const installFrameCodeCopyControls = useCallback(() => {
+    removeFrameCodeCopyControlsRef.current();
+    removeFrameCodeCopyControlsRef.current = () => undefined;
+
+    const frameDocument = iframeRef.current?.contentDocument;
+    if (!frameDocument || !showCodeCopyButton) return;
+
+    const style = frameDocument.createElement('style');
+    style.dataset.squisqCodeCopy = '';
+    style.textContent = `
+      .squisq-preview-code-copy-frame { position: relative; margin: 1em 0; }
+      .squisq-preview-code-copy-frame > pre { margin: 0; padding-right: 5rem; }
+      .squisq-preview-code-copy {
+        position: absolute; z-index: 1; top: .55rem; right: .55rem;
+        min-width: 3.7rem; padding: .28rem .5rem;
+        border: 1px solid color-mix(in srgb, var(--plain-text) 20%, transparent);
+        border-radius: 5px;
+        background: color-mix(in srgb, var(--plain-bg) 90%, transparent);
+        color: inherit; font: 500 .72rem/1.2 system-ui, sans-serif;
+        cursor: pointer; opacity: .58;
+        transition: opacity 120ms ease, background-color 120ms ease;
+      }
+      .squisq-preview-code-copy-frame:hover > .squisq-preview-code-copy,
+      .squisq-preview-code-copy:focus-visible,
+      .squisq-preview-code-copy[data-copy-state="copied"],
+      .squisq-preview-code-copy[data-copy-state="failed"] { opacity: 1; }
+      .squisq-preview-code-copy:hover { background: var(--plain-bg); }
+      .squisq-preview-code-copy:disabled { cursor: wait; }
+    `;
+    frameDocument.head.append(style);
+
+    const cleanups: Array<() => void> = [];
+    const wrappers: HTMLElement[] = [];
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+
+    for (const code of frameDocument.querySelectorAll<HTMLElement>(
+      'pre.squisq-code-block > code',
+    )) {
+      const pre = code.parentElement;
+      if (!pre?.parentElement) continue;
+
+      const wrapper = frameDocument.createElement('div');
+      wrapper.className = 'squisq-preview-code-copy-frame';
+      pre.replaceWith(wrapper);
+      wrapper.append(pre);
+      wrappers.push(wrapper);
+
+      const button = frameDocument.createElement('button');
+      button.type = 'button';
+      button.className = 'squisq-preview-code-copy';
+      button.dataset.copyState = 'idle';
+      button.textContent = 'Copy';
+      button.setAttribute('aria-label', 'Copy code to clipboard');
+      wrapper.append(button);
+
+      const languageClass = Array.from(code.classList).find((name) => name.startsWith('language-'));
+      const language = languageClass?.slice('language-'.length) || undefined;
+      const handleCopy = async () => {
+        if (button.dataset.copyState === 'copying') return;
+        button.dataset.copyState = 'copying';
+        button.textContent = 'Copying\u2026';
+        button.disabled = true;
+        try {
+          if (onCopyCode) {
+            await onCopyCode(code.textContent ?? '', language === undefined ? {} : { language });
+          } else {
+            const clipboard =
+              frameDocument.defaultView?.navigator.clipboard ??
+              (typeof navigator === 'undefined' ? undefined : navigator.clipboard);
+            if (!clipboard?.writeText) throw new Error('Clipboard access is unavailable');
+            await clipboard.writeText(code.textContent ?? '');
+          }
+          button.dataset.copyState = 'copied';
+          button.textContent = 'Copied';
+        } catch {
+          button.dataset.copyState = 'failed';
+          button.textContent = 'Copy failed';
+        } finally {
+          button.disabled = false;
+          const timer = setTimeout(() => {
+            timers.delete(timer);
+            button.dataset.copyState = 'idle';
+            button.textContent = 'Copy';
+          }, 1600);
+          timers.add(timer);
+        }
+      };
+      button.addEventListener('click', handleCopy);
+      cleanups.push(() => button.removeEventListener('click', handleCopy));
+    }
+
+    removeFrameCodeCopyControlsRef.current = () => {
+      for (const cleanup of cleanups) cleanup();
+      for (const timer of timers) clearTimeout(timer);
+      timers.clear();
+      for (const wrapper of wrappers) {
+        const pre = wrapper.firstElementChild;
+        if (pre && wrapper.parentElement) wrapper.replaceWith(pre);
+      }
+      style.remove();
+    };
+  }, [onCopyCode, showCodeCopyButton]);
+
+  useEffect(() => {
+    installFrameCodeCopyControls();
+    return () => removeFrameCodeCopyControlsRef.current();
+  }, [html, installFrameCodeCopyControls]);
+
   useEffect(() => {
     if (!globalKeyboardShortcuts) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -252,7 +368,10 @@ export function PlainHtmlPreview({
       data-testid="plain-html-preview"
       title={title ?? 'HTML preview'}
       srcDoc={html}
-      onLoad={installFrameLinkHandler}
+      onLoad={() => {
+        installFrameLinkHandler();
+        installFrameCodeCopyControls();
+      }}
       // `allow-same-origin` is required so the iframe can fetch blob:
       // URLs created by the host's media provider. We intentionally do
       // NOT include `allow-scripts` — the rendered HTML is plain-output

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import {
   parseMarkdown,
@@ -218,14 +218,63 @@ describe('MarkdownRenderer', () => {
     expect(code?.textContent).toBe('const x = 1;');
   });
 
+  it('keeps fenced-code copy controls off by default', () => {
+    const nodes: MarkdownBlockNode[] = [
+      { type: 'code', value: '$ node packages/tooling/dist/cli.mjs components' },
+    ];
+    const { queryByRole } = render(<MarkdownRenderer nodes={nodes} />);
+    expect(queryByRole('button', { name: 'Copy code to clipboard' })).toBeNull();
+  });
+
+  it('delegates exact fenced code and language to the host clipboard adapter', async () => {
+    const code = '$ node packages/tooling/dist/cli.mjs components';
+    const onCopyCode = vi.fn(async () => undefined);
+    const { getByRole } = render(
+      <MarkdownRenderer
+        nodes={[{ type: 'code', lang: 'shell', value: code }]}
+        showCodeCopyButton
+        onCopyCode={onCopyCode}
+      />,
+    );
+
+    const button = getByRole('button', { name: 'Copy code to clipboard' });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(onCopyCode).toHaveBeenCalledWith(code, { language: 'shell' }));
+    expect(button.textContent).toBe('Copied');
+  });
+
+  it('uses the browser Clipboard API when the host does not supply an adapter', async () => {
+    const previousClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    try {
+      const { getByRole } = render(
+        <MarkdownRenderer nodes={[{ type: 'code', value: 'echo browser' }]} showCodeCopyButton />,
+      );
+      fireEvent.click(getByRole('button', { name: 'Copy code to clipboard' }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('echo browser'));
+    } finally {
+      if (previousClipboard) {
+        Object.defineProperty(navigator, 'clipboard', previousClipboard);
+      } else {
+        Reflect.deleteProperty(navigator, 'clipboard');
+      }
+    }
+  });
+
   it('renders Mermaid fences as diagrams instead of source markup', async () => {
     const nodes = parseNodes('```mermaid\nflowchart LR\n  a --> b\n```');
-    const { container } = render(<MarkdownRenderer nodes={nodes} />);
+    const { container } = render(<MarkdownRenderer nodes={nodes} showCodeCopyButton />);
 
     await waitFor(() => {
       expect(container.querySelector('.squisq-mermaid-render-svg svg')).not.toBeNull();
     });
     expect(container.querySelector('pre.squisq-md-code-block')).toBeNull();
+    expect(container.querySelector('.squisq-md-code-copy')).toBeNull();
     expect(container.textContent).toContain('Rendered graph');
     expect(container.textContent).not.toContain('flowchart LR');
   });

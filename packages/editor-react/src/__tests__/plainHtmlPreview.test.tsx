@@ -57,6 +57,48 @@ describe('PlainHtmlPreview', () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  it('adds host-delegated copy controls to fenced code only when enabled', async () => {
+    const codeText = '$ node packages/tooling/dist/cli.mjs components';
+    const onCopyCode = vi.fn(async () => undefined);
+    render(
+      <PlainHtmlPreview
+        markdown={`\`\`\`shell\n${codeText}\n\`\`\``}
+        showCodeCopyButton
+        onCopyCode={onCopyCode}
+      />,
+    );
+    const iframe = screen.getByTestId('plain-html-preview') as HTMLIFrameElement;
+    const pre = iframe.contentDocument!.createElement('pre');
+    pre.className = 'squisq-code-block';
+    const code = iframe.contentDocument!.createElement('code');
+    code.className = 'language-shell';
+    code.textContent = codeText;
+    pre.append(code);
+    iframe.contentDocument!.body.append(pre);
+    fireEvent.load(iframe);
+
+    const button = iframe.contentDocument!.querySelector<HTMLButtonElement>(
+      '.squisq-preview-code-copy',
+    );
+    expect(button).not.toBeNull();
+    button!.click();
+
+    await waitFor(() => expect(onCopyCode).toHaveBeenCalledWith(codeText, { language: 'shell' }));
+    expect(button!.textContent).toBe('Copied');
+  });
+
+  it('does not add fenced-code copy controls by default', () => {
+    render(<PlainHtmlPreview markdown={'```\necho hidden\n```'} />);
+    const iframe = screen.getByTestId('plain-html-preview') as HTMLIFrameElement;
+    const pre = iframe.contentDocument!.createElement('pre');
+    pre.className = 'squisq-code-block';
+    pre.append(iframe.contentDocument!.createElement('code'));
+    iframe.contentDocument!.body.append(pre);
+    fireEvent.load(iframe);
+
+    expect(iframe.contentDocument!.querySelector('.squisq-preview-code-copy')).toBeNull();
+  });
+
   it('globally scrolls the iframe with up and down arrows when enabled', () => {
     render(<PlainHtmlPreview markdown={'# Scroll me'} globalKeyboardShortcuts />);
     const iframe = screen.getByTestId('plain-html-preview') as HTMLIFrameElement;

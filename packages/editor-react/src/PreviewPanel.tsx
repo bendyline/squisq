@@ -12,7 +12,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { DocPlayer, LinearDocView, useMediaProvider } from '@bendyline/squisq-react';
-import type { AudioController, PlaybackState } from '@bendyline/squisq-react';
+import type { AudioController, CodeBlockCopyHandler, PlaybackState } from '@bendyline/squisq-react';
 import { resolveTransformStyle } from '@bendyline/squisq/transform';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useEditorContext } from './EditorContext';
@@ -39,6 +39,10 @@ export interface PreviewPanelProps {
   workspaceContainer?: ContentContainer | null;
   /** Delegate authored link activation to the embedding host. */
   onLinkClick?: (href: string) => boolean | undefined;
+  /** Show a Copy button on ordinary fenced code blocks (default: false). */
+  showCodeCopyButton?: boolean;
+  /** Optional host clipboard adapter; otherwise the browser Clipboard API is used. */
+  onCopyCode?: CodeBlockCopyHandler;
 }
 
 // ── Component ──────────────────────────────────────────────────────
@@ -53,6 +57,8 @@ export function PreviewPanel({
   className,
   workspaceContainer,
   onLinkClick,
+  showCodeCopyButton = false,
+  onCopyCode,
 }: PreviewPanelProps) {
   const {
     doc,
@@ -292,6 +298,8 @@ export function PreviewPanel({
           theme={activeTheme}
           globalKeyboardShortcuts={!audience}
           onLinkClick={onLinkClick}
+          showCodeCopyButton={showCodeCopyButton}
+          onCopyCode={onCopyCode}
         />
       );
     }
@@ -336,6 +344,8 @@ export function PreviewPanel({
           transformPage={
             activeTransformStyle ? resolveTransformStyle(activeTransformStyle).page : undefined
           }
+          showCodeCopyButton={showCodeCopyButton}
+          onCopyCode={onCopyCode}
         />
       );
     }
@@ -377,6 +387,8 @@ export function PreviewPanel({
         audioController={audience ? followerAudioController! : undefined}
         enableSwipe={!audience}
         globalKeyboardShortcuts={!audience}
+        showCodeCopyButton={showCodeCopyButton}
+        onCopyCode={onCopyCode}
         onPlaybackStateChange={
           !audience && audienceWindowOpen ? handlePlaybackStateChange : undefined
         }

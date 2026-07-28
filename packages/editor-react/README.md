@@ -97,7 +97,10 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   host-controlled Write typography through `writeCanvasSettings` (`textSize`
   and `lineSpacing`). Set `hostMode="chat"` to keep the shell in Write view,
   remove its view tabs, and hide Custom layouts, Transform, View options, and
-  Document settings.
+  Document settings. `showCodeCopyButton` opts Document/Page previews into a
+  subtle fenced-code Copy control; use `onCopyCode` to bridge clipboard writes
+  in Electron or native hosts (browser hosts fall back to
+  `navigator.clipboard.writeText`).
 - **Color scheme** — pass `colorScheme="light" | "dark"` for the editor chrome
   (**v1.5:** renamed from the old `theme` prop; `RawEditor`'s own `theme` prop is
   now `monacoTheme`).

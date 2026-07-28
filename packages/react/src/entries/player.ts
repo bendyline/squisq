@@ -1,5 +1,6 @@
 export { DocPlayer } from '../DocPlayer.js';
 export type { DocPlayerProps } from '../DocPlayer.js';
+export type { CodeBlockCopyContext, CodeBlockCopyHandler } from '../MarkdownRenderer.js';
 export { BlockRenderer } from '../BlockRenderer.js';
 export { CaptionOverlay } from '../CaptionOverlay.js';
 export { SocialCaptionOverlay } from '../SocialCaptionOverlay.js';
