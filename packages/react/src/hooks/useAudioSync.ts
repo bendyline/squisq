@@ -10,9 +10,13 @@
  * This is the HTML5 Audio implementation of the AudioController interface.
  * Hosts that drive audio through an external player (e.g. a native shell)
  * can supply their own AudioController to DocPlayer instead of this hook.
+ *
+ * In `synthetic` mode there is no audio element to follow, so a caller that
+ * has no segments passes `syntheticDuration` — the document's own timeline
+ * length — and the same segment machinery drives a timer instead.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { RefObject } from 'react';
 import type { AudioTrack } from '@bendyline/squisq/schemas';
 import { fetchResourceBytes, isResourceUrlAllowed } from '@bendyline/squisq/markdown';
@@ -44,11 +48,28 @@ function resolveAudioUrl(src: string, basePath: string): string {
 
 export function useAudioSync(
   audioRef: RefObject<HTMLAudioElement>,
-  audioTrack: AudioTrack | undefined,
+  track: AudioTrack | undefined,
   basePath: string = '',
   enabled: boolean = true,
   mode: AudioSyncMode = 'media',
+  syntheticDuration: number = 0,
 ): AudioController {
+  // A synthetic clock is asked for precisely when the document has no audio
+  // asset, yet every timing path here — `totalDuration`, the fallback timer's
+  // arming condition, the scrubber — reads the segment list. With none, the
+  // clock length is 0 and `play()` flips `isPlaying` on a timeline that never
+  // advances: the player shows a pause button frozen at 0:00 / 0:00 on the
+  // first block. Standing in one segment spanning the caller's document
+  // duration keeps that single source of timing truth. The srcless segment is
+  // never fetched — every media path below returns early in synthetic mode.
+  const audioTrack = useMemo(() => {
+    if (mode !== 'synthetic' || track?.segments?.length || syntheticDuration <= 0) return track;
+    return {
+      ...track,
+      segments: [{ src: '', name: 'synthetic', duration: syntheticDuration, startTime: 0 }],
+    };
+  }, [track, mode, syntheticDuration]);
+
   const resourcePolicy = useResourcePolicy();
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
