@@ -534,6 +534,8 @@ export type {
   RecorderState,
   RecorderCameraLane,
 } from './recorder/hooks/useMediaRecorder.js';
+export { recordedMediaKind } from './recorder/recordedMediaKind.js';
+export type { RecordedMediaKind } from './recorder/recordedMediaKind.js';
 export { useStreamPreview } from './recorder/hooks/useStreamPreview.js';
 export { requestMicStream } from './recorder/sources/micStream.js';
 export { requestCameraStream } from './recorder/sources/cameraStream.js';

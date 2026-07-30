@@ -626,6 +626,17 @@
   border-radius: 0;
 }
 
+.squisq-wysiwyg-editor .squisq-video-node--audio-only {
+  width: min(100%, 360px);
+  max-width: 360px;
+  background: transparent;
+}
+
+.squisq-wysiwyg-editor .squisq-video-node--audio-only audio {
+  display: block;
+  width: 100%;
+}
+
 .squisq-editor-shell[data-theme='dark'] .squisq-video-placement-toolbar {
   border-bottom-color: #374151;
   background: #111827;

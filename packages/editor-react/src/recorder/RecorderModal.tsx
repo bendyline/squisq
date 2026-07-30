@@ -51,6 +51,7 @@ import {
   supportsSystemAudioCapture,
   type RecordingFilenameSeed,
 } from './formats.js';
+import { recordedMediaKind, type RecordedMediaKind } from './recordedMediaKind.js';
 import { buildTimingJson, encodeTimingJson, timingPathFor } from './timingJson.js';
 import { useModalDialog } from '../modal/useModalDialog.js';
 import {
@@ -146,6 +147,8 @@ export interface RecorderSaveResult {
   filename: string;
   /** Capture source the user picked. */
   source: RecorderSource;
+  /** Media kind detected from the tracks that were actually recorded. */
+  mediaKind: RecordedMediaKind;
   /** MIME type of the saved blob. */
   mimeType: string;
   /** Recording length in seconds. */
@@ -1049,6 +1052,7 @@ export function RecorderModal({
           relativePath: screenPath,
           filename: screenFilename,
           source,
+          mediaKind: 'video',
           mimeType: recorder.mimeType,
           duration,
           hasTimingSidecar: false,
@@ -1074,13 +1078,10 @@ export function RecorderModal({
     setIsSaving(true);
     setSaveError(null);
     try {
-      const filename = buildFilename(
-        source === 'mic' ? 'audio' : 'video',
-        recorder.extension,
-        basename,
-        filenameSeed,
-      );
-      const relativeName = `${recorder.directory}/${filename}`;
+      const mediaKind = recordedMediaKind(source, recorder.stream, recorder.mimeType);
+      const filename = buildFilename(mediaKind, recorder.extension, basename, filenameSeed);
+      const directory = mediaKind === 'audio' ? 'audio' : recorder.directory;
+      const relativeName = `${directory}/${filename}`;
       const relativePath = await mediaProvider.addMedia(
         relativeName,
         recorder.blob,
@@ -1113,6 +1114,7 @@ export function RecorderModal({
         relativePath,
         filename,
         source,
+        mediaKind,
         mimeType: recorder.mimeType,
         duration: recorder.durationMs / 1000,
         hasTimingSidecar,
@@ -1156,7 +1158,7 @@ export function RecorderModal({
     [recorder.durationMs],
   );
 
-  const isAudioOnly = source === 'mic';
+  const isAudioOnly = recordedMediaKind(source, recorder.stream, recorder.mimeType) === 'audio';
   const showPreview = recorder.state !== 'idle' && recorder.state !== 'error';
   const canRecord = recorder.state === 'ready';
   const canStop = recorder.state === 'recording';

@@ -15,6 +15,7 @@ import type { RecorderSaveResult } from '../recorder/RecorderModal';
 function dualResult(offsetSec: number, screenDur = 12.4): RecorderSaveResult {
   return {
     source: 'screen+camera',
+    mediaKind: 'video',
     relativePath: 'video/screen-20260721-101500.webm',
     filename: 'screen-20260721-101500.webm',
     mimeType: 'video/webm',
@@ -36,6 +37,7 @@ describe('buildDualClipInsertion — emitted markup', () => {
       relativePath: 'video/clip.webm',
       filename: 'clip.webm',
       source: 'screen',
+      mediaKind: 'video',
       mimeType: 'video/webm',
       duration: 5,
       hasTimingSidecar: false,

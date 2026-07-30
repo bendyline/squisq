@@ -105,7 +105,8 @@ export interface EditorShellProps {
    * Semantic mode for the surface embedding the editor. `'document'`
    * (default) exposes the normal multi-view authoring shell. `'chat'`
    * starts and stays in Write view through the shell's own controls, hides
-   * the view tabs, and removes document-level layout, transform, view, and
+   * the view tabs, hides formatting controls by default while retaining the
+   * Insert menu, and removes document-level layout, transform, view, and
    * settings controls from the toolbar.
    */
   hostMode?: EditorHostMode;
@@ -209,6 +210,18 @@ export interface EditorShellProps {
   onSaveVersion?: (result: SaveVersionResult) => void;
   /** Show the Files toggle in the toolbar. Defaults to true when mediaProvider is passed. */
   showFilesToggle?: boolean;
+  /**
+   * Show the toolbar's built-in text, block, and contextual formatting
+   * controls. The toolbar, Insert menu, and host-provided slots remain
+   * visible when false. Defaults to true in document mode and false in chat
+   * mode.
+   */
+  showFormattingControls?: boolean;
+  /**
+   * Show the toolbar's built-in Insert button and menu independently of the
+   * formatting controls. Defaults to true.
+   */
+  showInsertControls?: boolean;
   /**
    * Whether the Files panel offers browser downloads for its binary entries.
    * Defaults to true. Pass false to remove the built-in download affordance.
@@ -531,6 +544,8 @@ export function EditorShell({
   versioningAutoSaveIdleMs,
   onSaveVersion,
   showFilesToggle,
+  showFormattingControls = hostMode !== 'chat',
+  showInsertControls = true,
   allowBinaryDownloads = true,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
@@ -646,6 +661,8 @@ export function EditorShell({
           mediaProvider={effectiveMediaProvider ?? null}
           workspaceContainer={effectiveContainer}
           filesToggleEnabled={filesToggleEnabled}
+          showFormattingControls={showFormattingControls}
+          showInsertControls={showInsertControls}
           allowBinaryDownloads={allowBinaryDownloads}
           toolbarSlotLeft={toolbarSlotLeft}
           toolbarSlotAfterActions={toolbarSlotAfterActions}
@@ -694,6 +711,8 @@ interface EditorShellInnerProps {
   mediaProvider: MediaProvider | null;
   workspaceContainer?: ContentContainer | null;
   filesToggleEnabled: boolean;
+  showFormattingControls: boolean;
+  showInsertControls: boolean;
   allowBinaryDownloads: boolean;
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
@@ -772,6 +791,8 @@ function EditorShellInner({
   mediaProvider,
   workspaceContainer,
   filesToggleEnabled,
+  showFormattingControls,
+  showInsertControls,
   allowBinaryDownloads,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
@@ -1221,6 +1242,8 @@ function EditorShellInner({
                   slotAfterActions={toolbarSlotAfterActions}
                   slotRight={toolbarSlotRight}
                   showPlayTab={showPlayTab}
+                  showFormattingControls={showFormattingControls}
+                  showInsertControls={showInsertControls}
                   hostMode={hostMode}
                 />
               </div>

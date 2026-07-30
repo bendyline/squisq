@@ -72,4 +72,28 @@ describe('TiptapVideo placement toolbar', () => {
     expect(editor.getHTML()).toContain('data-squisq-video-clip-end="7"');
     editor.destroy();
   });
+
+  it('uses compact audio chrome when a video tag has no visual track', () => {
+    const editor = new Editor({
+      extensions: [StarterKit, TiptapVideo],
+      content: '<video src="video/audio-only.webm" controls width="480"></video>',
+    });
+    const { container } = render(<EditorContent editor={editor} />);
+    const video = container.querySelector('video');
+    expect(video).not.toBeNull();
+    Object.defineProperties(video!, {
+      videoWidth: { configurable: true, value: 0 },
+      videoHeight: { configurable: true, value: 0 },
+    });
+
+    fireEvent.loadedMetadata(video!);
+
+    expect(screen.queryByRole('toolbar', { name: 'Video placement' })).toBeNull();
+    expect(container.querySelector('video')).toBeNull();
+    expect(container.querySelector('audio')?.getAttribute('src')).toBe('video/audio-only.webm');
+    expect(container.querySelector('.squisq-video-node--audio-only')).not.toBeNull();
+    // Presentation adapts without silently rewriting the user's markdown tag.
+    expect(editor.getHTML()).toContain('<video');
+    editor.destroy();
+  });
 });

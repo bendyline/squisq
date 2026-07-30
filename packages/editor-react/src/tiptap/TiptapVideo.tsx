@@ -7,12 +7,14 @@
  * WYSIWYG surface and round-trip the tag through markdown.
  *
  * The NodeView renders a real `<video controls>` whose src is resolved
- * through the EditorContext's MediaProvider — same mechanism
- * `ImageNodeView` uses for `<img>`.
+ * through the EditorContext's MediaProvider. When metadata reports no visual
+ * track, legacy/misclassified `<video>` markup uses compact audio controls
+ * instead of an empty black stage.
  */
 import { Node, mergeAttributes } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
+import { useEffect, useState, type SyntheticEvent } from 'react';
 import type {
   VideoPipPosition,
   VideoPipShape,
@@ -84,67 +86,90 @@ function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
   const placement = normalizeVideoPlacement(rawPlacement);
   const lockToBlock = normalizeLockToBlock(rawLockToBlock);
   const resolvedSrc = useResolvedMediaSrc(src ?? '');
+  const [audioOnly, setAudioOnly] = useState(false);
   // Resolve poster through the same provider when present so a
   // workspace-local frame thumbnail also renders inside the editor.
   const resolvedPoster = useResolvedMediaSrc(poster ?? '');
 
+  useEffect(() => {
+    setAudioOnly(false);
+  }, [resolvedSrc]);
+
+  const handleLoadedMetadata = (event: SyntheticEvent<HTMLVideoElement>) => {
+    const video = event.currentTarget;
+    setAudioOnly(video.videoWidth <= 0 && video.videoHeight <= 0);
+  };
+
   return (
     <NodeViewWrapper
       as="div"
-      className={`squisq-inline-video-player squisq-video-node${selected ? ' squisq-video-node--selected' : ''}`}
+      className={`${audioOnly ? 'squisq-inline-audio-player squisq-video-node--audio-only' : 'squisq-inline-video-player'} squisq-video-node${selected ? ' squisq-video-node--selected' : ''}`}
       data-video-placement={placement}
     >
-      <div
-        className="squisq-video-placement-toolbar"
-        role="toolbar"
-        aria-label="Video placement"
-        contentEditable={false}
-      >
-        <span className="squisq-video-placement-label">Video</span>
-        {PLACEMENT_OPTIONS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className="squisq-video-placement-button"
-            aria-pressed={placement === option.value}
-            title={option.title}
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => updateAttributes({ placement: option.value })}
-          >
-            {option.label}
-          </button>
-        ))}
-        {placement !== 'content' && (
-          <button
-            type="button"
-            className="squisq-video-placement-button squisq-video-placement-button--lock"
-            aria-label="Lock to block"
-            aria-pressed={lockToBlock}
-            title={
-              lockToBlock
-                ? 'Locked to this block; turn off for independent document timing'
-                : 'Document-timed; turn on to follow this block'
-            }
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => updateAttributes({ lockToBlock: !lockToBlock })}
-          >
-            Lock to block
-          </button>
-        )}
-      </div>
-      <video
-        // Mark the media surface as the drag handle so toolbar button presses
-        // never initiate a ProseMirror node drag.
-        data-drag-handle
-        draggable
-        src={resolvedSrc || undefined}
-        poster={poster ? resolvedPoster : undefined}
-        controls={controls}
-        playsInline
-        preload="metadata"
-        width={width ?? undefined}
-        height={height ?? undefined}
-      />
+      {!audioOnly && (
+        <div
+          className="squisq-video-placement-toolbar"
+          role="toolbar"
+          aria-label="Video placement"
+          contentEditable={false}
+        >
+          <span className="squisq-video-placement-label">Video</span>
+          {PLACEMENT_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className="squisq-video-placement-button"
+              aria-pressed={placement === option.value}
+              title={option.title}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => updateAttributes({ placement: option.value })}
+            >
+              {option.label}
+            </button>
+          ))}
+          {placement !== 'content' && (
+            <button
+              type="button"
+              className="squisq-video-placement-button squisq-video-placement-button--lock"
+              aria-label="Lock to block"
+              aria-pressed={lockToBlock}
+              title={
+                lockToBlock
+                  ? 'Locked to this block; turn off for independent document timing'
+                  : 'Document-timed; turn on to follow this block'
+              }
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => updateAttributes({ lockToBlock: !lockToBlock })}
+            >
+              Lock to block
+            </button>
+          )}
+        </div>
+      )}
+      {audioOnly ? (
+        <audio
+          data-drag-handle
+          draggable
+          src={resolvedSrc || undefined}
+          controls={controls}
+          preload="metadata"
+        />
+      ) : (
+        <video
+          // Mark the media surface as the drag handle so toolbar button presses
+          // never initiate a ProseMirror node drag.
+          data-drag-handle
+          draggable
+          src={resolvedSrc || undefined}
+          poster={poster ? resolvedPoster : undefined}
+          controls={controls}
+          playsInline
+          preload="metadata"
+          width={width ?? undefined}
+          height={height ?? undefined}
+          onLoadedMetadata={handleLoadedMetadata}
+        />
+      )}
     </NodeViewWrapper>
   );
 }

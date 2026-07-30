@@ -90,6 +90,7 @@ describe('dual (screen + camera) insertion', () => {
   it('inserts both clips as top-level blocks, screen before camera, byte-stable to raw markup', () => {
     const result: RecorderSaveResult = {
       source: 'screen+camera',
+      mediaKind: 'video',
       relativePath: 'video/screen-x.webm',
       filename: 'screen-x.webm',
       mimeType: 'video/webm',
