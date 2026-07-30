@@ -55,6 +55,8 @@ export interface HtmlBundleOptions {
   themeRegistry?: ThemeRegistry;
   /** Rendering mode for every page (default: 'static' — scrollable, link-friendly). */
   mode?: 'slideshow' | 'static';
+  /** Show Copy controls on ordinary fenced code blocks (default: false). */
+  showCodeCopyButton?: boolean;
   /** Maximum recursion depth (default: unlimited; cycles always handled). */
   maxDepth?: number;
   /**
@@ -87,6 +89,7 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
     themeId,
     themeRegistry,
     mode = 'static',
+    showCodeCopyButton = false,
     maxDepth = Infinity,
     entryAsIndex = false,
   } = options;
@@ -180,6 +183,7 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
       imagePathMap:
         imageRewriteMap.size > 0 ? Object.fromEntries(imageRewriteMap.entries()) : undefined,
       mode,
+      showCodeCopyButton,
       title: pageTitle,
       themeId,
       themeRegistry,

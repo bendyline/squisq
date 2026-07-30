@@ -283,14 +283,22 @@ export function defaultFormats(): FormatDefinition[] {
       const markdownDoc = await markdownOf(input);
       const containerImages = await collectContainerImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
+      const pptxWarnings: string[] = [];
       const buf = await markdownDocToPptx(markdownDoc, {
         ...raw,
         ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
         themeRegistry: options.themeRegistry ?? raw.themeRegistry,
         images,
+        onWarning: (message) => {
+          pptxWarnings.push(message);
+          raw.onWarning?.(message);
+        },
       });
-      return ok(await toBytes(buf), MIME.pptx, markdownFidelityWarnings(markdownDoc, 'pptx'));
+      return ok(await toBytes(buf), MIME.pptx, [
+        ...markdownFidelityWarnings(markdownDoc, 'pptx'),
+        ...pptxWarnings,
+      ]);
     },
   };
 

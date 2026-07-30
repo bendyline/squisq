@@ -330,6 +330,21 @@ describe('DocPlayer smoke test', () => {
     expect(audioController.restart).not.toHaveBeenCalled();
   });
 
+  // Without an audio asset there is nothing to measure the timeline against,
+  // so the internal clock has to take its length from the document itself.
+  // It used to read the (empty) segment list, leaving the scrubber at 0:00 and
+  // the fallback timer unarmed — a player that reported playing and never moved.
+  it('runs its own clock off the document timeline in synthetic mode', () => {
+    const doc = markdownToDoc(parseMarkdown('# One\n\nFirst beat.\n\n## Two\n\nSecond beat.\n'), {
+      defaultDuration: 6,
+    });
+    expect(doc.audio.segments).toHaveLength(0);
+
+    render(<DocPlayer doc={doc} audioMode="synthetic" showScrubber showControls />);
+
+    expect(screen.getByRole('slider').getAttribute('aria-valuemax')).toBe(String(doc.duration));
+  });
+
   it('renders without crashing in slideshow mode', () => {
     const { container } = render(
       <DocPlayer doc={minimalDoc()} basePath="/test" displayMode="slideshow" />,

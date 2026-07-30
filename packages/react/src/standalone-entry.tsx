@@ -37,6 +37,7 @@ import type { SquisqRenderAPI } from './types';
 import { DocPlayer } from './DocPlayer';
 import { LinearDocView } from './LinearDocView';
 import { MediaContext } from './hooks/MediaContext';
+import type { CodeBlockCopyHandler } from './MarkdownRenderer';
 
 // Animation CSS is loaded as text and injected into the standalone player.
 // Font Awesome's webfonts remain in the package stylesheet instead of being
@@ -92,6 +93,10 @@ export interface MountOptions {
   animationsEnabled?: boolean;
   /** Caption style: 'standard' or 'social'. Omit or set to undefined for no captions. */
   captionStyle?: 'standard' | 'social';
+  /** Show a Copy button on fenced code blocks in static mode (default: false). */
+  showCodeCopyButton?: boolean;
+  /** Optional host clipboard adapter; otherwise the browser Clipboard API is used. */
+  onCopyCode?: CodeBlockCopyHandler;
 }
 
 /** Instance handle returned by {@link mount}. */
@@ -287,6 +292,8 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     animationsEnabled = true,
     captionStyle,
     globalKeyboardShortcuts = true,
+    showCodeCopyButton = false,
+    onCopyCode,
   } = options;
 
   // Rewrite audio URLs if map provided
@@ -307,6 +314,8 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       theme,
       animationsEnabled,
       globalKeyboardShortcuts,
+      showCodeCopyButton,
+      onCopyCode,
     });
   } else {
     content = createElement(DocPlayer, {

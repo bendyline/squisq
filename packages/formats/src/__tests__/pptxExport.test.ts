@@ -143,6 +143,84 @@ describe('markdownDocToPptx transitions', () => {
   });
 });
 
+describe('markdownDocToPptx thematic breaks', () => {
+  it('drops thematic breaks used redundantly before slide headings and reports them', async () => {
+    const warnings: string[] = [];
+    const source: MarkdownDocument = {
+      type: 'document',
+      children: [
+        {
+          type: 'heading',
+          depth: 1,
+          children: [{ type: 'text', value: 'One' }],
+        },
+        {
+          type: 'paragraph',
+          children: [{ type: 'text', value: 'First body' }],
+        },
+        { type: 'thematicBreak' },
+        {
+          type: 'heading',
+          depth: 1,
+          children: [{ type: 'text', value: 'Two' }],
+        },
+        {
+          type: 'paragraph',
+          children: [{ type: 'text', value: 'Second body' }],
+        },
+      ],
+    };
+
+    const pkg = await openPackage(
+      await markdownDocToPptx(source, {
+        slideBreak: 'h1',
+        onWarning: (message) => warnings.push(message),
+      }),
+    );
+    const firstSlide = await getPartXml(pkg, 'ppt/slides/slide1.xml');
+    const secondSlide = await getPartXml(pkg, 'ppt/slides/slide2.xml');
+
+    expect(firstSlide?.documentElement.textContent).not.toContain('─');
+    expect(secondSlide).not.toBeNull();
+    expect(warnings).toEqual([
+      'PPTX export removed 1 redundant thematic break(s) immediately before slide headings. ' +
+        'A heading already starts the next slide; omit --- unless a visible horizontal rule is intended.',
+    ]);
+  });
+
+  it('renders an intentional mid-slide thematic break as an unbulleted visual rule', async () => {
+    const source: MarkdownDocument = {
+      type: 'document',
+      children: [
+        {
+          type: 'heading',
+          depth: 1,
+          children: [{ type: 'text', value: 'One' }],
+        },
+        {
+          type: 'paragraph',
+          children: [{ type: 'text', value: 'Before' }],
+        },
+        { type: 'thematicBreak' },
+        {
+          type: 'paragraph',
+          children: [{ type: 'text', value: 'After' }],
+        },
+      ],
+    };
+
+    const pkg = await openPackage(await markdownDocToPptx(source, { slideBreak: 'h1' }));
+    const slide = await getPartXml(pkg, 'ppt/slides/slide1.xml');
+    const rule = Array.from(slide!.getElementsByTagNameNS(NS_DRAWINGML, 'p')).find((paragraph) =>
+      paragraph.textContent?.includes('─'),
+    );
+
+    expect(rule).toBeDefined();
+    expect(rule!.getElementsByTagNameNS(NS_DRAWINGML, 'buNone')).toHaveLength(1);
+    expect(rule!.getElementsByTagNameNS(NS_DRAWINGML, 'buChar')).toHaveLength(0);
+  });
+});
+
 // ============================================
 // Relationship ID Allocation (regression)
 // ============================================

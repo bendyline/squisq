@@ -8,7 +8,15 @@
  */
 
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import type { IRange } from 'monaco-editor';
 import type { Block } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
@@ -106,6 +114,17 @@ export interface ToolbarProps {
    * editing free-form prompts — can pass false to suppress it.
    */
   showPlayTab?: boolean;
+  /**
+   * Whether to render Squisq's built-in text, block, and contextual
+   * formatting controls. The toolbar, Insert menu, view tabs, and host slots
+   * remain mounted when false. Defaults to true.
+   */
+  showFormattingControls?: boolean;
+  /**
+   * Whether to render Squisq's built-in Insert button and menu independently
+   * of the formatting controls. Defaults to true.
+   */
+  showInsertControls?: boolean;
   /**
    * Semantic embedding mode inherited from EditorShell. Chat mode exposes
    * only the Write surface, which suppresses the view tabs and their
@@ -214,6 +233,8 @@ export function Toolbar({
   slotAfterActions,
   slotRight,
   showPlayTab = true,
+  showFormattingControls = true,
+  showInsertControls = true,
   hostMode = 'document',
 }: ToolbarProps) {
   const {
@@ -345,9 +366,13 @@ export function Toolbar({
   const codeSnippetMenuRef = useRef<HTMLDivElement | null>(null);
   const mermaidTypeMenuRef = useRef<HTMLDivElement | null>(null);
   const chartTypeMenuRef = useRef<HTMLDivElement | null>(null);
-  const [insertMenuAnchor, setInsertMenuAnchor] = useState<{ top: number; left: number } | null>(
-    null,
-  );
+  const insertMenuTriggerRectRef = useRef<DOMRect | null>(null);
+  const [insertMenuAnchor, setInsertMenuAnchor] = useState<{
+    top: number;
+    left: number;
+    maxHeight?: number;
+    placement: 'down' | 'up';
+  } | null>(null);
   const [codeSnippetMenuAnchor, setCodeSnippetMenuAnchor] = useState<{
     top: number;
     left: number;
@@ -375,7 +400,8 @@ export function Toolbar({
     if (left + INSERT_MENU_WIDTH + margin > vw) {
       left = Math.max(margin, rect.right - INSERT_MENU_WIDTH);
     }
-    setInsertMenuAnchor({ top: rect.bottom + gap, left });
+    insertMenuTriggerRectRef.current = rect;
+    setInsertMenuAnchor({ top: rect.bottom + gap, left, placement: 'down' });
     setCodeSnippetMenuAnchor(null);
     setMermaidTypeMenuAnchor(null);
     setChartTypeMenuAnchor(null);
@@ -433,6 +459,7 @@ export function Toolbar({
   }, []);
 
   const closeInsertMenu = useCallback(() => {
+    insertMenuTriggerRectRef.current = null;
     setInsertMenuAnchor(null);
     setCodeSnippetMenuAnchor(null);
     setMermaidTypeMenuAnchor(null);
@@ -567,6 +594,38 @@ export function Toolbar({
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [insertMenuAnchor, closeInsertMenu]);
+
+  const insertMenuOpen = insertMenuAnchor !== null;
+  useLayoutEffect(() => {
+    if (!insertMenuOpen) return;
+    const menu = insertMenuRef.current;
+    const triggerRect = insertMenuTriggerRectRef.current;
+    if (!menu || !triggerRect) return;
+
+    const gap = 4;
+    const margin = 8;
+    const spaceBelow = Math.max(0, window.innerHeight - triggerRect.bottom - gap - margin);
+    const spaceAbove = Math.max(0, triggerRect.top - gap - margin);
+    const naturalHeight = Math.max(menu.scrollHeight, menu.getBoundingClientRect().height);
+    const placement =
+      naturalHeight > spaceBelow && spaceAbove > spaceBelow ? ('up' as const) : ('down' as const);
+    const maxHeight = placement === 'up' ? spaceAbove : spaceBelow;
+    const visibleHeight = Math.min(naturalHeight, maxHeight);
+    const top =
+      placement === 'up'
+        ? Math.max(margin, triggerRect.top - gap - visibleHeight)
+        : triggerRect.bottom + gap;
+
+    setInsertMenuAnchor((current) => {
+      if (
+        !current ||
+        (current.top === top && current.maxHeight === maxHeight && current.placement === placement)
+      ) {
+        return current;
+      }
+      return { ...current, top, maxHeight, placement };
+    });
+  }, [insertMenuOpen]);
 
   // Open-up vs open-down: the overflow menu is anchored to its trigger with
   // `top: 100%` by default. When the toolbar lives near the bottom of a
@@ -1440,7 +1499,10 @@ export function Toolbar({
   };
   const hasVisibleMediaButtons = MEDIA_BUTTONS.some((b) => isButtonVisible(b.id));
   const showInsertInOverflow =
-    overflowIndex !== null && overflowIndex <= FIRST_MEDIA_INDEX && hasVisibleMediaButtons;
+    showInsertControls &&
+    overflowIndex !== null &&
+    overflowIndex <= FIRST_MEDIA_INDEX &&
+    hasVisibleMediaButtons;
 
   // Detect whether cursor is inside a table (WYSIWYG mode only)
   const isInTable = isWysiwyg ? tiptapEditor.isActive('table') : false;
@@ -1729,22 +1791,26 @@ export function Toolbar({
   // "<name> Block:" heading. `currentTemplate`/`currentTransition` are non-null
   // together (both gated on a heading being active); an empty template string
   // is a heading with no visual template, labeled "Heading".
-  const showTemplateInOverflow = currentTemplate !== null && clippedContextual.has('template');
+  const showTemplateInOverflow =
+    showFormattingControls && currentTemplate !== null && clippedContextual.has('template');
   const showTransitionInOverflow =
-    currentTransition !== null && clippedContextual.has('transition');
+    showFormattingControls && currentTransition !== null && clippedContextual.has('transition');
   const showBlockSectionInOverflow = showTemplateInOverflow || showTransitionInOverflow;
   const overflowBlockLabel = currentTemplate ? templateLabel(currentTemplate) : 'Heading';
   const showToolbarOverflow =
     !findMode &&
     !isPreview &&
     !isCodeMode &&
-    (overflowIndex !== null || clippedContextual.size > 0);
+    ((showFormattingControls && (overflowIndex !== null || clippedContextual.size > 0)) ||
+      showInsertInOverflow);
 
   return (
     <div
       className={`squisq-toolbar${findMode ? ' squisq-toolbar--find' : ''} ${className || ''}`}
       role="toolbar"
-      aria-label={findMode ? 'Find toolbar' : 'Formatting toolbar'}
+      aria-label={
+        findMode ? 'Find toolbar' : showFormattingControls ? 'Formatting toolbar' : 'Editor toolbar'
+      }
     >
       {/* Hidden file input for image picker */}
       <input
@@ -1824,55 +1890,58 @@ export function Toolbar({
       )}
       {/* After-tabs slot — left side, before formatting or preview controls. */}
       {findMode ? <FindToolbar onClose={() => setFindMode(false)} /> : slotAfterTabs}
-      {/* Formatting buttons — hidden in preview mode and code mode */}
-      {!findMode && !isPreview && !isCodeMode && (
+      {/* Built-in actions — formatting and Insert can be controlled independently. */}
+      {!findMode && !isPreview && !isCodeMode && (showFormattingControls || showInsertControls) && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>
-          {groups.map((group, gi) => (
-            <div key={group} className="squisq-toolbar-group">
-              {gi > 0 && <div className="squisq-toolbar-separator" />}
-              {BUTTONS.filter((b) => b.group === group && isButtonVisible(b.id)).map((btn) => {
-                const active =
-                  btn.id === 'emoji'
-                    ? emojiPickerAnchor !== null
-                    : formatActive && formattingEditor
-                      ? isTiptapActive(formattingEditor, btn.id)
-                      : false;
-                const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
-                return (
-                  <button
-                    key={btn.id}
-                    ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
-                    className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
-                    data-btn-index={BUTTON_INDEX_BY_ID.get(btn.id)}
-                    data-tooltip={disabled ? 'Insert image (requires media provider)' : btn.title}
-                    onClick={() => handleAction(btn.id)}
-                    aria-label={btn.title}
-                    aria-pressed={active}
-                    disabled={disabled}
-                  >
-                    {buttonIcon(btn)}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          {showFormattingControls &&
+            groups.map((group, gi) => (
+              <div key={group} className="squisq-toolbar-group">
+                {gi > 0 && <div className="squisq-toolbar-separator" />}
+                {BUTTONS.filter((b) => b.group === group && isButtonVisible(b.id)).map((btn) => {
+                  const active =
+                    btn.id === 'emoji'
+                      ? emojiPickerAnchor !== null
+                      : formatActive && formattingEditor
+                        ? isTiptapActive(formattingEditor, btn.id)
+                        : false;
+                  const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
+                  return (
+                    <button
+                      key={btn.id}
+                      ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
+                      className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
+                      data-btn-index={BUTTON_INDEX_BY_ID.get(btn.id)}
+                      data-tooltip={disabled ? 'Insert image (requires media provider)' : btn.title}
+                      onClick={() => handleAction(btn.id)}
+                      aria-label={btn.title}
+                      aria-pressed={active}
+                      disabled={disabled}
+                    >
+                      {buttonIcon(btn)}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
 
           {/* Insert menu button — collapses all media-group actions into a single dropdown */}
-          <div className="squisq-toolbar-group">
-            <div className="squisq-toolbar-separator" />
-            <button
-              ref={insertMenuButtonRef}
-              className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}`}
-              data-btn-index={FIRST_MEDIA_INDEX}
-              data-tooltip="Insert..."
-              onClick={() => (insertMenuAnchor ? closeInsertMenu() : openInsertMenu())}
-              aria-label="Insert"
-              aria-expanded={insertMenuAnchor !== null}
-              aria-haspopup="menu"
-            >
-              <Icon icon="fa-solid fa-plus" />
-            </button>
-          </div>
+          {showInsertControls && (
+            <div className="squisq-toolbar-group">
+              {showFormattingControls && <div className="squisq-toolbar-separator" />}
+              <button
+                ref={insertMenuButtonRef}
+                className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}`}
+                data-btn-index={FIRST_MEDIA_INDEX}
+                data-tooltip="Insert..."
+                onClick={() => (insertMenuAnchor ? closeInsertMenu() : openInsertMenu())}
+                aria-label="Insert"
+                aria-expanded={insertMenuAnchor !== null}
+                aria-haspopup="menu"
+              >
+                <Icon icon="fa-solid fa-plus" />
+              </button>
+            </div>
+          )}
 
           {/* Template picker — visible when the cursor is in a heading.
               In WYSIWYG, reads from the heading node's `dataTemplate`; in
@@ -1880,7 +1949,7 @@ export function Toolbar({
               The `squisq-toolbar-contextual` class + data-contextual id opt
               this group (and the two below) into the clipping measurement:
               when it doesn't fit it hides here and moves into the ··· menu. */}
-          {currentTemplate !== null && (
+          {showFormattingControls && currentTemplate !== null && (
             <div
               className={`squisq-toolbar-group squisq-toolbar-contextual squisq-template-picker${clippedContextual.has('template') ? ' squisq-toolbar-contextual--clipped' : ''}`}
               data-contextual="template"
@@ -1899,7 +1968,7 @@ export function Toolbar({
           {/* Transition picker — visible alongside the template picker when a
               block (heading) is active. Writes `transition=` into the block's
               Pandoc `{…}` attribute block (the canonical home for transitions). */}
-          {currentTransition !== null && (
+          {showFormattingControls && currentTransition !== null && (
             <div
               className={`squisq-toolbar-group squisq-toolbar-contextual squisq-transition-picker-group${clippedContextual.has('transition') ? ' squisq-toolbar-contextual--clipped' : ''}`}
               data-contextual="transition"
@@ -1915,7 +1984,7 @@ export function Toolbar({
           )}
 
           {/* Table controls — visible when cursor is in a table (WYSIWYG) */}
-          {isInTable && (
+          {showFormattingControls && isInTable && (
             <div
               className={`squisq-toolbar-group squisq-toolbar-contextual squisq-table-controls${clippedContextual.has('table') ? ' squisq-toolbar-contextual--clipped' : ''}`}
               data-contextual="table"
@@ -2072,6 +2141,11 @@ export function Toolbar({
           )}
         </div>
       )}
+      {/* Keep the flexible middle lane when built-in actions are hidden so
+          host-provided right slots stay pinned to the toolbar's far edge. */}
+      {!findMode && !isPreview && !isCodeMode && !showFormattingControls && !showInsertControls && (
+        <div className="squisq-toolbar-actions" />
+      )}
 
       {/* Overflow menu — outside the overflow:hidden actions container.
           Also appears when a contextual group (template/transition picker,
@@ -2092,38 +2166,40 @@ export function Toolbar({
             <div
               className={`squisq-toolbar-overflow-menu squisq-toolbar-overflow-menu--${overflowPlacement}`}
             >
-              {BUTTONS.slice(overflowIndex ?? BUTTONS.length)
-                .filter((b) => isButtonVisible(b.id))
-                // Media buttons are represented by the synthetic Insert dropdown
-                // in both the visible toolbar and the overflow menu.
-                .filter((b) => b.group !== 'media')
-                .map((btn) => {
-                  const active =
-                    btn.id === 'emoji'
-                      ? emojiPickerAnchor !== null
-                      : formatActive && formattingEditor
-                        ? isTiptapActive(formattingEditor, btn.id)
-                        : false;
-                  const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
-                  return (
-                    <button
-                      key={btn.id}
-                      ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
-                      className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
-                      onClick={() => {
-                        handleAction(btn.id);
-                        // Keep the overflow open when opening the emoji
-                        // picker — otherwise its anchor (the overflow
-                        // item) unmounts and the popover loses its ref.
-                        if (btn.id !== 'emoji') setShowOverflow(false);
-                      }}
-                      disabled={disabled}
-                    >
-                      <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
-                      <span>{btn.title}</span>
-                    </button>
-                  );
-                })}
+              {showFormattingControls &&
+                BUTTONS.slice(overflowIndex ?? BUTTONS.length)
+                  .filter((b) => isButtonVisible(b.id))
+                  // Media buttons are represented by the synthetic Insert dropdown
+                  // in both the visible toolbar and the overflow menu.
+                  .filter((b) => b.group !== 'media')
+                  .map((btn) => {
+                    const active =
+                      btn.id === 'emoji'
+                        ? emojiPickerAnchor !== null
+                        : formatActive && formattingEditor
+                          ? isTiptapActive(formattingEditor, btn.id)
+                          : false;
+                    const disabled =
+                      (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
+                    return (
+                      <button
+                        key={btn.id}
+                        ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
+                        className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                        onClick={() => {
+                          handleAction(btn.id);
+                          // Keep the overflow open when opening the emoji
+                          // picker — otherwise its anchor (the overflow
+                          // item) unmounts and the popover loses its ref.
+                          if (btn.id !== 'emoji') setShowOverflow(false);
+                        }}
+                        disabled={disabled}
+                      >
+                        <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
+                        <span>{btn.title}</span>
+                      </button>
+                    );
+                  })}
 
               {showInsertInOverflow && (
                 <button
@@ -2192,7 +2268,7 @@ export function Toolbar({
               )}
 
               {/* Contextual: table controls in overflow */}
-              {isInTable && clippedContextual.has('table') && (
+              {showFormattingControls && isInTable && clippedContextual.has('table') && (
                 <>
                   <div
                     className="squisq-toolbar-separator"
@@ -2345,7 +2421,13 @@ export function Toolbar({
             ref={insertMenuRef}
             className="squisq-insert-menu"
             data-theme={colorScheme}
-            style={{ position: 'fixed', top: insertMenuAnchor.top, left: insertMenuAnchor.left }}
+            data-placement={insertMenuAnchor.placement}
+            style={{
+              position: 'fixed',
+              top: insertMenuAnchor.top,
+              left: insertMenuAnchor.left,
+              maxHeight: insertMenuAnchor.maxHeight,
+            }}
             role="menu"
           >
             {showConvertActions && (

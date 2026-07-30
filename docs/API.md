@@ -1419,6 +1419,8 @@ interface DocPlayerProps {
   coverVisible?: boolean; // controlled cover cursor for synchronized audience mirrors
   captionStyle?: CaptionStyle; // default 'standard'
   enableSwipe?: boolean; // default true — drag-to-swipe navigation in slideshow mode
+  showCodeCopyButton?: boolean; // default false; linear mode only
+  onCopyCode?: CodeBlockCopyHandler; // host clipboard adapter; browser fallback when omitted
 }
 ```
 
@@ -1476,8 +1478,22 @@ interface LinearDocViewProps {
   globalKeyboardShortcuts?: boolean; // default false
   showCover?: boolean; // default true — hero from doc.startBlock (deduped vs an authored title)
   transformPage?: PageTransformHints; // page hints from the active Summarize style
+  showCodeCopyButton?: boolean; // default false
+  onCopyCode?: CodeBlockCopyHandler;
   className?: string;
 }
+
+interface MarkdownRendererProps {
+  nodes: MarkdownBlockNode[];
+  className?: string;
+  htmlPolicy?: HtmlPolicy;
+  linkSchemes?: readonly string[];
+  theme?: Theme;
+  showCodeCopyButton?: boolean; // default false
+  onCopyCode?: CodeBlockCopyHandler;
+}
+
+type CodeBlockCopyHandler = (code: string, context: { language?: string }) => void | Promise<void>;
 
 interface JsonViewProps {
   schema: SquisqAnnotatedSchema;
@@ -2197,6 +2213,8 @@ interface EditorShellProps {
   basePath?: string; // default '/'
   onChange?: (source: string) => void;
   onLinkClick?: (href: string) => boolean | undefined; // false allows browser navigation
+  showCodeCopyButton?: boolean; // default false; Document/Page preview fences
+  onCopyCode?: CodeBlockCopyHandler; // Electron/native clipboard bridge; browser fallback
   colorScheme?: EditorColorScheme; // 'light' | 'dark', default 'light'
   className?: string;
   height?: string; // default '100vh'

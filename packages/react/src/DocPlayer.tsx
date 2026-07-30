@@ -195,6 +195,8 @@ function DocPlayerContent({
   pipPosition,
   enableSwipe = true,
   globalKeyboardShortcuts = false,
+  showCodeCopyButton = false,
+  onCopyCode,
 }: DocPlayerContentProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
@@ -220,13 +222,22 @@ function DocPlayerContent({
     return params.get('debug') === 'true';
   }, []);
 
-  // Use internal HTML5 audio sync if no external controller is given
+  // Use internal HTML5 audio sync if no external controller is given.
+  // A synthetic clock has no media to take its length from, so the document's
+  // own timeline is the length. Intrinsic clip durations aren't resolved this
+  // early in the render; scheduled media that outruns the block timeline
+  // extends `mediaSchedule`, not the clock — the same bound render mode uses.
+  const syntheticDuration = useMemo(
+    () => (audioMode === 'synthetic' ? getDocPlaybackDuration(doc) : 0),
+    [audioMode, doc],
+  );
   const internalAudio = useAudioSync(
     audioRef,
     doc.audio,
     basePath,
     !externalAudioController,
     audioMode,
+    syntheticDuration,
   );
 
   // Use external controller if provided, otherwise fall back to internal
@@ -1271,6 +1282,8 @@ function DocPlayerContent({
           theme={theme}
           surface={surface}
           animationsEnabled={animationsEnabled}
+          showCodeCopyButton={showCodeCopyButton}
+          onCopyCode={onCopyCode}
         />
       </div>
     );

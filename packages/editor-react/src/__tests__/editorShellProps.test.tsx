@@ -388,7 +388,7 @@ describe('<EditorShell> instance boundaries', () => {
 });
 
 describe('<EditorShell> hostMode', () => {
-  it('keeps chat embeds in Write view without rendering view tabs', () => {
+  it('keeps chat embeds in Write view with Insert but without formatting or view tabs', async () => {
     const { container } = render(
       <EditorShell
         initialMarkdown="Chat draft"
@@ -407,6 +407,13 @@ describe('<EditorShell> hostMode', () => {
     expect(within(shell).queryByRole('button', { name: 'Transform document' })).toBeNull();
     expect(within(shell).queryByRole('button', { name: 'View options' })).toBeNull();
     expect(within(shell).queryByRole('button', { name: 'Document settings' })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: /^Bold/ })).toBeNull();
+    const insert = within(shell).getByRole('button', { name: 'Insert' });
+    expect(insert).toBeTruthy();
+    expect(within(shell).getByRole('toolbar', { name: 'Editor toolbar' })).toBeTruthy();
+
+    fireEvent.click(insert);
+    expect(await screen.findByRole('menu')).toBeTruthy();
 
     fireEvent.keyDown(within(shell).getByTestId('wysiwyg-editor-stub'), {
       key: '2',
@@ -414,6 +421,40 @@ describe('<EditorShell> hostMode', () => {
     });
     expect(within(shell).getByTestId('wysiwyg-editor-stub')).toBeTruthy();
     expect(within(shell).queryByTestId('raw-editor-stub')).toBeNull();
+    expect(within(shell).getByRole('button', { name: 'Send' })).toBeTruthy();
+  });
+
+  it('allows chat hosts to hide Insert independently', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="Chat draft"
+        hostMode="chat"
+        showInsertControls={false}
+        toolbarSlotRight={<button type="button">Send</button>}
+      />,
+    );
+
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(within(shell).queryByRole('button', { name: /^Bold/ })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: 'Insert' })).toBeNull();
+    expect(within(shell).getByRole('toolbar', { name: 'Editor toolbar' })).toBeTruthy();
+    expect(within(shell).getByRole('button', { name: 'Send' })).toBeTruthy();
+  });
+
+  it('allows chat hosts to opt back into formatting controls', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="Chat draft"
+        hostMode="chat"
+        showFormattingControls
+        toolbarSlotRight={<button type="button">Send</button>}
+      />,
+    );
+
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(within(shell).getByRole('button', { name: /^Bold/ })).toBeTruthy();
+    expect(within(shell).getByRole('button', { name: 'Insert' })).toBeTruthy();
+    expect(within(shell).getByRole('toolbar', { name: 'Formatting toolbar' })).toBeTruthy();
     expect(within(shell).getByRole('button', { name: 'Send' })).toBeTruthy();
   });
 });
@@ -683,6 +724,53 @@ describe('<Toolbar> Files badge', () => {
 });
 
 describe('<Toolbar> Insert menu', () => {
+  it('flips above its trigger when the rendered menu would cross the viewport bottom', async () => {
+    const originalInnerHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });
+    const scrollHeightSpy = vi
+      .spyOn(Element.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: Element) {
+        return this.classList.contains('squisq-insert-menu') ? 300 : 0;
+      });
+
+    try {
+      render(
+        <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+          <Toolbar />
+        </EditorProvider>,
+      );
+
+      const trigger = screen.getByLabelText('Insert');
+      trigger.getBoundingClientRect = () =>
+        ({
+          x: 24,
+          y: 700,
+          top: 700,
+          right: 64,
+          bottom: 740,
+          left: 24,
+          width: 40,
+          height: 40,
+          toJSON: () => ({}),
+        }) as DOMRect;
+
+      fireEvent.click(trigger);
+      const menu = await screen.findByRole('menu');
+
+      await waitFor(() => {
+        expect(menu.dataset.placement).toBe('up');
+        expect(menu.style.top).toBe('396px');
+        expect(menu.style.maxHeight).toBe('688px');
+      });
+    } finally {
+      scrollHeightSpy.mockRestore();
+      Object.defineProperty(window, 'innerHeight', {
+        configurable: true,
+        value: originalInnerHeight,
+      });
+    }
+  });
+
   it('closes on global Escape and returns focus to the Insert trigger', async () => {
     render(
       <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>

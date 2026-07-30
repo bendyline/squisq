@@ -333,6 +333,15 @@ describe('docToHtml', () => {
     expect(html).not.toContain('background:#fff');
   });
 
+  it('passes the fenced-code Copy option to the standalone player', () => {
+    const html = docToHtml(makeDoc(), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+      showCodeCopyButton: true,
+    });
+
+    expect(bootExportedHtml(html).options.showCodeCopyButton).toBe(true);
+  });
+
   it('inlines images as base64 data URIs', () => {
     const doc = makeDoc({ blocks: [makeImageBlock('hero.png')] });
     const images = new Map([['hero.png', makeImageBuffer()]]);
@@ -455,6 +464,17 @@ describe('docToHtmlZip', () => {
     expect(html).toContain('SquisqPlayer.mount');
   });
 
+  it('passes the fenced-code Copy option through ZIP exports', async () => {
+    const blob = await docToHtmlZip(makeDoc(), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+      showCodeCopyButton: true,
+    });
+
+    const zip = await JSZip.loadAsync(await blobToUint8Array(blob));
+    const html = await zip.file('index.html')!.async('text');
+    expect(bootExportedHtml(html).options.showCodeCopyButton).toBe(true);
+  });
+
   it('player.js contains the provided script', async () => {
     const doc = makeDoc();
     const blob = await docToHtmlZip(doc, { playerScript: MOCK_PLAYER_SCRIPT });
@@ -473,6 +493,7 @@ describe('docToHtmlZip', () => {
 interface MountedOptions {
   images: Record<string, string>;
   audio?: Record<string, string> | null;
+  showCodeCopyButton?: boolean;
 }
 
 /**

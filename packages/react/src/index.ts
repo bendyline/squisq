@@ -12,6 +12,11 @@ export { DocControlsSlideshow } from './DocControlsSlideshow.js';
 export { DocPlayerWithSidebar } from './DocPlayerWithSidebar.js';
 export { DocProgressBar } from './DocProgressBar.js';
 export { MarkdownRenderer } from './MarkdownRenderer.js';
+export type {
+  MarkdownRendererProps,
+  CodeBlockCopyContext,
+  CodeBlockCopyHandler,
+} from './MarkdownRenderer.js';
 export { MermaidDiagram } from './mermaid/MermaidDiagram.js';
 export type { MermaidDiagramProps } from './mermaid/MermaidDiagram.js';
 export { LinearDocView } from './LinearDocView.js';

@@ -8,6 +8,9 @@ const track: AudioTrack = {
   segments: [{ src: 'https://cdn.example.test/a.mp3', name: 'a', duration: 2, startTime: 0 }],
 };
 
+/** What `markdownToDoc` emits for a document with no narration. */
+const emptyTrack: AudioTrack = { segments: [] };
+
 afterEach(() => vi.restoreAllMocks());
 
 /**
@@ -139,6 +142,52 @@ describe('useAudioSync playback modes', () => {
     expect(play).not.toHaveBeenCalled();
     expect(result.current.isPlaying).toBe(true);
     expect(result.current.isAvailable).toBe(true);
+  });
+
+  // The whole point of synthetic mode is a document with no audio asset, and
+  // `markdownToDoc` emits exactly that: `audio: { segments: [] }`. Taking the
+  // clock length from the segments alone left it at 0, and the fallback timer
+  // refuses to arm without one — `play()` set isPlaying on a timeline frozen
+  // at 0:00 / 0:00, so the player looked like it was playing the first block
+  // forever.
+  it('takes the synthetic clock length from the caller when the track has no segments', async () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((cb) => frames.push(cb));
+    vi.spyOn(globalThis, 'cancelAnimationFrame').mockImplementation(() => {});
+    const { result } = renderHook(() =>
+      useAudioSync({ current: null }, emptyTrack, '', true, 'synthetic', 75),
+    );
+
+    expect(result.current.totalDuration).toBe(75);
+    expect(result.current.isReady).toBe(true);
+
+    await act(() => result.current.play());
+    expect(frames).not.toHaveLength(0);
+    act(() => frames[frames.length - 1](performance.now() + 1000));
+
+    expect(result.current.currentTime).toBeGreaterThan(0.5);
+    expect(result.current.isEnded).toBe(false);
+  });
+
+  it('seeks and ends on a synthetic clock with no segments', async () => {
+    const { result } = renderHook(() =>
+      useAudioSync({ current: null }, undefined, '', true, 'synthetic', 75),
+    );
+
+    await act(() => result.current.seekTo(40));
+    expect(result.current.currentTime).toBe(40);
+
+    // Past the end clamps rather than running on into empty timeline.
+    await act(() => result.current.seekTo(900));
+    expect(result.current.currentTime).toBe(75);
+  });
+
+  it('leaves the clock at zero in media mode even when a synthetic length is passed', async () => {
+    const { result } = renderHook(() =>
+      useAudioSync({ current: null }, emptyTrack, '', true, 'media', 75),
+    );
+
+    expect(result.current.totalDuration).toBe(0);
   });
 
   it('waits for a cross-segment seek to finish before restart plays', async () => {

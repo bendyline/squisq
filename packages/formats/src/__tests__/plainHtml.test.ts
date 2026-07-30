@@ -82,7 +82,9 @@ describe('markdownDocToPlainHtml', () => {
 
   it('renders fenced code blocks with a language class', () => {
     const html = render('```ts\nconst x = 1;\n```');
-    expect(html).toContain('<pre><code class="language-ts">const x = 1;</code></pre>');
+    expect(html).toContain(
+      '<pre class="squisq-code-block"><code class="language-ts">const x = 1;</code></pre>',
+    );
   });
 
   it('escapes HTML characters inside code blocks', () => {

@@ -636,7 +636,7 @@ function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): str
       return `<code>${escapeHtml(node.value ?? '')}</code>`;
     case 'code': {
       const lang = node.lang ? ` class="language-${escapeAttr(node.lang)}"` : '';
-      return `<pre><code${lang}>${escapeHtml(node.value ?? '')}</code></pre>`;
+      return `<pre class="squisq-code-block"><code${lang}>${escapeHtml(node.value ?? '')}</code></pre>`;
     }
     case 'blockquote':
       return `<blockquote>${childrenToHtml(node, ctx)}</blockquote>`;

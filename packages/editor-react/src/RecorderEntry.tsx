@@ -133,14 +133,12 @@ export function RecorderEntry({ open, onOpenChange, showTrigger = true }: Record
     (result: RecorderSaveResult) => {
       bumpMediaRevision();
 
-      if (result.source === 'mic') {
-        // Narration — annotate the nearest heading (drives the
-        // slideshow narration pipeline at `core/src/doc/audioMapping.ts`)
-        // *and* insert an inline `<audio controls>` so the user can
-        // audition the recording inside the editor. The two roles are
-        // orthogonal: the annotation is metadata for playback timing,
-        // the HTML tag is an in-editor preview control.
-        if (activeView === 'raw' && monacoEditor) {
+      if (result.mediaKind === 'audio') {
+        // Every audio-only result gets compact playback controls. Narration
+        // additionally annotates the nearest heading (drives the slideshow
+        // audio-mapping pipeline); a camera/screen request that happened to
+        // produce only audio remains an ordinary embedded clip.
+        if (result.source === 'mic' && activeView === 'raw' && monacoEditor) {
           annotateMonacoHeading(monacoEditor, result.filename);
         }
         const audioTag = `<audio src="${result.relativePath}" controls></audio>`;
@@ -152,8 +150,7 @@ export function RecorderEntry({ open, onOpenChange, showTrigger = true }: Record
           return;
         }
         if (activeView === 'raw' && monacoEditor) {
-          // The annotation went onto the heading line; drop the player
-          // on a fresh line at the cursor.
+          // Keep the player on a fresh line at the cursor.
           insertAtCursor(`\n\n${audioTag}\n`);
           return;
         }

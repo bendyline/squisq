@@ -2,6 +2,7 @@ import type { Doc, SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/doc';
 import type { CoverSlidePlayback, CoverSlideTemplate } from '@bendyline/squisq/doc';
 import type { AudioController } from './hooks/AudioController';
+import type { CodeBlockCopyHandler } from './MarkdownRenderer';
 import type {
   BlockMarker,
   CaptionStyle,
@@ -74,4 +75,8 @@ export interface DocPlayerProps {
   pipPosition?: PipPosition;
   enableSwipe?: boolean;
   globalKeyboardShortcuts?: boolean;
+  /** Show a Copy button on fenced code blocks in linear mode (default: false). */
+  showCodeCopyButton?: boolean;
+  /** Optional host clipboard adapter; otherwise the browser Clipboard API is used. */
+  onCopyCode?: CodeBlockCopyHandler;
 }

@@ -89,6 +89,7 @@ import type {
   RefObject,
 } from 'react';
 import { MediaContext, useMediaClipDurations } from '@bendyline/squisq-react';
+import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { useModalDialog } from './modal/useModalDialog';
 import type { EditorHostMode } from './editorHostMode';
@@ -104,7 +105,8 @@ export interface EditorShellProps {
    * Semantic mode for the surface embedding the editor. `'document'`
    * (default) exposes the normal multi-view authoring shell. `'chat'`
    * starts and stays in Write view through the shell's own controls, hides
-   * the view tabs, and removes document-level layout, transform, view, and
+   * the view tabs, hides formatting controls by default while retaining the
+   * Insert menu, and removes document-level layout, transform, view, and
    * settings controls from the toolbar.
    */
   hostMode?: EditorHostMode;
@@ -126,6 +128,13 @@ export interface EditorShellProps {
    * navigation; any other return (or void) marks the link as handled.
    */
   onLinkClick?: (href: string) => boolean | undefined;
+  /** Show a Copy button on ordinary fenced code blocks (default: false). */
+  showCodeCopyButton?: boolean;
+  /**
+   * Optional host clipboard adapter. When omitted, enabled controls use the
+   * browser Clipboard API. Electron/native hosts can bridge copying here.
+   */
+  onCopyCode?: CodeBlockCopyHandler;
   /**
    * Light/dark chrome color scheme for the editor shell — toolbar, tabs,
    * status bar, and side panes (default: `'light'`). This is the editor's
@@ -201,6 +210,18 @@ export interface EditorShellProps {
   onSaveVersion?: (result: SaveVersionResult) => void;
   /** Show the Files toggle in the toolbar. Defaults to true when mediaProvider is passed. */
   showFilesToggle?: boolean;
+  /**
+   * Show the toolbar's built-in text, block, and contextual formatting
+   * controls. The toolbar, Insert menu, and host-provided slots remain
+   * visible when false. Defaults to true in document mode and false in chat
+   * mode.
+   */
+  showFormattingControls?: boolean;
+  /**
+   * Show the toolbar's built-in Insert button and menu independently of the
+   * formatting controls. Defaults to true.
+   */
+  showInsertControls?: boolean;
   /**
    * Whether the Files panel offers browser downloads for its binary entries.
    * Defaults to true. Pass false to remove the built-in download affordance.
@@ -508,6 +529,8 @@ export function EditorShell({
   basePath = '/',
   onChange,
   onLinkClick,
+  showCodeCopyButton = false,
+  onCopyCode,
   colorScheme = 'light',
   className,
   height = '100vh',
@@ -521,6 +544,8 @@ export function EditorShell({
   versioningAutoSaveIdleMs,
   onSaveVersion,
   showFilesToggle,
+  showFormattingControls = hostMode !== 'chat',
+  showInsertControls = true,
   allowBinaryDownloads = true,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
@@ -626,6 +651,8 @@ export function EditorShell({
           defaultViewportPreset={defaultViewportPreset}
           onChange={onChange}
           onLinkClick={onLinkClick}
+          showCodeCopyButton={showCodeCopyButton}
+          onCopyCode={onCopyCode}
           className={className}
           height={height}
           minHeight={minHeight}
@@ -634,6 +661,8 @@ export function EditorShell({
           mediaProvider={effectiveMediaProvider ?? null}
           workspaceContainer={effectiveContainer}
           filesToggleEnabled={filesToggleEnabled}
+          showFormattingControls={showFormattingControls}
+          showInsertControls={showInsertControls}
           allowBinaryDownloads={allowBinaryDownloads}
           toolbarSlotLeft={toolbarSlotLeft}
           toolbarSlotAfterActions={toolbarSlotAfterActions}
@@ -672,6 +701,8 @@ interface EditorShellInnerProps {
   defaultViewportPreset: ViewportPreset;
   onChange?: (source: string) => void;
   onLinkClick?: (href: string) => boolean | undefined;
+  showCodeCopyButton: boolean;
+  onCopyCode?: CodeBlockCopyHandler;
   className?: string;
   height: string;
   minHeight?: string;
@@ -680,6 +711,8 @@ interface EditorShellInnerProps {
   mediaProvider: MediaProvider | null;
   workspaceContainer?: ContentContainer | null;
   filesToggleEnabled: boolean;
+  showFormattingControls: boolean;
+  showInsertControls: boolean;
   allowBinaryDownloads: boolean;
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
@@ -748,6 +781,8 @@ function EditorShellInner({
   defaultViewportPreset,
   onChange,
   onLinkClick,
+  showCodeCopyButton,
+  onCopyCode,
   className,
   height,
   minHeight,
@@ -756,6 +791,8 @@ function EditorShellInner({
   mediaProvider,
   workspaceContainer,
   filesToggleEnabled,
+  showFormattingControls,
+  showInsertControls,
   allowBinaryDownloads,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
@@ -1205,6 +1242,8 @@ function EditorShellInner({
                   slotAfterActions={toolbarSlotAfterActions}
                   slotRight={toolbarSlotRight}
                   showPlayTab={showPlayTab}
+                  showFormattingControls={showFormattingControls}
+                  showInsertControls={showInsertControls}
                   hostMode={hostMode}
                 />
               </div>
@@ -1336,6 +1375,8 @@ function EditorShellInner({
                     basePath={basePath}
                     workspaceContainer={workspaceContainer}
                     onLinkClick={onLinkClick}
+                    showCodeCopyButton={showCodeCopyButton}
+                    onCopyCode={onCopyCode}
                   />
                 )}
               </div>

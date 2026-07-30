@@ -45,6 +45,9 @@ export interface HtmlExportOptions {
   /** Auto-play slideshow on load (default: false) */
   autoPlay?: boolean;
 
+  /** Show Copy controls on ordinary fenced code blocks (default: false). */
+  showCodeCopyButton?: boolean;
+
   /**
    * Caption rendering for slideshow playback. Passed through to
    * `SquisqPlayer.mount` — 'social' shows the large centered 3-5 word
@@ -304,6 +307,7 @@ export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string
     mode = 'slideshow',
     title = 'Squisq Document',
     autoPlay = false,
+    showCodeCopyButton = false,
     captionStyle,
     themeId,
     themeRegistry,
@@ -350,6 +354,7 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
     mode: ${JSON.stringify(mode)},
     images: images,
     autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}
+    showCodeCopyButton: ${JSON.stringify(showCodeCopyButton)},
     basePath: "."
   });
 })();
@@ -370,7 +375,13 @@ export function generateExternalHtml(
   doc: Doc,
   options: Pick<
     HtmlExportOptions,
-    'mode' | 'title' | 'autoPlay' | 'captionStyle' | 'themeId' | 'themeRegistry'
+    | 'mode'
+    | 'title'
+    | 'autoPlay'
+    | 'showCodeCopyButton'
+    | 'captionStyle'
+    | 'themeId'
+    | 'themeRegistry'
   > & {
     /** Relative path to the player JS file (e.g., 'squisq-player.js') */
     playerScriptPath: string;
@@ -387,6 +398,7 @@ export function generateExternalHtml(
     mode = 'slideshow',
     title = 'Squisq Document',
     autoPlay = false,
+    showCodeCopyButton = false,
     captionStyle,
     themeId,
     themeRegistry,
@@ -425,6 +437,7 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
     images: images,
     audio: audio,
     autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}
+    showCodeCopyButton: ${JSON.stringify(showCodeCopyButton)},
     basePath: "."
   });
 })();

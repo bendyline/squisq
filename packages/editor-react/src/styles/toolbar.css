@@ -916,6 +916,8 @@
   z-index: 100;
   min-width: 200px;
   padding: 4px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   /* This menu is portaled to <body>, outside the editor shell that normally
      supplies the UX font. Keep its unbuttoned content (notably the header)
      on the same sans-serif UI stack instead of inheriting the host page font. */

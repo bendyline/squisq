@@ -57,6 +57,25 @@ state rather than crashing.
 | `MediaClipLayer`       | Hidden `<audio>`/`<video>` elements for timed media clips           |
 | `JsonView`             | Read-only viewer for JSON values bound to a Squisq-annotated schema |
 
+### Fenced-code copy control
+
+`MarkdownRenderer` and the linear document surfaces keep code-copy UI off by
+default. Opt in with `showCodeCopyButton`. Web hosts can rely on
+`navigator.clipboard`; Electron or native embeddings can provide their own
+clipboard bridge:
+
+````tsx
+<LinearDocView
+  markdown={'```\n$ node packages/tooling/dist/cli.mjs components\n```'}
+  showCodeCopyButton
+  onCopyCode={(code, { language }) => hostClipboard.writeText(code)}
+/>
+````
+
+The same two props are available on `DocPlayer` (for linear mode), and on the
+standalone static `mount()` options. The callback receives the exact fence
+contents, without the backtick delimiters.
+
 ## Layers
 
 Blocks are composed of typed layers rendered as SVG:

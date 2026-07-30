@@ -90,7 +90,10 @@ async function readMarkdown(page: Page): Promise<string> {
   await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
   const lines = page.locator('.monaco-editor .view-lines').first();
-  await expect(lines).toContainText(/\S/, { timeout: 4_000 });
+  // Switching views can briefly mount Monaco with the initial "#" source
+  // before the selected sample reaches its model. Wait for sample-specific
+  // content instead of accepting that transient non-empty value.
+  await expect(lines).toContainText('Grandparent', { timeout: 4_000 });
   const text = await lines.innerText();
   return text.replace(NBSP_RE, ' ');
 }

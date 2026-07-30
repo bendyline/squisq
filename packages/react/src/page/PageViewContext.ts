@@ -10,6 +10,7 @@ import type { MaterializeBlockLayersOptions } from '@bendyline/squisq/doc';
 import { DEFAULT_THEME, resolvePageStyle } from '@bendyline/squisq/doc';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import type { ImageDisplayMode } from '../LinearDocView';
+import type { CodeBlockCopyHandler } from '../MarkdownRenderer';
 
 export interface PageViewContextValue {
   theme: Theme;
@@ -20,6 +21,8 @@ export interface PageViewContextValue {
   renderContext: MaterializeBlockLayersOptions;
   animationsEnabled: boolean;
   imageDisplayMode: ImageDisplayMode;
+  showCodeCopyButton: boolean;
+  onCopyCode?: CodeBlockCopyHandler;
 }
 
 const defaultValue: PageViewContextValue = {
@@ -30,6 +33,7 @@ const defaultValue: PageViewContextValue = {
   renderContext: { theme: DEFAULT_THEME },
   animationsEnabled: true,
   imageDisplayMode: 'inline',
+  showCodeCopyButton: false,
 };
 
 export const PageViewContext = createContext<PageViewContextValue>(defaultValue);
