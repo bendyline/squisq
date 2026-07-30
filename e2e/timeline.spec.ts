@@ -156,7 +156,13 @@ test.describe('Timeline view', () => {
       Object.defineProperty(navigator, 'mediaDevices', {
         configurable: true,
         value: {
-          getUserMedia: async () => new MediaStream(),
+          getUserMedia: async () => {
+            // The recorder classifies the saved media from the tracks that
+            // were actually captured. Model a camera stream with a genuine
+            // synthetic video track so this remains a video-recording test.
+            const canvas = document.createElement('canvas');
+            return canvas.captureStream();
+          },
           getDisplayMedia: async () => new MediaStream(),
         },
       });
