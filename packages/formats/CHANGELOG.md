@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.4.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.3.10...@bendyline/squisq-formats@2.4.0) (2026-07-30)
+
+### Features
+
+* Support a copy button for code segments ([#41](https://github.com/bendyline/squisq/issues/41)) ([efe9376](https://github.com/bendyline/squisq/commit/efe937637e5007df65198eadc4d5e1bf64f5272f))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.6.0
+
 ## @bendyline/squisq-formats [2.3.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.3.9...@bendyline/squisq-formats@2.3.10) (2026-07-27)
 
 
