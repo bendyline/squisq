@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.6.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.5.0...@bendyline/squisq@2.6.0) (2026-07-30)
+
+### Features
+
+* Support a copy button for code segments ([#41](https://github.com/bendyline/squisq/issues/41)) ([efe9376](https://github.com/bendyline/squisq/commit/efe937637e5007df65198eadc4d5e1bf64f5272f))
+
 ## @bendyline/squisq [2.5.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.4.4...@bendyline/squisq@2.5.0) (2026-07-27)
 
 ### Features
