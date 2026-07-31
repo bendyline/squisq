@@ -7,6 +7,8 @@
 import { createContext, useContext } from 'react';
 import type { Theme, ThemePageStyle, ViewportConfig } from '@bendyline/squisq/schemas';
 import type { MaterializeBlockLayersOptions } from '@bendyline/squisq/doc';
+import type { FenceRendererMap } from '@bendyline/squisq/fence';
+import type { HtmlPolicy } from '@bendyline/squisq/markdown';
 import { DEFAULT_THEME, resolvePageStyle } from '@bendyline/squisq/doc';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import type { ImageDisplayMode } from '../LinearDocView';
@@ -23,6 +25,12 @@ export interface PageViewContextValue {
   imageDisplayMode: ImageDisplayMode;
   showCodeCopyButton: boolean;
   onCopyCode?: CodeBlockCopyHandler;
+  /** Host fence-renderer registry — see `MarkdownRendererProps.fenceRenderers`. */
+  fenceRenderers?: FenceRendererMap;
+  /** Raw-HTML policy for section markdown; defaults to MarkdownRenderer's `sanitize`. */
+  htmlPolicy?: HtmlPolicy;
+  /** Extra link URL schemes for section markdown. */
+  linkSchemes?: readonly string[];
 }
 
 const defaultValue: PageViewContextValue = {

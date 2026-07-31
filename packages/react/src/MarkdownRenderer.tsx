@@ -14,8 +14,10 @@
  * All elements use the `squisq-md-*` CSS class prefix for styling.
  */
 
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Component, Fragment, useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { Theme } from '@bendyline/squisq/schemas';
+import type { FenceRendererMap } from '@bendyline/squisq/fence';
 import {
   sanitizeHtmlNodes,
   sanitizeUrl,
@@ -29,6 +31,7 @@ import {
   MarkdownTableCell,
 } from '@bendyline/squisq/markdown';
 import { useMediaUrl } from './hooks/MediaContext';
+import { useFenceRenderers } from './hooks/FenceRendererContext';
 import { InlineVideoPlayer } from './InlineVideoPlayer.js';
 import { InlineAudioPlayer } from './InlineAudioPlayer.js';
 import { MermaidDiagram } from './mermaid/MermaidDiagram.js';
@@ -77,6 +80,14 @@ export interface MarkdownRendererProps {
    * or hosts with their own clipboard permission/error handling.
    */
   onCopyCode?: CodeBlockCopyHandler;
+  /**
+   * Host fence-renderer registry (`@bendyline/squisq/fence`): fenced code
+   * blocks whose language is claimed render through the host's widget
+   * instead of the default code block. Wins over the built-in mermaid
+   * handling and over an ambient `FenceRendererContext`; a renderer that
+   * throws falls back to the plain code block via an error boundary.
+   */
+  fenceRenderers?: FenceRendererMap;
 }
 
 /** Options threaded through the recursive renderers. */
@@ -86,6 +97,7 @@ interface RenderCtx {
   theme?: Theme;
   showCodeCopyButton?: boolean;
   onCopyCode?: CodeBlockCopyHandler;
+  fenceRenderers?: FenceRendererMap;
 }
 
 const DEFAULT_CTX: RenderCtx = { htmlPolicy: 'sanitize' };
@@ -167,6 +179,52 @@ function CodeBlock({
       >
         {CODE_COPY_LABELS[status]}
       </button>
+    </div>
+  );
+}
+
+/**
+ * Containment for host fence widgets: a renderer that throws during
+ * render falls back to the plain code block, so one broken widget never
+ * takes the whole document down.
+ */
+class FenceWidgetBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  override render(): ReactNode {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+function HostFence({
+  node,
+  lang,
+  ctx,
+}: {
+  node: Extract<MarkdownBlockNode, { type: 'code' }>;
+  lang: string;
+  ctx: RenderCtx;
+}) {
+  const renderer = ctx.fenceRenderers?.[lang];
+  if (!renderer) return null;
+  return (
+    <div className={`squisq-md-fence-widget squisq-md-fence-widget-${lang}`} data-fence-lang={lang}>
+      {
+        renderer({
+          lang,
+          ...(node.meta != null ? { meta: node.meta } : {}),
+          value: node.value,
+          ...(ctx.theme ? { theme: ctx.theme } : {}),
+          mode: 'read',
+        }) as ReactNode
+      }
     </div>
   );
 }
@@ -384,8 +442,22 @@ function renderBlock(
         </ul>
       );
 
-    case 'code':
-      if (node.lang?.trim().toLowerCase() === 'mermaid') {
+    case 'code': {
+      const fenceLang = node.lang?.trim().toLowerCase();
+      // Host-registered renderers win over the built-in mermaid handling —
+      // that's the point of registering. A throwing renderer degrades to
+      // the plain code block via the boundary.
+      if (fenceLang && ctx.fenceRenderers?.[fenceLang]) {
+        return (
+          <FenceWidgetBoundary
+            key={key}
+            fallback={<CodeBlock value={node.value} language={node.lang} ctx={ctx} />}
+          >
+            <HostFence node={node} lang={fenceLang} ctx={ctx} />
+          </FenceWidgetBoundary>
+        );
+      }
+      if (fenceLang === 'mermaid') {
         return (
           <MermaidDiagram
             key={key}
@@ -397,6 +469,7 @@ function renderBlock(
         );
       }
       return <CodeBlock key={key} value={node.value} language={node.lang} ctx={ctx} />;
+    }
 
     case 'thematicBreak':
       return <hr key={key} className="squisq-md-hr" />;
@@ -766,7 +839,11 @@ export function MarkdownRenderer({
   theme,
   showCodeCopyButton = false,
   onCopyCode,
+  fenceRenderers,
 }: MarkdownRendererProps) {
+  // Ambient registry fallback: the explicit prop always wins (pass `{}`
+  // to opt a surface out under a provider).
+  const ambientFenceRenderers = useFenceRenderers();
   if (!nodes || nodes.length === 0) return null;
 
   return (
@@ -777,6 +854,7 @@ export function MarkdownRenderer({
         theme,
         showCodeCopyButton,
         onCopyCode,
+        fenceRenderers: fenceRenderers ?? ambientFenceRenderers ?? undefined,
       })}
     </div>
   );

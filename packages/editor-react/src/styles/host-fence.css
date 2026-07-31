@@ -1,0 +1,11 @@
+/* HostFenceExtension — host-registered fence widgets in the WYSIWYG editor.
+ * The raw fence is hidden and the host's React widget mounts after it;
+ * the widget inherits the editor's CSS variables for light/dark. */
+
+.squisq-wysiwyg-editor pre.squisq-host-fence-hidden {
+  display: none;
+}
+
+.squisq-host-fence-widget-host {
+  margin: 0.6rem 0;
+}

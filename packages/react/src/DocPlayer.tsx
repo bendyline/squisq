@@ -197,6 +197,7 @@ function DocPlayerContent({
   globalKeyboardShortcuts = false,
   showCodeCopyButton = false,
   onCopyCode,
+  fenceRenderers,
 }: DocPlayerContentProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
@@ -1284,6 +1285,7 @@ function DocPlayerContent({
           animationsEnabled={animationsEnabled}
           showCodeCopyButton={showCodeCopyButton}
           onCopyCode={onCopyCode}
+          fenceRenderers={fenceRenderers}
         />
       </div>
     );
@@ -1297,6 +1299,7 @@ function DocPlayerContent({
       data-playback-state={isPlaying ? 'playing' : 'paused'}
       data-swipe-phase={swipe.phase}
       tabIndex={renderMode ? -1 : 0}
+      role="region"
       aria-label="Document player"
       onKeyDown={renderMode ? undefined : handleKeyDown}
       className={`doc-player${swipeEnabled ? ' doc-player--swipe' : ''}${

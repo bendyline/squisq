@@ -13,3 +13,4 @@ export * from './imageEdit/index.js';
 export * from './icons/index.js';
 export * from './recommend/index.js';
 export * from './narration/index.js';
+export * from './fence/index.js';

@@ -15,7 +15,7 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { CodeSnippetWidget } from './CodeSnippetWidget';
 import { CODE_SNIPPET_FOCUS_INSERTED_META } from './codeSnippetFocus';
-import { isCodeSnippetFenceLanguage } from './codeSnippetLanguages';
+import { codeSnippetFenceLanguageToken, isCodeSnippetFenceLanguage } from './codeSnippetLanguages';
 
 export interface CodeSnippetBlockEntry {
   /** Synthetic session id, stable while this code block remains in the doc. */
@@ -35,16 +35,25 @@ export interface CodeSnippetPluginState {
 export interface CodeSnippetExtensionOptions {
   /** When false, leave all ordinary language-tagged fences as code blocks. */
   enabled?: boolean;
+  /**
+   * Fence languages this extension must NOT claim — typically the keys of
+   * a host `FenceRendererMap` so `HostFenceExtension` can own them instead
+   * of every unknown language becoming a Monaco inset. Tokens are
+   * normalized like fence languages (first token, lowercased). Evaluated
+   * at configure time: changing the *set* of registered languages
+   * requires re-configuring the editor; renderer implementations can
+   * change freely behind the host extension's getter.
+   */
+  reservedLanguages?: readonly string[];
 }
 
 export const CODE_SNIPPET_KEY = new PluginKey<CodeSnippetPluginState>('squisq-code-snippet');
 
-export function isCodeSnippetNode(node: PMNode): boolean {
+export function isCodeSnippetNode(node: PMNode, reserved?: ReadonlySet<string>): boolean {
   const language = (node.attrs as { language?: unknown }).language;
-  return (
-    node.type.name === 'codeBlock' &&
-    isCodeSnippetFenceLanguage(typeof language === 'string' ? language : null)
-  );
+  const lang = typeof language === 'string' ? language : null;
+  if (node.type.name !== 'codeBlock' || !isCodeSnippetFenceLanguage(lang)) return false;
+  return !reserved || !reserved.has(codeSnippetFenceLanguageToken(lang));
 }
 
 export function findCodeSnippetBlockPos(editor: Editor, blockId: string): number | null {
@@ -61,11 +70,12 @@ function buildDecorations(
   entries: readonly CodeSnippetBlockEntry[],
   editor: Editor,
   focusBlockId: string | null = null,
+  reserved?: ReadonlySet<string>,
 ): DecorationSet {
   const decorations: Decoration[] = [];
   for (const entry of entries) {
     const node = doc.nodeAt(entry.pos);
-    if (!node || !isCodeSnippetNode(node)) continue;
+    if (!node || !isCodeSnippetNode(node, reserved)) continue;
     decorations.push(
       Decoration.node(entry.pos, entry.pos + node.nodeSize, {
         class: 'squisq-code-snippet-fence-hidden',
@@ -115,6 +125,7 @@ function remapEntries(
   tr: Transaction,
   previous: CodeSnippetPluginState,
   doc: PMNode,
+  reserved?: ReadonlySet<string>,
 ): { entries: CodeSnippetBlockEntry[]; seq: number } {
   const mapped = new Map<number, string>();
   const claimed = new Set<string>();
@@ -143,7 +154,7 @@ function remapEntries(
   const entries: CodeSnippetBlockEntry[] = [];
   doc.descendants((node, pos) => {
     if (node.type.name !== 'codeBlock') return;
-    if (!isCodeSnippetNode(node)) return false;
+    if (!isCodeSnippetNode(node, reserved)) return false;
     entries.push({ id: mapped.get(pos) ?? `code-snippet-${++seq}`, pos });
     return false;
   });
@@ -155,9 +166,10 @@ function applyState(
   previous: CodeSnippetPluginState,
   editor: Editor,
   doc: PMNode,
+  reserved?: ReadonlySet<string>,
 ): CodeSnippetPluginState {
   if (!tr.docChanged) return previous;
-  const { entries, seq } = remapEntries(tr, previous, doc);
+  const { entries, seq } = remapEntries(tr, previous, doc, reserved);
   const requestedFocusPos = tr.getMeta(CODE_SNIPPET_FOCUS_INSERTED_META);
   const focusBlockId =
     typeof requestedFocusPos === 'number'
@@ -167,7 +179,7 @@ function applyState(
     entries,
     seq,
     focusBlockId,
-    decorations: buildDecorations(doc, entries, editor, focusBlockId),
+    decorations: buildDecorations(doc, entries, editor, focusBlockId, reserved),
   };
 }
 
@@ -181,6 +193,10 @@ export const CodeSnippetExtension = Extension.create<CodeSnippetExtensionOptions
   addProseMirrorPlugins() {
     if (this.options.enabled === false) return [];
     const editor = this.editor as Editor;
+    const reserved =
+      this.options.reservedLanguages && this.options.reservedLanguages.length > 0
+        ? new Set(this.options.reservedLanguages.map((lang) => codeSnippetFenceLanguageToken(lang)))
+        : undefined;
     return [
       new Plugin<CodeSnippetPluginState>({
         key: CODE_SNIPPET_KEY,
@@ -190,7 +206,7 @@ export const CodeSnippetExtension = Extension.create<CodeSnippetExtensionOptions
             const entries: CodeSnippetBlockEntry[] = [];
             state.doc.descendants((node, pos) => {
               if (node.type.name !== 'codeBlock') return;
-              if (!isCodeSnippetNode(node)) return false;
+              if (!isCodeSnippetNode(node, reserved)) return false;
               entries.push({ id: `code-snippet-${++seq}`, pos });
               return false;
             });
@@ -198,11 +214,11 @@ export const CodeSnippetExtension = Extension.create<CodeSnippetExtensionOptions
               entries,
               seq,
               focusBlockId: null,
-              decorations: buildDecorations(state.doc, entries, editor),
+              decorations: buildDecorations(state.doc, entries, editor, null, reserved),
             };
           },
           apply: (tr, previous, _oldState, newState) =>
-            applyState(tr, previous, editor, newState.doc),
+            applyState(tr, previous, editor, newState.doc, reserved),
         },
         props: {
           decorations(state) {

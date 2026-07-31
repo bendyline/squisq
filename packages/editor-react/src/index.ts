@@ -446,6 +446,30 @@ export {
 } from './treeview/treeOps.js';
 export { shouldPasteAsTreeFence } from './treeview/treePaste.js';
 
+// Host fence widgets — the public fence-extension framework. Hosts register
+// a `FenceRendererMap` (EditorShellProps.fenceRenderers) and claimed fence
+// languages mount as interactive widgets via HostFenceExtension; the shared
+// registry/containment helpers are exported for hosts that build their own
+// fence extensions (boundary-churn survival + event containment are the
+// hard-won parts — don't reimplement them).
+export {
+  HostFenceExtension,
+  HOST_FENCE_KEY,
+  findHostFenceBlockPos,
+  replaceHostFenceText,
+} from './fenceWidgets/HostFenceExtension.js';
+export type {
+  HostFenceBlockEntry,
+  HostFenceExtensionOptions,
+  HostFencePluginState,
+} from './fenceWidgets/HostFenceExtension.js';
+export { mapFenceEntries } from './fenceWidgets/fenceRegistry.js';
+export type { FenceBlockEntry } from './fenceWidgets/fenceRegistry.js';
+export {
+  containFenceWidgetEvents,
+  FENCE_WIDGET_CONTAINED_EVENTS,
+} from './fenceWidgets/fenceWidgetHost.js';
+
 // Timeline editor — authored marker-rail fences become an accessible canvas
 // with add-point affordances and a selected-point inspector. Semantic edits
 // re-render the canonical `timeline` fence in one undoable transaction.

@@ -43,7 +43,8 @@ import type {
   PageSectionMaterialization,
   PageTransformHints,
 } from '@bendyline/squisq/doc';
-import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { parseMarkdown, type HtmlPolicy } from '@bendyline/squisq/markdown';
+import { fenceRendererLangs, type FenceRendererMap } from '@bendyline/squisq/fence';
 import { PageViewContext, type PageViewContextValue } from './page/PageViewContext';
 import { PageSectionView } from './page/PageSectionView';
 import type { CodeBlockCopyHandler } from './MarkdownRenderer';
@@ -114,6 +115,18 @@ export interface LinearDocViewProps {
   showCodeCopyButton?: boolean;
   /** Optional host clipboard adapter; otherwise the browser Clipboard API is used. */
   onCopyCode?: CodeBlockCopyHandler;
+  /**
+   * Host fence-renderer registry (`@bendyline/squisq/fence`). Claimed
+   * fence languages render through the host's widgets in every markdown
+   * section — including rich content preserved inside typed template
+   * sections (the claimed languages are threaded into the page
+   * materializer so those fences survive slot extraction).
+   */
+  fenceRenderers?: FenceRendererMap;
+  /** Raw-HTML policy for markdown sections (default: `sanitize`). */
+  htmlPolicy?: HtmlPolicy;
+  /** Extra link URL schemes allowed in markdown sections. */
+  linkSchemes?: readonly string[];
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
@@ -144,6 +157,9 @@ export function LinearDocView({
   transformPage,
   showCodeCopyButton = false,
   onCopyCode,
+  fenceRenderers,
+  htmlPolicy,
+  linkSchemes,
 }: LinearDocViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const activeViewport = viewport ?? VIEWPORT_PRESETS.landscape;
@@ -168,6 +184,11 @@ export function LinearDocView({
     [activeTheme, transformPage],
   );
 
+  // Claimed fence languages must survive typed-template slot extraction —
+  // without this, a host widget inside a callout/card section is dropped
+  // by the materializer before the renderer ever sees it.
+  const widgetFenceLangs = useMemo(() => fenceRendererLangs(fenceRenderers), [fenceRenderers]);
+
   const sections: PageSectionMaterialization[] = useMemo(() => {
     if (!resolvedDoc) return [];
     return materializePageSections(resolvedDoc, {
@@ -176,8 +197,9 @@ export function LinearDocView({
       customTemplates: resolvedDoc.customTemplates,
       cover: showCover !== false ? resolvedDoc.startBlock : false,
       transformPage,
+      ...(widgetFenceLangs.length > 0 ? { widgetFenceLangs } : {}),
     });
-  }, [resolvedDoc, activeTheme, activeViewport, showCover, transformPage]);
+  }, [resolvedDoc, activeTheme, activeViewport, showCover, transformPage, widgetFenceLangs]);
 
   // Canvas embeds materialize SVG layers with the same options the player
   // uses, so diagrams/trees/maps keep the theme atmosphere.
@@ -203,6 +225,9 @@ export function LinearDocView({
       imageDisplayMode,
       showCodeCopyButton,
       onCopyCode,
+      fenceRenderers,
+      htmlPolicy,
+      linkSchemes,
     }),
     [
       activeTheme,
@@ -214,6 +239,9 @@ export function LinearDocView({
       imageDisplayMode,
       showCodeCopyButton,
       onCopyCode,
+      fenceRenderers,
+      htmlPolicy,
+      linkSchemes,
     ],
   );
 

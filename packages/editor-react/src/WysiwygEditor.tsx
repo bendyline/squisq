@@ -36,6 +36,8 @@ import { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste';
 import { MermaidDiagramExtension } from './mermaid/MermaidDiagramExtension';
 import { createMermaidThemeStore, type MermaidThemeStore } from './mermaid/mermaidThemeStore';
 import { CodeSnippetExtension } from './codeSnippet/CodeSnippetExtension';
+import { HostFenceExtension } from './fenceWidgets/HostFenceExtension';
+import { fenceRendererLangs } from '@bendyline/squisq/fence';
 import { TreeViewExtension } from './treeview/TreeViewExtension';
 import { shouldPasteAsTreeFence } from './treeview/treePaste';
 import { TimelineViewExtension } from './timeline/TimelineViewExtension';
@@ -157,6 +159,7 @@ export function WysiwygEditor({
     setTiptapEditor,
     mediaProvider,
     mentionProvider,
+    fenceRenderers,
     blockTagVisibility,
     themeInheritance,
     colorScheme,
@@ -215,6 +218,18 @@ export function WysiwygEditor({
   useEffect(() => {
     mentionProviderRef.current = mentionProvider;
   }, [mentionProvider]);
+  // Same getter-ref pattern for the host fence registry: renderer
+  // implementations stay live without an editor remount. The *set* of
+  // claimed languages (CodeSnippet's reserved list) is captured at
+  // creation — see EditorShellProps.fenceRenderers.
+  const fenceRenderersRef = useRef(fenceRenderers);
+  useEffect(() => {
+    fenceRenderersRef.current = fenceRenderers;
+  }, [fenceRenderers]);
+  const activeThemeRef = useRef(activeTheme);
+  useEffect(() => {
+    activeThemeRef.current = activeTheme;
+  }, [activeTheme]);
   // Stable per mount: either the host-supplied string, or a random pick
   // from EMPTY_PROMPTS. Re-renders don't reshuffle.
   const resolvedPlaceholder = useMemo(() => placeholder ?? pickEmptyPrompt(), [placeholder]);
@@ -275,7 +290,13 @@ export function WysiwygEditor({
       BlockTagActivityExtension,
       AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
       MermaidDiagramExtension.configure({ themeStore: mermaidThemeStore }),
-      CodeSnippetExtension,
+      CodeSnippetExtension.configure({
+        reservedLanguages: fenceRendererLangs(fenceRenderers ?? undefined),
+      }),
+      HostFenceExtension.configure({
+        renderers: () => fenceRenderersRef.current ?? undefined,
+        theme: () => activeThemeRef.current ?? undefined,
+      }),
       RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
       TimelineViewExtension,
       TreeViewExtension,

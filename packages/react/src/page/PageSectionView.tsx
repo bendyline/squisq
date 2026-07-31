@@ -99,7 +99,15 @@ function sectionBody(
 }
 
 export function PageSectionView({ entry, featureFlip, isLeadProse }: PageSectionViewProps) {
-  const { pageStyle, theme, showCodeCopyButton, onCopyCode } = usePageView();
+  const {
+    pageStyle,
+    theme,
+    showCodeCopyButton,
+    onCopyCode,
+    fenceRenderers,
+    htmlPolicy,
+    linkSchemes,
+  } = usePageView();
   const { section } = entry;
   const richContent = section.slots.richContent?.markdown;
 
@@ -138,6 +146,9 @@ export function PageSectionView({ entry, featureFlip, isLeadProse }: PageSection
               theme={theme}
               showCodeCopyButton={showCodeCopyButton}
               onCopyCode={onCopyCode}
+              fenceRenderers={fenceRenderers}
+              htmlPolicy={htmlPolicy}
+              linkSchemes={linkSchemes}
             />
           </div>
         )}

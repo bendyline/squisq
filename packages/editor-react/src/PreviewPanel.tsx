@@ -71,6 +71,7 @@ export function PreviewPanel({
     allowRecording,
     colorScheme,
     fileName,
+    fenceRenderers,
   } = useEditorContext();
   const mediaProvider = useMediaProvider();
   const presentation = usePresentationModeOptional();
@@ -346,6 +347,7 @@ export function PreviewPanel({
           }
           showCodeCopyButton={showCodeCopyButton}
           onCopyCode={onCopyCode}
+          fenceRenderers={fenceRenderers ?? undefined}
         />
       );
     }

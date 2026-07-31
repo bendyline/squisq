@@ -18,6 +18,9 @@ import {
   type ReactNode,
 } from 'react';
 import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
+import type { FenceRendererMap } from '@bendyline/squisq/fence';
+
+export type { FenceRendererMap };
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
@@ -383,6 +386,13 @@ export interface EditorContextValue extends EditorState, EditorActions {
    */
   linkSchemes: readonly string[] | undefined;
   /**
+   * Host fence-renderer registry (`@bendyline/squisq/fence`). Claimed
+   * fence languages render as interactive host widgets in the WYSIWYG
+   * editor (via `HostFenceExtension`) instead of Monaco code insets, and
+   * flow into the preview panel's read path. Null disables.
+   */
+  fenceRenderers: FenceRendererMap | null;
+  /**
    * File name the host opened this document as (e.g. `Longview Plan.md`), if
    * any. Used as a display-title fallback — for example, the header of a
    * heading-less leading "preamble" block in the slideshow preview when the
@@ -469,6 +479,11 @@ export interface EditorProviderProps {
    * Omit to fall back to URL-only link insertion.
    */
   documentLinkProvider?: DocumentLinkProvider | null;
+  /**
+   * Host fence-renderer registry (`@bendyline/squisq/fence`). Omit to
+   * leave every explicit-language fence to the built-in families.
+   */
+  fenceRenderers?: FenceRendererMap | null;
   /**
    * Extra link schemes this host resolves itself. Threaded into the link
    * dialog's `sanitizeUrl` check so a host-custom protocol is accepted;
@@ -619,6 +634,7 @@ export function EditorProvider({
   imageDisplayMode = 'inline',
   mentionProvider = null,
   documentLinkProvider = null,
+  fenceRenderers = null,
   linkSchemes,
   allowRecording = true,
   allowNarrate = true,
@@ -1246,6 +1262,7 @@ export function EditorProvider({
       imageDisplayMode,
       mentionProvider,
       documentLinkProvider,
+      fenceRenderers,
       linkSchemes,
       fileName,
       setMarkdownSource,
@@ -1307,6 +1324,7 @@ export function EditorProvider({
       imageDisplayMode,
       mentionProvider,
       documentLinkProvider,
+      fenceRenderers,
       linkSchemes,
       fileName,
       setMarkdownSource,

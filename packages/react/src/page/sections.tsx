@@ -373,7 +373,8 @@ export function CardGridSection({ section }: SectionProps) {
 // ── Item list ──────────────────────────────────────────────────────
 
 export function ItemListSection({ section }: SectionProps) {
-  const { theme, showCodeCopyButton, onCopyCode } = usePageView();
+  const { theme, showCodeCopyButton, onCopyCode, fenceRenderers, htmlPolicy, linkSchemes } =
+    usePageView();
   const items = section.slots.items ?? [];
   return (
     <>
@@ -389,6 +390,9 @@ export function ItemListSection({ section }: SectionProps) {
                 theme={theme}
                 showCodeCopyButton={showCodeCopyButton}
                 onCopyCode={onCopyCode}
+                fenceRenderers={fenceRenderers}
+                htmlPolicy={htmlPolicy}
+                linkSchemes={linkSchemes}
               />
             ) : (
               item.body
@@ -460,7 +464,8 @@ export function TableSection({ section }: SectionProps) {
 // ── Prose ──────────────────────────────────────────────────────────
 
 export function ProseSection({ section, block }: SectionProps) {
-  const { theme, showCodeCopyButton, onCopyCode } = usePageView();
+  const { theme, showCodeCopyButton, onCopyCode, fenceRenderers, htmlPolicy, linkSchemes } =
+    usePageView();
   // The title slot may be deliberately suppressed (e.g. cover dedupe), so
   // gate the heading on it rather than on the source heading alone.
   const heading: ReactNode =
@@ -470,6 +475,8 @@ export function ProseSection({ section, block }: SectionProps) {
         theme={theme}
         showCodeCopyButton={showCodeCopyButton}
         onCopyCode={onCopyCode}
+        htmlPolicy={htmlPolicy}
+        linkSchemes={linkSchemes}
       />
     ) : null;
   const bodyNodes = section.slots.body?.markdown ?? block?.contents;
@@ -482,6 +489,9 @@ export function ProseSection({ section, block }: SectionProps) {
           theme={theme}
           showCodeCopyButton={showCodeCopyButton}
           onCopyCode={onCopyCode}
+          fenceRenderers={fenceRenderers}
+          htmlPolicy={htmlPolicy}
+          linkSchemes={linkSchemes}
         />
       )}
     </div>

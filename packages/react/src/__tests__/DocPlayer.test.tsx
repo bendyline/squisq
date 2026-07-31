@@ -303,6 +303,12 @@ describe('DocPlayer smoke test', () => {
     expect(video?.style.boxShadow).toBe(expectedVars['--squisq-pip-shadow']);
   });
 
+  it('exposes the labeled player as an accessible region', () => {
+    render(<DocPlayer doc={minimalDoc()} basePath="/test" />);
+
+    expect(screen.getByRole('region', { name: 'Document player' })).toBeTruthy();
+  });
+
   it('restarts Video-mode playback after the timeline ends when loop is enabled', async () => {
     const audioController = controller({ currentTime: 5, isEnded: true });
     const onEnded = vi.fn();

@@ -13,6 +13,7 @@ import {
   type EditorView,
   type ImageDisplayMode,
   type MentionProvider,
+  type FenceRendererMap,
   type DocumentLinkProvider,
   type ViewPreferences,
   type ThemeInheritance,
@@ -361,6 +362,15 @@ export interface EditorShellProps {
    */
   documentLinkProvider?: DocumentLinkProvider | null;
   /**
+   * Host fence-renderer registry (`@bendyline/squisq/fence`). Claimed
+   * fence languages mount as interactive host widgets in the WYSIWYG
+   * view (via `HostFenceExtension`) instead of Monaco code insets. The
+   * *set* of claimed languages is read at editor configure time;
+   * renderer implementations stay live behind a getter. Omit to leave
+   * every fence to the built-in families.
+   */
+  fenceRenderers?: FenceRendererMap | null;
+  /**
    * Extra link schemes this host resolves itself (e.g. an app-internal
    * navigation protocol). The link dialog validates typed URLs against
    * core's `sanitizeUrl` with these allowed, so an author isn't told a
@@ -569,6 +579,7 @@ export function EditorShell({
   onFindModeChange,
   mentionProvider,
   documentLinkProvider,
+  fenceRenderers,
   linkSchemes,
   allowRecording = true,
   allowNarrate = true,
@@ -629,6 +640,7 @@ export function EditorShell({
         imageDisplayMode={imageDisplayMode}
         mentionProvider={mentionProvider}
         documentLinkProvider={documentLinkProvider}
+        fenceRenderers={fenceRenderers}
         linkSchemes={linkSchemes}
         allowRecording={allowRecording}
         allowNarrate={allowNarrate}

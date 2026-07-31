@@ -1,6 +1,7 @@
 import type { Doc, SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/doc';
 import type { CoverSlidePlayback, CoverSlideTemplate } from '@bendyline/squisq/doc';
+import type { FenceRendererMap } from '@bendyline/squisq/fence';
 import type { AudioController } from './hooks/AudioController';
 import type { CodeBlockCopyHandler } from './MarkdownRenderer';
 import type {
@@ -79,4 +80,10 @@ export interface DocPlayerProps {
   showCodeCopyButton?: boolean;
   /** Optional host clipboard adapter; otherwise the browser Clipboard API is used. */
   onCopyCode?: CodeBlockCopyHandler;
+  /**
+   * Host fence-renderer registry (`@bendyline/squisq/fence`), applied in
+   * linear mode's markdown sections. Video/slideshow modes render blocks
+   * as SVG layers and do not consult it.
+   */
+  fenceRenderers?: FenceRendererMap;
 }

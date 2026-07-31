@@ -20,6 +20,7 @@ export default defineConfig({
     'icons/inlineIconMarker': 'src/icons/inlineIconMarker.ts',
     'recommend/index': 'src/recommend/index.ts',
     'narration/index': 'src/narration/index.ts',
+    'fence/index': 'src/fence/index.ts',
   },
   format: ['esm'],
   dts: true,
