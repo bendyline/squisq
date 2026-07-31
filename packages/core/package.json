@@ -121,6 +121,11 @@
       "types": "./dist/narration/index.d.ts",
       "import": "./dist/narration/index.js",
       "default": "./dist/narration/index.js"
+    },
+    "./fence": {
+      "types": "./dist/fence/index.d.ts",
+      "import": "./dist/fence/index.js",
+      "default": "./dist/fence/index.js"
     }
   },
   "scripts": {

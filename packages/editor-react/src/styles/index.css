@@ -18,6 +18,7 @@
 @import './mermaid-diagram.css';
 @import './code-snippet.css';
 @import './tree-view.css';
+@import './host-fence.css';
 @import './ascii-timeline.css';
 @import '../scene/scene.css';
 @import '../customTemplates/designer.css';

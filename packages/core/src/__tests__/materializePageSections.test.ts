@@ -240,6 +240,34 @@ describe('non-template paths', () => {
       expect.objectContaining({ type: 'paragraph' }),
     ]);
   });
+
+  it('preserves host-claimed widget fences alongside typed templates via widgetFenceLangs', () => {
+    const markdown =
+      '# Rich {[factCard]}\n\nNarrative copy.\n\n```gezel-action\nkind: fire-craftbook\n```';
+    const doc = markdownToDoc(parseMarkdown(markdown));
+
+    // Without the claim, the fence is consumed like any other prose.
+    const [without] = materializePageSections(doc);
+    expect(without.section.slots.richContent).toBeUndefined();
+
+    // With the claim, the fence survives into richContent — case-insensitive.
+    const [entry] = materializePageSections(doc, { widgetFenceLangs: ['gezel-action'] });
+    expect(entry.section.slots.richContent?.markdown).toEqual([
+      expect.objectContaining({ type: 'code', lang: 'gezel-action' }),
+    ]);
+
+    // Per-block entry point honors the option too.
+    const block = templateBlock('quote', {
+      quote: 'Keep the widget.',
+      contents: parseMarkdown('```gezel-action\nkind: create-task\n```').children,
+    });
+    const section = materializePageSection(block, {
+      widgetFenceLangs: ['gezel-action'],
+    }).section;
+    expect(section.slots.richContent?.markdown).toEqual([
+      expect.objectContaining({ type: 'code', lang: 'gezel-action' }),
+    ]);
+  });
 });
 
 describe('doc-level art direction', () => {

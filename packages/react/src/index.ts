@@ -69,6 +69,12 @@ export {
   useResourcePolicy,
   useMediaUrl,
 } from './hooks/MediaContext.js';
+export { FenceRendererContext, useFenceRenderers } from './hooks/FenceRendererContext.js';
+export type {
+  FenceRenderContext,
+  FenceRenderer,
+  FenceRendererMap,
+} from '@bendyline/squisq/fence';
 export { useAutoSurface } from './hooks/useAutoSurface.js';
 
 // Types
@@ -98,5 +104,9 @@ export { formatTime } from './types.js';
 export { getAnimationStyle, getTransitionClass } from './utils/animationUtils.js';
 
 // JSON Form — read-only viewer
-export { JsonView } from './jsonView/index.js';
-export type { JsonViewProps } from './jsonView/index.js';
+export { JsonView, createJsonFormFenceRenderer } from './jsonView/index.js';
+export type {
+  JsonViewProps,
+  JsonFormFenceAction,
+  JsonFormFenceRendererOptions,
+} from './jsonView/index.js';

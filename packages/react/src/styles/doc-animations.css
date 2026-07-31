@@ -2534,6 +2534,45 @@
   cursor: wait;
 }
 
+/* Host fence widgets (fenceRenderers) + the built-in JSON-form fence. */
+.squisq-md-fence-widget {
+  margin: 0.75rem 0;
+}
+
+.squisq-json-fence-error {
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+
+.squisq-json-fence-actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.squisq-json-fence-action {
+  padding: 0.32rem 0.75rem;
+  border: 1px solid color-mix(in srgb, currentcolor 25%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, Canvas 92%, transparent);
+  color: inherit;
+  font:
+    500 0.8rem/1.2 system-ui,
+    sans-serif;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.squisq-json-fence-action:hover {
+  background: Canvas;
+}
+
+.squisq-json-fence-action--primary {
+  border-color: color-mix(in srgb, currentcolor 45%, transparent);
+  font-weight: 600;
+}
+
 .squisq-mermaid-layer-frame {
   width: 100%;
   height: 100%;

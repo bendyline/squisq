@@ -197,6 +197,7 @@ function DocPlayerContent({
   globalKeyboardShortcuts = false,
   showCodeCopyButton = false,
   onCopyCode,
+  fenceRenderers,
 }: DocPlayerContentProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
@@ -1284,6 +1285,7 @@ function DocPlayerContent({
           animationsEnabled={animationsEnabled}
           showCodeCopyButton={showCodeCopyButton}
           onCopyCode={onCopyCode}
+          fenceRenderers={fenceRenderers}
         />
       </div>
     );

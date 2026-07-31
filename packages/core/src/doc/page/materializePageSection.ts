@@ -66,6 +66,16 @@ export interface MaterializePageSectionOptions {
   totalBlocks?: number;
   /** Document-scoped custom templates (render as canvas embeds). */
   customTemplates?: readonly CustomTemplateDefinition[];
+  /**
+   * Fence languages a host renderer claims as widgets (see
+   * `@bendyline/squisq/fence`). Typed-template sections keep only the rich
+   * content they haven't already consumed — historically just mermaid
+   * fences and media. A claimed fence must survive that filter too, or a
+   * host widget inside a callout/card block is dropped before it ever
+   * reaches the renderer. Lowercased language tokens; mermaid is always
+   * kept regardless.
+   */
+  widgetFenceLangs?: readonly string[];
 }
 
 /** Doc-level options. */
@@ -132,6 +142,15 @@ function isMermaidFence(node: MarkdownBlockNode): boolean {
   return node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid';
 }
 
+/** A fence some renderer claims as a widget: mermaid, or a host-registered lang. */
+function isWidgetFence(node: MarkdownBlockNode, widgetFenceLangs?: readonly string[]): boolean {
+  if (isMermaidFence(node)) return true;
+  if (!widgetFenceLangs || widgetFenceLangs.length === 0) return false;
+  if (node.type !== 'code') return false;
+  const lang = node.lang?.trim().toLowerCase();
+  return !!lang && widgetFenceLangs.includes(lang);
+}
+
 function htmlTreeContainsMedia(nodes: unknown[]): boolean {
   for (const value of nodes) {
     if (!value || typeof value !== 'object') continue;
@@ -163,13 +182,19 @@ function markdownNodeContainsMedia(value: unknown): boolean {
 }
 
 /** Rich body content that a typed template has not already consumed. */
-function unconsumedRichContent(block: Block, draft: PageSectionDraft): PageRichText | undefined {
+function unconsumedRichContent(
+  block: Block,
+  draft: PageSectionDraft,
+  widgetFenceLangs?: readonly string[],
+): PageRichText | undefined {
   if (!block.contents || block.contents.length === 0) return undefined;
   const templateHasMedia =
     Boolean(draft.slots.media) ||
     Boolean(draft.slots.items?.some((item) => item.media !== undefined));
   const markdown = block.contents.filter(
-    (node) => isMermaidFence(node) || (!templateHasMedia && markdownNodeContainsMedia(node)),
+    (node) =>
+      isWidgetFence(node, widgetFenceLangs) ||
+      (!templateHasMedia && markdownNodeContainsMedia(node)),
   );
   if (markdown.length === 0) return undefined;
   return {
@@ -181,8 +206,12 @@ function unconsumedRichContent(block: Block, draft: PageSectionDraft): PageRichT
   };
 }
 
-function preserveRichContent(block: Block, draft: PageSectionDraft): PageSectionDraft {
-  const richContent = unconsumedRichContent(block, draft);
+function preserveRichContent(
+  block: Block,
+  draft: PageSectionDraft,
+  widgetFenceLangs?: readonly string[],
+): PageSectionDraft {
+  const richContent = unconsumedRichContent(block, draft, widgetFenceLangs);
   return richContent ? { ...draft, slots: { ...draft.slots, richContent } } : draft;
 }
 
@@ -191,6 +220,7 @@ function draftForBlock(
   block: Block,
   viewport: ViewportConfig,
   customTemplates?: readonly CustomTemplateDefinition[],
+  widgetFenceLangs?: readonly string[],
 ): DraftResult {
   if (isTemplatedPageBlock(block)) {
     const resolved = resolvePageBlock(block);
@@ -198,7 +228,7 @@ function draftForBlock(
     const extractor = sectionExtractors[templateName];
     if (extractor) {
       return {
-        draft: preserveRichContent(block, extractor(resolved.templateBlock!, { block, viewport })),
+        draft: preserveRichContent(block, extractor(resolved.templateBlock!, { block, viewport }), widgetFenceLangs),
         source: 'template',
         templateName,
       };
@@ -222,7 +252,7 @@ function draftForBlock(
         },
       };
       return {
-        draft: preserveRichContent(block, draft),
+        draft: preserveRichContent(block, draft, widgetFenceLangs),
         source: 'custom-template',
         templateName,
       };
@@ -245,7 +275,7 @@ function draftForBlock(
       emphasis: 'quiet',
     };
     return {
-      draft: preserveRichContent(block, draft),
+      draft: preserveRichContent(block, draft, widgetFenceLangs),
       source: 'fallback',
       templateName,
       diagnostic,
@@ -266,7 +296,7 @@ function draftForBlock(
       },
     };
     return {
-      draft: preserveRichContent(block, draft),
+      draft: preserveRichContent(block, draft, widgetFenceLangs),
       source: 'authored',
     };
   }
@@ -372,7 +402,7 @@ export function materializePageSection(
   const theme = options.theme ?? DEFAULT_THEME;
   const viewport = options.viewport ?? VIEWPORT_PRESETS.landscape;
   const pageStyle = resolvePageStyle(theme);
-  const result = draftForBlock(block, viewport, options.customTemplates);
+  const result = draftForBlock(block, viewport, options.customTemplates, options.widgetFenceLangs);
   const override = overrideFor(pageStyle, result.draft.kind, result.templateName);
 
   const background: PageBackground =
@@ -448,7 +478,7 @@ export function materializePageSections(
 
   const walk = (blocks: readonly Block[], depth: number): void => {
     for (const block of blocks) {
-      const result = draftForBlock(block, viewport, customTemplates);
+      const result = draftForBlock(block, viewport, customTemplates, options.widgetFenceLangs);
       seeds.push({ ...result, block, depth });
       // Container templates (diagram/drawing/layout) consume their children
       // inside the canvas; everything else recurses.
