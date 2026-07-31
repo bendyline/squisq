@@ -1299,6 +1299,7 @@ function DocPlayerContent({
       data-playback-state={isPlaying ? 'playing' : 'paused'}
       data-swipe-phase={swipe.phase}
       tabIndex={renderMode ? -1 : 0}
+      role="region"
       aria-label="Document player"
       onKeyDown={renderMode ? undefined : handleKeyDown}
       className={`doc-player${swipeEnabled ? ' doc-player--swipe' : ''}${
