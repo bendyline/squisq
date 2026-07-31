@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.7.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.6.0...@bendyline/squisq@2.7.0) (2026-07-31)
+
+### Features
+
+* Add pluggable host fence renderers ([#42](https://github.com/bendyline/squisq/issues/42)) ([d5cdbbc](https://github.com/bendyline/squisq/commit/d5cdbbc5d96bdd32c3d3ae57770a4029c3b52660))
+
 ## @bendyline/squisq [2.6.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.5.0...@bendyline/squisq@2.6.0) (2026-07-30)
 
 ### Features
