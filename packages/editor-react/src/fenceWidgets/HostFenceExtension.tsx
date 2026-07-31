@@ -190,8 +190,9 @@ function buildDecorations(
               getTheme: () => options.theme?.(),
             }),
           );
-          (container as HTMLElement & { __squisqHostFenceRoot?: WidgetRootRef }).__squisqHostFenceRoot =
-            { root };
+          (
+            container as HTMLElement & { __squisqHostFenceRoot?: WidgetRootRef }
+          ).__squisqHostFenceRoot = { root };
           return container;
         },
         {

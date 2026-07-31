@@ -7,8 +7,4 @@ export type {
 export { MermaidDiagram } from '../mermaid/MermaidDiagram.js';
 export type { MermaidDiagramProps } from '../mermaid/MermaidDiagram.js';
 export { FenceRendererContext, useFenceRenderers } from '../hooks/FenceRendererContext.js';
-export type {
-  FenceRenderContext,
-  FenceRenderer,
-  FenceRendererMap,
-} from '@bendyline/squisq/fence';
+export type { FenceRenderContext, FenceRenderer, FenceRendererMap } from '@bendyline/squisq/fence';

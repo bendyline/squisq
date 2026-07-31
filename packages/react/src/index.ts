@@ -70,11 +70,7 @@ export {
   useMediaUrl,
 } from './hooks/MediaContext.js';
 export { FenceRendererContext, useFenceRenderers } from './hooks/FenceRendererContext.js';
-export type {
-  FenceRenderContext,
-  FenceRenderer,
-  FenceRendererMap,
-} from '@bendyline/squisq/fence';
+export type { FenceRenderContext, FenceRenderer, FenceRendererMap } from '@bendyline/squisq/fence';
 export { useAutoSurface } from './hooks/useAutoSurface.js';
 
 // Types

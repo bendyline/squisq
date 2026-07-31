@@ -28,7 +28,9 @@ const ACTION_MD = '```gezel-action\nkind: fire-craftbook\ntitle: Fix it\n```';
 describe('MarkdownRenderer fenceRenderers', () => {
   it('renders a claimed fence through the host renderer', () => {
     const renderers: FenceRendererMap = {
-      'gezel-action': (ctx) => <div data-testid="widget">{`lang=${ctx.lang} mode=${ctx.mode}`}</div>,
+      'gezel-action': (ctx) => (
+        <div data-testid="widget">{`lang=${ctx.lang} mode=${ctx.mode}`}</div>
+      ),
     };
     const { container, getByTestId } = render(
       <MarkdownRenderer nodes={parseNodes(ACTION_MD)} fenceRenderers={renderers} />,
@@ -60,7 +62,10 @@ describe('MarkdownRenderer fenceRenderers', () => {
   it('leaves unclaimed fences as ordinary code blocks', () => {
     const renderers: FenceRendererMap = { 'gezel-action': () => <div data-testid="widget" /> };
     const { container, queryByTestId } = render(
-      <MarkdownRenderer nodes={parseNodes('```ts\nconst x = 1;\n```')} fenceRenderers={renderers} />,
+      <MarkdownRenderer
+        nodes={parseNodes('```ts\nconst x = 1;\n```')}
+        fenceRenderers={renderers}
+      />,
     );
     expect(queryByTestId('widget')).toBeNull();
     expect(container.querySelector('code.language-ts')).toBeTruthy();
@@ -122,7 +127,10 @@ describe('LinearDocView fenceRenderers threading', () => {
       'gezel-action': () => <div data-testid="linear-widget" />,
     };
     const { getByTestId } = render(
-      <LinearDocView markdown={`# Report\n\nSome findings.\n\n${ACTION_MD}`} fenceRenderers={renderers} />,
+      <LinearDocView
+        markdown={`# Report\n\nSome findings.\n\n${ACTION_MD}`}
+        fenceRenderers={renderers}
+      />,
     );
     expect(getByTestId('linear-widget')).toBeTruthy();
   });

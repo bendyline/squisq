@@ -228,7 +228,11 @@ function draftForBlock(
     const extractor = sectionExtractors[templateName];
     if (extractor) {
       return {
-        draft: preserveRichContent(block, extractor(resolved.templateBlock!, { block, viewport }), widgetFenceLangs),
+        draft: preserveRichContent(
+          block,
+          extractor(resolved.templateBlock!, { block, viewport }),
+          widgetFenceLangs,
+        ),
         source: 'template',
         templateName,
       };

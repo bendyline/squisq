@@ -15,10 +15,7 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { CodeSnippetWidget } from './CodeSnippetWidget';
 import { CODE_SNIPPET_FOCUS_INSERTED_META } from './codeSnippetFocus';
-import {
-  codeSnippetFenceLanguageToken,
-  isCodeSnippetFenceLanguage,
-} from './codeSnippetLanguages';
+import { codeSnippetFenceLanguageToken, isCodeSnippetFenceLanguage } from './codeSnippetLanguages';
 
 export interface CodeSnippetBlockEntry {
   /** Synthetic session id, stable while this code block remains in the doc. */
