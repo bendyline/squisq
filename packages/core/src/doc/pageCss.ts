@@ -463,21 +463,29 @@ export const PAGE_BASE_CSS = `
 .squisq-page-items { list-style: none; margin: 0; padding: 0; counter-reset: squisq-item; max-width: 40em; }
 .squisq-page-items li {
   counter-increment: squisq-item;
-  position: relative;
-  padding: 0.9em 0 0.9em 3.4em;
+  /* Grid + baseline alignment keeps the marker locked to the first text line
+     regardless of marker size, body font, or line-height — an absolutely
+     positioned marker with a fixed top offset drifts as soon as either
+     changes. */
+  display: grid;
+  grid-template-columns: 3.4em 1fr;
+  align-items: baseline;
+  padding: 0.9em 0;
   font-size: 1.1rem;
 }
 .squisq-page-items li + li { border-top: 1px solid var(--squisq-page-divider-color); }
 .squisq-page-items li::before {
   content: counter(squisq-item, decimal-leading-zero);
-  position: absolute;
-  left: 0;
-  top: 0.85em;
   font-family: var(--squisq-page-title-font);
   font-weight: 700;
   color: var(--squisq-page-accent);
   font-size: 1.15em;
 }
+/* Item bodies are rendered markdown: neutralize UA paragraph margins (which
+   would otherwise push the first line below the marker) and space blocks. */
+.squisq-page-item-body { min-width: 0; }
+.squisq-page-item-body > * { margin: 0; }
+.squisq-page-item-body > * + * { margin-top: 0.6em; }
 .squisq-page[data-numerals='mono'] .squisq-page-items li::before { font-family: var(--squisq-page-mono-font); }
 .squisq-page-items-title { font-size: 1.9rem; }
 

@@ -44,6 +44,7 @@ import type {
 import { resolveFontFamily, VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import {
+  buildPreviewDoc,
   createTemplateContext,
   docToMarkdown,
   expandCoverBlock,
@@ -234,32 +235,55 @@ export async function markdownDocToPptx(
 }
 
 /**
+ * True when the Doc still carries markdown authoring structure rather than the
+ * flat, fully-typed slide list the player consumes. `sourceHeading` is the
+ * marker `markdownToDoc` sets on every heading-derived block and the one
+ * `buildPreviewDoc` strips, so this is also the guard against projecting an
+ * already-projected Doc twice. `applyTransform` output has no `sourceHeading`
+ * either — those blocks already ARE typed template inputs.
+ */
+function needsSlideshowProjection(doc: Doc): boolean {
+  return (doc.blocks ?? []).some((block) => !!block.sourceHeading);
+}
+
+/**
  * Convert a squisq Doc to a .pptx ArrayBuffer.
  *
- * Template-backed Docs are exported through the same canonical slideshow
- * expansion as the player, then their materialized visual layers are mapped
- * to native DrawingML shapes. Plain, non-template Docs retain the semantic
- * Markdown export path for backward compatibility.
+ * The deck IS the slideshow rendition: an authored Doc runs through the same
+ * `buildPreviewDoc` projection and `expandDocBlocks` expansion the player uses,
+ * then its materialized visual layers are mapped to native DrawingML shapes.
+ * Without that projection a heading with no `{[template]}` annotation renders
+ * through `sectionHeader` — heading only — and silently drops its body prose.
+ *
+ * Docs with no templates at all retain the semantic Markdown export path for
+ * backward compatibility.
  */
 export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Promise<ArrayBuffer> {
   options.signal?.throwIfAborted();
   const effectiveOptions =
     !options.themeId && doc.themeId ? { ...options, themeId: doc.themeId } : options;
-  const flatBlocks = flattenRenderableBlocks(doc.blocks);
+  const slideshowDoc = needsSlideshowProjection(doc) ? buildPreviewDoc(doc) : doc;
+  const flatBlocks = flattenRenderableBlocks(slideshowDoc.blocks);
 
-  // A plain Markdown-derived Doc has no fully-specified template inputs.
-  // Preserve the established semantic exporter for that shape. Player-ready
-  // Docs (including buildPreviewDoc/applyTransform output) take the visual path.
+  // A Doc with no template blocks at all (raw authored layers, or an empty
+  // deck) has nothing for the visual path to materialize. Preserve the
+  // established semantic exporter for that shape.
   if (!flatBlocks.some(isTemplateBlock)) {
     return markdownDocToPptx(docToMarkdown(doc), effectiveOptions);
   }
 
   const theme = resolveThemeForDoc(doc, effectiveOptions.themeId, effectiveOptions.themeRegistry);
   const style = slideStyleFromTheme(theme, effectiveOptions);
-  const audioSegments = doc.audio?.segments?.map((segment) => ({
-    startTime: segment.startTime,
-    duration: segment.duration,
-  }));
+  // Mirror the player's rule (`audioMode !== 'synthetic'`): only REAL narration
+  // reshapes the block sequence. `buildPreviewDoc` synthesizes a single
+  // src-less segment purely as a playback clock, and feeding that to the
+  // audio-timed path lets narration pacing merge authored slides away.
+  const audioSegments = doc.audio?.segments?.length
+    ? slideshowDoc.audio?.segments?.map((segment) => ({
+        startTime: segment.startTime,
+        duration: segment.duration,
+      }))
+    : undefined;
   const persistentLayers = resolvePersistentLayers(
     { persistentLayers: doc.persistentLayers },
     theme,
@@ -271,9 +295,11 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
     theme,
     customTemplates: doc.customTemplates,
     // A .pptx is a discrete deck: the >20s pacing split would emit N identical
-    // copies of one authored slide (a long single block became 18 duplicates).
-    // Keep one authored slide as one slide, matching the slideshow.
+    // copies of one authored slide (a long single block became 18 duplicates),
+    // and the <5s pacing merge would delete authored slides outright. Keep one
+    // authored slide as one slide, matching the slideshow.
     splitLongBlocks: false,
+    mergeShortBlocks: false,
   });
 
   const slideBlocks: Block[] = [];

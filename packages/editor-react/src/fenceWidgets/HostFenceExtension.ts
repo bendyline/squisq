@@ -19,6 +19,9 @@
  * text in one undoable transaction; the info-string meta is NOT provided
  * (it does not survive the ProseMirror round-trip — payload lives in the
  * body, see the fence contract docs).
+ *
+ * The React surface lives in `HostFenceWidget.tsx`, mirroring how every
+ * other fence family splits its `.ts` extension from its `.tsx` widget.
  */
 
 import { Extension } from '@tiptap/core';
@@ -28,11 +31,12 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { Editor } from '@tiptap/react';
 import { createRoot, type Root } from 'react-dom/client';
-import { Component, createElement, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createElement } from 'react';
 import type { Theme } from '@bendyline/squisq/schemas';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
 import { replaceAsciiFenceText } from '../asciiDiagram/asciiDiagramCommands';
 import { containFenceWidgetEvents } from './fenceWidgetHost';
+import { HostFenceWidget } from './HostFenceWidget';
 import { mapFenceEntries, type FenceBlockEntry } from './fenceRegistry';
 
 export type HostFenceBlockEntry = FenceBlockEntry;
@@ -57,7 +61,8 @@ export interface HostFenceExtensionOptions {
   theme?: () => Theme | undefined;
 }
 
-function fenceLangToken(node: PMNode): string {
+/** The fence's declared language, normalized to a bare lowercase token. */
+export function fenceLangToken(node: PMNode): string {
   const lang = (node.attrs as { language?: string | null }).language;
   if (typeof lang !== 'string') return '';
   return lang.trim().split(/\s+/, 1)[0]?.toLowerCase() ?? '';
@@ -77,77 +82,6 @@ export function replaceHostFenceText(editor: Editor, blockId: string, next: stri
   const pos = findHostFenceBlockPos(editor, blockId);
   if (pos === null) return false;
   return replaceAsciiFenceText(editor, pos, next);
-}
-
-class HostFenceErrorBoundary extends Component<
-  { fallback: ReactNode; children: ReactNode },
-  { failed: boolean }
-> {
-  state = { failed: false };
-
-  static getDerivedStateFromError(): { failed: boolean } {
-    return { failed: true };
-  }
-
-  override render(): ReactNode {
-    return this.state.failed ? this.props.fallback : this.props.children;
-  }
-}
-
-function HostFenceWidget({
-  editor,
-  blockId,
-  getRenderers,
-  getTheme,
-}: {
-  editor: Editor;
-  blockId: string;
-  getRenderers: () => FenceRendererMap | null | undefined;
-  getTheme: () => Theme | undefined;
-}) {
-  const [version, setVersion] = useState(0);
-  useEffect(() => {
-    const onUpdate = () => setVersion((v) => v + 1);
-    editor.on('transaction', onUpdate);
-    return () => {
-      editor.off('transaction', onUpdate);
-    };
-  }, [editor]);
-
-  const current = useMemo(() => {
-    const pos = findHostFenceBlockPos(editor, blockId);
-    if (pos === null) return null;
-    const node = editor.state.doc.nodeAt(pos);
-    if (!node || node.type.name !== 'codeBlock') return null;
-    return { lang: fenceLangToken(node), value: node.textContent };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, blockId, version]);
-
-  if (!current) return null;
-  const renderer = getRenderers()?.[current.lang];
-  const rawFallback = (
-    <pre className="squisq-md-code-block">
-      <code>{current.value}</code>
-    </pre>
-  );
-  if (!renderer) return rawFallback;
-
-  const theme = getTheme();
-  return (
-    <HostFenceErrorBoundary fallback={rawFallback}>
-      {
-        renderer({
-          lang: current.lang,
-          value: current.value,
-          ...(theme ? { theme } : {}),
-          mode: 'edit',
-          replaceValue: (next: string) => {
-            replaceHostFenceText(editor, blockId, next);
-          },
-        }) as ReactNode
-      }
-    </HostFenceErrorBoundary>
-  );
 }
 
 interface WidgetRootRef {

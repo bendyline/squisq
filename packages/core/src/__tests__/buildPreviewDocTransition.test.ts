@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { parseMarkdown } from '@bendyline/squisq/markdown';
-import { markdownToDoc } from '@bendyline/squisq/doc';
-import type { Doc, Transition } from '@bendyline/squisq/schemas';
-import { buildPreviewDoc } from '../buildPreviewDoc';
+import { parseMarkdown } from '../markdown/index';
+import { markdownToDoc } from '../doc/index';
+import type { Doc, Transition } from '../schemas/index';
+import { buildPreviewDoc } from '../doc/buildPreviewDoc';
 
 function previewSlides(md: string) {
   const doc = markdownToDoc(parseMarkdown(md), { articleId: 't' });

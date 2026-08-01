@@ -384,19 +384,21 @@ export function ItemListSection({ section }: SectionProps) {
       <ol className="squisq-page-items">
         {items.map((item, i) => (
           <li key={i}>
-            {item.markdown ? (
-              <MarkdownRenderer
-                nodes={item.markdown}
-                theme={theme}
-                showCodeCopyButton={showCodeCopyButton}
-                onCopyCode={onCopyCode}
-                fenceRenderers={fenceRenderers}
-                htmlPolicy={htmlPolicy}
-                linkSchemes={linkSchemes}
-              />
-            ) : (
-              item.body
-            )}
+            <div className="squisq-page-item-body">
+              {item.markdown ? (
+                <MarkdownRenderer
+                  nodes={item.markdown}
+                  theme={theme}
+                  showCodeCopyButton={showCodeCopyButton}
+                  onCopyCode={onCopyCode}
+                  fenceRenderers={fenceRenderers}
+                  htmlPolicy={htmlPolicy}
+                  linkSchemes={linkSchemes}
+                />
+              ) : (
+                item.body
+              )}
+            </div>
           </li>
         ))}
       </ol>

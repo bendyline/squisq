@@ -4,7 +4,7 @@
 
 import { useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { EditorProvider } from '../EditorContext';
 import {
   PresentationModeControl,
@@ -154,6 +154,73 @@ describe('PresentationModeControl', () => {
       fullscreenElement = null;
       fireEvent(document, new Event('fullscreenchange'));
       await waitFor(() => expect(shell.hasAttribute('data-presentation-mode')).toBe(false));
+    } finally {
+      if (originalRequest) {
+        Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', originalRequest);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'requestFullscreen');
+      }
+      if (originalExit) Object.defineProperty(document, 'exitFullscreen', originalExit);
+      else Reflect.deleteProperty(document, 'exitFullscreen');
+      if (originalElement) Object.defineProperty(document, 'fullscreenElement', originalElement);
+      else Reflect.deleteProperty(document, 'fullscreenElement');
+    }
+  });
+
+  it('ends fullscreen presentation when the host releases the element after the await', async () => {
+    const originalRequest = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'requestFullscreen',
+    );
+    const originalExit = Object.getOwnPropertyDescriptor(document, 'exitFullscreen');
+    const originalElement = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
+    let fullscreenElement: Element | null = null;
+    let requestedRoot: Element | null = null;
+    Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', {
+      configurable: true,
+      value: vi.fn(async () => {
+        fullscreenElement = requestedRoot;
+      }),
+    });
+    // Electron on macOS resolves `exitFullscreen()` roughly half a second
+    // before the native transition releases the element.
+    Object.defineProperty(document, 'exitFullscreen', {
+      configurable: true,
+      value: vi.fn(async () => undefined),
+    });
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => fullscreenElement,
+    });
+
+    try {
+      renderHarness();
+      requestedRoot = screen.getByTestId('shell');
+      fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
+      fireEvent.click(screen.getByRole('menuitemradio', { name: /Full screen/ }));
+      fireEvent.click(screen.getByRole('button', { name: 'Present: Full screen' }));
+      await waitFor(() =>
+        expect(screen.getByTestId('shell').getAttribute('data-presentation-mode')).toBe(
+          'fullscreen',
+        ),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Exit presentation mode' }));
+      // Let the continuation of `await exitFullscreen()` run while the element
+      // is still held. That is the exact moment a synchronous re-check
+      // mistakes an exit that is merely still animating for a failed one.
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(screen.getByTestId('shell').getAttribute('data-presentation-mode')).toBe('fullscreen');
+
+      fullscreenElement = null;
+      fireEvent(document, new Event('fullscreenchange'));
+      await waitFor(() =>
+        expect(screen.getByTestId('shell').hasAttribute('data-presentation-mode')).toBe(false),
+      );
+      expect(screen.queryByRole('alert')).toBeNull();
     } finally {
       if (originalRequest) {
         Object.defineProperty(HTMLElement.prototype, 'requestFullscreen', originalRequest);

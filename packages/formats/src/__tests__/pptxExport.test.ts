@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { MarkdownBlockNode, MarkdownDocument } from '@bendyline/squisq/markdown';
 import type { Doc, Transition } from '@bendyline/squisq/schemas';
 import { THEMES, TRANSITION_TYPES, VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 import {
+  buildPreviewDoc,
   expandDocBlocks,
   flattenRenderableBlocks,
+  markdownToDoc,
   resolvePersistentLayers,
   resolveThemeForDoc,
 } from '@bendyline/squisq/doc';
@@ -552,5 +555,138 @@ describe('docToPptx slideshow parity', () => {
     expect(size.getAttribute('cx')).toBe('12192000');
     expect(size.getAttribute('cy')).toBe('6858000');
     expect(size.getAttribute('type')).toBe('screen16x9');
+  });
+});
+
+// ============================================
+// Markdown-authored parity
+// ============================================
+
+/** Concatenated `<a:t>` text of every slide, in slide order. */
+async function pptxSlideTexts(bytes: ArrayBuffer): Promise<string[]> {
+  const pkg = await openPackage(bytes);
+  const presentation = await getPartXml(pkg, 'ppt/presentation.xml');
+  const count = presentation!.getElementsByTagNameNS(NS_PML, 'sldId').length;
+  const texts: string[] = [];
+  for (let index = 1; index <= count; index++) {
+    const slide = await getPartXml(pkg, `ppt/slides/slide${index}.xml`);
+    const runs = slide!.getElementsByTagNameNS(NS_DRAWINGML, 't');
+    texts.push(Array.from(runs, (run) => run.textContent ?? '').join(' '));
+  }
+  return texts;
+}
+
+/** The slide sequence the player renders for the same markdown. */
+function slideshowBlockCount(doc: Doc): number {
+  const theme = resolveThemeForDoc(doc, doc.themeId);
+  const projected = buildPreviewDoc(doc);
+  return expandDocBlocks(flattenRenderableBlocks(projected.blocks), {
+    viewport: VIEWPORT_PRESETS.landscape,
+    persistentLayers: resolvePersistentLayers({ persistentLayers: doc.persistentLayers }, theme),
+    theme,
+    customTemplates: doc.customTemplates,
+  }).length;
+}
+
+describe('docToPptx markdown-authored parity', () => {
+  it('emits one slide per authored block when slides are deeper than H2', async () => {
+    // Regression: the export ran the semantic Markdown path, which starts a new
+    // slide only at H1/H2. A deck whose sampler slides are `###` headings lost
+    // every one of them into the parent section — the About sample exported 17
+    // slides where the slideshow showed 23 plus a cover.
+    const markdown = [
+      '# Deck {[title]}',
+      '',
+      'Opening prose.',
+      '',
+      '## Sampler {[sectionHeader]}',
+      '',
+      'Intro to the sampler.',
+      '',
+      '### Stat {[statHighlight stat="42%"]}',
+      '',
+      'A measured thing.',
+      '',
+      '### Quote {[quote]}',
+      '',
+      '> Something quotable.',
+      '',
+      '### Definition {[definitionCard]}',
+      '',
+      'A defined thing.',
+      '',
+      '## Close {[sectionHeader]}',
+      '',
+      'Wrapping up.',
+    ].join('\n');
+
+    const doc = markdownToDoc(parseMarkdown(markdown), { articleId: 'deep-headings' });
+    const authored = flattenRenderableBlocks(doc.blocks).length;
+    expect(authored).toBe(6);
+
+    const count = await pptxSlideCount(await docToPptx(doc, { includeCoverSlide: false }));
+    expect(count).toBe(authored);
+    expect(count).toBe(slideshowBlockCount(doc));
+  });
+
+  it('keeps the managed cover as slide 1, matching the slideshow cover', async () => {
+    const doc = markdownToDoc(
+      parseMarkdown('# Deck {[title]}\n\nOpening prose.\n\n## Next\n\nMore.'),
+      {
+        articleId: 'cover-parity',
+      },
+    );
+    expect(doc.startBlock).toBeDefined();
+    const count = await pptxSlideCount(await docToPptx(doc));
+    expect(count).toBe(slideshowBlockCount(doc) + 1);
+  });
+
+  it('keeps the body prose of headings that carry no template annotation', async () => {
+    // The visual path renders an unannotated heading through `sectionHeader`,
+    // which draws the heading alone. Running the doc through the slideshow
+    // projection first promotes those blocks to `content` so the deck keeps the
+    // prose the semantic exporter always preserved.
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '# Title\n\nOpening prose.\n\n## Section A\n\nBody of section A.\n\n- one\n- two',
+      ),
+      { articleId: 'unannotated', generateCoverBlock: false },
+    );
+    const texts = await pptxSlideTexts(await docToPptx(doc));
+    expect(texts.join('\n')).toContain('Body of section A.');
+    expect(texts.join('\n')).toContain('Opening prose.');
+  });
+
+  it('renders full-bleed quote text rather than an empty slide', async () => {
+    // `fullBleedQuote` takes `text`, not `quote`. The projection used to emit
+    // the wrong key, so the template's only text layer came out empty.
+    const doc = markdownToDoc(
+      parseMarkdown('## One Line {[fullBleedQuote]}\n\nSometimes a single line is enough.'),
+      { articleId: 'full-bleed', generateCoverBlock: false },
+    );
+    const texts = await pptxSlideTexts(await docToPptx(doc));
+    expect(texts.join('\n')).toContain('Sometimes a single line is enough.');
+  });
+
+  it('keeps every authored slide when the doc carries narration audio', async () => {
+    // Narration pacing merges sub-5s blocks into their predecessor so timed
+    // playback does not flash slides. A .pptx advances by click, so that merge
+    // is pure content loss — `mergeShortBlocks: false` keeps the deck complete.
+    const narrated = {
+      articleId: 'narrated',
+      duration: 30,
+      audio: { segments: [{ src: 'audio/take.webm', name: 'take', duration: 30, startTime: 0 }] },
+      blocks: Array.from({ length: 8 }, (_, index) => ({
+        id: `beat-${index}`,
+        template: 'quote',
+        quote: `Beat ${index}`,
+        startTime: index * 2,
+        duration: 2,
+        audioSegment: 0,
+      })),
+    } as unknown as Doc;
+
+    const count = await pptxSlideCount(await docToPptx(narrated, { includeCoverSlide: false }));
+    expect(count).toBe(8);
   });
 });

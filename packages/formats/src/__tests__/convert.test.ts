@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import JSZip from 'jszip';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
-import { markdownToDoc } from '@bendyline/squisq/doc';
+import { flattenRenderableBlocks, markdownToDoc } from '@bendyline/squisq/doc';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { createTransformStyleRegistry, resolveTransformStyle } from '@bendyline/squisq/transform';
 import { convert, ConversionError, defaultRegistry, prepareConversion } from '../registry/index';
@@ -495,6 +495,63 @@ describe('pptx import inference threading (default ON)', () => {
       if (/\.(xml|rels)$/i.test(name)) text += await zip.files[name]!.async('string');
     }
     expect(text.toLowerCase()).toContain('1a1a2e');
+  });
+});
+
+// ── pptx export renders templates (not semantic heading segmentation) ──
+
+describe('pptx export through convert()', () => {
+  const DEEP_DECK = [
+    '# Deck {[title]}',
+    '',
+    'Opening prose.',
+    '',
+    '## Sampler {[sectionHeader]}',
+    '',
+    'Intro to the sampler.',
+    '',
+    '### Stat {[statHighlight stat="42%"]}',
+    '',
+    'A measured thing.',
+    '',
+    '### Quote {[quote]}',
+    '',
+    '> Something quotable.',
+    '',
+    '### Definition {[definitionCard]}',
+    '',
+    'A defined thing.',
+  ].join('\n');
+
+  async function slideCount(bytes: Uint8Array): Promise<number> {
+    const zip = await JSZip.loadAsync(bytes);
+    return Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+      .length;
+  }
+
+  it('emits one slide per authored block, including headings below H2', async () => {
+    // Regression: the pptx format ran `markdownDocToPptx`, whose segmentation
+    // starts a slide only at H1/H2 — so a deck built from `###` slides came out
+    // with whole sections collapsed into their parent. This format declares
+    // `templateAnnotationHandling: 'rendered'`, which only the Doc path honors.
+    const result = await convert({ kind: 'markdown', markdown: DEEP_DECK }, 'pptx');
+    const authored = flattenRenderableBlocks(markdownToDoc(parseMarkdown(DEEP_DECK)).blocks);
+    expect(authored.length).toBe(5);
+    // Every authored block plus the managed cover slide.
+    expect(await slideCount(result.bytes)).toBe(authored.length + 1);
+  });
+
+  it('materializes template layers rather than plain title/body text', async () => {
+    const result = await convert({ kind: 'markdown', markdown: DEEP_DECK }, 'pptx');
+    const zip = await JSZip.loadAsync(result.bytes);
+    let xml = '';
+    for (const name of Object.keys(zip.files)) {
+      if (/^ppt\/slides\/slide\d+\.xml$/.test(name)) xml += await zip.files[name]!.async('string');
+    }
+    // `statHighlight` draws the stat as its own oversized text layer; the
+    // semantic path only ever emitted a title placeholder plus body bullets.
+    expect(xml).toContain('42%');
+    expect(xml).toContain('Something quotable.');
   });
 });
 

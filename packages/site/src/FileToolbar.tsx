@@ -247,8 +247,11 @@ export function FileToolbar({
               }
             }
           }
-          const { markdownDocToPptx } = await import('@bendyline/squisq-formats/pptx');
-          const buffer = await markdownDocToPptx(mdDoc, { images });
+          // The deck is the slideshow rendition — `docToPptx` runs the same
+          // projection the preview player does, so every authored block
+          // becomes a slide (the markdown path segmented on H1/H2 only).
+          const { docToPptx } = await import('@bendyline/squisq-formats/pptx');
+          const buffer = await docToPptx(markdownToDoc(mdDoc), { images });
           const blob = new Blob([buffer], {
             type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
           });

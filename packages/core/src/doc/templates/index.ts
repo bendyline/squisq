@@ -144,6 +144,16 @@ export interface ExpandDocBlocksOptions {
    */
   splitLongBlocks?: boolean;
   /**
+   * Merge blocks whose *scheduled* duration falls under the ~5s minimum
+   * transition gap into their predecessor, and drop trailing blocks that would
+   * start just before a segment boundary. That pacing rule keeps timed playback
+   * from flashing slides, but it REMOVES authored blocks from the sequence.
+   * Discrete-slide consumers (the PPTX exporter) pass `false` so every authored
+   * slide survives into the deck. Only affects the audio-timed path; defaults to
+   * `true` to preserve video/narration pacing.
+   */
+  mergeShortBlocks?: boolean;
+  /**
    * User-defined custom templates to merge onto the built-in registry
    * before expanding blocks. Typically passed straight from
    * `Doc.customTemplates`. Built-in names take precedence on collision.
@@ -236,6 +246,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
     failureMode = 'fallback',
     onDiagnostic,
     splitLongBlocks = true,
+    mergeShortBlocks = true,
   } = opts;
   const totalBlocks = blocks.length;
   // Merge user-defined templates once, then share the immutable runtime view.
@@ -478,7 +489,11 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
       const lastBlock = segmentExpandedBlocks[segmentExpandedBlocks.length - 1];
       const timeFromLastToEnd = segmentEnd - lastBlock.startTime;
 
-      if (timeFromLastToEnd < MIN_TRANSITION_GAP && lastBlock.template !== 'sectionHeader') {
+      if (
+        mergeShortBlocks &&
+        timeFromLastToEnd < MIN_TRANSITION_GAP &&
+        lastBlock.template !== 'sectionHeader'
+      ) {
         const prevBlock = segmentExpandedBlocks[segmentExpandedBlocks.length - 2];
         prevBlock.duration = segmentEnd - prevBlock.startTime;
         lastBlock.duration = 0;
@@ -504,7 +519,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
     // Fifth pass: eliminate any remaining blocks shorter than MIN_TRANSITION_GAP.
     // Walk backwards and merge short blocks into their predecessor.
     // Skip index 0 (first block, typically section header) to preserve segment start.
-    let changed = true;
+    let changed = mergeShortBlocks;
     while (changed) {
       changed = false;
       for (let i = segmentExpandedBlocks.length - 1; i >= 1; i--) {
@@ -566,8 +581,12 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
     }
   }
 
-  // Filter out zero-duration blocks (eliminated in earlier passes)
-  return expandedBlocks.filter((block) => block && block.duration > 0);
+  // Filter out zero-duration blocks (eliminated in earlier passes). With
+  // `mergeShortBlocks: false` nothing was eliminated, so a zero-duration block
+  // is an authored slide the discrete-deck caller still expects to receive.
+  return mergeShortBlocks
+    ? expandedBlocks.filter((block) => block && block.duration > 0)
+    : expandedBlocks.filter(Boolean);
 }
 
 /**

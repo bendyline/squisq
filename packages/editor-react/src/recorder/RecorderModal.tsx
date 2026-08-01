@@ -37,6 +37,8 @@ import { useMediaRecorder, type RecorderSource } from './hooks/useMediaRecorder.
 import { useStreamPreview } from './hooks/useStreamPreview.js';
 import { requestCameraStream } from './sources/cameraStream.js';
 import { RecorderDeviceSettingsPanel } from './RecorderDeviceSettingsPanel.js';
+import { RecorderDeviceQuickPicks } from './RecorderDeviceQuickPicks.js';
+import { useMediaDevices } from './hooks/useMediaDevices.js';
 import {
   DEFAULT_RECORDER_DEVICE_SETTINGS,
   buildRecorderAudioConstraints,
@@ -877,6 +879,19 @@ export function RecorderModal({
   const narrationCameraStream = narrationOn
     ? (stage.recorder.cameraStream ?? narrationPreview)
     : null;
+
+  // The two live capture streams, shared by the device pickers (a permission
+  // grant reveals device labels without firing `devicechange`) and by the
+  // advanced panel's "Active track settings" readout.
+  const activePrimaryStream = narrationOn ? stage.controller.mic.stream : recorder.stream;
+  const activeCameraStream = narrationOn
+    ? narrationCameraStream
+    : (recorder.camera?.stream ?? null);
+  const { devices: mediaDevices, refresh: refreshMediaDevices } = useMediaDevices();
+  useEffect(() => {
+    if (activePrimaryStream || activeCameraStream) refreshMediaDevices();
+  }, [activeCameraStream, activePrimaryStream, refreshMediaDevices]);
+
   useStreamPreview(
     previewRef,
     narrationOn ? narrationCameraStream : recorder.state === 'stopped' ? null : recorder.stream,
@@ -1237,6 +1252,10 @@ export function RecorderModal({
     stage.recorder.state,
   );
   const deviceSettingsLocked = narrationOn ? !narrationRecorderIdle : togglesLocked;
+  // Narration always records the microphone; its camera is the stage's
+  // separate video lane rather than the standalone Camera pill.
+  const microphoneEnabled = narrationOn ? true : micOn;
+  const cameraEnabled = narrationOn ? stage.recorder.withCamera : cameraOn;
   const narrationToggleFor = (key: ToggleKey) => {
     switch (key) {
       case 'mic':
@@ -1355,17 +1374,41 @@ export function RecorderModal({
               </label>
             )}
 
+            {/* Promoted out of Advanced settings: which mic / which camera is
+            an everyday choice, but only on a machine that actually has more
+            than one of them. Same settings object, same option list. */}
+            <RecorderDeviceQuickPicks
+              devices={mediaDevices}
+              microphoneEnabled={microphoneEnabled}
+              cameraEnabled={cameraEnabled}
+              audioDeviceId={deviceSettings.audio.deviceId}
+              cameraDeviceId={deviceSettings.camera.deviceId}
+              onAudioDeviceChange={(deviceId) =>
+                handleDeviceSettingsChange({
+                  ...deviceSettings,
+                  audio: { ...deviceSettings.audio, deviceId },
+                })
+              }
+              onCameraDeviceChange={(deviceId) =>
+                handleDeviceSettingsChange({
+                  ...deviceSettings,
+                  camera: { ...deviceSettings.camera, deviceId },
+                })
+              }
+              disabled={deviceSettingsLocked}
+            />
+
             <RecorderDeviceSettingsPanel
               value={deviceSettings}
               onChange={handleDeviceSettingsChange}
               disabled={deviceSettingsLocked}
-              microphoneEnabled={narrationOn ? true : micOn}
-              cameraEnabled={narrationOn ? stage.recorder.withCamera : cameraOn}
+              microphoneEnabled={microphoneEnabled}
+              cameraEnabled={cameraEnabled}
               screenEnabled={narrationOn ? false : screenOn}
               systemAudioEnabled={!narrationOn && includeSystemAudio}
               separateAudioRecorder={narrationOn}
-              primaryStream={narrationOn ? stage.controller.mic.stream : recorder.stream}
-              cameraStream={narrationOn ? narrationCameraStream : (recorder.camera?.stream ?? null)}
+              primaryStream={activePrimaryStream}
+              cameraStream={activeCameraStream}
             />
 
             {!narrationOn && recorder.error && (

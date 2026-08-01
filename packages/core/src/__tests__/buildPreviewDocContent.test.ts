@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { markdownToDoc, materializeBlockLayers } from '@bendyline/squisq/doc';
-import { parseMarkdown } from '@bendyline/squisq/markdown';
-import type { DocBlock, TextLayer } from '@bendyline/squisq/schemas';
-import { buildPreviewDoc, documentTitleFromFileName } from '../buildPreviewDoc';
+import { markdownToDoc, materializeBlockLayers } from '../doc/index';
+import { parseMarkdown } from '../markdown/index';
+import type { DocBlock, TextLayer } from '../schemas/index';
+import { buildPreviewDoc, documentTitleFromFileName } from '../doc/buildPreviewDoc';
 
 function firstPreviewSlide(markdown: string): Record<string, unknown> {
   const source = markdownToDoc(parseMarkdown(markdown), {
