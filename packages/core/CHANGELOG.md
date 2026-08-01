@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.7.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.7.0...@bendyline/squisq@2.7.1) (2026-08-01)
+
+### Bug Fixes
+
+* Recording, export, page, PPTX fixes ([#43](https://github.com/bendyline/squisq/issues/43)) ([e9c4b32](https://github.com/bendyline/squisq/commit/e9c4b327a508c6e8494f90871e9305da5eb2ff58)), closes [#-level](https://github.com/bendyline/squisq/issues/-level)
+
 ## @bendyline/squisq [2.7.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.6.0...@bendyline/squisq@2.7.0) (2026-07-31)
 
 ### Features
