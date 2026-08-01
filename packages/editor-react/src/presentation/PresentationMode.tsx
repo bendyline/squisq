@@ -63,6 +63,44 @@ export interface PresentationModeProviderProps {
 const POPUP_WIDTH = 1280;
 const POPUP_HEIGHT = 720;
 
+/**
+ * How long to let a resolved `exitFullscreen()` actually release the element
+ * before reporting the exit as failed. Electron on macOS turns HTML fullscreen
+ * into a native Spaces transition and resolves the promise roughly half a
+ * second before that transition starts, so the release lands well after the
+ * await settles.
+ */
+const FULLSCREEN_RELEASE_TIMEOUT_MS = 4000;
+
+/**
+ * Resolve once `root` is no longer the fullscreen element, or when the timeout
+ * expires. Hosts disagree about when `exitFullscreen()` settles relative to the
+ * `fullscreenchange` that actually releases the element, so the event is the
+ * only trustworthy signal.
+ */
+function waitForFullscreenRelease(
+  ownerDocument: Document,
+  root: Element,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (ownerDocument.fullscreenElement !== root) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const settle = (released: boolean): void => {
+      ownerDocument.removeEventListener('fullscreenchange', handleChange);
+      window.clearTimeout(timer);
+      resolve(released);
+    };
+    const handleChange = (): void => {
+      if (ownerDocument.fullscreenElement !== root) settle(true);
+    };
+    const timer = window.setTimeout(
+      () => settle(ownerDocument.fullscreenElement !== root),
+      timeoutMs,
+    );
+    ownerDocument.addEventListener('fullscreenchange', handleChange);
+  });
+}
+
 function copyDocumentStyles(source: Document, target: Document): void {
   for (const sheet of Array.from(source.styleSheets)) {
     if (sheet.href) {
@@ -213,7 +251,15 @@ export function PresentationModeProvider({
             return;
           }
         }
-        if (ownerDocument.fullscreenElement === root) {
+        // A resolved `exitFullscreen()` does not mean the element has been
+        // released yet, so re-checking synchronously here would report a
+        // failure for an exit that is merely still animating.
+        const released = await waitForFullscreenRelease(
+          ownerDocument,
+          root,
+          FULLSCREEN_RELEASE_TIMEOUT_MS,
+        );
+        if (!released) {
           setError('Still in full screen. Press Escape to leave it.');
           return;
         }
