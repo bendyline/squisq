@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.4.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.4.1...@bendyline/squisq-formats@2.4.2) (2026-08-01)
+
+### Bug Fixes
+
+* Recording, export, page, PPTX fixes ([#43](https://github.com/bendyline/squisq/issues/43)) ([e9c4b32](https://github.com/bendyline/squisq/commit/e9c4b327a508c6e8494f90871e9305da5eb2ff58)), closes [#-level](https://github.com/bendyline/squisq/issues/-level)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.7.1
+
 ## @bendyline/squisq-formats [2.4.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.4.0...@bendyline/squisq-formats@2.4.1) (2026-07-31)
 
 
