@@ -24,6 +24,7 @@ import { slugifyTitle } from './exportFilename';
 import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
 import {
   createEntryAwareDocumentReader,
+  prepareExportDoc,
   prepareExportMarkdown,
   prepareVideoExportDoc,
 } from './exportPreparation';
@@ -514,9 +515,18 @@ export function ExportConfigModal({
           break;
         }
         case 'pptx': {
-          const { markdownDocToPptx } = await import('@bendyline/squisq-formats/pptx');
+          // A .pptx is the slideshow rendition, so export the Doc rather than
+          // the markdown: `docToPptx` runs the same projection the preview
+          // player does, one authored block per slide plus the cover. The
+          // markdown path segmented on H1/H2 headings only, so `###` slides
+          // were folded into their parent section.
+          const { docToPptx } = await import('@bendyline/squisq-formats/pptx');
           const images = await collectImagesByName();
-          const buf = await markdownDocToPptx(mdDoc, { themeId: exportThemeId, images });
+          const exportDoc = prepareExportDoc(currentSource, {
+            transformStyle,
+            themeId,
+          });
+          const buf = await docToPptx(exportDoc, { themeId: exportThemeId, images });
           downloadBlob(
             new Blob([buf], {
               type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',

@@ -11,6 +11,16 @@ export { RecorderPanel } from '../recorder/RecorderPanel.js';
 export type { RecorderPanelProps } from '../recorder/RecorderPanel.js';
 export { RecorderDeviceSettingsPanel } from '../recorder/RecorderDeviceSettingsPanel.js';
 export type { RecorderDeviceSettingsPanelProps } from '../recorder/RecorderDeviceSettingsPanel.js';
+export { RecorderDeviceQuickPicks } from '../recorder/RecorderDeviceQuickPicks.js';
+export type { RecorderDeviceQuickPicksProps } from '../recorder/RecorderDeviceQuickPicks.js';
+export {
+  hasRecorderDeviceChoice,
+  recorderDeviceGroups,
+  recorderDeviceOptions,
+} from '../recorder/mediaDeviceList.js';
+export type { RecorderDeviceOption } from '../recorder/mediaDeviceList.js';
+export { useMediaDevices } from '../recorder/hooks/useMediaDevices.js';
+export type { MediaDeviceInventory } from '../recorder/hooks/useMediaDevices.js';
 export {
   DEFAULT_RECORDER_DEVICE_SETTINGS,
   buildRecorderAudioConstraints,

@@ -278,13 +278,18 @@ export function defaultFormats(): FormatDefinition[] {
       return pptxToMarkdownDoc(data, pptxImportOptionsFrom(options));
     },
     async exportDoc(input, options): Promise<ConversionResult> {
-      const { markdownDocToPptx } = await import('../pptx/index.js');
+      // `docToPptx`, not `markdownDocToPptx`: this format declares
+      // `templateAnnotationHandling: 'rendered'`, and only the Doc path
+      // materializes template layers. The markdown path segments on H1/H2
+      // headings alone, so a deck whose slides are `###` headings came out
+      // with entire sections collapsed into one slide.
+      const { docToPptx } = await import('../pptx/index.js');
       const raw = optionsFor(options, 'pptx');
       const markdownDoc = await markdownOf(input);
       const containerImages = await collectContainerImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const pptxWarnings: string[] = [];
-      const buf = await markdownDocToPptx(markdownDoc, {
+      const buf = await docToPptx(input.doc, {
         ...raw,
         ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),

@@ -6,7 +6,7 @@
  * first permission grant, so the default-device choices always remain usable.
  */
 
-import { useCallback, useEffect, useId, useState, type CSSProperties } from 'react';
+import { useEffect, useId, type CSSProperties } from 'react';
 import type {
   RecorderAudioDeviceSettings,
   RecorderCameraDeviceSettings,
@@ -15,6 +15,8 @@ import type {
   RecorderScreenDeviceSettings,
   RecorderScreenAudioSettings,
 } from './deviceSettings.js';
+import { recorderDeviceGroups, recorderDeviceOptions } from './mediaDeviceList.js';
+import { useMediaDevices } from './hooks/useMediaDevices.js';
 
 export interface RecorderDeviceSettingsPanelProps {
   value: RecorderDeviceSettings;
@@ -30,7 +32,6 @@ export interface RecorderDeviceSettingsPanelProps {
   cameraStream?: MediaStream | null;
 }
 
-type SupportedConstraintMap = Record<string, boolean>;
 type TriState = 'default' | 'true' | 'false';
 
 const detailsStyle: CSSProperties = {
@@ -136,19 +137,6 @@ function booleanFromTriState(value: string): boolean | undefined {
   return value === 'default' ? undefined : value === 'true';
 }
 
-function deviceLabel(device: MediaDeviceInfo, index: number, noun: string): string {
-  return device.label || `${noun} ${index + 1}`;
-}
-
-function deviceGroups(devices: MediaDeviceInfo[]): Array<{ id: string; label: string }> {
-  const groups = new Map<string, string>();
-  for (const [index, device] of devices.entries()) {
-    if (!device.groupId || groups.has(device.groupId)) continue;
-    groups.set(device.groupId, device.label || `Device group ${index + 1}`);
-  }
-  return [...groups].map(([id, label]) => ({ id, label }));
-}
-
 function readSettings(track: MediaStreamTrack | undefined): MediaTrackSettings | null {
   if (!track || typeof track.getSettings !== 'function') return null;
   try {
@@ -229,49 +217,34 @@ export function RecorderDeviceSettingsPanel({
   primaryStream = null,
   cameraStream = null,
 }: RecorderDeviceSettingsPanelProps) {
-  const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
-  const [supported, setSupported] = useState<SupportedConstraintMap | null>(null);
   const audioMimeListId = useId();
   const videoMimeListId = useId();
-
-  const refreshBrowserInfo = useCallback(async () => {
-    const mediaDevices = typeof navigator === 'undefined' ? undefined : navigator.mediaDevices;
-    if (!mediaDevices) return;
-    if (typeof mediaDevices.getSupportedConstraints === 'function') {
-      setSupported(mediaDevices.getSupportedConstraints() as SupportedConstraintMap);
-    }
-    if (typeof mediaDevices.enumerateDevices === 'function') {
-      try {
-        setDevices(await mediaDevices.enumerateDevices());
-      } catch {
-        // Device enumeration is permission- and policy-dependent.
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshBrowserInfo();
-    const mediaDevices = typeof navigator === 'undefined' ? undefined : navigator.mediaDevices;
-    if (!mediaDevices?.addEventListener) return;
-    const handleDeviceChange = () => void refreshBrowserInfo();
-    mediaDevices.addEventListener('devicechange', handleDeviceChange);
-    return () => mediaDevices.removeEventListener('devicechange', handleDeviceChange);
-  }, [refreshBrowserInfo]);
+  const { devices, supported, refresh } = useMediaDevices();
 
   // A permission grant often reveals device labels without firing
   // `devicechange`; refresh once a preview stream lands.
   useEffect(() => {
-    if (primaryStream || cameraStream) void refreshBrowserInfo();
-  }, [cameraStream, primaryStream, refreshBrowserInfo]);
+    if (primaryStream || cameraStream) refresh();
+  }, [cameraStream, primaryStream, refresh]);
 
   const supports = (key: string) => supported === null || supported[key] === true;
   const hasAudioTrack = microphoneEnabled || systemAudioEnabled;
   const hasStandaloneAudioRecorder =
     separateAudioRecorder || (microphoneEnabled && !cameraEnabled && !screenEnabled);
-  const audioDevices = devices.filter((device) => device.kind === 'audioinput');
-  const videoDevices = devices.filter((device) => device.kind === 'videoinput');
-  const audioGroups = deviceGroups(audioDevices);
-  const videoGroups = deviceGroups(videoDevices);
+  const audioOptions = recorderDeviceOptions(
+    devices,
+    'audioinput',
+    'Microphone',
+    value.audio.deviceId,
+  );
+  const videoOptions = recorderDeviceOptions(
+    devices,
+    'videoinput',
+    'Camera',
+    value.camera.deviceId,
+  );
+  const audioGroups = recorderDeviceGroups(audioOptions);
+  const videoGroups = recorderDeviceGroups(videoOptions);
 
   const patchAudio = (patch: Partial<RecorderAudioDeviceSettings>) =>
     onChange({ ...value, audio: { ...value.audio, ...patch } });
@@ -330,9 +303,9 @@ export function RecorderDeviceSettingsPanel({
                   onChange={(event) => patchAudio({ deviceId: event.target.value })}
                 >
                   <option value="">System default</option>
-                  {audioDevices.map((device, index) => (
-                    <option key={device.deviceId} value={device.deviceId}>
-                      {deviceLabel(device, index, 'Microphone')}
+                  {audioOptions.map((option) => (
+                    <option key={option.deviceId} value={option.deviceId}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -428,9 +401,9 @@ export function RecorderDeviceSettingsPanel({
                   onChange={(event) => patchCamera({ deviceId: event.target.value })}
                 >
                   <option value="">System default</option>
-                  {videoDevices.map((device, index) => (
-                    <option key={device.deviceId} value={device.deviceId}>
-                      {deviceLabel(device, index, 'Camera')}
+                  {videoOptions.map((option) => (
+                    <option key={option.deviceId} value={option.deviceId}>
+                      {option.label}
                     </option>
                   ))}
                 </select>

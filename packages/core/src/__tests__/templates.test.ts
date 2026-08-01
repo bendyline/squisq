@@ -484,6 +484,31 @@ describe('expandDocBlocks', () => {
     expect(discrete.some((block) => block.id.includes('-split-'))).toBe(false);
   });
 
+  it('merges sub-gap blocks by default, but keeps them all when mergeShortBlocks is false', () => {
+    // Eight beats sharing a 30s narration segment: each lands under the ~5s
+    // minimum transition gap, so timed playback folds them into predecessors.
+    // A discrete deck must keep every authored slide instead.
+    const blocks: TemplateBlock[] = Array.from({ length: 8 }, (_, index) => ({
+      template: 'factCard',
+      id: `beat-${index}`,
+      duration: 2,
+      audioSegment: 0,
+      fact: `Fact ${index}`,
+      explanation: 'E',
+    }));
+    const audioSegments = [{ startTime: 0, duration: 30 }];
+
+    const paced = expandDocBlocks(blocks, { audioSegments, splitLongBlocks: false });
+    expect(paced.length).toBeLessThan(blocks.length);
+
+    const discrete = expandDocBlocks(blocks, {
+      audioSegments,
+      splitLongBlocks: false,
+      mergeShortBlocks: false,
+    });
+    expect(discrete.map((block) => block.id)).toEqual(blocks.map((block) => block.id));
+  });
+
   it('never mutates or aliases raw blocks and persistent layers', () => {
     const rawLayer: Layer = {
       type: 'shape',

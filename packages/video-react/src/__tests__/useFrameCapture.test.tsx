@@ -3,6 +3,7 @@ import type { Doc } from '@bendyline/squisq/schemas';
 import { resolveTheme } from '@bendyline/squisq/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  clearCaptionOverlayBackdrops,
   clearScheduledUnderlayBackdrops,
   coverSourceRect,
   createCaptureSvgRasterCache,
@@ -10,6 +11,8 @@ import {
   canCompositeScheduledPipVideos,
   compositeScheduledPipVideos,
   drawScheduledVideosOnto,
+  getCaptionLayerStateKey,
+  getCaptureCaptionOverlays,
   getFrameVisualStateKey,
   planScheduledVideoComposite,
   prepareScheduledVideoClones,
@@ -17,6 +20,8 @@ import {
   rasterizeCaptureSvgClones,
   releaseCaptureCloneCanvases,
   releaseCaptureSvgRasterCache,
+  resolveScheduledVideoCompositePlan,
+  shouldIgnoreCaptureCaptionSibling,
   useFrameCapture,
   waitForCaptureAssets,
   waitForVisualUpdate,
@@ -308,7 +313,7 @@ describe('primeIndeterminateCaptureVideos', () => {
     expect(video.dataset.captureSequential).toBeUndefined();
   });
 
-  it('leaves ordinary finite-duration video at its current frame', async () => {
+  it('flags ordinary finite-duration video for sequential capture without probing it', async () => {
     const root = document.createElement('div');
     root.innerHTML = '<video src="indexed.mp4"></video>';
     const video = root.querySelector('video')!;
@@ -322,10 +327,20 @@ describe('primeIndeterminateCaptureVideos', () => {
       videoWidth: { configurable: true, value: 640 },
       videoHeight: { configurable: true, value: 480 },
     });
+    const primed = new WeakSet<HTMLVideoElement>();
 
-    expect(await primeIndeterminateCaptureVideos(root)).toBe(0);
+    // Count stays 0: flagging does not move the video's position, so the
+    // caller must not re-run its seek barrier for it.
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+    // Per-frame currentTime seeks decode from the previous keyframe, which
+    // degrades progressively on sparse-keyframe screen recordings — finite
+    // sources take the sequential playback path exactly like recorder WebMs.
+    expect(video.dataset.captureSequential).toBe('true');
     expect(setCurrentTime).not.toHaveBeenCalled();
     expect(video.pause).not.toHaveBeenCalled();
+
+    expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+    expect(setCurrentTime).not.toHaveBeenCalled();
   });
 });
 
@@ -740,7 +755,7 @@ describe('scheduled video capture clones', () => {
     expect(plan!.overlays).toEqual([screen]);
   });
 
-  it('declines a composite plan for full-frame overlay clips (they sit under captions)', () => {
+  it('composites full-frame overlay clips only when the caller reports no captions', () => {
     const root = document.createElement('div');
     root.innerHTML =
       '<div class="doc-player__media-clips" data-presentation="full-frame">' +
@@ -751,7 +766,126 @@ describe('scheduled video capture clones', () => {
       videoHeight: { configurable: true, value: 480 },
     });
 
+    // With captions the base raster carries text above z 10 — full-frame
+    // clips must keep the inline html2canvas path.
     expect(planScheduledVideoComposite(root)).toBeNull();
+    expect(planScheduledVideoComposite(root, { includeFullFrameOverlays: false })).toBeNull();
+
+    const plan = planScheduledVideoComposite(root, { includeFullFrameOverlays: true });
+    expect(plan).not.toBeNull();
+    expect(plan!.underlays).toEqual([]);
+    expect(plan!.overlays).toEqual([video]);
+  });
+
+  it('suppresses video drawing while the managed cover block is mounted', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="full-frame">' +
+      '<video data-clip-id="screen" data-active="true"></video></div>' +
+      '<div class="doc-player__media-clips" data-presentation="picture-in-picture">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>' +
+      '<div class="doc-player__viewport">' +
+      '<div class="doc-player__block doc-player__block--cover">Cover</div></div>';
+    for (const video of Array.from(root.querySelectorAll('video'))) {
+      Object.defineProperties(video, {
+        videoWidth: { configurable: true, value: 640 },
+        videoHeight: { configurable: true, value: 480 },
+      });
+    }
+
+    // Cover mounted: composite machinery stays on (media excluded from the
+    // base, which therefore shows the cover) but no clip is drawn over it.
+    const coverPlan = resolveScheduledVideoCompositePlan(root, {
+      includeFullFrameOverlays: true,
+    });
+    expect(coverPlan).toEqual({ underlays: [], overlays: [] });
+
+    // Cover unmounted: the normal plan returns.
+    root.querySelector('.doc-player__block--cover')!.remove();
+    const plan = resolveScheduledVideoCompositePlan(root, { includeFullFrameOverlays: true });
+    expect(plan!.overlays).toHaveLength(2);
+  });
+
+  it('prunes the caption layer clone to caption branches only', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player">' +
+      '<svg class="block-svg"></svg>' +
+      '<div class="doc-player__media-clips" data-presentation="full-frame">' +
+      '<video data-clip-id="screen" data-active="true"></video></div>' +
+      '<div class="caption-overlay"><div><span>Hello there</span></div></div>' +
+      '</div>';
+    const overlays = getCaptureCaptionOverlays(root);
+    expect(overlays).toHaveLength(1);
+
+    const ignore = (selector: string) =>
+      shouldIgnoreCaptureCaptionSibling(root.querySelector(selector)!, root, overlays);
+
+    // Pruned: everything already covered by the base raster or composited.
+    expect(ignore('svg.block-svg')).toBe(true);
+    expect(ignore('.doc-player__media-clips')).toBe(true);
+    expect(ignore('video')).toBe(true);
+    // Kept: the overlay, its contents, and its ancestor chain.
+    expect(ignore('.caption-overlay')).toBe(false);
+    expect(ignore('span')).toBe(false);
+    expect(ignore('.doc-player')).toBe(false);
+    expect(shouldIgnoreCaptureCaptionSibling(root, root, overlays)).toBe(false);
+  });
+
+  it('strips caption ancestor backdrops so the layer stays transparent', () => {
+    const clonedRoot = document.createElement('div');
+    clonedRoot.style.backgroundColor = 'rgb(20, 20, 20)';
+    clonedRoot.innerHTML =
+      '<div class="doc-player" style="background-color: rgb(10, 10, 10); background-image: url(x.png)">' +
+      '<div class="caption-overlay"><div style="background: rgba(0,0,0,0.65)">' +
+      '<span>Hello</span></div></div></div>';
+
+    clearCaptionOverlayBackdrops(clonedRoot);
+
+    const player = clonedRoot.querySelector<HTMLElement>('.doc-player')!;
+    expect(player.style.backgroundColor).toBe('transparent');
+    expect(player.style.backgroundImage).toBe('none');
+    expect(clonedRoot.style.backgroundColor).toBe('transparent');
+    // The caption badge's own backdrop is caption pixels — untouched.
+    const badge = clonedRoot.querySelector<HTMLElement>('.caption-overlay div')!;
+    expect(badge.style.background).toContain('rgba(0, 0, 0, 0.65)');
+  });
+
+  it('keys the caption layer on markup, fonts, and output size', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<div class="caption-overlay"><div><span>First cue</span></div></div>';
+    const overlays = getCaptureCaptionOverlays(root);
+
+    const initial = getCaptionLayerStateKey(overlays, document, 1920, 1080);
+    expect(getCaptionLayerStateKey(overlays, document, 1920, 1080)).toBe(initial);
+    expect(getCaptionLayerStateKey(overlays, document, 1280, 720)).not.toBe(initial);
+
+    root.querySelector('span')!.textContent = 'Second cue';
+    expect(getCaptionLayerStateKey(getCaptureCaptionOverlays(root), document, 1920, 1080)).not.toBe(
+      initial,
+    );
+  });
+
+  it('keeps full-frame and PIP overlays in document order for same-z stacking', () => {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="full-frame">' +
+      '<video data-clip-id="screen" data-active="true"></video></div>' +
+      '<div class="doc-player__media-clips" data-presentation="picture-in-picture">' +
+      '<video data-clip-id="camera" data-active="true"></video></div>';
+    const [screen, camera] = Array.from(root.querySelectorAll('video'));
+    for (const video of [screen, camera]) {
+      Object.defineProperties(video, {
+        videoWidth: { configurable: true, value: 640 },
+        videoHeight: { configurable: true, value: 480 },
+      });
+    }
+
+    const plan = planScheduledVideoComposite(root, { includeFullFrameOverlays: true });
+    expect(plan).not.toBeNull();
+    expect(plan!.underlays).toEqual([]);
+    // The screenshare paints first, the camera PIP above it — document order.
+    expect(plan!.overlays).toEqual([screen, camera]);
   });
 
   it('plans nothing when no scheduled clip is visually active', () => {

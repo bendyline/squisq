@@ -84,6 +84,8 @@ const CAPTURE_VIDEO_READINESS_POLL_MS = 16;
 const CAPTURE_VIDEO_END_PROBE_TIME = 1e101;
 const SCHEDULED_MEDIA_SELECTOR = '.doc-player__media-clips';
 const SCHEDULED_VIDEO_SELECTOR = `${SCHEDULED_MEDIA_SELECTOR} video[data-clip-id]`;
+const CAPTION_OVERLAY_SELECTOR = '.caption-overlay, .social-caption-overlay';
+const COVER_BLOCK_SELECTOR = '.doc-player__block--cover';
 
 /**
  * Let React and the browser present DOM changes without waiting forever for
@@ -255,9 +257,18 @@ function captureVideoNeedsPriming(
 }
 
 /**
- * Make recorder-produced WebM video deterministic and fast to seek before
+ * Make capture video sources deterministic and fast to advance before
  * accelerated frame capture starts.
  *
+ * Every visual source is marked for sequential capture. Assigning
+ * `currentTime` for each output frame makes Chromium run a full pipeline
+ * seek that decodes forward from the previous keyframe; screen recordings
+ * keep keyframes seconds-to-minutes apart, so that per-frame cost grows with
+ * the offset into the clip until a long export crawls. The sequential path
+ * (see seekVideoToFrame) instead advances by short muted playback steps,
+ * decoding each source frame exactly once.
+ *
+ * Indeterminate-duration sources additionally need an indexing probe.
  * MediaRecorder WebMs commonly omit a finite Duration/Cues index. Chromium
  * then exposes `duration === Infinity` and buffers only a short window ahead
  * of a paused video. An export that advances faster than realtime eventually
@@ -265,6 +276,10 @@ function captureVideoNeedsPriming(
  * buffer extension. A single end probe makes Chromium scan the local/blob
  * resource, establishes its finite duration and seek index, and avoids that
  * timestamp-specific collapse. The original frame is restored before return.
+ *
+ * The returned count includes only probed sources: indexing moves a video's
+ * position, so the caller must re-run its seek barrier, while flagging a
+ * finite source leaves its position untouched.
  */
 export async function primeIndeterminateCaptureVideos(
   captureRoot: HTMLElement,
@@ -299,6 +314,10 @@ export async function primeIndeterminateCaptureVideos(
         return;
       }
       if (Number.isFinite(video.duration)) {
+        // Already indexed — no probe needed, but sequential capture matters
+        // just as much here: an uploaded screen recording with sparse
+        // keyframes degrades progressively under per-frame currentTime seeks.
+        video.dataset.captureSequential = 'true';
         primedVideos.add(video);
         return;
       }
@@ -964,25 +983,46 @@ export function canCompositeScheduledPipVideos(captureRoot: HTMLElement): boolea
 export interface ScheduledVideoCompositePlan {
   /** Full-bleed background clips drawn beneath the cached base raster. */
   underlays: HTMLVideoElement[];
-  /** Corner PiP clips drawn over the cached base raster. */
+  /** PiP / full-frame clips drawn over the cached base raster. */
   overlays: HTMLVideoElement[];
+}
+
+export interface ScheduledVideoCompositeOptions {
+  /**
+   * Composite `full-frame` overlay clips after the base raster too. The
+   * caller must then keep captions out of the base and draw them above the
+   * overlays: full-frame clips sit above blocks but BELOW captions (z 10 vs
+   * z 50). captureCanvasFrame does exactly that with its cached caption
+   * layer; a caller that bakes captions into the base must leave this off.
+   */
+  includeFullFrameOverlays?: boolean;
 }
 
 /**
  * Decide whether every active visual scheduled clip can be composited around a
  * cached base raster instead of re-running html2canvas for each frame.
  *
+ * This decision is load-bearing for long exports: the inline path clones the
+ * whole capture document through html2canvas for EVERY frame, and Chromium
+ * retains each detached clone document (layout, style, canvas stores) far
+ * longer than one frame under a busy main thread — several MB per frame until
+ * the renderer hits OOM. The composite path rasterizes the base only when it
+ * visually changes and draws video frames directly, allocating nothing per
+ * steady-state frame.
+ *
  * `background` clips sit at the bottom of the player stack (z 0 — below blocks
  * and captions), so they draw first with the base over them, provided the base
  * was rasterized with a transparent backdrop (see
  * {@link clearScheduledUnderlayBackdrops}). PiP clips sit above everything the
  * base contains and draw last — the original fast path. `full-frame` overlay
- * clips render above blocks but BELOW captions (z 10 vs z 50); drawing them
- * after the caption-bearing base would cover the captions, so they keep the
- * inline html2canvas path.
+ * clips join the overlay list when the caller opts in (see
+ * {@link ScheduledVideoCompositeOptions.includeFullFrameOverlays}); both
+ * groups render at z 10, so document order — which querySelectorAll already
+ * yields — decides their stacking exactly like the live player.
  */
 export function planScheduledVideoComposite(
   captureRoot: HTMLElement,
+  options: ScheduledVideoCompositeOptions = {},
 ): ScheduledVideoCompositePlan | null {
   const activeVideos = Array.from(
     captureRoot.querySelectorAll<HTMLVideoElement>(SCHEDULED_VIDEO_SELECTOR),
@@ -994,9 +1034,49 @@ export function planScheduledVideoComposite(
     const presentation = scheduledVideoPresentation(video);
     if (presentation === 'background') underlays.push(video);
     else if (presentation === 'picture-in-picture') overlays.push(video);
-    else return null;
+    else if (presentation === 'full-frame' && options.includeFullFrameOverlays) {
+      overlays.push(video);
+    } else return null;
   }
   return { underlays, overlays };
+}
+
+/**
+ * Cover-aware composite plan for one captured frame.
+ *
+ * While the managed cover block is mounted it is the document's face — the
+ * thumbnail surface the author previews when configuring it — so scheduled
+ * clips must not paint over it. Returning an empty plan keeps the composite
+ * machinery (scheduled media and captions stay out of the base raster, which
+ * therefore shows the cover, and captions still draw above it) while drawing
+ * no video at all. Cover frames then reuse the cached base with zero
+ * per-frame clone documents, and the plan returns to normal the moment the
+ * cover unmounts.
+ */
+export function resolveScheduledVideoCompositePlan(
+  captureRoot: HTMLElement,
+  options: ScheduledVideoCompositeOptions = {},
+): ScheduledVideoCompositePlan | null {
+  const plan = planScheduledVideoComposite(captureRoot, options);
+  if (!plan) return null;
+  if (captureRoot.querySelector(COVER_BLOCK_SELECTOR)) {
+    return { underlays: [], overlays: [] };
+  }
+  return plan;
+}
+
+/** Strip ancestor backgrounds (up to and including the cloned root) above targets. */
+function clearAncestorBackdropsFor(clonedRoot: HTMLElement, targets: Iterable<HTMLElement>): void {
+  for (const target of targets) {
+    for (
+      let element: HTMLElement | null = target.parentElement;
+      element;
+      element = element === clonedRoot ? null : element.parentElement
+    ) {
+      element.style.backgroundColor = 'transparent';
+      element.style.backgroundImage = 'none';
+    }
+  }
 }
 
 /**
@@ -1008,19 +1088,68 @@ export function planScheduledVideoComposite(
  * opaque backdrop does on the inline path.
  */
 export function clearScheduledUnderlayBackdrops(clonedRoot: HTMLElement): void {
-  const groups = clonedRoot.querySelectorAll<HTMLElement>(
-    `${SCHEDULED_MEDIA_SELECTOR}[data-presentation="background"]`,
+  clearAncestorBackdropsFor(
+    clonedRoot,
+    Array.from(
+      clonedRoot.querySelectorAll<HTMLElement>(
+        `${SCHEDULED_MEDIA_SELECTOR}[data-presentation="background"]`,
+      ),
+    ),
   );
-  for (const group of Array.from(groups)) {
-    for (
-      let element: HTMLElement | null = group.parentElement;
-      element;
-      element = element === clonedRoot ? null : element.parentElement
-    ) {
-      element.style.backgroundColor = 'transparent';
-      element.style.backgroundImage = 'none';
-    }
-  }
+}
+
+/** Caption overlays rendered by the player inside the capture root. */
+export function getCaptureCaptionOverlays(captureRoot: HTMLElement): HTMLElement[] {
+  return Array.from(captureRoot.querySelectorAll<HTMLElement>(CAPTION_OVERLAY_SELECTOR));
+}
+
+/**
+ * In the caption layer's disposable clone, strip backgrounds from caption
+ * ancestors. The layer must contain nothing but caption pixels over
+ * transparency — an ancestor background (e.g. the themed player surface)
+ * would otherwise blanket the composited videos beneath it.
+ */
+export function clearCaptionOverlayBackdrops(clonedRoot: HTMLElement): void {
+  clearAncestorBackdropsFor(clonedRoot, getCaptureCaptionOverlays(clonedRoot));
+}
+
+/**
+ * Prune the caption layer's clone down to caption overlays, their ancestors,
+ * and their contents (plus the document head, whose styles captions inherit).
+ * Everything else — blocks, SVG slides, scheduled videos — is already in the
+ * base raster or composited separately.
+ */
+export function shouldIgnoreCaptureCaptionSibling(
+  element: Element,
+  captureRoot: HTMLElement,
+  captionOverlays: readonly HTMLElement[],
+): boolean {
+  if (shouldIgnoreCaptureSibling(element, captureRoot)) return true;
+  if (element === captureRoot || element.contains(captureRoot)) return false;
+  if (!captureRoot.contains(element)) return false;
+  return !captionOverlays.some(
+    (overlay) => overlay === element || overlay.contains(element) || element.contains(overlay),
+  );
+}
+
+/**
+ * Conservative visual key for the caption layer. Caption text and inline
+ * styles live in the overlay markup, so equal keys mean the cached caption
+ * raster is still exact. Fonts participate because a late-loading caption
+ * font changes glyph rendering without changing markup.
+ */
+export function getCaptionLayerStateKey(
+  captionOverlays: readonly HTMLElement[],
+  ownerDocument: Document,
+  width: number,
+  height: number,
+): string {
+  return JSON.stringify({
+    markup: captionOverlays.map((overlay) => overlay.outerHTML),
+    fontStatus: ownerDocument.fonts?.status ?? 'unsupported',
+    width,
+    height,
+  });
 }
 
 function cssPixelValue(value: string): number {
@@ -1281,6 +1410,15 @@ export function useFrameCapture(): FrameCaptureHandle {
   const captureSvgRasterCacheRef = useRef<CaptureSvgRasterCache>(createCaptureSvgRasterCache());
   const primedCaptureVideosRef = useRef(new WeakSet<HTMLVideoElement>());
   const dimensionsRef = useRef<{ width: number; height: number }>({ width: 1920, height: 1080 });
+  /**
+   * Cached caption layer for the composite fast path. Captions sit above
+   * every scheduled clip (z 50), so composite mode lifts them out of the base
+   * raster and draws this transparent layer last. Re-rasterized only when the
+   * caption markup changes (cue cadence — seconds), never per frame.
+   */
+  const captionLayerCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const captionLayerKeyRef = useRef<string | null>(null);
+  const captionLayerHasContentRef = useRef(false);
 
   const init = useCallback(
     async (
@@ -1304,6 +1442,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         const oldOwnsMediaProvider = ownsMediaProviderRef.current;
         const oldCaptureCanvas = captureCanvasRef.current;
         const oldCaptureBaseCanvas = captureBaseCanvasRef.current;
+        const oldCaptionLayerCanvas = captionLayerCanvasRef.current;
         rootRef.current = null;
         containerRef.current = null;
         renderAPIRef.current = null;
@@ -1311,6 +1450,9 @@ export function useFrameCapture(): FrameCaptureHandle {
         ownsMediaProviderRef.current = false;
         captureCanvasRef.current = null;
         captureBaseCanvasRef.current = null;
+        captionLayerCanvasRef.current = null;
+        captionLayerKeyRef.current = null;
+        captionLayerHasContentRef.current = false;
         lastVisualStateKeyRef.current = null;
         hasCapturedFrameRef.current = false;
         decodedImagesRef.current = new WeakSet<HTMLImageElement>();
@@ -1330,6 +1472,10 @@ export function useFrameCapture(): FrameCaptureHandle {
             if (oldCaptureBaseCanvas) {
               oldCaptureBaseCanvas.width = 0;
               oldCaptureBaseCanvas.height = 0;
+            }
+            if (oldCaptionLayerCanvas) {
+              oldCaptionLayerCanvas.width = 0;
+              oldCaptionLayerCanvas.height = 0;
             }
             resolve();
           }, 0);
@@ -1358,6 +1504,8 @@ export function useFrameCapture(): FrameCaptureHandle {
       captureBaseCanvas.style.width = `${width}px`;
       captureBaseCanvas.style.height = `${height}px`;
       captureBaseCanvasRef.current = captureBaseCanvas;
+      captionLayerKeyRef.current = null;
+      captionLayerHasContentRef.current = false;
       lastVisualStateKeyRef.current = null;
       hasCapturedFrameRef.current = false;
       decodedImagesRef.current = new WeakSet<HTMLImageElement>();
@@ -1529,7 +1677,12 @@ export function useFrameCapture(): FrameCaptureHandle {
       }
       await waitForCaptureAssets(root, decodedImagesRef.current);
 
-      const compositePlan = planScheduledVideoComposite(root);
+      // Full-frame clips are always composited: captions are lifted into
+      // their own cached top layer below, and a mounted cover suppresses
+      // video drawing entirely (see resolveScheduledVideoCompositePlan).
+      const compositePlan = resolveScheduledVideoCompositePlan(root, {
+        includeFullFrameOverlays: true,
+      });
       const hasUnderlays = compositePlan !== null && compositePlan.underlays.length > 0;
       // Distinct cache namespaces: an underlay base is rasterized transparent
       // with ancestor backdrops stripped and must never be reused as an opaque
@@ -1580,6 +1733,11 @@ export function useFrameCapture(): FrameCaptureHandle {
                 clonedRoot
                   .querySelectorAll(SCHEDULED_MEDIA_SELECTOR)
                   .forEach((element) => element.remove());
+                // Captions draw above every composited clip, so they leave
+                // the base and return as the separately cached top layer.
+                clonedRoot
+                  .querySelectorAll(CAPTION_OVERLAY_SELECTOR)
+                  .forEach((element) => element.remove());
               }
               transientCloneCanvases.push(...prepareScheduledVideoClones(root, clonedRoot));
               await rasterizeCaptureSvgClones(
@@ -1608,16 +1766,82 @@ export function useFrameCapture(): FrameCaptureHandle {
         if (!outputContext) throw new Error('Could not create the frame output canvas context');
         outputContext.setTransform(1, 0, 0, 1, 0, 0);
         outputContext.clearRect(0, 0, width, height);
-        // Engine backdrop → background clips → base (blocks + captions, with
-        // alpha where underlays exist) → PiP clips. Underlays match live
-        // stacking exactly (media z 0 under blocks/captions). PiP drawn over
-        // the caption-bearing base is the fast path's long-standing trade-off:
-        // a corner PiP box virtually never intersects the top-center captions.
+        // Engine backdrop → background clips → base (blocks, with alpha where
+        // underlays exist) → PiP / full-frame clips → captions. This matches
+        // live stacking exactly: media z 0 under blocks, scheduled clips at
+        // z 10 in document order, captions at z 50 above everything.
         outputContext.fillStyle = '#000000';
         outputContext.fillRect(0, 0, width, height);
         drawScheduledVideosOnto(captureCanvas, root, compositePlan.underlays);
         outputContext.drawImage(captureBaseCanvas, 0, 0);
         drawScheduledVideosOnto(captureCanvas, root, compositePlan.overlays);
+
+        // ── Caption layer ─────────────────────────────────────────────
+        // Rasterized in isolation (blocks, slides, and scheduled media are
+        // pruned from its clone) and cached until the caption markup changes
+        // — cue cadence, not frame cadence. Between cue changes a composite
+        // frame allocates no clone document at all.
+        const captionOverlays = getCaptureCaptionOverlays(root);
+        if (captionOverlays.length > 0) {
+          const hasCaptionText = captionOverlays.some(
+            (overlay) => (overlay.textContent ?? '').trim().length > 0,
+          );
+          const captionKey = getCaptionLayerStateKey(
+            captionOverlays,
+            root.ownerDocument,
+            width,
+            height,
+          );
+          if (captionLayerKeyRef.current !== captionKey) {
+            if (hasCaptionText) {
+              let captionCanvas = captionLayerCanvasRef.current;
+              if (!captionCanvas) {
+                captionCanvas = document.createElement('canvas');
+                captionLayerCanvasRef.current = captionCanvas;
+              }
+              if (captionCanvas.width !== width || captionCanvas.height !== height) {
+                captionCanvas.width = width;
+                captionCanvas.height = height;
+              }
+              const captionContext = captionCanvas.getContext('2d');
+              if (!captionContext) {
+                throw new Error('Could not create the caption layer canvas context');
+              }
+              captionContext.setTransform(1, 0, 0, 1, 0, 0);
+              captionContext.clearRect(0, 0, width, height);
+              await html2canvas(root, {
+                canvas: captionCanvas,
+                width,
+                height,
+                scale: 1,
+                useCORS: true,
+                allowTaint: true,
+                backgroundColor: null,
+                logging: false,
+                onclone: (_clonedDocument, clonedRoot) => {
+                  clearCaptionOverlayBackdrops(clonedRoot);
+                },
+                ignoreElements: (element) =>
+                  shouldIgnoreCaptureCaptionSibling(element, root, captionOverlays),
+              });
+            }
+            captionLayerKeyRef.current = captionKey;
+            captionLayerHasContentRef.current = hasCaptionText;
+          }
+          if (captionLayerHasContentRef.current && captionLayerCanvasRef.current) {
+            // Honor a mid-fade computed opacity so cue transitions keep their
+            // authored ease instead of popping.
+            const overlayOpacity = Number.parseFloat(
+              root.ownerDocument.defaultView?.getComputedStyle(captionOverlays[0]).opacity ?? '1',
+            );
+            if (!Number.isFinite(overlayOpacity) || overlayOpacity > 0) {
+              outputContext.save();
+              outputContext.globalAlpha = Number.isFinite(overlayOpacity) ? overlayOpacity : 1;
+              outputContext.drawImage(captionLayerCanvasRef.current, 0, 0);
+              outputContext.restore();
+            }
+          }
+        }
       }
 
       // The reusable canvas is returned directly for the main-thread encoder.
@@ -1656,6 +1880,13 @@ export function useFrameCapture(): FrameCaptureHandle {
       captureBaseCanvasRef.current.height = 0;
       captureBaseCanvasRef.current = null;
     }
+    if (captionLayerCanvasRef.current) {
+      captionLayerCanvasRef.current.width = 0;
+      captionLayerCanvasRef.current.height = 0;
+      captionLayerCanvasRef.current = null;
+    }
+    captionLayerKeyRef.current = null;
+    captionLayerHasContentRef.current = false;
     lastVisualStateKeyRef.current = null;
     hasCapturedFrameRef.current = false;
     decodedImagesRef.current = new WeakSet<HTMLImageElement>();
