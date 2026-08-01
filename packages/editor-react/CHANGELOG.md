@@ -1,3 +1,17 @@
+## @bendyline/squisq-editor-react [2.7.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.7.0...@bendyline/squisq-editor-react@2.7.1) (2026-08-01)
+
+### Bug Fixes
+
+* Recording, export, page, PPTX fixes ([#43](https://github.com/bendyline/squisq/issues/43)) ([e9c4b32](https://github.com/bendyline/squisq/commit/e9c4b327a508c6e8494f90871e9305da5eb2ff58)), closes [#-level](https://github.com/bendyline/squisq/issues/-level)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.7.1
+* **@bendyline/squisq-formats:** upgraded to 2.4.2
+* **@bendyline/squisq-react:** upgraded to 2.7.1
+* **@bendyline/squisq-video-react:** upgraded to 2.3.3
+
 ## @bendyline/squisq-editor-react [2.7.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.6.0...@bendyline/squisq-editor-react@2.7.0) (2026-07-31)
 
 ### Features
