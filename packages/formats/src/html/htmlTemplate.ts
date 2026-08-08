@@ -23,6 +23,19 @@ export interface HtmlExportOptions {
   playerScript: string;
 
   /**
+   * Reference an existing standalone player instead of embedding
+   * {@link playerScript}. Used by outside-in documents that share one
+   * `_squisq/squisq-player.js` runtime across a folder hierarchy.
+   */
+  playerScriptPath?: string;
+
+  /**
+   * Base URL used to resolve relative document media. Defaults to `.`.
+   * Outside-in HTML points this at the document's companion `_files` folder.
+   */
+  basePath?: string;
+
+  /**
    * Map of relative image paths (as they appear in the Doc) to binary image data.
    * For inline HTML export, these are converted to base64 data URIs.
    * For ZIP export, these are written as separate files.
@@ -303,6 +316,7 @@ function buildInlineImageMaps(images: Map<string, ArrayBuffer> | undefined): {
 export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string {
   const {
     playerScript,
+    basePath = '.',
     images,
     mode = 'slideshow',
     title = 'Squisq Document',
@@ -355,7 +369,7 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
     images: images,
     autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}
     showCodeCopyButton: ${JSON.stringify(showCodeCopyButton)},
-    basePath: "."
+    basePath: ${JSON.stringify(basePath)}
   });
 })();
 </script>
@@ -382,6 +396,7 @@ export function generateExternalHtml(
     | 'captionStyle'
     | 'themeId'
     | 'themeRegistry'
+    | 'basePath'
   > & {
     /** Relative path to the player JS file (e.g., 'squisq-player.js') */
     playerScriptPath: string;
@@ -402,6 +417,7 @@ export function generateExternalHtml(
     captionStyle,
     themeId,
     themeRegistry,
+    basePath = '.',
   } = options;
 
   doc = applyThemeSelection(doc, themeId, themeRegistry);
@@ -438,7 +454,7 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
     audio: audio,
     autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}
     showCodeCopyButton: ${JSON.stringify(showCodeCopyButton)},
-    basePath: "."
+    basePath: ${JSON.stringify(basePath)}
   });
 })();
 </script>

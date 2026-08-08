@@ -97,6 +97,11 @@
       "types": "./dist/infer/index.d.ts",
       "import": "./dist/infer/index.js",
       "default": "./dist/infer/index.js"
+    },
+    "./outside-in": {
+      "types": "./dist/outside-in/index.d.ts",
+      "import": "./dist/outside-in/index.js",
+      "default": "./dist/outside-in/index.js"
     }
   },
   "scripts": {
