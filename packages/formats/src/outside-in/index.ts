@@ -35,6 +35,7 @@ const OUTSIDE_IN_FORMAT_SET = new Set<string>(OUTSIDE_IN_FORMAT_IDS);
 const OUTSIDE_IN_VERSION_KEY = 'squisq-outside-in';
 const OUTSIDE_IN_OUTPUT_KEY = 'squisq-output';
 const OUTSIDE_IN_FORMAT_KEY = 'squisq-output-format';
+export const OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY = 'squisq-updatefrommarkdown';
 
 export interface OutsideInLayout {
   /** User-facing rendered file, relative to the host's workspace root. */
@@ -55,12 +56,20 @@ export interface OutsideInLayout {
   markdownPath: string;
   /** Rendered target path as stored relative to the Markdown source. */
   relativeTargetPath: string;
+  /** Hidden directory containing the immutable pre-edit rendered file. */
+  backupDirectory: string;
+  /** Stable filename for the pre-edit rendered file. */
+  backupFilename: string;
+  /** Full workspace-relative path to the pre-edit rendered file. */
+  backupPath: string;
 }
 
 export interface OutsideInMetadata {
   version: 1;
   format: OutsideInFormatId;
   target: string;
+  /** Only an exact boolean true authorizes Markdown-driven regeneration. */
+  updateFromMarkdown: boolean;
 }
 
 export interface ImportedOutsideInDocument {
@@ -68,6 +77,8 @@ export interface ImportedOutsideInDocument {
   markdown: string;
   /** Imported media container. Hosts copy its non-Markdown members into the companion folder. */
   container: ContentContainer;
+  /** Non-fatal fidelity notes from theme/layout inference. */
+  warnings: string[];
 }
 
 export interface RenderOutsideInOptions extends ConvertOptions {
@@ -136,6 +147,8 @@ export function resolveOutsideInLayout(targetPath: string): OutsideInLayout | nu
   const companionName = `${stem}_files`;
   const companionDirectory = joinPath(parentDirectory, companionName);
   const markdownFilename = `${slugStem(stem)}.md`;
+  const backupDirectory = joinPath(companionDirectory, '.original');
+  const backupFilename = `original.${format}`;
   return {
     targetPath: normalized,
     format,
@@ -146,6 +159,9 @@ export function resolveOutsideInLayout(targetPath: string): OutsideInLayout | nu
     markdownFilename,
     markdownPath: joinPath(companionDirectory, markdownFilename),
     relativeTargetPath: `../${filename}`,
+    backupDirectory,
+    backupFilename,
+    backupPath: joinPath(backupDirectory, backupFilename),
   };
 }
 
@@ -198,7 +214,12 @@ export function readOutsideInMetadata(source: string): OutsideInMetadata | null 
   const format = frontmatter[OUTSIDE_IN_FORMAT_KEY];
   if (version !== 1 || typeof target !== 'string' || typeof format !== 'string') return null;
   if (!OUTSIDE_IN_FORMAT_SET.has(format)) return null;
-  return { version: 1, target, format: format as OutsideInFormatId };
+  return {
+    version: 1,
+    target,
+    format: format as OutsideInFormatId,
+    updateFromMarkdown: frontmatter[OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY] === true,
+  };
 }
 
 /** Add or refresh the portable relationship while preserving unrelated frontmatter. */
@@ -207,6 +228,30 @@ export function withOutsideInMetadata(source: string, layout: OutsideInLayout): 
     [OUTSIDE_IN_VERSION_KEY]: 1,
     [OUTSIDE_IN_OUTPUT_KEY]: layout.relativeTargetPath,
     [OUTSIDE_IN_FORMAT_KEY]: layout.format,
+  });
+}
+
+/** True only when the companion explicitly opts into rendered-file updates. */
+export function isOutsideInMarkdownEditingEnabled(source: string | MarkdownDocument): boolean {
+  if (typeof source !== 'string') {
+    return source.frontmatter?.[OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY] === true;
+  }
+  const yaml = rawFrontmatter(source);
+  const frontmatter = yaml === null ? null : parseFrontmatter(yaml);
+  return frontmatter?.[OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY] === true;
+}
+
+/**
+ * Opt a companion into or out of Markdown-driven regeneration while keeping
+ * the portable target relationship current.
+ */
+export function withOutsideInMarkdownEditing(
+  source: string,
+  layout: OutsideInLayout,
+  enabled = true,
+): string {
+  return setFrontmatterValues(withOutsideInMetadata(source, layout), {
+    [OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY]: enabled,
   });
 }
 
@@ -258,6 +303,44 @@ async function importMarkdownDocument(
   return { markdownDoc, container: new MemoryContentContainer() };
 }
 
+async function retainImportedOfficeTheme(
+  data: ArrayBuffer,
+  layout: OutsideInLayout,
+  markdownDoc: MarkdownDocument,
+  options: ConvertOptions,
+): Promise<string[]> {
+  if (layout.format !== 'docx' && layout.format !== 'xlsx') return [];
+  if (typeof markdownDoc.frontmatter?.['squisq-theme'] === 'string') return [];
+
+  try {
+    const [{ inferThemeFromFile }, themeCodec] = await Promise.all([
+      import('../infer/index.js'),
+      import('@bendyline/squisq/doc'),
+    ]);
+    const inferred = await inferThemeFromFile(data, {
+      format: layout.format,
+      nameHint: layout.stem,
+      signal: options.signal,
+    });
+    const payload = themeCodec.writeCustomThemesToFrontmatter([inferred.theme]);
+    if (payload) {
+      markdownDoc.frontmatter = {
+        ...(markdownDoc.frontmatter ?? {}),
+        [themeCodec.FRONTMATTER_CUSTOM_THEMES_KEY]: payload,
+        'squisq-theme': inferred.theme.id,
+      };
+    }
+    return inferred.warnings;
+  } catch (error: unknown) {
+    if (options.signal?.aborted) throw options.signal.reason ?? error;
+    return [
+      `The ${layout.format.toUpperCase()} content was imported, but its Office theme could not be retained: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    ];
+  }
+}
+
 /** Import a rendered target into editable Markdown plus any extracted media. */
 export async function importOutsideInDocument(
   source: { data: ArrayBuffer | Uint8Array; targetPath: string },
@@ -265,19 +348,21 @@ export async function importOutsideInDocument(
 ): Promise<ImportedOutsideInDocument> {
   options.signal?.throwIfAborted();
   const layout = requireLayout(source.targetPath);
+  const data = arrayBufferOf(source.data);
   const registry = options.registry ?? defaultRegistry();
-  const imported = await importMarkdownDocument(arrayBufferOf(source.data), layout, registry, {
+  const imported = await importMarkdownDocument(data, layout, registry, {
     ...options,
     registry,
     from: layout.format,
   });
+  const warnings = await retainImportedOfficeTheme(data, layout, imported.markdownDoc, options);
   options.signal?.throwIfAborted();
   const markdownOptions = options.formatOptions?.md;
   const markdown = withOutsideInMetadata(
     stringifyMarkdown(imported.markdownDoc, markdownOptions?.stringify),
     layout,
   );
-  return { layout, markdown, container: imported.container };
+  return { layout, markdown, container: imported.container, warnings };
 }
 
 /** Regenerate the user-facing target from its Markdown source. */
@@ -290,6 +375,13 @@ export async function renderOutsideInDocument(
   options: RenderOutsideInOptions = {},
 ): Promise<ConversionResult> {
   const layout = requireLayout(source.targetPath);
+  if (!isOutsideInMarkdownEditingEnabled(source.markdown)) {
+    throw new ConversionError(
+      'invalid-input',
+      `Outside-in editing is read-only until ${OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY}: true is set.`,
+      { format: layout.format },
+    );
+  }
   if (layout.format === 'html' && !options.html?.playerScriptPath) {
     throw new ConversionError(
       'missing-dependency',

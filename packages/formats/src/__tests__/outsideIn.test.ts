@@ -3,11 +3,14 @@ import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import {
   chooseOutsideInMarkdownPath,
   importOutsideInDocument,
+  isOutsideInMarkdownEditingEnabled,
   readOutsideInMetadata,
   renderOutsideInDocument,
   resolveOutsideInLayout,
   withOutsideInMetadata,
+  withOutsideInMarkdownEditing,
 } from '../outside-in/index.js';
+import { buildThemedDocx } from './pptxInferFixtures.js';
 
 describe('outside-in documents', () => {
   it('maps rendered files to case-preserving companions and slugged Markdown', () => {
@@ -21,6 +24,9 @@ describe('outside-in documents', () => {
       markdownFilename: 'tucson.md',
       markdownPath: 'decks/Tucson_files/tucson.md',
       relativeTargetPath: '../Tucson.pptx',
+      backupDirectory: 'decks/Tucson_files/.original',
+      backupFilename: 'original.pptx',
+      backupPath: 'decks/Tucson_files/.original/original.pptx',
     });
   });
 
@@ -45,7 +51,21 @@ describe('outside-in documents', () => {
       version: 1,
       target: '../battle-of-britain.html',
       format: 'html',
+      updateFromMarkdown: false,
     });
+  });
+
+  it('requires an explicit update-from-Markdown opt-in', async () => {
+    const layout = resolveOutsideInLayout('reports/Quarterly Review.docx')!;
+    const readOnly = withOutsideInMetadata('# Quarterly Review\n', layout);
+    expect(isOutsideInMarkdownEditingEnabled(readOnly)).toBe(false);
+    await expect(
+      renderOutsideInDocument({ targetPath: layout.targetPath, markdown: readOnly }),
+    ).rejects.toThrow('squisq-updatefrommarkdown: true');
+
+    const editable = withOutsideInMarkdownEditing(readOnly, layout);
+    expect(isOutsideInMarkdownEditingEnabled(editable)).toBe(true);
+    expect(readOutsideInMetadata(editable)?.updateFromMarkdown).toBe(true);
   });
 
   it('imports HTML into a frontmatter-linked Markdown source', async () => {
@@ -57,13 +77,25 @@ describe('outside-in documents', () => {
     expect(readOutsideInMetadata(imported.markdown)?.format).toBe('html');
   });
 
+  it('retains an imported Office theme in the Markdown frontmatter', async () => {
+    const imported = await importOutsideInDocument({
+      targetPath: 'reports/Quarterly Review.docx',
+      data: await buildThemedDocx(),
+    });
+    expect(imported.markdown).toContain('squisq-custom-themes:');
+    expect(imported.markdown).toContain('squisq-theme:');
+  });
+
   it('renders HTML against a shared runtime and companion media base', async () => {
     const container = new MemoryContentContainer();
     await container.writeFile('hero.png', new Uint8Array([1, 2, 3]), 'image/png');
     const result = await renderOutsideInDocument(
       {
         targetPath: 'history/battle-of-britain.html',
-        markdown: '# Battle\n\n![Map](hero.png)\n',
+        markdown: withOutsideInMarkdownEditing(
+          '# Battle\n\n![Map](hero.png)\n',
+          resolveOutsideInLayout('history/battle-of-britain.html')!,
+        ),
         container,
       },
       {

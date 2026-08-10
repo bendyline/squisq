@@ -89,11 +89,14 @@ export {
 // Outside-in editing (rendered file ↔ hidden Markdown companion directory)
 export {
   OUTSIDE_IN_FORMAT_IDS,
+  OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY,
   isOutsideInTargetPath,
+  isOutsideInMarkdownEditingEnabled,
   resolveOutsideInLayout,
   chooseOutsideInMarkdownPath,
   readOutsideInMetadata,
   withOutsideInMetadata,
+  withOutsideInMarkdownEditing,
   importOutsideInDocument,
   renderOutsideInDocument,
 } from './outside-in/index.js';
