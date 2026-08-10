@@ -345,6 +345,13 @@ export type {
 export { useMermaidDiagramData } from './mermaid/mermaidData.js';
 export type { MermaidDiagramData } from './mermaid/mermaidData.js';
 export {
+  adaptThemeToSurface,
+  mermaidSurfaceScheme,
+  resolveMermaidSurfaceTheme,
+  useMermaidSurfaceTheme,
+} from './mermaid/mermaidSurfaceTheme.js';
+export type { MermaidSurfaceScheme } from './mermaid/mermaidSurfaceTheme.js';
+export {
   renderMermaidDiagram,
   inspectMermaidSource,
   mermaidErrorMessage,

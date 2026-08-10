@@ -57,6 +57,11 @@ export interface FrameCaptureHandle {
   destroy: () => void;
 }
 
+interface CaptureMediaResolutionTracker {
+  provider: MediaProvider;
+  waitForSettled: () => Promise<boolean>;
+}
+
 /** Extension → MIME type map (hoisted to avoid per-image allocation). */
 const MIME_MAP: Record<string, string> = {
   jpg: 'image/jpeg',
@@ -397,6 +402,64 @@ export function createInlineProvider(images: Map<string, ArrayBuffer>): MediaPro
       sizes.clear();
     },
   };
+}
+
+/**
+ * Track provider-backed URL resolution without taking ownership of the caller's
+ * provider. Image layers first render their relative fallback and replace it
+ * from a React effect; frame capture must not decode that fallback while the
+ * provider operation is still in flight.
+ */
+export function createCaptureMediaResolutionTracker(
+  provider: MediaProvider,
+): CaptureMediaResolutionTracker {
+  const pending = new Set<Promise<void>>();
+  let resolutionGeneration = 0;
+  let observedGeneration = 0;
+  const trackedProvider: MediaProvider = {
+    resolveUrl(relativePath) {
+      resolutionGeneration += 1;
+      const resolution = provider.resolveUrl(relativePath);
+      const completion = resolution.then(
+        () => {
+          pending.delete(completion);
+        },
+        () => {
+          pending.delete(completion);
+        },
+      );
+      pending.add(completion);
+      return resolution;
+    },
+    listMedia: () => provider.listMedia(),
+    addMedia: (name, data, mimeType) => provider.addMedia(name, data, mimeType),
+    removeMedia: (relativePath) => provider.removeMedia(relativePath),
+    // The frame-capture hook retains ownership of inline providers and callers
+    // retain ownership of supplied providers. Context consumers must never
+    // dispose the wrapper and accidentally revoke the caller's live URLs.
+    dispose: () => undefined,
+  };
+
+  return {
+    provider: trackedProvider,
+    async waitForSettled() {
+      while (pending.size > 0) {
+        await Promise.all([...pending]);
+      }
+      const changed = resolutionGeneration !== observedGeneration;
+      observedGeneration = resolutionGeneration;
+      return changed;
+    },
+  };
+}
+
+/** Wait for provider URLs to reach the DOM before asking Chromium to decode images. */
+export async function waitForCaptureMediaResolutions(
+  tracker: CaptureMediaResolutionTracker | null,
+): Promise<void> {
+  while (await tracker?.waitForSettled()) {
+    await waitForVisualUpdate();
+  }
 }
 
 /** Keep html2canvas's document clone limited to the rendered player and styles. */
@@ -1400,6 +1463,7 @@ export function useFrameCapture(): FrameCaptureHandle {
   const rootRef = useRef<Root | null>(null);
   const renderAPIRef = useRef<SquisqRenderAPI | null>(null);
   const mediaProviderRef = useRef<MediaProvider | null>(null);
+  const mediaResolutionTrackerRef = useRef<CaptureMediaResolutionTracker | null>(null);
   const ownsMediaProviderRef = useRef(false);
   const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const captureBaseCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1447,6 +1511,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         containerRef.current = null;
         renderAPIRef.current = null;
         mediaProviderRef.current = null;
+        mediaResolutionTrackerRef.current = null;
         ownsMediaProviderRef.current = false;
         captureCanvasRef.current = null;
         captureBaseCanvasRef.current = null;
@@ -1533,6 +1598,10 @@ export function useFrameCapture(): FrameCaptureHandle {
         ? createInlineProvider(renderOptions.images)
         : (renderOptions.mediaProvider ?? null);
       mediaProviderRef.current = mediaProvider;
+      const mediaResolutionTracker = mediaProvider
+        ? createCaptureMediaResolutionTracker(mediaProvider)
+        : null;
+      mediaResolutionTrackerRef.current = mediaResolutionTracker;
       ownsMediaProviderRef.current = !!renderOptions.images;
 
       // Mount DocPlayer in renderMode via React
@@ -1577,7 +1646,13 @@ export function useFrameCapture(): FrameCaptureHandle {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
       if (mediaProvider) {
-        root.render(createElement(MediaContext.Provider, { value: mediaProvider }, playerElement));
+        root.render(
+          createElement(
+            MediaContext.Provider,
+            { value: mediaResolutionTracker!.provider },
+            playerElement,
+          ),
+        );
       } else {
         root.render(playerElement);
       }
@@ -1604,6 +1679,7 @@ export function useFrameCapture(): FrameCaptureHandle {
             if (!(captureRoot instanceof HTMLElement)) {
               throw new Error('Capture root element not found after player initialization.');
             }
+            await waitForCaptureMediaResolutions(mediaResolutionTrackerRef.current);
             await waitForCaptureAssets(captureRoot, decodedImagesRef.current);
             await primeIndeterminateCaptureVideos(captureRoot, primedCaptureVideosRef.current);
             clearTimeout(timeout);
@@ -1675,6 +1751,7 @@ export function useFrameCapture(): FrameCaptureHandle {
           `Player committed ${renderedTime.toFixed(6)}s while capture requested ${time.toFixed(6)}s.`,
         );
       }
+      await waitForCaptureMediaResolutions(mediaResolutionTrackerRef.current);
       await waitForCaptureAssets(root, decodedImagesRef.current);
 
       // Full-frame clips are always composited: captions are lifted into
@@ -1869,6 +1946,7 @@ export function useFrameCapture(): FrameCaptureHandle {
     }
     if (ownsMediaProviderRef.current) mediaProviderRef.current?.dispose();
     mediaProviderRef.current = null;
+    mediaResolutionTrackerRef.current = null;
     ownsMediaProviderRef.current = false;
     if (captureCanvasRef.current) {
       captureCanvasRef.current.width = 0;

@@ -59,6 +59,7 @@ import {
 } from './mermaidSourceAdapters';
 import type { MermaidFlowchartShapeId } from './mermaidShapes';
 import { DEFAULT_THEME } from '@bendyline/squisq/doc';
+import { useMermaidSurfaceTheme } from './mermaidSurfaceTheme';
 import type { MermaidThemeStore } from './mermaidThemeStore';
 
 const MIN_DIAGRAM_HEIGHT = 160;
@@ -109,11 +110,12 @@ export function MermaidDiagramWidget({
   themeStore,
 }: MermaidDiagramWidgetProps) {
   const data = useMermaidDiagramData(editor, blockId);
-  const theme = useSyncExternalStore(
+  const docTheme = useSyncExternalStore(
     themeStore?.subscribe ?? subscribeToDefaultTheme,
     themeStore?.getSnapshot ?? getDefaultTheme,
     themeStore?.getSnapshot ?? getDefaultTheme,
   );
+  const theme = useMermaidSurfaceTheme(host, docTheme);
   const [model, setModel] = useState<MermaidEditableModel | null>(null);
   const [selection, setSelection] = useState<MermaidSelection | null>(null);
   const [renaming, setRenaming] = useState<MermaidSelection | null>(null);
