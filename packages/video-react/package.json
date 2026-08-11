@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-video-react",
-  "version": "2.3.3",
+  "version": "2.3.4",
   "description": "React components for browser-based MP4 and animated-GIF export of Squisq documents",
   "license": "MIT",
   "author": "Bendyline",
