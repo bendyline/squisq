@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-cli",
-  "version": "2.5.3",
+  "version": "2.5.4",
   "description": "Squisq CLI — convert documents and render MP4 video or animated GIF",
   "license": "MIT",
   "author": "Bendyline",
@@ -59,7 +59,7 @@
   },
   "dependencies": {
     "@bendyline/squisq": "2.7.1",
-    "@bendyline/squisq-formats": "2.4.2",
+    "@bendyline/squisq-formats": "2.4.3",
     "@bendyline/squisq-video": "2.2.12",
     "commander": "12.1.0",
     "playwright-core": "1.61.1"
