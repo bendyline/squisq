@@ -377,9 +377,22 @@ export function defaultFormats(): FormatDefinition[] {
     // importContainer omitted: HTML import already inlines images as data URIs,
     // so there is nothing to extract into a container this wave.
     async exportDoc(input, options): Promise<ConversionResult> {
+      const raw = optionsFor(options, 'html');
+      if (raw.playerScriptPath) {
+        const { generateExternalHtml } = await import('../html/index.js');
+        const htmlText = generateExternalHtml(input.doc, {
+          ...raw,
+          playerScriptPath: raw.playerScriptPath,
+          title: options.title ?? input.baseName,
+          mode: raw.mode ?? 'static',
+          themeId: resolveThemeId(input, options),
+          themeRegistry: options.themeRegistry ?? raw.themeRegistry,
+        });
+        return ok(new TextEncoder().encode(htmlText), MIME.html);
+      }
+
       const playerScript = await requirePlayerScript(options, 'html');
       const { docToHtml } = await import('../html/index.js');
-      const raw = optionsFor(options, 'html');
       const containerImages = await collectContainerImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const htmlText = docToHtml(input.doc, {

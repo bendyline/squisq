@@ -86,6 +86,28 @@ export {
   resolveConversionLimits,
 } from './registry/index.js';
 
+// Outside-in editing (rendered file ↔ hidden Markdown companion directory)
+export {
+  OUTSIDE_IN_FORMAT_IDS,
+  OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY,
+  isOutsideInTargetPath,
+  isOutsideInMarkdownEditingEnabled,
+  resolveOutsideInLayout,
+  chooseOutsideInMarkdownPath,
+  readOutsideInMetadata,
+  withOutsideInMetadata,
+  withOutsideInMarkdownEditing,
+  importOutsideInDocument,
+  renderOutsideInDocument,
+} from './outside-in/index.js';
+export type {
+  OutsideInFormatId,
+  OutsideInLayout,
+  OutsideInMetadata,
+  ImportedOutsideInDocument,
+  RenderOutsideInOptions,
+} from './outside-in/index.js';
+
 // Shared bounded-decompression errors/options used by DBK and OOXML imports.
 export { ZipSafetyError } from './shared/zipSafety.js';
 export type {

@@ -91,15 +91,20 @@
   filter: drop-shadow(0 0 3px #4f46e5);
 }
 
-/* Mermaid's default lineColor is #333, which is nearly invisible against the
- * editor's dark canvas. Retheme default relationship strokes and arrowheads
- * while leaving explicitly authored edge strokes (linkStyle/style) intact. */
-.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg {
+/* Mermaid's default lineColor is #333, which is nearly invisible against a dark
+ * canvas. Retheme default relationship strokes and arrowheads while leaving
+ * explicitly authored edge strokes (linkStyle/style) intact.
+ *
+ * Keyed off the canvas's own `data-surface`, not the editor shell's theme: a
+ * light document theme rendered with "Theme styling: Fonts & colors" keeps a
+ * light diagram card inside the dark shell, and these overrides would wash its
+ * edges out. It also survives the maximize portal, which leaves the shell. */
+.squisq-mermaid-canvas[data-surface='dark'] .squisq-mermaid-svg {
   --squisq-mermaid-edge: #cbd5e1;
   --squisq-mermaid-edge-label-bg: rgba(15, 23, 42, 0.88);
 }
 
-.squisq-editor-shell[data-theme='dark']
+.squisq-mermaid-canvas[data-surface='dark']
   .squisq-mermaid-svg
   :is(
     path.flowchart-link,
@@ -112,25 +117,25 @@
   stroke: var(--squisq-mermaid-edge) !important;
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg :is(.marker, .arrowheadPath),
-.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg marker :is(path, polygon) {
+.squisq-mermaid-canvas[data-surface='dark'] .squisq-mermaid-svg :is(.marker, .arrowheadPath),
+.squisq-mermaid-canvas[data-surface='dark'] .squisq-mermaid-svg marker :is(path, polygon) {
   stroke: var(--squisq-mermaid-edge) !important;
 }
 
-.squisq-editor-shell[data-theme='dark']
+.squisq-mermaid-canvas[data-surface='dark']
   .squisq-mermaid-svg
   marker
   :is(path, polygon):not([fill='none']):not([style*='fill:none']):not([style*='fill: none']) {
   fill: var(--squisq-mermaid-edge) !important;
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg .edgeLabel,
-.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg .edgeLabel :is(span, p) {
+.squisq-mermaid-canvas[data-surface='dark'] .squisq-mermaid-svg .edgeLabel,
+.squisq-mermaid-canvas[data-surface='dark'] .squisq-mermaid-svg .edgeLabel :is(span, p) {
   color: var(--squisq-mermaid-edge) !important;
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg .edgeLabel p,
-.squisq-editor-shell[data-theme='dark'] .squisq-mermaid-svg .edgeLabel rect {
+.squisq-mermaid-canvas[data-surface='dark'] .squisq-mermaid-svg .edgeLabel p,
+.squisq-mermaid-canvas[data-surface='dark'] .squisq-mermaid-svg .edgeLabel rect {
   background: var(--squisq-mermaid-edge-label-bg) !important;
   fill: var(--squisq-mermaid-edge-label-bg) !important;
 }

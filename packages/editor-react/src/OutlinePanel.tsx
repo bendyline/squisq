@@ -28,15 +28,15 @@ import { moveHeadingSectionInSource, type OutlineDropPlacement } from './outline
 
 /**
  * Responsive default width for the outline pane, used when no fixed `width`
- * (or `--squisq-outline-width`) is supplied: never narrower than 260px, grows
+ * (or `--squisq-outline-width`) is supplied: never narrower than 180px, grows
  * with the viewport so it stretches out to fill horizontal space when there's
- * room, and caps at 460px so it never dominates the editor. A viewport unit
- * (rather than
- * a container unit) keeps the pane and the toolbar's view-tabs — which read the
- * same value — resolving to an identical width, so their right edges stay
- * aligned.
+ * room, and caps at 260px so it never dominates the editor — heading rows
+ * ellipsize, so the pane doesn't need to fit the longest title. A viewport
+ * unit (rather than a container unit) keeps the pane and the toolbar's
+ * view-tabs — which read the same value — resolving to an identical width,
+ * so their right edges stay aligned.
  */
-export const OUTLINE_RESPONSIVE_WIDTH = 'clamp(260px, 30vw, 460px)';
+export const OUTLINE_RESPONSIVE_WIDTH = 'clamp(180px, 15vw, 260px)';
 
 export interface OutlinePanelProps {
   /**

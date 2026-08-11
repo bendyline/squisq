@@ -1,11 +1,12 @@
 import { renderHook } from '@testing-library/react';
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
 import { resolveTheme } from '@bendyline/squisq/schemas';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   clearCaptionOverlayBackdrops,
   clearScheduledUnderlayBackdrops,
   coverSourceRect,
+  createCaptureMediaResolutionTracker,
   createCaptureSvgRasterCache,
   createInlineProvider,
   canCompositeScheduledPipVideos,
@@ -24,6 +25,7 @@ import {
   shouldIgnoreCaptureCaptionSibling,
   useFrameCapture,
   waitForCaptureAssets,
+  waitForCaptureMediaResolutions,
   waitForVisualUpdate,
 } from '../hooks/useFrameCapture';
 
@@ -143,6 +145,75 @@ describe('createInlineProvider', () => {
 
     expect(revoke.mock.calls.map(([url]) => url)).toEqual(['blob:1', 'blob:2', 'blob:3', 'blob:4']);
     expect(await provider.resolveUrl('photo.JPG')).toBe('photo.JPG');
+  });
+});
+
+describe('capture media resolution', () => {
+  it('retains a completed cached-resolution signal until the capture barrier observes it', async () => {
+    const provider: MediaProvider = {
+      resolveUrl: vi.fn(async () => 'blob:cached-hero'),
+      listMedia: async () => [],
+      addMedia: async () => {
+        throw new Error('Read-only');
+      },
+      removeMedia: async () => undefined,
+      dispose: vi.fn(),
+    };
+    const tracker = createCaptureMediaResolutionTracker(provider);
+
+    await expect(tracker.provider.resolveUrl('hero.png')).resolves.toBe('blob:cached-hero');
+
+    expect(await tracker.waitForSettled()).toBe(true);
+    expect(await tracker.waitForSettled()).toBe(false);
+  });
+
+  it('waits for a provider URL to reach the DOM before decoding its image', async () => {
+    let resolveUrl!: (value: string) => void;
+    const dispose = vi.fn();
+    const provider: MediaProvider = {
+      resolveUrl: vi.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveUrl = resolve;
+          }),
+      ),
+      listMedia: async () => [],
+      addMedia: async () => {
+        throw new Error('Read-only');
+      },
+      removeMedia: async () => undefined,
+      dispose,
+    };
+    const tracker = createCaptureMediaResolutionTracker(provider);
+    const root = document.createElement('div');
+    root.innerHTML = '<img src="./hero.png">';
+    const image = root.querySelector('img')!;
+    const decode = vi.fn(async () => {
+      if (image.getAttribute('src') !== 'blob:resolved-hero') {
+        throw new DOMException('The source image cannot be decoded.', 'EncodingError');
+      }
+    });
+    Object.defineProperty(image, 'decode', { configurable: true, value: decode });
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const resolution = tracker.provider
+      .resolveUrl('hero.png')
+      .then((url) => image.setAttribute('src', url));
+    const ready = waitForCaptureMediaResolutions(tracker).then(() => waitForCaptureAssets(root));
+    await Promise.resolve();
+
+    expect(decode).not.toHaveBeenCalled();
+    resolveUrl('blob:resolved-hero');
+    await resolution;
+    await ready;
+
+    expect(decode).toHaveBeenCalledOnce();
+    tracker.provider.dispose();
+    expect(dispose).not.toHaveBeenCalled();
   });
 });
 

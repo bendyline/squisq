@@ -16,7 +16,7 @@ rendering and spatial utilities. It is designed to be framework-agnostic at the 
 
 - `@bendyline/squisq` — Headless utilities (schemas, themes, templates, spatial math, markdown, storage, versions, jsonForm, icons, image-edit, transform, recommend)
 - `@bendyline/squisq-react` — React component library (DocPlayer, BlockRenderer, layers, hooks, LinearDocView, MarkdownRenderer, JsonView, inline media players, standalone IIFE bundle)
-- `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV import/export; shared OOXML infrastructure; format registry + `convert()`; ContentContainer ZIP serialization; theme + layout inference from office files via `/infer`)
+- `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV import/export; shared OOXML infrastructure; format registry + `convert()`; outside-in rendered-file/companion-Markdown contract via `/outside-in`; ContentContainer ZIP serialization; theme + layout inference from office files via `/infer`)
 - `@bendyline/squisq-editor-react` — React editor shell (Monaco raw, Tiptap WYSIWYG with Monaco code-fence insets, block preview, toolbar, theme/template pickers, version history, ASCII + Mermaid diagram editors, image editor, JsonEditor) + browser-based audio/camera/screen recording (MediaRecorder + getUserMedia + getDisplayMedia, persists into a `ContentContainer`)
 - `@bendyline/squisq-video` — Cross-runtime render/timeline/preset helpers, shared GIF palette arguments, and a browser-only ffmpeg.wasm MP4 encoder. Node MP4/GIF export uses the CLI's native FFmpeg path.
 - `@bendyline/squisq-video-react` — React components for browser-based MP4/GIF export (WebCodecs primary, ffmpeg.wasm fallback/palette pass; MP4 muxes narration audio, GIF is silent)
@@ -196,6 +196,8 @@ squisq/
         xlsx/               # XLSX import + export (SpreadsheetML; export is tables-only → ArrayBuffer)
         registry/           # Format registry + convert() front door (FormatDefinition per format id,
                             #   ConversionResult, ConversionError)
+        outside-in/         # Rendered target ↔ hidden `_files/<slug>.md` layout/frontmatter
+                            #   contract plus registry-backed import/export and shared HTML runtime
         csv/                # CSV import + export (parseCsv, csvToMarkdownDoc, markdownDocToCsv)
         container/          # ContentContainer ZIP serialization (containerToZip, zipToContainer)
         infer/              # Theme inference from file imports: inferThemeFromFile (DOCX/PPTX/XLSX

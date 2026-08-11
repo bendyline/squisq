@@ -9,6 +9,7 @@ import {
   type MermaidSelection,
 } from './mermaidModel';
 import { mermaidErrorMessage, renderMermaidDiagram } from './mermaidRenderer';
+import { mermaidSurfaceScheme } from './mermaidSurfaceTheme';
 import type { Theme } from '@bendyline/squisq/schemas';
 
 let renderSequence = 0;
@@ -702,6 +703,10 @@ export function MermaidDiagramCanvas({
     <div
       className="squisq-mermaid-canvas"
       aria-label={`${diagramType} diagram editor`}
+      // The canvas paints its own surface, which is not always the editor
+      // chrome's. Publish which one it landed on so the dark retheming of
+      // Mermaid's own output keys off the surface rather than the shell.
+      data-surface={mermaidSurfaceScheme(theme)}
       style={{ background: theme.colors.backgroundLight, color: theme.colors.text }}
     >
       <SceneViewControls
