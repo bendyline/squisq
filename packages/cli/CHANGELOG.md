@@ -1,3 +1,14 @@
+## @bendyline/squisq-cli [2.5.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.5.4...@bendyline/squisq-cli@2.5.5) (2026-08-14)
+
+### Bug Fixes
+
+* Update XML dom dependencies ([#45](https://github.com/bendyline/squisq/issues/45)) ([944c808](https://github.com/bendyline/squisq/commit/944c808b7e56fdc9562d76f860db9a00e2eda798))
+
+
+### Dependencies
+
+* **@bendyline/squisq-formats:** upgraded to 2.4.4
+
 ## @bendyline/squisq-cli [2.5.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.5.3...@bendyline/squisq-cli@2.5.4) (2026-08-11)
 
 
