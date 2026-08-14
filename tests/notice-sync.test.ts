@@ -55,7 +55,7 @@ describe('third-party notices stay in sync', () => {
   });
 
   it('records Mermaid and its verified license', () => {
-    expect(notice).toMatch(/\|\s*mermaid\s*\|\s*11\.16\.0\s*\|\s*MIT\s*\|/);
+    expect(notice).toMatch(/\|\s*mermaid\s*\|\s*11\.16\.1\s*\|\s*MIT\s*\|/);
     expect(notice).toContain('Copyright (c) 2014-2022 Knut Sveidqvist');
   });
 

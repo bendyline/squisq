@@ -105,7 +105,7 @@
     "@tiptap/react": "2.27.2",
     "@tiptap/starter-kit": "2.27.2",
     "@tiptap/suggestion": "2.27.2",
-    "mermaid": "11.16.0",
+    "mermaid": "11.16.1",
     "type-fest": "4.41.0"
   },
   "devDependencies": {
