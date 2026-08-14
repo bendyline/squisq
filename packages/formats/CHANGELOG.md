@@ -1,3 +1,9 @@
+## @bendyline/squisq-formats [2.4.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.4.3...@bendyline/squisq-formats@2.4.4) (2026-08-14)
+
+### Bug Fixes
+
+* Update XML dom dependencies ([#45](https://github.com/bendyline/squisq/issues/45)) ([944c808](https://github.com/bendyline/squisq/commit/944c808b7e56fdc9562d76f860db9a00e2eda798))
+
 ## @bendyline/squisq-formats [2.4.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.4.2...@bendyline/squisq-formats@2.4.3) (2026-08-11)
 
 ### Bug Fixes

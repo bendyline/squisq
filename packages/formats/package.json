@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-formats",
-  "version": "2.4.3",
+  "version": "2.4.4",
   "description": "Document format converters — DOCX, PDF, OOXML import/export",
   "license": "MIT",
   "author": "Bendyline",
