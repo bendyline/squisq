@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.7.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.7.1...@bendyline/squisq-react@2.7.2) (2026-08-14)
+
+### Bug Fixes
+
+* Update XML dom dependencies ([#45](https://github.com/bendyline/squisq/issues/45)) ([944c808](https://github.com/bendyline/squisq/commit/944c808b7e56fdc9562d76f860db9a00e2eda798))
+
 ## @bendyline/squisq-react [2.7.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.7.0...@bendyline/squisq-react@2.7.1) (2026-08-01)
 
 ### Bug Fixes
