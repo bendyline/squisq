@@ -59,7 +59,7 @@ license terms.
 | ----------------- | --------- | ----------------------- | ---------------------------------- |
 | @bendyline/squisq | workspace | MIT                     | (internal)                         |
 | @pdf-lib/fontkit  | 1.1.1     | MIT                     | https://github.com/Hopding/fontkit |
-| @xmldom/xmldom    | 0.9.10    | MIT                     | https://github.com/xmldom/xmldom   |
+| @xmldom/xmldom    | 0.9.11    | MIT                     | https://github.com/xmldom/xmldom   |
 | jszip             | 3.10.1    | MIT OR GPL-3.0-or-later | https://github.com/Stuk/jszip      |
 | pdf-lib           | 1.17.1    | MIT                     | https://pdf-lib.js.org             |
 | pdfjs-dist        | 4.10.38   | Apache-2.0              | https://mozilla.github.io/pdf.js   |
@@ -89,7 +89,7 @@ license terms.
 | @tiptap/react                  | 2.27.2    | MIT                           | https://tiptap.dev                           |
 | @tiptap/starter-kit            | 2.27.2    | MIT                           | https://tiptap.dev                           |
 | @tiptap/suggestion             | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| mermaid                        | 11.16.0   | MIT                           | https://github.com/mermaid-js/mermaid        |
+| mermaid                        | 11.16.1   | MIT                           | https://github.com/mermaid-js/mermaid        |
 | type-fest                      | 4.41.0    | MIT OR CC0-1.0                | https://github.com/sindresorhus/type-fest    |
 | monaco-editor _(peer)_         | >=0.50.0  | MIT                           | https://github.com/microsoft/monaco-editor   |
 | react _(peer)_                 | ^18 / ^19 | MIT                           | https://reactjs.org                          |

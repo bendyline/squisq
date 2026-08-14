@@ -102,7 +102,7 @@ COMPONENTS
 - mdast-util-phrasing@4.1.0 (MIT); files: license
 - mdast-util-to-markdown@2.1.2 (MIT); files: license
 - mdast-util-to-string@4.0.0 (MIT); files: license
-- mermaid@11.16.0 (MIT); files: LICENSE
+- mermaid@11.16.1 (MIT); files: LICENSE
 - micromark-core-commonmark@2.0.3 (MIT); files: license
 - micromark-extension-directive@3.0.2 (MIT); files: license
 - micromark-extension-frontmatter@2.0.0 (MIT); files: license
@@ -2987,7 +2987,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ==============================================================================
-mermaid@11.16.0 - LICENSE
+mermaid@11.16.1 - LICENSE
 ==============================================================================
 The MIT License (MIT)
 

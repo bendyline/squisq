@@ -9,7 +9,7 @@ Third-party components remain under their respective license terms.
 | Package                       | Version              | License                       | Repository                                  |
 | ----------------------------- | -------------------- | ----------------------------- | ------------------------------------------- |
 | @fortawesome/fontawesome-free | 7.2.0                | CC-BY-4.0 AND OFL-1.1 AND MIT | https://github.com/FortAwesome/Font-Awesome |
-| mermaid                       | 11.16.0              | MIT                           | https://github.com/mermaid-js/mermaid       |
+| mermaid                       | 11.16.1              | MIT                           | https://github.com/mermaid-js/mermaid       |
 | preact _(bundled)_            | 10.29.0              | MIT                           | https://github.com/preactjs/preact          |
 | react _(peer)_                | ^18.0.0 \|\| ^19.0.0 | MIT                           | https://github.com/facebook/react           |
 | react-dom _(peer)_            | ^18.0.0 \|\| ^19.0.0 | MIT                           | https://github.com/facebook/react           |
