@@ -40,6 +40,17 @@ describe('CLI format registry', () => {
     expect(registry.byExtension('.GIF')!.id).to.equal('gif');
   });
 
+  it('registers the dashboard PNG image as a CLI-only rendered format', () => {
+    const registry = createCliRegistry();
+    const png = registry.get('png');
+    expect(png).to.not.equal(undefined);
+    expect(png!.label).to.equal('Dashboard Image');
+    expect(png!.mimeType).to.equal('image/png');
+    expect(png!.extensions).to.include('.png');
+    expect(png!.exportDoc).to.be.a('function');
+    expect(registry.byExtension('.PNG')!.id).to.equal('png');
+  });
+
   it('pre-binds convert() end-to-end for a non-mp4 conversion', async () => {
     const result = await convert(
       { kind: 'markdown', markdown: '# Hello\n\nWorld', baseName: 'greeting' },
@@ -77,7 +88,7 @@ describe('CLI format registry', () => {
     expect(htmlText).to.include('SquisqPlayer');
   });
 
-  for (const format of ['mp4', 'gif'] as const) {
+  for (const format of ['mp4', 'gif', 'png'] as const) {
     it(`stops a pre-aborted ${format} conversion before browser or FFmpeg work`, async () => {
       const controller = new AbortController();
       const reason = new Error(`cancel ${format}`);

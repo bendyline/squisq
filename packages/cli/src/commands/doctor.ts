@@ -46,7 +46,9 @@ const defaultDoctorRuntime: DoctorRuntime = {
 export function registerDoctorCommand(program: Command): void {
   program
     .command('doctor')
-    .description('Check that ffmpeg and Playwright Chromium are available for video rendering')
+    .description(
+      'Check that ffmpeg and Playwright Chromium are available for video/image rendering',
+    )
     .action(async () => {
       const allPresent = await runDoctor();
       process.exitCode = allPresent ? 0 : 1;
@@ -54,7 +56,8 @@ export function registerDoctorCommand(program: Command): void {
 }
 
 export async function runDoctor(runtime: DoctorRuntime = defaultDoctorRuntime): Promise<boolean> {
-  let allPresent = true;
+  let ffmpegOk = true;
+  let chromiumOk = true;
 
   // ── Node ─────────────────────────────────────────────────────────
   runtime.log(`Node:     ${runtime.nodeVersion}`);
@@ -68,7 +71,7 @@ export async function runDoctor(runtime: DoctorRuntime = defaultDoctorRuntime): 
         `ffmpeg:   ${detection.path} (source: ${detection.source}) — ${version ?? 'version unknown'}`,
       );
     } else {
-      allPresent = false;
+      ffmpegOk = false;
       runtime.log('ffmpeg:   not found.');
       runtime.log('          Install it with:');
       runtime.log('            macOS:   brew install ffmpeg');
@@ -78,7 +81,7 @@ export async function runDoctor(runtime: DoctorRuntime = defaultDoctorRuntime): 
     }
   } catch (err: unknown) {
     // detectFfmpegDetailed throws when SQUISQ_FFMPEG is set but broken
-    allPresent = false;
+    ffmpegOk = false;
     runtime.log(`ffmpeg:   ${err instanceof Error ? err.message : String(err)}`);
   }
 
@@ -88,12 +91,18 @@ export async function runDoctor(runtime: DoctorRuntime = defaultDoctorRuntime): 
     await browser.close();
     runtime.log(`Chromium: available (${browser.executablePath})`);
   } catch (err: unknown) {
-    allPresent = false;
+    chromiumOk = false;
     const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
     runtime.log(`Chromium: not available — ${detail}`);
     runtime.log('          Run: npx playwright install chromium');
   }
 
+  // ── Feature readiness ────────────────────────────────────────────
+  // Video/GIF need both tools; the dashboard PNG image needs Chromium only.
+  runtime.log(`video/gif (ffmpeg + Chromium): ${ffmpegOk && chromiumOk ? 'ready' : 'not ready'}`);
+  runtime.log(`image PNG (Chromium only):     ${chromiumOk ? 'ready' : 'not ready'}`);
+
+  const allPresent = ffmpegOk && chromiumOk;
   runtime.log(allPresent ? '\n✓ All checks passed' : '\n✗ Some checks failed');
   return allPresent;
 }

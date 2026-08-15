@@ -48,8 +48,20 @@ import animationCss from './styles/doc-animations.css';
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface MountOptions {
-  /** Rendering mode: 'slideshow' (interactive, default) or 'static' (scrollable) */
-  mode?: 'slideshow' | 'static';
+  /**
+   * Rendering mode: 'slideshow' (interactive, default), 'static'
+   * (scrollable page), or 'dashboard' (one canvas of arranged blocks).
+   */
+  mode?: 'slideshow' | 'static' | 'dashboard';
+  /** Dashboard-mode options (ignored by the other modes). */
+  dashboard?: {
+    /** Layout id or 'auto'. Overrides doc frontmatter. */
+    layout?: string;
+    /** Title-band override. Overrides doc frontmatter. */
+    title?: boolean;
+    /** Host-supplied title fallback (typically the file name). */
+    documentTitle?: string;
+  };
   /** Base path for resolving relative media URLs */
   basePath?: string;
   /**
@@ -279,6 +291,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
 
   const {
     mode = 'slideshow',
+    dashboard,
     basePath = '.',
     images,
     audio,
@@ -302,7 +315,12 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
   // Build the media provider if images are provided
   const mediaProvider = images ? createInlineMediaProvider(images, basePath) : null;
   handles.get(element)?.cancel();
-  const handle = createPlayerHandle(element, mode === 'slideshow' && renderMode);
+  // Dashboard mounts publish a render API too (single-frame capture waits
+  // on it), so both player-backed modes expect one in render mode.
+  const handle = createPlayerHandle(
+    element,
+    (mode === 'slideshow' || mode === 'dashboard') && renderMode,
+  );
   handles.set(element, handle);
 
   let content: ReturnType<typeof createElement>;
@@ -318,10 +336,27 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       onCopyCode,
     });
   } else {
+    // Dashboard canvases fill the host element's box: the render page pins
+    // `#squisq-root` to the export dimensions, and a live host sizes it with
+    // CSS. Without this, DocPlayer's render-mode fallback (landscape) would
+    // letterbox a square/portrait dashboard inside the page.
+    const hostRect = mode === 'dashboard' ? element.getBoundingClientRect() : undefined;
+    const dashboardViewport =
+      hostRect && hostRect.width > 0 && hostRect.height > 0
+        ? {
+            width: Math.round(hostRect.width),
+            height: Math.round(hostRect.height),
+            name: 'Host viewport',
+          }
+        : undefined;
     content = createElement(DocPlayer, {
       doc: finalDoc,
       basePath,
-      displayMode: 'slideshow',
+      displayMode: mode === 'dashboard' ? 'dashboard' : 'slideshow',
+      dashboardLayout: dashboard?.layout,
+      dashboardShowTitle: dashboard?.title,
+      dashboardDocumentTitle: dashboard?.documentTitle,
+      forceViewport: dashboardViewport,
       autoPlay: renderMode ? false : autoPlay,
       showControls: !renderMode,
       renderMode,

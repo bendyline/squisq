@@ -42,6 +42,10 @@
       "types": "./dist/cover-image/index.d.ts",
       "import": "./dist/cover-image/index.js"
     },
+    "./dashboard-image": {
+      "types": "./dist/dashboard-image/index.d.ts",
+      "import": "./dist/dashboard-image/index.js"
+    },
     "./hooks": {
       "types": "./dist/hooks/index.d.ts",
       "import": "./dist/hooks/index.js"

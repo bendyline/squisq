@@ -1625,6 +1625,12 @@ export function useFrameCapture(): FrameCaptureHandle {
         autoPlay: false,
         forceViewport: { width, height, name: 'export' },
         theme: renderOptions.theme,
+        // Undefined preserves DocPlayer's default; 'dashboard' mounts the
+        // one-canvas dashboard rendition for single-frame capture.
+        displayMode: renderOptions.displayMode,
+        dashboardLayout: renderOptions.dashboard?.layout,
+        dashboardShowTitle: renderOptions.dashboard?.title,
+        dashboardDocumentTitle: renderOptions.dashboard?.documentTitle,
         videoPresentation: renderOptions.videoPresentation,
         pipSize: renderOptions.pipSize,
         pipShape: renderOptions.pipShape,

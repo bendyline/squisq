@@ -48,6 +48,8 @@ export type {
   ThemeInheritance,
   BlockTagVisibility,
   LayoutMode,
+  CoverImageSaveOutput,
+  DashboardImageSaveOutput,
 } from './EditorContext.js';
 
 // Block-at-a-time primitives — reusable outside EditorShell. `useBlockNavigator`

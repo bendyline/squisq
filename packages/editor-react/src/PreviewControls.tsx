@@ -59,10 +59,17 @@ import {
   createTemplateContext,
   expandCoverBlock,
   resolveCoverSlideSettings,
+  DASHBOARD_AUTO_LAYOUT_ID,
+  listDashboardLayouts,
   type CoverSlidePlayback,
   type CoverSlideTemplate,
+  type DashboardLayoutSummary,
 } from '@bendyline/squisq/doc';
 import { CoverImageExportModal } from '@bendyline/squisq-video-react/cover-image';
+import {
+  DashboardImageExportModal,
+  type DashboardResolutionId,
+} from '@bendyline/squisq-video-react/dashboard-image';
 import { useEditorContext } from './EditorContext';
 import {
   useCustomThemes,
@@ -126,6 +133,16 @@ export interface PreviewSettings {
   activeVideoLoop: boolean;
   /** Enable/disable automatic Video-mode playback restart. */
   setVideoLoopEnabled: (enabled: boolean) => void;
+  /** Dashboard layout id, or `'auto'` for the block-count auto-pick. */
+  activeDashboardLayout: string;
+  /** Set (and persist) the dashboard layout; null resets to auto. */
+  setDashboardLayout: (id: string | null) => void;
+  /** Whether the dashboard renders the document-title band. */
+  activeDashboardTitle: boolean;
+  /** Enable/disable (and persist) the dashboard title band. */
+  setDashboardTitleEnabled: (enabled: boolean) => void;
+  /** Layouts available to the doc: customs first, then built-ins. */
+  dashboardLayoutOptions: DashboardLayoutSummary[];
   /** User-authored themes (doc + browser library) for the picker's "Custom" group. */
   customThemes: Theme[];
   /** Open the custom-theme designer for a theme (or null to create a new one). */
@@ -197,6 +214,7 @@ function resolveDisplayMode(value: unknown): DisplayMode | null {
   if (v === 'video' || v === 'slideshow' || v === 'linear' || v === 'narrate') return v;
   if (v === 'slides' || v === 'presentation' || v === 'deck') return 'slideshow';
   if (v === 'teleprompter' || v === 'prompter') return 'narrate';
+  if (v === 'dashboard' || v === 'dash') return 'dashboard';
   // Frontmatter uses product-facing names: Document is the plain text/HTML
   // preview, Page is the styled Squisq page view. The raw DisplayMode values
   // are older and remain stable for the public React API.
@@ -293,6 +311,19 @@ function resolveFrontmatterBoolean(value: unknown): boolean | null {
   if (v === 'true' || v === 'yes' || v === 'on' || v === 'show' || v === 'visible') return true;
   if (v === 'false' || v === 'no' || v === 'off' || v === 'hide' || v === 'hidden') return false;
   return null;
+}
+
+/**
+ * Any non-empty string is admitted as a dashboard layout id — validity is
+ * checked at materialize time so an unknown id degrades to auto with a
+ * diagnostic rather than silently snapping back here.
+ */
+function resolveDashboardLayoutId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === 'auto' || normalized === 'default') return DASHBOARD_AUTO_LAYOUT_ID;
+  return normalized;
 }
 
 // ── Provider ─────────────────────────────────────────────────────
@@ -403,7 +434,9 @@ export function PreviewSettingsProvider({
   const [selectedPreset, setSelectedPreset] = useState<ViewportPreset | null>(null);
   useEffect(() => setSelectedPreset(null), [fmPreset]);
   const playbackDefaultPreset =
-    activeDisplayMode === 'slideshow' || activeDisplayMode === 'video'
+    activeDisplayMode === 'slideshow' ||
+    activeDisplayMode === 'video' ||
+    activeDisplayMode === 'dashboard'
       ? defaultViewportPreset
       : 'landscape';
   const activePreset = selectedPreset ?? fmPreset ?? playbackDefaultPreset;
@@ -865,6 +898,73 @@ export function PreviewSettingsProvider({
     [designer.open, designer.editing, handleDesignerSave, closeThemeDesigner],
   );
 
+  // Dashboard mode — layout choice + title band, persisted with the same
+  // Pattern-A idiom as every other scalar setting. The layout options list
+  // is customs (hand-authored `squisq-dashboard-layouts`) then built-ins.
+  const fmDashboardLayout = useMemo(
+    () =>
+      resolveDashboardLayoutId(
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.dashboardLayout.canonical,
+          FRONTMATTER_SETTING_KEYS.dashboardLayout.legacy,
+        ),
+      ),
+    [frontmatter],
+  );
+  const [selectedDashboardLayout, setSelectedDashboardLayout] = useState<string | null>(null);
+  useEffect(() => setSelectedDashboardLayout(null), [fmDashboardLayout]);
+  const activeDashboardLayout =
+    selectedDashboardLayout ?? fmDashboardLayout ?? FRONTMATTER_SETTING_DEFAULTS.dashboardLayout;
+  const handleSetDashboardLayout = useCallback(
+    (id: string | null) => {
+      const next = resolveDashboardLayoutId(id) ?? FRONTMATTER_SETTING_DEFAULTS.dashboardLayout;
+      setSelectedDashboardLayout(next);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.dashboardLayout.canonical]: omitFrontmatterDefault(
+          next,
+          FRONTMATTER_SETTING_DEFAULTS.dashboardLayout,
+        ),
+        [FRONTMATTER_SETTING_KEYS.dashboardLayout.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
+  const fmDashboardTitle = useMemo(
+    () =>
+      resolveFrontmatterBoolean(
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.dashboardTitle.canonical,
+          FRONTMATTER_SETTING_KEYS.dashboardTitle.legacy,
+        ),
+      ),
+    [frontmatter],
+  );
+  const [selectedDashboardTitle, setSelectedDashboardTitle] = useState<boolean | null>(null);
+  useEffect(() => setSelectedDashboardTitle(null), [fmDashboardTitle]);
+  const activeDashboardTitle =
+    selectedDashboardTitle ?? fmDashboardTitle ?? FRONTMATTER_SETTING_DEFAULTS.dashboardTitle;
+  const handleSetDashboardTitleEnabled = useCallback(
+    (enabled: boolean) => {
+      setSelectedDashboardTitle(enabled);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.dashboardTitle.canonical]: omitFrontmatterDefault(
+          enabled,
+          FRONTMATTER_SETTING_DEFAULTS.dashboardTitle,
+        ),
+        [FRONTMATTER_SETTING_KEYS.dashboardTitle.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
+  const dashboardLayoutOptions = useMemo(
+    () => listDashboardLayouts({ frontmatter }),
+    [frontmatter],
+  );
+
   const value = useMemo<PreviewSettings>(
     () => ({
       activePreset,
@@ -891,6 +991,11 @@ export function PreviewSettingsProvider({
       setPipPosition: handlePipPosition,
       activeVideoLoop,
       setVideoLoopEnabled: handleSetVideoLoopEnabled,
+      activeDashboardLayout,
+      setDashboardLayout: handleSetDashboardLayout,
+      activeDashboardTitle,
+      setDashboardTitleEnabled: handleSetDashboardTitleEnabled,
+      dashboardLayoutOptions,
       activeCoverSlide,
       setCoverSlideEnabled: handleSetCoverSlideEnabled,
       activeCoverSlideTemplate,
@@ -920,6 +1025,9 @@ export function PreviewSettingsProvider({
       activePipShape,
       activePipPosition,
       activeVideoLoop,
+      activeDashboardLayout,
+      activeDashboardTitle,
+      dashboardLayoutOptions,
       activeCoverSlide,
       activeCoverSlideTemplate,
       activeCoverSlideDuration,
@@ -932,6 +1040,8 @@ export function PreviewSettingsProvider({
       handlePipShape,
       handlePipPosition,
       handleSetVideoLoopEnabled,
+      handleSetDashboardLayout,
+      handleSetDashboardTitleEnabled,
       handleSetCoverSlideEnabled,
       handleSetCoverSlideTemplate,
       handleSetCoverSlideDuration,
@@ -1039,6 +1149,12 @@ const DISPLAY_MODE_OPTIONS: {
     summary: 'Scroll through the fully designed page.',
   },
   {
+    key: 'dashboard',
+    label: 'Dashboard',
+    icon: 'fa-solid fa-table-cells-large',
+    summary: 'See every block arranged on one canvas.',
+  },
+  {
     key: 'page',
     label: 'Document',
     icon: 'fa-solid fa-align-left',
@@ -1071,26 +1187,42 @@ const SUMMARIZE_TOOLTIP =
  * longest, but
  * still collapses into the same menu when the toolbar is very constrained.
  */
-type ControlKey = 'format' | 'video' | 'theme' | 'transform' | 'captions' | 'loop' | 'cover';
+type ControlKey =
+  | 'format'
+  | 'layout'
+  | 'video'
+  | 'theme'
+  | 'transform'
+  | 'captions'
+  | 'loop'
+  | 'cover'
+  | 'dashboardImage';
 const CONTROL_KEYS: ControlKey[] = [
   'format',
+  'layout',
   'video',
   'theme',
   'transform',
   'captions',
   'loop',
   'cover',
+  'dashboardImage',
 ];
 
 /**
  * Controls that apply to the active display mode. Page (`linear`) is a
  * variable-height HTML rendition: the aspect-ratio format switch only
  * affects embedded canvas sections (which default sensibly) and captions
- * never applied, so both are hidden there. Cover, Theme, and Summarize
- * remain live in every mode.
+ * never applied, so both are hidden there. Dashboard is a static canvas
+ * with no clock, captions, or managed cover — it shows the format switch,
+ * its own layout picker, theme, and summarize. Cover, Theme, and Summarize
+ * remain live in every other mode.
  */
 function controlKeysForMode(displayMode: string, hasVideoMedia: boolean): ControlKey[] {
-  let keys = CONTROL_KEYS;
+  if (displayMode === 'dashboard') {
+    return ['format', 'layout', 'theme', 'transform', 'dashboardImage'];
+  }
+  let keys = CONTROL_KEYS.filter((key) => key !== 'layout' && key !== 'dashboardImage');
   if (displayMode !== 'video') {
     keys = keys.filter((key) => key !== 'loop');
   }
@@ -1164,9 +1296,60 @@ const COVER_MENU_WIDTH = 336;
 const COVER_MENU_GAP = 4;
 const COVER_MENU_MARGIN = 8;
 
+/** Aspect preset → the dashboard export dialog's initial resolution. */
+const DASHBOARD_EXPORT_RESOLUTION_BY_PRESET: Record<ViewportPreset, DashboardResolutionId> = {
+  landscape: 'fhd',
+  portrait: 'portrait',
+  square: 'square',
+  standard: 'standard',
+};
+
+/**
+ * "Export dashboard as image…" toolbar button (Dashboard mode only) — opens
+ * the DashboardImageExportModal seeded from the active preview settings.
+ */
+function DashboardImageExportControl({ compact }: { compact: boolean }) {
+  const settings = usePreviewSettings();
+  const { colorScheme, doc, fileName, mediaProvider, saveDashboardImageOutput } =
+    useEditorContext();
+  const [exportOpen, setExportOpen] = useState(false);
+  return (
+    <div className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}>
+      {compact && <label style={labelStyle}>Export:</label>}
+      <button
+        type="button"
+        className="squisq-toolbar-button"
+        disabled={!doc}
+        onClick={() => setExportOpen(true)}
+        aria-label="Export dashboard as image"
+        title="Export dashboard as image"
+      >
+        <Icon icon="fa-solid fa-file-image" />
+      </button>
+      {exportOpen &&
+        doc &&
+        createPortal(
+          <DashboardImageExportModal
+            doc={doc}
+            mediaProvider={mediaProvider}
+            theme={settings.activeTheme}
+            defaultResolution={DASHBOARD_EXPORT_RESOLUTION_BY_PRESET[settings.activePreset]}
+            defaultLayout={settings.activeDashboardLayout}
+            defaultShowTitle={settings.activeDashboardTitle}
+            defaultFileName={fileName}
+            colorScheme={colorScheme}
+            saveOutput={saveDashboardImageOutput}
+            onClose={() => setExportOpen(false)}
+          />,
+          document.body,
+        )}
+    </div>
+  );
+}
+
 function CoverSlideMenuControl({ compact }: { compact: boolean }) {
   const settings = usePreviewSettings();
-  const { colorScheme, doc, fileName, mediaProvider } = useEditorContext();
+  const { colorScheme, doc, fileName, mediaProvider, saveCoverImageOutput } = useEditorContext();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
@@ -1430,6 +1613,7 @@ function CoverSlideMenuControl({ compact }: { compact: boolean }) {
             defaultHeight={settings.activeViewport.height}
             defaultFileName={fileName}
             colorScheme={colorScheme}
+            saveOutput={saveCoverImageOutput}
             onClose={() => setExportOpen(false)}
           />,
           document.body,
@@ -1573,6 +1757,48 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
             <PreviewFormatSwitch />
           </div>
         );
+      case 'layout': {
+        const builtIns = s.dashboardLayoutOptions.filter((option) => !option.custom);
+        const customs = s.dashboardLayoutOptions.filter((option) => option.custom);
+        return (
+          <div
+            key="layout"
+            className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}
+          >
+            <label style={labelStyle}>Layout:</label>
+            <select
+              aria-label="Dashboard layout"
+              style={selectStyle}
+              value={s.activeDashboardLayout}
+              onChange={(event) => s.setDashboardLayout(event.target.value)}
+            >
+              <option value={DASHBOARD_AUTO_LAYOUT_ID}>Auto</option>
+              {builtIns.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {`${option.label} (${option.capacity})`}
+                </option>
+              ))}
+              {customs.length > 0 && (
+                <optgroup label="Custom">
+                  {customs.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {`${option.label} (${option.capacity})`}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+            <label className="squisq-preview-checkbox">
+              <input
+                type="checkbox"
+                checked={s.activeDashboardTitle}
+                onChange={(event) => s.setDashboardTitleEnabled(event.target.checked)}
+              />
+              <span>Title</span>
+            </label>
+          </div>
+        );
+      }
       case 'video': {
         const showPipOptions = s.activeVideoPresentation === 'picture-in-picture';
         return (
@@ -1758,6 +1984,8 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
         );
       case 'cover':
         return <CoverSlideMenuControl key="cover" compact={compact} />;
+      case 'dashboardImage':
+        return <DashboardImageExportControl key="dashboardImage" compact={compact} />;
     }
   };
 

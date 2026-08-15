@@ -35,6 +35,10 @@ describe('@bendyline/squisq-react exports', () => {
     expect(typeof squisqReact.LinearDocView).toBe('function');
   });
 
+  it('exports DashboardView', () => {
+    expect(typeof squisqReact.DashboardView).toBe('function');
+  });
+
   it('exports hooks', () => {
     expect(typeof squisqReact.useAudioSync).toBe('function');
     expect(typeof squisqReact.useDocPlayback).toBe('function');

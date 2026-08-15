@@ -378,6 +378,13 @@ export interface BuildPreviewDocOptions {
    * the placeholder block id.
    */
   documentTitle?: string;
+  /**
+   * Whether unused document images become standalone interleaved
+   * `imageWithCaption` slides (default true — the slideshow behavior).
+   * Consumers with a fixed cell budget (the dashboard projection) pass
+   * false so synthetic filler slides never compete with real blocks.
+   */
+  interleaveImages?: boolean;
 }
 
 /**
@@ -451,7 +458,10 @@ export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc
   }
 
   // Interleave unused images
-  const unusedImages = allImages.filter((img) => !usedImageSrcs.has(img.src));
+  const unusedImages =
+    (options?.interleaveImages ?? true)
+      ? allImages.filter((img) => !usedImageSrcs.has(img.src))
+      : [];
   if (unusedImages.length > 0 && slides.length > 0) {
     const interval = Math.max(2, Math.floor(slides.length / (unusedImages.length + 1)));
     let insertOffset = 0;

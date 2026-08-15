@@ -18,6 +18,8 @@ import {
   type ViewPreferences,
   type ThemeInheritance,
   type BlockTagVisibility,
+  type CoverImageSaveOutput,
+  type DashboardImageSaveOutput,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
@@ -330,6 +332,16 @@ export interface EditorShellProps {
    */
   fileName?: string;
   /**
+   * Optional host save flow for cover-slide image exports. When omitted, the
+   * editor uses the browser File System Access picker or download fallback.
+   */
+  saveCoverImageOutput?: CoverImageSaveOutput;
+  /**
+   * Optional host save flow for dashboard image exports. When omitted, the
+   * editor uses the browser File System Access picker or download fallback.
+   */
+  saveDashboardImageOutput?: DashboardImageSaveOutput;
+  /**
    * Explicit Monaco language ID override (e.g. `'typescript'`,
    * `'python'`, `'json'`). Wins over the language derived from
    * `fileName`. Anything other than `'markdown'` or `'plaintext'`
@@ -574,6 +586,8 @@ export function EditorShell({
   showStatusBar = true,
   imageDisplayMode = 'inline',
   fileName,
+  saveCoverImageOutput,
+  saveDashboardImageOutput,
   language,
   findMode,
   onFindModeChange,
@@ -646,6 +660,8 @@ export function EditorShell({
         allowNarrate={allowNarrate}
         preserveSourceWrapping={preserveSourceWrapping}
         fileName={fileName}
+        saveCoverImageOutput={saveCoverImageOutput}
+        saveDashboardImageOutput={saveDashboardImageOutput}
         language={language}
         findMode={findMode}
         onFindModeChange={onFindModeChange}

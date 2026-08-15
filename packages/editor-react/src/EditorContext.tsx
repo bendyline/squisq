@@ -318,6 +318,21 @@ export interface EditorActions {
   bumpMediaRevision: () => void;
 }
 
+/**
+ * Host-owned persistence for a rendered cover image. Return `false` when the
+ * user cancels so the export modal stays open without reporting an error.
+ */
+export type CoverImageSaveOutput = (
+  blob: Blob,
+  filename: string,
+) => boolean | void | Promise<boolean | void>;
+
+/**
+ * Host-owned persistence for a rendered dashboard image — the same contract
+ * as {@link CoverImageSaveOutput} (`false` keeps the export dialog open).
+ */
+export type DashboardImageSaveOutput = CoverImageSaveOutput;
+
 export interface EditorContextValue extends EditorState, EditorActions {
   /** The live Tiptap editor instance (null when WYSIWYG is not mounted) */
   tiptapEditor: TiptapEditor | null;
@@ -399,6 +414,10 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * document has no frontmatter `title:`.
    */
   fileName: string | undefined;
+  /** Optional host save flow for cover-slide image exports. */
+  saveCoverImageOutput: CoverImageSaveOutput | undefined;
+  /** Optional host save flow for dashboard image exports. */
+  saveDashboardImageOutput: DashboardImageSaveOutput | undefined;
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
@@ -514,6 +533,10 @@ export interface EditorProviderProps {
    * language and decide between markdown vs. code mode.
    */
   fileName?: string;
+  /** Optional host save flow for cover-slide image exports. */
+  saveCoverImageOutput?: CoverImageSaveOutput;
+  /** Optional host save flow for dashboard image exports. */
+  saveDashboardImageOutput?: DashboardImageSaveOutput;
   /** Explicit Monaco language ID — wins over the fileName-derived one. */
   language?: string;
   /**
@@ -640,6 +663,8 @@ export function EditorProvider({
   allowNarrate = true,
   preserveSourceWrapping = true,
   fileName,
+  saveCoverImageOutput,
+  saveDashboardImageOutput,
   language,
   findMode: controlledFindMode,
   onFindModeChange,
@@ -1265,6 +1290,8 @@ export function EditorProvider({
       fenceRenderers,
       linkSchemes,
       fileName,
+      saveCoverImageOutput,
+      saveDashboardImageOutput,
       setMarkdownSource,
       setEditorSource,
       setLayoutMode,
@@ -1327,6 +1354,8 @@ export function EditorProvider({
       fenceRenderers,
       linkSchemes,
       fileName,
+      saveCoverImageOutput,
+      saveDashboardImageOutput,
       setMarkdownSource,
       setEditorSource,
       setLayoutMode,

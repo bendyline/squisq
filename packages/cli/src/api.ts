@@ -24,14 +24,20 @@
  *   });
  */
 
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, resolve as resolvePath } from 'node:path';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import { flattenBlocks } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import type { GifDither, VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+import type {
+  DashboardResolutionId,
+  GifDither,
+  VideoQuality,
+  VideoOrientation,
+} from '@bendyline/squisq-video';
 import { ffmpegGifOutputArgs, generateRenderHtml } from '@bendyline/squisq-video';
-import { resolveDimensions } from '@bendyline/squisq-video';
+import { resolveDashboardDimensions, resolveDimensions } from '@bendyline/squisq-video';
 import {
   convert as formatsConvert,
   prepareConversion as formatsPrepareConversion,
@@ -52,7 +58,7 @@ import { GIF_EXPORT_DEFAULTS } from './util/nativeEncoder.js';
 import { selectStandalonePlayerVariant } from './util/playerBundle.js';
 import { runFfmpeg } from './util/runFfmpeg.js';
 import { createCliRegistry } from './registry.js';
-import type { GifFormatOptions, Mp4FormatOptions } from './registry.js';
+import type { GifFormatOptions, Mp4FormatOptions, PngFormatOptions } from './registry.js';
 
 let playerBundlePromise: Promise<string> | undefined;
 let fullPlayerBundlePromise: Promise<string> | undefined;
@@ -96,13 +102,21 @@ export {
   framesToMp4NativeBytes,
 } from './util/nativeEncoder.js';
 export type { GifExportOptions, NativeVideoExportOptions } from './util/nativeEncoder.js';
-export type { GifFormatOptions, Mp4FormatOptions } from './registry.js';
+export type { GifFormatOptions, Mp4FormatOptions, PngFormatOptions } from './registry.js';
+export {
+  DASHBOARD_RESOLUTIONS,
+  DEFAULT_DASHBOARD_RESOLUTION,
+  resolveDashboardDimensions,
+  validateDashboardImageDimensions,
+} from '@bendyline/squisq-video';
+export type { DashboardResolutionId, DashboardResolutionPreset } from '@bendyline/squisq-video';
 
 /** Convert options with the CLI-only rendered-media adapters strongly typed. */
 export type CliConvertOptions = Omit<ConvertOptions, 'formatOptions'> & {
   formatOptions?: ConvertOptions['formatOptions'] & {
     mp4?: Mp4FormatOptions;
     gif?: GifFormatOptions;
+    png?: PngFormatOptions;
   };
 };
 
@@ -299,29 +313,55 @@ interface CapturedDocFrames {
   ffmpegPath: string;
 }
 
-/** Capture deterministic PNG frames once, independent of the output encoder. */
-async function captureDocFrames(
+/** The live headless page + render-API handle passed to a capture callback. */
+interface RenderPageSession {
+  page: import('playwright-core').Page;
+  renderAPI: import('playwright-core').JSHandle<BrowserRenderAPI>;
+}
+
+interface RenderPageOptions {
+  signal?: AbortSignal;
+  width: number;
+  height: number;
+  /**
+   * Embed narration/scheduled audio in the render page. Video/GIF paths
+   * need it (media duration defines the visual timeline); the single-frame
+   * dashboard PNG path passes false — there is no clock to feed.
+   */
+  includeAudio: boolean;
+  captionStyle?: 'standard' | 'social';
+  animationsEnabled: boolean;
+  /** Player rendition mounted in the capture page (default 'slideshow'). */
+  displayMode?: 'slideshow' | 'dashboard';
+  /** Dashboard-mode options forwarded to the standalone mount. */
+  dashboard?: { layout?: string; title?: boolean; documentTitle?: string };
+  onProgress?: (phase: string, percent: number) => void;
+}
+
+/**
+ * Boot the standalone player in headless Chromium and hand the ready page
+ * to `fn`. Owns everything every capture path must not get subtly wrong:
+ * media collection under the shared budget, player-bundle variant
+ * selection, render-HTML generation, browser launch + abort wiring, the
+ * SSRF route guard, the readiness poll, and teardown.
+ */
+async function withRenderPage<T>(
   doc: Doc,
   container: ContentContainer,
-  options: CaptureDocFramesOptions,
-): Promise<CapturedDocFrames> {
-  const { fps, width, height, captionStyle, coverPreRoll, animationsEnabled, onProgress, signal } =
-    options;
-
-  signal?.throwIfAborted();
-  resolveAppliedCoverPreRoll(coverPreRoll, true);
-  const ffmpegPath = (await detectFfmpegDetailed(signal))?.path ?? null;
-  signal?.throwIfAborted();
-  if (!ffmpegPath) {
-    throw new Error(
-      'ffmpeg is required but not found in PATH.\n' +
-        'Install it with:\n' +
-        '  macOS:   brew install ffmpeg\n' +
-        '  Ubuntu:  sudo apt install ffmpeg\n' +
-        '  Windows: winget install ffmpeg\n' +
-        'Or: npm install ffmpeg-static, or set SQUISQ_FFMPEG to an ffmpeg binary.',
-    );
-  }
+  options: RenderPageOptions,
+  fn: (session: RenderPageSession) => Promise<T>,
+): Promise<T> {
+  const {
+    signal,
+    width,
+    height,
+    includeAudio,
+    captionStyle,
+    animationsEnabled,
+    displayMode,
+    dashboard,
+    onProgress,
+  } = options;
 
   onProgress?.('collecting media', 0);
   signal?.throwIfAborted();
@@ -342,14 +382,16 @@ async function captureDocFrames(
   // Audio remains available to the headless player even for silent GIF output:
   // narration metadata and media duration still define the visual timeline.
   const audio = new Map<string, ArrayBuffer>();
-  for (const seg of doc.audio?.segments ?? []) {
-    signal?.throwIfAborted();
-    const data = await container.readFile(seg.src);
-    signal?.throwIfAborted();
-    if (data) {
-      budget.admit(seg.src, data);
-      audio.set(seg.src, data);
-      audio.set(seg.name, data);
+  if (includeAudio) {
+    for (const seg of doc.audio?.segments ?? []) {
+      signal?.throwIfAborted();
+      const data = await container.readFile(seg.src);
+      signal?.throwIfAborted();
+      if (data) {
+        budget.admit(seg.src, data);
+        audio.set(seg.src, data);
+        audio.set(seg.name, data);
+      }
     }
   }
 
@@ -384,6 +426,8 @@ async function captureDocFrames(
     height,
     captionStyle,
     animationsEnabled,
+    displayMode,
+    dashboard,
   });
 
   onProgress?.('launching browser', 15);
@@ -411,7 +455,6 @@ async function captureDocFrames(
   }
   signal?.addEventListener('abort', handleAbort, { once: true });
   let renderAPI: import('playwright-core').JSHandle<BrowserRenderAPI> | null = null;
-  const capturedFrames = new CapturedFrameCollector();
 
   try {
     const page = await browser.newPage({ viewport: { width, height } });
@@ -458,62 +501,202 @@ async function captureDocFrames(
       return api;
     });
     signal?.throwIfAborted();
-    const docDuration = await renderAPI.evaluate((api) => api.getDuration());
-    signal?.throwIfAborted();
-    if (docDuration <= 0) throw new Error('Document has zero duration — nothing to render');
-
-    const hasCover =
-      coverPreRoll > 0 ? await renderAPI.evaluate((api) => api.hasCoverBlock()) : false;
-    const appliedCoverPreRoll = resolveAppliedCoverPreRoll(coverPreRoll, hasCover);
-    const storyFrameCount = Math.ceil(docDuration * fps);
-    const preRollFrameCount = Math.ceil(appliedCoverPreRoll * fps);
-    const totalFrames = preRollFrameCount + storyFrameCount;
-    onProgress?.('capturing frames', 20);
-    capturedFrames.throwIfAborted(signal);
-
-    if (preRollFrameCount > 0) {
-      capturedFrames.throwIfAborted(signal);
-      await renderAPI.evaluate((api) => api.showCover());
-      await page.waitForTimeout(100);
-      capturedFrames.throwIfAborted(signal);
-      const coverFrame = await page.screenshot({ type: 'png' });
-      capturedFrames.throwIfAborted(signal);
-      capturedFrames.append(coverFrame, preRollFrameCount);
-      await renderAPI.evaluate((api) => api.hideCover());
-    }
-
-    const frameInterval = 1 / fps;
-    for (let i = 0; i < storyFrameCount; i++) {
-      capturedFrames.throwIfAborted(signal);
-      const time = i * frameInterval;
-      await renderAPI.evaluate((api, t: number) => api.seekTo(t), time);
-      const frame = await page.screenshot({ type: 'png' });
-      capturedFrames.throwIfAborted(signal);
-      capturedFrames.append(frame);
-      if (i % Math.max(1, Math.floor(fps / 2)) === 0 || i === storyFrameCount - 1) {
-        onProgress?.(
-          'capturing frames',
-          20 + Math.round((capturedFrames.frameCount / totalFrames) * 60),
-        );
-        capturedFrames.throwIfAborted(signal);
-      }
-    }
-
-    return {
-      frames: capturedFrames.release(),
-      totalDuration: docDuration + appliedCoverPreRoll,
-      appliedCoverPreRoll,
-      ffmpegPath,
-    };
-  } catch (err: unknown) {
-    capturedFrames.clear();
-    signal?.throwIfAborted();
-    throw err;
+    return await fn({ page, renderAPI });
   } finally {
     signal?.removeEventListener('abort', handleAbort);
     await renderAPI?.dispose().catch(() => undefined);
     await browser.close().catch(() => undefined);
   }
+}
+
+/** Capture deterministic PNG frames once, independent of the output encoder. */
+async function captureDocFrames(
+  doc: Doc,
+  container: ContentContainer,
+  options: CaptureDocFramesOptions,
+): Promise<CapturedDocFrames> {
+  const { fps, width, height, captionStyle, coverPreRoll, animationsEnabled, onProgress, signal } =
+    options;
+
+  signal?.throwIfAborted();
+  resolveAppliedCoverPreRoll(coverPreRoll, true);
+  // The ffmpeg gate stays ahead of any browser work for the video/GIF paths.
+  // The dashboard PNG path never enters this function, so it needs Chromium
+  // only — do not move this check into `withRenderPage`.
+  const ffmpegPath = (await detectFfmpegDetailed(signal))?.path ?? null;
+  signal?.throwIfAborted();
+  if (!ffmpegPath) {
+    throw new Error(
+      'ffmpeg is required but not found in PATH.\n' +
+        'Install it with:\n' +
+        '  macOS:   brew install ffmpeg\n' +
+        '  Ubuntu:  sudo apt install ffmpeg\n' +
+        '  Windows: winget install ffmpeg\n' +
+        'Or: npm install ffmpeg-static, or set SQUISQ_FFMPEG to an ffmpeg binary.',
+    );
+  }
+
+  const capturedFrames = new CapturedFrameCollector();
+  try {
+    return await withRenderPage(
+      doc,
+      container,
+      { signal, width, height, includeAudio: true, captionStyle, animationsEnabled, onProgress },
+      async ({ page, renderAPI }) => {
+        const docDuration = await renderAPI.evaluate((api) => api.getDuration());
+        signal?.throwIfAborted();
+        if (docDuration <= 0) throw new Error('Document has zero duration — nothing to render');
+
+        const hasCover =
+          coverPreRoll > 0 ? await renderAPI.evaluate((api) => api.hasCoverBlock()) : false;
+        const appliedCoverPreRoll = resolveAppliedCoverPreRoll(coverPreRoll, hasCover);
+        const storyFrameCount = Math.ceil(docDuration * fps);
+        const preRollFrameCount = Math.ceil(appliedCoverPreRoll * fps);
+        const totalFrames = preRollFrameCount + storyFrameCount;
+        onProgress?.('capturing frames', 20);
+        capturedFrames.throwIfAborted(signal);
+
+        if (preRollFrameCount > 0) {
+          capturedFrames.throwIfAborted(signal);
+          await renderAPI.evaluate((api) => api.showCover());
+          await page.waitForTimeout(100);
+          capturedFrames.throwIfAborted(signal);
+          const coverFrame = await page.screenshot({ type: 'png' });
+          capturedFrames.throwIfAborted(signal);
+          capturedFrames.append(coverFrame, preRollFrameCount);
+          await renderAPI.evaluate((api) => api.hideCover());
+        }
+
+        const frameInterval = 1 / fps;
+        for (let i = 0; i < storyFrameCount; i++) {
+          capturedFrames.throwIfAborted(signal);
+          const time = i * frameInterval;
+          await renderAPI.evaluate((api, t: number) => api.seekTo(t), time);
+          const frame = await page.screenshot({ type: 'png' });
+          capturedFrames.throwIfAborted(signal);
+          capturedFrames.append(frame);
+          if (i % Math.max(1, Math.floor(fps / 2)) === 0 || i === storyFrameCount - 1) {
+            onProgress?.(
+              'capturing frames',
+              20 + Math.round((capturedFrames.frameCount / totalFrames) * 60),
+            );
+            capturedFrames.throwIfAborted(signal);
+          }
+        }
+
+        return {
+          frames: capturedFrames.release(),
+          totalDuration: docDuration + appliedCoverPreRoll,
+          appliedCoverPreRoll,
+          ffmpegPath,
+        };
+      },
+    );
+  } catch (err: unknown) {
+    capturedFrames.clear();
+    signal?.throwIfAborted();
+    throw err;
+  }
+}
+
+/** Options for {@link renderDocToDashboardPng}. */
+export interface RenderDashboardPngOptions {
+  /** Abort the render; rejects with the signal's reason. */
+  signal?: AbortSignal;
+  /** Optional output file; bytes are always returned. */
+  outputPath?: string;
+  /** Named resolution preset (default `'fhd'`, 1920×1080). */
+  resolution?: DashboardResolutionId;
+  /** Custom pixel width; requires `height` and excludes `resolution`. */
+  width?: number;
+  /** Custom pixel height; requires `width` and excludes `resolution`. */
+  height?: number;
+  /** Dashboard layout id, or `'auto'` for the block-count pick (default). */
+  layout?: string;
+  /** Render the document-title band. Default: the projection default (on). */
+  title?: boolean;
+  /** Host-supplied title fallback when the doc has no frontmatter title. */
+  documentTitle?: string;
+  onProgress?: (phase: string, percent: number) => void;
+}
+
+/** Result returned by {@link renderDocToDashboardPng}. */
+export interface RenderDashboardPngResult {
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+  /** Absolute path written, when `outputPath` was requested. */
+  outputPath?: string;
+}
+
+/**
+ * Render a Doc's Dashboard rendition to a single PNG image.
+ *
+ * Needs Playwright Chromium only — unlike the video paths there is no
+ * ffmpeg involvement. Apply a theme upstream (`{ ...doc, themeId }`), the
+ * same convention `renderDocToMp4`/`renderDocToGif` use.
+ */
+export async function renderDocToDashboardPng(
+  doc: Doc,
+  container: ContentContainer,
+  options: RenderDashboardPngOptions = {},
+): Promise<RenderDashboardPngResult> {
+  const {
+    signal,
+    outputPath,
+    resolution,
+    width,
+    height,
+    layout,
+    title,
+    documentTitle,
+    onProgress,
+  } = options;
+  signal?.throwIfAborted();
+  // Dimension conflicts and bounds fail here, before any browser work.
+  const dimensions = resolveDashboardDimensions({ resolution, width, height });
+
+  const bytes = await withRenderPage(
+    doc,
+    container,
+    {
+      signal,
+      width: dimensions.width,
+      height: dimensions.height,
+      includeAudio: false,
+      animationsEnabled: false,
+      displayMode: 'dashboard',
+      dashboard: { layout, title, documentTitle },
+      onProgress,
+    },
+    async ({ page, renderAPI }) => {
+      onProgress?.('rendering dashboard', 50);
+      signal?.throwIfAborted();
+      // The dashboard render API's seekTo resolves once fonts and images
+      // have settled; the time argument is ignored (there is no clock).
+      await renderAPI.evaluate((api) => api.seekTo(0));
+      signal?.throwIfAborted();
+      await page.waitForTimeout(100);
+      signal?.throwIfAborted();
+      onProgress?.('capturing image', 85);
+      return await page.screenshot({ type: 'png' });
+    },
+  );
+
+  let writtenPath: string | undefined;
+  if (outputPath) {
+    const absolute = resolvePath(outputPath);
+    await mkdir(dirname(absolute), { recursive: true });
+    await writeFile(absolute, bytes);
+    writtenPath = absolute;
+  }
+  onProgress?.('done', 100);
+  return {
+    bytes,
+    width: dimensions.width,
+    height: dimensions.height,
+    ...(writtenPath ? { outputPath: writtenPath } : {}),
+  };
 }
 
 /** Render a Doc + media container to an MP4 video file. */

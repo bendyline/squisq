@@ -60,8 +60,11 @@ export type PipPosition = VideoPipPosition;
  *   implement this mode; it is owned by the editor package
  *   (`@bendyline/squisq-editor-react`), which renders its own
  *   voice-paced teleprompter view for it.
+ * - `'dashboard'` — One static canvas that arranges every block into a
+ *   layout's cells (grids, hero mosaics). No timeline, no navigation;
+ *   overflow blocks beyond the layout's capacity are not rendered.
  */
-export type DisplayMode = 'video' | 'slideshow' | 'linear' | 'page' | 'narrate';
+export type DisplayMode = 'video' | 'slideshow' | 'linear' | 'page' | 'narrate' | 'dashboard';
 
 /**
  * Caption display style.

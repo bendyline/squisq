@@ -113,7 +113,19 @@ describe('--formats validation', () => {
 });
 
 describe('suggestId', () => {
-  const formats = ['md', 'docx', 'pptx', 'pdf', 'html', 'htmlzip', 'epub', 'dbk', 'mp4', 'gif'];
+  const formats = [
+    'md',
+    'docx',
+    'pptx',
+    'pdf',
+    'html',
+    'htmlzip',
+    'epub',
+    'dbk',
+    'mp4',
+    'gif',
+    'png',
+  ];
 
   it('catches a transposition', () => {
     expect(suggestId('pfd', formats)).to.equal('pdf');

@@ -69,7 +69,7 @@ describe('convert command', () => {
 
   it('does not produce rendered media for a bare default convert', async () => {
     await runCli('convert', FIXTURE_MD, '-d', tempDir);
-    for (const ext of ['mp4', 'gif']) {
+    for (const ext of ['mp4', 'gif', 'png']) {
       try {
         await stat(join(tempDir, `test.${ext}`));
         expect.fail(`test.${ext} should not be produced by the default format set`);

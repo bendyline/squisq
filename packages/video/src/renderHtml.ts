@@ -67,6 +67,23 @@ export interface RenderHtmlOptions {
    * Defaults to true. Embedded/timed media and document timing are unaffected.
    */
   animationsEnabled?: boolean;
+
+  /**
+   * Player rendition mounted in the capture page (default 'slideshow').
+   * 'dashboard' renders the one-canvas dashboard projection for
+   * single-frame image capture.
+   */
+  displayMode?: 'slideshow' | 'dashboard';
+
+  /** Dashboard-mode options (ignored unless `displayMode` is 'dashboard'). */
+  dashboard?: {
+    /** Layout id or 'auto'. Overrides doc frontmatter. */
+    layout?: string;
+    /** Title-band override. Overrides doc frontmatter. */
+    title?: boolean;
+    /** Host-supplied title fallback (typically the file name). */
+    documentTitle?: string;
+  };
 }
 
 // ── MIME Detection ─────────────────────────────────────────────────
@@ -162,6 +179,8 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
     pipShape,
     pipPosition,
     animationsEnabled = true,
+    displayMode = 'slideshow',
+    dashboard,
   } = options;
 
   // Build base64 image map
@@ -193,6 +212,9 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
     pipSize ? `    pipSize: ${JSON.stringify(pipSize)}` : null,
     pipShape ? `    pipShape: ${JSON.stringify(pipShape)}` : null,
     pipPosition ? `    pipPosition: ${JSON.stringify(pipPosition)}` : null,
+    displayMode === 'dashboard'
+      ? `    dashboard: ${escapeForScript(JSON.stringify(dashboard ?? {}))}`
+      : null,
   ].filter((line): line is string => line !== null);
 
   return `<!DOCTYPE html>
@@ -217,7 +239,7 @@ html,body{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden
   var audio = ${audioMapJson === 'null' ? 'null' : 'JSON.parse(' + JSON.stringify(audioMapJson) + ')'};
   var root = document.getElementById("squisq-root");
   SquisqPlayer.mount(root, doc, {
-    mode: "slideshow",
+    mode: ${JSON.stringify(displayMode === 'dashboard' ? 'dashboard' : 'slideshow')},
     images: images,
     audio: audio,
     autoPlay: false,

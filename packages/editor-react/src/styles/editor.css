@@ -1350,6 +1350,26 @@
   padding: 16px;
 }
 
+/* Contain-fit the Dashboard canvas inside the preview surface: the wrapper
+   spans the surface and becomes a size container, and the canvas width is
+   the larger of "fills the width" and "fills the height at its aspect" —
+   whichever fits. Without this, a portrait dashboard is width-driven and
+   clips at the surface's hidden overflow instead of scaling down. */
+.squisq-dashboard-fit {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.squisq-dashboard-fit .squisq-dashboard {
+  --squisq-dashboard-fit-width: min(100%, calc(100cqh * var(--squisq-dashboard-aspect, 1.7778)));
+}
+
 .squisq-editor-shell[data-print-preview='true'] > .squisq-status-bar,
 .squisq-editor-shell[data-print-preview='true'] > .squisq-timeline,
 .squisq-editor-shell[data-print-preview='true'] .squisq-media-bin,
