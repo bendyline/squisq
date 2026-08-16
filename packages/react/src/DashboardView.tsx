@@ -17,9 +17,13 @@
  * readiness through the exact same contract the slideshow player uses.
  */
 
-import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { Fragment, useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import type { Block, Doc, Theme } from '@bendyline/squisq/schemas';
-import type { DashboardMaterialization, ViewportConfig } from '@bendyline/squisq/doc';
+import type {
+  DashboardMaterialization,
+  DashboardStyleId,
+  ViewportConfig,
+} from '@bendyline/squisq/doc';
 import { materializeDashboard, resolveThemeForDoc, VIEWPORT_PRESETS } from '@bendyline/squisq/doc';
 import type { SquisqRenderAPI } from './types';
 import { BlockRenderer } from './BlockRenderer';
@@ -34,6 +38,11 @@ export interface DashboardViewProps {
   layout?: string;
   /** Title-band override. Overrides doc frontmatter (default true). */
   showTitle?: boolean;
+  /**
+   * Cell style variant (`basic` | `card` | `panel` | `accent`). Overrides
+   * doc frontmatter; all variants take their colors from the active theme.
+   */
+  style?: DashboardStyleId;
   /** Host-supplied title fallback (typically the file name). */
   documentTitle?: string;
   /** Base path for resolving media URLs (default `'.'`). */
@@ -93,6 +102,7 @@ export function DashboardView({
   viewport,
   layout,
   showTitle,
+  style,
   documentTitle,
   basePath = '.',
   animationsEnabled = true,
@@ -112,9 +122,10 @@ export function DashboardView({
         viewport: activeViewport,
         layout,
         showTitle,
+        style,
         documentTitle,
       }),
-    [doc, activeTheme, activeViewport, layout, showTitle, documentTitle],
+    [doc, activeTheme, activeViewport, layout, showTitle, style, documentTitle],
   );
 
   const backdropBottom = useMemo(
@@ -179,7 +190,9 @@ export function DashboardView({
     width: 'var(--squisq-dashboard-fit-width, 100%)',
     aspectRatio: `${activeViewport.width} / ${activeViewport.height}`,
     overflow: 'hidden',
-    background: activeTheme.colors.background,
+    // The style variant owns the canvas fill: card styles tint it away
+    // from the card surface so cards read as raised.
+    background: materialization.backdrop.fill,
     margin: '0 auto',
     '--squisq-dashboard-aspect': (activeViewport.width / activeViewport.height).toFixed(6),
   } as CSSProperties;
@@ -189,6 +202,7 @@ export function DashboardView({
       ref={rootRef}
       className={className ? `squisq-dashboard ${className}` : 'squisq-dashboard'}
       data-dashboard-layout={materialization.layout.name}
+      data-dashboard-style={materialization.style}
       style={canvasStyle}
     >
       <div style={coverStyle} aria-hidden="true">
@@ -204,29 +218,88 @@ export function DashboardView({
         />
       </div>
       {materialization.cells.map((cell) => (
-        <div
-          key={`${cell.index}-${cell.block.id}`}
-          className="squisq-dashboard__cell"
-          data-cell-index={cell.index}
-          style={{
-            position: 'absolute',
-            left: cell.rectPct.left,
-            top: cell.rectPct.top,
-            width: cell.rectPct.width,
-            height: cell.rectPct.height,
-          }}
-        >
-          <BlockRenderer
-            block={{ ...cell.block, layers: cell.layers } as Block}
-            blockTime={0}
-            basePath={basePath}
-            viewport={{ width: cell.viewport.width, height: cell.viewport.height }}
-            isPlaying={false}
-            muted={muted}
-            animationsEnabled={animationsEnabled}
-            theme={activeTheme}
-          />
-        </div>
+        <Fragment key={`${cell.index}-${cell.block.id}`}>
+          {cell.frame && (
+            <div
+              className="squisq-dashboard__frame"
+              data-cell-index={cell.index}
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                left: cell.frame.rectPct.left,
+                top: cell.frame.rectPct.top,
+                width: cell.frame.rectPct.width,
+                height: cell.frame.rectPct.height,
+                pointerEvents: 'none',
+              }}
+            >
+              <BlockRenderer
+                block={syntheticBlock(`dashboard-frame-${cell.index}`, cell.frame.layers)}
+                blockTime={0}
+                basePath={basePath}
+                viewport={{
+                  width: cell.frame.viewport.width,
+                  height: cell.frame.viewport.height,
+                }}
+                isPlaying={false}
+                muted
+                animationsEnabled={animationsEnabled}
+                theme={activeTheme}
+              />
+            </div>
+          )}
+          <div
+            className="squisq-dashboard__cell"
+            data-cell-index={cell.index}
+            style={{
+              position: 'absolute',
+              left: cell.rectPct.left,
+              top: cell.rectPct.top,
+              width: cell.rectPct.width,
+              height: cell.rectPct.height,
+              // Percentage radii scale with the rendered canvas, so a card
+              // cell's full-bleed art stays clipped to its corners at any
+              // export resolution.
+              ...(cell.frame?.contentRadiusPct
+                ? { borderRadius: cell.frame.contentRadiusPct, overflow: 'hidden' }
+                : {}),
+            }}
+          >
+            <BlockRenderer
+              block={{ ...cell.block, layers: cell.layers } as Block}
+              blockTime={0}
+              basePath={basePath}
+              viewport={{ width: cell.viewport.width, height: cell.viewport.height }}
+              isPlaying={false}
+              muted={muted}
+              animationsEnabled={animationsEnabled}
+              theme={activeTheme}
+            />
+            {cell.frame && cell.frame.overlayLayers.length > 0 && (
+              // Borders and accents ride above the block: a template that
+              // paints its own opaque surface would bury them. Same box, so
+              // the cell's clip rounds them to the card's corners.
+              <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                <BlockRenderer
+                  block={syntheticBlock(
+                    `dashboard-frame-overlay-${cell.index}`,
+                    cell.frame.overlayLayers,
+                  )}
+                  blockTime={0}
+                  basePath={basePath}
+                  viewport={{
+                    width: cell.frame.overlayViewport.width,
+                    height: cell.frame.overlayViewport.height,
+                  }}
+                  isPlaying={false}
+                  muted
+                  animationsEnabled={animationsEnabled}
+                  theme={activeTheme}
+                />
+              </div>
+            )}
+          </div>
+        </Fragment>
       ))}
       {materialization.title && titleBlock && (
         <div

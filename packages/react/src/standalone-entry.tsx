@@ -33,6 +33,7 @@ import type {
   VideoPipSize,
   VideoPresentation,
 } from '@bendyline/squisq/schemas';
+import type { DashboardStyleId } from '@bendyline/squisq/doc';
 import type { SquisqRenderAPI } from './types';
 import { DocPlayer } from './DocPlayer';
 import { LinearDocView } from './LinearDocView';
@@ -59,6 +60,8 @@ export interface MountOptions {
     layout?: string;
     /** Title-band override. Overrides doc frontmatter. */
     title?: boolean;
+    /** Cell style variant ('basic' | 'card' | 'panel' | 'accent'). */
+    style?: DashboardStyleId;
     /** Host-supplied title fallback (typically the file name). */
     documentTitle?: string;
   };
@@ -355,6 +358,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       displayMode: mode === 'dashboard' ? 'dashboard' : 'slideshow',
       dashboardLayout: dashboard?.layout,
       dashboardShowTitle: dashboard?.title,
+      dashboardStyle: dashboard?.style,
       dashboardDocumentTitle: dashboard?.documentTitle,
       forceViewport: dashboardViewport,
       autoPlay: renderMode ? false : autoPlay,

@@ -430,12 +430,12 @@ are not rendered (an overflow diagnostic is reported, never a console error).
 There is no clock: video layers show as paused poster frames and scheduled
 audio/video media does not play.
 
-| Key                                                     | Purpose                                                                                                                                                                                       |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `squisq-dashboard-layout` (legacy `dashboard-layout`)   | Preferred layout id, or `auto` (default) to pick the smallest layout that fits the block count. Built-ins: `focus-1`, `split-2`, `hero-left`, `grid-2x2`, `hero-top`, `mosaic-5`, `grid-3x2`, `grid-3x3`, `grid-4x3`, `grid-4x4`. |
-| `squisq-dashboard-title` (legacy `dashboard-title`)     | Whether the document-title band renders (default `true`; the band only appears when a title actually resolves, and a leading block that merely restates the title dedupes into it).            |
-| `squisq-dashboard-layouts`                              | Inline custom layout definitions (compact single-line JSON keyed by layout name, same convention as `squisq-custom-templates`). Customs win name collisions with built-ins and join auto-pick. |
-| `squisq-dashboard-zoom` (legacy `dashboard-zoom`)       | Cell zoom behavior: `auto` (default) boosts short text-led blocks to 1.5×/2× type so they fill their slot, quantized to at most ONE boost level per dashboard (cells stay consistently sized); `off` renders everything at 1×.  |
+| Key                                                   | Purpose                                                                                                                                                                                                                           |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `squisq-dashboard-layout` (legacy `dashboard-layout`) | Preferred layout id, or `auto` (default) to pick the smallest layout that fits the block count. Built-ins: `focus-1`, `split-2`, `hero-left`, `grid-2x2`, `hero-top`, `mosaic-5`, `grid-3x2`, `grid-3x3`, `grid-4x3`, `grid-4x4`. |
+| `squisq-dashboard-title` (legacy `dashboard-title`)   | Whether the document-title band renders (default `true`; the band only appears when a title actually resolves, and a leading block that merely restates the title dedupes into it).                                               |
+| `squisq-dashboard-layouts`                            | Inline custom layout definitions (compact single-line JSON keyed by layout name, same convention as `squisq-custom-templates`). Customs win name collisions with built-ins and join auto-pick.                                    |
+| `squisq-dashboard-zoom` (legacy `dashboard-zoom`)     | Cell zoom behavior: `auto` (default) boosts short text-led blocks to 1.5×/2× type so they fill their slot, quantized to at most ONE boost level per dashboard (cells stay consistently sized); `off` renders everything at 1×.    |
 
 A custom layout defines `%`-rect cells relative to the content area (the
 canvas minus the title band), per orientation (`ls` landscape required;
@@ -447,7 +447,21 @@ accepted — pinned cells are exempt from the automatic pick, and automatic
 boosts rally to a pinned level so the dashboard keeps ≤2 unique sizes):
 
 ```yaml
-squisq-dashboard-layouts: {"kpi-wall":{"lb":"KPI Wall","ce":{"ls":[{"x":"0%","y":"0%","wd":"49%","hg":"100%","bk":1},{"x":"51%","y":"0%","wd":"49%","hg":"100%"}]}}}
+squisq-dashboard-layouts:
+  {
+    'kpi-wall':
+      {
+        'lb': 'KPI Wall',
+        'ce':
+          {
+            'ls':
+              [
+                { 'x': '0%', 'y': '0%', 'wd': '49%', 'hg': '100%', 'bk': 1 },
+                { 'x': '51%', 'y': '0%', 'wd': '49%', 'hg': '100%' },
+              ],
+          },
+      },
+  }
 squisq-dashboard-layout: kpi-wall
 ```
 

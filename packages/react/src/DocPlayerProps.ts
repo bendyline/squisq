@@ -1,5 +1,5 @@
 import type { Doc, SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
-import type { ViewportConfig } from '@bendyline/squisq/doc';
+import type { DashboardStyleId, ViewportConfig } from '@bendyline/squisq/doc';
 import type { CoverSlidePlayback, CoverSlideTemplate } from '@bendyline/squisq/doc';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
 import type { AudioController } from './hooks/AudioController';
@@ -58,6 +58,8 @@ export interface DocPlayerProps {
   dashboardLayout?: string;
   /** Dashboard mode: title-band override. Overrides doc frontmatter. */
   dashboardShowTitle?: boolean;
+  /** Dashboard mode: cell style variant. Overrides doc frontmatter. */
+  dashboardStyle?: DashboardStyleId;
   /** Dashboard mode: host-supplied title fallback (typically the file name). */
   dashboardDocumentTitle?: string;
   showCoverSlide?: boolean;

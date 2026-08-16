@@ -100,4 +100,42 @@ describe('DashboardView', () => {
     render(<DashboardView doc={testDoc(2)} onRenderAPIReady={onRenderAPIReady} />);
     expect(onRenderAPIReady).not.toHaveBeenCalled();
   });
+
+  it('paints no cell chrome under the default basic style', () => {
+    const { container } = render(<DashboardView doc={testDoc(4)} />);
+    expect(container.querySelector('.squisq-dashboard')?.getAttribute('data-dashboard-style')).toBe(
+      'basic',
+    );
+    expect(container.querySelectorAll('.squisq-dashboard__frame')).toHaveLength(0);
+    const cell = container.querySelector('.squisq-dashboard__cell') as HTMLElement;
+    expect(cell.style.borderRadius).toBe('');
+  });
+
+  it('renders one chrome frame per cell and clips the cell to the card corners', () => {
+    const { container } = render(<DashboardView doc={testDoc(4)} style="card" />);
+    expect(container.querySelector('.squisq-dashboard')?.getAttribute('data-dashboard-style')).toBe(
+      'card',
+    );
+    const frames = container.querySelectorAll('.squisq-dashboard__frame');
+    expect(frames).toHaveLength(4);
+    expect(container.querySelectorAll('.squisq-dashboard__cell')).toHaveLength(4);
+    const cell = container.querySelector('.squisq-dashboard__cell') as HTMLElement;
+    // Percentage radii scale with the rendered canvas at any export size.
+    expect(cell.style.borderRadius).toMatch(/%/);
+    expect(cell.style.overflow).toBe('hidden');
+    // The block box sits inside its frame box.
+    const frame = frames[0] as HTMLElement;
+    expect(parseFloat(cell.style.left)).toBeGreaterThan(parseFloat(frame.style.left));
+    expect(parseFloat(cell.style.width)).toBeLessThan(parseFloat(frame.style.width));
+  });
+
+  it('reads the style from frontmatter when no prop overrides it', () => {
+    const { container } = render(
+      <DashboardView doc={testDoc(4, { 'squisq-dashboard-style': 'panel' })} />,
+    );
+    expect(container.querySelector('.squisq-dashboard')?.getAttribute('data-dashboard-style')).toBe(
+      'panel',
+    );
+    expect(container.querySelectorAll('.squisq-dashboard__frame')).toHaveLength(4);
+  });
 });

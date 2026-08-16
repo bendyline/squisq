@@ -103,28 +103,32 @@ canvas — to a PNG image. Needs Playwright Chromium only (no ffmpeg; this is a
 single-frame capture, not a video encode). The layout comes from the doc's
 `squisq-dashboard-layout` frontmatter (or `--layout`), defaulting to the
 auto-pick that chooses the smallest built-in layout fitting the block count;
-the document-title band renders by default and `--no-title` hides it.
+the document-title band renders by default and `--no-title` hides it. `--style`
+picks the cell dressing (`basic`, `card`, `panel`, `accent` — all theme-derived),
+defaulting to the doc's `squisq-dashboard-style`.
 
 ```bash
 squisq image input.md output.png
 squisq image input.md --resolution 4k
 squisq image input.md --resolution square --layout grid-2x2
+squisq image input.md --style card
 squisq image input.md --width 1280 --height 720 --no-title
 squisq image input.md -t documentary --transform magazine
 ```
 
-| Option                 | Description                                                                                                | Default       |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------- | ------------- |
-| `-o, --output`         | Output `.png` path                                                                                         | `<input>.png` |
-| `--resolution`         | Named preset: `hd`, `fhd`, `4k`, `square`, `square-2k`, `portrait`, `portrait-4k`, `standard`              | `fhd`         |
-| `--width` / `--height` | Custom pixels (both required together; excludes `--resolution`). 64–7680 per axis, ≤33 MP; odd values fine | preset        |
-| `--layout`             | Dashboard layout id (built-ins or a doc-defined custom layout), or `auto`                                  | `auto`        |
-| `--title` / `--no-title` | Show/hide the document-title band                                                                        | shown         |
-| `--format`             | Output format (`png`)                                                                                      | `png`         |
-| `-t, --theme`          | Squisq theme id to apply                                                                                   | none          |
-| `--transform`          | Transform style to apply before rendering                                                                  | none          |
-| `--overwrite`          | Replace an existing output file (otherwise refuse and exit non-zero)                                       | off           |
-| `--no-auto-templates`  | Disable content-aware template auto-picking for unannotated headings                                       | (auto on)     |
+| Option                   | Description                                                                                                | Default       |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------- |
+| `-o, --output`           | Output `.png` path                                                                                         | `<input>.png` |
+| `--resolution`           | Named preset: `hd`, `fhd`, `4k`, `square`, `square-2k`, `portrait`, `portrait-4k`, `standard`              | `fhd`         |
+| `--width` / `--height`   | Custom pixels (both required together; excludes `--resolution`). 64–7680 per axis, ≤33 MP; odd values fine | preset        |
+| `--layout`               | Dashboard layout id (built-ins or a doc-defined custom layout), or `auto`                                  | `auto`        |
+| `--style`                | Cell style variant: `basic`, `card`, `panel`, `accent` (all theme-derived)                                 | doc setting   |
+| `--title` / `--no-title` | Show/hide the document-title band                                                                          | shown         |
+| `--format`               | Output format (`png`)                                                                                      | `png`         |
+| `-t, --theme`            | Squisq theme id to apply                                                                                   | none          |
+| `--transform`            | Transform style to apply before rendering                                                                  | none          |
+| `--overwrite`            | Replace an existing output file (otherwise refuse and exit non-zero)                                       | off           |
+| `--no-auto-templates`    | Disable content-aware template auto-picking for unannotated headings                                       | (auto on)     |
 
 The same export is available through the registry as `squisq convert <input> -f png`.
 
@@ -263,6 +267,7 @@ const result = await renderDocToDashboardPng(doc, input.container, {
   outputPath: './dashboard.png',
   resolution: 'square', // or width/height for custom pixels
   layout: 'grid-2x2', // 'auto' (default) picks by block count
+  style: 'card', // 'basic' (default) | 'card' | 'panel' | 'accent'
   title: true,
 });
 // result: { bytes: Uint8Array, width, height, outputPath? }

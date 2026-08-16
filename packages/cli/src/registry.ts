@@ -19,6 +19,7 @@ import type {
   FormatRegistry,
   NormalizedInput,
 } from '@bendyline/squisq-formats';
+import type { DashboardStyleId } from '@bendyline/squisq/doc';
 import type {
   DashboardResolutionId,
   GifDither,
@@ -57,8 +58,8 @@ export interface GifFormatOptions {
 /**
  * Per-export options for `convert(..., 'png')` — the Dashboard image.
  * `resolution` names a preset; explicit `width`/`height` (both required
- * together) win over it. `layout`/`title` override the doc's dashboard
- * frontmatter.
+ * together) win over it. `layout`/`style`/`title` override the doc's
+ * dashboard frontmatter.
  */
 export interface PngFormatOptions {
   onProgress?: (phase: string, percent: number) => void;
@@ -66,6 +67,8 @@ export interface PngFormatOptions {
   width?: number;
   height?: number;
   layout?: string;
+  /** Cell style variant; unset defers to the doc's own frontmatter. */
+  style?: DashboardStyleId;
   title?: boolean;
 }
 
@@ -247,6 +250,7 @@ function pngFormat(): FormatDefinition {
         width: pngOpts.width,
         height: pngOpts.height,
         layout: pngOpts.layout,
+        style: pngOpts.style,
         title: pngOpts.title,
         documentTitle: options.title ?? input.baseName,
         signal: options.signal,

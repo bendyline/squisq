@@ -29,6 +29,7 @@ import { dirname, resolve as resolvePath } from 'node:path';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import { flattenBlocks } from '@bendyline/squisq/doc';
+import type { DashboardStyleId } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type {
   DashboardResolutionId,
@@ -334,7 +335,12 @@ interface RenderPageOptions {
   /** Player rendition mounted in the capture page (default 'slideshow'). */
   displayMode?: 'slideshow' | 'dashboard';
   /** Dashboard-mode options forwarded to the standalone mount. */
-  dashboard?: { layout?: string; title?: boolean; documentTitle?: string };
+  dashboard?: {
+    layout?: string;
+    title?: boolean;
+    style?: DashboardStyleId;
+    documentTitle?: string;
+  };
   onProgress?: (phase: string, percent: number) => void;
 }
 
@@ -615,6 +621,11 @@ export interface RenderDashboardPngOptions {
   layout?: string;
   /** Render the document-title band. Default: the projection default (on). */
   title?: boolean;
+  /**
+   * Cell style variant (`basic` | `card` | `panel` | `accent`). Default:
+   * the document's own `squisq-dashboard-style` setting.
+   */
+  style?: DashboardStyleId;
   /** Host-supplied title fallback when the doc has no frontmatter title. */
   documentTitle?: string;
   onProgress?: (phase: string, percent: number) => void;
@@ -649,6 +660,7 @@ export async function renderDocToDashboardPng(
     height,
     layout,
     title,
+    style,
     documentTitle,
     onProgress,
   } = options;
@@ -666,7 +678,7 @@ export async function renderDocToDashboardPng(
       includeAudio: false,
       animationsEnabled: false,
       displayMode: 'dashboard',
-      dashboard: { layout, title, documentTitle },
+      dashboard: { layout, title, style, documentTitle },
       onProgress,
     },
     async ({ page, renderAPI }) => {

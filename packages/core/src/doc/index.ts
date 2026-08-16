@@ -95,7 +95,26 @@ export {
   DEFAULT_DASHBOARD_SETTINGS,
   resolveDashboardSettings,
 } from './dashboard/dashboardSettings.js';
-export type { DashboardSettings } from './dashboard/dashboardSettings.js';
+export type {
+  DashboardSettings,
+  DashboardSettingsOverrides,
+} from './dashboard/dashboardSettings.js';
+export {
+  DASHBOARD_STYLE_IDS,
+  DASHBOARD_STYLES,
+  DEFAULT_DASHBOARD_STYLE,
+  buildDashboardCellChrome,
+  dashboardCanvasFill,
+  dashboardCellAccent,
+  resolveDashboardStyleId,
+  stripBlockBackdropLayer,
+  stripsBlockBackdrop,
+} from './dashboard/dashboardStyle.js';
+export type {
+  DashboardCellChrome,
+  DashboardStyleId,
+  DashboardStyleSummary,
+} from './dashboard/dashboardStyle.js';
 export {
   FRONTMATTER_DASHBOARD_LAYOUTS_KEY,
   readDashboardLayoutsFromFrontmatter,
@@ -115,6 +134,7 @@ export type {
 export { composeDashboardLayers, materializeDashboard } from './dashboard/materializeDashboard.js';
 export type {
   DashboardCell,
+  DashboardCellFrame,
   DashboardDiagnostic,
   DashboardMaterialization,
   DashboardRectPct,

@@ -184,6 +184,7 @@ function DocPlayerContent({
   displayMode = 'video',
   dashboardLayout,
   dashboardShowTitle,
+  dashboardStyle,
   dashboardDocumentTitle,
   showCoverSlide,
   coverSlideTemplate,
@@ -1324,6 +1325,7 @@ function DocPlayerContent({
           viewport={activeViewport}
           layout={dashboardLayout}
           showTitle={dashboardShowTitle}
+          style={dashboardStyle}
           documentTitle={dashboardDocumentTitle}
           basePath={basePath}
           animationsEnabled={animationsEnabled}

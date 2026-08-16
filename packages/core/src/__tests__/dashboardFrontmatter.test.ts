@@ -14,7 +14,12 @@ import type { DashboardLayoutDefinition } from '../doc/dashboard/DashboardLayout
 describe('resolveDashboardSettings', () => {
   it('defaults to auto layout with the title band on and auto zoom', () => {
     expect(resolveDashboardSettings(undefined)).toEqual(DEFAULT_DASHBOARD_SETTINGS);
-    expect(DEFAULT_DASHBOARD_SETTINGS).toEqual({ layout: 'auto', showTitle: true, zoom: 'auto' });
+    expect(DEFAULT_DASHBOARD_SETTINGS).toEqual({
+      layout: 'auto',
+      showTitle: true,
+      zoom: 'auto',
+      style: 'basic',
+    });
   });
 
   it('reads canonical keys with legacy fallbacks (canonical wins)', () => {
@@ -23,7 +28,7 @@ describe('resolveDashboardSettings', () => {
         'squisq-dashboard-layout': 'Grid-3x2',
         'squisq-dashboard-title': 'hidden',
       }),
-    ).toEqual({ layout: 'grid-3x2', showTitle: false, zoom: 'auto' });
+    ).toEqual({ layout: 'grid-3x2', showTitle: false, zoom: 'auto', style: 'basic' });
     expect(resolveDashboardSettings({ 'dashboard-layout': 'mosaic-5' }).layout).toBe('mosaic-5');
     expect(
       resolveDashboardSettings({
@@ -45,13 +50,19 @@ describe('resolveDashboardSettings', () => {
       { 'squisq-dashboard-layout': 'grid-2x2', 'squisq-dashboard-title': true },
       { layout: 'mosaic-5', showTitle: false },
     );
-    expect(settings).toEqual({ layout: 'mosaic-5', showTitle: false, zoom: 'auto' });
+    expect(settings).toEqual({
+      layout: 'mosaic-5',
+      showTitle: false,
+      zoom: 'auto',
+      style: 'basic',
+    });
   });
 
   it('publishes the canonical key registry', () => {
     expect(DASHBOARD_FRONTMATTER_KEYS.layout.canonical).toBe('squisq-dashboard-layout');
     expect(DASHBOARD_FRONTMATTER_KEYS.showTitle.canonical).toBe('squisq-dashboard-title');
     expect(DASHBOARD_FRONTMATTER_KEYS.zoom.canonical).toBe('squisq-dashboard-zoom');
+    expect(DASHBOARD_FRONTMATTER_KEYS.style.canonical).toBe('squisq-dashboard-style');
   });
 
   it('resolves the zoom mode with a tolerant vocabulary (default auto)', () => {
@@ -62,6 +73,23 @@ describe('resolveDashboardSettings', () => {
     expect(resolveDashboardSettings({ 'squisq-dashboard-zoom': 'auto' }).zoom).toBe('auto');
     expect(resolveDashboardSettings({ 'squisq-dashboard-zoom': 'wat' }).zoom).toBe('auto');
     expect(resolveDashboardSettings({}, { zoom: 'off' }).zoom).toBe('off');
+  });
+
+  it('resolves the cell style with a tolerant vocabulary (default basic)', () => {
+    expect(resolveDashboardSettings(undefined).style).toBe('basic');
+    expect(resolveDashboardSettings({ 'squisq-dashboard-style': 'Card' }).style).toBe('card');
+    expect(resolveDashboardSettings({ 'squisq-dashboard-style': 'cards' }).style).toBe('card');
+    expect(resolveDashboardSettings({ 'squisq-dashboard-style': 'outline' }).style).toBe('panel');
+    expect(resolveDashboardSettings({ 'squisq-dashboard-style': 'accent' }).style).toBe('accent');
+    expect(resolveDashboardSettings({ 'dashboard-style': 'panel' }).style).toBe('panel');
+    expect(resolveDashboardSettings({ 'squisq-dashboard-style': 'wat' }).style).toBe('basic');
+    expect(
+      resolveDashboardSettings({ 'squisq-dashboard-style': 'card' }, { style: 'panel' }).style,
+    ).toBe('panel');
+    // An unrecognized override falls back to the document's own setting.
+    expect(
+      resolveDashboardSettings({ 'squisq-dashboard-style': 'card' }, { style: 'nope' }).style,
+    ).toBe('card');
   });
 });
 

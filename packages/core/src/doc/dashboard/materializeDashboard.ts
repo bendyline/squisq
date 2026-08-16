@@ -57,6 +57,13 @@ import {
 import { resolveDashboardSettings } from './dashboardSettings.js';
 import { readDashboardLayoutsFromFrontmatter } from './dashboardLayoutsFrontmatter.js';
 import {
+  buildDashboardCellChrome,
+  dashboardCanvasFill,
+  stripBlockBackdropLayer,
+  stripsBlockBackdrop,
+  type DashboardStyleId,
+} from './dashboardStyle.js';
+import {
   resolveDashboardZooms,
   type DashboardZoomLevel,
   type DashboardZoomMode,
@@ -84,6 +91,8 @@ export interface MaterializeDashboardOptions {
   documentTitle?: string;
   /** Cell zoom override; overrides `squisq-dashboard-zoom` frontmatter. */
   zoom?: DashboardZoomMode;
+  /** Cell style override; overrides `squisq-dashboard-style` frontmatter. */
+  style?: DashboardStyleId | string;
   /** Per-cell failure policy, forwarded to `materializeBlockLayers`. */
   failureMode?: LayerMaterializationFailureMode;
 }
@@ -96,6 +105,38 @@ export interface DashboardRectPct {
   height: string;
 }
 
+/**
+ * A cell's style chrome — the card/panel surface painted BEHIND the block.
+ * Shaped like {@link DashboardTitle}: layers live in the frame's own
+ * viewport space, so a renderer positions one box and draws into it.
+ * Absent under the `basic` style, which paints no chrome at all.
+ */
+export interface DashboardCellFrame {
+  /** The layout's full cell rect in canvas units (chrome's own box). */
+  rect: LayerRect;
+  /** The frame rect as percentages of the full canvas. */
+  rectPct: DashboardRectPct;
+  /** Viewport the chrome layers were composed against. */
+  viewport: ViewportConfig;
+  /** Chrome layers painted BEHIND the block, in frame-local coordinates. */
+  layers: Layer[];
+  /**
+   * Chrome layers painted ON TOP of the block — borders and accents, which
+   * a template's own opaque surface would otherwise bury. Composed against
+   * {@link DashboardCellFrame.overlayViewport} and positioned at the
+   * block's own rect, so the same clip rounds them to the card's corners.
+   */
+  overlayLayers: Layer[];
+  /** Viewport the overlay layers were composed against (the card box). */
+  overlayViewport: ViewportConfig;
+  /**
+   * CSS `border-radius` (percentage-based, so it scales with any rendered
+   * size) for the block's content box, matching the card's corners. React
+   * consumers apply it with `overflow: hidden` to clip full-bleed cell art.
+   */
+  contentRadiusPct?: string;
+}
+
 /** One populated dashboard cell. */
 export interface DashboardCell {
   /** Cell ordinal in the layout (0-based, layout order). */
@@ -106,10 +147,15 @@ export interface DashboardCell {
   blockIndex: number;
   /** Layers materialized against {@link DashboardCell.viewport} (un-prefixed). */
   layers: Layer[];
-  /** Cell rect in canvas units. */
+  /**
+   * The block's rect in canvas units. Equals the layout cell under `basic`;
+   * under a card style it is the cell inset by the card's padding ring.
+   */
   rect: LayerRect;
-  /** Cell rect as percentages of the full canvas. */
+  /** Block rect as percentages of the full canvas. */
   rectPct: DashboardRectPct;
+  /** Style chrome painted behind the block; absent under `basic`. */
+  frame?: DashboardCellFrame;
   /** The synthetic per-cell viewport the layers were rendered against. */
   viewport: ViewportConfig;
   /**
@@ -143,18 +189,29 @@ export interface DashboardTitle {
 export interface DashboardMaterialization {
   layout: DashboardLayoutDefinition;
   layoutSource: 'option' | 'frontmatter' | 'auto';
+  /** The resolved cell style variant. */
+  style: DashboardStyleId;
   viewport: ViewportConfig;
   cells: DashboardCell[];
   /** Null when the title band is disabled or no title resolves. */
   title: DashboardTitle | null;
   /** Canvas-level base fill + theme/doc persistent layers, applied once. */
-  backdrop: { bottomLayers: Layer[]; topLayers: Layer[] };
+  backdrop: { fill: string; bottomLayers: Layer[]; topLayers: Layer[] };
   diagnostics: DashboardDiagnostic[];
 }
 
 const DEFAULT_TITLE_SLOT: DashboardTitleSlotDefinition = { placement: 'top', height: '9%' };
 /** Gap between the title band and the content area, as a canvas-height fraction. */
 const TITLE_CONTENT_GAP = 0.015;
+/**
+ * Margin between the canvas edge and the cell area, as a fraction of the
+ * canvas's SHORTER axis — so the breathing room is physically equal on both
+ * axes instead of being wide-and-thin on a 16:9 canvas. It applies to every
+ * layout and style (layout `%` rects are resolved against the inset content
+ * rect). The title band keeps its full-bleed header treatment; the edge it
+ * abuts gets its spacing from {@link TITLE_CONTENT_GAP} instead.
+ */
+const CANVAS_MARGIN = 0.02;
 
 function percentNumber(value: string): number {
   const parsed = Number(value.trim().replace(/%$/, ''));
@@ -206,19 +263,24 @@ function buildTitleLayers(
   slot: DashboardTitleSlotDefinition,
   theme: Theme,
   canvasViewport: ViewportConfig,
+  /** Canvas margin, so the band's type aligns with the cell area's edge. */
+  margin: number,
 ): Layer[] {
   const context = createTemplateContext(theme, 0, 1, canvasViewport);
   const canvasFontScale = calculateFontScale(canvasViewport);
   const fontSize = Math.min(44 * canvasFontScale, bandViewport.height * 0.52);
+  const accentWidth = Math.max(4, Math.round(6 * canvasFontScale));
+  // Bar, then a gap of its own width again before the type starts.
+  const textX = margin + accentWidth + Math.max(10, Math.round(accentWidth * 2.5));
   return [
     {
       type: 'shape',
       id: 'dashboard-title-accent',
       content: { shape: 'rect', fill: theme.colors.primary },
       position: {
-        x: 0,
+        x: margin,
         y: '26%',
-        width: Math.max(4, Math.round(6 * canvasFontScale)),
+        width: accentWidth,
         height: '48%',
       },
     },
@@ -237,7 +299,12 @@ function buildTitleLayers(
           maxLines: 1,
         },
       },
-      position: { x: '1.4%', y: 0, width: '97%', height: '100%' },
+      position: {
+        x: textX,
+        y: 0,
+        width: Math.max(1, bandViewport.width - textX - margin),
+        height: '100%',
+      },
     },
     {
       // Hairline separating the band from the content area.
@@ -272,7 +339,9 @@ export function materializeDashboard(
     layout: typeof options.layout === 'string' ? options.layout : undefined,
     showTitle: options.showTitle,
     zoom: options.zoom,
+    ...(options.style !== undefined ? { style: options.style } : {}),
   });
+  const style = settings.style;
   let layoutDef: DashboardLayoutDefinition | undefined;
   let layoutSource: DashboardMaterialization['layoutSource'] = 'auto';
   if (options.layout && typeof options.layout === 'object') {
@@ -330,8 +399,17 @@ export function materializeDashboard(
     layoutSource = 'auto';
   }
 
-  // 5. Geometry: the content rect is the canvas minus the title band.
-  let contentRect: LayerRect = { x: 0, y: 0, width: viewport.width, height: viewport.height };
+  // 5. Geometry: the content rect is the canvas minus the outer margin, then
+  //    minus the title band. The margin insets the cell area on every edge;
+  //    the edge the band occupies trades it for the band + its own gap, so a
+  //    header still reads as a full-bleed band rather than a floating strip.
+  const margin = CANVAS_MARGIN * Math.min(viewport.width, viewport.height);
+  let contentRect: LayerRect = {
+    x: margin,
+    y: margin,
+    width: Math.max(1, viewport.width - margin * 2),
+    height: Math.max(1, viewport.height - margin * 2),
+  };
   let title: DashboardTitle | null = null;
   if (hasTitleBand) {
     const slot = layoutDef.titleSlot ?? DEFAULT_TITLE_SLOT;
@@ -344,12 +422,17 @@ export function materializeDashboard(
         : { x: 0, y: 0, width: viewport.width, height: bandHeight };
     contentRect =
       slot.placement === 'bottom'
-        ? { x: 0, y: 0, width: viewport.width, height: viewport.height - bandHeight - gap }
+        ? {
+            x: margin,
+            y: margin,
+            width: Math.max(1, viewport.width - margin * 2),
+            height: Math.max(1, viewport.height - bandHeight - gap - margin),
+          }
         : {
-            x: 0,
+            x: margin,
             y: bandHeight + gap,
-            width: viewport.width,
-            height: viewport.height - bandHeight - gap,
+            width: Math.max(1, viewport.width - margin * 2),
+            height: Math.max(1, viewport.height - bandHeight - gap - margin),
           };
     const bandViewport: ViewportConfig = {
       width: Math.max(1, Math.round(titleRect.width)),
@@ -361,7 +444,9 @@ export function materializeDashboard(
       rect: titleRect,
       rectPct: rectToPct(titleRect, viewport),
       viewport: bandViewport,
-      layers: buildTitleLayers(titleText, bandViewport, slot, theme, viewport),
+      // The band spans the canvas, but its type starts on the cell area's
+      // left edge so the title and the first column share one margin.
+      layers: buildTitleLayers(titleText, bandViewport, slot, theme, viewport, margin),
     };
   }
 
@@ -445,9 +530,16 @@ export function materializeDashboard(
     ({ cellIndex, rect, candidateIndex }, orderIndex) => {
       const block = candidates[candidateIndex];
       const zoom = zooms[orderIndex];
+      // The style decides where inside its layout cell the block actually
+      // renders: `basic` uses the whole cell, card styles reserve a
+      // padding ring for the surface they paint behind it. The block is
+      // materialized against THAT box, so composition and type scale
+      // target the real content area rather than being shrunk after.
+      const chrome = buildDashboardCellChrome(style, { theme, rect, index: cellIndex });
+      const contentRect = chrome ? chrome.contentRect : rect;
       const cellViewport: ViewportConfig = {
-        width: Math.max(1, Math.round(rect.width)),
-        height: Math.max(1, Math.round(rect.height)),
+        width: Math.max(1, Math.round(contentRect.width)),
+        height: Math.max(1, Math.round(contentRect.height)),
         name: `Dashboard cell ${cellIndex + 1}`,
       };
       const cellContext = createTemplateContext(
@@ -469,13 +561,38 @@ export function materializeDashboard(
         },
         { registry, templateContext: cellContext },
       );
+      const layers = stripsBlockBackdrop(style)
+        ? stripBlockBackdropLayer(result.layers, theme)
+        : result.layers;
+      let frame: DashboardCellFrame | undefined;
+      if (chrome) {
+        const frameViewport: ViewportConfig = {
+          width: Math.max(1, Math.round(rect.width)),
+          height: Math.max(1, Math.round(rect.height)),
+          name: `Dashboard cell ${cellIndex + 1} frame`,
+        };
+        frame = {
+          rect,
+          rectPct: rectToPct(rect, viewport),
+          viewport: frameViewport,
+          layers: chrome.layers,
+          overlayLayers: chrome.overlayLayers,
+          overlayViewport: {
+            width: cellViewport.width,
+            height: cellViewport.height,
+            name: `Dashboard cell ${cellIndex + 1} overlay`,
+          },
+          ...(chrome.contentRadiusPct ? { contentRadiusPct: chrome.contentRadiusPct } : {}),
+        };
+      }
       return {
         index: cellIndex,
         block,
         blockIndex: candidateIndex,
-        layers: result.layers,
-        rect,
-        rectPct: rectToPct(rect, viewport),
+        layers,
+        rect: contentRect,
+        rectPct: rectToPct(contentRect, viewport),
+        ...(frame ? { frame } : {}),
         viewport: cellViewport,
         zoom,
         source: result.source,
@@ -487,12 +604,14 @@ export function materializeDashboard(
   // 9. Canvas backdrop: base fill + persistent layers (doc's win wholesale
   //    over the theme's, matching every other projection).
   const persistent = resolvePersistentLayers(doc, theme);
+  const canvasFill = dashboardCanvasFill(style, theme);
   const backdrop = {
+    fill: canvasFill,
     bottomLayers: [
       {
         type: 'shape',
         id: 'dashboard-backdrop',
-        content: { shape: 'rect', fill: theme.colors.background },
+        content: { shape: 'rect', fill: canvasFill },
         position: { x: 0, y: 0, width: '100%', height: '100%' },
       } as Layer,
       ...expandPersistentLayers(persistent?.bottomLayers, theme),
@@ -503,6 +622,7 @@ export function materializeDashboard(
   return {
     layout: layoutDef,
     layoutSource,
+    style,
     viewport,
     cells,
     title,
@@ -516,12 +636,37 @@ export function materializeDashboard(
  * consumers. Every cell/title layer is mapped into its canvas rect with a
  * unique id prefix (templates reuse ids like `title`, so the prefix is
  * what keeps the flat canvas collision-free). Paint order: backdrop
- * bottom, cells, title band, backdrop top.
+ * bottom, then per cell its style chrome followed by its block, then the
+ * title band and the backdrop top.
+ *
+ * The flat canvas has no clipping concept, so a cell's full-bleed art is
+ * not rounded to its card corners here the way a React host clips it with
+ * `frame.contentRadiusPct`.
  */
 export function composeDashboardLayers(materialization: DashboardMaterialization): Layer[] {
   const layers: Layer[] = [...materialization.backdrop.bottomLayers];
   for (const cell of materialization.cells) {
+    if (cell.frame) {
+      layers.push(
+        ...placeLayersInRect(
+          cell.frame.layers,
+          cell.frame.viewport,
+          cell.frame.rect,
+          `cell-${cell.index}-frame`,
+        ),
+      );
+    }
     layers.push(...placeLayersInRect(cell.layers, cell.viewport, cell.rect, `cell-${cell.index}`));
+    if (cell.frame && cell.frame.overlayLayers.length > 0) {
+      layers.push(
+        ...placeLayersInRect(
+          cell.frame.overlayLayers,
+          cell.frame.overlayViewport,
+          cell.rect,
+          `cell-${cell.index}-overlay`,
+        ),
+      );
+    }
   }
   if (materialization.title) {
     layers.push(

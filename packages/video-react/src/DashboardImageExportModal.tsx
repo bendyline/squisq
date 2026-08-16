@@ -12,7 +12,13 @@
 
 import { useCallback, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Doc, MediaProvider, Theme } from '@bendyline/squisq/schemas';
-import { DASHBOARD_AUTO_LAYOUT_ID, listDashboardLayouts } from '@bendyline/squisq/doc';
+import {
+  DASHBOARD_AUTO_LAYOUT_ID,
+  DASHBOARD_STYLES,
+  DEFAULT_DASHBOARD_STYLE,
+  listDashboardLayouts,
+  type DashboardStyleId,
+} from '@bendyline/squisq/doc';
 import {
   DASHBOARD_RESOLUTIONS,
   DEFAULT_DASHBOARD_RESOLUTION,
@@ -44,6 +50,8 @@ export interface DashboardImageExportModalProps {
   defaultLayout?: string;
   /** Initial title-band state (default true — the projection default). */
   defaultShowTitle?: boolean;
+  /** Initially selected cell style variant (default `'basic'`). */
+  defaultStyle?: DashboardStyleId;
   defaultFileName?: string;
   colorScheme?: 'light' | 'dark';
   /** Optional host save flow. Return false when the user cancels. */
@@ -92,6 +100,7 @@ export function DashboardImageExportModal({
   defaultResolution = DEFAULT_DASHBOARD_RESOLUTION,
   defaultLayout = DASHBOARD_AUTO_LAYOUT_ID,
   defaultShowTitle = true,
+  defaultStyle = DEFAULT_DASHBOARD_STYLE,
   defaultFileName,
   colorScheme = 'light',
   saveOutput,
@@ -110,6 +119,7 @@ export function DashboardImageExportModal({
   const [customHeight, setCustomHeight] = useState<number>(defaultPreset.height);
   const [layout, setLayout] = useState(defaultLayout);
   const [showTitle, setShowTitle] = useState(defaultShowTitle);
+  const [style, setStyle] = useState<DashboardStyleId>(defaultStyle);
   const [quality, setQuality] = useState(0.92);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +174,7 @@ export function DashboardImageExportModal({
           dashboard: {
             layout,
             title: showTitle,
+            style,
             documentTitle: documentTitleFromFileName(defaultFileName),
           },
         },
@@ -209,6 +220,7 @@ export function DashboardImageExportModal({
     quality,
     saveOutput,
     showTitle,
+    style,
     theme,
     width,
   ]);
@@ -372,6 +384,23 @@ export function DashboardImageExportModal({
                 ))}
               </optgroup>
             )}
+          </select>
+        </label>
+
+        <label style={labelStyle}>
+          Style
+          <select
+            aria-label="Dashboard cell style"
+            value={style}
+            disabled={busy}
+            onChange={(event) => setStyle(event.target.value as DashboardStyleId)}
+            style={fieldStyle}
+          >
+            {DASHBOARD_STYLES.map((option) => (
+              <option key={option.id} value={option.id} title={option.description}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </label>
 

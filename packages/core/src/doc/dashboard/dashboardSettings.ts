@@ -7,9 +7,16 @@
  * - `squisq-dashboard-layout`: layout id or `auto` (default `auto`).
  * - `squisq-dashboard-title`: whether the document title band renders
  *   (default true; the band only appears when a title actually resolves).
+ * - `squisq-dashboard-style`: cell style variant (default `basic`) — the
+ *   dressing axis that is orthogonal to the layout's geometry.
  */
 
 import { DASHBOARD_AUTO_LAYOUT_ID } from './chooseDashboardLayout.js';
+import {
+  DEFAULT_DASHBOARD_STYLE,
+  resolveDashboardStyleId,
+  type DashboardStyleId,
+} from './dashboardStyle.js';
 import type { DashboardZoomMode } from './dashboardZoom.js';
 
 export interface DashboardSettings {
@@ -19,18 +26,22 @@ export interface DashboardSettings {
   showTitle: boolean;
   /** Cell zoom behavior: density-based `auto` boosts, or `off` (all 1×). */
   zoom: DashboardZoomMode;
+  /** Cell style variant (chrome around each block). */
+  style: DashboardStyleId;
 }
 
 export const DASHBOARD_FRONTMATTER_KEYS = Object.freeze({
   layout: { canonical: 'squisq-dashboard-layout', legacy: 'dashboard-layout' },
   showTitle: { canonical: 'squisq-dashboard-title', legacy: 'dashboard-title' },
   zoom: { canonical: 'squisq-dashboard-zoom', legacy: 'dashboard-zoom' },
+  style: { canonical: 'squisq-dashboard-style', legacy: 'dashboard-style' },
 });
 
 export const DEFAULT_DASHBOARD_SETTINGS: Readonly<DashboardSettings> = Object.freeze({
   layout: DASHBOARD_AUTO_LAYOUT_ID,
   showTitle: true,
   zoom: 'auto',
+  style: DEFAULT_DASHBOARD_STYLE,
 });
 
 function readSetting(
@@ -74,10 +85,19 @@ function resolveZoomMode(value: unknown): DashboardZoomMode | undefined {
   return undefined;
 }
 
+/**
+ * Caller overrides. `style` is deliberately widened to `string`: hosts pass
+ * raw CLI/UI values through, and an unrecognized one normalizes away rather
+ * than needing a cast at every call site.
+ */
+export type DashboardSettingsOverrides = Partial<Omit<DashboardSettings, 'style'>> & {
+  style?: DashboardStyleId | string;
+};
+
 /** Resolve dashboard settings from frontmatter, then apply caller overrides. */
 export function resolveDashboardSettings(
   frontmatter: Record<string, unknown> | undefined,
-  overrides: Partial<DashboardSettings> = {},
+  overrides: DashboardSettingsOverrides = {},
 ): DashboardSettings {
   const resolved: DashboardSettings = {
     layout:
@@ -89,10 +109,14 @@ export function resolveDashboardSettings(
     zoom:
       resolveZoomMode(readSetting(frontmatter, DASHBOARD_FRONTMATTER_KEYS.zoom)) ??
       DEFAULT_DASHBOARD_SETTINGS.zoom,
+    style:
+      resolveDashboardStyleId(readSetting(frontmatter, DASHBOARD_FRONTMATTER_KEYS.style)) ??
+      DEFAULT_DASHBOARD_SETTINGS.style,
   };
   return {
     layout: resolveLayoutId(overrides.layout) ?? resolved.layout,
     showTitle: overrides.showTitle ?? resolved.showTitle,
     zoom: overrides.zoom ?? resolved.zoom,
+    style: resolveDashboardStyleId(overrides.style) ?? resolved.style,
   };
 }

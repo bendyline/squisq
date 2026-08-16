@@ -98,11 +98,43 @@ describe('materializeDashboard', () => {
   });
 
   it('reclaims the band when the title is disabled', () => {
+    const withBand = materializeDashboard(docFrom(SIX_BLOCKS));
     const result = materializeDashboard(docFrom(SIX_BLOCKS), { showTitle: false });
     expect(result.title).toBeNull();
     // Six candidates now (no dedupe without a band) → grid-3x2 at full height.
     expect(result.layout.name).toBe('grid-3x2');
-    expect(Math.min(...result.cells.map((cell) => cell.rect.y))).toBe(0);
+    // Only the canvas margin remains above the first row — the band's height
+    // and its gap are given back to the cells.
+    const top = Math.min(...result.cells.map((cell) => cell.rect.y));
+    expect(top).toBeGreaterThan(0);
+    expect(top).toBeLessThan(Math.min(...withBand.cells.map((cell) => cell.rect.y)));
+  });
+
+  it('insets the cell area from every canvas edge', () => {
+    // With no band the margin is symmetric on all four edges; with one, the
+    // band + its gap replace the top margin.
+    const bare = materializeDashboard(docFrom(SIX_BLOCKS), { showTitle: false });
+    const left = Math.min(...bare.cells.map((cell) => cell.rect.x));
+    const top = Math.min(...bare.cells.map((cell) => cell.rect.y));
+    const right = 1920 - Math.max(...bare.cells.map((cell) => cell.rect.x + cell.rect.width));
+    const bottom = 1080 - Math.max(...bare.cells.map((cell) => cell.rect.y + cell.rect.height));
+    // Equal physical margin on both axes (a fraction of the shorter axis).
+    for (const gap of [left, top, right, bottom]) {
+      expect(gap).toBeGreaterThan(0);
+      expect(gap).toBeCloseTo(left, 3);
+    }
+
+    const titled = materializeDashboard(docFrom(SIX_BLOCKS));
+    expect(Math.min(...titled.cells.map((cell) => cell.rect.x))).toBeCloseTo(left, 3);
+    expect(
+      1080 - Math.max(...titled.cells.map((cell) => cell.rect.y + cell.rect.height)),
+    ).toBeCloseTo(bottom, 3);
+    // The band itself stays full-bleed, but its type starts on the same
+    // left edge as the first column.
+    expect(titled.title!.rect.x).toBe(0);
+    expect(titled.title!.rect.width).toBe(1920);
+    const accent = titled.title!.layers.find((layer) => layer.id === 'dashboard-title-accent');
+    expect(accent!.position.x).toBeCloseTo(left, 3);
   });
 
   it('keeps a title-matching lead block that carries its own body prose', () => {

@@ -664,19 +664,22 @@ interface MaterializeDashboardOptions {
   showTitle?: boolean; // overrides squisq-dashboard-title (default true)
   documentTitle?: string; // host filename fallback for the title band
   zoom?: 'auto' | 'off'; // overrides squisq-dashboard-zoom (default 'auto')
+  style?: DashboardStyleId | string; // overrides squisq-dashboard-style (default 'basic')
   failureMode?: 'fallback' | 'empty'; // per-cell, forwarded to materializeBlockLayers
 }
 interface DashboardMaterialization {
   layout: DashboardLayoutDefinition;
   layoutSource: 'option' | 'frontmatter' | 'auto';
+  style: DashboardStyleId; // resolved cell style variant
   viewport: ViewportConfig;
-  cells: DashboardCell[]; // { index, block, blockIndex, layers, rect, rectPct, viewport, source, diagnostic? }
+  cells: DashboardCell[]; // { index, block, blockIndex, layers, rect, rectPct, frame?, viewport, zoom, source, diagnostic? }
   title: DashboardTitle | null; // band text + rect + synthesized layers; null when disabled/absent
-  backdrop: { bottomLayers: Layer[]; topLayers: Layer[] }; // canvas fill + persistent layers, applied once
+  backdrop: { fill: string; bottomLayers: Layer[]; topLayers: Layer[] }; // canvas fill + persistent layers, applied once
   diagnostics: DashboardDiagnostic[]; // 'overflow' | 'unknown-layout' | 'invalid-cell-assignment' | 'empty-doc'
 }
 // Flatten a materialization into one canvas-level Layer[] for non-React
-// consumers (placeLayersInRect per cell with `cell-N-` id prefixes).
+// consumers (per cell: frame chrome, block, overlay chrome — placeLayersInRect
+// with `cell-N-frame-` / `cell-N-` / `cell-N-overlay-` id prefixes).
 function composeDashboardLayers(m: DashboardMaterialization): Layer[];
 
 // Layout model: cells are %-rects relative to the content area (canvas minus
@@ -701,6 +704,24 @@ const DASHBOARD_ZOOM_LEVELS: readonly [1, 1.5, 2];
 function normalizeDashboardZoom(value: unknown): DashboardZoomLevel | undefined; // 1/1.5/2 or 100/150/200
 function desiredCellZoom(candidate: DashboardZoomCandidate): DashboardZoomLevel;
 function resolveDashboardZooms(candidates: readonly DashboardZoomCandidate[], mode: 'auto' | 'off'): DashboardZoomLevel[];
+// Cell style: the dressing axis, orthogonal to the layout's geometry. Every
+// variant takes its colors from the ACTIVE theme (colors, style.borderRadius,
+// colorSchemes rotation) — a style never carries a palette. Under a card
+// style the block FILLS its card (templates bring their own padding); a
+// leading full-bleed backdrop that is exactly theme.colors.background is
+// dropped so the surface shows through, and borders/accents render as
+// overlay layers ABOVE the block. Each cell's `frame` carries the behind and
+// overlay layers plus `contentRadiusPct`, a percentage border-radius a host
+// clips the cell with (so corners scale at any export size).
+type DashboardStyleId = 'basic' | 'card' | 'panel' | 'accent';
+const DASHBOARD_STYLE_IDS: readonly DashboardStyleId[];
+const DASHBOARD_STYLES: readonly { id: DashboardStyleId; label: string; description: string }[];
+const DEFAULT_DASHBOARD_STYLE = 'basic';
+function resolveDashboardStyleId(value: unknown): DashboardStyleId | undefined; // tolerant; undefined when unknown
+function buildDashboardCellChrome(style: DashboardStyleId, options: { theme: Theme; rect: LayerRect; index: number }): DashboardCellChrome | null; // null for 'basic'
+function dashboardCanvasFill(style: DashboardStyleId, theme: Theme): string; // tinted desk for elevated styles
+function dashboardCellAccent(theme: Theme, index: number): string; // colorSchemes rotation
+function stripBlockBackdropLayer(layers: readonly Layer[], theme: Theme): Layer[];
 const BUILTIN_DASHBOARD_LAYOUTS: readonly DashboardLayoutDefinition[]; // focus-1 … grid-4x4 (capacities 1–16)
 const DASHBOARD_AUTO_LAYOUT_ID = 'auto';
 function chooseDashboardLayout(blockCount: number, orientation: ViewportOrientation, customLayouts?: readonly DashboardLayoutDefinition[]): DashboardLayoutDefinition;
@@ -713,12 +734,17 @@ function getDashboardLayoutSummaries(): DashboardLayoutSummary[]; // built-ins, 
 function listDashboardLayouts(doc: Pick<Doc, 'frontmatter'> | undefined): DashboardLayoutSummary[]; // doc customs first
 
 // Frontmatter: settings resolver (Pattern A) + custom-layout codec (Pattern B).
-function resolveDashboardSettings(frontmatter: Record<string, unknown> | undefined, overrides?: Partial<DashboardSettings>): DashboardSettings; // { layout: 'auto', showTitle: true } defaults
-const DASHBOARD_FRONTMATTER_KEYS: { layout: …; showTitle: … }; // squisq-dashboard-layout / squisq-dashboard-title
+function resolveDashboardSettings(frontmatter: Record<string, unknown> | undefined, overrides?: DashboardSettingsOverrides): DashboardSettings; // { layout: 'auto', showTitle: true, zoom: 'auto', style: 'basic' } defaults
+const DASHBOARD_FRONTMATTER_KEYS: { layout: …; showTitle: …; zoom: …; style: … }; // squisq-dashboard-layout / -title / -zoom / -style
 function readDashboardLayoutsFromFrontmatter(frontmatter?: Record<string, unknown>): DashboardLayoutDefinition[] | undefined;
 function writeDashboardLayoutsToFrontmatter(layouts?: readonly DashboardLayoutDefinition[], options?: { pretty?: boolean }): string | undefined;
 const FRONTMATTER_DASHBOARD_LAYOUTS_KEY = 'squisq-dashboard-layouts';
 ```
+
+The cell area is inset from the canvas edge by a small margin (2% of the
+shorter axis) on every side the title band does not occupy, so a dashboard
+never runs its cards into the frame; the band itself stays full-bleed and
+aligns its type with the cell area's left edge.
 
 Candidate blocks come from `buildPreviewDoc(doc, { interleaveImages: false })`
 so template resolution and derived inputs match the slideshow exactly. Each
@@ -1497,6 +1523,7 @@ interface DocPlayerProps {
   displayMode?: DisplayMode; // default 'video'
   dashboardLayout?: string; // dashboard mode: layout id or 'auto' (overrides doc frontmatter)
   dashboardShowTitle?: boolean; // dashboard mode: title-band override
+  dashboardStyle?: DashboardStyleId; // dashboard mode: cell style variant
   dashboardDocumentTitle?: string; // dashboard mode: host title fallback (file name)
   showCoverSlide?: boolean; // default true
   coverVisible?: boolean; // controlled cover cursor for synchronized audience mirrors
@@ -1529,24 +1556,24 @@ interface BlockRendererProps {
 
 #### Other components
 
-| Component              | Summary                                                                                                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DocPlayerWithSidebar` | `DocPlayer` composed with `DocControlsSidebar`.                                                                                                                        |
-| `LinearDocView`        | The "Page" rendition: theme-art-directed, variable-height HTML sections via core `materializePageSections`; SVG only for spatial canvas embeds (`LinearDocViewProps`). |
-| `DashboardView`        | The "Dashboard" rendition: one static canvas of per-cell `BlockRenderer`s via core `materializeDashboard`; publishes a minimal render API for single-frame capture.   |
-| `PageSectionView`      | Dispatches one `PageSection` to its section layout component.                                                                                                          |
-| `CanvasSection`        | Responsive SVG embed for spatial sections (diagram/tree/map/…).                                                                                                        |
-| `MarkdownRenderer`     | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                      |
-| `CaptionOverlay`       | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                      |
-| `SocialCaptionOverlay` | Large centered TikTok/Reels-style word-by-word captions.                                                                                                               |
-| `DocProgressBar`       | Block progress indicator with seek.                                                                                                                                    |
-| `DocControlsOverlay`   | Floating play/pause + prev/next over the player.                                                                                                                       |
-| `DocControlsBottom`    | Bottom bar with progress + counter.                                                                                                                                    |
-| `DocControlsSidebar`   | Side panel with block thumbnails.                                                                                                                                      |
-| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter).                                                                                                                         |
-| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                  |
-| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                           |
-| `JsonView`             | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                  |
+| Component              | Summary                                                                                                                                                                                               |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DocPlayerWithSidebar` | `DocPlayer` composed with `DocControlsSidebar`.                                                                                                                                                       |
+| `LinearDocView`        | The "Page" rendition: theme-art-directed, variable-height HTML sections via core `materializePageSections`; SVG only for spatial canvas embeds (`LinearDocViewProps`).                                |
+| `DashboardView`        | The "Dashboard" rendition: one static canvas of per-cell `BlockRenderer`s (plus each cell's `style` chrome) via core `materializeDashboard`; publishes a minimal render API for single-frame capture. |
+| `PageSectionView`      | Dispatches one `PageSection` to its section layout component.                                                                                                                                         |
+| `CanvasSection`        | Responsive SVG embed for spatial sections (diagram/tree/map/…).                                                                                                                                       |
+| `MarkdownRenderer`     | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                                                     |
+| `CaptionOverlay`       | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                                                     |
+| `SocialCaptionOverlay` | Large centered TikTok/Reels-style word-by-word captions.                                                                                                                                              |
+| `DocProgressBar`       | Block progress indicator with seek.                                                                                                                                                                   |
+| `DocControlsOverlay`   | Floating play/pause + prev/next over the player.                                                                                                                                                      |
+| `DocControlsBottom`    | Bottom bar with progress + counter.                                                                                                                                                                   |
+| `DocControlsSidebar`   | Side panel with block thumbnails.                                                                                                                                                                     |
+| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter).                                                                                                                                                        |
+| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                                                 |
+| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                                                          |
+| `JsonView`             | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                                                 |
 
 ```ts
 interface LinearDocViewProps {
@@ -1741,7 +1768,12 @@ function getTransitionClass(
 ```ts
 interface MountOptions {
   mode?: 'slideshow' | 'static' | 'dashboard';
-  dashboard?: { layout?: string; title?: boolean; documentTitle?: string }; // dashboard mode only
+  dashboard?: {
+    layout?: string;
+    title?: boolean;
+    style?: DashboardStyleId;
+    documentTitle?: string;
+  }; // dashboard mode only
   basePath?: string;
   images?: Record<string, string>;
   audio?: Record<string, string>;
@@ -2771,7 +2803,7 @@ interface RenderHtmlOptions {
   captionStyle?: 'standard' | 'social';
   animationsEnabled?: boolean; // default true
   displayMode?: 'slideshow' | 'dashboard'; // default 'slideshow'
-  dashboard?: { layout?: string; title?: boolean; documentTitle?: string };
+  dashboard?: { layout?: string; title?: boolean; style?: string; documentTitle?: string };
 }
 
 // Dashboard image export presets — shared by `squisq image` and the browser
@@ -2779,11 +2811,21 @@ interface RenderHtmlOptions {
 // (physical pixels); `family` names the VIEWPORT_PRESETS aspect they imply.
 const DASHBOARD_RESOLUTIONS: readonly DashboardResolutionPreset[]; // hd, fhd, 4k, square, square-2k, portrait, portrait-4k, standard
 const DEFAULT_DASHBOARD_RESOLUTION: DashboardResolutionId; // 'fhd' (1920×1080)
-interface DashboardResolutionPreset { id: string; label: string; width: number; height: number; family: ViewportPreset }
+interface DashboardResolutionPreset {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  family: ViewportPreset;
+}
 // Cover-image ruleset (whole pixels, 64–7680 per axis, ≤33,177,600 px) — NOT
 // the H.264 even-dimension rule; odd dimensions are legal for a PNG.
 function validateDashboardImageDimensions(width: number, height: number): string | null;
-function resolveDashboardDimensions(input?: { resolution?: string; width?: number; height?: number }): { width: number; height: number; family: ViewportPreset }; // preset XOR both-custom; throws RangeError
+function resolveDashboardDimensions(input?: {
+  resolution?: string;
+  width?: number;
+  height?: number;
+}): { width: number; height: number; family: ViewportPreset }; // preset XOR both-custom; throws RangeError
 function dashboardFamilyForDimensions(width: number, height: number): ViewportPreset;
 ```
 
@@ -3051,8 +3093,9 @@ package. Run `squisq doctor` to check the toolchain.
 
 Render a document's **Dashboard** rendition — every block arranged on one
 canvas — to a PNG image (Playwright headless single-frame capture). Needs
-Chromium only; no ffmpeg. Layout and title default to the doc's
-`squisq-dashboard-layout` / `squisq-dashboard-title` frontmatter.
+Chromium only; no ffmpeg. Layout, style, and title default to the doc's
+`squisq-dashboard-layout` / `squisq-dashboard-style` / `squisq-dashboard-title`
+frontmatter.
 
 | Option                   | Description                                                                                   | Default       |
 | ------------------------ | --------------------------------------------------------------------------------------------- | ------------- |
@@ -3060,6 +3103,7 @@ Chromium only; no ffmpeg. Layout and title default to the doc's
 | `--resolution`           | Named preset: `hd`, `fhd`, `4k`, `square`, `square-2k`, `portrait`, `portrait-4k`, `standard` | `fhd`         |
 | `--width` / `--height`   | Custom pixels (both together; excludes `--resolution`; 64–7680 per axis, ≤33 MP; odd is fine) | preset        |
 | `--layout`               | Dashboard layout id (built-in or doc-defined custom), or `auto`                               | `auto`        |
+| `--style`                | Cell style variant: `basic`, `card`, `panel`, `accent`                                        | doc setting   |
 | `--title` / `--no-title` | Show/hide the document-title band                                                             | shown         |
 | `--format`               | Output format (`png`)                                                                         | `png`         |
 | `-t, --theme`            | Squisq theme id to apply                                                                      | none          |
@@ -3181,6 +3225,7 @@ interface RenderDashboardPngOptions {
   height?: number;
   layout?: string; // dashboard layout id or 'auto' (default)
   title?: boolean; // title band override
+  style?: DashboardStyleId; // 'basic' | 'card' | 'panel' | 'accent'; default: the doc's setting
   documentTitle?: string; // title fallback when the doc has no frontmatter title
   onProgress?: (phase: string, percent: number) => void;
 }

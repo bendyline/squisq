@@ -94,6 +94,7 @@ export function PreviewPanel({
     activeCoverSlidePlayback,
     activeDashboardLayout,
     activeDashboardTitle,
+    activeDashboardStyle,
   } = usePreviewSettings();
   const mainSurfaceRef = useRef<HTMLDivElement>(null);
   const popupSurfaceRef = useRef<HTMLDivElement>(null);
@@ -371,6 +372,7 @@ export function PreviewPanel({
             theme={activeTheme}
             layout={activeDashboardLayout}
             showTitle={activeDashboardTitle}
+            style={activeDashboardStyle}
             documentTitle={documentTitleFromFileName(fileName)}
           />
         </div>

@@ -219,9 +219,11 @@ function DashboardProbe() {
   const {
     activeDashboardLayout,
     activeDashboardTitle,
+    activeDashboardStyle,
     dashboardLayoutOptions,
     setDashboardLayout,
     setDashboardTitleEnabled,
+    setDashboardStyle,
   } = usePreviewSettings();
   const { markdownSource } = useEditorContext();
   return (
@@ -238,10 +240,17 @@ function DashboardProbe() {
       <button type="button" onClick={() => setDashboardTitleEnabled(true)}>
         Show dashboard title
       </button>
+      <button type="button" onClick={() => setDashboardStyle('card')}>
+        Choose card style
+      </button>
+      <button type="button" onClick={() => setDashboardStyle(null)}>
+        Choose basic style
+      </button>
       <div
         data-testid="active-dashboard"
         data-layout={activeDashboardLayout}
         data-title={String(activeDashboardTitle)}
+        data-style={activeDashboardStyle}
         data-custom-options={dashboardLayoutOptions
           .filter((option) => option.custom)
           .map((option) => option.id)
@@ -1150,6 +1159,33 @@ describe('dashboard mode', () => {
     expect(probe.getAttribute('data-title')).toBe('true');
   });
 
+  it('persists a cell-style selection and drops it when back on basic', async () => {
+    renderDashboardHarness('# Hello');
+    expect(screen.getByTestId('active-dashboard').getAttribute('data-style')).toBe('basic');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose card style' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        'squisq-dashboard-style: card',
+      );
+      expect(screen.getByTestId('active-dashboard').getAttribute('data-style')).toBe('card');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose basic style' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).not.toContain(
+        'squisq-dashboard-style',
+      );
+    });
+  });
+
+  it('reads the persisted cell style from frontmatter', async () => {
+    renderDashboardHarness('---\nsquisq-dashboard-style: panel\n---\n\n# Hello');
+    await waitFor(() => {
+      expect(screen.getByTestId('active-dashboard').getAttribute('data-style')).toBe('panel');
+    });
+  });
+
   it('reads the persisted layout and title from frontmatter', async () => {
     renderDashboardHarness(
       '---\nsquisq-dashboard-layout: grid-3x2\nsquisq-dashboard-title: false\n---\n\n# Hello',
@@ -1229,6 +1265,7 @@ describe('dashboard mode', () => {
       // The hidden measurement probe renders every applicable control, so
       // queryAll sees each control at least once regardless of overflow.
       expect(screen.getAllByLabelText('Dashboard layout').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText('Dashboard cell style').length).toBeGreaterThan(0);
       expect(screen.getAllByLabelText('Export dashboard as image').length).toBeGreaterThan(0);
       expect(screen.queryByText('Captions:')).toBeNull();
       expect(screen.queryByText('Loop')).toBeNull();

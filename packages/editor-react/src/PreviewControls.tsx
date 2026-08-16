@@ -60,10 +60,13 @@ import {
   expandCoverBlock,
   resolveCoverSlideSettings,
   DASHBOARD_AUTO_LAYOUT_ID,
+  DASHBOARD_STYLES,
   listDashboardLayouts,
+  resolveDashboardStyleId,
   type CoverSlidePlayback,
   type CoverSlideTemplate,
   type DashboardLayoutSummary,
+  type DashboardStyleId,
 } from '@bendyline/squisq/doc';
 import { CoverImageExportModal } from '@bendyline/squisq-video-react/cover-image';
 import {
@@ -141,6 +144,10 @@ export interface PreviewSettings {
   activeDashboardTitle: boolean;
   /** Enable/disable (and persist) the dashboard title band. */
   setDashboardTitleEnabled: (enabled: boolean) => void;
+  /** Dashboard cell style variant — the dressing axis beside the layout. */
+  activeDashboardStyle: DashboardStyleId;
+  /** Set (and persist) the dashboard cell style; null resets to `basic`. */
+  setDashboardStyle: (id: string | null) => void;
   /** Layouts available to the doc: customs first, then built-ins. */
   dashboardLayoutOptions: DashboardLayoutSummary[];
   /** User-authored themes (doc + browser library) for the picker's "Custom" group. */
@@ -960,6 +967,41 @@ export function PreviewSettingsProvider({
     [persistFrontmatter],
   );
 
+  // The style variant is the second dashboard axis: the layout decides the
+  // geometry, the style decides how each cell is dressed. Both persist the
+  // same way, and both stay theme-driven — a style never carries colors.
+  const fmDashboardStyle = useMemo(
+    () =>
+      resolveDashboardStyleId(
+        readFrontmatterKey(
+          frontmatter,
+          FRONTMATTER_SETTING_KEYS.dashboardStyle.canonical,
+          FRONTMATTER_SETTING_KEYS.dashboardStyle.legacy,
+        ),
+      ),
+    [frontmatter],
+  );
+  const [selectedDashboardStyle, setSelectedDashboardStyle] = useState<DashboardStyleId | null>(
+    null,
+  );
+  useEffect(() => setSelectedDashboardStyle(null), [fmDashboardStyle]);
+  const activeDashboardStyle =
+    selectedDashboardStyle ?? fmDashboardStyle ?? FRONTMATTER_SETTING_DEFAULTS.dashboardStyle;
+  const handleSetDashboardStyle = useCallback(
+    (id: string | null) => {
+      const next = resolveDashboardStyleId(id) ?? FRONTMATTER_SETTING_DEFAULTS.dashboardStyle;
+      setSelectedDashboardStyle(next);
+      persistFrontmatter({
+        [FRONTMATTER_SETTING_KEYS.dashboardStyle.canonical]: omitFrontmatterDefault(
+          next,
+          FRONTMATTER_SETTING_DEFAULTS.dashboardStyle,
+        ),
+        [FRONTMATTER_SETTING_KEYS.dashboardStyle.legacy]: null,
+      });
+    },
+    [persistFrontmatter],
+  );
+
   const dashboardLayoutOptions = useMemo(
     () => listDashboardLayouts({ frontmatter }),
     [frontmatter],
@@ -995,6 +1037,8 @@ export function PreviewSettingsProvider({
       setDashboardLayout: handleSetDashboardLayout,
       activeDashboardTitle,
       setDashboardTitleEnabled: handleSetDashboardTitleEnabled,
+      activeDashboardStyle,
+      setDashboardStyle: handleSetDashboardStyle,
       dashboardLayoutOptions,
       activeCoverSlide,
       setCoverSlideEnabled: handleSetCoverSlideEnabled,
@@ -1027,6 +1071,7 @@ export function PreviewSettingsProvider({
       activeVideoLoop,
       activeDashboardLayout,
       activeDashboardTitle,
+      activeDashboardStyle,
       dashboardLayoutOptions,
       activeCoverSlide,
       activeCoverSlideTemplate,
@@ -1042,6 +1087,7 @@ export function PreviewSettingsProvider({
       handleSetVideoLoopEnabled,
       handleSetDashboardLayout,
       handleSetDashboardTitleEnabled,
+      handleSetDashboardStyle,
       handleSetCoverSlideEnabled,
       handleSetCoverSlideTemplate,
       handleSetCoverSlideDuration,
@@ -1336,6 +1382,7 @@ function DashboardImageExportControl({ compact }: { compact: boolean }) {
             defaultResolution={DASHBOARD_EXPORT_RESOLUTION_BY_PRESET[settings.activePreset]}
             defaultLayout={settings.activeDashboardLayout}
             defaultShowTitle={settings.activeDashboardTitle}
+            defaultStyle={settings.activeDashboardStyle}
             defaultFileName={fileName}
             colorScheme={colorScheme}
             saveOutput={saveDashboardImageOutput}
@@ -1787,6 +1834,19 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
                   ))}
                 </optgroup>
               )}
+            </select>
+            <label style={labelStyle}>Style:</label>
+            <select
+              aria-label="Dashboard cell style"
+              style={selectStyle}
+              value={s.activeDashboardStyle}
+              onChange={(event) => s.setDashboardStyle(event.target.value)}
+            >
+              {DASHBOARD_STYLES.map((option) => (
+                <option key={option.id} value={option.id} title={option.description}>
+                  {option.label}
+                </option>
+              ))}
             </select>
             <label className="squisq-preview-checkbox">
               <input

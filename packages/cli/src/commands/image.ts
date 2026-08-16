@@ -8,14 +8,19 @@
  * Usage:
  *   squisq image <input> [-o output.png] [--resolution fhd|4k|square|…]
  *     [--width <px> --height <px>] [--layout <id|auto>] [--no-title]
- *     [--theme <id>] [--transform <style>]
+ *     [--style basic|card|panel|accent] [--theme <id>] [--transform <style>]
  */
 
 import { mkdir } from 'node:fs/promises';
 import { dirname, basename, extname, resolve } from 'node:path';
 import type { Command } from 'commander';
 import type { Doc } from '@bendyline/squisq/schemas';
-import { DASHBOARD_AUTO_LAYOUT_ID, listDashboardLayouts } from '@bendyline/squisq/doc';
+import {
+  DASHBOARD_AUTO_LAYOUT_ID,
+  DASHBOARD_STYLE_IDS,
+  listDashboardLayouts,
+  resolveDashboardStyleId,
+} from '@bendyline/squisq/doc';
 import {
   DASHBOARD_RESOLUTIONS,
   DEFAULT_DASHBOARD_RESOLUTION,
@@ -44,6 +49,8 @@ interface ImageCommandOptions {
   width?: string;
   height?: string;
   layout?: string;
+  /** Cell style variant; unset defers to the doc's own frontmatter. */
+  style?: string;
   /** Commander's --title/--no-title pair; defaults true (band shown). */
   title?: boolean;
   overwrite?: boolean;
@@ -69,6 +76,10 @@ export function registerImageCommand(program: Command): void {
     .option(
       '--layout <id>',
       `Dashboard layout id, or "${DASHBOARD_AUTO_LAYOUT_ID}" to pick by block count (default)`,
+    )
+    .option(
+      '--style <variant>',
+      `Cell style variant: ${DASHBOARD_STYLE_IDS.join(', ')} (default: the document's own setting)`,
     )
     .option('--title', 'Include the document-title band (default)')
     .option('--no-title', 'Hide the document-title band')
@@ -129,6 +140,15 @@ async function runImage(inputPath: string, opts: ImageCommandOptions): Promise<v
 
   if (opts.layout !== undefined && opts.layout.trim().length === 0) {
     throw new Error('The --layout id must be a non-empty string.');
+  }
+
+  // The style vocabulary is closed, so an unknown value fails here rather
+  // than silently rendering the document's own style.
+  const requestedStyle = opts.style === undefined ? undefined : resolveDashboardStyleId(opts.style);
+  if (opts.style !== undefined && requestedStyle === undefined) {
+    throw new Error(
+      `Unknown dashboard style "${opts.style}". Valid: ${DASHBOARD_STYLE_IDS.join(', ')}`,
+    );
   }
 
   // Validate the transform ID up front. The theme id (and the layout id,
@@ -194,7 +214,7 @@ async function runImage(inputPath: string, opts: ImageCommandOptions): Promise<v
   }
 
   console.error(
-    `Rendering dashboard PNG: ${dimensions.width}×${dimensions.height}, layout: ${requestedLayout ?? DASHBOARD_AUTO_LAYOUT_ID}, title: ${opts.title === false ? 'off' : 'on'}`,
+    `Rendering dashboard PNG: ${dimensions.width}×${dimensions.height}, layout: ${requestedLayout ?? DASHBOARD_AUTO_LAYOUT_ID}, style: ${requestedStyle ?? 'document'}, title: ${opts.title === false ? 'off' : 'on'}`,
   );
 
   // ── Step 3: Render via programmatic API ─────────────────────────
@@ -206,6 +226,7 @@ async function runImage(inputPath: string, opts: ImageCommandOptions): Promise<v
         ? { width, height }
         : {}),
     layout: requestedLayout,
+    style: requestedStyle,
     title: opts.title,
     documentTitle: baseName,
     onProgress: (phase: string, percent: number) => writeProgress(phase, percent, 100),

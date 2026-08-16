@@ -81,6 +81,11 @@ export interface RenderHtmlOptions {
     layout?: string;
     /** Title-band override. Overrides doc frontmatter. */
     title?: boolean;
+    /**
+     * Cell style variant ('basic' | 'card' | 'panel' | 'accent'). Overrides
+     * doc frontmatter; colors always come from the active theme.
+     */
+    style?: string;
     /** Host-supplied title fallback (typically the file name). */
     documentTitle?: string;
   };

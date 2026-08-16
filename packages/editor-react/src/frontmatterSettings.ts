@@ -24,6 +24,7 @@ export const FRONTMATTER_SETTING_KEYS = {
   pipPosition: { canonical: 'squisq-pip-position', legacy: 'pip-position' as const },
   dashboardLayout: DASHBOARD_FRONTMATTER_KEYS.layout,
   dashboardTitle: DASHBOARD_FRONTMATTER_KEYS.showTitle,
+  dashboardStyle: DASHBOARD_FRONTMATTER_KEYS.style,
 } as const;
 
 /** Runtime defaults whose equivalent frontmatter entries can be omitted. */
@@ -42,6 +43,7 @@ export const FRONTMATTER_SETTING_DEFAULTS = {
   pipPosition: 'bottom-right',
   dashboardLayout: DEFAULT_DASHBOARD_SETTINGS.layout,
   dashboardTitle: DEFAULT_DASHBOARD_SETTINGS.showTitle,
+  dashboardStyle: DEFAULT_DASHBOARD_SETTINGS.style,
 } as const;
 
 /** Return `null` when a setting matches its runtime default so writers remove it. */
