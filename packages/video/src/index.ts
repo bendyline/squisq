@@ -41,6 +41,24 @@ export { computeAudioTimeline } from './audioTimeline.js';
 export type { RenderHtmlOptions } from './renderHtml.js';
 export { generateRenderHtml } from './renderHtml.js';
 
+// ── Dashboard Image Export ─────────────────────────────────────────
+export type {
+  DashboardResolutionId,
+  DashboardResolutionPreset,
+  ResolveDashboardDimensionsInput,
+  ResolvedDashboardDimensions,
+} from './dashboardImage.js';
+export {
+  DASHBOARD_RESOLUTIONS,
+  DEFAULT_DASHBOARD_RESOLUTION,
+  MAX_DASHBOARD_IMAGE_DIMENSION,
+  MAX_DASHBOARD_IMAGE_PIXELS,
+  MIN_DASHBOARD_IMAGE_DIMENSION,
+  dashboardFamilyForDimensions,
+  resolveDashboardDimensions,
+  validateDashboardImageDimensions,
+} from './dashboardImage.js';
+
 // ── FFmpeg Argument Builders ───────────────────────────────────────
 export type { GifDither, GifFilterOptions, GifOutputOptions } from './ffmpegArgs.js';
 export {

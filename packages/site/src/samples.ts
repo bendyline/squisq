@@ -106,6 +106,49 @@ Press start, take a breath, and begin reading. The highlighted word marks where 
 End on a steady, confident line. When you stop speaking, the prompter stops with you. That is the whole trick.
 `,
 
+  // Dashboard-mode demo: opens straight into the one-canvas dashboard
+  // (frontmatter display-mode) with six varied blocks so the auto-pick
+  // lands on grid-3x2. Exercises the title band, a chart, a quote, a
+  // stat, and a list — the block variety a real status wall would carry.
+  'dashboard-demo': `---
+title: Mission Dashboard
+display-mode: dashboard
+---
+
+# Mission Dashboard
+
+## Launch Readiness {[statHighlight value=92% label="systems go"]}
+
+Ninety-two percent of pre-flight checks are complete.
+
+## Weekly Trend {[lineChart]}
+
+| Week | Checks passed |
+| ---- | ------------- |
+| 1    | 61            |
+| 2    | 74            |
+| 3    | 83            |
+| 4    | 92            |
+
+## Crew Notes {[quote author="Flight Director"]}
+
+Steady progress. Hold the line on the fuel-cell retest and we make the window.
+
+## Open Items {[list]}
+
+- Fuel-cell retest scheduled
+- Range safety sign-off
+- Weather review at T-48 hours
+
+## Systems
+
+Guidance, telemetry, and comms are green across both redundancy chains.
+
+## Recovery Fleet
+
+Two ships on station; the third leaves port tomorrow with the backup crane aboard.
+`,
+
   'hello-world': `# Hello World
 
 Welcome to the **Squisq Editor**. This is a simple markdown document.

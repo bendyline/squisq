@@ -19,7 +19,13 @@ import type {
   FormatRegistry,
   NormalizedInput,
 } from '@bendyline/squisq-formats';
-import type { GifDither, VideoOrientation, VideoQuality } from '@bendyline/squisq-video';
+import type { DashboardStyleId } from '@bendyline/squisq/doc';
+import type {
+  DashboardResolutionId,
+  GifDither,
+  VideoOrientation,
+  VideoQuality,
+} from '@bendyline/squisq-video';
 
 export interface Mp4FormatOptions {
   onProgress?: (phase: string, percent: number) => void;
@@ -47,6 +53,23 @@ export interface GifFormatOptions {
   maxColors?: number;
   dither?: GifDither;
   bayerScale?: number;
+}
+
+/**
+ * Per-export options for `convert(..., 'png')` — the Dashboard image.
+ * `resolution` names a preset; explicit `width`/`height` (both required
+ * together) win over it. `layout`/`style`/`title` override the doc's
+ * dashboard frontmatter.
+ */
+export interface PngFormatOptions {
+  onProgress?: (phase: string, percent: number) => void;
+  resolution?: DashboardResolutionId;
+  width?: number;
+  height?: number;
+  layout?: string;
+  /** Cell style variant; unset defers to the doc's own frontmatter. */
+  style?: DashboardStyleId;
+  title?: boolean;
 }
 
 /** Sensible defaults for `convert(..., 'mp4')` — a full-quality landscape clip. */
@@ -198,6 +221,48 @@ function gifFormat(): FormatDefinition {
 }
 
 /**
+ * The CLI-only dashboard PNG format definition.
+ *
+ * Export-only: renders the Doc's Dashboard rendition to a single PNG via
+ * {@link renderDocToDashboardPng}. Unlike mp4/gif there is no temp-file
+ * dance — the renderer returns bytes directly — and no ffmpeg dependency;
+ * only Playwright Chromium is required. The doc's `title:`/`squisq-dashboard-*`
+ * frontmatter drives layout and the title band unless
+ * `options.formatOptions.png` overrides them; `options.title` (the convert
+ * front door's base-name fallback) feeds the title band when the doc has
+ * no frontmatter title.
+ */
+function pngFormat(): FormatDefinition {
+  return {
+    id: 'png',
+    templateAnnotationHandling: 'rendered',
+    label: 'Dashboard Image',
+    mimeType: 'image/png',
+    extensions: ['.png'],
+    async exportDoc(input: NormalizedInput, options: ConvertOptions): Promise<ConversionResult> {
+      options.signal?.throwIfAborted();
+      const pngOpts = (options.formatOptions?.png ?? {}) as PngFormatOptions;
+      // Lazy-loaded like mp4/gif so api.ts can create this registry without
+      // an eager ES-module initialization cycle.
+      const { renderDocToDashboardPng } = await import('./api.js');
+      const result = await renderDocToDashboardPng(input.doc, input.container, {
+        resolution: pngOpts.resolution,
+        width: pngOpts.width,
+        height: pngOpts.height,
+        layout: pngOpts.layout,
+        style: pngOpts.style,
+        title: pngOpts.title,
+        documentTitle: options.title ?? input.baseName,
+        signal: options.signal,
+        onProgress: pngOpts.onProgress,
+      });
+      options.signal?.throwIfAborted();
+      return { bytes: result.bytes, mimeType: 'image/png', suggestedFilename: '', warnings: [] };
+    },
+  };
+}
+
+/**
  * Build the CLI's format registry: every built-in format from
  * `@bendyline/squisq-formats` plus the CLI-only rendered-media exporters.
  */
@@ -205,5 +270,6 @@ export function createCliRegistry(): FormatRegistry {
   const registry = defaultRegistry();
   registry.register(mp4Format());
   registry.register(gifFormat());
+  registry.register(pngFormat());
   return registry;
 }

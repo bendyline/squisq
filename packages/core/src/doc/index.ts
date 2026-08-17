@@ -65,6 +65,82 @@ export {
   buildPageCssVars,
   pageStyleDataAttributes,
 } from './pageCss.js';
+export {
+  layoutCapacity,
+  resolveLayoutCells,
+  transposeCells,
+  validateDashboardLayoutDefinition,
+} from './dashboard/DashboardLayout.js';
+export type {
+  DashboardCellDefinition,
+  DashboardLayoutDefinition,
+  DashboardLayoutValidationError,
+  DashboardLayoutValidationResult,
+  DashboardTitleSlotDefinition,
+  ResolvedDashboardCell,
+} from './dashboard/DashboardLayout.js';
+export {
+  BUILTIN_DASHBOARD_LAYOUTS,
+  getDashboardLayoutSummaries,
+  listDashboardLayouts,
+} from './dashboard/builtinDashboardLayouts.js';
+export type { DashboardLayoutSummary } from './dashboard/builtinDashboardLayouts.js';
+export {
+  DASHBOARD_AUTO_LAYOUT_ID,
+  chooseDashboardLayout,
+  resolveDashboardLayoutDefinition,
+} from './dashboard/chooseDashboardLayout.js';
+export {
+  DASHBOARD_FRONTMATTER_KEYS,
+  DEFAULT_DASHBOARD_SETTINGS,
+  resolveDashboardSettings,
+} from './dashboard/dashboardSettings.js';
+export type {
+  DashboardSettings,
+  DashboardSettingsOverrides,
+} from './dashboard/dashboardSettings.js';
+export {
+  DASHBOARD_STYLE_IDS,
+  DASHBOARD_STYLES,
+  DEFAULT_DASHBOARD_STYLE,
+  buildDashboardCellChrome,
+  dashboardCanvasFill,
+  dashboardCellAccent,
+  resolveDashboardStyleId,
+  stripBlockBackdropLayer,
+  stripsBlockBackdrop,
+} from './dashboard/dashboardStyle.js';
+export type {
+  DashboardCellChrome,
+  DashboardStyleId,
+  DashboardStyleSummary,
+} from './dashboard/dashboardStyle.js';
+export {
+  FRONTMATTER_DASHBOARD_LAYOUTS_KEY,
+  readDashboardLayoutsFromFrontmatter,
+  writeDashboardLayoutsToFrontmatter,
+} from './dashboard/dashboardLayoutsFrontmatter.js';
+export {
+  DASHBOARD_ZOOM_LEVELS,
+  desiredCellZoom,
+  normalizeDashboardZoom,
+  resolveDashboardZooms,
+} from './dashboard/dashboardZoom.js';
+export type {
+  DashboardZoomCandidate,
+  DashboardZoomLevel,
+  DashboardZoomMode,
+} from './dashboard/dashboardZoom.js';
+export { composeDashboardLayers, materializeDashboard } from './dashboard/materializeDashboard.js';
+export type {
+  DashboardCell,
+  DashboardCellFrame,
+  DashboardDiagnostic,
+  DashboardMaterialization,
+  DashboardRectPct,
+  DashboardTitle,
+  MaterializeDashboardOptions,
+} from './dashboard/materializeDashboard.js';
 export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';
 export { applyNarrationTiming, type NarrationResolution } from './applyNarrationTiming.js';
 export {

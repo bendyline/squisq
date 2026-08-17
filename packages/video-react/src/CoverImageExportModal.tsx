@@ -8,8 +8,16 @@ import type { Doc, MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { CoverSlideTemplate } from '@bendyline/squisq/doc';
 import { useModalDialog } from '@bendyline/squisq-react';
 import { useFrameCapture } from './hooks/useFrameCapture.js';
+import {
+  IMAGE_FORMAT_DETAILS,
+  canvasToImageBlob,
+  chooseImageSaveTarget,
+  downloadImageBlob,
+  imageExportFilename,
+  type ImageExportFormat,
+} from './imageExportShared.js';
 
-export type CoverImageExportFormat = 'png' | 'jpeg' | 'webp';
+export type CoverImageExportFormat = ImageExportFormat;
 
 export interface CoverImageExportModalProps {
   doc: Doc;
@@ -23,25 +31,6 @@ export interface CoverImageExportModalProps {
   /** Optional host save flow. Return false when the user cancels. */
   saveOutput?: (blob: Blob, filename: string) => boolean | void | Promise<boolean | void>;
   onClose: () => void;
-}
-
-interface CoverImageWritable {
-  write(data: Blob): Promise<void>;
-  close(): Promise<void>;
-}
-
-interface CoverImageFileHandle {
-  createWritable(): Promise<CoverImageWritable>;
-}
-
-interface CoverImagePickerWindow {
-  showSaveFilePicker?: (options: {
-    suggestedName: string;
-    types: Array<{
-      description: string;
-      accept: Record<string, string[]>;
-    }>;
-  }) => Promise<CoverImageFileHandle>;
 }
 
 const MIN_DIMENSION = 64;
@@ -59,14 +48,7 @@ export const COVER_IMAGE_SIZE_PRESETS: readonly {
   height: number;
 }[] = [{ label: 'YouTube cover', width: 1280, height: 720 }];
 
-const FORMAT_DETAILS: Record<
-  CoverImageExportFormat,
-  { extension: string; mime: string; label: string }
-> = {
-  png: { extension: 'png', mime: 'image/png', label: 'PNG — lossless' },
-  jpeg: { extension: 'jpg', mime: 'image/jpeg', label: 'JPEG — smaller file' },
-  webp: { extension: 'webp', mime: 'image/webp', label: 'WebP — compact' },
-};
+const FORMAT_DETAILS = IMAGE_FORMAT_DETAILS;
 
 export function validateCoverImageDimensions(width: number, height: number): string | null {
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) {
@@ -90,68 +72,7 @@ export function coverImageFilename(
   requestedName: string | undefined,
   format: CoverImageExportFormat,
 ): string {
-  const extension = FORMAT_DETAILS[format].extension;
-  const base =
-    requestedName
-      ?.replace(/\.[^.]+$/, '')
-      .replace(/[<>:"/\\|?*]/g, '-')
-      .split('')
-      .map((character) => (character.charCodeAt(0) < 32 ? '-' : character))
-      .join('')
-      .trim()
-      .replace(/[. ]+$/g, '') || 'document';
-  return `${base}-cover.${extension}`;
-}
-
-function canvasToBlob(
-  canvas: HTMLCanvasElement,
-  format: CoverImageExportFormat,
-  quality: number,
-): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error('The browser could not encode the cover image.'));
-      },
-      FORMAT_DETAILS[format].mime,
-      format === 'png' ? undefined : quality,
-    );
-  });
-}
-
-async function chooseSaveTarget(
-  filename: string,
-  format: CoverImageExportFormat,
-): Promise<CoverImageFileHandle | null | undefined> {
-  const picker = (window as unknown as CoverImagePickerWindow).showSaveFilePicker;
-  if (!picker) return undefined;
-  const details = FORMAT_DETAILS[format];
-  try {
-    return await picker.call(window, {
-      suggestedName: filename,
-      types: [
-        {
-          description: `${details.label.split(' —')[0]} image`,
-          accept: { [details.mime]: [`.${details.extension}`] },
-        },
-      ],
-    });
-  } catch (caught: unknown) {
-    if (caught instanceof DOMException && caught.name === 'AbortError') return null;
-    throw caught;
-  }
-}
-
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  return imageExportFilename(requestedName, 'cover', format);
 }
 
 const overlayStyle: CSSProperties = {
@@ -229,7 +150,7 @@ export function CoverImageExportModal({
     try {
       // Request the native picker before rendering so browsers still consider
       // the call part of the user's click activation.
-      const saveTarget = saveOutput ? undefined : await chooseSaveTarget(filename, format);
+      const saveTarget = saveOutput ? undefined : await chooseImageSaveTarget(filename, format);
       if (saveTarget === null) return;
 
       setBusy(true);
@@ -248,7 +169,7 @@ export function CoverImageExportModal({
       );
       await capture.setCoverVisible(true);
       const canvas = await capture.captureCanvasFrame(0);
-      const blob = await canvasToBlob(canvas, format, quality);
+      const blob = await canvasToImageBlob(canvas, format, quality);
 
       if (saveOutput) {
         const saved = await saveOutput(blob, filename);
@@ -261,7 +182,7 @@ export function CoverImageExportModal({
         await writable.write(blob);
         await writable.close();
       } else {
-        downloadBlob(blob, filename);
+        downloadImageBlob(blob, filename);
       }
       capture.destroy();
       onClose();

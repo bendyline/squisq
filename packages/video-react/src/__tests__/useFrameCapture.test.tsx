@@ -1183,6 +1183,88 @@ describe('useFrameCapture', () => {
     expect(() => result.current.destroy()).not.toThrow();
   });
 
+  it('threads every dashboard render option into the hidden player', async () => {
+    // The export dialogs mock this hook, so nothing else covers the
+    // renderOptions.dashboard -> DocPlayer prop mapping. A key dropped here is
+    // invisible: the capture still succeeds, it just renders the wrong thing.
+    const api = {
+      getDuration: vi.fn(() => 0),
+      getRenderedTime: vi.fn(() => 0),
+      seekTo: vi.fn(async () => {}),
+      showCover: vi.fn(async () => {}),
+      hideCover: vi.fn(async () => {}),
+    };
+    const renderedProps: Array<Record<string, unknown>> = [];
+    frameCaptureMocks.render.mockImplementation((node: unknown) => {
+      const element = node as { props: Record<string, unknown> };
+      renderedProps.push(element.props);
+      (element.props.onRenderAPIReady as (value: typeof api) => void)(api);
+    });
+    const doc = {
+      articleId: 'dashboard-render-options-test',
+      duration: 0,
+      blocks: [],
+      audio: { segments: [] },
+    } as Doc;
+    const { result } = renderHook(() => useFrameCapture());
+
+    await result.current.init(doc, {
+      width: 1920,
+      height: 1080,
+      displayMode: 'dashboard',
+      dashboard: {
+        layout: 'grid-2x2',
+        title: false,
+        style: 'accent',
+        documentTitle: 'Fleet Report',
+      },
+    });
+
+    expect(renderedProps[0]).toMatchObject({
+      displayMode: 'dashboard',
+      dashboardLayout: 'grid-2x2',
+      dashboardShowTitle: false,
+      dashboardStyle: 'accent',
+      dashboardDocumentTitle: 'Fleet Report',
+    });
+
+    result.current.destroy();
+  });
+
+  it('defers to the document style when the dashboard style is unset or unknown', async () => {
+    const api = {
+      getDuration: vi.fn(() => 0),
+      getRenderedTime: vi.fn(() => 0),
+      seekTo: vi.fn(async () => {}),
+      showCover: vi.fn(async () => {}),
+      hideCover: vi.fn(async () => {}),
+    };
+    const renderedProps: Array<Record<string, unknown>> = [];
+    frameCaptureMocks.render.mockImplementation((node: unknown) => {
+      const element = node as { props: Record<string, unknown> };
+      renderedProps.push(element.props);
+      (element.props.onRenderAPIReady as (value: typeof api) => void)(api);
+    });
+    const doc = {
+      articleId: 'dashboard-style-fallback-test',
+      duration: 0,
+      blocks: [],
+      audio: { segments: [] },
+    } as Doc;
+    const { result } = renderHook(() => useFrameCapture());
+
+    await result.current.init(doc, {
+      width: 1920,
+      height: 1080,
+      displayMode: 'dashboard',
+      dashboard: { layout: 'auto', style: 'not-a-style' },
+    });
+
+    expect(renderedProps[0].dashboardStyle).toBeUndefined();
+
+    result.current.destroy();
+  });
+
   it('primes a recorder WebM mounted after initialization before its first seek', async () => {
     let renderedTime = 0;
     let video: HTMLVideoElement | null = null;

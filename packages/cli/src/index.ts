@@ -7,6 +7,7 @@
  * Usage:
  *   squisq convert <input> [options]
  *   squisq video <input> [output.mp4|output.gif] [options]
+ *   squisq image <input> [output.png] [options]
  *   squisq --help
  *
  * THIS MODULE IS THE `squisq` BIN ENTRY POINT ONLY. Importing it runs the CLI:
@@ -21,6 +22,7 @@ import { createRequire } from 'node:module';
 import { Command } from 'commander';
 import { registerConvertCommand } from './commands/convert.js';
 import { registerVideoCommand } from './commands/video.js';
+import { registerImageCommand } from './commands/image.js';
 import { registerValidateCommand } from './commands/validate.js';
 import { registerDoctorCommand } from './commands/doctor.js';
 import { registerTransformCommand } from './commands/transform.js';
@@ -46,6 +48,7 @@ program
 
 registerConvertCommand(program);
 registerVideoCommand(program);
+registerImageCommand(program);
 registerValidateCommand(program);
 registerDoctorCommand(program);
 registerTransformCommand(program);

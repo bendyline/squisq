@@ -31,8 +31,32 @@ describe('doctor command checks', () => {
       'Node:     v22.14.0-test',
       'ffmpeg:   /tools/ffmpeg (source: path) — ffmpeg version 7.1',
       'Chromium: available (/browsers/chromium)',
+      'video/gif (ffmpeg + Chromium): ready',
+      'image PNG (Chromium only):     ready',
       '\n✓ All checks passed',
     ]);
+  });
+
+  it('reports the PNG image path as ready on a Chromium-only machine', async () => {
+    const test = makeRuntime({ detectFfmpeg: async () => null });
+
+    // Exit code still signals the incomplete toolchain…
+    expect(await runDoctor(test.runtime)).to.equal(false);
+    // …but the per-feature lines make clear what still works.
+    expect(test.lines).to.include('video/gif (ffmpeg + Chromium): not ready');
+    expect(test.lines).to.include('image PNG (Chromium only):     ready');
+  });
+
+  it('reports the PNG image path as not ready without Chromium', async () => {
+    const test = makeRuntime({
+      launchChromium: async () => {
+        throw new Error('browser missing');
+      },
+    });
+
+    expect(await runDoctor(test.runtime)).to.equal(false);
+    expect(test.lines).to.include('video/gif (ffmpeg + Chromium): not ready');
+    expect(test.lines).to.include('image PNG (Chromium only):     not ready');
   });
 
   it('provides install guidance when ffmpeg is missing', async () => {

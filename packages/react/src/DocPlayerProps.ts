@@ -1,5 +1,5 @@
 import type { Doc, SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
-import type { ViewportConfig } from '@bendyline/squisq/doc';
+import type { DashboardStyleId, ViewportConfig } from '@bendyline/squisq/doc';
 import type { CoverSlidePlayback, CoverSlideTemplate } from '@bendyline/squisq/doc';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
 import type { AudioController } from './hooks/AudioController';
@@ -52,8 +52,16 @@ export interface DocPlayerProps {
   forceViewport?: ViewportConfig;
   theme?: Theme;
   surface?: SurfaceScheme | 'auto';
-  /** Video, manual slideshow, or long-scrolling linear rendition. */
+  /** Video, manual slideshow, long-scrolling linear, or dashboard rendition. */
   displayMode?: DisplayMode;
+  /** Dashboard mode: layout id or `'auto'`. Overrides doc frontmatter. */
+  dashboardLayout?: string;
+  /** Dashboard mode: title-band override. Overrides doc frontmatter. */
+  dashboardShowTitle?: boolean;
+  /** Dashboard mode: cell style variant. Overrides doc frontmatter. */
+  dashboardStyle?: DashboardStyleId;
+  /** Dashboard mode: host-supplied title fallback (typically the file name). */
+  dashboardDocumentTitle?: string;
   showCoverSlide?: boolean;
   /** Visual template used to materialize the managed cover. */
   coverSlideTemplate?: CoverSlideTemplate;

@@ -215,6 +215,63 @@ function VideoLoopHarness() {
   );
 }
 
+function DashboardProbe() {
+  const {
+    activeDashboardLayout,
+    activeDashboardTitle,
+    activeDashboardStyle,
+    dashboardLayoutOptions,
+    setDashboardLayout,
+    setDashboardTitleEnabled,
+    setDashboardStyle,
+  } = usePreviewSettings();
+  const { markdownSource } = useEditorContext();
+  return (
+    <>
+      <button type="button" onClick={() => setDashboardLayout('grid-2x2')}>
+        Choose grid layout
+      </button>
+      <button type="button" onClick={() => setDashboardLayout(null)}>
+        Choose auto layout
+      </button>
+      <button type="button" onClick={() => setDashboardTitleEnabled(false)}>
+        Hide dashboard title
+      </button>
+      <button type="button" onClick={() => setDashboardTitleEnabled(true)}>
+        Show dashboard title
+      </button>
+      <button type="button" onClick={() => setDashboardStyle('card')}>
+        Choose card style
+      </button>
+      <button type="button" onClick={() => setDashboardStyle(null)}>
+        Choose basic style
+      </button>
+      <div
+        data-testid="active-dashboard"
+        data-layout={activeDashboardLayout}
+        data-title={String(activeDashboardTitle)}
+        data-style={activeDashboardStyle}
+        data-custom-options={dashboardLayoutOptions
+          .filter((option) => option.custom)
+          .map((option) => option.id)
+          .join(',')}
+      >
+        {dashboardLayoutOptions.map((option) => option.id).join(',')}
+      </div>
+      <pre data-testid="markdown-source">{markdownSource}</pre>
+    </>
+  );
+}
+
+function DashboardHarness() {
+  const { doc } = useEditorContext();
+  return (
+    <PreviewSettingsProvider doc={doc}>
+      <DashboardProbe />
+    </PreviewSettingsProvider>
+  );
+}
+
 function PipShapeProbe() {
   const { activePipShape, setPipShape } = usePreviewSettings();
   const { markdownSource } = useEditorContext();
@@ -314,7 +371,7 @@ describe('PreviewModeSwitch', () => {
       .map((button) => button.textContent)
       .filter(Boolean);
 
-    expect(labels).toEqual(['Slideshow', 'Video', 'Page', 'Document', 'Narrate']);
+    expect(labels).toEqual(['Slideshow', 'Video', 'Page', 'Dashboard', 'Document', 'Narrate']);
     expect(screen.getByTestId('active-mode').textContent).toBe('slideshow');
 
     fireEvent.click(screen.getByRole('button', { name: 'Document' }));
@@ -875,7 +932,7 @@ describe('Use tab mode menu', () => {
       within(menu)
         .getAllByRole('menuitemradio')
         .map((item) => item.querySelector('.squisq-use-mode-menu-label')?.textContent),
-    ).toEqual(['Slideshow', 'Video', 'Page', 'Document', 'Narrate']);
+    ).toEqual(['Slideshow', 'Video', 'Page', 'Dashboard', 'Document', 'Narrate']);
     const slideshowItem = within(menu).getByRole('menuitemradio', { name: 'Slideshow' });
     expect(slideshowItem.getAttribute('aria-checked')).toBe('true');
     expect(within(slideshowItem).getByText('Present designed slides one at a time.')).toBeTruthy();
@@ -1067,5 +1124,158 @@ describe('Narrate mode gating', () => {
     await waitFor(() => {
       expect(screen.getByTestId('active-mode').textContent).toBe('narrate');
     });
+  });
+});
+
+describe('dashboard mode', () => {
+  function renderDashboardHarness(markdown: string) {
+    render(
+      <EditorProvider initialMarkdown={markdown}>
+        <DashboardHarness />
+      </EditorProvider>,
+    );
+  }
+
+  it('maps display-mode: dashboard (and the dash alias) frontmatter', async () => {
+    renderPreviewControls('---\ndisplay-mode: dashboard\n---\n\n# Hello');
+    await waitFor(() => {
+      expect(screen.getByTestId('active-mode').textContent).toBe('dashboard');
+    });
+    expect(screen.getByRole('button', { name: 'Dashboard' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+
+    cleanup();
+    renderPreviewControls('---\ndisplay-mode: dash\n---\n\n# Hello');
+    await waitFor(() => {
+      expect(screen.getByTestId('active-mode').textContent).toBe('dashboard');
+    });
+  });
+
+  it('defaults to auto layout with the title band on', () => {
+    renderDashboardHarness('# Hello');
+    const probe = screen.getByTestId('active-dashboard');
+    expect(probe.getAttribute('data-layout')).toBe('auto');
+    expect(probe.getAttribute('data-title')).toBe('true');
+  });
+
+  it('persists a cell-style selection and drops it when back on basic', async () => {
+    renderDashboardHarness('# Hello');
+    expect(screen.getByTestId('active-dashboard').getAttribute('data-style')).toBe('basic');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose card style' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        'squisq-dashboard-style: card',
+      );
+      expect(screen.getByTestId('active-dashboard').getAttribute('data-style')).toBe('card');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose basic style' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).not.toContain(
+        'squisq-dashboard-style',
+      );
+    });
+  });
+
+  it('reads the persisted cell style from frontmatter', async () => {
+    renderDashboardHarness('---\nsquisq-dashboard-style: panel\n---\n\n# Hello');
+    await waitFor(() => {
+      expect(screen.getByTestId('active-dashboard').getAttribute('data-style')).toBe('panel');
+    });
+  });
+
+  it('reads the persisted layout and title from frontmatter', async () => {
+    renderDashboardHarness(
+      '---\nsquisq-dashboard-layout: grid-3x2\nsquisq-dashboard-title: false\n---\n\n# Hello',
+    );
+    await waitFor(() => {
+      const probe = screen.getByTestId('active-dashboard');
+      expect(probe.getAttribute('data-layout')).toBe('grid-3x2');
+      expect(probe.getAttribute('data-title')).toBe('false');
+    });
+  });
+
+  it('persists a layout selection to frontmatter and removes it when back on auto', async () => {
+    renderDashboardHarness('# Hello');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose grid layout' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        'squisq-dashboard-layout: grid-2x2',
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose auto layout' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).not.toContain(
+        'squisq-dashboard-layout',
+      );
+    });
+  });
+
+  it('persists the title toggle and omits the default-on state', async () => {
+    renderDashboardHarness('# Hello');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide dashboard title' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        'squisq-dashboard-title: false',
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show dashboard title' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).not.toContain(
+        'squisq-dashboard-title',
+      );
+    });
+  });
+
+  it('lists doc custom layouts ahead of the built-ins', async () => {
+    renderDashboardHarness(
+      '---\nsquisq-dashboard-layouts: {"kpi-wall":{"lb":"KPI Wall","ce":{"ls":[{"x":"0%","y":"0%","wd":"100%","hg":"100%"}]}}}\n---\n\n# Hello',
+    );
+    await waitFor(() => {
+      const probe = screen.getByTestId('active-dashboard');
+      expect(probe.textContent?.startsWith('kpi-wall,')).toBe(true);
+      expect(probe.getAttribute('data-custom-options')).toBe('kpi-wall');
+    });
+  });
+
+  it('shows the dashboard control set (layout + export, no captions/loop/cover)', async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class ResizeObserverStub implements ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    globalThis.ResizeObserver = ResizeObserverStub;
+    try {
+      render(
+        <EditorProvider initialMarkdown={'---\ndisplay-mode: dashboard\n---\n\n# Hello'}>
+          <PreviewToolbarHarness showMode />
+        </EditorProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('active-mode').textContent).toBe('dashboard');
+      });
+      // The hidden measurement probe renders every applicable control, so
+      // queryAll sees each control at least once regardless of overflow.
+      expect(screen.getAllByLabelText('Dashboard layout').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText('Dashboard cell style').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText('Export dashboard as image').length).toBeGreaterThan(0);
+      expect(screen.queryByText('Captions:')).toBeNull();
+      expect(screen.queryByText('Loop')).toBeNull();
+      expect(document.querySelector('.squisq-cover-slide-trigger')).toBeNull();
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      }
+    }
   });
 });

@@ -28,11 +28,11 @@ import { assertOutputsWritable, writeFileGuarded } from '../util/outputGuard.js'
 import { suggestId } from '../util/suggestId.js';
 
 /** Every format the registry can export (built-ins + CLI rendered media). */
-const VALID_FORMATS: readonly FormatId[] = [...BUILTIN_FORMAT_IDS, 'mp4', 'gif'];
+const VALID_FORMATS: readonly FormatId[] = [...BUILTIN_FORMAT_IDS, 'mp4', 'gif', 'png'];
 
 /**
  * Default formats produced by a bare `convert <input>` (no -o / --formats).
- * Deliberately excludes md/xlsx/csv and — crucially — mp4/gif, so a
+ * Deliberately excludes md/xlsx/csv and — crucially — mp4/gif/png, so a
  * bare convert never spins up Playwright/FFmpeg.
  */
 const DEFAULT_FORMATS: readonly FormatId[] = [
@@ -127,7 +127,7 @@ export function registerConvertCommand(program: Command): void {
   program
     .command('convert')
     .description(
-      'Convert a document to DOCX, PPTX, PDF, HTML, EPUB, MP4, animated GIF, and container formats',
+      'Convert a document to DOCX, PPTX, PDF, HTML, EPUB, MP4, animated GIF, dashboard PNG, and container formats',
     )
     .argument('<input>', 'Path to .md/.docx/.pptx/.pdf/.xlsx/.csv/.html file, .zip/.dbk, or folder')
     .addOption(

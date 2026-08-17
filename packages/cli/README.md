@@ -96,9 +96,45 @@ Notes:
 - **An existing output file is never overwritten by default.** The check runs before rendering, so a colliding path costs you a second rather than a full capture. Pass `--overwrite` to replace.
 - FFmpeg failures report the one relevant line (e.g. `[libx264] width not divisible by 2 (851x480) (exit code 1)`) rather than dumping the whole command line and stderr buffer.
 
+### `squisq image <input> [output]`
+
+Render a document's **Dashboard** rendition — every block arranged on one
+canvas — to a PNG image. Needs Playwright Chromium only (no ffmpeg; this is a
+single-frame capture, not a video encode). The layout comes from the doc's
+`squisq-dashboard-layout` frontmatter (or `--layout`), defaulting to the
+auto-pick that chooses the smallest built-in layout fitting the block count;
+the document-title band renders by default and `--no-title` hides it. `--style`
+picks the cell dressing (`basic`, `card`, `panel`, `accent` — all theme-derived),
+defaulting to the doc's `squisq-dashboard-style`.
+
+```bash
+squisq image input.md output.png
+squisq image input.md --resolution 4k
+squisq image input.md --resolution square --layout grid-2x2
+squisq image input.md --style card
+squisq image input.md --width 1280 --height 720 --no-title
+squisq image input.md -t documentary --transform magazine
+```
+
+| Option                   | Description                                                                                                | Default       |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------- | ------------- |
+| `-o, --output`           | Output `.png` path                                                                                         | `<input>.png` |
+| `--resolution`           | Named preset: `hd`, `fhd`, `4k`, `square`, `square-2k`, `portrait`, `portrait-4k`, `standard`              | `fhd`         |
+| `--width` / `--height`   | Custom pixels (both required together; excludes `--resolution`). 64–7680 per axis, ≤33 MP; odd values fine | preset        |
+| `--layout`               | Dashboard layout id (built-ins or a doc-defined custom layout), or `auto`                                  | `auto`        |
+| `--style`                | Cell style variant: `basic`, `card`, `panel`, `accent` (all theme-derived)                                 | doc setting   |
+| `--title` / `--no-title` | Show/hide the document-title band                                                                          | shown         |
+| `--format`               | Output format (`png`)                                                                                      | `png`         |
+| `-t, --theme`            | Squisq theme id to apply                                                                                   | none          |
+| `--transform`            | Transform style to apply before rendering                                                                  | none          |
+| `--overwrite`            | Replace an existing output file (otherwise refuse and exit non-zero)                                       | off           |
+| `--no-auto-templates`    | Disable content-aware template auto-picking for unannotated headings                                       | (auto on)     |
+
+The same export is available through the registry as `squisq convert <input> -f png`.
+
 ### `squisq doctor`
 
-Preflight the video toolchain: reports the resolved ffmpeg path, version, and which source it came from (`SQUISQ_FFMPEG` env / `PATH` / `ffmpeg-static`) with an install hint when missing, attempts a headless Chromium launch, and reports the Node version.
+Preflight the rendering toolchain: reports the resolved ffmpeg path, version, and which source it came from (`SQUISQ_FFMPEG` env / `PATH` / `ffmpeg-static`) with an install hint when missing, attempts a headless Chromium launch, reports the Node version, and summarizes per-feature readiness (video/GIF need ffmpeg + Chromium; the dashboard PNG image needs Chromium only).
 
 ```bash
 squisq doctor
@@ -222,6 +258,27 @@ captions, an infinite loop, and disabled slide animations/transitions. Set
 `captionStyle: 'off'` to omit captions. Embedded video still advances, but all
 audio is omitted and reported through `result.warnings`.
 
+### `renderDocToDashboardPng`
+
+```ts
+import { renderDocToDashboardPng } from '@bendyline/squisq-cli/api';
+
+const result = await renderDocToDashboardPng(doc, input.container, {
+  outputPath: './dashboard.png',
+  resolution: 'square', // or width/height for custom pixels
+  layout: 'grid-2x2', // 'auto' (default) picks by block count
+  style: 'card', // 'basic' (default) | 'card' | 'panel' | 'accent'
+  title: true,
+});
+// result: { bytes: Uint8Array, width, height, outputPath? }
+```
+
+Renders the Dashboard rendition to a single PNG. Needs Playwright Chromium
+only — no ffmpeg. `resolution` names a preset from `DASHBOARD_RESOLUTIONS`
+(default `fhd`, 1920×1080); explicit `width`/`height` (both together) replace
+it. Apply a theme upstream (`{ ...doc, themeId }`), the same convention the
+video renderers use.
+
 ### Native frame encoding
 
 For callers that already have PNG frames and do not need Playwright capture,
@@ -271,6 +328,7 @@ await extractThumbnails({
 - `readInput(inputPath)` → `{ doc: Doc, container: ContentContainer, markdownDoc?: MarkdownDocument, sourceFormat: FormatId }`
 - `MemoryContentContainer` (re-export from `@bendyline/squisq/storage`)
 - `VideoQuality`, `VideoOrientation` types (re-exports from `@bendyline/squisq-video`)
+- `DASHBOARD_RESOLUTIONS`, `DEFAULT_DASHBOARD_RESOLUTION`, `resolveDashboardDimensions`, `validateDashboardImageDimensions` (re-exports from `@bendyline/squisq-video`)
 
 See the full [API Reference](https://github.com/bendyline/squisq/blob/main/docs/API.md#bendylinesquisq-cli) for all types and options.
 

@@ -11,7 +11,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { DocPlayer, LinearDocView, useMediaProvider } from '@bendyline/squisq-react';
+import { DashboardView, DocPlayer, LinearDocView, useMediaProvider } from '@bendyline/squisq-react';
 import type { AudioController, CodeBlockCopyHandler, PlaybackState } from '@bendyline/squisq-react';
 import { resolveTransformStyle } from '@bendyline/squisq/transform';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -92,6 +92,9 @@ export function PreviewPanel({
     activeCoverSlideTemplate,
     activeCoverSlideDuration,
     activeCoverSlidePlayback,
+    activeDashboardLayout,
+    activeDashboardTitle,
+    activeDashboardStyle,
   } = usePreviewSettings();
   const mainSurfaceRef = useRef<HTMLDivElement>(null);
   const popupSurfaceRef = useRef<HTMLDivElement>(null);
@@ -156,6 +159,7 @@ export function PreviewPanel({
   const isDocumentMode = activeDisplayMode === 'page';
   const isPageMode = activeDisplayMode === 'linear';
   const isNarrateMode = activeDisplayMode === 'narrate';
+  const isDashboardMode = activeDisplayMode === 'dashboard';
 
   useEffect(() => {
     if (presentation?.activeTarget === 'window') return;
@@ -349,6 +353,29 @@ export function PreviewPanel({
           onCopyCode={onCopyCode}
           fenceRenderers={fenceRenderers ?? undefined}
         />
+      );
+    }
+
+    if (isDashboardMode) {
+      // A static canvas: the audience window renders the identical view —
+      // there is no clock or scroll position to mirror. `contentDoc` keeps
+      // the transform applied while `materializeDashboard` runs its own
+      // slide projection (image interleaving off) internally. The fit
+      // wrapper contain-fits the canvas inside the preview surface (a
+      // portrait dashboard scales down instead of clipping at the fold).
+      return (
+        <div className="squisq-dashboard-fit">
+          <DashboardView
+            doc={contentDoc ?? doc!}
+            basePath={basePath}
+            viewport={activeViewport}
+            theme={activeTheme}
+            layout={activeDashboardLayout}
+            showTitle={activeDashboardTitle}
+            style={activeDashboardStyle}
+            documentTitle={documentTitleFromFileName(fileName)}
+          />
+        </div>
       );
     }
 

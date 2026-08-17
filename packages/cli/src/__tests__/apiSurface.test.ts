@@ -47,4 +47,22 @@ describe('@bendyline/squisq-cli/api native encoding surface', () => {
     } satisfies CliConvertOptions;
     expect(options.formatOptions.gif.animationsEnabled).to.equal(false);
   });
+
+  it('types the CLI-only dashboard PNG format options', () => {
+    const options = {
+      formatOptions: {
+        png: {
+          resolution: 'square',
+          layout: 'grid-2x2',
+          title: false,
+        },
+      },
+    } satisfies CliConvertOptions;
+    expect(options.formatOptions.png.resolution).to.equal('square');
+
+    const custom = {
+      formatOptions: { png: { width: 1280, height: 720 } },
+    } satisfies CliConvertOptions;
+    expect(custom.formatOptions.png.width).to.equal(1280);
+  });
 });

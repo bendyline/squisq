@@ -364,6 +364,7 @@ Sets the default display/playback mode.
 | --------------------------------------------- | ------------------------------------------------------------------ |
 | `video`                                       | Video — timeline playback with audio sync, scrub bar, auto-advance |
 | `slideshow`, `slides`, `presentation`, `deck` | Slideshow — prev/next navigation, no auto-advance                  |
+| `dashboard`, `dash`                           | Dashboard — every block arranged on one static canvas              |
 | `linear`, `document`, `scroll`                | Document — long-scrolling readable view, no audio                  |
 | `page`, `html`, `plain`, `reader`             | Page — static plain-HTML rendering (no doc model)                  |
 
@@ -419,6 +420,55 @@ These are managed by the editor's Preview controls and consumed by the player/ex
 | `squisq-video-loop` (legacy `video-loop`)         | Whether Video mode restarts automatically after playback ends. Default: `false`.                            |
 
 When the editor writes these settings, values matching their runtime defaults are omitted rather than persisted. The same applies to the default `standard` theme. Choosing a default also removes any legacy alias; non-default values use the canonical `squisq-*` key.
+
+### Dashboard
+
+Dashboard mode (`display-mode: dashboard`) renders the document as ONE static
+canvas: a layout places the doc's blocks into cells (grids and hero mosaics),
+each block rendered at its cell's size. Blocks beyond the layout's capacity
+are not rendered (an overflow diagnostic is reported, never a console error).
+There is no clock: video layers show as paused poster frames and scheduled
+audio/video media does not play.
+
+| Key                                                   | Purpose                                                                                                                                                                                                                           |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `squisq-dashboard-layout` (legacy `dashboard-layout`) | Preferred layout id, or `auto` (default) to pick the smallest layout that fits the block count. Built-ins: `focus-1`, `split-2`, `hero-left`, `grid-2x2`, `hero-top`, `mosaic-5`, `grid-3x2`, `grid-3x3`, `grid-4x3`, `grid-4x4`. |
+| `squisq-dashboard-title` (legacy `dashboard-title`)   | Whether the document-title band renders (default `true`; the band only appears when a title actually resolves, and a leading block that merely restates the title dedupes into it).                                               |
+| `squisq-dashboard-layouts`                            | Inline custom layout definitions (compact single-line JSON keyed by layout name, same convention as `squisq-custom-templates`). Customs win name collisions with built-ins and join auto-pick.                                    |
+| `squisq-dashboard-zoom` (legacy `dashboard-zoom`)     | Cell zoom behavior: `auto` (default) boosts short text-led blocks to 1.5×/2× type so they fill their slot, quantized to at most ONE boost level per dashboard (cells stay consistently sized); `off` renders everything at 1×.    |
+
+A custom layout defines `%`-rect cells relative to the content area (the
+canvas minus the title band), per orientation (`ls` landscape required;
+`pt` portrait / `sq` square optional — portrait falls back to a transposed
+landscape). A cell may pin a specific block with `bk` (1-based document
+order; duplicates allowed — a KPI wall may repeat a block) and may pin a
+type-scale zoom with `zo` (`1`/`1.5`/`2`, percent spellings `100/150/200`
+accepted — pinned cells are exempt from the automatic pick, and automatic
+boosts rally to a pinned level so the dashboard keeps ≤2 unique sizes):
+
+```yaml
+squisq-dashboard-layouts:
+  {
+    'kpi-wall':
+      {
+        'lb': 'KPI Wall',
+        'ce':
+          {
+            'ls':
+              [
+                { 'x': '0%', 'y': '0%', 'wd': '49%', 'hg': '100%', 'bk': 1 },
+                { 'x': '51%', 'y': '0%', 'wd': '49%', 'hg': '100%' },
+              ],
+          },
+      },
+  }
+squisq-dashboard-layout: kpi-wall
+```
+
+The editor's Dashboard mode adds a Layout picker + Title toggle to the
+preview toolbar (persisted with the keys above) and an "Export dashboard as
+image" dialog; the CLI exports the same rendition with `squisq image` or
+`squisq convert -f png`.
 
 ### Custom frontmatter
 

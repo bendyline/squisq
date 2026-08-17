@@ -87,6 +87,23 @@ describe('standalone player instance handles', () => {
     expect(second.getRenderAPI()?.getBlocks()[0].id).toBe('second-block');
   });
 
+  it('resolves a live render API for a dashboard mount in render mode', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountedElements.push(root);
+
+    // The export pipeline's readiness poll waits on exactly this contract:
+    // a dashboard mount in render mode must surface a non-null render API.
+    const handle = mount(root, doc('dash'), { mode: 'dashboard', renderMode: true });
+    const api = await handle.renderAPI;
+    expect(api).not.toBeNull();
+    expect(api?.getDuration()).toBe(0);
+    expect(api?.hasCoverBlock()).toBe(false);
+    await expect(api!.seekTo(0)).resolves.toBeUndefined();
+    expect(root.querySelector('.doc-player--dashboard')).not.toBeNull();
+    expect(root.querySelector('.squisq-dashboard')).not.toBeNull();
+  });
+
   it('forwards the animationsEnabled render policy to the mounted player', async () => {
     const root = document.createElement('div');
     document.body.append(root);

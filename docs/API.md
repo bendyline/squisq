@@ -648,6 +648,112 @@ templates) become `canvas-embed` sections whose consumers render the carried
 block through `materializeBlockLayers`. Unknown templates degrade to a
 visible diagnostic callout — failures are data, never console output.
 
+#### Dashboard Resolution
+
+```ts
+// The Dashboard projection — one static canvas of arranged blocks. The third
+// core rendition beside slides (buildPreviewDoc + materializeBlockLayers) and
+// pages (materializePageSections). Core owns every geometry decision.
+function materializeDashboard(doc: Doc, options?: MaterializeDashboardOptions): DashboardMaterialization;
+interface MaterializeDashboardOptions {
+  theme?: Theme;
+  viewport?: ViewportConfig; // canvas; default landscape
+  layout?: string | DashboardLayoutDefinition; // id | 'auto' | inline def; overrides frontmatter
+  customLayouts?: readonly DashboardLayoutDefinition[]; // default: squisq-dashboard-layouts frontmatter
+  customTemplates?: readonly CustomTemplateDefinition[]; // default doc.customTemplates
+  showTitle?: boolean; // overrides squisq-dashboard-title (default true)
+  documentTitle?: string; // host filename fallback for the title band
+  zoom?: 'auto' | 'off'; // overrides squisq-dashboard-zoom (default 'auto')
+  style?: DashboardStyleId | string; // overrides squisq-dashboard-style (default 'basic')
+  failureMode?: 'fallback' | 'empty'; // per-cell, forwarded to materializeBlockLayers
+}
+interface DashboardMaterialization {
+  layout: DashboardLayoutDefinition;
+  layoutSource: 'option' | 'frontmatter' | 'auto';
+  style: DashboardStyleId; // resolved cell style variant
+  viewport: ViewportConfig;
+  cells: DashboardCell[]; // { index, block, blockIndex, layers, rect, rectPct, frame?, viewport, zoom, source, diagnostic? }
+  title: DashboardTitle | null; // band text + rect + synthesized layers; null when disabled/absent
+  backdrop: { fill: string; bottomLayers: Layer[]; topLayers: Layer[] }; // canvas fill + persistent layers, applied once
+  diagnostics: DashboardDiagnostic[]; // 'overflow' | 'unknown-layout' | 'invalid-cell-assignment' | 'empty-doc'
+}
+// Flatten a materialization into one canvas-level Layer[] for non-React
+// consumers (per cell: frame chrome, block, overlay chrome — placeLayersInRect
+// with `cell-N-frame-` / `cell-N-` / `cell-N-overlay-` id prefixes).
+function composeDashboardLayers(m: DashboardMaterialization): Layer[];
+
+// Layout model: cells are %-rects relative to the content area (canvas minus
+// the title band), per orientation; landscape is required and defines
+// capacity, portrait falls back to a transposed landscape, square to
+// landscape. A cell may pin a 1-based block index (duplicates allowed).
+interface DashboardLayoutDefinition {
+  name: string; label: string; description?: string;
+  cells: { landscape: DashboardCellDefinition[]; portrait?: DashboardCellDefinition[]; square?: DashboardCellDefinition[] };
+  titleSlot?: { placement: 'top' | 'bottom'; height: string }; // default top, '9%'
+  auto?: boolean; // false = excluded from auto-pick
+}
+interface DashboardCellDefinition { x: string; y: string; width: string; height: string; block?: number; zoom?: number }
+
+// Cell zoom: a closed type-scale ladder (1 | 1.5 | 2). Each DashboardCell
+// reports the zoom baked into its layers. 'auto' boosts short text-led
+// blocks (content/list/quote/definitionCard/factCard/dateEvent) so they
+// fill their slot — spatial/chart/display-scaled templates always render
+// 1× — and picks are quantized to base 1× plus at most ONE boost level per
+// dashboard; explicit cell pins are honored and autos rally to them.
+const DASHBOARD_ZOOM_LEVELS: readonly [1, 1.5, 2];
+function normalizeDashboardZoom(value: unknown): DashboardZoomLevel | undefined; // 1/1.5/2 or 100/150/200
+function desiredCellZoom(candidate: DashboardZoomCandidate): DashboardZoomLevel;
+function resolveDashboardZooms(candidates: readonly DashboardZoomCandidate[], mode: 'auto' | 'off'): DashboardZoomLevel[];
+// Cell style: the dressing axis, orthogonal to the layout's geometry. Every
+// variant takes its colors from the ACTIVE theme (colors, style.borderRadius,
+// colorSchemes rotation) — a style never carries a palette. Under a card
+// style the block FILLS its card (templates bring their own padding); a
+// leading full-bleed backdrop that is exactly theme.colors.background is
+// dropped so the surface shows through, and borders/accents render as
+// overlay layers ABOVE the block. Each cell's `frame` carries the behind and
+// overlay layers plus `contentRadiusPct`, a percentage border-radius a host
+// clips the cell with (so corners scale at any export size).
+type DashboardStyleId = 'basic' | 'card' | 'panel' | 'accent';
+const DASHBOARD_STYLE_IDS: readonly DashboardStyleId[];
+const DASHBOARD_STYLES: readonly { id: DashboardStyleId; label: string; description: string }[];
+const DEFAULT_DASHBOARD_STYLE = 'basic';
+function resolveDashboardStyleId(value: unknown): DashboardStyleId | undefined; // tolerant; undefined when unknown
+function buildDashboardCellChrome(style: DashboardStyleId, options: { theme: Theme; rect: LayerRect; index: number }): DashboardCellChrome | null; // null for 'basic'
+function dashboardCanvasFill(style: DashboardStyleId, theme: Theme): string; // tinted desk for elevated styles
+function dashboardCellAccent(theme: Theme, index: number): string; // colorSchemes rotation
+function stripBlockBackdropLayer(layers: readonly Layer[], theme: Theme): Layer[];
+const BUILTIN_DASHBOARD_LAYOUTS: readonly DashboardLayoutDefinition[]; // focus-1 … grid-4x4 (capacities 1–16)
+const DASHBOARD_AUTO_LAYOUT_ID = 'auto';
+function chooseDashboardLayout(blockCount: number, orientation: ViewportOrientation, customLayouts?: readonly DashboardLayoutDefinition[]): DashboardLayoutDefinition;
+function resolveDashboardLayoutDefinition(id: string, customLayouts?: readonly DashboardLayoutDefinition[]): DashboardLayoutDefinition | undefined;
+function validateDashboardLayoutDefinition(input: unknown): DashboardLayoutValidationResult;
+function layoutCapacity(def: DashboardLayoutDefinition): number;
+function transposeCells(cells: readonly DashboardCellDefinition[]): DashboardCellDefinition[];
+function resolveLayoutCells(def: DashboardLayoutDefinition, orientation: ViewportOrientation, contentRect: LayerRect): ResolvedDashboardCell[];
+function getDashboardLayoutSummaries(): DashboardLayoutSummary[]; // built-ins, ladder order
+function listDashboardLayouts(doc: Pick<Doc, 'frontmatter'> | undefined): DashboardLayoutSummary[]; // doc customs first
+
+// Frontmatter: settings resolver (Pattern A) + custom-layout codec (Pattern B).
+function resolveDashboardSettings(frontmatter: Record<string, unknown> | undefined, overrides?: DashboardSettingsOverrides): DashboardSettings; // { layout: 'auto', showTitle: true, zoom: 'auto', style: 'basic' } defaults
+const DASHBOARD_FRONTMATTER_KEYS: { layout: …; showTitle: …; zoom: …; style: … }; // squisq-dashboard-layout / -title / -zoom / -style
+function readDashboardLayoutsFromFrontmatter(frontmatter?: Record<string, unknown>): DashboardLayoutDefinition[] | undefined;
+function writeDashboardLayoutsToFrontmatter(layouts?: readonly DashboardLayoutDefinition[], options?: { pretty?: boolean }): string | undefined;
+const FRONTMATTER_DASHBOARD_LAYOUTS_KEY = 'squisq-dashboard-layouts';
+```
+
+The cell area is inset from the canvas edge by a small margin (2% of the
+shorter axis) on every side the title band does not occupy, so a dashboard
+never runs its cards into the frame; the band itself stays full-bleed and
+aligns its type with the cell area's left edge.
+
+Candidate blocks come from `buildPreviewDoc(doc, { interleaveImages: false })`
+so template resolution and derived inputs match the slideshow exactly. Each
+cell renders its block **at the cell's size** (a synthetic per-cell viewport),
+so templates re-compose for the cell's orientation and typography scales via
+`calculateFontScale`. Blocks beyond the layout's capacity are not rendered —
+reported as an `overflow` diagnostic, never console output. A leading block
+that merely restates the resolved document title dedupes into the title band.
+
 #### Template Registry
 
 ```ts
@@ -1415,6 +1521,10 @@ interface DocPlayerProps {
   theme?: Theme; // default DEFAULT_THEME
   surface?: SurfaceScheme | 'auto';
   displayMode?: DisplayMode; // default 'video'
+  dashboardLayout?: string; // dashboard mode: layout id or 'auto' (overrides doc frontmatter)
+  dashboardShowTitle?: boolean; // dashboard mode: title-band override
+  dashboardStyle?: DashboardStyleId; // dashboard mode: cell style variant
+  dashboardDocumentTitle?: string; // dashboard mode: host title fallback (file name)
   showCoverSlide?: boolean; // default true
   coverVisible?: boolean; // controlled cover cursor for synchronized audience mirrors
   captionStyle?: CaptionStyle; // default 'standard'
@@ -1446,23 +1556,24 @@ interface BlockRendererProps {
 
 #### Other components
 
-| Component              | Summary                                                                                                                                                                |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DocPlayerWithSidebar` | `DocPlayer` composed with `DocControlsSidebar`.                                                                                                                        |
-| `LinearDocView`        | The "Page" rendition: theme-art-directed, variable-height HTML sections via core `materializePageSections`; SVG only for spatial canvas embeds (`LinearDocViewProps`). |
-| `PageSectionView`      | Dispatches one `PageSection` to its section layout component.                                                                                                          |
-| `CanvasSection`        | Responsive SVG embed for spatial sections (diagram/tree/map/…).                                                                                                        |
-| `MarkdownRenderer`     | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                      |
-| `CaptionOverlay`       | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                      |
-| `SocialCaptionOverlay` | Large centered TikTok/Reels-style word-by-word captions.                                                                                                               |
-| `DocProgressBar`       | Block progress indicator with seek.                                                                                                                                    |
-| `DocControlsOverlay`   | Floating play/pause + prev/next over the player.                                                                                                                       |
-| `DocControlsBottom`    | Bottom bar with progress + counter.                                                                                                                                    |
-| `DocControlsSidebar`   | Side panel with block thumbnails.                                                                                                                                      |
-| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter).                                                                                                                         |
-| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                  |
-| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                           |
-| `JsonView`             | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                  |
+| Component              | Summary                                                                                                                                                                                               |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DocPlayerWithSidebar` | `DocPlayer` composed with `DocControlsSidebar`.                                                                                                                                                       |
+| `LinearDocView`        | The "Page" rendition: theme-art-directed, variable-height HTML sections via core `materializePageSections`; SVG only for spatial canvas embeds (`LinearDocViewProps`).                                |
+| `DashboardView`        | The "Dashboard" rendition: one static canvas of per-cell `BlockRenderer`s (plus each cell's `style` chrome) via core `materializeDashboard`; publishes a minimal render API for single-frame capture. |
+| `PageSectionView`      | Dispatches one `PageSection` to its section layout component.                                                                                                                                         |
+| `CanvasSection`        | Responsive SVG embed for spatial sections (diagram/tree/map/…).                                                                                                                                       |
+| `MarkdownRenderer`     | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                                                     |
+| `CaptionOverlay`       | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                                                     |
+| `SocialCaptionOverlay` | Large centered TikTok/Reels-style word-by-word captions.                                                                                                                                              |
+| `DocProgressBar`       | Block progress indicator with seek.                                                                                                                                                                   |
+| `DocControlsOverlay`   | Floating play/pause + prev/next over the player.                                                                                                                                                      |
+| `DocControlsBottom`    | Bottom bar with progress + counter.                                                                                                                                                                   |
+| `DocControlsSidebar`   | Side panel with block thumbnails.                                                                                                                                                                     |
+| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter).                                                                                                                                                        |
+| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                                                 |
+| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                                                          |
+| `JsonView`             | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                                                 |
 
 ```ts
 interface LinearDocViewProps {
@@ -1482,6 +1593,31 @@ interface LinearDocViewProps {
   onCopyCode?: CodeBlockCopyHandler;
   className?: string;
 }
+
+interface DashboardViewProps {
+  doc: Doc;
+  theme?: Theme; // default: the doc's own theme resolution (resolveThemeForDoc)
+  viewport?: ViewportConfig; // canvas; default landscape
+  layout?: string; // layout id or 'auto'; overrides doc frontmatter
+  showTitle?: boolean; // title-band override (default true when a title resolves)
+  documentTitle?: string; // host title fallback (typically the file name)
+  basePath?: string; // default '.'
+  animationsEnabled?: boolean; // default true (ambient motion in cells)
+  muted?: boolean; // default true — cell video layers render as paused posters
+  renderMode?: boolean; // publish the capture-readiness render API
+  onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
+  className?: string;
+}
+// The canvas is width-driven by default. Its width is
+// `var(--squisq-dashboard-fit-width, 100%)` and the root exposes
+// `--squisq-dashboard-aspect` (width/height as a number), so a host with a
+// definite-height box can contain-fit the whole dashboard:
+//   .host { container-type: size; }
+//   .host .squisq-dashboard {
+//     --squisq-dashboard-fit-width: min(100%, calc(100cqh * var(--squisq-dashboard-aspect)));
+//   }
+// The editor preview does exactly this, so portrait/square dashboards scale
+// down to stay fully visible instead of clipping.
 
 interface MarkdownRendererProps {
   nodes: MarkdownBlockNode[];
@@ -1631,7 +1767,13 @@ function getTransitionClass(
 
 ```ts
 interface MountOptions {
-  mode?: 'slideshow' | 'static';
+  mode?: 'slideshow' | 'static' | 'dashboard';
+  dashboard?: {
+    layout?: string;
+    title?: boolean;
+    style?: DashboardStyleId;
+    documentTitle?: string;
+  }; // dashboard mode only
   basePath?: string;
   images?: Record<string, string>;
   audio?: Record<string, string>;
@@ -1657,6 +1799,10 @@ host page (consumed by `formats/html` and `squisq-cli`). The runtime IIFE at
 `mount`, `getHandle`, `unmount`, and `version`. `mount()` returns an
 instance-scoped `SquisqPlayerHandle`; in render mode, await
 `handle.renderAPI`. `getHandle(element)` retrieves that exact mounted instance.
+`mode: 'dashboard'` mounts the one-canvas Dashboard rendition sized to the
+host element's box; in render mode it publishes a minimal render API whose
+`seekTo` resolves once assets have settled (the single-frame capture
+contract), with `getDuration() === 0` and no cover.
 
 ---
 
@@ -2250,6 +2396,7 @@ interface EditorShellProps {
   writeCanvasSettings?: WriteCanvasSettings; // { textSize?: px; lineSpacing?: unitless }
   // File-kind / read-only / image mode
   fileName?: string;
+  saveCoverImageOutput?: (blob: Blob, filename: string) => boolean | void | Promise<boolean | void>; // host save flow for cover images
   language?: string;
   findMode?: boolean; // controlled; no built-in trigger button
   onFindModeChange?: (active: boolean) => void;
@@ -2655,7 +2802,31 @@ interface RenderHtmlOptions {
   height?: number; // default 1080
   captionStyle?: 'standard' | 'social';
   animationsEnabled?: boolean; // default true
+  displayMode?: 'slideshow' | 'dashboard'; // default 'slideshow'
+  dashboard?: { layout?: string; title?: boolean; style?: string; documentTitle?: string };
 }
+
+// Dashboard image export presets — shared by `squisq image` and the browser
+// export dialog so both accept identical input. These are EXPORT resolutions
+// (physical pixels); `family` names the VIEWPORT_PRESETS aspect they imply.
+const DASHBOARD_RESOLUTIONS: readonly DashboardResolutionPreset[]; // hd, fhd, 4k, square, square-2k, portrait, portrait-4k, standard
+const DEFAULT_DASHBOARD_RESOLUTION: DashboardResolutionId; // 'fhd' (1920×1080)
+interface DashboardResolutionPreset {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  family: ViewportPreset;
+}
+// Cover-image ruleset (whole pixels, 64–7680 per axis, ≤33,177,600 px) — NOT
+// the H.264 even-dimension rule; odd dimensions are legal for a PNG.
+function validateDashboardImageDimensions(width: number, height: number): string | null;
+function resolveDashboardDimensions(input?: {
+  resolution?: string;
+  width?: number;
+  height?: number;
+}): { width: number; height: number; family: ViewportPreset }; // preset XOR both-custom; throws RangeError
+function dashboardFamilyForDimensions(width: number, height: number): ViewportPreset;
 ```
 
 ---
@@ -2742,11 +2913,30 @@ interface CoverImageExportModalProps {
   onClose: () => void;
 }
 function CoverImageExportModal(props: CoverImageExportModalProps): JSX.Element;
+
+interface DashboardImageExportModalProps {
+  doc: Doc;
+  mediaProvider?: MediaProvider | null;
+  theme?: Theme;
+  defaultResolution?: DashboardResolutionId; // default 'fhd'
+  defaultLayout?: string; // default 'auto'
+  defaultShowTitle?: boolean; // default true
+  defaultFileName?: string;
+  colorScheme?: 'light' | 'dark';
+  saveOutput?: (blob: Blob, filename: string) => boolean | void | Promise<boolean | void>;
+  onClose: () => void;
+}
+function DashboardImageExportModal(props: DashboardImageExportModalProps): JSX.Element;
 ```
 
 Cover-only editor surfaces should import this component from
 `@bendyline/squisq-video-react/cover-image`; that focused entry point excludes
-the MP4/GIF encoder worker graph.
+the MP4/GIF encoder worker graph. The dashboard export dialog has the same
+split at `@bendyline/squisq-video-react/dashboard-image` (which also re-exports
+`DASHBOARD_RESOLUTIONS` and `validateDashboardImageDimensions`); it renders the
+doc's Dashboard rendition through the capture pipeline and offers named
+resolutions, custom pixels, the layout picker, the title toggle, and
+PNG/JPEG/WebP output.
 
 ### Hooks
 
@@ -2899,12 +3089,38 @@ a pre-built Doc as a `.json` file.
 `SQUISQ_FFMPEG` env var, then `PATH`, then an optionally-installed `ffmpeg-static`
 package. Run `squisq doctor` to check the toolchain.
 
+#### `squisq image <input> [output]`
+
+Render a document's **Dashboard** rendition — every block arranged on one
+canvas — to a PNG image (Playwright headless single-frame capture). Needs
+Chromium only; no ffmpeg. Layout, style, and title default to the doc's
+`squisq-dashboard-layout` / `squisq-dashboard-style` / `squisq-dashboard-title`
+frontmatter.
+
+| Option                   | Description                                                                                   | Default       |
+| ------------------------ | --------------------------------------------------------------------------------------------- | ------------- |
+| `-o, --output`           | Output `.png` path                                                                            | `<input>.png` |
+| `--resolution`           | Named preset: `hd`, `fhd`, `4k`, `square`, `square-2k`, `portrait`, `portrait-4k`, `standard` | `fhd`         |
+| `--width` / `--height`   | Custom pixels (both together; excludes `--resolution`; 64–7680 per axis, ≤33 MP; odd is fine) | preset        |
+| `--layout`               | Dashboard layout id (built-in or doc-defined custom), or `auto`                               | `auto`        |
+| `--style`                | Cell style variant: `basic`, `card`, `panel`, `accent`                                        | doc setting   |
+| `--title` / `--no-title` | Show/hide the document-title band                                                             | shown         |
+| `--format`               | Output format (`png`)                                                                         | `png`         |
+| `-t, --theme`            | Squisq theme id to apply                                                                      | none          |
+| `--transform`            | Transform style to apply before rendering                                                     | none          |
+| `--overwrite`            | Replace an existing output file                                                               | off           |
+| `--no-auto-templates`    | Disable auto template pick                                                                    | (auto on)     |
+
+The same export is available as the registry format `png`
+(`squisq convert <input> -f png`).
+
 #### `squisq doctor`
 
-Preflight check for the video toolchain: reports the resolved ffmpeg path,
+Preflight check for the rendering toolchain: reports the resolved ffmpeg path,
 version, and which source it came from (env / PATH / `ffmpeg-static`) — with an
-actionable install hint when missing — attempts a headless Chromium launch, and
-reports the Node version.
+actionable install hint when missing — attempts a headless Chromium launch,
+reports the Node version, and summarizes per-feature readiness (video/GIF need
+ffmpeg + Chromium; the dashboard PNG image needs Chromium only).
 
 #### `squisq validate <input>`
 
@@ -2949,10 +3165,10 @@ Exit codes: `0` success, `1` transform/output failure, `2` input unreadable.
 
 The API surfaces a pre-bound `convert()` — a thin wrapper over
 `@bendyline/squisq-formats`' `convert()` that injects the CLI's format registry
-(every built-in exporter plus the CLI-only `mp4` and `gif` formats) and a default
-`resolvePlayerScript` (so HTML/player-embedding exports work out of the box).
-Both are overridable via `options`. `createCliRegistry()` returns that same
-registry for direct use.
+(every built-in exporter plus the CLI-only `mp4`, `gif`, and `png` formats) and
+a default `resolvePlayerScript` (so HTML/player-embedding exports work out of
+the box). Both are overridable via `options`. `createCliRegistry()` returns
+that same registry for direct use.
 
 ```ts
 // Pre-bound convert(): CLI registry (+ mp4/gif) + default player script injected.
@@ -2965,6 +3181,7 @@ type CliConvertOptions = Omit<ConvertOptions, 'formatOptions'> & {
   formatOptions?: ConvertOptions['formatOptions'] & {
     mp4?: Mp4FormatOptions;
     gif?: GifFormatOptions;
+    png?: PngFormatOptions;
   };
 };
 interface Mp4FormatOptions {
@@ -2984,7 +3201,40 @@ interface GifFormatOptions {
   dither?: GifDither;
   bayerScale?: number;
 }
-function createCliRegistry(): FormatRegistry; // defaultRegistry() + mp4/gif exporters
+interface PngFormatOptions {
+  resolution?: DashboardResolutionId; // default 'fhd'
+  width?: number; // custom pixels (with height; excludes resolution)
+  height?: number;
+  layout?: string; // dashboard layout id or 'auto'
+  title?: boolean; // title band (default: doc frontmatter, then true)
+}
+function createCliRegistry(): FormatRegistry; // defaultRegistry() + mp4/gif/png exporters
+
+// Render the Dashboard rendition to a single PNG (Chromium only — no ffmpeg).
+// Apply a theme upstream ({ ...doc, themeId }) like the video renderers.
+function renderDocToDashboardPng(
+  doc: Doc,
+  container: ContentContainer,
+  options?: RenderDashboardPngOptions,
+): Promise<RenderDashboardPngResult>;
+interface RenderDashboardPngOptions {
+  signal?: AbortSignal;
+  outputPath?: string; // optional file; bytes are always returned
+  resolution?: DashboardResolutionId; // default 'fhd'
+  width?: number; // custom pixels (with height; excludes resolution)
+  height?: number;
+  layout?: string; // dashboard layout id or 'auto' (default)
+  title?: boolean; // title band override
+  style?: DashboardStyleId; // 'basic' | 'card' | 'panel' | 'accent'; default: the doc's setting
+  documentTitle?: string; // title fallback when the doc has no frontmatter title
+  onProgress?: (phase: string, percent: number) => void;
+}
+interface RenderDashboardPngResult {
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+  outputPath?: string; // absolute path written, when requested
+}
 // Re-exports: ConversionError, the ConvertSource/ConvertOptions/ConversionResult/
 // FormatId/FormatRegistry/FormatDefinition/NormalizedInput types, plus readInput.
 

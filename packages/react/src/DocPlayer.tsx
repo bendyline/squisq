@@ -62,6 +62,7 @@ import { DocControlsOverlay } from './DocControlsOverlay';
 import { DocControlsSlideshow } from './DocControlsSlideshow';
 import { DocProgressBar } from './DocProgressBar';
 import { LinearDocView } from './LinearDocView';
+import { DashboardView } from './DashboardView';
 import type {
   PlaybackState,
   PlaybackActions,
@@ -181,6 +182,10 @@ function DocPlayerContent({
   onBlockMarkers,
   forceViewport,
   displayMode = 'video',
+  dashboardLayout,
+  dashboardShowTitle,
+  dashboardStyle,
+  dashboardDocumentTitle,
   showCoverSlide,
   coverSlideTemplate,
   coverSlideDuration,
@@ -201,6 +206,7 @@ function DocPlayerContent({
 }: DocPlayerContentProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
+  const isDashboardMode = displayMode === 'dashboard';
   const audioRef = useRef<HTMLAudioElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const playerId = `squisq-player-${useId().replace(/:/g, '')}`;
@@ -633,11 +639,11 @@ function DocPlayerContent({
   useEffect(() => {
     if (isEnded) {
       onEnded?.();
-      if (loop && !isSlideshowMode && !isLinearMode) {
+      if (loop && !isSlideshowMode && !isLinearMode && !isDashboardMode) {
         void restart();
       }
     }
-  }, [isEnded, isLinearMode, isSlideshowMode, loop, onEnded, restart]);
+  }, [isEnded, isDashboardMode, isLinearMode, isSlideshowMode, loop, onEnded, restart]);
 
   // Consumers keep this API object for the lifetime of the mounted player
   // (the standalone handle promise and Playwright both do). The implementation
@@ -668,7 +674,8 @@ function DocPlayerContent({
 
   // Refresh the implementation behind the stable instance API.
   useEffect(() => {
-    if (!renderMode && !isDebugMode) {
+    if (isDashboardMode || (!renderMode && !isDebugMode)) {
+      // Dashboard mode: DashboardView owns the render API.
       liveRenderAPIRef.current = null;
       return;
     }
@@ -840,19 +847,23 @@ function DocPlayerContent({
     doc,
     externalAudioController,
     waitForRenderCommit,
+    isDashboardMode,
   ]);
 
   // Publish/clean up only when the host callback or API availability changes;
   // ordinary playback state changes update the implementation ref above
   // without replacing the object consumers already hold.
   useEffect(() => {
+    // Dashboard mode: DashboardView publishes (and cleans up) its own API;
+    // touching the callback here would clobber the child's publication.
+    if (isDashboardMode) return;
     if ((!renderMode && !isDebugMode) || !containerRef.current) {
       onRenderAPIReady?.(null);
       return;
     }
     onRenderAPIReady?.(stableRenderAPI);
     return () => onRenderAPIReady?.(null);
-  }, [renderMode, isDebugMode, onRenderAPIReady, stableRenderAPI]);
+  }, [renderMode, isDebugMode, isDashboardMode, onRenderAPIReady, stableRenderAPI]);
 
   // Caption mode state: cycles through off → standard → social → off
   // The captionStyle prop sets the default active style; captionsEnabledProp
@@ -1179,8 +1190,9 @@ function DocPlayerContent({
         return;
       }
 
-      // Linear mode: no keyboard shortcuts (native scrolling handles it)
-      if (isLinearMode) return;
+      // Linear mode: no keyboard shortcuts (native scrolling handles it).
+      // Dashboard mode: a static canvas with nothing to navigate.
+      if (isLinearMode || isDashboardMode) return;
 
       // Fullscreen is mode-independent and host-owned: the control variants
       // advertise "(F)" only when `toggleFullscreen` is wired, so the shortcut
@@ -1241,6 +1253,7 @@ function DocPlayerContent({
     [
       isSlideshowMode,
       isLinearMode,
+      isDashboardMode,
       toggleWithTimelineMedia,
       seekTo,
       slideNavActions,
@@ -1254,13 +1267,13 @@ function DocPlayerContent({
   );
 
   useEffect(() => {
-    if (!globalKeyboardShortcuts || renderMode || isLinearMode) return;
+    if (!globalKeyboardShortcuts || renderMode || isLinearMode || isDashboardMode) return;
     const handleDocumentKeyDown = (event: KeyboardEvent) => {
       handleKeyboardShortcut(event, true);
     };
     document.addEventListener('keydown', handleDocumentKeyDown);
     return () => document.removeEventListener('keydown', handleDocumentKeyDown);
-  }, [globalKeyboardShortcuts, handleKeyboardShortcut, isLinearMode, renderMode]);
+  }, [globalKeyboardShortcuts, handleKeyboardShortcut, isDashboardMode, isLinearMode, renderMode]);
 
   // ── Linear mode: render as scrollable document ──────────────────
   if (isLinearMode) {
@@ -1286,6 +1299,39 @@ function DocPlayerContent({
           showCodeCopyButton={showCodeCopyButton}
           onCopyCode={onCopyCode}
           fenceRenderers={fenceRenderers}
+        />
+      </div>
+    );
+  }
+
+  // ── Dashboard mode: one static canvas of arranged blocks ────────
+  if (isDashboardMode) {
+    return (
+      <div
+        ref={containerRef}
+        data-player-id={playerId}
+        className="doc-player doc-player--dashboard"
+        style={{
+          position: 'relative',
+          width: '100%',
+          aspectRatio: `${activeViewport.width} / ${activeViewport.height}`,
+          margin: '0 auto',
+          overflow: 'hidden',
+        }}
+      >
+        <DashboardView
+          doc={doc}
+          theme={theme}
+          viewport={activeViewport}
+          layout={dashboardLayout}
+          showTitle={dashboardShowTitle}
+          style={dashboardStyle}
+          documentTitle={dashboardDocumentTitle}
+          basePath={basePath}
+          animationsEnabled={animationsEnabled}
+          muted={renderMode || muted}
+          renderMode={renderMode || isDebugMode}
+          onRenderAPIReady={onRenderAPIReady}
         />
       </div>
     );

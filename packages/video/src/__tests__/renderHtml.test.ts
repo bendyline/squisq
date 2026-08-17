@@ -27,6 +27,33 @@ describe('generateRenderHtml', () => {
     expect(html).not.toContain('window.getDuration');
   });
 
+  it('mounts the slideshow rendition by default (no dashboard option line)', () => {
+    const html = generateRenderHtml(minimalDoc(), { playerScript: PLAYER_STUB });
+    expect(html).toContain('mode: "slideshow"');
+    expect(html).not.toContain('dashboard:');
+  });
+
+  it('mounts the dashboard rendition with its option object when requested', () => {
+    const html = generateRenderHtml(minimalDoc(), {
+      playerScript: PLAYER_STUB,
+      displayMode: 'dashboard',
+      dashboard: { layout: 'grid-2x2', title: false, documentTitle: 'Fleet Report' },
+    });
+    expect(html).toContain('mode: "dashboard"');
+    expect(html).toContain('"layout":"grid-2x2"');
+    expect(html).toContain('"title":false');
+    expect(html).toContain('"documentTitle":"Fleet Report"');
+  });
+
+  it('emits an empty dashboard option object when none is supplied', () => {
+    const html = generateRenderHtml(minimalDoc(), {
+      playerScript: PLAYER_STUB,
+      displayMode: 'dashboard',
+    });
+    expect(html).toContain('mode: "dashboard"');
+    expect(html).toContain('dashboard: {}');
+  });
+
   it('applies the requested viewport dimensions', () => {
     const html = generateRenderHtml(minimalDoc(), {
       playerScript: PLAYER_STUB,

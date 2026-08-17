@@ -55,7 +55,7 @@
     "build": "tsup && node scripts/copy-player-bundle.mjs && node ../../scripts/remove-empty-chunks.mjs dist",
     "typecheck": "tsc --noEmit",
     "test": "mocha",
-    "test:native": "mocha --grep \"flagship pptx|native animated GIF\""
+    "test:native": "mocha --grep \"flagship pptx|native animated GIF|native dashboard PNG\""
   },
   "dependencies": {
     "@bendyline/squisq": "2.7.1",
