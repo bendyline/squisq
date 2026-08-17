@@ -1,3 +1,14 @@
+## @bendyline/squisq-video [2.3.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video@2.2.12...@bendyline/squisq-video@2.3.0) (2026-08-17)
+
+### Features
+
+* Dashboard mode ([#46](https://github.com/bendyline/squisq/issues/46)) ([d66c3d9](https://github.com/bendyline/squisq/commit/d66c3d91c9953135eb324670c91820d56a68ea48))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.8.0
+
 ## @bendyline/squisq-video [2.2.12](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video@2.2.11...@bendyline/squisq-video@2.2.12) (2026-08-01)
 
 
