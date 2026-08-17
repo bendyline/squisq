@@ -1,3 +1,17 @@
+## @bendyline/squisq-editor-react [2.8.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.7.3...@bendyline/squisq-editor-react@2.8.0) (2026-08-17)
+
+### Features
+
+* Dashboard mode ([#46](https://github.com/bendyline/squisq/issues/46)) ([d66c3d9](https://github.com/bendyline/squisq/commit/d66c3d91c9953135eb324670c91820d56a68ea48))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.8.0
+* **@bendyline/squisq-formats:** upgraded to 2.4.5
+* **@bendyline/squisq-react:** upgraded to 2.8.0
+* **@bendyline/squisq-video-react:** upgraded to 2.4.0
+
 ## @bendyline/squisq-editor-react [2.7.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.7.2...@bendyline/squisq-editor-react@2.7.3) (2026-08-14)
 
 ### Bug Fixes
