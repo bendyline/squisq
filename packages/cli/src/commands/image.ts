@@ -51,7 +51,13 @@ interface ImageCommandOptions {
   layout?: string;
   /** Cell style variant; unset defers to the doc's own frontmatter. */
   style?: string;
-  /** Commander's --title/--no-title pair; defaults true (band shown). */
+  /**
+   * Commander's --title/--no-title pair. Because the positive `--title` is
+   * registered FIRST, commander skips the implicit `true` default it would
+   * otherwise attach to a lone `--no-title` — so this stays `undefined`
+   * unless the user names a flag, and undefined defers to the document's
+   * own `squisq-dashboard-title` frontmatter (which itself defaults on).
+   */
   title?: boolean;
   overwrite?: boolean;
   theme?: string;
@@ -81,7 +87,7 @@ export function registerImageCommand(program: Command): void {
       '--style <variant>',
       `Cell style variant: ${DASHBOARD_STYLE_IDS.join(', ')} (default: the document's own setting)`,
     )
-    .option('--title', 'Include the document-title band (default)')
+    .option('--title', "Include the document-title band (default: the document's own setting)")
     .option('--no-title', 'Hide the document-title band')
     .option(
       '--no-auto-templates',
@@ -214,7 +220,7 @@ async function runImage(inputPath: string, opts: ImageCommandOptions): Promise<v
   }
 
   console.error(
-    `Rendering dashboard PNG: ${dimensions.width}×${dimensions.height}, layout: ${requestedLayout ?? DASHBOARD_AUTO_LAYOUT_ID}, style: ${requestedStyle ?? 'document'}, title: ${opts.title === false ? 'off' : 'on'}`,
+    `Rendering dashboard PNG: ${dimensions.width}×${dimensions.height}, layout: ${requestedLayout ?? DASHBOARD_AUTO_LAYOUT_ID}, style: ${requestedStyle ?? 'document'}, title: ${titleReadout(opts.title)}`,
   );
 
   // ── Step 3: Render via programmatic API ─────────────────────────
@@ -235,6 +241,17 @@ async function runImage(inputPath: string, opts: ImageCommandOptions): Promise<v
   clearProgress();
   console.error(`  ✓ ${rendered.outputPath} (${rendered.width}×${rendered.height})`);
   console.error('Done.');
+}
+
+/**
+ * Status-line word for the title band. Mirrors the `style` readout: an
+ * unset flag reports `document`, not `on`, because the band is then the
+ * document's call — reporting `on` would contradict a doc that turned it
+ * off in frontmatter.
+ */
+function titleReadout(title: boolean | undefined): string {
+  if (title === undefined) return 'document';
+  return title ? 'on' : 'off';
 }
 
 // ── Progress helpers ──────────────────────────────────────────────

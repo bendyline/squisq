@@ -14,6 +14,7 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useRef, useCallback, useMemo } from 'react';
 import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
+import { resolveDashboardStyleId } from '@bendyline/squisq/doc';
 import type { RenderHtmlOptions } from '@bendyline/squisq-video';
 import { DocPlayer, MediaContext } from '@bendyline/squisq-react';
 import type { SquisqRenderAPI, CaptionMode, CaptionStyle } from '@bendyline/squisq-react';
@@ -1630,6 +1631,11 @@ export function useFrameCapture(): FrameCaptureHandle {
         displayMode: renderOptions.displayMode,
         dashboardLayout: renderOptions.dashboard?.layout,
         dashboardShowTitle: renderOptions.dashboard?.title,
+        // RenderHtmlOptions types the style as a plain string (it is serialized
+        // into a script for the standalone path), so narrow it the same way the
+        // CLI does. An unrecognized value yields undefined, which defers to the
+        // doc's own squisq-dashboard-style rather than forcing 'basic'.
+        dashboardStyle: resolveDashboardStyleId(renderOptions.dashboard?.style),
         dashboardDocumentTitle: renderOptions.dashboard?.documentTitle,
         videoPresentation: renderOptions.videoPresentation,
         pipSize: renderOptions.pipSize,

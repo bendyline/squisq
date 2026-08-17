@@ -11,6 +11,8 @@ import { expect } from 'chai';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
+import { Command } from 'commander';
+import { registerImageCommand } from '../commands/image.js';
 
 const exec = promisify(execFile);
 
@@ -137,6 +139,18 @@ describe('image command flag validation', () => {
     expect(stderr).to.not.include('Unknown resolution preset');
     expect(stderr).to.not.include('Unknown dashboard layout');
     expect(stderr).to.include('Unknown theme "bogus-theme"');
+  });
+
+  it('leaves --title unset so the doc frontmatter decides the band', () => {
+    // Commander attaches an implicit `true` default to a lone `--no-title`.
+    // Registering the positive `--title` FIRST suppresses that, which is the
+    // only reason `squisq-dashboard-title: false` survives a flagless run —
+    // an explicit `true` here would silently override every such document.
+    const program = new Command();
+    registerImageCommand(program);
+    const image = program.commands.find((cmd) => cmd.name() === 'image');
+    expect(image === undefined, 'image command should be registered').to.equal(false);
+    expect(image?.opts().title).to.equal(undefined);
   });
 
   it('rejects using the positional output and --output together', async () => {

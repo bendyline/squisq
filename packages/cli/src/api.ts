@@ -619,7 +619,10 @@ export interface RenderDashboardPngOptions {
   height?: number;
   /** Dashboard layout id, or `'auto'` for the block-count pick (default). */
   layout?: string;
-  /** Render the document-title band. Default: the projection default (on). */
+  /**
+   * Render the document-title band. Leave unset to defer to the doc's own
+   * `squisq-dashboard-title` frontmatter (which itself defaults on).
+   */
   title?: boolean;
   /**
    * Cell style variant (`basic` | `card` | `panel` | `accent`). Default:
