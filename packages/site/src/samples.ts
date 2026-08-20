@@ -37,6 +37,7 @@ export const SAMPLE_LABELS: Record<string, string> = {
   'e2e-gif': 'E2E gif',
   'e2e-tasklist': 'E2E tasklist',
   'teleprompter-demo': 'Teleprompter (Narrate mode)',
+  'flashcards-demo': 'Flashcards & quiz',
 };
 
 /** Return the human-readable dropdown label for an inline sample. */
@@ -104,6 +105,50 @@ Press start, take a breath, and begin reading. The highlighted word marks where 
 ## The Finish
 
 End on a steady, confident line. When you stop speaking, the prompter stops with you. That is the whole trick.
+`,
+
+  // Flashcards-mode demo: ordinary nested headings become reveal cards;
+  // study metadata is only needed to disambiguate multiple choice.
+  'flashcards-demo': `---
+title: Squisq Study Deck
+display-mode: flashcards
+---
+
+# Squisq Study Deck
+
+## What is Squisq?
+
+### Answer
+
+An open-source set of framework-agnostic libraries for turning Markdown into designed documents, slides, dashboards, video, and interactive experiences.
+
+## What remains the source of truth?
+
+The original **Markdown**. Visual modes are projections, so changing how a document is used does not rewrite its content.
+
+## Block hierarchy {study=flashcard}
+
+### What creates parent and child blocks?
+
+### Parent
+
+A Markdown heading owns the body beneath it.
+
+### Child
+
+Deeper headings become nested child blocks.
+
+## Quick quiz {study=multiple-choice-flashcard}
+
+The answer is shown after you choose.
+
+### Which mode arranges every block on one canvas?
+
+### Slideshow
+
+### Dashboard {correct=true}
+
+### Narrate
 `,
 
   // Dashboard-mode demo: opens straight into the one-canvas dashboard

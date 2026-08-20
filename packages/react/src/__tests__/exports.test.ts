@@ -39,6 +39,10 @@ describe('@bendyline/squisq-react exports', () => {
     expect(typeof squisqReact.DashboardView).toBe('function');
   });
 
+  it('exports FlashcardView', () => {
+    expect(typeof squisqReact.FlashcardView).toBe('function');
+  });
+
   it('exports hooks', () => {
     expect(typeof squisqReact.useAudioSync).toBe('function');
     expect(typeof squisqReact.useDocPlayback).toBe('function');

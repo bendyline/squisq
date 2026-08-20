@@ -222,6 +222,9 @@ function resolveDisplayMode(value: unknown): DisplayMode | null {
   if (v === 'slides' || v === 'presentation' || v === 'deck') return 'slideshow';
   if (v === 'teleprompter' || v === 'prompter') return 'narrate';
   if (v === 'dashboard' || v === 'dash') return 'dashboard';
+  if (v === 'flashcards' || v === 'flashcard' || v === 'study' || v === 'quiz') {
+    return 'flashcards';
+  }
   // Frontmatter uses product-facing names: Document is the plain text/HTML
   // preview, Page is the styled Squisq page view. The raw DisplayMode values
   // are older and remain stable for the public React API.
@@ -1183,6 +1186,12 @@ const DISPLAY_MODE_OPTIONS: {
     summary: 'Present designed slides one at a time.',
   },
   {
+    key: 'flashcards',
+    label: 'Flashcards',
+    icon: 'fa-solid fa-clone',
+    summary: 'Study with progressive reveals and quizzes.',
+  },
+  {
     key: 'video',
     label: 'Video',
     icon: 'fa-solid fa-circle-play',
@@ -1265,6 +1274,9 @@ const CONTROL_KEYS: ControlKey[] = [
  * remain live in every other mode.
  */
 function controlKeysForMode(displayMode: string, hasVideoMedia: boolean): ControlKey[] {
+  if (displayMode === 'flashcards') {
+    return ['theme', 'transform'];
+  }
   if (displayMode === 'dashboard') {
     return ['format', 'layout', 'theme', 'transform', 'dashboardImage'];
   }

@@ -371,7 +371,15 @@ describe('PreviewModeSwitch', () => {
       .map((button) => button.textContent)
       .filter(Boolean);
 
-    expect(labels).toEqual(['Slideshow', 'Video', 'Page', 'Dashboard', 'Document', 'Narrate']);
+    expect(labels).toEqual([
+      'Slideshow',
+      'Flashcards',
+      'Video',
+      'Page',
+      'Dashboard',
+      'Document',
+      'Narrate',
+    ]);
     expect(screen.getByTestId('active-mode').textContent).toBe('slideshow');
 
     fireEvent.click(screen.getByRole('button', { name: 'Document' }));
@@ -398,6 +406,22 @@ describe('PreviewModeSwitch', () => {
       expect(screen.getByTestId('active-mode').textContent).toBe('linear');
     });
     expect(screen.getByRole('button', { name: 'Page' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('maps flashcards frontmatter and its study alias to the peer display mode', async () => {
+    renderPreviewControls('---\ndisplay-mode: flashcards\n---\n\n# Hello');
+    await waitFor(() => {
+      expect(screen.getByTestId('active-mode').textContent).toBe('flashcards');
+    });
+    expect(screen.getByRole('button', { name: 'Flashcards' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+
+    cleanup();
+    renderPreviewControls('---\ndisplay-mode: study\n---\n\n# Hello');
+    await waitFor(() => {
+      expect(screen.getByTestId('active-mode').textContent).toBe('flashcards');
+    });
   });
 
   it('uses the shared squisq-theme, themeId, theme fallback order', async () => {
@@ -932,7 +956,7 @@ describe('Use tab mode menu', () => {
       within(menu)
         .getAllByRole('menuitemradio')
         .map((item) => item.querySelector('.squisq-use-mode-menu-label')?.textContent),
-    ).toEqual(['Slideshow', 'Video', 'Page', 'Dashboard', 'Document', 'Narrate']);
+    ).toEqual(['Slideshow', 'Flashcards', 'Video', 'Page', 'Dashboard', 'Document', 'Narrate']);
     const slideshowItem = within(menu).getByRole('menuitemradio', { name: 'Slideshow' });
     expect(slideshowItem.getAttribute('aria-checked')).toBe('true');
     expect(within(slideshowItem).getByText('Present designed slides one at a time.')).toBeTruthy();

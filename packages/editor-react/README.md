@@ -81,6 +81,11 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   synchronized audience window, or take over the entire screen. Slideshow/video
   playback, Page/Document scrolling, and the Narrate surface remain linked to
   the main view.
+- **Flashcards mode** — the Use menu can project the original nested block tree
+  as progressively revealed study cards and multiple-choice quizzes. Ordinary
+  headings are inferred automatically; `{study=flashcard}` disambiguates a card
+  boundary and `{study=multiple-choice-flashcard}` makes child one the question,
+  child two the default correct answer, and remaining children distractors.
 - **Panels** — `outline` (heading outline pane) and `inlinePreview` (per-block
   SVG preview gutter, `inlinePreviewWidth` default 320).
 - **Code & image modes** — pass `fileName` / `language` to get a Monaco-only

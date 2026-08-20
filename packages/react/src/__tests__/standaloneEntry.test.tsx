@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { waitFor } from '@testing-library/react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { getHandle, mount, unmount } from '../standalone-entry';
 import * as standalone from '../standalone-entry';
@@ -102,6 +103,30 @@ describe('standalone player instance handles', () => {
     await expect(api!.seekTo(0)).resolves.toBeUndefined();
     expect(root.querySelector('.doc-player--dashboard')).not.toBeNull();
     expect(root.querySelector('.squisq-dashboard')).not.toBeNull();
+  });
+
+  it('mounts the flashcards peer mode without requiring a render clock', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountedElements.push(root);
+
+    const flashcardDoc: Doc = {
+      ...doc('study'),
+      blocks: [
+        {
+          id: 'question',
+          title: 'Question',
+          contents: [{ type: 'paragraph', children: [{ type: 'text', value: 'Answer' }] }],
+          startTime: 0,
+          duration: 2,
+          audioSegment: 0,
+        },
+      ],
+    };
+    const handle = mount(root, flashcardDoc, { mode: 'flashcards' });
+    expect(await handle.renderAPI).toBeNull();
+    await waitFor(() => expect(root.querySelector('.doc-player--flashcards')).not.toBeNull());
+    expect(root.querySelector('.squisq-flashcards')).not.toBeNull();
   });
 
   it('forwards the animationsEnabled render policy to the mounted player', async () => {
