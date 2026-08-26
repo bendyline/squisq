@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.9.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.8.0...@bendyline/squisq@2.9.0) (2026-08-26)
+
+### Features
+
+* Flashcard/multiple choice mode, bug fixes ([#47](https://github.com/bendyline/squisq/issues/47)) ([9bded0b](https://github.com/bendyline/squisq/commit/9bded0b40e3762c074a0a7193414cb9dcf284949))
+
 ## @bendyline/squisq [2.8.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.7.1...@bendyline/squisq@2.8.0) (2026-08-17)
 
 ### Features
