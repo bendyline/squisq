@@ -1,3 +1,17 @@
+## @bendyline/squisq-editor-react [2.9.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.8.0...@bendyline/squisq-editor-react@2.9.0) (2026-08-26)
+
+### Features
+
+* Flashcard/multiple choice mode, bug fixes ([#47](https://github.com/bendyline/squisq/issues/47)) ([9bded0b](https://github.com/bendyline/squisq/commit/9bded0b40e3762c074a0a7193414cb9dcf284949))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.9.0
+* **@bendyline/squisq-formats:** upgraded to 2.4.6
+* **@bendyline/squisq-react:** upgraded to 2.9.0
+* **@bendyline/squisq-video-react:** upgraded to 2.4.1
+
 ## @bendyline/squisq-editor-react [2.8.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.7.3...@bendyline/squisq-editor-react@2.8.0) (2026-08-17)
 
 ### Features
