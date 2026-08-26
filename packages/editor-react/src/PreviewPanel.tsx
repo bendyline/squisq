@@ -375,6 +375,7 @@ export function PreviewPanel({
           showCodeCopyButton={showCodeCopyButton}
           onCopyCode={onCopyCode}
           fenceRenderers={fenceRenderers ?? undefined}
+          viewport={activeViewport}
         />
       );
     }

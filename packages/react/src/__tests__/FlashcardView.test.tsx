@@ -63,4 +63,26 @@ describe('FlashcardView', () => {
     expect(screen.getByText('No complete flashcards yet')).toBeTruthy();
     expect(screen.getByText(/has no content for its answer/)).toBeTruthy();
   });
+
+  it('keeps navigation outside the scrollable card content viewport', () => {
+    const { container } = render(<FlashcardView doc={doc('## Question\n\nAnswer.\n')} />);
+    const cardViewport = screen.getByRole('main', { name: 'Scrollable flashcard content' });
+    const footer = container.querySelector('.squisq-flashcards__footer');
+    expect(cardViewport.classList.contains('squisq-flashcards__card')).toBe(true);
+    expect(cardViewport.nextElementSibling).toBe(footer);
+  });
+
+  it('renders an ASCII diagram through the existing visual template pipeline', () => {
+    const { container } = render(
+      <FlashcardView
+        doc={doc(
+          '## Architecture {study=flashcard}\n\nName the flow.\n\n### System Overview\n\n```text\n┌─────────┐     ┌───────────┐     ┌──────────┐\n│ Extract │ ──> │ Transform │ ──> │   Load   │\n└─────────┘     └───────────┘     └──────────┘\n```\n',
+        )}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));
+    expect(container.querySelector('.squisq-flashcards__canvas svg')).toBeTruthy();
+    expect(container.querySelector('.squisq-flashcards__answer pre')).toBeNull();
+  });
 });

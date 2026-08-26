@@ -786,6 +786,13 @@ card boundary, `{study=group}` forces grouping, and
 remaining children to choices. The first choice is correct unless a choice
 uses `{correct=true}`.
 
+`FlashcardView` keeps the active card body in its own scroll viewport so the
+progress row and Previous/Reveal/Again/Got it controls remain fixed. Visual
+templates—including automatically detected ASCII diagrams, trees, timelines,
+charts, drawings, layouts, maps, and document custom templates—are resolved
+through the same `resolvePageBlock` + `materializeBlockLayers` pipeline used by
+the other rich modes rather than displayed as source Markdown.
+
 #### Template Registry
 
 ```ts
@@ -1651,6 +1658,8 @@ interface FlashcardViewProps {
   globalKeyboardShortcuts?: boolean; // default false
   showCodeCopyButton?: boolean;
   onCopyCode?: CodeBlockCopyHandler;
+  fenceRenderers?: FenceRendererMap;
+  viewport?: ViewportConfig; // rich visual materialization; default landscape
   className?: string;
 }
 // The canvas is width-driven by default. Its width is

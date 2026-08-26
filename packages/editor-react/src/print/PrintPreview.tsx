@@ -139,6 +139,8 @@ export function PrintPreview({
       theme,
       basePath,
       showCodeCopyButton: false,
+      viewport,
+      customTemplates: contentDoc?.customTemplates,
     };
     return (
       <div

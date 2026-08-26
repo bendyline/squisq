@@ -4,14 +4,24 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
-import type { Block, Doc, Theme } from '@bendyline/squisq/schemas';
-import { resolveFontFamily } from '@bendyline/squisq/schemas';
+import type {
+  Block,
+  CustomTemplateDefinition,
+  Doc,
+  DocBlock,
+  Theme,
+  ViewportConfig,
+} from '@bendyline/squisq/schemas';
+import { resolveFontFamily, VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import {
+  materializeBlockLayers,
   materializeFlashcards,
+  resolvePageBlock,
   resolveThemeForDoc,
   type Flashcard,
   type FlashcardChoice,
@@ -34,6 +44,8 @@ export interface FlashcardViewProps {
   showCodeCopyButton?: boolean;
   onCopyCode?: CodeBlockCopyHandler;
   fenceRenderers?: FenceRendererMap;
+  /** Viewport used to materialize diagrams and other spatial content. */
+  viewport?: ViewportConfig;
   className?: string;
 }
 
@@ -46,9 +58,57 @@ export interface FlashcardFaceViewProps {
   showCodeCopyButton: boolean;
   onCopyCode?: CodeBlockCopyHandler;
   fenceRenderers?: FenceRendererMap;
+  viewport?: ViewportConfig;
+  customTemplates?: readonly CustomTemplateDefinition[];
 }
 
-type FaceContentProps = FlashcardFaceViewProps;
+type FaceContentProps = Omit<FlashcardFaceViewProps, 'viewport'> & {
+  viewport: ViewportConfig;
+};
+
+const VISUAL_TEMPLATES = new Set([
+  'diagram',
+  'tree',
+  'timeline',
+  'map',
+  'drawing',
+  'layout',
+  'barChart',
+  'columnChart',
+  'pieChart',
+  'donutChart',
+  'lineChart',
+  'areaChart',
+  'scatterChart',
+]);
+
+function resolveVisualBlock(
+  block: Block,
+  theme: Theme,
+  viewport: ViewportConfig,
+  customTemplates?: readonly CustomTemplateDefinition[],
+): Block | null {
+  const resolved = resolvePageBlock(block);
+  const visualTemplate =
+    !!resolved.templateName &&
+    (VISUAL_TEMPLATES.has(resolved.templateName) ||
+      !!customTemplates?.some((definition) => definition.name === resolved.templateName));
+  // markdownToDoc has already detected ASCII diagram/tree/timeline fences,
+  // populated templateData, and selected the canonical visual template. This
+  // component only routes that resolved template through the shared layer
+  // materializer; parsing must not drift into the React package.
+  if (!visualTemplate) return null;
+
+  const materializationBlock = (resolved.templateBlock ?? block) as DocBlock;
+  const { layers, source } = materializeBlockLayers(materializationBlock, {
+    theme,
+    viewport,
+    customTemplates,
+    persistentLayers: false,
+  });
+  if (layers.length === 0 || source === 'fallback') return null;
+  return { ...(materializationBlock as unknown as Block), layers };
+}
 
 function FaceBlock({
   block,
@@ -58,15 +118,23 @@ function FaceBlock({
   showCodeCopyButton,
   onCopyCode,
   fenceRenderers,
+  viewport,
+  customTemplates,
 }: {
   block: Block;
   depth: number;
 } & Omit<FaceContentProps, 'face'>) {
   const Heading = depth === 0 ? 'h2' : depth === 1 ? 'h3' : 'h4';
+  const visualBlock = useMemo(
+    () => resolveVisualBlock(block, theme, viewport, customTemplates),
+    [block, customTemplates, theme, viewport],
+  );
   return (
     <section className="squisq-flashcards__content-block" data-source-block-id={block.id}>
-      {block.title && <Heading className="squisq-flashcards__content-title">{block.title}</Heading>}
-      {block.contents && block.contents.length > 0 && (
+      {!visualBlock && block.title && (
+        <Heading className="squisq-flashcards__content-title">{block.title}</Heading>
+      )}
+      {!visualBlock && block.contents && block.contents.length > 0 && (
         <MarkdownRenderer
           nodes={block.contents}
           theme={theme}
@@ -75,31 +143,37 @@ function FaceBlock({
           fenceRenderers={fenceRenderers}
         />
       )}
-      {block.layers && block.layers.length > 0 && (
-        <div className="squisq-flashcards__canvas">
+      {(visualBlock || (block.layers && block.layers.length > 0)) && (
+        <div
+          className="squisq-flashcards__canvas"
+          style={{ aspectRatio: `${viewport.width} / ${viewport.height}` }}
+        >
           <BlockRenderer
-            block={block}
-            blockTime={Math.max(0, block.duration)}
+            block={visualBlock ?? block}
+            blockTime={Math.max(0, block.duration ?? 0)}
             basePath={basePath}
-            viewport={{ width: 960, height: 540 }}
+            viewport={viewport}
             animationsEnabled={false}
             theme={theme}
             muted
           />
         </div>
       )}
-      {block.children?.map((child) => (
-        <FaceBlock
-          key={child.id}
-          block={child}
-          depth={depth + 1}
-          theme={theme}
-          basePath={basePath}
-          showCodeCopyButton={showCodeCopyButton}
-          onCopyCode={onCopyCode}
-          fenceRenderers={fenceRenderers}
-        />
-      ))}
+      {!visualBlock &&
+        block.children?.map((child) => (
+          <FaceBlock
+            key={child.id}
+            block={child}
+            depth={depth + 1}
+            theme={theme}
+            basePath={basePath}
+            showCodeCopyButton={showCodeCopyButton}
+            onCopyCode={onCopyCode}
+            fenceRenderers={fenceRenderers}
+            viewport={viewport}
+            customTemplates={customTemplates}
+          />
+        ))}
     </section>
   );
 }
@@ -116,7 +190,7 @@ function FaceContent(props: FaceContentProps) {
 
 /** Rich, theme-aware renderer for one materialized flashcard face. */
 export function FlashcardFaceView(props: FlashcardFaceViewProps) {
-  return <FaceContent {...props} />;
+  return <FaceContent {...props} viewport={props.viewport ?? VIEWPORT_PRESETS.landscape} />;
 }
 
 function hashSeed(value: string): number {
@@ -166,6 +240,7 @@ export function FlashcardView({
   showCodeCopyButton = false,
   onCopyCode,
   fenceRenderers,
+  viewport = VIEWPORT_PRESETS.landscape,
   className,
 }: FlashcardViewProps) {
   const activeTheme = useMemo(() => theme ?? resolveThemeForDoc(doc), [doc, theme]);
@@ -177,6 +252,7 @@ export function FlashcardView({
   const [selectedChoiceId, setSelectedChoiceId] = useState<string | null>(null);
   const [ratings, setRatings] = useState<Record<string, CardRating>>({});
   const [retryIds, setRetryIds] = useState<string[] | null>(null);
+  const cardViewportRef = useRef<HTMLElement>(null);
 
   const orderedCards = useMemo(
     () =>
@@ -213,6 +289,10 @@ export function FlashcardView({
     setRetryIds(null);
     resetPosition();
   }, [deck, resetPosition]);
+
+  useEffect(() => {
+    if (cardViewportRef.current) cardViewportRef.current.scrollTop = 0;
+  }, [cardIndex, retryIds]);
 
   const revealAnswer = useCallback(() => {
     if (!currentCard) return;
@@ -310,6 +390,8 @@ export function FlashcardView({
     showCodeCopyButton,
     onCopyCode,
     fenceRenderers,
+    viewport,
+    customTemplates: doc.customTemplates,
   };
   const titleFont = resolveFontFamily(activeTheme.typography.titleFont, 'Georgia, serif');
   const bodyFont = resolveFontFamily(activeTheme.typography.bodyFont, 'system-ui, sans-serif');
@@ -449,7 +531,13 @@ export function FlashcardView({
         />
       </div>
 
-      <main className="squisq-flashcards__card" data-card-kind={currentCard.kind}>
+      <main
+        ref={cardViewportRef}
+        className="squisq-flashcards__card"
+        data-card-kind={currentCard.kind}
+        aria-label="Scrollable flashcard content"
+        tabIndex={0}
+      >
         {currentCard.label && <div className="squisq-flashcards__label">{currentCard.label}</div>}
         <section className="squisq-flashcards__front" aria-label="Question">
           <FaceContent {...faceProps} face={currentCard.front} />

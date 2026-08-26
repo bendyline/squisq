@@ -138,6 +138,28 @@ A Markdown heading owns the body beneath it.
 
 Deeper headings become nested child blocks.
 
+## Rich visual answers {study=flashcard}
+
+How does the request move through the system?
+
+### System Overview
+
+\`\`\`text
+┌────────┐     ┌───────────┐     ┌──────────┐
+│ Client │ ──> │ API Server│ ──> │ Database │
+└────────┘     └─────┬─────┘     └──────────┘
+                     │
+                     ▼
+               ┌───────────┐
+               │ Job Queue │
+               └─────┬─────┘
+                     │
+                     ▼
+               ┌───────────┐
+               │  Worker   │
+               └───────────┘
+\`\`\`
+
 ## Quick quiz {study=multiple-choice-flashcard}
 
 The answer is shown after you choose.

@@ -166,6 +166,7 @@ export function DocPlayer(props: DocPlayerProps) {
           showCodeCopyButton={props.showCodeCopyButton}
           onCopyCode={props.onCopyCode}
           fenceRenderers={props.fenceRenderers}
+          viewport={props.forceViewport}
         />
       </div>
     );
