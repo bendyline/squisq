@@ -37,7 +37,7 @@ test.describe('presentation mode', () => {
     await expect(shell).not.toHaveAttribute('data-presentation-mode');
   });
 
-  test('takes over the native screen with the same exit control', async ({ page }) => {
+  test('takes over the native screen and docks exit left of slide navigation', async ({ page }) => {
     await page.goto('/');
     await waitForAppReady(page);
     await switchView(page, 'Play');
@@ -61,8 +61,11 @@ test.describe('presentation mode', () => {
     const exit = page.getByRole('button', { name: 'Exit presentation mode', exact: true });
     await expect(exit).toBeVisible();
     const exitBox = await exit.boundingBox();
+    const navigationBox = await page.getByTestId('slideshow-controls').boundingBox();
     expect(exitBox).not.toBeNull();
-    expect(exitBox!.x + exitBox!.width / 2).toBeCloseTo(display.width / 2, 0);
+    expect(navigationBox).not.toBeNull();
+    expect(exitBox!.x + exitBox!.width).toBeCloseTo(navigationBox!.x - 8, 0);
+    expect(exitBox!.y + exitBox!.height).toBeCloseTo(navigationBox!.y + navigationBox!.height, 0);
     expect(display.height - (exitBox!.y + exitBox!.height)).toBeCloseTo(16, 0);
 
     await exit.click();

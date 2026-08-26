@@ -9,21 +9,51 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { ContentBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
+import type { MarkdownBlockNode, MarkdownList } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
+import { markdownBlockSeparatorLines, renderMarkdownBlocksHtml } from '../templateInputs.js';
 import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
-function completeBodyText(context: TemplateContext): string {
-  return (
-    (context.block?.contents ?? [])
-      // Mermaid source is already materialized as a visual layer. Repeating the
-      // fence text as prose makes the loss-averse default noisy without
-      // preserving any additional authored meaning.
-      .filter((node) => !(node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid'))
-      .map((node) => extractPlainText(node))
-      .join('\n')
-      .trim()
+function bodyNodes(context: TemplateContext): MarkdownBlockNode[] {
+  return (context.block?.contents ?? []).filter(
+    // Mermaid source is already materialized as a visual layer. Repeating the
+    // fence text as prose makes the loss-averse default noisy without
+    // preserving any additional authored meaning.
+    (node) => !(node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid'),
   );
+}
+
+/** Plain projection for accessibility and non-HTML consumers. */
+function plainListText(list: MarkdownList, depth = 0): string {
+  const indent = '  '.repeat(depth);
+  return list.children
+    .flatMap((item, index) => {
+      const ownText = item.children
+        .filter((node) => node.type !== 'list')
+        .map((node) => extractPlainText(node).trim())
+        .filter(Boolean)
+        .join(' ');
+      const marker = list.ordered ? `${(list.start ?? 1) + index}.` : '•';
+      const lines = ownText ? [`${indent}${marker} ${ownText}`] : [];
+      for (const child of item.children) {
+        if (child.type === 'list') lines.push(plainListText(child, depth + 1));
+      }
+      return lines;
+    })
+    .join('\n');
+}
+
+function completeBodyText(nodes: readonly MarkdownBlockNode[]): string {
+  return nodes
+    .map((node, index) => {
+      const text = node.type === 'list' ? plainListText(node) : extractPlainText(node);
+      if (index === 0) return text;
+      const separator = '\n'.repeat(markdownBlockSeparatorLines(nodes[index - 1], node));
+      return `${separator}${text}`;
+    })
+    .join('')
+    .trim();
 }
 
 function bodyFontSize(body: string, context: TemplateContext): number {
@@ -34,7 +64,9 @@ function bodyFontSize(body: string, context: TemplateContext): number {
 export function contentBlock(input: ContentBlockInput, context: TemplateContext): Layer[] {
   const { theme } = context;
   const title = input.title ?? context.block?.title ?? '';
-  const body = completeBodyText(context);
+  const markdown = bodyNodes(context);
+  const body = completeBodyText(markdown);
+  const bodyHtml = renderMarkdownBlocksHtml(markdown);
   const layers: Layer[] = [createBackgroundLayer('bg', theme.colors.background)];
 
   if (title) {
@@ -63,6 +95,7 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
       id: 'body',
       content: {
         text: body,
+        ...(bodyHtml ? { html: bodyHtml } : {}),
         style: {
           fontSize: bodyFontSize(body, context),
           fontFamily: getThemeFont(context, 'body'),

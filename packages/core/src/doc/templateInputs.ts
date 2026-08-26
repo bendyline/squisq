@@ -138,6 +138,104 @@ function renderInlineHtml(nodes: MarkdownInlineNode[]): string {
     .join('');
 }
 
+/**
+ * Render Markdown block nodes as the small, sanitized HTML subset accepted by
+ * `TextLayer.content.html`. This keeps structural content (especially lists
+ * and paragraph boundaries) intact when a slide template uses one rich text
+ * layer instead of the full React Markdown renderer.
+ *
+ * Raw HTML blocks deliberately fall through to escaped plain text. The text
+ * layer renderer sanitizes this projection again, but generated HTML should
+ * still be safe before it reaches that boundary.
+ */
+export function renderMarkdownBlocksHtml(nodes: readonly MarkdownBlockNode[]): string {
+  const renderBlocks = (blocks: readonly MarkdownBlockNode[]): string =>
+    blocks
+      .map((node, index) => {
+        const previous = blocks[index - 1];
+        const extraBlankLines = previous
+          ? Math.max(0, markdownBlockSeparatorLines(previous, node) - 2)
+          : 0;
+        const sourceGap = '<div data-squisq-source-gap aria-hidden="true"><br></div>'.repeat(
+          extraBlankLines,
+        );
+        return `${sourceGap}${renderBlock(node)}`;
+      })
+      .join('');
+
+  const renderList = (node: MarkdownList): string => {
+    const tag = node.ordered ? 'ol' : 'ul';
+    const start = node.ordered && node.start != null ? ` start="${node.start}"` : '';
+    const items = node.children
+      .map((item) => {
+        const taskMarker =
+          item.checked == null ? '' : `<span>${item.checked ? '[x]' : '[ ]'} </span>`;
+        return `<li>${taskMarker}${renderBlocks(item.children)}</li>`;
+      })
+      .join('');
+    return `<${tag}${start}>${items}</${tag}>`;
+  };
+
+  const renderBlock = (node: MarkdownBlockNode): string => {
+    switch (node.type) {
+      case 'paragraph':
+        return `<p>${renderInlineHtml(node.children)}</p>`;
+      case 'heading':
+        return `<h${node.depth}>${renderInlineHtml(node.children)}</h${node.depth}>`;
+      case 'blockquote':
+        return `<blockquote>${renderBlocks(node.children)}</blockquote>`;
+      case 'list':
+        return renderList(node);
+      case 'code':
+        return `<pre><code>${escapeInlineHtml(node.value)}</code></pre>`;
+      case 'thematicBreak':
+        return '<hr>';
+      case 'table': {
+        const [head, ...body] = node.children;
+        const row = (cells: (typeof node.children)[number]['children'], header: boolean) =>
+          `<tr>${cells
+            .map((cell) => {
+              const tag = header ? 'th' : 'td';
+              return `<${tag}>${renderInlineHtml(cell.children)}</${tag}>`;
+            })
+            .join('')}</tr>`;
+        const thead = head ? `<thead>${row(head.children, true)}</thead>` : '';
+        const tbody = body.length
+          ? `<tbody>${body.map((item) => row(item.children, false)).join('')}</tbody>`
+          : '';
+        return `<table>${thead}${tbody}</table>`;
+      }
+      case 'math':
+        return `<pre><code>${escapeInlineHtml(node.value)}</code></pre>`;
+      case 'definition':
+        return '';
+      default: {
+        const text = extractPlainText(node).trim();
+        return text ? `<p>${escapeInlineHtml(text)}</p>` : '';
+      }
+    }
+  };
+
+  return renderBlocks(nodes);
+}
+
+/**
+ * Number of newline characters to retain in a plain-text projection between
+ * two Markdown blocks. A normal block boundary gets the usual two newlines;
+ * parsed source with additional blank lines keeps the larger authored gap.
+ */
+export function markdownBlockSeparatorLines(
+  previous: MarkdownBlockNode,
+  next: MarkdownBlockNode,
+): number {
+  const previousEndLine = previous.position?.end.line;
+  const nextStartLine = next.position?.start.line;
+  if (previousEndLine == null || nextStartLine == null || nextStartLine <= previousEndLine) {
+    return 2;
+  }
+  return Math.max(2, nextStartLine - previousEndLine);
+}
+
 function renderListItemHtml(markdown: MarkdownBlockNode[]): string {
   return markdown
     .map((node) =>

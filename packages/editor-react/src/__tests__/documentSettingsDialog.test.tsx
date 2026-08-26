@@ -79,6 +79,50 @@ describe('DocumentSettingsDialog', () => {
     expect(next).toMatch(/^---\ntitle: Custom Title\n---/);
   });
 
+  it('shows the inferred cover subtitle as the placeholder', () => {
+    const onSave = vi.fn();
+    open('# My Document\n\nAn inferred subtitle.\n\n## Section\n\nBody.', onSave);
+
+    const input = screen.getByLabelText('Subtitle') as HTMLInputElement;
+    expect(input.value).toBe('');
+    expect(input.placeholder).toBe('An inferred subtitle.');
+  });
+
+  it('reads and writes an explicit document subtitle', () => {
+    const onSave = vi.fn();
+    open('---\nsubtitle: Existing line\n---\n\n# Doc\n\nFallback line.', onSave);
+
+    const input = screen.getByLabelText('Subtitle') as HTMLInputElement;
+    expect(input.value).toBe('Existing line');
+    fireEvent.change(input, { target: { value: 'Edited cover line' } });
+    clickSave();
+
+    const next = onSave.mock.calls[0][0] as string;
+    expect(next).toContain('subtitle: Edited cover line');
+  });
+
+  it('removes the explicit subtitle when the field is cleared', () => {
+    const onSave = vi.fn();
+    open('---\nsubtitle: Existing line\n---\n\n# Doc\n\nFallback line.', onSave);
+
+    fireEvent.change(screen.getByLabelText('Subtitle'), { target: { value: '' } });
+    clickSave();
+
+    const next = onSave.mock.calls[0][0] as string;
+    expect(next).not.toMatch(/^subtitle:/m);
+  });
+
+  it('does not store a subtitle that matches the inferred cover text', () => {
+    const onSave = vi.fn();
+    open('# Doc\n\nFallback line.', onSave);
+
+    fireEvent.change(screen.getByLabelText('Subtitle'), { target: { value: 'Fallback line.' } });
+    clickSave();
+
+    const next = onSave.mock.calls[0][0] as string;
+    expect(next).not.toMatch(/^subtitle:/m);
+  });
+
   it('writes squisq-theme when the user picks a theme', () => {
     const onSave = vi.fn();
     open('# Doc\n', onSave);

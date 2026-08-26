@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeAll, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { EditorProvider, useEditorContext } from '../EditorContext';
-import { OutlinePanel } from '../OutlinePanel';
+import { OutlinePanel, OUTLINE_RESPONSIVE_WIDTH } from '../OutlinePanel';
 
 // jsdom lacks ResizeObserver — the pane wires one up to track the editor's
 // page edge. A no-op shim is enough for the rendering tests below.
@@ -26,6 +26,24 @@ function renderOutline(markdown: string) {
 function SourceProbe() {
   const { markdownSource } = useEditorContext();
   return <output data-testid="markdown-source">{markdownSource}</output>;
+}
+
+function BodyEditProbe() {
+  const { markdownSource, setMarkdownSource, isParsing } = useEditorContext();
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() =>
+          setMarkdownSource(markdownSource.replace('Alpha body.', 'Alpha body.\n\nMore body.'))
+        }
+      >
+        Insert body lines
+      </button>
+      <output data-testid="parse-state">{String(isParsing)}</output>
+      <SourceProbe />
+    </>
+  );
 }
 
 function renderOutlineWithSource(markdown: string, readOnly = false) {
@@ -54,6 +72,15 @@ describe('OutlinePanel', () => {
   it('renders the empty placeholder when the doc has no headings', async () => {
     renderOutline('Just a paragraph, no headings.\n');
     expect(await screen.findByText(/add a heading to populate the outline/i)).toBeTruthy();
+  });
+
+  it('uses the full responsive outline width when no fixed width is supplied', async () => {
+    renderOutline('# A heading\n');
+    const panel = await screen.findByTestId('outline-panel');
+
+    expect(OUTLINE_RESPONSIVE_WIDTH).toBe('clamp(260px, 30vw, 460px)');
+    expect(panel.style.width).toBe(`var(--squisq-outline-width, ${OUTLINE_RESPONSIVE_WIDTH})`);
+    expect(panel.style.flex).toBe(`0 0 var(--squisq-outline-width, ${OUTLINE_RESPONSIVE_WIDTH})`);
   });
 
   it('renders one row per heading and nests by depth', async () => {
@@ -102,6 +129,41 @@ describe('OutlinePanel', () => {
     const chip = container.querySelector('.squisq-outline-template-chip');
     expect(chip).not.toBeNull();
     expect(chip!.textContent).toContain('Title');
+  });
+
+  it('keeps outline controls mounted across body-only parses and uses current heading lines', async () => {
+    const source = '# Alpha\n\nAlpha body.\n\n# Bravo\n\nBravo body.\n';
+    const { container } = render(
+      <EditorProvider initialMarkdown={source} initialView="wysiwyg" articleId="test">
+        <OutlinePanel />
+        <BodyEditProbe />
+      </EditorProvider>,
+    );
+
+    await screen.findByRole('button', { name: 'Alpha' });
+    await waitFor(() => expect(screen.getByTestId('parse-state').textContent).toBe('false'));
+    const originalHandle = container.querySelector('.squisq-outline-drag-handle');
+    expect(originalHandle).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Insert body lines' }));
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain('More body.');
+      expect(screen.getByTestId('parse-state').textContent).toBe('false');
+    });
+
+    // Body edits — including inserted lines that shift later headings — do not
+    // replace the memoized outline tree or transiently remove its drag handles.
+    expect(container.querySelector('.squisq-outline-drag-handle')).toBe(originalHandle);
+
+    // The visual snapshot is retained, but mutations still resolve the latest
+    // parsed Block so Bravo's shifted source line is the one that gets changed.
+    const demoteButtons = screen.getAllByRole('button', {
+      name: /demote heading \(currently h1\)/i,
+    });
+    fireEvent.click(demoteButtons[1]);
+    await waitFor(() => {
+      expect(screen.getByTestId('markdown-source').textContent).toContain('## Bravo');
+    });
   });
 
   it('drags a section after a sibling and rewrites the underlying markdown', async () => {

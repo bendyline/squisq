@@ -195,6 +195,7 @@ export function PresentationModeProvider({
   const [activeTarget, setActiveTarget] = useState<PresentationTarget | null>(null);
   const [popupRoot, setPopupRoot] = useState<HTMLElement | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fullscreenExitStyle, setFullscreenExitStyle] = useState<CSSProperties | null>(null);
   const activeTargetRef = useRef(activeTarget);
   activeTargetRef.current = activeTarget;
   const previousActiveTargetRef = useRef<PresentationTarget | null>(null);
@@ -439,6 +440,43 @@ export function PresentationModeProvider({
     return () => window.clearTimeout(timer);
   }, [error]);
 
+  // Fullscreen slides already expose their navigation as a bottom-right pill.
+  // Keep the separate exit affordance immediately to its left while allowing
+  // the navigation width to grow for longer slide counts and labels.
+  useLayoutEffect(() => {
+    if (activeTarget !== 'fullscreen') {
+      setFullscreenExitStyle(null);
+      return;
+    }
+    const root = rootRef.current;
+    const controls = root?.querySelector<HTMLElement>('.doc-controls-slideshow');
+    if (!root || !controls) {
+      setFullscreenExitStyle(null);
+      return;
+    }
+
+    const updatePosition = () => {
+      const rootBounds = root.getBoundingClientRect();
+      const controlsBounds = controls.getBoundingClientRect();
+      setFullscreenExitStyle({
+        left: 'auto',
+        right: `${Math.max(0, rootBounds.right - controlsBounds.left + 8)}px`,
+        transform: 'none',
+      });
+    };
+
+    updatePosition();
+    const resizeObserver =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updatePosition);
+    resizeObserver?.observe(root);
+    resizeObserver?.observe(controls);
+    window.addEventListener('resize', updatePosition);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', updatePosition);
+    };
+  }, [activeTarget, rootRef]);
+
   useEffect(
     () => () => {
       popupCleanupRef.current?.();
@@ -487,7 +525,7 @@ export function PresentationModeProvider({
       type="button"
       className="squisq-presentation-exit"
       data-theme={colorScheme}
-      style={presentationThemeStyle}
+      style={{ ...presentationThemeStyle, ...fullscreenExitStyle }}
       onClick={() => void stop()}
       autoFocus={activeTarget === 'control' || activeTarget === 'fullscreen'}
       aria-label="Exit presentation mode"

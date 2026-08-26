@@ -2,7 +2,7 @@
  * DocumentSettingsDialog
  *
  * Modal editor for the frontmatter values that Squisq currently
- * understands: document title plus the persisted preview keys
+ * understands: document title and cover subtitle plus the persisted preview keys
  * (`squisq-theme`, `squisq-transform`, `squisq-captions`). Writes back
  * to the same `setFrontmatterValues` channel that `PreviewControls`
  * uses, so any change made here is reflected in the play-mode controls
@@ -22,6 +22,7 @@ import {
   readFrontmatterThemeId,
   setFrontmatterValues,
 } from '@bendyline/squisq/markdown';
+import { markdownToDoc } from '@bendyline/squisq/doc';
 import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import { ThemePicker } from './ThemePicker';
 import { resolvePersistedTransformStyleId } from './transformStyleId';
@@ -73,8 +74,20 @@ export function DocumentSettingsDialog({
   const parsed = useMemo(() => parseMarkdown(markdownSource), [markdownSource]);
   const frontmatter = parsed.frontmatter;
   const inferredTitle = useMemo(() => inferDocumentTitle(parsed), [parsed]);
+  const inferredSubtitle = useMemo(
+    () =>
+      markdownToDoc({
+        ...parsed,
+        // Ignore an explicit subtitle while calculating the value the cover
+        // would otherwise inherit from document content.
+        frontmatter: { ...parsed.frontmatter, subtitle: null },
+      }).startBlock?.subtitle,
+    [parsed],
+  );
 
   const currentTitle = typeof frontmatter?.title === 'string' ? (frontmatter.title as string) : '';
+  const currentSubtitle =
+    typeof frontmatter?.subtitle === 'string' ? (frontmatter.subtitle as string) : '';
   const currentTheme = readFrontmatterThemeId(frontmatter) ?? '';
   const currentTransform =
     resolvePersistedTransformStyleId(
@@ -91,6 +104,7 @@ export function DocumentSettingsDialog({
   );
 
   const [title, setTitle] = useState(currentTitle);
+  const [subtitle, setSubtitle] = useState(currentSubtitle);
   const [theme, setTheme] = useState(currentTheme);
   const [transform, setTransform] = useState(currentTransform);
   const [captions, setCaptions] = useState(currentCaptions);
@@ -126,9 +140,14 @@ export function DocumentSettingsDialog({
       // Empty input OR matches the value we'd infer otherwise → no
       // explicit title needed in frontmatter.
       const nextTitle = !trimmedTitle || titleMatchesInferred ? null : trimmedTitle;
+      const trimmedSubtitle = subtitle.trim();
+      const subtitleMatchesInferred =
+        !!inferredSubtitle && trimmedSubtitle === inferredSubtitle.trim();
+      const nextSubtitle = !trimmedSubtitle || subtitleMatchesInferred ? null : trimmedSubtitle;
 
       const updates: Record<string, string | null> = {
         title: nextTitle,
+        subtitle: nextSubtitle,
         [FRONTMATTER_SETTING_KEYS.theme.canonical]: omitFrontmatterDefault(
           theme || FRONTMATTER_SETTING_DEFAULTS.theme,
           FRONTMATTER_SETTING_DEFAULTS.theme,
@@ -151,7 +170,17 @@ export function DocumentSettingsDialog({
       const nextSource = setFrontmatterValues(markdownSource, updates);
       onSave(nextSource);
     },
-    [title, theme, transform, captions, inferredTitle, markdownSource, onSave],
+    [
+      title,
+      subtitle,
+      theme,
+      transform,
+      captions,
+      inferredTitle,
+      inferredSubtitle,
+      markdownSource,
+      onSave,
+    ],
   );
 
   return (
@@ -201,6 +230,30 @@ export function DocumentSettingsDialog({
             ) : (
               <span className="squisq-doc-settings-hint">
                 No title heading found — set one here or add an H1 to the document.
+              </span>
+            )}
+          </div>
+
+          <div className="squisq-doc-settings-field">
+            <label className="squisq-doc-settings-label" htmlFor="squisq-doc-settings-subtitle">
+              Subtitle
+            </label>
+            <input
+              id="squisq-doc-settings-subtitle"
+              type="text"
+              className="squisq-doc-settings-input"
+              value={subtitle}
+              onChange={(e) => setSubtitle(e.target.value)}
+              placeholder={inferredSubtitle ?? 'Cover subtitle'}
+              spellCheck
+            />
+            {inferredSubtitle ? (
+              <span className="squisq-doc-settings-hint">
+                Defaults to <strong>{inferredSubtitle}</strong> — leave blank to use it.
+              </span>
+            ) : (
+              <span className="squisq-doc-settings-hint">
+                Optional supporting text shown on the document cover.
               </span>
             )}
           </div>

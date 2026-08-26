@@ -49,6 +49,60 @@ A **bold** statement with an [example link](https://example.com).
     expect(renderedText).toContain('inline code');
   });
 
+  it('preserves list markers and separation from the following paragraph', () => {
+    const slide =
+      firstPreviewSlide(`### You can create a codebase of a high quality just through prompts; writing code by hand is done.
+
+- There is some combination of prompts + frontier models that can create a codebase of high quality (e.g., that a panel of people would rate as "high quality, well architected, well tested".)
+- We may not have "discovered" that exact combination of prompts yet, but it's out there.
+- Because of this, and because coding significant portions of codebases by hand simply cannot keep pace, people will move trusting agents to build code for them.
+
+Implication: A massive industry wide change management process is happening`);
+
+    expect(slide.template).toBe('content');
+
+    const { layers } = materializeBlockLayers(slide as unknown as DocBlock);
+    const body = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'body',
+    );
+
+    expect(body?.content.text).toContain('• There is some combination');
+    expect(body?.content.text).toContain(
+      'people will move trusting agents to build code for them.\n\nImplication:',
+    );
+    expect(body?.content.html).toContain('<ul><li><p>There is some combination');
+    expect(body?.content.html).toContain(
+      '</ul><p>Implication: A massive industry wide change management process is happening</p>',
+    );
+  });
+
+  it('preserves additional authored blank lines between body blocks', () => {
+    const slide = firstPreviewSlide(`## A bit about me {[content]}
+
+25 years working on developer platforms
+
+- Developer Marketing
+- Minecraft platform
+
+
+
+Now currently AI-pilled :)
+
+Fun fact: this slideshow is running from one of my apps`);
+
+    const { layers } = materializeBlockLayers(slide as unknown as DocBlock);
+    const body = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'body',
+    );
+
+    expect(body?.content.text).toContain(
+      '• Minecraft platform\n\n\n\nNow currently AI-pilled :)\n\nFun fact:',
+    );
+    expect(body?.content.html).toContain(
+      '</ul><div data-squisq-source-gap aria-hidden="true"><br></div><div data-squisq-source-gap aria-hidden="true"><br></div><p>Now currently AI-pilled :)</p><p>Fun fact:',
+    );
+  });
+
   it('keeps an explicitly authored section header as a title-only divider', () => {
     const slide = firstPreviewSlide('# Chapter {[sectionHeader]}\n\nSupporting body.');
     expect(slide.template).toBe('sectionHeader');

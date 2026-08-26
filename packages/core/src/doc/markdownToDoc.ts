@@ -88,8 +88,9 @@ export interface MarkdownToDocOptions {
    * StartBlockConfig is created with a title resolved in priority order:
    * frontmatter `title:`, the first occurrence of the shallowest heading
    * (H1, else H2, else H3, …), then {@link fileName}. If the document
-   * contains an image, the first image is used as the hero. Set to false to
-   * suppress automatic cover generation.
+   * contains an image, the first image is used as the hero. A frontmatter
+   * `subtitle:` overrides the usual first-paragraph subtitle. Set to false
+   * to suppress automatic cover generation.
    */
   generateCoverBlock?: boolean;
 
@@ -1192,14 +1193,20 @@ function buildStartBlock(
   const title = frontmatterTitle || headingTitle || fileNameCoverTitle(fileName);
   if (!title) return undefined;
 
-  // Subtitle: the first paragraph directly under the title-bearing heading —
-  // or under the leading block when the title came from frontmatter or the
-  // file name and the document has no heading at all.
+  // Subtitle: an explicit per-document frontmatter value wins. Otherwise use
+  // the first paragraph directly under the title-bearing heading — or under
+  // the leading block when the title came from frontmatter or the file name
+  // and the document has no heading at all.
+  const frontmatterSubtitle =
+    typeof markdownDoc.frontmatter?.subtitle === 'string'
+      ? markdownDoc.frontmatter.subtitle.trim()
+      : undefined;
   const subtitleBlock = headingBlock ?? rootBlocks[0];
-  const subtitle =
+  const inferredSubtitle =
     subtitleBlock?.contents?.[0]?.type === 'paragraph'
       ? extractPlainText(subtitleBlock.contents[0])
       : undefined;
+  const subtitle = frontmatterSubtitle || inferredSubtitle;
 
   // Scan the whole document for the first image to use as the hero
   const firstImage = findFirstImage(markdownDoc);

@@ -4,39 +4,37 @@
  * Left-side companion to the InlinePreviewGutter. Renders a hierarchical
  * tree of the document's headings (h1 → h2 → h3 …) so the structure is
  * graspable at a glance and the user can jump to any section. Works in
- * BOTH the WYSIWYG and Markdown editor views — view-specific positioning
- * lives in `useHeadingLayout`.
+ * BOTH the WYSIWYG and Markdown editor views.
  */
 
 import {
   type CSSProperties,
   type DragEvent as ReactDragEvent,
+  memo,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import type { Block } from '@bendyline/squisq/schemas';
+import type { Block, Doc } from '@bendyline/squisq/schemas';
 import { flattenBlocks, hasTemplate } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import { useEditorContext } from './EditorContext';
 import { templateLabel } from './TemplatePicker';
-import { useHeadingLayout } from './useHeadingLayout';
 import { usePreviewSettingsOptional } from './PreviewControls';
 import { moveHeadingSectionInSource, type OutlineDropPlacement } from './outlineSource';
 
 /**
  * Responsive default width for the outline pane, used when no fixed `width`
- * (or `--squisq-outline-width`) is supplied: never narrower than 180px, grows
+ * (or `--squisq-outline-width`) is supplied: never narrower than 260px, grows
  * with the viewport so it stretches out to fill horizontal space when there's
- * room, and caps at 260px so it never dominates the editor — heading rows
- * ellipsize, so the pane doesn't need to fit the longest title. A viewport
- * unit (rather than a container unit) keeps the pane and the toolbar's
- * view-tabs — which read the same value — resolving to an identical width,
- * so their right edges stay aligned.
+ * room, and caps at 460px so it never dominates the editor. A viewport unit
+ * (rather than a container unit) keeps the pane and the toolbar's view-tabs —
+ * which read the same value — resolving to an identical width, so their right
+ * edges stay aligned.
  */
-export const OUTLINE_RESPONSIVE_WIDTH = 'clamp(180px, 15vw, 260px)';
+export const OUTLINE_RESPONSIVE_WIDTH = 'clamp(260px, 30vw, 460px)';
 
 export interface OutlinePanelProps {
   /**
@@ -68,6 +66,7 @@ interface OutlineDropTarget {
 }
 
 const OUTLINE_DRAG_MIME = 'application/x-squisq-outline-section';
+const EMPTY_BLOCKS: Block[] = [];
 
 export function OutlinePanel({ width, className, readOnly = false }: OutlinePanelProps) {
   const {
@@ -78,13 +77,52 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
     layoutMode,
     goToBlockByLine,
     activeBlockStartLine,
+    activeView,
+    monacoEditor,
+    tiptapEditor,
   } = useEditorContext();
   const paneRef = useRef<HTMLElement | null>(null);
-  const { scrollToBlock } = useHeadingLayout(paneRef);
   const cursorActiveId = useActiveOutlineBlockId();
   const activeDragRef = useRef<ActiveOutlineDrag | null>(null);
   const [draggedBlockId, setDraggedBlockId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<OutlineDropTarget | null>(null);
+
+  // Parsing creates a fresh Doc for every source edit, even when none of the
+  // H1-H6 nodes changed. Keep the previous tree in that common case so the
+  // memoized renderer receives the same block-array identity and React can
+  // leave every outline row (including its drag handle) untouched.
+  const nextOutlineBlocks = doc?.blocks ?? EMPTY_BLOCKS;
+  const outlineBlocksRef = useRef(nextOutlineBlocks);
+  if (!sameOutlineStructure(outlineBlocksRef.current, nextOutlineBlocks)) {
+    outlineBlocksRef.current = nextOutlineBlocks;
+  }
+  const outlineBlocks = outlineBlocksRef.current;
+
+  // Event handlers stay stable while source text and parsing state change.
+  // They still read the newest Doc/source/editor at invocation time, so a
+  // cached visual tree never means an interaction operates on stale data.
+  const interactionRef = useRef({
+    doc,
+    markdownSource,
+    setMarkdownSource,
+    isParsing,
+    layoutMode,
+    goToBlockByLine,
+    activeView,
+    monacoEditor,
+    tiptapEditor,
+  });
+  interactionRef.current = {
+    doc,
+    markdownSource,
+    setMarkdownSource,
+    isParsing,
+    layoutMode,
+    goToBlockByLine,
+    activeView,
+    monacoEditor,
+    tiptapEditor,
+  };
 
   // In block-at-a-time mode there's no live cursor across the whole document
   // (only the active block is mounted), so the highlight follows the card:
@@ -100,33 +138,62 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
 
   // Clicking a row jumps the card to that block in block mode, or scrolls the
   // editor to it in document mode.
-  const handleSelect = useCallback(
-    (block: Block) => {
-      if (layoutMode === 'block') {
-        const line = block.sourceHeading?.position?.start.line;
-        if (typeof line === 'number') {
-          goToBlockByLine(line);
-          return;
+  const handleSelect = useCallback((outlineBlock: Block) => {
+    const current = interactionRef.current;
+    const block = findLiveBlock(current.doc, outlineBlock.id) ?? outlineBlock;
+
+    if (current.layoutMode === 'block') {
+      const line = block.sourceHeading?.position?.start.line;
+      if (typeof line === 'number') {
+        current.goToBlockByLine(line);
+        return;
+      }
+    }
+
+    if (current.activeView === 'wysiwyg') {
+      const wrapper = paneRef.current ? findEditorWrapper(paneRef.current) : null;
+      const wysiwygContainer = wrapper?.querySelector<HTMLElement>('.squisq-wysiwyg-container');
+      if (!wysiwygContainer) return;
+      const headings = wysiwygContainer.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6');
+      const blocks = current.doc ? flattenBlocks(current.doc.blocks) : [];
+      const index = blocks.findIndex((candidate) => candidate.id === block.id);
+      if (index < 0 || index >= headings.length) return;
+      headings[index].scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (current.tiptapEditor) {
+        try {
+          current.tiptapEditor.chain().focus().run();
+        } catch {
+          // Ignore focus failures from an editor that is being unmounted.
         }
       }
-      scrollToBlock(block);
-    },
-    [layoutMode, goToBlockByLine, scrollToBlock],
-  );
+      return;
+    }
+
+    if (current.activeView === 'raw' && current.monacoEditor) {
+      const line = block.sourceHeading?.position?.start.line;
+      if (typeof line === 'number') {
+        current.monacoEditor.revealLineInCenter(line);
+        current.monacoEditor.setPosition({ lineNumber: line, column: 1 });
+        current.monacoEditor.focus();
+      }
+    }
+  }, []);
 
   // Promote / demote the row's heading by rewriting just the `#` prefix
   // on the heading line. Falls through when the new depth would leave the
   // legal H1–H6 range, so the buttons disable themselves at the edges.
   // Both editor surfaces resync from `markdownSource` automatically.
   const changeHeadingLevel = useCallback(
-    (block: Block, delta: number) => {
-      if (readOnly || isParsing) return;
+    (outlineBlock: Block, delta: number) => {
+      const current = interactionRef.current;
+      if (readOnly || current.isParsing) return;
+      const block = findLiveBlock(current.doc, outlineBlock.id) ?? outlineBlock;
       const line = block.sourceHeading?.position?.start.line;
       if (typeof line !== 'number') return;
-      const next = bumpHeadingLevelInSource(markdownSource, line, delta);
-      if (next != null) setMarkdownSource(next);
+      const next = bumpHeadingLevelInSource(current.markdownSource, line, delta);
+      if (next != null) current.setMarkdownSource(next);
     },
-    [isParsing, markdownSource, readOnly, setMarkdownSource],
+    [readOnly],
   );
 
   const clearDragState = useCallback(() => {
@@ -137,35 +204,44 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
 
   const handleDragStart = useCallback(
     (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => {
-      if (readOnly || isParsing) {
+      const current = interactionRef.current;
+      if (readOnly || current.isParsing) {
         event.preventDefault();
         return;
       }
 
-      activeDragRef.current = { ...section, sourceAtStart: markdownSource };
+      const liveBlock = findLiveBlock(current.doc, section.blockId);
+      const liveHeadingLine = liveBlock?.sourceHeading?.position?.start.line;
+      const liveSection =
+        typeof liveHeadingLine === 'number'
+          ? { ...section, headingLine: liveHeadingLine }
+          : section;
+
+      activeDragRef.current = { ...liveSection, sourceAtStart: current.markdownSource };
       setDraggedBlockId(section.blockId);
       setDropTarget(null);
       event.dataTransfer.effectAllowed = 'move';
       // Firefox requires a text payload before it will initiate a native drag.
       // The custom type makes the payload identifiable to other Squisq panes;
       // the in-memory ref remains authoritative for this mounted panel.
-      event.dataTransfer.setData(OUTLINE_DRAG_MIME, String(section.headingLine));
-      event.dataTransfer.setData('text/plain', String(section.headingLine));
+      event.dataTransfer.setData(OUTLINE_DRAG_MIME, String(liveSection.headingLine));
+      event.dataTransfer.setData('text/plain', String(liveSection.headingLine));
     },
-    [isParsing, markdownSource, readOnly],
+    [readOnly],
   );
 
   const handleDragOver = useCallback(
     (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => {
       const dragged = activeDragRef.current;
       if (!dragged) return;
+      const current = interactionRef.current;
 
       // Prevent the editor shell's file-drop handler from changing this to a
       // copy operation while an outline section is being moved.
       event.preventDefault();
       event.stopPropagation();
 
-      if (!canDropOnSection(dragged, section) || readOnly || isParsing) {
+      if (!canDropOnSection(dragged, section) || readOnly || current.isParsing) {
         event.dataTransfer.dropEffect = 'none';
         setDropTarget(null);
         return;
@@ -179,35 +255,40 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
           : { blockId: section.blockId, placement },
       );
     },
-    [isParsing, readOnly],
+    [readOnly],
   );
 
   const handleDrop = useCallback(
     (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => {
       const dragged = activeDragRef.current;
       if (!dragged) return;
+      const current = interactionRef.current;
 
       event.preventDefault();
       event.stopPropagation();
       const placement = placementForPointer(event);
+      const liveTarget = findLiveBlock(current.doc, section.blockId);
+      const liveTargetLine = liveTarget?.sourceHeading?.position?.start.line;
+      const targetSection =
+        typeof liveTargetLine === 'number' ? { ...section, headingLine: liveTargetLine } : section;
       const canMove =
         !readOnly &&
-        !isParsing &&
-        dragged.sourceAtStart === markdownSource &&
-        canDropOnSection(dragged, section);
+        !current.isParsing &&
+        dragged.sourceAtStart === current.markdownSource &&
+        canDropOnSection(dragged, targetSection);
       const next = canMove
         ? moveHeadingSectionInSource(
-            markdownSource,
+            current.markdownSource,
             dragged.headingLine,
-            section.headingLine,
+            targetSection.headingLine,
             placement,
           )
         : null;
 
       clearDragState();
-      if (next != null) setMarkdownSource(next);
+      if (next != null) current.setMarkdownSource(next);
     },
-    [clearDragState, isParsing, markdownSource, readOnly, setMarkdownSource],
+    [clearDragState, readOnly],
   );
 
   // Inherit the active document theme's primary color so the current-row
@@ -218,7 +299,7 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
   const previewSettings = usePreviewSettingsOptional();
   const accentColor = previewSettings?.activeTheme?.colors?.primary;
 
-  const isEmpty = !doc || doc.blocks.length === 0 || !hasAnyHeading(doc.blocks);
+  const isEmpty = outlineBlocks.length === 0 || !hasAnyHeading(outlineBlocks);
   // Fixed px when a width is supplied; otherwise size from the shared
   // `--squisq-outline-width` variable (the shell sets it, and the toolbar's
   // view-tabs read the same value so their right edges stay aligned). The
@@ -247,31 +328,54 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
           <p>Add a heading to populate the outline.</p>
         </div>
       ) : (
-        <ul className="squisq-outline-tree" role="tree">
-          {doc!.blocks.map((b) => (
-            <OutlineNode
-              key={b.id}
-              block={b}
-              parentId={null}
-              activeBlockId={activeBlockId}
-              draggedBlockId={draggedBlockId}
-              dropTarget={dropTarget}
-              mutationsDisabled={readOnly || isParsing}
-              onSelect={handleSelect}
-              onChangeLevel={changeHeadingLevel}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onDragEnd={clearDragState}
-            />
-          ))}
-        </ul>
+        <OutlineTree
+          blocks={outlineBlocks}
+          activeBlockId={activeBlockId}
+          draggedBlockId={draggedBlockId}
+          dropTarget={dropTarget}
+          mutationsDisabled={readOnly}
+          onSelect={handleSelect}
+          onChangeLevel={changeHeadingLevel}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onDragEnd={clearDragState}
+        />
       )}
     </aside>
   );
 }
 
 // ── Subcomponents ──────────────────────────────────────────────────
+
+interface OutlineTreeProps {
+  blocks: Block[];
+  activeBlockId: string | null;
+  draggedBlockId: string | null;
+  dropTarget: OutlineDropTarget | null;
+  mutationsDisabled: boolean;
+  onSelect: (block: Block) => void;
+  onChangeLevel: (block: Block, delta: number) => void;
+  onDragStart: (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => void;
+  onDragOver: (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => void;
+  onDrop: (event: ReactDragEvent<HTMLElement>, section: OutlineSectionRef) => void;
+  onDragEnd: () => void;
+}
+
+/**
+ * This boundary is deliberately shallow-memoized. `blocks` is retained by
+ * OutlinePanel until heading structure changes, while all interaction
+ * callbacks read current editor state through refs and therefore stay stable.
+ */
+const OutlineTree = memo(function OutlineTree({ blocks, ...nodeProps }: OutlineTreeProps) {
+  return (
+    <ul className="squisq-outline-tree" role="tree">
+      {blocks.map((block) => (
+        <OutlineNode key={block.id} block={block} parentId={null} {...nodeProps} />
+      ))}
+    </ul>
+  );
+});
 
 function OutlineNode({
   block,
@@ -443,6 +547,15 @@ function OutlineNode({
 function useActiveOutlineBlockId(): string | null {
   const { doc, activeView, tiptapEditor, monacoEditor } = useEditorContext();
   const flatBlocks = useMemo(() => (doc ? flattenBlocks(doc.blocks) : []), [doc]);
+  const flatBlocksRef = useRef(flatBlocks);
+  flatBlocksRef.current = flatBlocks;
+  // A normal body-character edit creates new Block objects but leaves this
+  // primitive key unchanged, so cursor subscriptions are not torn down and
+  // recreated after every parse. Source-line changes remain significant for
+  // Monaco's active-heading lookup.
+  const headingLocations = flatBlocks
+    .map((block) => `${block.id}:${block.sourceHeading?.position?.start.line ?? ''}`)
+    .join('\u0000');
   const [activeId, setActiveId] = useState<string | null>(null);
 
   // Reset whenever the active surface changes — a stale highlight from
@@ -464,7 +577,7 @@ function useActiveOutlineBlockId(): string | null {
         seen += 1;
         if (offset <= from) lastIndex = seen;
       });
-      const block = lastIndex >= 0 ? flatBlocks[lastIndex] : null;
+      const block = lastIndex >= 0 ? flatBlocksRef.current[lastIndex] : null;
       setActiveId(block?.id ?? null);
     };
 
@@ -475,7 +588,7 @@ function useActiveOutlineBlockId(): string | null {
       tiptapEditor.off('selectionUpdate', update);
       tiptapEditor.off('update', update);
     };
-  }, [activeView, tiptapEditor, flatBlocks]);
+  }, [activeView, tiptapEditor, headingLocations]);
 
   useEffect(() => {
     if (activeView !== 'raw' || !monacoEditor) return;
@@ -487,23 +600,74 @@ function useActiveOutlineBlockId(): string | null {
         return;
       }
       let lastIndex = -1;
-      flatBlocks.forEach((b, i) => {
+      flatBlocksRef.current.forEach((b, i) => {
         const headingLine = b.sourceHeading?.position?.start.line;
         if (typeof headingLine === 'number' && headingLine <= line) lastIndex = i;
       });
-      const block = lastIndex >= 0 ? flatBlocks[lastIndex] : null;
+      const block = lastIndex >= 0 ? flatBlocksRef.current[lastIndex] : null;
       setActiveId(block?.id ?? null);
     };
 
     update();
     const sub = monacoEditor.onDidChangeCursorPosition(update);
     return () => sub.dispose();
-  }, [activeView, monacoEditor, flatBlocks]);
+  }, [activeView, monacoEditor, headingLocations]);
 
   return activeId;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
+
+/**
+ * Compare only the information rendered by the outline: heading identity,
+ * order/nesting, H1-H6 depth, label, and template chip. Body text and source
+ * positions are intentionally excluded. Interactions resolve the newest Block
+ * by id, so they still use current line numbers after body lines are inserted.
+ */
+function sameOutlineStructure(previous: Block[], next: Block[]): boolean {
+  if (previous === next) return true;
+  if (previous.length !== next.length) return false;
+
+  for (let index = 0; index < previous.length; index += 1) {
+    const before = previous[index];
+    const after = next[index];
+    if (before.id !== after.id) return false;
+
+    const beforeHeading = before.sourceHeading;
+    const afterHeading = after.sourceHeading;
+    if (!!beforeHeading !== !!afterHeading) return false;
+    if (beforeHeading && afterHeading) {
+      if (beforeHeading.depth !== afterHeading.depth) return false;
+      if (extractPlainText(beforeHeading).trim() !== extractPlainText(afterHeading).trim()) {
+        return false;
+      }
+      if (
+        beforeHeading.templateAnnotation?.template !== afterHeading.templateAnnotation?.template
+      ) {
+        return false;
+      }
+    }
+
+    if (!sameOutlineStructure(before.children ?? EMPTY_BLOCKS, after.children ?? EMPTY_BLOCKS)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function findLiveBlock(doc: Doc | null, blockId: string): Block | null {
+  return doc ? (flattenBlocks(doc.blocks).find((block) => block.id === blockId) ?? null) : null;
+}
+
+function findEditorWrapper(node: HTMLElement): HTMLElement | null {
+  let current: HTMLElement | null = node.parentElement;
+  while (current) {
+    if (current.classList.contains('squisq-editor-with-gutter')) return current;
+    current = current.parentElement;
+  }
+  return node.parentElement;
+}
 
 function canDropOnSection(dragged: OutlineSectionRef, target: OutlineSectionRef): boolean {
   return (

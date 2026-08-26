@@ -668,6 +668,22 @@ describe('auto cover block generation', () => {
     expect(doc.startBlock!.subtitle).toBe('This is a subtitle paragraph.');
   });
 
+  it('prefers a frontmatter subtitle over the first paragraph', () => {
+    const md = parseMarkdown(
+      '---\nsubtitle: An authored cover line\n---\n\n# Title\n\nThis is the inferred line.',
+    );
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock!.subtitle).toBe('An authored cover line');
+  });
+
+  it('falls back to the first paragraph when the frontmatter subtitle is blank', () => {
+    const md = parseMarkdown('---\nsubtitle: ""\n---\n\n# Title\n\nThis is the inferred line.');
+    const doc = markdownToDoc(md);
+
+    expect(doc.startBlock!.subtitle).toBe('This is the inferred line.');
+  });
+
   it('picks first image as heroSrc', () => {
     const md = parseMarkdown('# Title\n\n![photo](hero.jpg)\n\nSome text.');
     const doc = markdownToDoc(md);
