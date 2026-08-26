@@ -52,6 +52,17 @@ describe('markdownToTiptap', () => {
     expect(html).toContain('<em>italic</em>');
   });
 
+  it('recovers mark boundary whitespace emitted by older bridge versions', () => {
+    const legacy = '**Implication: **A massive change and *an italic aside *follow.';
+    const html = markdownToTiptap(legacy);
+    expect(html).toBe(
+      '<p><strong>Implication:</strong> A massive change and <em>an italic aside</em> follow.</p>',
+    );
+    expect(tiptapToMarkdown(html)).toBe(
+      '**Implication:** A massive change and *an italic aside* follow.\n',
+    );
+  });
+
   it('converts strikethrough text', () => {
     const html = markdownToTiptap('This is ~~deleted~~ text');
     expect(html).toContain('<s>deleted</s>');
@@ -301,6 +312,22 @@ describe('tiptapToMarkdown', () => {
   it('converts em tags to italic markdown', () => {
     const md = tiptapToMarkdown('<p>This is <em>italic</em> text</p>');
     expect(md).toContain('*italic*');
+  });
+
+  it('moves mark boundary whitespace outside markdown delimiters', () => {
+    const md = tiptapToMarkdown(
+      '<p><strong>Implication: </strong>A massive change and <em>an italic aside </em>follow.</p>',
+    );
+    expect(md).toBe('**Implication:** A massive change and *an italic aside* follow.\n');
+    expect(markdownToTiptap(md)).toBe(
+      '<p><strong>Implication:</strong> A massive change and <em>an italic aside</em> follow.</p>',
+    );
+  });
+
+  it('keeps boundary whitespace stable for nested marks', () => {
+    const md = tiptapToMarkdown('<p><strong><em>both </em></strong>plain</p>');
+    expect(md).toBe('***both*** plain\n');
+    expect(tiptapToMarkdown(markdownToTiptap(md))).toBe(md);
   });
 
   it('converts s/del tags to strikethrough', () => {

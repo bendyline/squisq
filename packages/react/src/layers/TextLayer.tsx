@@ -424,16 +424,17 @@ function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   // Scoped reset so authored block elements (headings, lists, paragraphs)
   // render tightly inside the box rather than with the UA's large margins.
   const cls = `squisq-rich-text-${cssId(layer.id)}`;
+  const listStylePosition =
+    style.textAlign === 'center' || style.textAlign === 'right' ? 'inside' : 'outside';
   const scopedCss =
     `.${cls}{margin:0}` +
     `.${cls} p{margin:0 0 .4em}` +
     `.${cls} h1,.${cls} h2,.${cls} h3,.${cls} h4,.${cls} h5,.${cls} h6{margin:0 0 .3em;line-height:1.2}` +
-    // `list-style-position: inside` keeps the bullet/number next to its text
-    // — with `outside` (the default) a centered or middle-aligned list leaves
-    // the marker stranded at the box's left padding, far from the text. The
-    // editor wraps each item's text in a `<p>`, so flatten that to inline or
-    // the block paragraph drops below the (inline) marker.
-    `.${cls} ul,.${cls} ol{margin:0 0 .4em;padding-left:1.2em;list-style-position:inside}` +
+    // Left-aligned prose uses outside markers for a proper hanging indent.
+    // Centered/right-aligned lists keep markers inside so they stay beside
+    // their text. The editor wraps each item's text in a `<p>`, so flatten it
+    // to inline or the block paragraph drops below an inside marker.
+    `.${cls} ul,.${cls} ol{margin:0 0 .7em;padding-left:1.2em;list-style-position:${listStylePosition}}` +
     `.${cls} li{margin:0}` +
     `.${cls} li>p{display:inline;margin:0}` +
     `.${cls} *:first-child{margin-top:0}.${cls} *:last-child{margin-bottom:0}` +

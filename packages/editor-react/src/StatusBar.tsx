@@ -4,10 +4,12 @@
  * Bottom status bar showing document statistics and host status.
  */
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { countBlocks } from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
+
+const STATS_DEBOUNCE_MS = 150;
 
 export interface StatusBarProps {
   /** Additional class name */
@@ -21,15 +23,25 @@ export interface StatusBarProps {
  * block count, parse errors, and optional host status.
  */
 export function StatusBar({ className, slotRight }: StatusBarProps) {
-  const { markdownSource, doc, parseError, isParsing } = useEditorContext();
+  const { markdownSource, doc, parseError } = useEditorContext();
+  const [statsSource, setStatsSource] = useState(markdownSource);
 
+  useEffect(() => {
+    if (statsSource === markdownSource) return;
+    const timeout = setTimeout(() => setStatsSource(markdownSource), STATS_DEBOUNCE_MS);
+    return () => clearTimeout(timeout);
+  }, [markdownSource, statsSource]);
+
+  // Full-document text scans are intentionally idle-debounced so a keypress
+  // only schedules cheap work. Block counting is independent and runs only
+  // when the debounced parse publishes a new Doc.
   const stats = useMemo(() => {
-    const chars = markdownSource.length;
-    const words = markdownSource.trim() ? markdownSource.trim().split(/\s+/).length : 0;
-    const lines = markdownSource.split('\n').length;
-    const blocks = doc ? countBlocks(doc.blocks) : 0;
-    return { chars, words, lines, blocks };
-  }, [markdownSource, doc]);
+    const chars = statsSource.length;
+    const words = statsSource.trim() ? statsSource.trim().split(/\s+/).length : 0;
+    const lines = statsSource.split('\n').length;
+    return { chars, words, lines };
+  }, [statsSource]);
+  const blocks = useMemo(() => (doc ? countBlocks(doc.blocks) : 0), [doc]);
 
   return (
     <div className={`squisq-status-bar ${className || ''}`}>
@@ -37,7 +49,7 @@ export function StatusBar({ className, slotRight }: StatusBarProps) {
       <span className="squisq-status-item">{stats.chars} chars</span>
       <span className="squisq-status-item">{stats.lines} lines</span>
       <span className="squisq-status-item">
-        {stats.blocks} {stats.blocks === 1 ? 'block' : 'blocks'}
+        {blocks} {blocks === 1 ? 'block' : 'blocks'}
       </span>
       <span className="squisq-status-spacer" />
       {parseError && (
@@ -45,9 +57,7 @@ export function StatusBar({ className, slotRight }: StatusBarProps) {
           ⚠ Error
         </span>
       )}
-      {!isParsing && !parseError && (
-        <span className="squisq-status-item squisq-status-ok">✓ OK</span>
-      )}
+      {!parseError && <span className="squisq-status-item squisq-status-ok">✓ OK</span>}
       {slotRight}
     </div>
   );

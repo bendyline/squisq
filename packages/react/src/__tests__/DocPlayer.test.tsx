@@ -819,6 +819,19 @@ describe('DocPlayer smoke test', () => {
     expect(container.firstChild).toBeTruthy();
   });
 
+  it('renders the original nested document through flashcards mode', () => {
+    const flashcardDoc = markdownToDoc(
+      parseMarkdown('## What is HTTP 418?\n\n### Answer\n\nI am a teapot.\n'),
+    );
+    const { container } = render(
+      <DocPlayer doc={flashcardDoc} basePath="/test" displayMode="flashcards" />,
+    );
+    expect(container.querySelector('.doc-player--flashcards')).not.toBeNull();
+    expect(container.querySelector('.squisq-flashcards')).not.toBeNull();
+    expect(screen.getByText('What is HTTP 418?')).toBeTruthy();
+    expect(screen.queryByText('I am a teapot.')).toBeNull();
+  });
+
   it('exposes playback controls via onControlsReady', () => {
     let controls: { play: () => void; pause: () => void } | null = null;
     render(

@@ -63,6 +63,7 @@ import { DocControlsSlideshow } from './DocControlsSlideshow';
 import { DocProgressBar } from './DocProgressBar';
 import { LinearDocView } from './LinearDocView';
 import { DashboardView } from './DashboardView';
+import { FlashcardView } from './FlashcardView';
 import type {
   PlaybackState,
   PlaybackActions,
@@ -149,6 +150,26 @@ export function DocPlayer(props: DocPlayerProps) {
 
   if (!resolvedDoc) {
     return <div className="doc-player doc-player--empty" />;
+  }
+
+  // Flashcards is a peer rendition over the ORIGINAL nested block tree. Keep
+  // it outside the timeline player: slideshow playback flattens descendants,
+  // while card materialization needs those parent/child boundaries intact.
+  if (props.displayMode === 'flashcards') {
+    return (
+      <div className="doc-player doc-player--flashcards">
+        <FlashcardView
+          doc={resolvedDoc}
+          basePath={props.basePath}
+          theme={props.theme}
+          globalKeyboardShortcuts={props.globalKeyboardShortcuts}
+          showCodeCopyButton={props.showCodeCopyButton}
+          onCopyCode={props.onCopyCode}
+          fenceRenderers={props.fenceRenderers}
+          viewport={props.forceViewport}
+        />
+      </div>
+    );
   }
 
   return <DocPlayerContent {...props} doc={resolvedDoc} />;

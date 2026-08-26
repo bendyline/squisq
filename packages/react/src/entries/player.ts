@@ -2,6 +2,8 @@ export { DocPlayer } from '../DocPlayer.js';
 export type { DocPlayerProps } from '../DocPlayer.js';
 export type { CodeBlockCopyContext, CodeBlockCopyHandler } from '../MarkdownRenderer.js';
 export { BlockRenderer } from '../BlockRenderer.js';
+export { FlashcardFaceView, FlashcardView } from '../FlashcardView.js';
+export type { FlashcardFaceViewProps, FlashcardViewProps } from '../FlashcardView.js';
 export { CaptionOverlay } from '../CaptionOverlay.js';
 export { SocialCaptionOverlay } from '../SocialCaptionOverlay.js';
 export { DocControlsOverlay } from '../DocControlsOverlay.js';

@@ -45,6 +45,16 @@ const RE_ITALIC_STAR = /\*(?![\s*])(.+?)(?<![\s*])\*/g;
 const RE_ITALIC_UNDER = /(?<![\p{L}\p{N}_])_(?![\s_])(.+?)(?<![\s_])_(?![\p{L}\p{N}_])/gu;
 const RE_STRIKETHROUGH = /~~(.+?)~~/g;
 
+// Compatibility for Markdown emitted by older versions of htmlToInline,
+// which left a selected trailing space inside the mark delimiters. Keep this
+// narrower than the CommonMark-ish rules above: the opener must be valid and
+// the invalid closer must be followed by real text or the end of the line.
+// This recovers `**Implication: **Next` as `**Implication:** Next` without
+// interpreting intentionally literal whitespace-flanked forms such as
+// `** bold **` or `2 * 3 * 4` as emphasis.
+const RE_LEGACY_BOLD_STAR = /\*\*(?![\s*])(.+?)(?<![\s*])([ \t]+)\*\*(?=$|[^\s*])/g;
+const RE_LEGACY_ITALIC_STAR = /(?<!\*)\*(?![\s*])(.+?)(?<![\s*])([ \t]+)\*(?=$|[^\s*])/g;
+
 // The delimiters whose backslash escapes this pass understands. `\\` is
 // included so an even backslash run collapses correctly instead of
 // leaking a literal backslash in front of live emphasis.
@@ -70,12 +80,7 @@ const RE_MENTION_TAG = /<span\b[^>]*?\bdata-mention\b[^>]*?>(?:<[^>]+>)*([^<]*)<
 //     class="fa-brands fa-github" contenteditable="false"></i>`.
 const RE_ICON_MD = /\{\[([a-zA-Z0-9_:-]+)\]\}/g;
 const RE_ICON_TAG = /<i\b[^>]*?\bdata-icon="([^"]*)"[^>]*?><\/i>/gi;
-const RE_STRONG_TAG = /<strong>(.*?)<\/strong>/g;
-const RE_B_TAG = /<b>(.*?)<\/b>/g;
-const RE_EM_TAG = /<em>(.*?)<\/em>/g;
-const RE_I_TAG = /<i>(.*?)<\/i>/g;
-const RE_S_TAG = /<s>(.*?)<\/s>/g;
-const RE_DEL_TAG = /<del>(.*?)<\/del>/g;
+const RE_MARK_TAG = /<(strong|b|em|i|s|del)>(.*?)<\/\1>/gs;
 const RE_CODE_TAG = /<code>(.*?)<\/code>/g;
 // Attribute-order agnostic: Tiptap's Link extension renders
 // `<a target rel href>` while `markdownToTiptap` emits `<a href title>`.
@@ -1366,11 +1371,16 @@ function inlineToHtml(text: string): string {
     (_m, ch: string) => `\u0000ESC${ESCAPABLE_MD_CHARS.indexOf(ch)}\u0000`,
   );
 
+  // Recover the invalid delimiter placement emitted by older versions of
+  // this bridge before applying the normal CommonMark-ish emphasis rules.
+  result = result.replace(RE_LEGACY_BOLD_STAR, '<strong>$1</strong>$2');
+
   // Bold: **text** or __text__
   result = result.replace(RE_BOLD_STAR, '<strong>$1</strong>');
   result = result.replace(RE_BOLD_UNDER, '<strong>$1</strong>');
 
   // Italic: *text* or _text_
+  result = result.replace(RE_LEGACY_ITALIC_STAR, '<em>$1</em>$2');
   result = result.replace(RE_ITALIC_STAR, '<em>$1</em>');
   result = result.replace(RE_ITALIC_UNDER, '<em>$1</em>');
 
@@ -1630,6 +1640,32 @@ function escapeMarkdownTextNodes(html: string): string {
   return out + escapeMarkdownText(html.slice(cursor));
 }
 
+/**
+ * Convert Tiptap's inline mark tags to Markdown delimiters while keeping
+ * boundary whitespace outside the delimiters.
+ *
+ * ProseMirror can legitimately emit `<strong>Implication: </strong>Next`
+ * when the selected bold range includes its trailing space. Emitting that
+ * verbatim as `**Implication: **Next` is not valid emphasis: a delimiter run
+ * preceded by whitespace cannot close. On the next Markdown -> Tiptap pass
+ * the asterisks therefore become visible text. Moving the space produces the
+ * equivalent, stable `**Implication:** Next` form. Recursing over the inner
+ * HTML keeps the same rule valid for nested marks.
+ */
+function markdownFromMarkTags(html: string): string {
+  return html.replace(RE_MARK_TAG, (_match, tag: string, inner: string) => {
+    const convertedInner = markdownFromMarkTags(inner);
+    const leading = convertedInner.match(/^\s*/)?.[0] ?? '';
+    const trailing = convertedInner.match(/\s*$/)?.[0] ?? '';
+    const content = convertedInner.slice(leading.length, convertedInner.length - trailing.length);
+    if (!content) return convertedInner;
+
+    const delimiter =
+      tag === 'strong' || tag === 'b' ? '**' : tag === 'em' || tag === 'i' ? '*' : '~~';
+    return `${leading}${delimiter}${content}${delimiter}${trailing}`;
+  });
+}
+
 /** Convert inline HTML back to markdown */
 function htmlToInline(html: string): string {
   let result = html;
@@ -1644,22 +1680,15 @@ function htmlToInline(html: string): string {
   result = escapeMarkdownTextNodes(result);
 
   // FontAwesome inline icons — emit the original token. Must run before
-  // RE_I_TAG (which matches a bare `<i>` and would otherwise eat icon
-  // tags too). The token captured via data-icon already carries the
+  // generic mark converter (which treats a bare `<i>` as emphasis and would
+  // otherwise eat icon tags too). The token captured via data-icon carries the
   // qualified form when needed, so source round-trips exactly.
   result = result.replace(RE_ICON_TAG, (_m, token) => `{[${token}]}`);
 
-  // Strong
-  result = result.replace(RE_STRONG_TAG, '**$1**');
-  result = result.replace(RE_B_TAG, '**$1**');
-
-  // Em
-  result = result.replace(RE_EM_TAG, '*$1*');
-  result = result.replace(RE_I_TAG, '*$1*');
-
-  // Strikethrough
-  result = result.replace(RE_S_TAG, '~~$1~~');
-  result = result.replace(RE_DEL_TAG, '~~$1~~');
+  // Strong / emphasis / strikethrough. Boundary spaces must sit outside
+  // delimiters or the next Markdown parse will expose those delimiters as
+  // literal text. Convert marks recursively so nested marks remain valid.
+  result = markdownFromMarkTags(result);
 
   // Code
   result = result.replace(RE_CODE_TAG, '`$1`');

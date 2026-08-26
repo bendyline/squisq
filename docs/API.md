@@ -754,6 +754,45 @@ so templates re-compose for the cell's orientation and typography scales via
 reported as an `overflow` diagnostic, never console output. A leading block
 that merely restates the resolved document title dedupes into the title band.
 
+#### Flashcard Resolution
+
+```ts
+function materializeFlashcards(doc: Doc, options?: { source?: 'auto' | 'explicit' }): FlashcardDeck;
+
+interface FlashcardDeck {
+  title?: string;
+  cards: Flashcard[];
+  diagnostics: FlashcardDiagnostic[];
+}
+interface Flashcard {
+  id: string;
+  sourceBlockId: string;
+  kind: 'basic' | 'multiple-choice';
+  label?: string;
+  front: { blocks: Block[] };
+  back: { blocks: Block[] };
+  choices?: { id: string; sourceBlockId: string; content: { blocks: Block[] }; correct: boolean }[];
+  explanation?: { blocks: Block[] };
+}
+```
+
+Automatic basic cards use a leaf heading as the front and its body as the
+back; with one child, the parent's own content is the front and the child is
+the back; with two or more children, child one is the front and children 2–N
+form the back. Empty structural headings are treated as deck groups when their
+descendants are already complete cards. `{study=flashcard}` fixes an ambiguous
+card boundary, `{study=group}` forces grouping, and
+`{study=multiple-choice-flashcard}` maps child one to the question and the
+remaining children to choices. The first choice is correct unless a choice
+uses `{correct=true}`.
+
+`FlashcardView` keeps the active card body in its own scroll viewport so the
+progress row and Previous/Reveal/Again/Got it controls remain fixed. Visual
+templates—including automatically detected ASCII diagrams, trees, timelines,
+charts, drawings, layouts, maps, and document custom templates—are resolved
+through the same `resolvePageBlock` + `materializeBlockLayers` pipeline used by
+the other rich modes rather than displayed as source Markdown.
+
 #### Template Registry
 
 ```ts
@@ -1529,7 +1568,7 @@ interface DocPlayerProps {
   coverVisible?: boolean; // controlled cover cursor for synchronized audience mirrors
   captionStyle?: CaptionStyle; // default 'standard'
   enableSwipe?: boolean; // default true — drag-to-swipe navigation in slideshow mode
-  showCodeCopyButton?: boolean; // default false; linear mode only
+  showCodeCopyButton?: boolean; // default false; rich page/flashcard content
   onCopyCode?: CodeBlockCopyHandler; // host clipboard adapter; browser fallback when omitted
 }
 ```
@@ -1556,24 +1595,25 @@ interface BlockRendererProps {
 
 #### Other components
 
-| Component              | Summary                                                                                                                                                                                               |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DocPlayerWithSidebar` | `DocPlayer` composed with `DocControlsSidebar`.                                                                                                                                                       |
-| `LinearDocView`        | The "Page" rendition: theme-art-directed, variable-height HTML sections via core `materializePageSections`; SVG only for spatial canvas embeds (`LinearDocViewProps`).                                |
-| `DashboardView`        | The "Dashboard" rendition: one static canvas of per-cell `BlockRenderer`s (plus each cell's `style` chrome) via core `materializeDashboard`; publishes a minimal render API for single-frame capture. |
-| `PageSectionView`      | Dispatches one `PageSection` to its section layout component.                                                                                                                                         |
-| `CanvasSection`        | Responsive SVG embed for spatial sections (diagram/tree/map/…).                                                                                                                                       |
-| `MarkdownRenderer`     | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                                                     |
-| `CaptionOverlay`       | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                                                     |
-| `SocialCaptionOverlay` | Large centered TikTok/Reels-style word-by-word captions.                                                                                                                                              |
-| `DocProgressBar`       | Block progress indicator with seek.                                                                                                                                                                   |
-| `DocControlsOverlay`   | Floating play/pause + prev/next over the player.                                                                                                                                                      |
-| `DocControlsBottom`    | Bottom bar with progress + counter.                                                                                                                                                                   |
-| `DocControlsSidebar`   | Side panel with block thumbnails.                                                                                                                                                                     |
-| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter).                                                                                                                                                        |
-| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                                                 |
-| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                                                          |
-| `JsonView`             | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                                                 |
+| Component              | Summary                                                                                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DocPlayerWithSidebar` | `DocPlayer` composed with `DocControlsSidebar`.                                                                                                                                                        |
+| `LinearDocView`        | The "Page" rendition: theme-art-directed, variable-height HTML sections via core `materializePageSections`; SVG only for spatial canvas embeds (`LinearDocViewProps`).                                 |
+| `DashboardView`        | The "Dashboard" rendition: one static canvas of per-cell `BlockRenderer`s (plus each cell's `style` chrome) via core `materializeDashboard`; publishes a minimal render API for single-frame capture.  |
+| `FlashcardView`        | The "Flashcards" rendition: progressively revealed basic cards and multiple-choice quizzes via core `materializeFlashcards`; includes shuffle, self-rating, retry-missed, and keyboard study controls. |
+| `PageSectionView`      | Dispatches one `PageSection` to its section layout component.                                                                                                                                          |
+| `CanvasSection`        | Responsive SVG embed for spatial sections (diagram/tree/map/…).                                                                                                                                        |
+| `MarkdownRenderer`     | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                                                      |
+| `CaptionOverlay`       | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                                                      |
+| `SocialCaptionOverlay` | Large centered TikTok/Reels-style word-by-word captions.                                                                                                                                               |
+| `DocProgressBar`       | Block progress indicator with seek.                                                                                                                                                                    |
+| `DocControlsOverlay`   | Floating play/pause + prev/next over the player.                                                                                                                                                       |
+| `DocControlsBottom`    | Bottom bar with progress + counter.                                                                                                                                                                    |
+| `DocControlsSidebar`   | Side panel with block thumbnails.                                                                                                                                                                      |
+| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter).                                                                                                                                                         |
+| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                                                  |
+| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                                                           |
+| `JsonView`             | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                                                  |
 
 ```ts
 interface LinearDocViewProps {
@@ -1606,6 +1646,20 @@ interface DashboardViewProps {
   muted?: boolean; // default true — cell video layers render as paused posters
   renderMode?: boolean; // publish the capture-readiness render API
   onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
+  className?: string;
+}
+
+interface FlashcardViewProps {
+  doc: Doc;
+  theme?: Theme;
+  basePath?: string;
+  source?: 'auto' | 'explicit'; // default auto
+  shuffle?: boolean; // default false
+  globalKeyboardShortcuts?: boolean; // default false
+  showCodeCopyButton?: boolean;
+  onCopyCode?: CodeBlockCopyHandler;
+  fenceRenderers?: FenceRendererMap;
+  viewport?: ViewportConfig; // rich visual materialization; default landscape
   className?: string;
 }
 // The canvas is width-driven by default. Its width is
@@ -1702,7 +1756,14 @@ function useMediaUrl(relativePath: string, basePath: string): string;
 ### Types & Utilities
 
 ```ts
-type DisplayMode = 'video' | 'slideshow' | 'linear' | 'page';
+type DisplayMode =
+  | 'video'
+  | 'slideshow'
+  | 'linear'
+  | 'page'
+  | 'narrate'
+  | 'dashboard'
+  | 'flashcards';
 type CaptionStyle = 'standard' | 'social';
 type CaptionMode = 'off' | 'standard' | 'social';
 type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
@@ -1767,7 +1828,7 @@ function getTransitionClass(
 
 ```ts
 interface MountOptions {
-  mode?: 'slideshow' | 'static' | 'dashboard';
+  mode?: 'slideshow' | 'static' | 'dashboard' | 'flashcards';
   dashboard?: {
     layout?: string;
     title?: boolean;

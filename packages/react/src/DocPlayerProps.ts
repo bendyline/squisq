@@ -52,7 +52,7 @@ export interface DocPlayerProps {
   forceViewport?: ViewportConfig;
   theme?: Theme;
   surface?: SurfaceScheme | 'auto';
-  /** Video, manual slideshow, long-scrolling linear, or dashboard rendition. */
+  /** Video, slideshow, page, dashboard, or flashcards rendition. */
   displayMode?: DisplayMode;
   /** Dashboard mode: layout id or `'auto'`. Overrides doc frontmatter. */
   dashboardLayout?: string;

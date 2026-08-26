@@ -11,7 +11,13 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { DashboardView, DocPlayer, LinearDocView, useMediaProvider } from '@bendyline/squisq-react';
+import {
+  DashboardView,
+  DocPlayer,
+  FlashcardView,
+  LinearDocView,
+  useMediaProvider,
+} from '@bendyline/squisq-react';
 import type { AudioController, CodeBlockCopyHandler, PlaybackState } from '@bendyline/squisq-react';
 import { resolveTransformStyle } from '@bendyline/squisq/transform';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -160,6 +166,7 @@ export function PreviewPanel({
   const isPageMode = activeDisplayMode === 'linear';
   const isNarrateMode = activeDisplayMode === 'narrate';
   const isDashboardMode = activeDisplayMode === 'dashboard';
+  const isFlashcardsMode = activeDisplayMode === 'flashcards';
 
   useEffect(() => {
     if (presentation?.activeTarget === 'window') return;
@@ -272,7 +279,9 @@ export function PreviewPanel({
   }
 
   const fillsContainer =
-    printMode?.active || isDocumentMode || isPageMode || isNarrateMode ? 'stretch' : 'center';
+    printMode?.active || isDocumentMode || isPageMode || isNarrateMode || isFlashcardsMode
+      ? 'stretch'
+      : 'center';
   const audienceWindowOpen = presentation?.activeTarget === 'window';
 
   const renderSurface = (audience: boolean): ReactNode => {
@@ -352,6 +361,21 @@ export function PreviewPanel({
           showCodeCopyButton={showCodeCopyButton}
           onCopyCode={onCopyCode}
           fenceRenderers={fenceRenderers ?? undefined}
+        />
+      );
+    }
+
+    if (isFlashcardsMode) {
+      return (
+        <FlashcardView
+          doc={contentDoc ?? doc!}
+          basePath={basePath}
+          theme={activeTheme}
+          globalKeyboardShortcuts={!audience}
+          showCodeCopyButton={showCodeCopyButton}
+          onCopyCode={onCopyCode}
+          fenceRenderers={fenceRenderers ?? undefined}
+          viewport={activeViewport}
         />
       );
     }

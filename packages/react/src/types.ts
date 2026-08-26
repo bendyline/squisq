@@ -63,8 +63,17 @@ export type PipPosition = VideoPipPosition;
  * - `'dashboard'` — One static canvas that arranges every block into a
  *   layout's cells (grids, hero mosaics). No timeline, no navigation;
  *   overflow blocks beyond the layout's capacity are not rendered.
+ * - `'flashcards'` — A progressively revealed study deck derived from the
+ *   document's nested block hierarchy, including multiple-choice quizzes.
  */
-export type DisplayMode = 'video' | 'slideshow' | 'linear' | 'page' | 'narrate' | 'dashboard';
+export type DisplayMode =
+  | 'video'
+  | 'slideshow'
+  | 'linear'
+  | 'page'
+  | 'narrate'
+  | 'dashboard'
+  | 'flashcards';
 
 /**
  * Caption display style.

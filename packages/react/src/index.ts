@@ -23,6 +23,8 @@ export { LinearDocView } from './LinearDocView.js';
 export type { LinearDocViewProps, ImageDisplayMode } from './LinearDocView.js';
 export { DashboardView } from './DashboardView.js';
 export type { DashboardViewProps } from './DashboardView.js';
+export { FlashcardFaceView, FlashcardView } from './FlashcardView.js';
+export type { FlashcardFaceViewProps, FlashcardViewProps } from './FlashcardView.js';
 export { PageSectionView } from './page/PageSectionView.js';
 export type { PageSectionViewProps } from './page/PageSectionView.js';
 export { CanvasSection } from './page/CanvasSection.js';

@@ -51,9 +51,10 @@ import animationCss from './styles/doc-animations.css';
 export interface MountOptions {
   /**
    * Rendering mode: 'slideshow' (interactive, default), 'static'
-   * (scrollable page), or 'dashboard' (one canvas of arranged blocks).
+   * (scrollable page), 'dashboard' (one canvas of arranged blocks), or
+   * 'flashcards' (progressively revealed study deck).
    */
-  mode?: 'slideshow' | 'static' | 'dashboard';
+  mode?: 'slideshow' | 'static' | 'dashboard' | 'flashcards';
   /** Dashboard-mode options (ignored by the other modes). */
   dashboard?: {
     /** Layout id or 'auto'. Overrides doc frontmatter. */
@@ -355,7 +356,8 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     content = createElement(DocPlayer, {
       doc: finalDoc,
       basePath,
-      displayMode: mode === 'dashboard' ? 'dashboard' : 'slideshow',
+      displayMode:
+        mode === 'dashboard' ? 'dashboard' : mode === 'flashcards' ? 'flashcards' : 'slideshow',
       dashboardLayout: dashboard?.layout,
       dashboardShowTitle: dashboard?.title,
       dashboardStyle: dashboard?.style,

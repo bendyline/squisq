@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
   BlockRenderer,
+  FlashcardFaceView,
   LinearDocView,
   useDocPlayback,
   useMediaProvider,
@@ -15,7 +16,7 @@ import {
   type Theme,
   type ViewportConfig,
 } from '@bendyline/squisq/schemas';
-import { expandCoverBlock } from '@bendyline/squisq/doc';
+import { expandCoverBlock, materializeFlashcards } from '@bendyline/squisq/doc';
 import { resolveTransformStyle } from '@bendyline/squisq/transform';
 import type { Block } from '@bendyline/squisq/schemas';
 import { PlainHtmlPreview } from '../PlainHtmlPreview';
@@ -76,6 +77,10 @@ export function PrintPreview({
       layers: expandCoverBlock(previewDoc.startBlock, context),
     };
   }, [previewDoc?.startBlock, showCover, theme, viewport]);
+  const flashcardDeck = useMemo(
+    () => (contentDoc ? materializeFlashcards(contentDoc) : null),
+    [contentDoc],
+  );
 
   const isTextDocument = displayMode === 'page' || displayMode === 'narrate';
   useEffect(() => {
@@ -125,6 +130,70 @@ export function PrintPreview({
             transformPage={transformStyle ? resolveTransformStyle(transformStyle).page : undefined}
           />
         </div>
+      </div>
+    );
+  }
+
+  if (displayMode === 'flashcards') {
+    const faceProps = {
+      theme,
+      basePath,
+      showCodeCopyButton: false,
+      viewport,
+      customTemplates: contentDoc?.customTemplates,
+    };
+    return (
+      <div
+        className="squisq-print-preview squisq-print-preview--flashcards"
+        style={
+          {
+            '--squisq-print-flashcard-text': theme.colors.text,
+            '--squisq-print-flashcard-muted': theme.colors.textMuted,
+            '--squisq-print-flashcard-accent': theme.colors.primary,
+            '--squisq-print-flashcard-bg': theme.colors.background,
+            '--squisq-print-flashcard-surface': theme.colors.backgroundLight,
+          } as CSSProperties
+        }
+      >
+        <style>{'@page { size: landscape; margin: 0; }'}</style>
+        {flashcardDeck?.cards.map((card, index) => (
+          <article key={card.id} className="squisq-print-flashcard-sheet">
+            <header>
+              <span>
+                Card {index + 1} of {flashcardDeck.cards.length}
+              </span>
+              {card.label && <strong>{card.label}</strong>}
+            </header>
+            <div className="squisq-print-flashcard-pair">
+              <section className="squisq-print-flashcard-face" aria-label="Question side">
+                <small>Front</small>
+                <FlashcardFaceView {...faceProps} face={card.front} />
+                {card.kind === 'multiple-choice' && (
+                  <ol className="squisq-print-flashcard-choices">
+                    {card.choices?.map((choice) => (
+                      <li key={choice.id}>
+                        <FlashcardFaceView {...faceProps} face={choice.content} />
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+              <section className="squisq-print-flashcard-face" aria-label="Answer side">
+                <small>Back</small>
+                <FlashcardFaceView {...faceProps} face={card.back} />
+                {card.explanation && (
+                  <div className="squisq-print-flashcard-explanation">
+                    <small>Explanation</small>
+                    <FlashcardFaceView {...faceProps} face={card.explanation} />
+                  </div>
+                )}
+              </section>
+            </div>
+          </article>
+        ))}
+        {(!flashcardDeck || flashcardDeck.cards.length === 0) && (
+          <p className="squisq-print-empty">Nothing to print.</p>
+        )}
       </div>
     );
   }

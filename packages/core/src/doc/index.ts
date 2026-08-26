@@ -141,6 +141,21 @@ export type {
   DashboardTitle,
   MaterializeDashboardOptions,
 } from './dashboard/materializeDashboard.js';
+export {
+  materializeFlashcards,
+  resolveFlashcardMarker,
+} from './flashcards/materializeFlashcards.js';
+export type {
+  Flashcard,
+  FlashcardChoice,
+  FlashcardDeck,
+  FlashcardDiagnostic,
+  FlashcardDiagnosticCode,
+  FlashcardFace,
+  FlashcardKind,
+  FlashcardSourceMode,
+  MaterializeFlashcardsOptions,
+} from './flashcards/materializeFlashcards.js';
 export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';
 export { applyNarrationTiming, type NarrationResolution } from './applyNarrationTiming.js';
 export {
