@@ -15,66 +15,10 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { RecorderModal } from '../recorder/RecorderModal';
+import { FakeStream, FakeTrack, fakeMediaProvider, stubRecorderGlobals } from './fakeMediaRecorder';
 
-const mediaProvider: MediaProvider = {
-  resolveUrl: vi.fn(async (path: string) => path),
-  listMedia: vi.fn(async () => []),
-  addMedia: vi.fn(async (name: string) => name),
-  removeMedia: vi.fn(async () => undefined),
-  dispose: vi.fn(),
-};
-
-class FakeTrack {
-  readyState: 'live' | 'ended' = 'live';
-  constructor(public kind: 'audio' | 'video') {}
-  stop(): void {
-    this.readyState = 'ended';
-  }
-}
-
-class FakeStream {
-  constructor(private tracks: FakeTrack[] = [new FakeTrack('audio')]) {}
-  get active() {
-    return this.tracks.some((t) => t.readyState === 'live');
-  }
-  getTracks() {
-    return [...this.tracks];
-  }
-  getAudioTracks() {
-    return this.tracks.filter((t) => t.kind === 'audio');
-  }
-  getVideoTracks() {
-    return this.tracks.filter((t) => t.kind === 'video');
-  }
-}
-
-/** Minimal MediaRecorder that emits one chunk and reports `inactive` on stop. */
-class FakeMediaRecorder {
-  state: 'inactive' | 'recording' = 'inactive';
-  ondataavailable: ((e: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  onerror: ((e: unknown) => void) | null = null;
-  constructor(
-    public stream: FakeStream,
-    options?: { mimeType?: string },
-  ) {
-    this.mimeType = options?.mimeType ?? 'audio/webm';
-  }
-  mimeType: string;
-  static isTypeSupported() {
-    return true;
-  }
-  start() {
-    this.state = 'recording';
-  }
-  stop() {
-    this.state = 'inactive';
-    this.ondataavailable?.({ data: new Blob(['take'], { type: this.mimeType }) });
-    this.onstop?.();
-  }
-}
+const mediaProvider = fakeMediaProvider();
 
 /** Drive the modal from idle to the review state with a take in hand. */
 async function recordATake() {
@@ -94,20 +38,7 @@ const toggle = (name: string) => screen.getByRole('button', { name });
 describe('RecorderModal — unsaved take is not silently destroyed', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal('MediaStream', FakeStream);
-    vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
-    Object.defineProperty(globalThis.navigator, 'mediaDevices', {
-      configurable: true,
-      value: {
-        getUserMedia: vi.fn(async () => new FakeStream()),
-        getDisplayMedia: vi.fn(async () => new FakeStream([new FakeTrack('video')])),
-      },
-    });
-    vi.stubGlobal('URL', {
-      ...URL,
-      createObjectURL: vi.fn(() => 'blob:take'),
-      revokeObjectURL: vi.fn(),
-    });
+    stubRecorderGlobals();
   });
 
   afterEach(() => {

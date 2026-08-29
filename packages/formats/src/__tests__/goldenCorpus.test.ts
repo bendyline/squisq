@@ -90,12 +90,14 @@ describe('independent format golden corpus', () => {
     assertSemantics(await xlsxToMarkdownDoc(await buildIndependentXlsx()), (await manifest()).xlsx);
   });
 
+  // PDF.js cold-loading and fake-worker startup can exceed Vitest's 5s default
+  // when the full parallel suite saturates a CI runner.
   it('imports a PDF generated outside the Squisq PDF exporter', async () => {
     assertSemantics(
       await pdfToMarkdownDoc(await buildIndependentPdf(), { bodyFontSize: 12 }),
       (await manifest()).pdf,
     );
-  });
+  }, 30_000);
 
   it('imports hand-authored hostile semantic HTML', async () => {
     const html = await readFile(fixturePath('interop.html'), 'utf8');

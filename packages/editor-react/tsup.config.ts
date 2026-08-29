@@ -11,6 +11,7 @@ export default defineConfig({
     'image-editor/index': 'src/entries/image-editor.ts',
     'recorder/index': 'src/entries/recorder.ts',
     'teleprompter/index': 'src/entries/teleprompter.ts',
+    'proofing/index': 'src/entries/proofing.ts',
   },
   format: ['esm'],
   dts: true,

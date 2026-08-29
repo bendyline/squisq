@@ -25,6 +25,7 @@ import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
 import {
   DocumentVersionManager,
   type PrunePolicy,
@@ -387,6 +388,27 @@ export interface EditorContextValue extends EditorState, EditorActions {
    */
   mentionProvider: MentionProvider | null;
   /**
+   * Grammar/spellcheck capability injected by the host — a provider (or
+   * factory) from `@bendyline/squisq-editor-react/proofing`. `null`
+   * means the feature is off everywhere (the `ffmpegWasm` semantics:
+   * absent capability, absent feature).
+   */
+  proofing: ProofingCapability | null;
+  /**
+   * Host default for whether proofing checks documents when the
+   * capability is present. Per-doc frontmatter and the session toggle
+   * override it.
+   */
+  proofingDefaultEnabled: boolean;
+  /**
+   * Host-owned, per-document storage for dismissed findings. Ignores
+   * are never written into the document; without a store they last only
+   * for the session.
+   */
+  proofingIgnoreStore: ProofingIgnoreStore | null;
+  /** The document's article id — part of the proofing document ref. */
+  articleId: string;
+  /**
    * Optional provider for sibling-document suggestions in the link
    * dialog. When set, the dialog shows a "Browse documents" picker that
    * lets authors search neighbor docs by name and insert a relative-
@@ -493,6 +515,15 @@ export interface EditorProviderProps {
    * entirely — typing `@` becomes just a literal character again.
    */
   mentionProvider?: MentionProvider | null;
+  /**
+   * Grammar/spellcheck capability. Omit for no proofing; see
+   * `EditorShellProps.proofing`.
+   */
+  proofing?: ProofingCapability | null;
+  /** Host default enable state for proofing (default true). */
+  proofingDefaultEnabled?: boolean;
+  /** Host-owned per-document storage for dismissed proofing findings. */
+  proofingIgnoreStore?: ProofingIgnoreStore | null;
   /**
    * Async provider for sibling-document suggestions in the link dialog.
    * Omit to fall back to URL-only link insertion.
@@ -656,6 +687,9 @@ export function EditorProvider({
   mediaProvider = null,
   imageDisplayMode = 'inline',
   mentionProvider = null,
+  proofing = null,
+  proofingDefaultEnabled = true,
+  proofingIgnoreStore = null,
   documentLinkProvider = null,
   fenceRenderers = null,
   linkSchemes,
@@ -1286,6 +1320,10 @@ export function EditorProvider({
       mediaProvider,
       imageDisplayMode,
       mentionProvider,
+      proofing,
+      proofingDefaultEnabled,
+      proofingIgnoreStore,
+      articleId,
       documentLinkProvider,
       fenceRenderers,
       linkSchemes,
@@ -1350,6 +1388,10 @@ export function EditorProvider({
       mediaProvider,
       imageDisplayMode,
       mentionProvider,
+      proofing,
+      proofingDefaultEnabled,
+      proofingIgnoreStore,
+      articleId,
       documentLinkProvider,
       fenceRenderers,
       linkSchemes,

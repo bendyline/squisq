@@ -14,3 +14,4 @@ export * from './icons/index.js';
 export * from './recommend/index.js';
 export * from './narration/index.js';
 export * from './fence/index.js';
+export * from './proof/index.js';

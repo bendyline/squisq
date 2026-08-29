@@ -9,8 +9,17 @@
  * overhangs the editor's clipping edge and gets cut off.
  *
  * So we measure the real gutter (the gap between the canvas's right edge and
- * the nearest horizontally-clipping ancestor) rather than guessing from a
- * viewport breakpoint, since page width / centering / host chrome all move it:
+ * the nearest boundary the column must not cross) rather than guessing from a
+ * viewport breakpoint, since page width / centering / host chrome all move it.
+ * Two kinds of boundary count, and the tighter one wins:
+ *   • A horizontally-clipping ancestor — the column is literally cut off there.
+ *   • A pane docked beside the editor surface (the outline pane, the inline
+ *     block-preview rail) — the shell's own flex column doesn't clip, so an
+ *     overhanging toolbar isn't cut off, it's *covered*: the rail is a later
+ *     sibling, so it paints on top and swallows the toolbar whole. Measuring
+ *     only the clip edge misses this entirely, which is what left the toolbar
+ *     hidden underneath the preview rail.
+ * Either way:
  *   • Fits  — render the column as-is (the common, wider case).
  *   • Clips — render the toolbar as a compact horizontal bar in normal flow
  *     above the canvas (`.squisq-scene-inline-toolbar`). It stays visible and
@@ -46,32 +55,53 @@ export function SceneSideToolbar({ children }: SceneSideToolbarProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   // Measure whether the right gutter can host the column. The column is
-  // absolutely positioned at the shell's right edge, so its clipping depends on
-  // `shellRight` vs. the nearest ancestor that clips horizontally — recomputed
-  // whenever the editor body resizes (window resize, outline toggle, etc.).
-  // Switching to the in-flow bar changes shell *height*, not `shellRight`, so
-  // there's no measure↔collapse loop.
+  // absolutely positioned at the shell's right edge, so the room it has is the
+  // distance from that edge to the nearest boundary above — either an ancestor
+  // that clips horizontally, or a pane docked to the right of the editor
+  // surface, which would paint over the column rather than cut it off.
+  // Recomputed whenever the editor body resizes (window resize, outline or
+  // preview-gutter toggle, etc.). Switching to the in-flow bar changes shell
+  // *height*, not `shellRight`, so there's no measure↔collapse loop.
   useLayoutEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
     const shell = wrap.closest('.squisq-scene-shell') as HTMLElement | null;
     const clip = wrap.closest('.squisq-editor-content') as HTMLElement | null;
+    // The flex row holding [outline?] [editor surface] [preview gutter?]. The
+    // surface is whichever of its children contains this canvas; anything after
+    // that child is a docked pane occupying the space the column wants.
+    const row = wrap.closest('.squisq-editor-with-gutter') as HTMLElement | null;
     const measure = () => {
       if (!shell) return;
       const shellRight = shell.getBoundingClientRect().right;
-      const clipRight = clip
-        ? clip.getBoundingClientRect().right
-        : document.documentElement.clientWidth;
-      setCollapsed(clipRight - shellRight < SIDE_TOOLBAR_FIT_PX);
+      let limit = clip ? clip.getBoundingClientRect().right : document.documentElement.clientWidth;
+      if (row) {
+        const pane = Array.from(row.children).find((child) => child.contains(wrap));
+        // Only a pane that actually follows the surface constrains us; with no
+        // trailing sibling the surface's own right edge is free gutter space
+        // (the shell is narrower than the surface when the editor is centered).
+        if (pane && pane.nextElementSibling) {
+          limit = Math.min(limit, pane.getBoundingClientRect().right);
+        }
+      }
+      setCollapsed(limit - shellRight < SIDE_TOOLBAR_FIT_PX);
     };
     measure();
     const ro = new ResizeObserver(measure);
-    const target = clip ?? shell;
-    if (target) ro.observe(target);
-    if (shell && shell !== target) ro.observe(shell);
+    const targets = new Set<Element>();
+    if (clip) targets.add(clip);
+    if (row) targets.add(row);
+    if (shell) targets.add(shell);
+    targets.forEach((t) => ro.observe(t));
+    // A pane can be added or removed without resizing anything we observe
+    // (the surface keeps its width while the rail slides in beside it), so
+    // watch the row's child list too.
+    const mo = row ? new MutationObserver(measure) : null;
+    if (mo && row) mo.observe(row, { childList: true });
     window.addEventListener('resize', measure);
     return () => {
       ro.disconnect();
+      mo?.disconnect();
       window.removeEventListener('resize', measure);
     };
   }, []);

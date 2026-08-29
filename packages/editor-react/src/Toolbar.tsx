@@ -263,6 +263,7 @@ export function Toolbar({
   const previewSettings = usePreviewSettingsOptional();
   const [useModeMenuRequest, requestUseModeMenu] = useReducer((count: number) => count + 1, 0);
   const [recorderOpen, setRecorderOpen] = useState(false);
+  const [docNarrationOpen, setDocNarrationOpen] = useState(false);
   // When a canvas textbox is being edited, its Tiptap instance takes over
   // the formatting buttons; otherwise they drive the document editor. The
   // `level` gates which buttons apply (inline labels vs. rich textboxes).
@@ -1905,12 +1906,15 @@ export function Toolbar({
                         ? isTiptapActive(formattingEditor, btn.id)
                         : false;
                   const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
+                  const btnIndex = BUTTON_INDEX_BY_ID.get(btn.id);
+                  const overflowed =
+                    overflowIndex !== null && btnIndex !== undefined && btnIndex >= overflowIndex;
                   return (
                     <button
                       key={btn.id}
                       ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
-                      className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}`}
-                      data-btn-index={BUTTON_INDEX_BY_ID.get(btn.id)}
+                      className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}${overflowed ? ' squisq-toolbar-button--overflowed' : ''}`}
+                      data-btn-index={btnIndex}
                       data-tooltip={disabled ? 'Insert image (requires media provider)' : btn.title}
                       onClick={() => handleAction(btn.id)}
                       aria-label={btn.title}
@@ -1930,7 +1934,7 @@ export function Toolbar({
               {showFormattingControls && <div className="squisq-toolbar-separator" />}
               <button
                 ref={insertMenuButtonRef}
-                className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}`}
+                className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}${showInsertInOverflow ? ' squisq-toolbar-button--overflowed' : ''}`}
                 data-btn-index={FIRST_MEDIA_INDEX}
                 data-tooltip="Insert..."
                 onClick={() => (insertMenuAnchor ? closeInsertMenu() : openInsertMenu())}
@@ -2337,7 +2341,15 @@ export function Toolbar({
       {/* Keep the recorder controller mounted while its Insert menu closes so
           the portaled modal retains its open state. */}
       {allowRecording && !isCodeMode && mediaProvider && (
-        <RecorderEntry open={recorderOpen} onOpenChange={setRecorderOpen} showTrigger={false} />
+        <>
+          <RecorderEntry open={recorderOpen} onOpenChange={setRecorderOpen} showTrigger={false} />
+          <RecorderEntry
+            open={docNarrationOpen}
+            onOpenChange={setDocNarrationOpen}
+            showTrigger={false}
+            mode="document-narration"
+          />
+        </>
       )}
       {showDocumentChrome && (
         <button
@@ -2514,6 +2526,23 @@ export function Toolbar({
                   <Icon icon="fa-solid fa-microphone" />
                 </span>
                 <span>Record media</span>
+              </button>
+            )}
+            {allowRecording && mediaProvider && (
+              <button
+                type="button"
+                className="squisq-toolbar-overflow-item"
+                onClick={() => {
+                  setDocNarrationOpen(true);
+                  closeInsertMenu();
+                }}
+                role="menuitem"
+                aria-label="Document narration"
+              >
+                <span className="squisq-toolbar-overflow-icon">
+                  <Icon icon="fa-solid fa-comment-dots" />
+                </span>
+                <span>Document narration</span>
               </button>
             )}
             <button

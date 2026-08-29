@@ -126,6 +126,11 @@
       "types": "./dist/fence/index.d.ts",
       "import": "./dist/fence/index.js",
       "default": "./dist/fence/index.js"
+    },
+    "./proof": {
+      "types": "./dist/proof/index.d.ts",
+      "import": "./dist/proof/index.js",
+      "default": "./dist/proof/index.js"
     }
   },
   "scripts": {

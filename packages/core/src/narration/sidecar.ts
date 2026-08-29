@@ -50,8 +50,18 @@ export interface NarrationTimingJsonV3 {
    */
   cameraOffsetSec?: number;
   /** Provenance of the timing data. */
-  generator?: { name: string; method: 'dsp-align'; baseWpm?: number };
+  generator?: { name: string; method: NarrationTimingMethod; baseWpm?: number };
 }
+
+/**
+ * How a sidecar's block ranges were produced.
+ *
+ * - `'dsp-align'` — the teleprompter's offline banded-DTW aligner inferred
+ *   them from the take's audio against the expected script.
+ * - `'presenter-advance'` — the presenter drove them directly, by advancing
+ *   slides in the recorder while the take rolled. Observed, not inferred.
+ */
+export type NarrationTimingMethod = 'dsp-align' | 'presenter-advance';
 
 export interface BuildNarrationTimingOptions {
   cameraOffsetSec?: number;

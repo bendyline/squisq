@@ -24,6 +24,7 @@ import {
 } from '../ooxml/namespaces';
 import { xmlDeclaration } from '../ooxml/xmlUtils';
 import { docxToMarkdownDoc, docxToDoc } from '../docx/import';
+import { stringifyMarkdown } from '@bendyline/squisq/markdown';
 import type {
   MarkdownHeading,
   MarkdownParagraph,
@@ -269,6 +270,25 @@ describe('docxToMarkdownDoc', () => {
     expect(para.children.length).toBe(1);
     expect(para.children[0].type).toBe('text');
     expect((para.children[0] as MarkdownText).value).toBe('Hello world');
+  });
+
+  it('normalizes Word boundary spaces without emitting Markdown space entities', async () => {
+    const data = await buildTestDocx({
+      bodyXml:
+        `<w:p><w:r><w:t xml:space="preserve"> Plain paragraph </w:t></w:r></w:p>` +
+        `<w:p>` +
+        `<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">The </w:t></w:r>` +
+        `<w:r><w:rPr><w:i/></w:rPr><w:t xml:space="preserve">Way to Heaven </w:t></w:r>` +
+        `</w:p>` +
+        `<w:p><w:r><w:t xml:space="preserve"> </w:t></w:r></w:p>`,
+    });
+
+    const doc = await docxToMarkdownDoc(data);
+    const markdown = stringifyMarkdown(doc);
+
+    expect(doc.children).toHaveLength(2);
+    expect(markdown).toBe('Plain paragraph\n\n*The* *Way to Heaven*\n');
+    expect(markdown).not.toContain('&#x20;');
   });
 
   // ============================================

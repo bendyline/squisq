@@ -32,6 +32,10 @@ const HEAVY_DEPS = [
   '@ffmpeg/util',
   'pdfjs-dist',
   'html2canvas',
+  // Optional peer for the proofing feature — reached only through a
+  // dynamic import('harper.js') inside the /proofing entry, which this
+  // test's line-anchored static-import regex deliberately cannot match.
+  'harper.js',
 ] as const;
 
 /**

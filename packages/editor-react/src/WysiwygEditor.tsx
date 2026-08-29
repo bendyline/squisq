@@ -76,6 +76,7 @@ import { usePreviewSettingsOptional } from './PreviewControls';
 import { uploadAndInsertImages } from './wysiwygImageUpload';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { FindHighlightExtension } from './find/FindHighlightExtension';
+import { ProofingExtension } from './proofing/ProofingExtension';
 
 type MediaMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
 
@@ -319,6 +320,7 @@ export function WysiwygEditor({
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
       FindHighlightExtension,
+      ProofingExtension,
     ],
     content: markdownToTiptap(initialDisplayBodyRef.current),
     onUpdate: ({ editor: ed }) => {

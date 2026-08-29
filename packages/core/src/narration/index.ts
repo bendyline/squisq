@@ -82,5 +82,17 @@ export {
   parseNarrationTimingJson,
   type NarrationTimingJsonV3,
   type NarrationTimingBlock,
+  type NarrationTimingMethod,
   type BuildNarrationTimingOptions,
 } from './sidecar.js';
+
+export {
+  recordSlideShown,
+  buildAdvanceTimingJson,
+  advanceCoverage,
+  EMPTY_ADVANCE_LOG,
+  type SlideAdvance,
+  type SlideAdvanceLog,
+  type AdvanceCoverage,
+  type BuildAdvanceTimingOptions,
+} from './advanceTiming.js';

@@ -28,6 +28,9 @@ import { WysiwygEditor } from './WysiwygEditor';
 import { InlinePreviewGutter } from './InlinePreviewGutter';
 import { BlockPreviewPanel } from './BlockPreviewPanel';
 import { OutlinePanel, OUTLINE_RESPONSIVE_WIDTH } from './OutlinePanel';
+import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
+import { ProofingRoot } from './proofing/ProofingContext';
+import { ProofingPanel } from './proofing/ProofingPanel';
 import { CodeContextZones } from './codeContext/CodeContextZones';
 import type { CodeContext } from './codeContext/types';
 import { BlockCardView } from './BlockCardView';
@@ -365,6 +368,32 @@ export interface EditorShellProps {
    */
   mentionProvider?: MentionProvider | null;
   /**
+   * Grammar/spellcheck capability — a `ProofingProvider` (or factory)
+   * from `@bendyline/squisq-editor-react/proofing`, typically backed by
+   * harper.js. Same semantics as `ffmpegWasm` in video export: omit and
+   * the feature is completely off — no engine bytes are ever fetched,
+   * and no proofing UI renders. Pass an *instance* to own its lifetime
+   * yourself (it survives shell remounts); pass a *factory* and the
+   * shell creates the provider on first use and disposes it on unmount.
+   */
+  proofing?: ProofingCapability | null;
+  /**
+   * Whether proofing checks documents by default when the capability is
+   * present (default `true`). Per-doc frontmatter (`squisq-proofing`)
+   * and the user's session toggle in the View menu override this.
+   */
+  proofingDefaultEnabled?: boolean;
+  /**
+   * Host-owned storage for findings the user dismissed with "Ignore",
+   * scoped per document (`load`/`save` receive a
+   * `ProofingDocumentRef` carrying `articleId` + `fileName`, so a host
+   * can key by file path). Ignores are deliberately NEVER written into
+   * the document — they are one person's editing preference, not
+   * content that should travel through git to everyone else. Omit the
+   * store and Ignore still works, lasting for the session only.
+   */
+  proofingIgnoreStore?: ProofingIgnoreStore | null;
+  /**
    * Optional async provider for sibling-document suggestions in the
    * link insert dialog. When supplied, the dialog gains a "Browse
    * documents" picker so authors can pick a neighbor `.md` by name and
@@ -592,6 +621,9 @@ export function EditorShell({
   findMode,
   onFindModeChange,
   mentionProvider,
+  proofing = null,
+  proofingDefaultEnabled = true,
+  proofingIgnoreStore = null,
   documentLinkProvider,
   fenceRenderers,
   linkSchemes,
@@ -653,6 +685,9 @@ export function EditorShell({
         mediaProvider={effectiveMediaProvider}
         imageDisplayMode={imageDisplayMode}
         mentionProvider={mentionProvider}
+        proofing={proofing}
+        proofingDefaultEnabled={proofingDefaultEnabled}
+        proofingIgnoreStore={proofingIgnoreStore}
         documentLinkProvider={documentLinkProvider}
         fenceRenderers={fenceRenderers}
         linkSchemes={linkSchemes}
@@ -674,51 +709,53 @@ export function EditorShell({
         viewPreferences={viewPreferences}
         onViewPreferencesChange={onViewPreferencesChange}
       >
-        <EditorShellInner
-          basePath={basePath}
-          defaultViewportPreset={defaultViewportPreset}
-          onChange={onChange}
-          onLinkClick={onLinkClick}
-          showCodeCopyButton={showCodeCopyButton}
-          onCopyCode={onCopyCode}
-          className={className}
-          height={height}
-          minHeight={minHeight}
-          maxHeight={maxHeight}
-          placeholder={placeholder}
-          mediaProvider={effectiveMediaProvider ?? null}
-          workspaceContainer={effectiveContainer}
-          filesToggleEnabled={filesToggleEnabled}
-          showFormattingControls={showFormattingControls}
-          showInsertControls={showInsertControls}
-          allowBinaryDownloads={allowBinaryDownloads}
-          toolbarSlotLeft={toolbarSlotLeft}
-          toolbarSlotAfterActions={toolbarSlotAfterActions}
-          toolbarSlotRight={toolbarSlotRight}
-          statusBarSlotRight={statusBarSlotRight}
-          showPlayTab={showPlayTab}
-          hostMode={hostMode}
-          allowPresentationWindow={allowPresentationWindow}
-          allowPresentationFullscreen={allowPresentationFullscreen}
-          allowPrint={allowPrint}
-          submitOnEnter={submitOnEnter}
-          codeContext={codeContext}
-          fullWidth={fullWidth}
-          uxFont={uxFont}
-          thinMargins={thinMargins}
-          writeCanvasSettings={writeCanvasSettings}
-          readOnly={readOnly}
-          imageSrc={imageSrc}
-          imageAlt={imageAlt}
-          imageMode={imageMode}
-          imageEditorContainer={imageEditorContainer}
-          onImageExport={onImageExport}
-          allowVersioning={allowVersioning}
-          versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-          inlinePreviewWidth={inlinePreviewWidth}
-          outlineWidth={outlineWidth}
-          themeOverride={themeOverride}
-        />
+        <ProofingRoot>
+          <EditorShellInner
+            basePath={basePath}
+            defaultViewportPreset={defaultViewportPreset}
+            onChange={onChange}
+            onLinkClick={onLinkClick}
+            showCodeCopyButton={showCodeCopyButton}
+            onCopyCode={onCopyCode}
+            className={className}
+            height={height}
+            minHeight={minHeight}
+            maxHeight={maxHeight}
+            placeholder={placeholder}
+            mediaProvider={effectiveMediaProvider ?? null}
+            workspaceContainer={effectiveContainer}
+            filesToggleEnabled={filesToggleEnabled}
+            showFormattingControls={showFormattingControls}
+            showInsertControls={showInsertControls}
+            allowBinaryDownloads={allowBinaryDownloads}
+            toolbarSlotLeft={toolbarSlotLeft}
+            toolbarSlotAfterActions={toolbarSlotAfterActions}
+            toolbarSlotRight={toolbarSlotRight}
+            statusBarSlotRight={statusBarSlotRight}
+            showPlayTab={showPlayTab}
+            hostMode={hostMode}
+            allowPresentationWindow={allowPresentationWindow}
+            allowPresentationFullscreen={allowPresentationFullscreen}
+            allowPrint={allowPrint}
+            submitOnEnter={submitOnEnter}
+            codeContext={codeContext}
+            fullWidth={fullWidth}
+            uxFont={uxFont}
+            thinMargins={thinMargins}
+            writeCanvasSettings={writeCanvasSettings}
+            readOnly={readOnly}
+            imageSrc={imageSrc}
+            imageAlt={imageAlt}
+            imageMode={imageMode}
+            imageEditorContainer={imageEditorContainer}
+            onImageExport={onImageExport}
+            allowVersioning={allowVersioning}
+            versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+            inlinePreviewWidth={inlinePreviewWidth}
+            outlineWidth={outlineWidth}
+            themeOverride={themeOverride}
+          />
+        </ProofingRoot>
       </EditorProvider>
     </MediaContext.Provider>
   );
@@ -1447,6 +1484,8 @@ function EditorShellInner({
               {/* Docked custom-theme designer — a flex sibling of the preview, so
               opening it reflows the preview narrower. Renders nothing when the
               designer is closed. */}
+              {isMarkdownMode && <ProofingPanel />}
+
               {isMarkdownMode && <ThemeDesignerDock />}
 
               {/* Drop zone overlay — image / text drop UX is markdown-specific.

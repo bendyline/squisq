@@ -574,7 +574,9 @@ async function convertRuns(
   paragraphEl: Element,
   ctx: ImportContext,
 ): Promise<MarkdownInlineNode[]> {
-  return mergeAdjacentText(await convertInlineElements(Array.from(paragraphEl.children), ctx));
+  return normalizeParagraphWhitespace(
+    await convertInlineElements(Array.from(paragraphEl.children), ctx),
+  );
 }
 
 async function convertInlineElements(
@@ -1264,4 +1266,99 @@ function mergeAdjacentText(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
     }
   }
   return result;
+}
+
+type ImportedInlineContainer =
+  | MarkdownEmphasis
+  | MarkdownStrong
+  | MarkdownStrikethrough
+  | MarkdownLink;
+
+function isImportedInlineContainer(node: MarkdownInlineNode): node is ImportedInlineContainer {
+  return (
+    node.type === 'emphasis' ||
+    node.type === 'strong' ||
+    node.type === 'delete' ||
+    node.type === 'link'
+  );
+}
+
+/**
+ * Normalize whitespace that Word stores at paragraph and formatting-run
+ * boundaries. A space at the start or end of a Word paragraph is layout
+ * residue rather than Markdown content; retaining it makes remark-stringify
+ * emit `&#x20;` so it cannot be mistaken for indentation or a hard break.
+ *
+ * Spaces on the edge of bold/italic/link runs are lifted outside the formatting
+ * wrapper first. That keeps an intentional word boundary while allowing the
+ * Markdown serializer to use ordinary spaces instead of character entities.
+ */
+function normalizeParagraphWhitespace(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  const result: MarkdownInlineNode[] = [];
+  let line: MarkdownInlineNode[] = [];
+
+  const flushLine = (): void => {
+    const normalized = liftFormattedBoundaryWhitespace(line);
+    takeLeadingHorizontalWhitespace(normalized);
+    takeTrailingHorizontalWhitespace(normalized);
+    result.push(...mergeAdjacentText(normalized));
+    line = [];
+  };
+
+  for (const node of nodes) {
+    if (node.type === 'break') {
+      flushLine();
+      result.push(node);
+    } else {
+      line.push(node);
+    }
+  }
+  flushLine();
+
+  return result;
+}
+
+function liftFormattedBoundaryWhitespace(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  const result: MarkdownInlineNode[] = [];
+
+  for (const node of nodes) {
+    if (!isImportedInlineContainer(node)) {
+      result.push(node);
+      continue;
+    }
+
+    const children = liftFormattedBoundaryWhitespace(node.children);
+    const leading = takeLeadingHorizontalWhitespace(children);
+    const trailing = takeTrailingHorizontalWhitespace(children);
+
+    if (leading) result.push({ type: 'text', value: leading } satisfies MarkdownText);
+    if (children.length > 0) result.push({ ...node, children });
+    if (trailing) result.push({ type: 'text', value: trailing } satisfies MarkdownText);
+  }
+
+  return mergeAdjacentText(result);
+}
+
+function takeLeadingHorizontalWhitespace(nodes: MarkdownInlineNode[]): string {
+  const first = nodes[0];
+  if (first?.type !== 'text') return '';
+
+  const match = /^[\t ]+/.exec(first.value);
+  if (!match) return '';
+
+  first.value = first.value.slice(match[0].length);
+  if (!first.value) nodes.shift();
+  return match[0];
+}
+
+function takeTrailingHorizontalWhitespace(nodes: MarkdownInlineNode[]): string {
+  const last = nodes[nodes.length - 1];
+  if (last?.type !== 'text') return '';
+
+  const match = /[\t ]+$/.exec(last.value);
+  if (!match) return '';
+
+  last.value = last.value.slice(0, -match[0].length);
+  if (!last.value) nodes.pop();
+  return match[0];
 }

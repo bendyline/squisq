@@ -31,8 +31,16 @@ import {
   useState,
   type CSSProperties,
 } from 'react';
-import type { Doc, MediaProvider, Theme } from '@bendyline/squisq/schemas';
+import type { Doc, MediaProvider, Theme, ViewportConfig } from '@bendyline/squisq/schemas';
+import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import {
+  EMPTY_ADVANCE_LOG,
+  advanceCoverage,
+  buildAdvanceTimingJson,
+  recordSlideShown,
+  type SlideAdvanceLog,
+} from '@bendyline/squisq/narration';
 import { useMediaRecorder, type RecorderSource } from './hooks/useMediaRecorder.js';
 import { useStreamPreview } from './hooks/useStreamPreview.js';
 import { requestCameraStream } from './sources/cameraStream.js';
@@ -54,7 +62,23 @@ import {
   type RecordingFilenameSeed,
 } from './formats.js';
 import { recordedMediaKind, type RecordedMediaKind } from './recordedMediaKind.js';
-import { buildTimingJson, encodeTimingJson, timingPathFor } from './timingJson.js';
+import {
+  buildTimingJson,
+  encodeNarrationTimingJson,
+  encodeTimingJson,
+  timingPathFor,
+} from './timingJson.js';
+import {
+  SLIDE_TIMING_CHECKBOX_LABEL,
+  clampSlideIndex,
+  isExpandedPanel,
+  panelModeAfterToggle,
+  showSlideTimingCheckbox,
+  unshownSlidesWarning,
+  type RecorderPanelMode,
+} from './slidesModePolicy.js';
+import { buildRecorderSlideDeck } from './slides/slideDeck.js';
+import { RecorderSlidesPanel } from './slides/RecorderSlidesPanel.js';
 import { useModalDialog } from '../modal/useModalDialog.js';
 import {
   useNarrationStage,
@@ -89,6 +113,36 @@ export interface RecorderNarrationOptions {
   recording: TeleprompterRecordingDeps | null;
 }
 
+/**
+ * Everything slides mode needs beyond the base recorder props. Supplying this
+ * with a non-null `doc` surfaces the "Show slides mode" checkbox; when
+ * checked, the dialog expands and the deck occupies the right column while
+ * capture controls stay on the left.
+ */
+export interface RecorderSlidesOptions {
+  /** Parsed document the deck is built from. Null hides the checkbox. */
+  doc: Doc | null;
+  /** Theme the slides render with — the same one the preview uses. */
+  theme: Theme;
+  /** Viewport the slides compose at. Defaults to landscape. */
+  viewport?: ViewportConfig;
+  /** Resolves relative media inside slides. Defaults to the modal's own provider. */
+  mediaProvider?: MediaProvider | null;
+  /** Base path for media URLs in the slide renderer. */
+  basePath?: string;
+  /**
+   * Turn slide advances made during the take into an authoritative per-block
+   * v3 timing sidecar on save.
+   *
+   * Only meaningful when the host inserts the take as a DOCUMENT-ANCHORED clip
+   * (the "Record document narration" entry) — that is the only clip
+   * `applyNarrationTiming` reads a sidecar for, so for an ordinary block-level
+   * recording the file would be written and never read. This flag is
+   * therefore also how the dialog learns it is in document-narration mode.
+   */
+  captureTimings?: boolean;
+}
+
 export interface RecorderModalProps {
   /** Required — recordings are written here. */
   mediaProvider: MediaProvider;
@@ -117,6 +171,14 @@ export interface RecorderModalProps {
   onSave?: (result: RecorderSaveResult) => void;
   /** Enables the "Show narration mode" checkbox. Omit for the classic dialog. */
   narration?: RecorderNarrationOptions | null;
+  /** Enables the "Show slides mode" checkbox. Omit for the classic dialog. */
+  slides?: RecorderSlidesOptions | null;
+  /**
+   * Dialog heading (also its accessible name). Defaults to `'Record media'`;
+   * hosts that open the dialog for a specific purpose — e.g. "Record document
+   * narration" — pass their own so the dialog names what it is capturing.
+   */
+  title?: string;
 }
 
 /**
@@ -155,12 +217,29 @@ export interface RecorderSaveResult {
   mimeType: string;
   /** Recording length in seconds. */
   duration: number;
-  /** Whether a narration sidecar was written. Always `false` for video sources. */
+  /**
+   * Whether a timing sidecar was written — either the v1 script sidecar for a
+   * mic take, or the v3 per-block sidecar from slide advances.
+   */
   hasTimingSidecar: boolean;
   /** Script text the user typed (narration only). */
   sourceText?: string;
   /** The paired camera file — present only for `source === 'screen+camera'`. */
   camera?: RecorderCameraSaveResult;
+  /** Present when slide advances were saved as a v3 per-block timing sidecar. */
+  slideTiming?: SlideTimingSaveResult;
+}
+
+/** What a presenter-advance timing write produced, for host status messaging. */
+export interface SlideTimingSaveResult {
+  /** Container path the sidecar was written to. */
+  sidecarPath: string;
+  /** Renderable blocks written into the sidecar. */
+  blockCount: number;
+  /** Blocks never shown during the take — they save as zero-length ranges. */
+  unshownCount: number;
+  /** Take length the block ranges were normalized against. */
+  durationSec: number;
 }
 
 // ── Styles ─────────────────────────────────────────────────────────
@@ -634,6 +713,8 @@ export function RecorderModal({
   onClose,
   onSave,
   narration = null,
+  slides = null,
+  title = 'Record media',
 }: RecorderModalProps) {
   const initialToggles = toggleStateFromMode(initialMode);
   const [micOn, setMicOn] = useState(initialToggles.micOn);
@@ -647,7 +728,14 @@ export function RecorderModal({
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [cameraPlaybackUrl, setCameraPlaybackUrl] = useState<string | null>(null);
   const [playbackPositionMs, setPlaybackPositionMs] = useState(0);
-  const [narrationOn, setNarrationOn] = useState(false);
+  // ONE mode, not two booleans: narration and slides both expand the dialog
+  // and both claim the right column, so checking either must structurally
+  // deselect the other. `narrationOn` stays as a derived alias so every
+  // existing narration branch reads exactly as it did.
+  const [panelMode, setPanelMode] = useState<RecorderPanelMode>('none');
+  const narrationOn = panelMode === 'narration';
+  const slidesOn = panelMode === 'slides';
+  const expanded = isExpandedPanel(panelMode);
   const [narrationRequesting, setNarrationRequesting] = useState(false);
   const [narrationPreview, setNarrationPreview] = useState<MediaStream | null>(null);
   const [deviceSettings, setDeviceSettings] = useState<RecorderDeviceSettings>(() => ({
@@ -741,6 +829,63 @@ export function RecorderModal({
   });
   const stageRef = useRef(stage);
   stageRef.current = stage;
+
+  // ── Slides mode ────────────────────────────────────────────────────
+  const slidesViewport = slides?.viewport ?? VIEWPORT_PRESETS.landscape;
+  const slideDeck = useMemo(
+    () => (slides?.doc ? buildRecorderSlideDeck(slides.doc, slides.theme, slidesViewport) : []),
+    [slides?.doc, slides?.theme, slidesViewport],
+  );
+  const slidesAvailable = slideDeck.length > 0;
+  const slidesCaptureTimings = Boolean(slides?.captureTimings && slides?.doc);
+  const [slideIndex, setSlideIndex] = useState(0);
+  const [advanceLog, setAdvanceLog] = useState<SlideAdvanceLog>(EMPTY_ADVANCE_LOG);
+  const [applySlideTimings, setApplySlideTimings] = useState(true);
+  // The index is read from an event handler that fires during a take, so it
+  // must not be a stale closure over a render.
+  const slideIndexRef = useRef(slideIndex);
+  slideIndexRef.current = slideIndex;
+  const advanceLogRef = useRef(advanceLog);
+  advanceLogRef.current = advanceLog;
+  const slideDeckRef = useRef(slideDeck);
+  slideDeckRef.current = slideDeck;
+
+  const shownBlockIds = useMemo(
+    () => new Set(advanceLog.map((advance) => advance.blockId)),
+    [advanceLog],
+  );
+
+  /**
+   * Move the deck, stamping the new slide's first showing when a take is
+   * rolling. `getElapsedMs()` returns null outside `'recording'`, which is
+   * what makes pre-roll browsing free: the presenter can line up a starting
+   * slide in `ready` without writing anything into the log.
+   */
+  const handleSlideIndexChange = useCallback(
+    (next: number) => {
+      const clamped = clampSlideIndex(next, slideDeckRef.current.length);
+      setSlideIndex(clamped);
+      const elapsedMs = recorder.getElapsedMs();
+      const blockId = slideDeckRef.current[clamped]?.blockId;
+      if (elapsedMs === null || !blockId) return;
+      setAdvanceLog((log) => recordSlideShown(log, blockId, elapsedMs));
+    },
+    [recorder],
+  );
+
+  // Leaving slides mode, or a doc edit that changes which blocks exist,
+  // invalidates the log's block ids — start over rather than save stale ones.
+  //
+  // Keyed on the ID LIST, not on the deck's object identity: the editor
+  // reparses on a debounce, so the deck is rebuilt whenever anything at all in
+  // the document changes. Resetting on identity would silently discard a
+  // rolling take's advances because the presenter fixed a typo.
+  const slideDeckKey = slideDeck.map((slide) => slide.blockId).join(' ');
+  useEffect(() => {
+    setAdvanceLog(EMPTY_ADVANCE_LOG);
+    setSlideIndex(0);
+  }, [panelMode, slideDeckKey]);
+
   const handleDeviceSettingsChange = useCallback(
     (next: RecorderDeviceSettings) => {
       setDeviceSettings(next);
@@ -946,11 +1091,16 @@ export function RecorderModal({
   const previousKeyRef = useRef(captureKey);
   // Retry-safe record of which dual files have already been written this save,
   // so a second `addMedia` that fails doesn't re-upload (and orphan) the first.
-  const dualSaveProgressRef = useRef<{ screenPath?: string; cameraPath?: string }>({});
+  const dualSaveProgressRef = useRef<{
+    screenPath?: string;
+    cameraPath?: string;
+    slideTiming?: SlideTimingSaveResult | null;
+  }>({});
   useEffect(() => {
     if (previousKeyRef.current !== captureKey) {
       previousKeyRef.current = captureKey;
       dualSaveProgressRef.current = {};
+      setAdvanceLog(EMPTY_ADVANCE_LOG);
       recorder.cancel();
     }
   }, [captureKey, recorder]);
@@ -1000,12 +1150,63 @@ export function RecorderModal({
     setSaveError(null);
     dualSaveProgressRef.current = {};
     recorder.start();
+    // Seed the log with whatever slide is already on screen, at t=0. Without
+    // this the first block would have no observation and would collapse to a
+    // zero-length range — the take begins on the slide the presenter chose.
+    const blockId = slideDeckRef.current[slideIndexRef.current]?.blockId;
+    setAdvanceLog(blockId ? recordSlideShown(EMPTY_ADVANCE_LOG, blockId, 0) : EMPTY_ADVANCE_LOG);
   }, [recorder]);
 
   const handleStop = useCallback(async () => {
     setSaveError(null);
     await recorder.stop();
   }, [recorder]);
+
+  /**
+   * Write the observed slide advances as a v3 per-block timing sidecar beside
+   * the saved media, or return null when this take doesn't get one.
+   *
+   * The sidecar lands at `<media>.timing.json`, the path
+   * `applyNarrationTiming` looks for on a document-anchored clip. That path is
+   * shared with the v1 script sidecar, so the two can never both be written —
+   * see the precedence ladder in `handleSave`.
+   */
+  const writeSlideTimingSidecar = useCallback(
+    async (
+      mediaRelativePath: string,
+      durationSec: number,
+    ): Promise<SlideTimingSaveResult | null> => {
+      const doc = slides?.doc;
+      if (!slidesOn || !slidesCaptureTimings || !applySlideTimings || !doc) return null;
+      const log = advanceLogRef.current;
+      if (log.length === 0) return null;
+
+      const timing = buildAdvanceTimingJson(doc, log, durationSec);
+      const encoded = encodeNarrationTimingJson(timing);
+      const sidecarPath = timingPathFor(mediaRelativePath);
+      // Prefer the container so the sidecar lands at the exact path the
+      // pipeline expects; addMedia may rename, which would orphan it.
+      if (container) {
+        await container.writeFile(sidecarPath, encoded, 'application/json');
+      } else {
+        const written = await mediaProvider.addMedia(sidecarPath, encoded, 'application/json');
+        if (written !== sidecarPath) {
+          console.warn(
+            `[squisq-recorder] block timings were saved as "${written}" instead of "${sidecarPath}" — they will not be applied.`,
+          );
+          return null;
+        }
+      }
+      const coverage = advanceCoverage(doc, log);
+      return {
+        sidecarPath,
+        blockCount: coverage.total,
+        unshownCount: coverage.unshown,
+        durationSec: timing.duration,
+      };
+    },
+    [slidesOn, slidesCaptureTimings, applySlideTimings, slides?.doc, container, mediaProvider],
+  );
 
   const handleSave = useCallback(async () => {
     if (!recorder.blob || !recorder.mimeType || !recorder.extension || !recorder.directory) {
@@ -1062,6 +1263,15 @@ export function RecorderModal({
         progress.cameraPath = cameraPath;
 
         const duration = recorder.durationMs / 1000;
+        // The sidecar belongs to the SCREEN file: `buildDocumentNarrationTags`
+        // emits the screen tag first and `applyNarrationTiming` takes the
+        // first document-anchored clip whose sidecar parses, and the screen
+        // clip has `startAt: 0` while the camera clip carries the skew (which
+        // would then be added to every block's time).
+        const slideTiming =
+          progress.slideTiming ?? (await writeSlideTimingSidecar(screenPath, duration));
+        progress.slideTiming = slideTiming;
+
         const offsetSec = recorder.cameraOffsetSec ?? 0;
         const result: RecorderSaveResult = {
           relativePath: screenPath,
@@ -1070,7 +1280,8 @@ export function RecorderModal({
           mediaKind: 'video',
           mimeType: recorder.mimeType,
           duration,
-          hasTimingSidecar: false,
+          hasTimingSidecar: slideTiming !== null,
+          ...(slideTiming ? { slideTiming } : {}),
           camera: {
             relativePath: cameraPath,
             filename: cameraFilename,
@@ -1103,9 +1314,15 @@ export function RecorderModal({
         recorder.mimeType,
       );
 
-      let hasTimingSidecar = false;
-      if (source === 'mic') {
-        const timing = buildTimingJson(sourceText, recorder.durationMs / 1000);
+      const duration = recorder.durationMs / 1000;
+      // Precedence, not a choice: v3 and v1 share `<media>.timing.json`, and
+      // v3 is a documented strict superset of v1 (it carries `sourceText`,
+      // `duration` and `bookmarks` too). Running the v1 branch afterwards
+      // would clobber the block timings with no error, so it is an `else`.
+      const slideTiming = await writeSlideTimingSidecar(relativePath, duration);
+      let hasTimingSidecar = slideTiming !== null;
+      if (!slideTiming && source === 'mic') {
+        const timing = buildTimingJson(sourceText, duration);
         const encoded = encodeTimingJson(timing);
         const sidecarPath = timingPathFor(relativePath);
         // Prefer direct container write so the sidecar lands at the
@@ -1131,11 +1348,14 @@ export function RecorderModal({
         source,
         mediaKind,
         mimeType: recorder.mimeType,
-        duration: recorder.durationMs / 1000,
+        duration,
         hasTimingSidecar,
       };
+      if (slideTiming) result.slideTiming = slideTiming;
       if (source === 'mic') {
-        result.sourceText = sourceText;
+        // With block timings on, `sourceText` is the doc's narration script,
+        // not the Script textarea (which is hidden in that mode).
+        result.sourceText = slideTiming ? undefined : sourceText;
       }
       onSave?.(result);
       handleClose();
@@ -1158,10 +1378,12 @@ export function RecorderModal({
     container,
     onSave,
     handleClose,
+    writeSlideTimingSidecar,
   ]);
 
   const handleDiscard = useCallback(() => {
     dualSaveProgressRef.current = {};
+    setAdvanceLog(EMPTY_ADVANCE_LOG);
     recorder.reset();
   }, [recorder]);
 
@@ -1179,6 +1401,23 @@ export function RecorderModal({
   const canStop = recorder.state === 'recording';
   const canSave = recorder.state === 'stopped' && recorder.blob !== null;
   const isBusy = recorder.state === 'requesting' || recorder.state === 'stopping' || isSaving;
+
+  // Slide advances are being recorded for this take, and the host can attach
+  // the resulting sidecar to something that will read it back.
+  const slidesTimingCapture = slidesOn && slidesCaptureTimings;
+  const showTimingCheckbox = showSlideTimingCheckbox({
+    slidesOn,
+    captureTimings: slidesCaptureTimings,
+    recorderState: recorder.state,
+    hasBlob: recorder.blob !== null,
+  });
+  const slideCoverage = useMemo(
+    () => (slides?.doc && showTimingCheckbox ? advanceCoverage(slides.doc, advanceLog) : null),
+    [slides?.doc, showTimingCheckbox, advanceLog],
+  );
+  const slideCoverageWarning = slideCoverage
+    ? unshownSlidesWarning(slideCoverage.total, slideCoverage.unshown)
+    : null;
 
   // Toggles lock while a stream is live (acquiring or recording) — changing
   // the capture config then would tear down the in-progress take.
@@ -1301,8 +1540,10 @@ export function RecorderModal({
         className="squisq-editor-shell"
         data-theme={colorScheme}
         data-narration={narrationOn ? 'true' : undefined}
+        data-slides={slidesOn ? 'true' : undefined}
+        data-panel-mode={panelMode}
         style={{
-          ...(narrationOn ? modalExpandedStyle : modalStyle),
+          ...(expanded ? modalExpandedStyle : modalStyle),
           ...recorderThemeStyle(colorScheme),
         }}
         onClick={(e) => e.stopPropagation()}
@@ -1312,11 +1553,11 @@ export function RecorderModal({
         tabIndex={-1}
       >
         <h2 id={headingId} style={titleStyle}>
-          Record media
+          {title}
         </h2>
 
-        <div style={narrationOn ? bodyRowStyle : undefined}>
-          <div style={narrationOn ? leftColStyle : undefined}>
+        <div style={expanded ? bodyRowStyle : undefined}>
+          <div style={expanded ? leftColStyle : undefined}>
             <div style={toggleRowStyle} role="group" aria-label="Capture sources">
               {TOGGLE_GROUPS.map((group, groupIndex) => (
                 <Fragment key={group.label}>
@@ -1360,7 +1601,9 @@ export function RecorderModal({
                   type="checkbox"
                   style={{ accentColor: 'var(--squisq-recorder-accent)' }}
                   checked={narrationOn}
-                  onChange={(e) => setNarrationOn(e.target.checked)}
+                  onChange={(e) =>
+                    setPanelMode(panelModeAfterToggle(panelMode, 'narration', e.target.checked))
+                  }
                   disabled={narrationToggleDisabled}
                   title={
                     narrationToggleDisabled
@@ -1371,6 +1614,26 @@ export function RecorderModal({
                   }
                 />
                 Show narration mode
+              </label>
+            )}
+
+            {slidesAvailable && (
+              <label style={checkboxRowStyle}>
+                <input
+                  type="checkbox"
+                  style={{ accentColor: 'var(--squisq-recorder-accent)' }}
+                  checked={slidesOn}
+                  onChange={(e) =>
+                    setPanelMode(panelModeAfterToggle(panelMode, 'slides', e.target.checked))
+                  }
+                  disabled={narrationToggleDisabled}
+                  title={
+                    narrationToggleDisabled
+                      ? 'Save or discard this recording before switching modes'
+                      : undefined
+                  }
+                />
+                Show slides mode
               </label>
             )}
 
@@ -1576,9 +1839,12 @@ export function RecorderModal({
               </div>
             )}
 
-            {/* Mode-specific fields. Narration mode prompts from the document, so
-            the free-text script is hidden. */}
-            {!narrationOn && source === 'mic' && (
+            {/* Mode-specific fields. Narration mode prompts from the document,
+            so the free-text script is hidden — and so does slide-timing
+            capture, whose sidecar takes its `sourceText` from the doc's own
+            narration script. Leaving the field visible there would invite the
+            user to type into a value that gets discarded. */}
+            {!narrationOn && !slidesTimingCapture && source === 'mic' && (
               <>
                 <label style={labelStyle} htmlFor="recorder-source-text">
                   Script (used to auto-match this narration to a block)
@@ -1611,6 +1877,28 @@ export function RecorderModal({
               <div style={recordingStatusStyle}>
                 ● Recording {formatDurationMs(recorder.durationMs)}
               </div>
+            )}
+
+            {/* Recording done, slides mode: offer to turn the advances into
+            block timings. Opt-out rather than opt-in — the presenter chose
+            this dialog and turned slides mode on, so recording the timings is
+            the point; unchecking just saves the media on its own. */}
+            {showTimingCheckbox && (
+              <>
+                <label style={checkboxRowStyle}>
+                  <input
+                    type="checkbox"
+                    style={{ accentColor: 'var(--squisq-recorder-accent)' }}
+                    checked={applySlideTimings}
+                    onChange={(e) => setApplySlideTimings(e.target.checked)}
+                    disabled={isSaving}
+                  />
+                  {SLIDE_TIMING_CHECKBOX_LABEL}
+                </label>
+                {applySlideTimings && slideCoverageWarning && (
+                  <p style={summaryStyle}>{slideCoverageWarning}</p>
+                )}
+              </>
             )}
 
             {/* Action buttons. Layout depends on state. Narration mode keeps
@@ -1759,6 +2047,21 @@ export function RecorderModal({
                 showRecordSlot={false}
                 showTransportPlay={false}
                 showReviewActions={false}
+              />
+            </div>
+          )}
+
+          {slidesOn && (
+            <div style={rightColStyle}>
+              <RecorderSlidesPanel
+                slides={slideDeck}
+                index={slideIndex}
+                onIndexChange={handleSlideIndexChange}
+                viewport={slidesViewport}
+                basePath={slides?.basePath}
+                mediaProvider={slides?.mediaProvider ?? mediaProvider}
+                recording={recorder.state === 'recording'}
+                shownBlockIds={shownBlockIds}
               />
             </div>
           )}

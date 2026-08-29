@@ -512,7 +512,7 @@
 /* ─── WYSIWYG Editor ─────────────────────────────────── */
 
 .squisq-wysiwyg-container {
-  background: #dcd8d0;
+  background: var(--squisq-desk-bg);
 }
 
 .squisq-wysiwyg-editor {
@@ -1763,6 +1763,14 @@
   --squisq-input-bg: #fff;
   --squisq-text: #1f2937;
   --squisq-text-muted: #6b7280;
+  /* The "desk" — every chrome surface the editing page floats on: the
+     WYSIWYG container behind the page, the block card and its preview
+     panel, the inline-preview gutter, and the outline pane. One token so
+     hosts re-tone the whole field at once instead of overriding each
+     pane; a host palette that clashes with this beige only has to rebind
+     here. Panes that want to sit apart from the desk should shade *from*
+     this value, not pick an unrelated color. */
+  --squisq-desk-bg: #dcd8d0;
   /* Match Monaco's canvas while its lazy-loaded editor is being prepared.
      RawEditor uses these for its editable loading fallback. */
   --squisq-editor-background: #ffffff;
@@ -1775,6 +1783,7 @@
   --squisq-input-bg: #374151;
   --squisq-text: #e5e7eb;
   --squisq-text-muted: #9ca3af;
+  --squisq-desk-bg: #0f1219;
   --squisq-editor-background: #1e1e1e;
   --squisq-editor-foreground: #d4d4d4;
 }
@@ -2144,11 +2153,6 @@
 
 .squisq-editor-shell[data-theme='dark'] .squisq-status-error {
   color: #f87171;
-}
-
-/* WYSIWYG Editor */
-.squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-container {
-  background: #0f1219;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-wysiwyg-editor {
@@ -4110,8 +4114,8 @@
   align-items: center;
   justify-content: center;
   padding: 12px 16px;
-  /* Same beige "desk" as the block card so the framed slide sits on it. */
-  background: #dcd8d0;
+  /* Same "desk" as the block card so the framed slide sits on it. */
+  background: var(--squisq-desk-bg);
   border-left: 1px solid #b0a99a;
   overflow: auto;
 }
@@ -4134,7 +4138,6 @@
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-block-preview-panel {
-  background: #0f1219;
   border-left-color: #2a3144;
 }
 
@@ -4148,8 +4151,8 @@
   height: 100%;
   min-height: 0;
   /* Matches the editor "desk" so the card body's top/bottom margin reads as
-     the same beige as the left/right sides rather than white. */
-  background: #dcd8d0;
+     the same tone as the left/right sides rather than white. */
+  background: var(--squisq-desk-bg);
 }
 
 .squisq-block-card-body {
@@ -4224,10 +4227,6 @@
 
 .squisq-block-card-add {
   margin-left: 8px;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-block-card {
-  background: #0f1219;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-block-card-body .squisq-wysiwyg-editor,
@@ -5121,7 +5120,7 @@
 .squisq-editor-shell {
   --squisq-preview-accent: #6366f1;
   --squisq-preview-accent-muted: #94a3b8;
-  --squisq-preview-gutter-bg: #dcd8d0;
+  --squisq-preview-gutter-bg: var(--squisq-desk-bg);
   --squisq-preview-card-bg: #ffffff;
   --squisq-preview-card-border: #e5e7eb;
   --squisq-preview-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
@@ -5276,7 +5275,9 @@
 
 .squisq-outline {
   padding: 12px 8px;
-  background: #dcd8d0;
+  /* Same desk as the inline-preview gutter on the other side of the
+     canvas — the two panes bracket the page as one continuous surface. */
+  background: var(--squisq-desk-bg);
   font-size: 13px;
   color: #1f2937;
   box-sizing: border-box;
@@ -5538,7 +5539,6 @@
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-outline {
-  background: #0f1219;
   color: #d1d5db;
 }
 
@@ -5546,7 +5546,7 @@
 .squisq-editor-shell[data-theme='dark'] {
   --squisq-preview-accent: #818cf8;
   --squisq-preview-accent-muted: #475569;
-  --squisq-preview-gutter-bg: #0f1219;
+  --squisq-preview-gutter-bg: var(--squisq-desk-bg);
   --squisq-preview-card-bg: #111827;
   --squisq-preview-card-border: #1f2937;
   --squisq-preview-card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);

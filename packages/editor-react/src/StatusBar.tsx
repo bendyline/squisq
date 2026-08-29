@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { countBlocks } from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
+import { useProofingState } from './proofing/ProofingContext';
 
 const STATS_DEBOUNCE_MS = 150;
 
@@ -24,6 +25,7 @@ export interface StatusBarProps {
  */
 export function StatusBar({ className, slotRight }: StatusBarProps) {
   const { markdownSource, doc, parseError } = useEditorContext();
+  const proofingState = useProofingState();
   const [statsSource, setStatsSource] = useState(markdownSource);
 
   useEffect(() => {
@@ -51,6 +53,33 @@ export function StatusBar({ className, slotRight }: StatusBarProps) {
       <span className="squisq-status-item">
         {blocks} {blocks === 1 ? 'block' : 'blocks'}
       </span>
+      {proofingState && proofingState.enabled && (
+        <button
+          type="button"
+          className={`squisq-status-item squisq-proof-status${
+            proofingState.status === 'error' ? ' squisq-proof-status--error' : ''
+          }`}
+          title={
+            proofingState.status === 'error'
+              ? `Proofing failed: ${proofingState.errorMessage ?? 'unknown error'} — click to retry`
+              : 'Toggle the proofing panel'
+          }
+          onClick={() => {
+            if (proofingState.status === 'error') proofingState.retrySetup();
+            else proofingState.setPanelVisible(!proofingState.panelVisible);
+          }}
+        >
+          {proofingState.status === 'loading' && 'Proofing…'}
+          {proofingState.status === 'error' && '⚠ Proofing'}
+          {proofingState.status === 'ready' &&
+            (proofingState.findings.length > 0
+              ? `${proofingState.findings.length} ${
+                  proofingState.findings.length === 1 ? 'issue' : 'issues'
+                }`
+              : '✓ Proofing')}
+          {proofingState.status === 'idle' && 'Proofing'}
+        </button>
+      )}
       <span className="squisq-status-spacer" />
       {parseError && (
         <span className="squisq-status-item squisq-status-error" title={parseError}>

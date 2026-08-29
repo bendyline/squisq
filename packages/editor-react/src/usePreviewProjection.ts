@@ -69,7 +69,22 @@ export function usePreviewProjection(
     // any generated slides before the player-ready document is materialized.
     const build = (sourceDoc: Doc): PreviewProjection => {
       const contentDoc = transformStyle ? applyTransform(sourceDoc, transformStyle).doc : sourceDoc;
-      return { contentDoc, playerDoc: buildPreviewDoc(contentDoc, { documentTitle }) };
+      // Image interleaving splices untimed 5s filler slides between blocks and
+      // then recomputes every startTime cumulatively. That is fine for a doc
+      // whose timeline is only a reading-time estimate, but once a
+      // document-anchored take OWNS the timeline — a narration recording, or
+      // presenter-driven slide timings — the filler shifts every later slide
+      // off the audio. A take's schedule wins over decoration.
+      const narrationOwnsTimeline = (contentDoc.documentMedia ?? []).some(
+        (clip) => clip.anchor === 'document',
+      );
+      return {
+        contentDoc,
+        playerDoc: buildPreviewDoc(contentDoc, {
+          documentTitle,
+          interleaveImages: !narrationOwnsTimeline,
+        }),
+      };
     };
     const commit = (next: PreviewProjection) => {
       setProjection((previous) => preserveEquivalentAudio(previous, next));

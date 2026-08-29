@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { EditorShell, ThemeCustomizerPanel } from '@bendyline/squisq-editor-react';
+import { siteProofingProvider, siteProofingIgnoreStore } from './harperConfig';
 import type {
   EditorColorScheme,
   WriteCanvasSettings,
@@ -760,6 +761,8 @@ export function App() {
                 themeInheritance={writeThemeInheritance}
                 findMode={findMode}
                 onFindModeChange={setFindMode}
+                proofing={siteProofingProvider}
+                proofingIgnoreStore={siteProofingIgnoreStore}
               />
             </div>
 

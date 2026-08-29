@@ -68,6 +68,10 @@
       "types": "./dist/teleprompter/index.d.ts",
       "import": "./dist/teleprompter/index.js"
     },
+    "./proofing": {
+      "types": "./dist/proofing/index.d.ts",
+      "import": "./dist/proofing/index.js"
+    },
     "./styles": {
       "types": "./dist/styles/index.d.ts",
       "default": "./dist/styles/index.css"
@@ -79,9 +83,15 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
+    "harper.js": "^2.7.0",
     "monaco-editor": "~0.50.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "harper.js": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@bendyline/squisq": "2.9.0",
@@ -112,6 +122,7 @@
     "@monaco-editor/react": "4.7.0",
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
+    "harper.js": "2.7.0",
     "monaco-editor": "0.50.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",

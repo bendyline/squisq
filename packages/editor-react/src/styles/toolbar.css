@@ -634,6 +634,16 @@
   visibility: hidden;
 }
 
+/* Plain buttons past the measured overflow point are already represented in
+   the ··· menu. `overflow: hidden` on the actions row stops them painting, but
+   a clipped button stays in the tab order and still reports an on-screen rect,
+   so hosts that give the row less width end up with unreachable duplicates.
+   Same `visibility` trick as above: the layout box survives, so the
+   measurement still notices when the button fits again. */
+.squisq-toolbar-button--overflowed {
+  visibility: hidden;
+}
+
 .squisq-toolbar-view-tab {
   /* Top padding is asymmetric — bumped 4px above the bottom — so the
      label sits more vertically centered alongside the neighboring

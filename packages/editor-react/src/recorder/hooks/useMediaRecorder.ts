@@ -153,6 +153,16 @@ export interface UseMediaRecorderResult {
   directory: 'audio' | 'video' | null;
   /** Milliseconds elapsed since `start()` was called. Updates ~10× per second while recording. */
   durationMs: number;
+  /**
+   * Milliseconds since `start()`, read at the moment of the call — or null
+   * when no take is rolling.
+   *
+   * The companion of `durationMs`, for callers that need to STAMP an event
+   * rather than display a clock. `durationMs` is a 10 Hz state value and so
+   * lags by up to one tick, which is fine for a readout but not for recording
+   * when the presenter advanced a slide.
+   */
+  getElapsedMs: () => number | null;
   /** Most recent error, if any. */
   error: Error | null;
   /**
@@ -801,6 +811,21 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
     }, 100);
   }, [clearTicker, deactivateCapture, transition]);
 
+  /**
+   * Exact take-relative elapsed time, for stamping an event as it happens.
+   *
+   * A callback rather than a returned `startedAtMs` value: the start timestamp
+   * lives in a ref, and reading a ref during render is only safe here by
+   * coincidence (every mutation happens to coincide with a state transition).
+   * A callback has no such coupling, adds no renders, and hands the caller an
+   * unquantized value.
+   */
+  const getElapsedMs = useCallback((): number | null => {
+    if (stateRef.current !== 'recording') return null;
+    const startedAt = startTimestampRef.current;
+    return startedAt === null ? null : Math.max(0, Date.now() - startedAt);
+  }, []);
+
   const stop = useCallback((): Promise<Blob | null> => {
     if (stopPromiseRef.current) return stopPromiseRef.current;
     const rec = recorderRef.current;
@@ -891,6 +916,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
     extension: format?.extension ?? null,
     directory: format?.directory ?? null,
     durationMs,
+    getElapsedMs,
     error,
     camera,
     cameraOffsetSec,

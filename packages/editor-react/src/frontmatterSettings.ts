@@ -4,6 +4,7 @@ import {
   DEFAULT_COVER_SLIDE_SETTINGS,
   DEFAULT_DASHBOARD_SETTINGS,
 } from '@bendyline/squisq/doc';
+import { DEFAULT_PROOF_SETTINGS, PROOF_FRONTMATTER_KEYS } from '@bendyline/squisq/proof';
 
 /** Canonical and legacy keys for frontmatter settings managed by the editor. */
 export const FRONTMATTER_SETTING_KEYS = {
@@ -25,6 +26,8 @@ export const FRONTMATTER_SETTING_KEYS = {
   dashboardLayout: DASHBOARD_FRONTMATTER_KEYS.layout,
   dashboardTitle: DASHBOARD_FRONTMATTER_KEYS.showTitle,
   dashboardStyle: DASHBOARD_FRONTMATTER_KEYS.style,
+  proofing: PROOF_FRONTMATTER_KEYS.enabled,
+  proofDialect: PROOF_FRONTMATTER_KEYS.dialect,
 } as const;
 
 /** Runtime defaults whose equivalent frontmatter entries can be omitted. */
@@ -44,6 +47,8 @@ export const FRONTMATTER_SETTING_DEFAULTS = {
   dashboardLayout: DEFAULT_DASHBOARD_SETTINGS.layout,
   dashboardTitle: DEFAULT_DASHBOARD_SETTINGS.showTitle,
   dashboardStyle: DEFAULT_DASHBOARD_SETTINGS.style,
+  proofing: DEFAULT_PROOF_SETTINGS.enabled,
+  proofDialect: DEFAULT_PROOF_SETTINGS.dialect,
 } as const;
 
 /** Return `null` when a setting matches its runtime default so writers remove it. */

@@ -23,10 +23,19 @@
 
 import { useCallback, useMemo } from 'react';
 import { resolveThemeForDoc } from '@bendyline/squisq/doc';
+import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { RecorderPanel } from './recorder/RecorderPanel.js';
-import type { RecorderNarrationOptions, RecorderSaveResult } from './recorder/RecorderModal.js';
+import type {
+  RecorderNarrationOptions,
+  RecorderSaveResult,
+  RecorderSlidesOptions,
+} from './recorder/RecorderModal.js';
 import { insertMediaBlock, insertMediaBlocks } from './recorder/insertMediaBlock.js';
 import { buildDualClipInsertion } from './recorder/dualClipInsertion.js';
+import {
+  buildDocumentNarrationTags,
+  insertDocumentNarration,
+} from './recorder/documentNarrationInsertion.js';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettingsOptional } from './PreviewControls';
 import { markdownFencedCodeLineMask } from './markdownCodeFence';
@@ -76,13 +85,32 @@ function annotateMonacoHeading(
   return false;
 }
 
+/**
+ * Where a save lands.
+ *
+ * - `'cursor'` (default) — an ordinary "Record media" insert: the clip goes in
+ *   at the caret and, for video, stays locked to the block that hosts it.
+ * - `'document-narration'` — the take runs alongside the WHOLE document: the
+ *   tag is written at the top of the first block (so it starts at t=0) and
+ *   video is emitted unlocked, as a document-anchored overlay. See
+ *   `recorder/documentNarrationInsertion.ts`.
+ */
+export type RecorderEntryMode = 'cursor' | 'document-narration';
+
 export interface RecorderEntryProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   showTrigger?: boolean;
+  /** Insertion behaviour for a successful save. Defaults to `'cursor'`. */
+  mode?: RecorderEntryMode;
 }
 
-export function RecorderEntry({ open, onOpenChange, showTrigger = true }: RecorderEntryProps = {}) {
+export function RecorderEntry({
+  open,
+  onOpenChange,
+  showTrigger = true,
+  mode = 'cursor',
+}: RecorderEntryProps = {}) {
   const {
     mediaProvider,
     workspaceContainer,
@@ -105,7 +133,15 @@ export function RecorderEntry({ open, onOpenChange, showTrigger = true }: Record
   const previewSettings = usePreviewSettingsOptional();
   const theme = previewSettings?.activeTheme ?? resolveThemeForDoc(doc);
 
+  const isDocumentNarration = mode === 'document-narration';
+
   const narration = useMemo<RecorderNarrationOptions | null>(() => {
+    // Teleprompter narration owns its own save pipeline (it writes an
+    // `{[audio … anchor=document]}` preamble itself and never fires `onSave`),
+    // so offering it here would silently bypass this entry's insertion and
+    // could leave two document-anchored tracks. The document-narration entry
+    // is the plain capture dialog.
+    if (isDocumentNarration) return null;
     if (!allowNarrate || !mediaProvider) return null;
     return {
       doc,
@@ -119,6 +155,7 @@ export function RecorderEntry({ open, onOpenChange, showTrigger = true }: Record
       },
     };
   }, [
+    isDocumentNarration,
     allowNarrate,
     mediaProvider,
     doc,
@@ -129,9 +166,34 @@ export function RecorderEntry({ open, onOpenChange, showTrigger = true }: Record
     bumpMediaRevision,
   ]);
 
+  // Slides mode is offered in BOTH entries — it is a presenter aid in its own
+  // right. Only document narration sets `captureTimings`, because only its
+  // take becomes a document-anchored clip, and that is the one kind of clip
+  // `applyNarrationTiming` ever reads a timing sidecar for.
+  const slides = useMemo<RecorderSlidesOptions | null>(() => {
+    if (!doc) return null;
+    return {
+      doc,
+      theme,
+      viewport: previewSettings?.activeViewport ?? VIEWPORT_PRESETS.landscape,
+      mediaProvider,
+      captureTimings: isDocumentNarration,
+    };
+  }, [doc, theme, previewSettings?.activeViewport, mediaProvider, isDocumentNarration]);
+
   const handleSave = useCallback(
     (result: RecorderSaveResult) => {
       bumpMediaRevision();
+
+      // Document narration ignores the caret entirely — the take belongs at the
+      // top of the first block regardless of which view is active, and every
+      // view is fed from the same markdown source. One write, from the current
+      // snapshot (the single-write rule).
+      if (isDocumentNarration) {
+        const tags = buildDocumentNarrationTags(result);
+        setMarkdownSource(insertDocumentNarration(markdownSource, tags));
+        return;
+      }
 
       if (result.mediaKind === 'audio') {
         // Every audio-only result gets compact playback controls. Narration
@@ -201,6 +263,7 @@ export function RecorderEntry({ open, onOpenChange, showTrigger = true }: Record
       setMarkdownSource(markdownSource ? `${markdownSource}\n\n${videoTag}` : videoTag);
     },
     [
+      isDocumentNarration,
       activeView,
       monacoEditor,
       tiptapEditor,
@@ -219,11 +282,17 @@ export function RecorderEntry({ open, onOpenChange, showTrigger = true }: Record
       container={workspaceContainer}
       colorScheme={colorScheme}
       narration={narration}
+      slides={slides}
       onSave={handleSave}
       className="squisq-toolbar-button"
       open={open}
       onOpenChange={onOpenChange}
       showTrigger={showTrigger}
+      // A document narration is a talking head over the whole doc, so start
+      // the dialog on the camera rather than the mic.
+      initialMode={isDocumentNarration ? 'camera' : 'mic'}
+      tooltip={isDocumentNarration ? 'Record document narration' : 'Record media'}
+      title={isDocumentNarration ? 'Record document narration' : 'Record media'}
     />
   );
 }
