@@ -234,7 +234,7 @@
   font-style: italic;
 }
 
-/* ── Hover tooltip (portaled; passive twin of the menu) ───────────── */
+/* ── Hover card (portaled; interactive twin of the menu) ──────────── */
 
 .squisq-proof-tooltip {
   max-width: 320px;
@@ -246,7 +246,6 @@
   font-size: 12px;
   line-height: 1.4;
   color: #333;
-  pointer-events: none;
 }
 
 .squisq-proof-tooltip-head {
@@ -276,28 +275,67 @@
   margin-top: 6px;
 }
 
-.squisq-proof-tooltip-label {
-  color: #777;
-  font-size: 11px;
-}
-
 .squisq-proof-tooltip-chip {
-  padding: 1px 6px;
+  border: 1px solid transparent;
+  padding: 2px 8px;
   border-radius: 4px;
   background: #f0f4ff;
   color: #1a3d8f;
+  font: inherit;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.squisq-proof-tooltip-chip:hover,
+.squisq-proof-tooltip-chip:focus-visible {
+  background: #dfe8ff;
+  border-color: #b7c8f5;
+  outline: none;
 }
 
 .squisq-proof-tooltip-more {
-  color: #999;
+  border: none;
+  background: transparent;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: #777;
+  font: inherit;
   font-size: 11px;
+  cursor: pointer;
 }
 
-.squisq-proof-tooltip-hint {
+.squisq-proof-tooltip-more:hover,
+.squisq-proof-tooltip-more:focus-visible {
+  color: #333;
+  background: #f0f0f0;
+  outline: none;
+}
+
+.squisq-proof-tooltip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
   margin-top: 6px;
-  color: #999;
+  padding-top: 5px;
+  border-top: 1px solid #eee;
+}
+
+.squisq-proof-tooltip-action {
+  border: none;
+  background: transparent;
+  padding: 3px 6px;
+  border-radius: 4px;
+  color: #666;
+  font: inherit;
   font-size: 11px;
+  cursor: pointer;
+}
+
+.squisq-proof-tooltip-action:hover,
+.squisq-proof-tooltip-action:focus-visible {
+  background: #f0f0f0;
+  color: #222;
+  outline: none;
 }
 
 /* ── Status bar segment ─────────────────────────────────────────────── */
@@ -427,8 +465,25 @@
   color: #cddcff;
 }
 
-.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-label,
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-chip:hover,
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-chip:focus-visible {
+  background: #3f4e68;
+  border-color: #56688a;
+}
+
 .squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-more,
-.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-hint {
-  color: #888;
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-action {
+  color: #999;
+}
+
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-more:hover,
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-more:focus-visible,
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-action:hover,
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-action:focus-visible {
+  background: #333;
+  color: #eee;
+}
+
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-actions {
+  border-top-color: #3a3a3a;
 }

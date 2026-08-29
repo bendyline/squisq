@@ -51,6 +51,13 @@ const ATOM_PLACEHOLDER = String.fromCharCode(0);
 const LINT_DEBOUNCE_MS = 450;
 /** Dwell before the Write view explains a squiggle, matching Monaco's hover feel. */
 const HOVER_DELAY_MS = 300;
+/**
+ * Grace period before a hover card closes once the pointer leaves the
+ * squiggle. The card carries buttons, so the pointer has to be able to
+ * cross the gap to reach them — every dismissal path is delayed by this
+ * except the deliberate ones (a click in the text, a scroll).
+ */
+const HOVER_CLOSE_DELAY_MS = 260;
 
 /**
  * Which document's ignore set an engine currently holds.
@@ -123,9 +130,17 @@ export interface ProofingState {
   openMenu: (anchor: ProofingMenuAnchor) => void;
   closeMenu: () => void;
   menuAnchor: ProofingMenuAnchor | null;
-  /** The squiggle currently explained by the hover tooltip, if any. */
+  /** The squiggle currently explained by the hover card, if any. */
   hoverAnchor: ProofingHoverAnchor | null;
   closeHover: () => void;
+  /**
+   * The pointer entered the hover card — cancel the close armed when it
+   * left the squiggle. Without this pair the card could not be clicked:
+   * reaching for a button would dismiss it.
+   */
+  holdHover: () => void;
+  /** The pointer left the hover card — close it after the grace period. */
+  releaseHover: () => void;
   /** Retry a failed engine load. */
   retrySetup: () => void;
 }
@@ -175,6 +190,14 @@ export function useProofing(): ProofingState | null {
   const collectionRef = useRef<MonacoEditorNs.IEditorDecorationsCollection | null>(null);
   const sourceOrderRef = useRef<string[]>([]);
   const lastWriteDecorationsRef = useRef<TiptapProofDecoration[]>([]);
+
+  // Hover-card lifecycle. Held at hook scope rather than inside the
+  // tracking effect because the card itself steers it: entering the card
+  // cancels the pending close, leaving it re-arms one.
+  const hoverOpenTimerRef = useRef<number | undefined>(undefined);
+  const hoverCloseTimerRef = useRef<number | undefined>(undefined);
+  const hoveredFindingRef = useRef<string | null>(null);
+  const hoverHeldRef = useRef(false);
 
   // ── Settings & effective enable ─────────────────────────────────────
   const settings = useMemo(() => readProofingSettings(markdownDoc?.frontmatter), [markdownDoc]);
@@ -533,61 +556,115 @@ export function useProofing(): ProofingState | null {
     };
   }, [tiptapEditor, enabled, status]);
 
-  // ── Hover explanation (Write view) ──────────────────────────────────
+  // ── Hover card (Write view) ─────────────────────────────────────────
   // The Source view gets this from Monaco's own hover card (see
   // `proofDecorationOptions`); ProseMirror has no equivalent, so the
   // squiggle spans are tracked directly. Hit-testing reads the
   // decoration's `data-proof-id` attribute instead of `posAtCoords`,
-  // which snaps to the NEAREST position and would pop a tooltip for a
-  // word the pointer is merely beside.
+  // which snaps to the NEAREST position and would pop a card for a word
+  // the pointer is merely beside.
+  //
+  // The card is interactive, so leaving the squiggle only ARMS a close:
+  // the pointer needs time to cross the gap, and `holdHover` (fired by
+  // the card's own pointer-enter) cancels the pending close when it
+  // lands. Only a click in the text or a scroll dismisses immediately.
+  const cancelHoverTimers = useCallback(() => {
+    if (hoverOpenTimerRef.current !== undefined) window.clearTimeout(hoverOpenTimerRef.current);
+    if (hoverCloseTimerRef.current !== undefined) window.clearTimeout(hoverCloseTimerRef.current);
+    hoverOpenTimerRef.current = undefined;
+    hoverCloseTimerRef.current = undefined;
+  }, []);
+
+  const closeHover = useCallback(() => {
+    cancelHoverTimers();
+    hoveredFindingRef.current = null;
+    hoverHeldRef.current = false;
+    setHoverAnchor(null);
+  }, [cancelHoverTimers]);
+
+  const scheduleHoverClose = useCallback(() => {
+    if (hoverOpenTimerRef.current !== undefined) {
+      window.clearTimeout(hoverOpenTimerRef.current);
+      hoverOpenTimerRef.current = undefined;
+    }
+    if (hoverCloseTimerRef.current !== undefined) window.clearTimeout(hoverCloseTimerRef.current);
+    hoverCloseTimerRef.current = window.setTimeout(() => {
+      hoverCloseTimerRef.current = undefined;
+      // The pointer reached the card during the grace period — it now
+      // owns the lifecycle until `releaseHover`.
+      if (hoverHeldRef.current) return;
+      hoveredFindingRef.current = null;
+      setHoverAnchor(null);
+    }, HOVER_CLOSE_DELAY_MS);
+  }, []);
+
+  /** The pointer is over the card — keep it up. */
+  const holdHover = useCallback(() => {
+    hoverHeldRef.current = true;
+    if (hoverCloseTimerRef.current !== undefined) {
+      window.clearTimeout(hoverCloseTimerRef.current);
+      hoverCloseTimerRef.current = undefined;
+    }
+  }, []);
+
+  /** The pointer left the card — close it after the same grace period. */
+  const releaseHover = useCallback(() => {
+    hoverHeldRef.current = false;
+    scheduleHoverClose();
+  }, [scheduleHoverClose]);
+
   useEffect(() => {
     if (!enabled || status !== 'ready') return;
     const editor = tiptapEditor;
     if (!editor || editor.isDestroyed) return;
     const dom = editor.view.dom;
-    let timer: number | undefined;
-    let hoveredId: string | null = null;
-
-    const clearHover = () => {
-      if (timer !== undefined) window.clearTimeout(timer);
-      timer = undefined;
-      hoveredId = null;
-      setHoverAnchor(null);
-    };
 
     const onMouseMove = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       const span = target?.closest?.('[data-proof-id]') as HTMLElement | null;
       const findingId = span?.getAttribute('data-proof-id') ?? null;
       if (!span || !findingId) {
-        if (hoveredId !== null) clearHover();
+        if (hoveredFindingRef.current !== null) scheduleHoverClose();
         return;
       }
-      // Same squiggle, still hovered — leave the pending timer or the
-      // shown tooltip exactly as they are.
-      if (findingId === hoveredId) return;
-      if (timer !== undefined) window.clearTimeout(timer);
-      hoveredId = findingId;
+      // Same squiggle — the card (or its pending open) stays, and a
+      // close armed by a brief excursion off the word is called off.
+      if (findingId === hoveredFindingRef.current) {
+        if (hoverCloseTimerRef.current !== undefined) {
+          window.clearTimeout(hoverCloseTimerRef.current);
+          hoverCloseTimerRef.current = undefined;
+        }
+        return;
+      }
+      cancelHoverTimers();
+      hoverHeldRef.current = false;
+      hoveredFindingRef.current = findingId;
       setHoverAnchor(null);
-      timer = window.setTimeout(() => {
-        timer = undefined;
+      hoverOpenTimerRef.current = window.setTimeout(() => {
+        hoverOpenTimerRef.current = undefined;
         const rect = span.getBoundingClientRect();
         setHoverAnchor({ findingId, left: rect.left, top: rect.top, bottom: rect.bottom });
       }, HOVER_DELAY_MS);
     };
 
+    // Leaving the editor is how the pointer REACHES a card sitting below
+    // the text, so it arms the close rather than performing it.
+    const onMouseLeave = () => {
+      if (hoveredFindingRef.current !== null) scheduleHoverClose();
+    };
+
     dom.addEventListener('mousemove', onMouseMove);
-    dom.addEventListener('mouseleave', clearHover);
-    dom.addEventListener('mousedown', clearHover);
-    window.addEventListener('scroll', clearHover, true);
+    dom.addEventListener('mouseleave', onMouseLeave);
+    dom.addEventListener('mousedown', closeHover);
+    window.addEventListener('scroll', closeHover, true);
     return () => {
       dom.removeEventListener('mousemove', onMouseMove);
-      dom.removeEventListener('mouseleave', clearHover);
-      dom.removeEventListener('mousedown', clearHover);
-      window.removeEventListener('scroll', clearHover, true);
-      clearHover();
+      dom.removeEventListener('mouseleave', onMouseLeave);
+      dom.removeEventListener('mousedown', closeHover);
+      window.removeEventListener('scroll', closeHover, true);
+      closeHover();
     };
-  }, [tiptapEditor, enabled, status]);
+  }, [tiptapEditor, enabled, status, cancelHoverTimers, closeHover, scheduleHoverClose]);
 
   useEffect(() => {
     if (!enabled || status !== 'ready') return;
@@ -931,15 +1008,17 @@ export function useProofing(): ProofingState | null {
     setStatus('idle');
     setRetryNonce((nonce) => nonce + 1);
   }, []);
-  const openMenu = useCallback((anchor: ProofingMenuAnchor) => {
-    // The menu supersedes the tooltip: it says everything the tooltip
-    // does and can act on it.
-    setHoverAnchor(null);
-    setMenuAnchor(anchor);
-  }, []);
+  const openMenu = useCallback(
+    (anchor: ProofingMenuAnchor) => {
+      // The menu supersedes the hover card: it says everything the card
+      // does, plus the actions that did not fit on it.
+      closeHover();
+      setMenuAnchor(anchor);
+    },
+    [closeHover],
+  );
   openMenuRef.current = openMenu;
   const closeMenu = useCallback(() => setMenuAnchor(null), []);
-  const closeHover = useCallback(() => setHoverAnchor(null), []);
 
   // A factory capability has no instance until activation, so fall back
   // to the capability itself when it is already an instance and assume
@@ -974,6 +1053,8 @@ export function useProofing(): ProofingState | null {
       menuAnchor,
       hoverAnchor,
       closeHover,
+      holdHover,
+      releaseHover,
       retrySetup,
     };
   }, [
@@ -998,6 +1079,8 @@ export function useProofing(): ProofingState | null {
     menuAnchor,
     hoverAnchor,
     closeHover,
+    holdHover,
+    releaseHover,
     retrySetup,
   ]);
 }

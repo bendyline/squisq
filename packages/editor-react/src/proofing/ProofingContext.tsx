@@ -30,8 +30,8 @@ export function ProofingRoot({ children }: { children: ReactNode }): JSX.Element
     state?.menuAnchor != null
       ? (state.findings.find((finding) => finding.id === state.menuAnchor?.findingId) ?? null)
       : null;
-  // The menu wins when both are live — it carries the same explanation
-  // plus the actions.
+  // The menu wins when both are live — it is the same explanation with
+  // the full action list, opened deliberately.
   const hoverFinding =
     state?.hoverAnchor != null && !state.menuAnchor
       ? (state.findings.find((finding) => finding.id === state.hoverAnchor?.findingId) ?? null)
@@ -70,6 +70,26 @@ export function ProofingRoot({ children }: { children: ReactNode }): JSX.Element
           anchor={state.hoverAnchor}
           finding={hoverFinding}
           colorScheme={colorScheme}
+          onApply={(index) => {
+            state.applySuggestion(hoverFinding.id, index);
+            state.closeHover();
+          }}
+          onIgnore={() => {
+            state.ignoreFinding(hoverFinding.id);
+            state.closeHover();
+          }}
+          onAddToAppDictionary={() => {
+            state.addToAppDictionary(hoverFinding.id);
+            state.closeHover();
+          }}
+          onAddToDocWordList={() => {
+            state.addToDocWordList(hoverFinding.id);
+            state.closeHover();
+          }}
+          canAddToAppDictionary={state.canAddToAppDictionary}
+          onMore={(x, y) => state.openMenu({ findingId: hoverFinding.id, x, y })}
+          onHold={state.holdHover}
+          onRelease={state.releaseHover}
         />
       )}
     </ProofingStateContext.Provider>

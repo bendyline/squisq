@@ -1,27 +1,45 @@
 /**
- * Hover readout for a squiggle — the passive sibling of
+ * Hover card for a squiggle — the pointer-driven sibling of
  * `ProofingMenu`. It answers "what is wrong here?" without the user
- * having to right-click: category, the engine's message, and a preview
- * of the top suggestions (applying one still goes through the menu).
+ * having to right-click, and now also acts on the answer: the
+ * suggestions are buttons, and the same Ignore / dictionary actions the
+ * menu offers sit beneath them.
  *
- * Deliberately `pointer-events: none` and portaled: it never steals a
- * click from the text underneath, so it needs no outside-click or
- * hover-bridge handling — the pointer tracking in `useProofing` owns
- * its whole lifecycle.
+ * Being interactive is what makes the pointer lifecycle non-trivial:
+ * the card is portaled and sits a few pixels off the flagged word, so
+ * `useProofing` arms a close when the pointer leaves the squiggle and
+ * this card cancels it (`onHold`) the moment the pointer arrives. Every
+ * action closes the card explicitly, because after applying a
+ * suggestion the finding it describes no longer exists.
  */
 
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { ProofFinding } from '@bendyline/squisq/proof';
-import { PROOF_CATEGORY_LABELS, proofSuggestionLabels } from './findingText';
+import { PROOF_CATEGORY_LABELS, proofSuggestionLabel } from './findingText';
 import type { ProofingHoverAnchor } from './useProofing';
 
 export interface ProofingTooltipProps {
   anchor: ProofingHoverAnchor;
   finding: ProofFinding;
   colorScheme: 'light' | 'dark';
+  onApply: (suggestionIndex: number) => void;
+  onIgnore: () => void;
+  /** Accept the word app-wide (host storage). */
+  onAddToAppDictionary: () => void;
+  /** Accept the word in this document's frontmatter word list. */
+  onAddToDocWordList: () => void;
+  /** Hide the app-dictionary item when the host persists nothing. */
+  canAddToAppDictionary: boolean;
+  /** Open the full menu at these client coordinates (overflow suggestions). */
+  onMore: (x: number, y: number) => void;
+  /** Pointer entered the card — cancel the pending close. */
+  onHold: () => void;
+  /** Pointer left the card — re-arm the close. */
+  onRelease: () => void;
 }
 
+/** Suggestions shown as buttons; the rest live behind "more". */
 const MAX_SUGGESTIONS = 3;
 
 /** Below the squiggle by default, flipped above / clamped to the viewport. */
@@ -47,6 +65,14 @@ export function ProofingTooltip({
   anchor,
   finding,
   colorScheme,
+  onApply,
+  onIgnore,
+  onAddToAppDictionary,
+  onAddToDocWordList,
+  canAddToAppDictionary,
+  onMore,
+  onHold,
+  onRelease,
 }: ProofingTooltipProps): JSX.Element {
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<CSSProperties>(() => computeStyle(anchor));
@@ -58,8 +84,11 @@ export function ProofingTooltip({
     setStyle(computeStyle(anchor, tooltipRef.current));
   }, [anchor, finding.id]);
 
-  const labels = proofSuggestionLabels(finding, MAX_SUGGESTIONS);
-  const extra = finding.suggestions.length - labels.length;
+  const suggestions = finding.suggestions.slice(0, MAX_SUGGESTIONS);
+  const extra = finding.suggestions.length - suggestions.length;
+  // Only an unknown WORD can be dictionary material; a grammar or style
+  // finding spans a phrase. Same rule as `ProofingMenu`.
+  const showAddWord = finding.category === 'spelling';
 
   return createPortal(
     <div
@@ -67,8 +96,14 @@ export function ProofingTooltip({
       className="squisq-proof-tooltip"
       data-theme={colorScheme}
       data-proof-tooltip-id={finding.id}
-      role="tooltip"
+      role="group"
+      aria-label={`${PROOF_CATEGORY_LABELS[finding.category]} suggestion`}
       style={style}
+      onMouseEnter={onHold}
+      onMouseLeave={onRelease}
+      // The card lives outside the editor, so a click in it would blur
+      // the selection an applied suggestion needs.
+      onMouseDown={(event) => event.preventDefault()}
     >
       <div className="squisq-proof-tooltip-head">
         <span className={`squisq-proof-dot squisq-proof-dot--${finding.category}`} aria-hidden />
@@ -77,18 +112,58 @@ export function ProofingTooltip({
         </span>
       </div>
       <div className="squisq-proof-tooltip-message">{finding.message}</div>
-      {labels.length > 0 && (
+      {suggestions.length > 0 && (
         <div className="squisq-proof-tooltip-suggestions">
-          <span className="squisq-proof-tooltip-label">Suggested</span>
-          {labels.map((label, index) => (
-            <span key={`${index}-${label}`} className="squisq-proof-tooltip-chip">
-              {label}
-            </span>
+          {suggestions.map((suggestion, index) => (
+            <button
+              key={`${index}-${suggestion.kind}-${suggestion.text}`}
+              type="button"
+              className="squisq-proof-tooltip-chip"
+              onClick={() => onApply(index)}
+            >
+              {proofSuggestionLabel(suggestion)}
+            </button>
           ))}
-          {extra > 0 && <span className="squisq-proof-tooltip-more">+{extra} more</span>}
+          {extra > 0 && (
+            <button
+              type="button"
+              className="squisq-proof-tooltip-more"
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect();
+                onMore(rect.left, rect.bottom);
+              }}
+            >
+              +{extra} more
+            </button>
+          )}
         </div>
       )}
-      <div className="squisq-proof-tooltip-hint">Right-click for options</div>
+      <div className="squisq-proof-tooltip-actions">
+        <button type="button" className="squisq-proof-tooltip-action" onClick={onIgnore}>
+          Ignore
+        </button>
+        {/* Two deliberately distinct scopes: the app dictionary is
+            invisible to the file, the document word list is written into
+            its frontmatter — so the labels have to say so. */}
+        {showAddWord && canAddToAppDictionary && (
+          <button
+            type="button"
+            className="squisq-proof-tooltip-action"
+            onClick={onAddToAppDictionary}
+          >
+            Add to dictionary
+          </button>
+        )}
+        {showAddWord && (
+          <button
+            type="button"
+            className="squisq-proof-tooltip-action"
+            onClick={onAddToDocWordList}
+          >
+            Add to document word list
+          </button>
+        )}
+      </div>
     </div>,
     document.body,
   );

@@ -2,8 +2,9 @@
 
 Squisq's editor can proof documents — red squigglies for spelling/typos,
 green for grammar, blue-dotted for style, in both the Write (Tiptap) and
-Source (Monaco) views, with a right-click suggestions menu, a findings
-panel, a StatusBar count, and per-doc settings. The engine is
+Source (Monaco) views, with a hover card that both explains a squiggle
+and acts on it, a right-click suggestions menu, a findings panel, a
+StatusBar count, and per-doc settings. The engine is
 [harper.js](https://github.com/Automattic/harper) (Apache-2.0, English
 only, five dialects), compiled to WebAssembly and running fully offline
 inside a Web Worker.
@@ -95,15 +96,34 @@ app dictionary) and the CSP in `packages/site/index.html`.
 | `squisq-proof-dictionary` | Comma-separated accepted words ("Add to document word list" appends here) |
 
 The first two are editable in the Document Settings dialog; the word
-list is written by the right-click menu (see below).
+list is written by the hover card or the right-click menu (see below).
 
 **Ignored findings are deliberately absent from this table.** They are
 never written into the document — see "Dismissed findings" below.
 
+## Acting on a finding
+
+Two surfaces, same actions, different amounts of intent:
+
+- **Hover card** (Write view). Dwell ~300 ms on a squiggle and a card
+  appears under it: category, the engine's message, then the top three
+  suggestions as buttons, with **Ignore** and the dictionary items
+  beneath. It is interactive, so it does not vanish the moment the
+  pointer leaves the word — leaving only _arms_ a close ~260 ms out,
+  which is cancelled when the pointer lands on the card. A click in the
+  text or a scroll dismisses it at once. "+N more" opens the full menu.
+- **Right-click menu** (both views). The complete suggestion list plus
+  the same Ignore/dictionary items, with arrow-key navigation. It
+  supersedes the hover card whenever both would be live.
+
+The Source view's explanation is Monaco's own hover card (built from the
+decoration's `hoverMessage`), so it reads the same but carries no
+buttons; act there through the right-click menu.
+
 ## The two dictionary scopes
 
 Accepting a word is a deliberate choice of _where_ it is remembered, and
-the menu says which is which:
+both surfaces say which is which:
 
 | Menu item                     | Where the word goes                                                                                           | Host callback            |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------ |

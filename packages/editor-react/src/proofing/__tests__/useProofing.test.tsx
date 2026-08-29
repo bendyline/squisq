@@ -463,3 +463,112 @@ describe('ignore', () => {
     expect(shared.ignoredJson).toBe('{"context_hashes":[2]}');
   });
 });
+
+describe('hover card', () => {
+  /** Dwell / grace constants in `useProofing`, plus slack for the timer. */
+  const OPEN_MS = 300;
+  const CLOSE_MS = 260;
+
+  const card = () => document.querySelector<HTMLElement>('.squisq-proof-tooltip');
+  const squiggle = () =>
+    tiptap!.view.dom.querySelector<HTMLElement>('[data-proof-id]') as HTMLElement;
+
+  async function wait(ms: number): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    });
+  }
+
+  function move(target: HTMLElement): void {
+    act(() => {
+      target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+    });
+  }
+
+  /** Hover the squiggle and wait out the dwell. */
+  async function openCard(): Promise<HTMLElement> {
+    await vi.waitFor(() => expect(lastState?.findings.length).toBe(1));
+    await vi.waitFor(() => expect(squiggle()).toBeTruthy());
+    move(squiggle());
+    await wait(OPEN_MS + 40);
+    const element = card();
+    expect(element).toBeTruthy();
+    return element as HTMLElement;
+  }
+
+  afterEach(() => {
+    tiptap = null;
+  });
+
+  it('opens after the dwell with the suggestion as a button', async () => {
+    mount();
+    const element = await openCard();
+    const chip = element.querySelector<HTMLButtonElement>('.squisq-proof-tooltip-chip');
+    expect(chip?.textContent).toBe('the');
+    // Interactive, so it must not be click-through.
+    expect(getComputedStyle(element).pointerEvents).not.toBe('none');
+  });
+
+  it('survives the trip from the squiggle to the card', async () => {
+    mount();
+    const element = await openCard();
+    // Pointer leaves the word — the close is armed, not performed…
+    move(tiptap!.view.dom);
+    await wait(CLOSE_MS / 2);
+    expect(card()).toBeTruthy();
+    // …and cancelled outright once the pointer lands on the card.
+    act(() => {
+      element.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: false }));
+    });
+    await wait(CLOSE_MS + 80);
+    expect(card()).toBeTruthy();
+  });
+
+  it('closes once the pointer leaves the word and never arrives', async () => {
+    mount();
+    await openCard();
+    move(tiptap!.view.dom);
+    await wait(CLOSE_MS + 80);
+    expect(card()).toBeNull();
+  });
+
+  it('applies a suggestion from its button', async () => {
+    mount();
+    const element = await openCard();
+    const chip = element.querySelector<HTMLButtonElement>('.squisq-proof-tooltip-chip');
+    await act(async () => {
+      chip!.click();
+    });
+    await flush();
+    expect(tiptap!.state.doc.textBetween(0, tiptap!.state.doc.content.size, ' ')).toContain(
+      'This is the body.',
+    );
+    expect(card()).toBeNull();
+  });
+
+  it('ignores a finding from its button', async () => {
+    const { provider } = mount();
+    const fake = provider as FakeProvider;
+    const element = await openCard();
+    const ignore = [
+      ...element.querySelectorAll<HTMLButtonElement>('.squisq-proof-tooltip-action'),
+    ].find((button) => button.textContent === 'Ignore');
+    await act(async () => {
+      ignore!.click();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(fake.ignoredJson).toBeTruthy());
+    expect(card()).toBeNull();
+  });
+
+  it('hides the app-dictionary action when the host stores nothing', async () => {
+    mount({ capability: makeFakeProvider({ hasAppDictionary: false }) });
+    const element = await openCard();
+    const labels = [
+      ...element.querySelectorAll<HTMLButtonElement>('.squisq-proof-tooltip-action'),
+    ].map((button) => button.textContent);
+    expect(labels).not.toContain('Add to dictionary');
+    expect(labels).toContain('Add to document word list');
+  });
+});

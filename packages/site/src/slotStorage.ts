@@ -11,12 +11,18 @@
  *   slot:{n}:meta      → SlotMeta object
  *   slot:{n}:media:{filename} → ArrayBuffer (binary asset)
  *
- * The createSlotMediaProvider(n) factory returns a MediaProvider that
- * resolves relative paths to blob URLs from the slot's stored media.
+ * The createSlotContentContainer(n) factory exposes a slot's media
+ * namespace as a `ContentContainer`, which is what the editor needs for
+ * everything that reads files *beside* a media asset rather than the asset
+ * itself — narration `.timing.json` sidecars, image-edit sidecars, version
+ * snapshots. Pair it with `createMediaProviderFromContainer()` so the
+ * MediaProvider and the container are two views of one namespace and can
+ * never disagree about what a relative path means.
  */
 
-import { LocalForageAdapter } from '@bendyline/squisq/storage';
-import type { MediaProvider, MediaEntry } from '@bendyline/squisq/schemas';
+import { LocalForageAdapter, findDocumentPath } from '@bendyline/squisq/storage';
+import type { ContentContainer, ContentEntry } from '@bendyline/squisq/storage';
+import type { MediaEntry } from '@bendyline/squisq/schemas';
 
 // ============================================
 // Constants
@@ -212,81 +218,108 @@ export async function removeSlotMedia(slot: number, filename: string): Promise<v
   }
 }
 
-/**
- * Get raw media data from a slot.
- */
-export async function getSlotMedia(slot: number, filename: string): Promise<ArrayBuffer | null> {
-  const key = mediaKey(slot, filename);
-  return store.get<ArrayBuffer>(key);
+// ============================================
+// ContentContainer Factory
+// ============================================
+
+/** Coerce whatever IndexedDB handed back into an ArrayBuffer. */
+async function toArrayBuffer(value: unknown): Promise<ArrayBuffer | null> {
+  if (value == null) return null;
+  if (value instanceof ArrayBuffer) return value;
+  if (value instanceof Blob) return value.arrayBuffer();
+  if (ArrayBuffer.isView(value)) {
+    const view = value as ArrayBufferView;
+    return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
+  }
+  return null;
 }
 
-// ============================================
-// MediaProvider Factory
-// ============================================
+/**
+ * A slot's media namespace, exposed as a `ContentContainer`.
+ *
+ * Paths map 1:1 onto the `slot:{n}:media:{path}` keys the MediaProvider
+ * resolves, so `container.readFile('audio/take.webm.timing.json')` finds the
+ * sidecar the recorder wrote next to `audio/take.webm`. That shared namespace
+ * is the whole point: a container and a MediaProvider built over different
+ * stores would silently disagree, which is exactly how a written sidecar ends
+ * up never being read.
+ *
+ * The slot's markdown lives at `slot:{n}:doc`, OUTSIDE this namespace — the
+ * site keeps the document in React state and saves it explicitly. So
+ * `getDocumentPath()` is honest about finding nothing unless someone actually
+ * writes a `.md` file into the container.
+ */
+class SlotContentContainer implements ContentContainer {
+  readonly mutationLock: object;
+
+  constructor(private readonly slot: number) {
+    this.mutationLock = mutationLockFor(slot);
+  }
+
+  async readFile(path: string): Promise<ArrayBuffer | null> {
+    return toArrayBuffer(await store.get<unknown>(mediaKey(this.slot, path)));
+  }
+
+  async writeFile(path: string, data: ArrayBuffer | Uint8Array, mimeType?: string): Promise<void> {
+    await addSlotMedia(this.slot, path, data, mimeType ?? 'application/octet-stream');
+  }
+
+  async removeFile(path: string): Promise<void> {
+    await removeSlotMedia(this.slot, path);
+  }
+
+  async listFiles(prefix?: string): Promise<ContentEntry[]> {
+    const entries = await listSlotMedia(this.slot);
+    return entries
+      .filter((entry) => (prefix ? entry.name.startsWith(prefix) : true))
+      .map((entry) => ({ path: entry.name, mimeType: entry.mimeType, size: entry.size }));
+  }
+
+  async exists(path: string): Promise<boolean> {
+    const key = mediaKey(this.slot, path);
+    // The companion `:info` record is written with every asset, so it answers
+    // existence without pulling the binary back out of IndexedDB. Fall back to
+    // the data key for anything written before the companion existed.
+    if ((await store.get<unknown>(key + ':info')) != null) return true;
+    return (await store.get<unknown>(key)) != null;
+  }
+
+  async getDocumentPath(): Promise<string | null> {
+    return findDocumentPath(await this.listFiles());
+  }
+
+  async readDocument(): Promise<string | null> {
+    const path = await this.getDocumentPath();
+    if (!path) return null;
+    const data = await this.readFile(path);
+    return data ? new TextDecoder().decode(data) : null;
+  }
+
+  async writeDocument(markdown: string, filename = 'index.md'): Promise<void> {
+    await this.writeFile(filename, new TextEncoder().encode(markdown), 'text/markdown');
+  }
+}
 
 /**
- * Create a MediaProvider backed by a specific storage slot.
- *
- * Resolves relative paths to blob URLs by reading binary data from IndexedDB.
- * Blob URLs are cached and revoked on dispose().
+ * Shared per-slot identity so two containers over the same slot serialize
+ * their in-process mutations against each other rather than racing.
  */
-export function createSlotMediaProvider(slot: number): MediaProvider {
-  // Cache: filename → blob URL (to avoid re-creating blob URLs on every render)
-  const blobUrlCache = new Map<string, string>();
+const mutationLocks = new Map<number, object>();
+function mutationLockFor(slot: number): object {
+  let lock = mutationLocks.get(slot);
+  if (!lock) {
+    lock = {};
+    mutationLocks.set(slot, lock);
+  }
+  return lock;
+}
 
-  return {
-    async resolveUrl(relativePath: string): Promise<string> {
-      // Check cache first
-      const cached = blobUrlCache.get(relativePath);
-      if (cached) return cached;
-
-      // Try to load from storage
-      const data = await getSlotMedia(slot, relativePath);
-      if (!data) {
-        // No stored media — return the path as-is (fallback)
-        return relativePath;
-      }
-
-      // Get MIME type from companion metadata
-      const key = mediaKey(slot, relativePath);
-      const info = await store.get<{ mimeType: string; size: number }>(key + ':info');
-      const mimeType = info?.mimeType ?? 'application/octet-stream';
-
-      // Create blob URL
-      const blob = new Blob([data], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      blobUrlCache.set(relativePath, url);
-      return url;
-    },
-
-    async listMedia(): Promise<MediaEntry[]> {
-      return listSlotMedia(slot);
-    },
-
-    async addMedia(
-      name: string,
-      data: ArrayBuffer | Blob | Uint8Array,
-      mimeType: string,
-    ): Promise<string> {
-      return addSlotMedia(slot, name, data, mimeType);
-    },
-
-    async removeMedia(relativePath: string): Promise<void> {
-      // Revoke cached blob URL
-      const cached = blobUrlCache.get(relativePath);
-      if (cached) {
-        URL.revokeObjectURL(cached);
-        blobUrlCache.delete(relativePath);
-      }
-      return removeSlotMedia(slot, relativePath);
-    },
-
-    dispose(): void {
-      // Revoke all cached blob URLs
-      for (const url of blobUrlCache.values()) {
-        URL.revokeObjectURL(url);
-      }
-      blobUrlCache.clear();
-    },
-  };
+/**
+ * Create a `ContentContainer` over a storage slot's media namespace.
+ *
+ * Wrap it in `createMediaProviderFromContainer()` to get the slot's
+ * MediaProvider — the two then share one namespace by construction.
+ */
+export function createSlotContentContainer(slot: number): ContentContainer {
+  return new SlotContentContainer(slot);
 }

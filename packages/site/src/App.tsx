@@ -27,7 +27,7 @@ import { StorageToolbar } from './StorageToolbar';
 import { JsonEditorDemo } from './JsonEditorDemo';
 import { ImageEditorDemo } from './ImageEditorDemo';
 import { CodeContextDemo } from './CodeContextDemo';
-import { createSlotMediaProvider } from './slotStorage';
+import { createSlotContentContainer } from './slotStorage';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { parseTheme } from '@bendyline/squisq/schemas';
 import { openExternalLink } from './externalLinks';
@@ -248,53 +248,69 @@ export function App() {
   const [editorKey, setEditorKey] = useState(0);
   // Storage slot state
   const [activeSlot, setActiveSlot] = useState<number | null>(null);
-  /** Create a fresh empty MediaProvider (for samples with no bundled media). */
-  const createEmptyProvider = useCallback(
-    () => createMediaProviderFromContainer(new MemoryContentContainer()),
-    [],
-  );
 
+  // The workspace is ALWAYS a ContentContainer, and the MediaProvider is
+  // always derived from it. Anything less than that breaks every feature that
+  // reads a file *beside* a media asset rather than the asset itself: a
+  // narration take's `.timing.json` sidecar (which is what re-times blocks
+  // from a document-anchored clip), image-edit sidecars, version snapshots.
+  // Those writes go through the MediaProvider and those reads go through the
+  // container, so if the two are not views of one namespace the write lands
+  // somewhere the read never looks — silently, with no error anywhere.
+  const [workspaceContainer, setWorkspaceContainer] = useState<ContentContainer>(
+    () => new MemoryContentContainer(),
+  );
   const [mediaProvider, setMediaProvider] = useState<MediaProvider | null>(() =>
-    createEmptyProvider(),
+    createMediaProviderFromContainer(workspaceContainer),
   );
   const mediaProviderRef = useRef<MediaProvider | null>(mediaProvider);
-  // The active workspace-scoped ContentContainer (when the user loaded
-  // a zip sample or uploaded a zip). Surfaced to FileToolbar so the
-  // export dialog can offer the recursive "Export linked documents"
-  // toggle. Null when the editor is running off a slot or a standalone
-  // markdown source.
-  const [workspaceContainer, setWorkspaceContainer] = useState<ContentContainer | null>(null);
+  // Which `activeSlot` the live workspace was built for. A caller that
+  // installs its own workspace (a zip sample, a zip upload) records the slot
+  // it is switching to, so the slot effect below can tell "the slot changed"
+  // from "someone already handled this slot change" and leave the loaded
+  // container alone instead of clobbering it with an empty one.
+  const workspaceSlotRef = useRef<number | null>(null);
   // Loading state for content zip samples
   const [loadingContent, setLoadingContent] = useState(false);
 
-  /** Replace the active MediaProvider, disposing the previous one. */
-  const replaceMediaProvider = useCallback((provider: MediaProvider | null) => {
+  /**
+   * Swap in a new workspace container, disposing the previous provider and
+   * deriving a fresh one. The single entry point for changing workspaces —
+   * setting either half on its own is what lets them drift apart.
+   */
+  const replaceWorkspace = useCallback((container: ContentContainer, slot: number | null) => {
     if (mediaProviderRef.current) {
       mediaProviderRef.current.dispose();
     }
+    const provider = createMediaProviderFromContainer(container);
     mediaProviderRef.current = provider;
+    workspaceSlotRef.current = slot;
+    setWorkspaceContainer(container);
     setMediaProvider(provider);
   }, []);
 
-  // Create/dispose MediaProvider when active slot changes. A slot is
-  // backed by IndexedDB media storage, not a markdown container, so we
-  // also clear any container that may have been left over from a prior
-  // zip-sample load.
+  // A slot's media namespace is exposed as a container too, so a slot-backed
+  // workspace behaves exactly like a zip-backed one.
   useEffect(() => {
-    if (activeSlot !== null) {
-      replaceMediaProvider(createSlotMediaProvider(activeSlot));
-      setWorkspaceContainer(null);
-    } else {
-      replaceMediaProvider(createEmptyProvider());
-    }
+    if (workspaceSlotRef.current === activeSlot) return;
+    replaceWorkspace(
+      activeSlot !== null ? createSlotContentContainer(activeSlot) : new MemoryContentContainer(),
+      activeSlot,
+    );
+  }, [activeSlot, replaceWorkspace]);
 
-    return () => {
+  // Release blob URLs on unmount only. Disposal must NOT ride the slot effect's
+  // cleanup: that runs on every `activeSlot` change, including the ones the
+  // effect then skips, which would tear down the provider a caller just built.
+  useEffect(
+    () => () => {
       if (mediaProviderRef.current) {
         mediaProviderRef.current.dispose();
         mediaProviderRef.current = null;
       }
-    };
-  }, [activeSlot, replaceMediaProvider, createEmptyProvider]);
+    },
+    [],
+  );
 
   const isDark = colorScheme === 'dark';
 
@@ -320,15 +336,14 @@ export function App() {
           .then(async (loaded) => {
             const markdown = (await loaded.readDocument()) ?? '';
             setCurrentSource(markdown);
-            replaceMediaProvider(createMediaProviderFromContainer(loaded));
-            setWorkspaceContainer(loaded);
+            replaceWorkspace(loaded, null);
             setEditorKey((k) => k + 1);
           })
           .catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : String(err);
             console.error('Failed to load content sample:', msg);
             setCurrentSource(`# Error\n\nCould not load sample: ${msg}`);
-            replaceMediaProvider(createEmptyProvider());
+            replaceWorkspace(new MemoryContentContainer(), null);
             setEditorKey((k) => k + 1);
           })
           .finally(() => setLoadingContent(false));
@@ -337,11 +352,10 @@ export function App() {
 
       // Inline markdown sample
       setCurrentSource(SAMPLES[key] || '');
-      replaceMediaProvider(createEmptyProvider());
-      setWorkspaceContainer(null);
+      replaceWorkspace(new MemoryContentContainer(), null);
       setActiveSlot(null);
     },
-    [replaceMediaProvider, createEmptyProvider],
+    [replaceWorkspace],
   );
 
   const handleChange = useCallback((source: string) => {
@@ -350,26 +364,33 @@ export function App() {
 
   const handleLinkClick = useCallback((href: string) => openExternalLink(href), []);
 
-  const handleImport = useCallback((markdown: string) => {
-    setCurrentSource(markdown);
-    setSelectedSample(''); // deselect sample dropdown
-    // A bare markdown import has no associated container — drop any
-    // container that was previously active so the export dialog stops
-    // offering "Export linked documents" (which can't work without one).
-    setWorkspaceContainer(null);
-    setEditorKey((k) => k + 1); // remount editor with new content
-  }, []);
+  const handleImport = useCallback(
+    (markdown: string) => {
+      setCurrentSource(markdown);
+      setSelectedSample(''); // deselect sample dropdown
+      // A bare markdown import brings no media of its own, so it drops any
+      // container the previous document was riding on (a loaded zip, whose
+      // files have nothing to do with this text) and returns to the workspace
+      // the current storage selection implies — the slot's own media if one is
+      // active, an empty container otherwise.
+      replaceWorkspace(
+        activeSlot !== null ? createSlotContentContainer(activeSlot) : new MemoryContentContainer(),
+        activeSlot,
+      );
+      setEditorKey((k) => k + 1); // remount editor with new content
+    },
+    [replaceWorkspace, activeSlot],
+  );
 
   const handleZipImport = useCallback(
     (markdown: string, imported: ContentContainer) => {
       setCurrentSource(markdown);
       setSelectedSample('');
       setActiveSlot(null);
-      replaceMediaProvider(createMediaProviderFromContainer(imported));
-      setWorkspaceContainer(imported);
+      replaceWorkspace(imported, null);
       setEditorKey((k) => k + 1);
     },
-    [replaceMediaProvider],
+    [replaceWorkspace],
   );
 
   return (
