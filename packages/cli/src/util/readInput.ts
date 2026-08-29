@@ -68,6 +68,13 @@ export interface ReadInputOptions {
   inferTheme?: boolean;
   /** Derive custom layout templates from PPTX slide layouts. Default true. */
   inferLayouts?: boolean;
+  /**
+   * Split each XLSX worksheet into its contiguous data islands, one anchored
+   * block per island. Default true.
+   */
+  xlsxRegions?: boolean;
+  /** Emit the companion formulas table for XLSX regions that have one. Default true. */
+  xlsxFormulas?: boolean;
 }
 
 /** Schema failure carrying diagnostics suitable for `squisq validate --json`. */
@@ -502,6 +509,8 @@ async function readViaImporter(
       [def.id]: {
         inferTheme: options?.inferTheme !== false,
         inferLayouts: options?.inferLayouts !== false,
+        regions: options?.xlsxRegions !== false,
+        formulas: options?.xlsxFormulas !== false,
       },
     },
   };

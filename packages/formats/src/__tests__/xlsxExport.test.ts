@@ -185,3 +185,163 @@ describe('markdownDocToXlsx', () => {
     expect(flat).toContain('99');
   });
 });
+
+describe('markdownDocToXlsx — anchored placement', () => {
+  /** Cell refs in document order, per worksheet. */
+  const refsOf = (sheet: string) => [...sheet.matchAll(/<c r="([^"]+)"/g)].map((m) => m[1]!);
+
+  it('places anchored tables on one worksheet at their own addresses', async () => {
+    const md = parseMarkdown(
+      [
+        '# Sales',
+        '',
+        '## Q3 Revenue {[dataTable sheet=Sales anchor=B4]}',
+        '',
+        '| Region | Revenue |',
+        '| ------ | ------- |',
+        '| North  | 1200    |',
+        '',
+        '## Side table {[dataTable sheet=Sales anchor=F4]}',
+        '',
+        '| Item   | Qty |',
+        '| ------ | --- |',
+        '| Widget | 3   |',
+        '',
+      ].join('\n'),
+    );
+    const { workbook, sheets } = await unzip(await markdownDocToXlsx(md));
+
+    expect(sheetNames(workbook)).toEqual(['Sales']);
+    expect(refsOf(sheets[0]!)).toEqual(['B4', 'C4', 'F4', 'G4', 'B5', 'C5', 'F5', 'G5']);
+    expect(sheets[0]).toContain('<dimension ref="A1:G5"/>');
+  });
+
+  it('writes an absorbed heading back to its title cell', async () => {
+    const md = parseMarkdown(
+      [
+        '## Q3 Revenue {[dataTable sheet=Sales anchor=B4 titleAnchor=B3]}',
+        '',
+        '| Region |',
+        '| ------ |',
+        '| North  |',
+        '',
+      ].join('\n'),
+    );
+    const { sheets } = await unzip(await markdownDocToXlsx(md));
+    expect(sheets[0]).toContain('<t xml:space="preserve">Q3 Revenue</t>');
+    expect(refsOf(sheets[0]!)).toEqual(['B3', 'B4', 'B5']);
+  });
+
+  it('overlays a formulas companion onto its region, keyed by column letter', async () => {
+    const md = parseMarkdown(
+      [
+        '## Totals {[dataTable sheet=S anchor=B2]}',
+        '',
+        '| Qty | Total |',
+        '| --- | ----- |',
+        '| 3   | 12    |',
+        '',
+        '## Totals — formulas {[dataTable sheet=S anchor=B2 role=formulas]}',
+        '',
+        '| B | C |',
+        '| - | - |',
+        '|   |   |',
+        '|   | =B3\\*4 |',
+        '',
+      ].join('\n'),
+    );
+    const { workbook, sheets } = await unzip(await markdownDocToXlsx(md));
+
+    expect(sheets[0]).toContain('<c r="C3"><f>B3*4</f><v>12</v></c>');
+    // A cached value may be stale or missing, so Excel is told to recalculate.
+    expect(workbook).toContain('fullCalcOnLoad="1"');
+  });
+
+  it('expands a loose-cells table one address at a time', async () => {
+    const md = parseMarkdown(
+      [
+        '## Loose {[dataTable sheet=S role=loose]}',
+        '',
+        '| Cell | Value | Formula |',
+        '| ---- | ----- | ------- |',
+        '| A1   | note  |         |',
+        '| H9   | 7     | =1+1    |',
+        '| zz   | bad   |         |',
+        '',
+      ].join('\n'),
+    );
+    const { sheets } = await unzip(await markdownDocToXlsx(md));
+    expect(refsOf(sheets[0]!)).toEqual(['A1', 'H9']);
+    expect(sheets[0]).toContain('<c r="H9"><f>1+1</f><v>7</v></c>');
+  });
+
+  it('demotes a malformed anchor to A1 and warns instead of throwing', async () => {
+    const warnings: string[] = [];
+    const md = parseMarkdown(
+      ['## Bad {[dataTable sheet=S anchor=NOPE]}', '', '| A |', '| - |', '| x |', ''].join('\n'),
+    );
+    const { sheets } = await unzip(
+      await markdownDocToXlsx(md, { onWarning: (m) => warnings.push(m) }),
+    );
+
+    expect(refsOf(sheets[0]!)).toEqual(['A1', 'A2']);
+    expect(warnings.join(' ')).toMatch(/not a valid cell reference/);
+  });
+
+  it('reports overlapping regions once per sheet', async () => {
+    const warnings: string[] = [];
+    const md = parseMarkdown(
+      [
+        '## One {[dataTable sheet=S anchor=A1]}',
+        '',
+        '| A | B |',
+        '| - | - |',
+        '| 1 | 2 |',
+        '',
+        '## Two {[dataTable sheet=S anchor=B2]}',
+        '',
+        '| C |',
+        '| - |',
+        '| 3 |',
+        '',
+      ].join('\n'),
+    );
+    await markdownDocToXlsx(md, { onWarning: (m) => warnings.push(m) });
+    expect(warnings.filter((w) => w.includes('overlapping'))).toHaveLength(1);
+    expect(warnings.join(' ')).toContain('B2');
+  });
+
+  it('restores numbers as numbers for anchored tables only', async () => {
+    const anchored = parseMarkdown(
+      ['## N {[dataTable sheet=S anchor=A1]}', '', '| A |', '| - |', '| 1200 |', ''].join('\n'),
+    );
+    const plain = parseMarkdown(['# N', '', '| A |', '| - |', '| 1200 |', ''].join('\n'));
+
+    expect((await unzip(await markdownDocToXlsx(anchored))).sheets[0]).toContain(
+      '<c r="A2"><v>1200</v></c>',
+    );
+    // A hand-authored table has no column schema, so its text stays text.
+    expect((await unzip(await markdownDocToXlsx(plain))).sheets[0]).toContain('t="inlineStr"');
+  });
+
+  it('keeps sheet groups distinct when their names sanitize alike', async () => {
+    const md = parseMarkdown(
+      [
+        '## A {[dataTable sheet=Data anchor=A1]}',
+        '',
+        '| a |',
+        '| - |',
+        '| 1 |',
+        '',
+        '## B {[dataTable sheet=data anchor=A1]}',
+        '',
+        '| b |',
+        '| - |',
+        '| 2 |',
+        '',
+      ].join('\n'),
+    );
+    const { workbook } = await unzip(await markdownDocToXlsx(md));
+    expect(sheetNames(workbook)).toEqual(['Data', 'data2']);
+  });
+});

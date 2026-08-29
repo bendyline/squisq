@@ -102,7 +102,9 @@ describe('defaultRegistry', () => {
       htmlzip: 'rendered',
       docx: 'ignored',
       pdf: 'ignored',
-      xlsx: 'ignored',
+      // Anchored `{[dataTable sheet=… anchor=…]}` annotations decide worksheet
+      // and cell placement, so XLSX export demonstrably honors them.
+      xlsx: 'preserved',
       csv: 'ignored',
       epub: 'ignored',
     });

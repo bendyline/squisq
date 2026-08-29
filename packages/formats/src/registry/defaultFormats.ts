@@ -309,7 +309,10 @@ export function defaultFormats(): FormatDefinition[] {
 
   const xlsx: FormatDefinition = {
     id: 'xlsx',
-    templateAnnotationHandling: 'ignored',
+    // Not 'ignored': a `{[dataTable sheet=… anchor=…]}` annotation decides which
+    // worksheet a table lands on and at which cell, so annotations demonstrably
+    // affect the exported result.
+    templateAnnotationHandling: 'preserved',
     label: 'Excel (XLSX)',
     mimeType: MIME.xlsx,
     extensions: ['.xlsx'],
@@ -333,6 +336,9 @@ export function defaultFormats(): FormatDefinition[] {
       const blob = await markdownDocToXlsx(markdownDoc, {
         ...optionsFor(options, 'xlsx'),
         ...(options.title !== undefined ? { title: options.title } : {}),
+        // Placement problems (a bad anchor, overlapping regions) degrade rather
+        // than throw, so they have to reach the caller as conversion warnings.
+        onWarning: (message) => warnings.push(message),
       });
       return ok(await toBytes(blob), MIME.xlsx, warnings);
     },
