@@ -16,6 +16,7 @@ import {
   type RecorderColorScheme,
   type RecorderNarrationOptions,
   type RecorderSaveResult,
+  type RecorderSlidesOptions,
 } from './RecorderModal.js';
 import type { RecorderSource } from './hooks/useMediaRecorder.js';
 
@@ -32,6 +33,8 @@ export interface RecorderButtonProps {
   onSave?: (result: RecorderSaveResult) => void;
   /** Enables the modal's "Show narration mode" checkbox. */
   narration?: RecorderNarrationOptions | null;
+  /** Enables the modal's "Show slides mode" checkbox. */
+  slides?: RecorderSlidesOptions | null;
   /** Button label. Defaults to `'Record'`. */
   label?: string;
   /** Optional inline button styles. */
@@ -47,6 +50,7 @@ export function RecorderButton({
   colorScheme = 'light',
   onSave,
   narration = null,
+  slides = null,
   label = 'Record',
   style,
   disabled,
@@ -75,6 +79,7 @@ export function RecorderButton({
             initialMode={initialMode}
             colorScheme={colorScheme}
             narration={narration}
+            slides={slides}
             onClose={handleClose}
             onSave={handleSave}
           />,

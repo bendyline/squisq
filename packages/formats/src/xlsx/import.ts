@@ -1,19 +1,39 @@
 /**
  * XLSX import — SpreadsheetML (.xlsx) → MarkdownDocument.
  *
- * Reuses the shared ooxml/ reader (zip + DOMParser). Reads the workbook's
- * sheet list, resolves each sheet part via relationships, pulls shared strings,
- * and turns each worksheet's cell grid into a markdown table (first row treated
- * as the header). By default every sheet is imported, each preceded by an H1 of
- * the sheet name; pass `options.sheet` (index or name) to import just one.
+ * Reuses the shared ooxml/ reader (zip + DOMParser). Reads the workbook's sheet
+ * list, resolves each sheet part via relationships, pulls shared strings, and
+ * turns each worksheet into markdown. By default every sheet is imported, each
+ * preceded by an H1 of the sheet name; pass `options.sheet` (index or name) to
+ * import just one.
+ *
+ * A sheet is NOT one table. It is usually several tables scattered across the
+ * grid with stray labels and notes in the gaps, so by default each worksheet is
+ * split into its contiguous data islands (see `regions.ts`) and every island
+ * becomes its own block:
+ *
+ * ```markdown
+ * ## Q3 Revenue {[dataTable sheet=Sales anchor=B7]}
+ * ```
+ *
+ * The `sheet`/`anchor` params on the heading annotation are what let
+ * `markdownDocToXlsx` put each table back where it came from, so the round trip
+ * reproduces addresses rather than piling everything at A1. A region holding
+ * formulas additionally emits a `role=formulas` companion table, and every
+ * left-over single cell on a sheet collects into one `role=loose` table.
+ *
+ * Pass `{ regions: false }` for the historical behavior: one table per sheet,
+ * spanning the whole used range.
  */
 
 import type {
   MarkdownBlockNode,
   MarkdownDocument,
+  MarkdownHeading,
   MarkdownTable,
   MarkdownTableCell,
   MarkdownTableRow,
+  MarkdownInlineNode,
 } from '@bendyline/squisq/markdown';
 import {
   getPartXml,
@@ -25,6 +45,19 @@ import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage } from '../ooxml/types.js';
 import { baseDirOf } from '../ooxml/readUtils.js';
 import { NS_R, NS_SML } from '../ooxml/namespaces.js';
+import {
+  EMPTY_CELL,
+  colIndex,
+  columnLetter,
+  formatCellRef,
+  isOccupied,
+  parseRangeRef,
+  translateFormula,
+  type CellRect,
+  type XlsxCell,
+  type XlsxCellKind,
+} from './cells.js';
+import { detectRegions, sliceRect, type StrayCell } from './regions.js';
 
 /** Conventional main part path; the root `officeDocument` rel wins when present. */
 const XLSX_MAIN_PART = 'xl/workbook.xml';
@@ -32,6 +65,21 @@ const XLSX_MAIN_PART = 'xl/workbook.xml';
 export interface XlsxImportOptions extends OoxmlOpenOptions {
   /** Which sheet to import (0-based index or sheet name). Default: all sheets. */
   sheet?: number | string;
+  /**
+   * Split each sheet into its contiguous data islands, one block each, anchored
+   * with `{[dataTable sheet=… anchor=…]}`. Default true. Set false for the
+   * historical one-table-per-sheet output.
+   */
+  regions?: boolean;
+  /**
+   * Emit a `role=formulas` companion table for regions that contain formulas.
+   * Default true. Ignored when `regions` is false.
+   */
+  formulas?: boolean;
+  /** Cap on region tables per sheet before the rest fold into loose cells. Default 64. */
+  maxRegionsPerSheet?: number;
+  /** Smallest island that stays a table of its own. Default 2 — single cells coalesce. */
+  minRegionCells?: number;
 }
 
 interface SheetRef {
@@ -99,33 +147,98 @@ function isPhonetic(el: Element, root: Element): boolean {
 }
 
 /**
- * Text of a SpreadsheetML string item — a shared `<si>` or an inline `<is>`.
+ * Vertical alignment of a rich-text run, from its `<rPr><vertAlign val="…"/>`.
  *
- * Both may carry rich text as a sequence of `<r>` runs, so every `<t>` has to
- * be concatenated; reading only the first drops all but the opening run.
+ * This is how a spreadsheet records a footnote marker: the `1` in `Fresh¹` is
+ * an ordinary character in an ordinary cell, distinguished only by a run
+ * property. Reading only `<t>` text — as this importer used to — turns the
+ * marker into a literal digit welded onto the end of the word, which is both
+ * wrong on the page and wrong for anything that later parses the value.
+ */
+function runVertAlign(run: Element): 'superscript' | 'subscript' | null {
+  const rPr = run.getElementsByTagNameNS(NS_SML, 'rPr')[0];
+  if (!rPr) return null;
+  const va = rPr.getElementsByTagNameNS(NS_SML, 'vertAlign')[0];
+  const val = va?.getAttribute('val');
+  return val === 'superscript' || val === 'subscript' ? val : null;
+}
+
+/** A string item's display text plus, when it has any, its formatted runs. */
+interface StringItem {
+  text: string;
+  /**
+   * Inline markdown for the item, present ONLY when a run carries formatting
+   * this importer preserves. Left undefined for the overwhelmingly common
+   * unformatted cell so that nothing downstream has to care.
+   */
+  rich?: MarkdownInlineNode[];
+}
+
+/**
+ * Read a SpreadsheetML string item — a shared `<si>` or an inline `<is>`.
+ *
+ * An item is either a single unformatted `<t>` or a sequence of `<r>` runs,
+ * each with its own optional `<rPr>`. Every `<t>` has to be concatenated for
+ * the display text; reading only the first drops all but the opening run.
  *
  * `textContent` is not a valid shortcut either: `<si>` may also hold `<rPh>`
  * phonetic (furigana) guides, whose `<t>` is a *pronunciation annotation* of
  * the neighbouring run rather than part of the cell's value. Splicing those in
  * turns Japanese "漢字" into "漢字かんじ". Skip any `<t>` under an `<rPh>`.
  */
-function stringItemText(root: Element): string {
+function readStringItem(root: Element): StringItem {
   const tEls = root.getElementsByTagNameNS(NS_SML, 't');
-  let out = '';
+  const rich: MarkdownInlineNode[] = [];
+  let text = '';
+  let formatted = false;
+
   for (let i = 0; i < tEls.length; i++) {
     const t = tEls[i]!;
     if (isPhonetic(t, root)) continue;
-    out += t.textContent ?? '';
+    const value = t.textContent ?? '';
+    if (value === '') continue;
+    text += value;
+
+    // `<t>`'s parent is the `<r>` run when the item is rich text, and the
+    // `<si>`/`<is>` itself when it is a bare string.
+    const parent = t.parentNode;
+    const run = parent && (parent as Element).localName === 'r' ? (parent as Element) : null;
+    const vertAlign = run ? runVertAlign(run) : null;
+    if (vertAlign) {
+      formatted = true;
+      rich.push({ type: vertAlign, children: [{ type: 'text', value }] });
+    } else {
+      rich.push({ type: 'text', value });
+    }
+  }
+
+  return formatted ? { text, rich: mergeAdjacentText(rich) } : { text };
+}
+
+/**
+ * Collapse runs that ended up as neighbouring plain-text nodes.
+ *
+ * Excel splits a string at every formatting boundary, so "Juice, ready to
+ * drink" plus a superscript "2" can arrive as four runs of which three are
+ * unformatted. Merging them keeps the emitted markdown as close as possible to
+ * what a person would have typed.
+ */
+function mergeAdjacentText(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  const out: MarkdownInlineNode[] = [];
+  for (const node of nodes) {
+    const prev = out[out.length - 1];
+    if (node.type === 'text' && prev?.type === 'text') prev.value += node.value;
+    else out.push(node);
   }
   return out;
 }
 
-async function readSharedStrings(pkg: OoxmlPackage): Promise<string[]> {
+async function readSharedStrings(pkg: OoxmlPackage): Promise<StringItem[]> {
   const doc = await getPartXml(pkg, 'xl/sharedStrings.xml');
   if (!doc) return [];
   const siEls = doc.getElementsByTagNameNS(NS_SML, 'si');
-  const out: string[] = [];
-  for (let i = 0; i < siEls.length; i++) out.push(stringItemText(siEls[i]!));
+  const out: StringItem[] = [];
+  for (let i = 0; i < siEls.length; i++) out.push(readStringItem(siEls[i]!));
   return out;
 }
 
@@ -171,15 +284,6 @@ async function readCellStyles(pkg: OoxmlPackage): Promise<CellStyle[]> {
     });
   }
   return out;
-}
-
-/** Column letters of a cell ref ("B7" → 1, "AA1" → 26). */
-function colIndex(ref: string): number {
-  const m = /^([A-Za-z]+)/.exec(ref);
-  if (!m) return 0;
-  let n = 0;
-  for (const ch of m[1]!.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
-  return n - 1;
 }
 
 type NumberFormatKind = 'date' | 'time' | 'datetime' | 'percent' | 'zero-pad' | 'general';
@@ -255,29 +359,112 @@ function formattedNumberText(raw: string, style: CellStyle | undefined, date1904
   return raw;
 }
 
-function cellText(cell: Element, shared: string[], styles: CellStyle[], date1904: boolean): string {
+/** The master text of a shared formula, plus where it was written. */
+interface SharedFormula {
+  text: string;
+  row: number;
+  col: number;
+}
+
+interface SheetReadContext {
+  shared: StringItem[];
+  styles: CellStyle[];
+  date1904: boolean;
+  /** `si` → master, built as the sheet is read. Masters always precede followers. */
+  sharedFormulas: Map<string, SharedFormula>;
+}
+
+/**
+ * The formula source of a cell, without its leading `=`.
+ *
+ * A shared formula is written once, on the master cell, as
+ * `<f t="shared" si="0" ref="D2:D10">B2*C2</f>`; every follower in the range is
+ * an empty `<f t="shared" si="0"/>` whose real formula is "the master's, shifted
+ * to here". `translateFormula` performs that shift, so followers come back with
+ * their own text rather than being silently dropped.
+ */
+function readFormula(cell: Element, row: number, col: number, ctx: SheetReadContext): string {
+  const fEls = cell.getElementsByTagNameNS(NS_SML, 'f');
+  const f = fEls.length ? fEls[0]! : null;
+  if (!f) return '';
+  const text = (f.textContent ?? '').trim();
+  if (f.getAttribute('t') !== 'shared') return text;
+
+  const si = f.getAttribute('si');
+  if (si === null) return text;
+  if (text !== '') {
+    ctx.sharedFormulas.set(si, { text, row, col });
+    return text;
+  }
+  const master = ctx.sharedFormulas.get(si);
+  if (!master) return '';
+  try {
+    return translateFormula(master.text, row - master.row, col - master.col);
+  } catch {
+    // A formula we cannot confidently shift is better dropped than guessed at.
+    return '';
+  }
+}
+
+/** Read one `<c>` element into the richer cell model. */
+function readCell(cell: Element, row: number, col: number, ctx: SheetReadContext): XlsxCell {
+  const formula = readFormula(cell, row, col, ctx);
+  const withFormula = (text: string, kind: XlsxCellKind): XlsxCell => {
+    const out: XlsxCell = { text, kind: text === '' ? 'empty' : kind };
+    if (formula !== '') out.formula = formula;
+    return out;
+  };
+  const stringCell = (item: StringItem): XlsxCell => {
+    const out = withFormula(item.text, 'string');
+    // An empty cell has nothing to format, so never attach runs to one.
+    if (item.rich && out.kind !== 'empty') out.richText = item.rich;
+    return out;
+  };
+
   const t = cell.getAttribute('t');
   if (t === 'inlineStr') {
     const is = cell.getElementsByTagNameNS(NS_SML, 'is')[0];
-    return is ? stringItemText(is) : '';
+    return stringCell(is ? readStringItem(is) : { text: '' });
   }
   const vEls = cell.getElementsByTagNameNS(NS_SML, 'v');
   const v = vEls.length ? (vEls[0]!.textContent ?? '') : '';
-  if (t === 's') return shared[Number.parseInt(v, 10)] ?? '';
-  if (t === 'b') return v === '1' ? 'TRUE' : 'FALSE';
-  const styleIndex = Number.parseInt(cell.getAttribute('s') ?? '0', 10);
-  return formattedNumberText(v, styles[styleIndex], date1904);
+  // A cell with a style but no value — `<c r="A1" s="1"/>`, which Excel writes
+  // across whole formatted-but-blank ranges — is EMPTY. Decoding it as a number
+  // would run `Number('')` → 0 through the format code and yield `1899-12-31`
+  // for a date column or `FALSE` for a boolean one, filling the sheet with
+  // phantom content. Under region splitting that is fatal rather than merely
+  // untidy: a styled blank range is a fully occupied rectangle, and it would
+  // fuse every island on the sheet into one.
+  if (v === '') return withFormula('', 'empty');
+  if (t === 's') return stringCell(ctx.shared[Number.parseInt(v, 10)] ?? { text: '' });
+  if (t === 'b') return withFormula(v === '1' ? 'TRUE' : 'FALSE', 'bool');
+  if (t === 'e') return withFormula(v, 'error');
+  if (t === 'str') return withFormula(v, 'string');
+
+  const style = ctx.styles[Number.parseInt(cell.getAttribute('s') ?? '0', 10)];
+  const text = formattedNumberText(v, style, ctx.date1904);
+  const dateLike = style ? numberFormatKind(style.formatCode) : 'general';
+  const kind: XlsxCellKind =
+    dateLike === 'date' || dateLike === 'time' || dateLike === 'datetime' ? 'date' : 'number';
+  return withFormula(text, kind);
 }
 
-async function sheetToGrid(
+/** One worksheet's cells plus the merge ranges that inform region detection. */
+interface SheetContent {
+  cells: XlsxCell[][];
+  merges: CellRect[];
+}
+
+async function sheetToCells(
   pkg: OoxmlPackage,
   path: string,
-  shared: string[],
+  shared: StringItem[],
   styles: CellStyle[],
   date1904: boolean,
-): Promise<string[][]> {
+): Promise<SheetContent> {
   const doc = await getPartXml(pkg, path);
-  if (!doc) return [];
+  if (!doc) return { cells: [], merges: [] };
+  const ctx: SheetReadContext = { shared, styles, date1904, sharedFormulas: new Map() };
   const rowEls = doc.getElementsByTagNameNS(NS_SML, 'row');
 
   // SpreadsheetML OMITS empty rows entirely — a sheet whose data starts at
@@ -286,51 +473,149 @@ async function sheetToGrid(
   // first data row to the markdown table's HEADER. The `r` attribute is
   // 1-based and authoritative, so use it to restore row gaps the same way
   // cell refs restore column gaps.
-  const byIndex = new Map<number, string[]>();
+  const byIndex = new Map<number, XlsxCell[]>();
   let maxContentIdx = -1;
   let fallbackIdx = 0;
   for (let r = 0; r < rowEls.length; r++) {
     const rowEl = rowEls[r]!;
+    const rowRef = Number.parseInt(rowEl.getAttribute('r') ?? '', 10);
+    // Resolve the row index BEFORE reading cells: a shared-formula follower is
+    // translated by its offset from the master, so it needs its own address.
+    const rowIdx = Number.isFinite(rowRef) && rowRef > 0 ? rowRef - 1 : fallbackIdx;
+    fallbackIdx = rowIdx + 1;
+
     const cells = rowEl.getElementsByTagNameNS(NS_SML, 'c');
-    const rowArr: string[] = [];
+    const rowArr: XlsxCell[] = [];
     for (let c = 0; c < cells.length; c++) {
       const cell = cells[c]!;
       const ref = cell.getAttribute('r');
       const idx = ref ? colIndex(ref) : rowArr.length;
-      while (rowArr.length < idx) rowArr.push('');
-      rowArr[idx] = cellText(cell, shared, styles, date1904);
+      while (rowArr.length < idx) rowArr.push(EMPTY_CELL);
+      rowArr[idx] = readCell(cell, rowIdx, idx, ctx);
     }
-    const rowRef = Number.parseInt(rowEl.getAttribute('r') ?? '', 10);
-    const rowIdx = Number.isFinite(rowRef) && rowRef > 0 ? rowRef - 1 : fallbackIdx;
-    fallbackIdx = rowIdx + 1;
     byIndex.set(rowIdx, rowArr);
     // Excel also writes style-only rows (`<row r="5000" s="1"/>`) far below
     // the data. Tracking the last row with actual CONTENT means those don't
     // materialize thousands of trailing blank table rows — while leading and
     // interior blanks, which are structural, are preserved.
-    if (rowArr.some((v) => v !== '')) maxContentIdx = Math.max(maxContentIdx, rowIdx);
+    if (rowArr.some(isOccupied)) maxContentIdx = Math.max(maxContentIdx, rowIdx);
   }
 
-  const grid: string[][] = [];
+  const grid: XlsxCell[][] = [];
   for (let i = 0; i <= maxContentIdx; i++) grid.push(byIndex.get(i) ?? []);
-  return grid;
+
+  const merges: CellRect[] = [];
+  const mergeEls = doc.getElementsByTagNameNS(NS_SML, 'mergeCell');
+  for (let i = 0; i < mergeEls.length; i++) {
+    const rect = parseRangeRef(mergeEls[i]!.getAttribute('ref') ?? '');
+    if (rect) merges.push(rect);
+  }
+
+  return { cells: grid, merges };
 }
 
-function gridToTable(grid: string[][]): MarkdownTable {
+/** Build a GFM table from an inline-content matrix; row 0 is the header slot. */
+function inlineGridToTable(grid: MarkdownInlineNode[][][]): MarkdownTable {
   const maxCols = grid.reduce((m, r) => Math.max(m, r.length), 1);
   const rows: MarkdownTableRow[] = grid.map((cells, rowIdx) => {
     const children: MarkdownTableCell[] = [];
     for (let c = 0; c < maxCols; c++) {
-      const value = cells[c] ?? '';
       children.push({
         type: 'tableCell',
         ...(rowIdx === 0 ? { isHeader: true } : {}),
-        children: value ? [{ type: 'text', value }] : [],
+        children: cells[c] ?? [],
       });
     }
     return { type: 'tableRow', children };
   });
   return { type: 'table', children: rows };
+}
+
+/** Build a GFM table from a text matrix; row 0 occupies the header slot. */
+function textGridToTable(grid: string[][]): MarkdownTable {
+  return inlineGridToTable(
+    grid.map((row) => row.map((value) => (value ? [{ type: 'text', value }] : []))),
+  );
+}
+
+function cellsToTable(cells: XlsxCell[][]): MarkdownTable {
+  return inlineGridToTable(cells.map((row) => row.map(cellInline)));
+}
+
+/**
+ * Whether row 0 of a region reads as a header.
+ *
+ * A header row is complete and textual — every cell filled, none of them a
+ * number or a date. That is informational only: GFM requires a header row, so
+ * row 0 sits in the header slot either way and maps to the anchor row on the
+ * way back. What it changes is the `header=false` marker an author or a later
+ * importer can act on.
+ */
+function inferHeader(cells: XlsxCell[][]): boolean {
+  if (cells.length < 2) return false;
+  const first = cells[0]!;
+  if (first.length === 0) return false;
+  return first.every((cell) => cell.kind === 'string');
+}
+
+/**
+ * The companion formulas table for a region, or null when it holds no formulas.
+ *
+ * Its header row is the region's SOURCE COLUMN LETTERS rather than a repeat of
+ * the value headers. That buys two things: the body rows then cover every source
+ * row including the anchor row (a formula in the header row is representable),
+ * and each column announces which sheet column it belongs to.
+ */
+function formulasTable(cells: XlsxCell[][], rect: CellRect): MarkdownTable | null {
+  if (!cells.some((row) => row.some((cell) => cell.formula))) return null;
+  const header: string[] = [];
+  for (let c = rect.left; c <= rect.right; c++) header.push(columnLetter(c));
+  const body = cells.map((row) => row.map((cell) => (cell.formula ? `=${cell.formula}` : '')));
+  return textGridToTable([header, ...body]);
+}
+
+/** Inline content for one cell — its rich runs when it has them, else its text. */
+function cellInline(cell: XlsxCell): MarkdownInlineNode[] {
+  return cell.richText ?? (cell.text ? [{ type: 'text', value: cell.text }] : []);
+}
+
+/** Plain inline content for a string that is never rich (a ref, a formula). */
+function textInline(value: string): MarkdownInlineNode[] {
+  return value ? [{ type: 'text', value }] : [];
+}
+
+/**
+ * The sheet's left-over single cells as one address-keyed table.
+ *
+ * The Value column goes through {@link cellInline} rather than `.text`: a
+ * footnote line like "¹USDA, Agricultural Research Service" is a stray cell,
+ * and it carries exactly the superscript that makes it a footnote.
+ */
+function looseTable(strays: readonly StrayCell[]): MarkdownTable {
+  const withFormula = strays.some((s) => s.cell.formula);
+  const header = withFormula ? ['Cell', 'Value', 'Formula'] : ['Cell', 'Value'];
+  const body = strays.map((s) => {
+    const ref = textInline(formatCellRef(s.row, s.col));
+    const value = cellInline(s.cell);
+    return withFormula
+      ? [ref, value, textInline(s.cell.formula ? `=${s.cell.formula}` : '')]
+      : [ref, value];
+  });
+  return inlineGridToTable([header.map(textInline), ...body]);
+}
+
+/** A heading carrying a `{[dataTable …]}` annotation. */
+function annotatedHeading(
+  depth: 1 | 2,
+  text: string,
+  params: Record<string, string>,
+): MarkdownHeading {
+  return {
+    type: 'heading',
+    depth,
+    children: [{ type: 'text', value: text }],
+    templateAnnotation: { template: 'dataTable', params },
+  };
 }
 
 export async function xlsxToMarkdownDoc(
@@ -356,12 +641,81 @@ export async function xlsxToMarkdownDoc(
 
   const children: MarkdownBlockNode[] = [];
   const single = selected.length === 1 && options.sheet !== undefined;
+  const useRegions = options.regions !== false;
+  const withFormulas = options.formulas !== false;
+
   for (const sheet of selected) {
-    const grid = await sheetToGrid(pkg, sheet.path, shared, styles, date1904);
+    const { cells, merges } = await sheetToCells(pkg, sheet.path, shared, styles, date1904);
     if (!single) {
       children.push({ type: 'heading', depth: 1, children: [{ type: 'text', value: sheet.name }] });
     }
-    if (grid.length > 0) children.push(gridToTable(grid));
+    if (cells.length === 0) continue;
+
+    if (!useRegions) {
+      children.push(cellsToTable(cells));
+      continue;
+    }
+
+    const plan = detectRegions(cells, merges, {
+      ...(options.maxRegionsPerSheet !== undefined
+        ? { maxRegionsPerSheet: options.maxRegionsPerSheet }
+        : {}),
+      ...(options.minRegionCells !== undefined ? { minRegionCells: options.minRegionCells } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+    // Detection degrading is a functional outcome, not a failure: the sheet
+    // still imports, just as one grid instead of several tables.
+    for (const warning of plan.warnings) console.warn(`XLSX import: ${sheet.name}: ${warning}`);
+    if (plan.degraded || (plan.regions.length === 0 && plan.strays.length === 0)) {
+      children.push(cellsToTable(cells));
+      continue;
+    }
+
+    const depth: 1 | 2 = single ? 1 : 2;
+    for (const region of plan.regions) {
+      const slice = sliceRect(cells, region.rect, EMPTY_CELL);
+      const anchor = formatCellRef(region.rect.top, region.rect.left);
+      const title = region.title ?? `${sheet.name} — ${anchor}`;
+      children.push(
+        annotatedHeading(depth, title, {
+          sheet: sheet.name,
+          anchor,
+          // Omit the common case: `headerRow=true` is what a GFM table already
+          // says. (`headerRow`, not `header` — `dataTable` already declares a
+          // `headers` input, and two params one letter apart in the same
+          // annotation is a trap for anyone reading or editing the markdown.)
+          ...(inferHeader(slice) ? {} : { headerRow: 'false' }),
+          // A caption promoted into the heading has left its cell behind;
+          // record where, so the reverse path can put the text back.
+          ...(region.titleCell
+            ? { titleAnchor: formatCellRef(region.titleCell.row, region.titleCell.col) }
+            : {}),
+        }),
+        cellsToTable(slice),
+      );
+
+      if (!withFormulas) continue;
+      const formulas = formulasTable(slice, region.rect);
+      if (!formulas) continue;
+      children.push(
+        annotatedHeading(depth, `${title} — formulas`, {
+          sheet: sheet.name,
+          anchor,
+          role: 'formulas',
+        }),
+        formulas,
+      );
+    }
+
+    if (plan.strays.length > 0) {
+      children.push(
+        annotatedHeading(depth, `${sheet.name} — loose cells`, {
+          sheet: sheet.name,
+          role: 'loose',
+        }),
+        looseTable(plan.strays),
+      );
+    }
   }
   return { type: 'document', children };
 }

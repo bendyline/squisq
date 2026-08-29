@@ -14,6 +14,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useEditorContext, type ThemeInheritance, type LayoutMode } from './EditorContext';
 import { Icon } from './Icon';
 import { useEscapeDismissal } from './useEscapeDismissal';
+import { useProofingState } from './proofing/ProofingContext';
 
 export function ViewMenuPanel() {
   const {
@@ -30,6 +31,7 @@ export function ViewMenuPanel() {
     layoutMode,
     setLayoutMode,
   } = useEditorContext();
+  const proofingState = useProofingState();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -111,6 +113,13 @@ export function ViewMenuPanel() {
             checked={statusBarVisible}
             onChange={toggleStatusBar}
           />
+          {proofingState && (
+            <MenuToggle
+              label="Check spelling & grammar"
+              checked={proofingState.enabled}
+              onChange={() => proofingState.setEnabled(!proofingState.enabled)}
+            />
+          )}
           <div className="squisq-view-menu-separator" role="separator" />
           <MenuRadioGroup
             label="Editor styling from theme"

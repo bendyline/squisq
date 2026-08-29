@@ -807,6 +807,27 @@ describe('<Toolbar> Insert menu', () => {
     expect(screen.getByRole('dialog', { name: 'Record media' })).toBeTruthy();
   });
 
+  it('opens document narration from the Insert menu as its own dialog', async () => {
+    render(
+      <EditorProvider
+        initialMarkdown="# Title"
+        initialView="raw"
+        mediaProvider={mediaProviderWith(0)}
+      >
+        <Toolbar />
+      </EditorProvider>,
+    );
+
+    fireEvent.click(screen.getByLabelText('Insert'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Document narration' }));
+
+    expect(screen.queryByRole('menu')).toBeNull();
+    // A separate controller from "Record media", so the two dialogs never
+    // share open state — and it names what it captures.
+    expect(screen.getByRole('dialog', { name: 'Record document narration' })).toBeTruthy();
+    expect(screen.queryByRole('dialog', { name: 'Record media' })).toBeNull();
+  });
+
   it('adds a default task list from the Insert menu in raw fallback mode', async () => {
     render(
       <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>

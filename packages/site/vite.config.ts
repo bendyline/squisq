@@ -148,9 +148,59 @@ function ffmpegCorePlugin(): Plugin {
   };
 }
 
+/**
+ * Serve and publish harper.js's WASM binary beside the demo site — the
+ * reference implementation of the host side of the proofing capability:
+ * the host serves the engine same-origin (correct MIME for
+ * instantiateStreaming) and passes a provider pointed at it. The
+ * Apache-2.0 license travels with the binary.
+ */
+function harperCorePlugin(): Plugin {
+  const harperDir = path.resolve(__dirname, '../../node_modules/harper.js');
+  const publishedFiles = new Map<string, string>([
+    ['/harper/harper_wasm_bg.wasm', path.join(harperDir, 'dist', 'harper_wasm_bg.wasm')],
+    // The 'full' engine derives this sibling URL by filename substitution
+    // and loads BOTH binaries — hosts must serve the pair side by side.
+    ['/harper/harper_wasm_slim_bg.wasm', path.join(harperDir, 'dist', 'harper_wasm_slim_bg.wasm')],
+    ['/harper/LICENSE.txt', path.join(harperDir, 'LICENSE')],
+  ]);
+
+  const servePublishedFile: Connect.NextHandleFunction = (req, res, next) => {
+    const pathname = req.url?.split('?', 1)[0] ?? '';
+    const filePath = publishedFiles.get(pathname);
+    if (!filePath) return next();
+    if (!fs.existsSync(filePath)) return next();
+    const stat = fs.statSync(filePath);
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader(
+      'Content-Type',
+      pathname.endsWith('.wasm') ? 'application/wasm' : 'text/plain; charset=utf-8',
+    );
+    fs.createReadStream(filePath).pipe(res);
+  };
+
+  return {
+    name: 'harper-core',
+    configureServer(server) {
+      server.middlewares.use(servePublishedFile);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(servePublishedFile);
+    },
+    writeBundle(options) {
+      const outDir = options.dir ?? path.resolve(__dirname, 'dist');
+      for (const [publicPath, sourcePath] of publishedFiles) {
+        const destinationPath = path.join(outDir, ...publicPath.slice(1).split('/'));
+        fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+        fs.copyFileSync(sourcePath, destinationPath);
+      }
+    },
+  };
+}
+
 export default defineConfig({
   base: process.env.VITE_BASE || '/',
-  plugins: [react(), sampleContentPlugin(), ffmpegCorePlugin()],
+  plugins: [react(), sampleContentPlugin(), ffmpegCorePlugin(), harperCorePlugin()],
   resolve: {
     // The editor package's CSS is bundled into dist/ only by its one-shot
     // build. Its tsup dev watchers rebuild JS and declarations, so resolving

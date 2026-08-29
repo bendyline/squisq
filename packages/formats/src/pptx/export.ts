@@ -92,6 +92,7 @@ import {
   inlineNodesToRuns,
   inlineNodeToRuns,
   type InlineRunHandlers,
+  type InlineRunFormat,
 } from '../shared/inlineRuns.js';
 import {
   NS_PML,
@@ -1872,12 +1873,12 @@ function convertMathBlock(node: MarkdownMathBlock): string {
 // Inline Conversion (DrawingML runs)
 // ============================================
 
-interface InlineFormat {
-  bold?: boolean;
-  italic?: boolean;
-  strike?: boolean;
-  code?: boolean;
-}
+/**
+ * Formatting state threaded down by the shared walker in
+ * `shared/inlineRuns.ts`. An alias rather than a copy, so a newly threaded
+ * format (vertical alignment, say) can't go unnoticed here.
+ */
+type InlineFormat = InlineRunFormat;
 
 /**
  * PPTX leaf handlers for the shared run-based inline walker. The traversal
@@ -1913,6 +1914,12 @@ function makeRun(text: string, format: InlineFormat, style: SlideStyle): string 
   if (format.bold) rPrParts.push(`b="1"`);
   if (format.italic) rPrParts.push(`i="1"`);
   if (format.strike) rPrParts.push(`strike="sngStrike"`);
+  // DrawingML expresses vertical alignment as a `baseline` OFFSET in
+  // thousandths of a percent of the font size, not as an enum — the values
+  // PowerPoint itself writes for its Superscript/Subscript buttons.
+  if (format.vertAlign) {
+    rPrParts.push(`baseline="${format.vertAlign === 'superscript' ? 30000 : -25000}"`);
+  }
 
   // `a:rPr` children must follow the ECMA-376 `CT_TextCharacterProperties`
   // sequence: ln → EG_FillProperties (solidFill) → EG_EffectProperties →

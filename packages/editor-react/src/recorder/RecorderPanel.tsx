@@ -17,6 +17,7 @@ import {
   type RecorderColorScheme,
   type RecorderNarrationOptions,
   type RecorderSaveResult,
+  type RecorderSlidesOptions,
 } from './RecorderModal.js';
 import { Icon } from '../Icon';
 import type { RecorderSource } from './hooks/useMediaRecorder.js';
@@ -30,8 +31,12 @@ export interface RecorderPanelProps {
   onSave?: (result: RecorderSaveResult) => void;
   /** Enables the modal's "Show narration mode" checkbox. */
   narration?: RecorderNarrationOptions | null;
+  /** Enables the modal's "Show slides mode" checkbox. */
+  slides?: RecorderSlidesOptions | null;
   /** ARIA / tooltip label. Defaults to `'Record media'`. */
   tooltip?: string;
+  /** Dialog heading / accessible name. Defaults to the modal's own `'Record media'`. */
+  title?: string;
   /** Optional className for the trigger button. */
   className?: string;
   /** Controlled modal state. Omit to let the panel manage its own state. */
@@ -49,7 +54,9 @@ export function RecorderPanel({
   colorScheme = 'light',
   onSave,
   narration = null,
+  slides = null,
   tooltip = 'Record media',
+  title,
   className,
   open: controlledOpen,
   onOpenChange,
@@ -89,6 +96,8 @@ export function RecorderPanel({
             initialMode={initialMode}
             colorScheme={colorScheme}
             narration={narration}
+            slides={slides}
+            {...(title !== undefined ? { title } : {})}
             onClose={handleClose}
             onSave={(result) => {
               onSave?.(result);

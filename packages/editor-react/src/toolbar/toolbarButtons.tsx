@@ -87,6 +87,26 @@ export const BUTTONS: ToolbarButton[] = [
     group: 'insert',
     faIcon: 'fa-solid fa-code',
   },
+  // Vertical alignment sits with `code` rather than beside bold/italic: all
+  // three are inline marks, but these are reached for far less often, and the
+  // toolbar overflows in declaration order — putting them earlier would push
+  // bullet lists and Heading 1 into the ··· menu on a narrow editor.
+  {
+    id: 'superscript',
+    label: 'x²',
+    icon: 'x²',
+    title: 'Superscript (Ctrl+.)',
+    group: 'insert',
+    faIcon: 'fa-solid fa-superscript',
+  },
+  {
+    id: 'subscript',
+    label: 'x₂',
+    icon: 'x₂',
+    title: 'Subscript (Ctrl+,)',
+    group: 'insert',
+    faIcon: 'fa-solid fa-subscript',
+  },
   {
     id: 'hr',
     label: '—',

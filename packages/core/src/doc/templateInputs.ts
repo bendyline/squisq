@@ -105,6 +105,10 @@ function renderInlineHtml(nodes: MarkdownInlineNode[]): string {
           return `<strong>${renderInlineHtml(node.children)}</strong>`;
         case 'delete':
           return `<del>${renderInlineHtml(node.children)}</del>`;
+        case 'superscript':
+          return `<sup>${renderInlineHtml(node.children)}</sup>`;
+        case 'subscript':
+          return `<sub>${renderInlineHtml(node.children)}</sub>`;
         case 'inlineCode':
           return `<code>${escapeInlineHtml(node.value)}</code>`;
         case 'link': {

@@ -260,6 +260,7 @@ export {
 
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';
+export { Superscript, Subscript } from './VerticalAlign.js';
 
 // Diagram editor — ASCII fences are the authored diagram format. The
 // AsciiDiagramExtension turns code fences containing box-and-line art
@@ -531,9 +532,25 @@ export type {
   RecorderColorScheme,
   RecorderModalProps,
   RecorderNarrationOptions,
+  RecorderSlidesOptions,
   RecorderSaveResult,
   RecorderCameraSaveResult,
+  SlideTimingSaveResult,
 } from './recorder/RecorderModal.js';
+export { RecorderSlidesPanel } from './recorder/slides/RecorderSlidesPanel.js';
+export type { RecorderSlidesPanelProps } from './recorder/slides/RecorderSlidesPanel.js';
+export { buildRecorderSlideDeck } from './recorder/slides/slideDeck.js';
+export type { RecorderSlide } from './recorder/slides/slideDeck.js';
+export {
+  SLIDE_TIMING_CHECKBOX_LABEL,
+  clampSlideIndex,
+  isExpandedPanel,
+  panelModeAfterToggle,
+  showSlideTimingCheckbox,
+  slideStepForKey,
+  unshownSlidesWarning,
+  type RecorderPanelMode,
+} from './recorder/slidesModePolicy.js';
 export { RecorderButton } from './recorder/RecorderButton.js';
 export type { RecorderButtonProps } from './recorder/RecorderButton.js';
 export { RecorderPanel } from './recorder/RecorderPanel.js';
@@ -667,3 +684,28 @@ export type {
   ImageEditorTool,
   CanvasRect,
 } from './imageEditor/state.js';
+
+// Proofing — grammar/spellcheck capability contract + harper.js adapter.
+// The engine is an optional peer dependency reached only through dynamic
+// import; see `@bendyline/squisq-editor-react/proofing` for the narrow entry.
+export {
+  createHarperProofingProvider,
+  PROOF_DIALECTS,
+  PROOF_FRONTMATTER_KEYS,
+} from './proofing/index.js';
+export type {
+  ProofingProvider,
+  ProofingProviderFactory,
+  ProofingCapability,
+  ProofingDocumentRef,
+  ProofingIgnoreStore,
+  ProofingLanguage,
+  ProofingLintOptions,
+  HarperProofingConfig,
+  ProofFinding,
+  ProofSuggestion,
+  ProofSuggestionKind,
+  ProofCategory,
+  ProofDialect,
+  ProofRange,
+} from './proofing/index.js';

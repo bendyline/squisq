@@ -21,6 +21,7 @@ export default defineConfig({
     'recommend/index': 'src/recommend/index.ts',
     'narration/index': 'src/narration/index.ts',
     'fence/index': 'src/fence/index.ts',
+    'proof/index': 'src/proof/index.ts',
   },
   format: ['esm'],
   dts: true,

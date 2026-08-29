@@ -80,8 +80,10 @@ const RE_MENTION_TAG = /<span\b[^>]*?\bdata-mention\b[^>]*?>(?:<[^>]+>)*([^<]*)<
 //     class="fa-brands fa-github" contenteditable="false"></i>`.
 const RE_ICON_MD = /\{\[([a-zA-Z0-9_:-]+)\]\}/g;
 const RE_ICON_TAG = /<i\b[^>]*?\bdata-icon="([^"]*)"[^>]*?><\/i>/gi;
-const RE_MARK_TAG = /<(strong|b|em|i|s|del)>(.*?)<\/\1>/gs;
+const RE_MARK_TAG = /<(strong|b|em|i|s|del|sup|sub)>(.*?)<\/\1>/gs;
 const RE_CODE_TAG = /<code>(.*?)<\/code>/g;
+/** A bare `<sup>…</sup>` / `<sub>…</sub>` pair with no nested sup/sub inside. */
+const RE_VERT_ALIGN_TAG = /<(sup|sub)>((?:(?!<\/?(?:sup|sub)>)[\s\S])*)<\/\1>/gi;
 // Attribute-order agnostic: Tiptap's Link extension renders
 // `<a target rel href>` while `markdownToTiptap` emits `<a href title>`.
 // The attrs are parsed out of the capture rather than positionally so a
@@ -1318,6 +1320,14 @@ function inlineToHtml(text: string): string {
     stash(`<code>${escapeHtml(code)}</code>`),
   );
 
+  // Vertical alignment: `<sup>…</sup>` / `<sub>…</sub>`. Stashed (rather than
+  // escaped into visible `&lt;sup&gt;` text) so the Superscript / Subscript
+  // marks pick the tags up, and recursed so formatting inside them still works.
+  staged = staged.replace(RE_VERT_ALIGN_TAG, (_m, tag: string, inner: string) => {
+    const name = tag.toLowerCase();
+    return stash(`<${name}>${inlineToHtml(inner)}</${name}>`);
+  });
+
   // Images first: ![alt](src) — must be before links so the `!` prefix is consumed
   staged = staged.replace(RE_IMAGE, (_m, alt, src) =>
     stash(`<img alt="${escapeHtml(alt)}" src="${escapeHtml(src)}">`),
@@ -1660,15 +1670,53 @@ function markdownFromMarkTags(html: string): string {
     const content = convertedInner.slice(leading.length, convertedInner.length - trailing.length);
     if (!content) return convertedInner;
 
+    // Markdown has no delimiter pair for vertical alignment, so sup/sub keep
+    // their HTML form — core's parser folds `<sup>…</sup>` back into a real
+    // inline node on the next parse. The raw-HTML vault in `htmlToInline` is
+    // what stops the trailing tag-stripper from eating these again.
+    if (tag === 'sup' || tag === 'sub') {
+      return `${leading}<${tag}>${content}</${tag}>${trailing}`;
+    }
+
     const delimiter =
       tag === 'strong' || tag === 'b' ? '**' : tag === 'em' || tag === 'i' ? '*' : '~~';
     return `${leading}${delimiter}${content}${delimiter}${trailing}`;
   });
 }
 
+/**
+ * Raw HTML that must reach the markdown output intact.
+ *
+ * `htmlToInline` finishes by stripping every remaining tag, which is right for
+ * the editor chrome ProseMirror adds but wrong for the handful of tags that ARE
+ * the markdown: `<sup>`/`<sub>`, and the `<img width=…>` form used when an
+ * image carries dimensions markdown cannot express. Both are swapped for an
+ * opaque sentinel before the strip and restored after it — the same idiom the
+ * markdown → HTML direction uses for code spans and links.
+ */
+class RawHtmlVault {
+  private readonly parts: string[] = [];
+
+  /** Replace a raw HTML string with a sentinel the tag-stripper won't match. */
+  protect(html: string): string {
+    this.parts.push(html);
+    return `\u0000RAW${this.parts.length - 1}\u0000`;
+  }
+
+  /** Swap every sentinel back for its raw HTML. */
+  restore(text: string): string {
+    let out = text;
+    for (let i = this.parts.length - 1; i >= 0; i--) {
+      out = out.split(`\u0000RAW${i}\u0000`).join(this.parts[i]!);
+    }
+    return out;
+  }
+}
+
 /** Convert inline HTML back to markdown */
 function htmlToInline(html: string): string {
   let result = html;
+  const vault = new RawHtmlVault();
 
   // Soft line breaks — convert <br> to GFM hard-break syntax (two trailing
   // spaces + newline) before stripping tags so the newline survives.
@@ -1689,6 +1737,10 @@ function htmlToInline(html: string): string {
   // delimiters or the next Markdown parse will expose those delimiters as
   // literal text. Convert marks recursively so nested marks remain valid.
   result = markdownFromMarkTags(result);
+
+  // Vertical alignment stays as HTML (see `markdownFromMarkTags`), so vault the
+  // tags now — the strip pass below removes every tag it can still see.
+  result = result.replace(/<\/?(?:sup|sub)>/gi, (tag) => vault.protect(tag));
 
   // Code
   result = result.replace(RE_CODE_TAG, '`$1`');
@@ -1723,11 +1775,15 @@ function htmlToInline(html: string): string {
     const src = /\bsrc="([^"]*)"/i.exec(attrs)?.[1];
     if (!src) return match;
     const alt = /\balt="([^"]*)"/i.exec(attrs)?.[1] ?? '';
-    return serializeImage(src, alt, attrs);
+    const serialized = serializeImage(src, alt, attrs);
+    // A sized image serializes to a raw `<img>` tag, which the strip pass
+    // below would otherwise delete outright — losing the image entirely.
+    return serialized.startsWith('<') ? vault.protect(serialized) : serialized;
   });
 
   // Strip remaining tags
   result = result.replace(RE_STRIP_TAGS, '');
+  result = vault.restore(result);
 
   return restoreLeadingSpaces(unescapeHtml(result));
 }

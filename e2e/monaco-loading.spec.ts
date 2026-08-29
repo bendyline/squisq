@@ -51,9 +51,13 @@ test('loads the compact Markdown editor only when Source is opened', async ({ pa
   // Markdown uses grammar-only highlighting. Monaco can opportunistically
   // start its base editor worker (for links/word operations) depending on
   // browser scheduling, but it must not start a rich language-service worker.
+  // The proofing engine (harper) legitimately runs in a blob: worker at app
+  // boot — unrelated to Monaco, so it is exempt from this assertion.
   expect(
-    startedWorkers.every((url) =>
-      (new URL(url).pathname.split('/').at(-1) ?? '').startsWith('editor.worker-'),
+    startedWorkers.every(
+      (url) =>
+        url.startsWith('blob:') ||
+        (new URL(url).pathname.split('/').at(-1) ?? '').startsWith('editor.worker-'),
     ),
   ).toBe(true);
 

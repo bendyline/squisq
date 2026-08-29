@@ -73,6 +73,10 @@ export function isTiptapActive(editor: TiptapEditor, id: string): boolean {
       return editor.isActive('italic');
     case 'strikethrough':
       return editor.isActive('strike');
+    case 'superscript':
+      return editor.isActive('superscript');
+    case 'subscript':
+      return editor.isActive('subscript');
     case 'code':
       return editor.isActive('code');
     case 'h1':

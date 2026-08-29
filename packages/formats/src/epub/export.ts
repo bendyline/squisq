@@ -38,6 +38,7 @@ import type {
   MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
+import { FootnoteIndex, footnoteIds } from '../shared/footnotes.js';
 import { escapeXml } from '../ooxml/xmlUtils.js';
 import { inferMimeType, extractFilename } from '../html/imageUtils.js';
 import { extractPlainText } from '../shared/text.js';
@@ -110,6 +111,15 @@ export async function markdownDocToEpub(
 
   // Split document into chapters
   const chapters = splitIntoChapters(doc.children);
+  // One index for the whole book: footnote numbers must not restart per chapter,
+  // and a definition often sits in a different chapter from its citation.
+  const footnoteIndex = new FootnoteIndex(doc);
+  const citedAnywhere = new Set<string>();
+  collectCitedIdentifiers(doc.children, citedAnywhere);
+  const uncitedFootnotes = footnoteIndex
+    .ordered()
+    .filter((fn) => fn.definition && !citedAnywhere.has(fn.identifier))
+    .map((fn) => fn.identifier);
 
   // Collect images referenced in the document, deduplicating filenames
   const imageEntries = collectDocImages(doc.children);
@@ -266,11 +276,16 @@ export async function markdownDocToEpub(
     const audioInfo = chapterAudio[i] ?? null;
 
     // Render XHTML with element IDs for SMIL references when audio is present
+    // A definition nobody cites has no chapter to belong to; park the leftovers
+    // in the final chapter so the content still reaches the reader.
+    const isLastChapter = i === chapters.length - 1;
     const { xhtml, ids } = renderChapterXhtml(
       chap.nodes,
       title,
       resolvedImages,
       audioInfo !== null,
+      footnoteIndex,
+      isLastChapter ? uncitedFootnotes : [],
     );
     zip.file(`OEBPS/chapters/${filename}`, xhtml);
 
@@ -456,11 +471,58 @@ type ImageMap = Map<string, { data: ArrayBuffer; mime: string; filename: string 
  * refs to IDs that exist nowhere in the XHTML, which fails epubcheck).
  * Reporting the real IDs makes the drift unrepresentable.
  */
+/**
+ * A chapter's footnotes as an EPUB 3 `<aside epub:type="footnotes">`.
+ *
+ * Definitions render to '' where they stand (see `blockToXhtml`) and reappear
+ * here, so the note sits at the end of the chapter that cites it rather than
+ * wherever the markdown author happened to write it. Numbering comes from the
+ * DOCUMENT-wide index, so a note first cited in chapter 3 keeps its number.
+ */
+/** Every footnote identifier the prose actually cites, at any depth. */
+function collectCitedIdentifiers(nodes: readonly unknown[], into: Set<string>): void {
+  for (const raw of nodes) {
+    const node = raw as { type?: string; identifier?: string; children?: unknown[] };
+    if (node?.type === 'footnoteReference' && node.identifier) into.add(node.identifier);
+    if (Array.isArray(node?.children)) collectCitedIdentifiers(node.children, into);
+  }
+}
+
+function renderFootnotesXhtml(identifiers: readonly string[], ctx: EpubRenderCtx): string {
+  const index = ctx.footnotes;
+  if (!index || identifiers.length === 0) return '';
+  const seen = new Set<string>();
+  const notes = index
+    .ordered()
+    .filter(
+      (fn) =>
+        identifiers.includes(fn.identifier) && !seen.has(fn.identifier) && seen.add(fn.identifier),
+    );
+  if (notes.length === 0) return '';
+  const items = notes.map((fn) => {
+    const { def } = footnoteIds(fn.identifier);
+    const body = fn.definition
+      ? fn.definition.children.map((c) => blockToXhtml(c, ctx)).join('')
+      : '';
+    return (
+      `<li id="${escapeXml(def)}" epub:type="footnote">` +
+      `<span class="squisq-footnote-num">${fn.number}.</span> ${body}</li>`
+    );
+  });
+  return (
+    `\n<aside class="squisq-footnotes" epub:type="footnotes"><hr/>\n<ol>\n` +
+    items.join('\n') +
+    `\n</ol>\n</aside>`
+  );
+}
+
 function renderChapterXhtml(
   nodes: MarkdownBlockNode[],
   bookTitle: string,
   images: ImageMap,
   addIds = false,
+  footnotes?: FootnoteIndex,
+  trailingFootnotes: readonly string[] = [],
 ): { xhtml: string; ids: string[] } {
   const ids: string[] = [];
   const nextId = () => {
@@ -468,7 +530,10 @@ function renderChapterXhtml(
     ids.push(id);
     return id;
   };
-  const body = nodes.map((n) => blockToXhtml(n, images, addIds ? nextId : undefined)).join('\n');
+  const ctx: EpubRenderCtx = { images, footnotes, cited: new Set<string>() };
+  const rendered = nodes.map((n) => blockToXhtml(n, ctx, addIds ? nextId : undefined)).join('\n');
+  // Footnotes cited in THIS chapter, plus any the caller could not place.
+  const body = rendered + renderFootnotesXhtml([...(ctx.cited ?? []), ...trailingFootnotes], ctx);
   const xhtml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
@@ -484,7 +549,22 @@ ${body}
   return { xhtml, ids };
 }
 
-function blockToXhtml(node: MarkdownBlockNode, images: ImageMap, nextId?: () => string): string {
+/**
+ * What the XHTML renderers need threaded through the whole node walk.
+ *
+ * Was a bare `ImageMap`; footnotes need per-chapter citation state alongside
+ * it, and widening the one threaded value beats adding a parallel parameter to
+ * every renderer.
+ */
+interface EpubRenderCtx {
+  images: ImageMap;
+  /** Document-wide numbering, so numbers stay coherent across chapters. */
+  footnotes?: FootnoteIndex;
+  /** Identifiers cited while rendering the CURRENT chapter. */
+  cited?: Set<string>;
+}
+
+function blockToXhtml(node: MarkdownBlockNode, ctx: EpubRenderCtx, nextId?: () => string): string {
   // Allocate the ID LAZILY — only the branches that actually emit `idAttr`
   // should consume one. Allocating eagerly here burned an ID for node types
   // that render to '' (footnoteDefinition, containerDirective, …), which is
@@ -499,20 +579,20 @@ function blockToXhtml(node: MarkdownBlockNode, images: ImageMap, nextId?: () => 
   switch (node.type) {
     case 'heading': {
       const tag = `h${node.depth}`;
-      return `<${tag}${idAttr()}>${inlinesToXhtml(node.children, images)}</${tag}>`;
+      return `<${tag}${idAttr()}>${inlinesToXhtml(node.children, ctx)}</${tag}>`;
     }
 
     case 'paragraph':
-      return `<p${idAttr()}>${inlinesToXhtml(node.children, images)}</p>`;
+      return `<p${idAttr()}>${inlinesToXhtml(node.children, ctx)}</p>`;
 
     case 'blockquote':
-      return `<blockquote${idAttr()}>\n${node.children.map((c) => blockToXhtml(c, images, nextId)).join('\n')}\n</blockquote>`;
+      return `<blockquote${idAttr()}>\n${node.children.map((c) => blockToXhtml(c, ctx, nextId)).join('\n')}\n</blockquote>`;
 
     case 'list': {
       const tag = node.ordered ? 'ol' : 'ul';
       const startAttr =
         node.ordered && node.start && node.start !== 1 ? ` start="${node.start}"` : '';
-      const items = node.children.map((item) => listItemToXhtml(item, images)).join('\n');
+      const items = node.children.map((item) => listItemToXhtml(item, ctx)).join('\n');
       return `<${tag}${idAttr()}${startAttr}>\n${items}\n</${tag}>`;
     }
 
@@ -525,7 +605,7 @@ function blockToXhtml(node: MarkdownBlockNode, images: ImageMap, nextId?: () => 
       return `<hr${idAttr()}/>`;
 
     case 'table':
-      return tableToXhtml(node as MarkdownTable, images, idAttr());
+      return tableToXhtml(node as MarkdownTable, ctx, idAttr());
 
     case 'htmlBlock':
       // Strip HTML tags for XHTML safety — raw HTML may not be well-formed XML
@@ -539,17 +619,17 @@ function blockToXhtml(node: MarkdownBlockNode, images: ImageMap, nextId?: () => 
   }
 }
 
-function listItemToXhtml(item: MarkdownListItem, images: ImageMap): string {
-  const content = item.children.map((c) => blockToXhtml(c, images)).join('\n');
+function listItemToXhtml(item: MarkdownListItem, ctx: EpubRenderCtx): string {
+  const content = item.children.map((c) => blockToXhtml(c, ctx)).join('\n');
   // Unwrap single <p> inside <li> for cleaner output
   const unwrapped =
     item.children.length === 1 && item.children[0].type === 'paragraph'
-      ? inlinesToXhtml((item.children[0] as MarkdownParagraph).children, images)
+      ? inlinesToXhtml((item.children[0] as MarkdownParagraph).children, ctx)
       : content;
   return `<li>${unwrapped}</li>`;
 }
 
-function tableToXhtml(table: MarkdownTable, images: ImageMap, idAttr = ''): string {
+function tableToXhtml(table: MarkdownTable, ctx: EpubRenderCtx, idAttr = ''): string {
   const rows = table.children;
   if (rows.length === 0) return `<table${idAttr}></table>`;
 
@@ -560,7 +640,7 @@ function tableToXhtml(table: MarkdownTable, images: ImageMap, idAttr = ''): stri
   function cellToXhtml(cell: MarkdownTableCell, tag: 'th' | 'td', colIndex: number): string {
     const a = align[colIndex];
     const style = a ? ` style="text-align: ${a}"` : '';
-    return `<${tag}${style}>${inlinesToXhtml(cell.children, images)}</${tag}>`;
+    return `<${tag}${style}>${inlinesToXhtml(cell.children, ctx)}</${tag}>`;
   }
 
   const thead = `<thead><tr>${headerRow.children.map((c, i) => cellToXhtml(c, 'th', i)).join('')}</tr></thead>`;
@@ -572,37 +652,56 @@ function tableToXhtml(table: MarkdownTable, images: ImageMap, idAttr = ''): stri
   return `<table${idAttr}>${thead}${tbody}</table>`;
 }
 
-function inlinesToXhtml(nodes: MarkdownInlineNode[], images: ImageMap): string {
-  return nodes.map((n) => inlineToXhtml(n, images)).join('');
+function inlinesToXhtml(nodes: MarkdownInlineNode[], ctx: EpubRenderCtx): string {
+  return nodes.map((n) => inlineToXhtml(n, ctx)).join('');
 }
 
-function inlineToXhtml(node: MarkdownInlineNode, images: ImageMap): string {
+function inlineToXhtml(node: MarkdownInlineNode, ctx: EpubRenderCtx): string {
   switch (node.type) {
     case 'text':
       return escapeXml(node.value);
 
     case 'strong':
-      return `<strong>${inlinesToXhtml(node.children, images)}</strong>`;
+      return `<strong>${inlinesToXhtml(node.children, ctx)}</strong>`;
 
     case 'emphasis':
-      return `<em>${inlinesToXhtml(node.children, images)}</em>`;
+      return `<em>${inlinesToXhtml(node.children, ctx)}</em>`;
 
     case 'delete':
-      return `<del>${inlinesToXhtml(node.children, images)}</del>`;
+      return `<del>${inlinesToXhtml(node.children, ctx)}</del>`;
+
+    case 'superscript':
+      return `<sup>${inlinesToXhtml(node.children, ctx)}</sup>`;
+
+    case 'footnoteReference': {
+      if (!ctx.footnotes) return '';
+      const { number, occurrence } = ctx.footnotes.cite(node.identifier);
+      const { ref, def } = footnoteIds(node.identifier, occurrence);
+      ctx.cited?.add(node.identifier);
+      // `epub:type="noteref"` is what lets a reading system show the note as a
+      // popup instead of jumping the reader to the end of the chapter.
+      return (
+        `<sup class="squisq-footnote-ref" epub:type="noteref">` +
+        `<a href="#${escapeXml(def)}" id="${escapeXml(ref)}">${number}</a></sup>`
+      );
+    }
+
+    case 'subscript':
+      return `<sub>${inlinesToXhtml(node.children, ctx)}</sub>`;
 
     case 'inlineCode':
       return `<code>${escapeXml(node.value)}</code>`;
 
     case 'link': {
       const href = sanitizeUrl(node.url, 'link');
-      if (!href) return inlinesToXhtml(node.children, images);
+      if (!href) return inlinesToXhtml(node.children, ctx);
       const titleAttr = node.title ? ` title="${escapeXml(node.title)}"` : '';
-      return `<a href="${escapeXml(href)}"${titleAttr}>${inlinesToXhtml(node.children, images)}</a>`;
+      return `<a href="${escapeXml(href)}"${titleAttr}>${inlinesToXhtml(node.children, ctx)}</a>`;
     }
 
     case 'image': {
       const alt = escapeXml(node.alt ?? '');
-      const resolved = images.get(node.url);
+      const resolved = ctx.images.get(node.url);
       const safeSrc = resolved ? `../images/${resolved.filename}` : sanitizeUrl(node.url, 'media');
       if (!safeSrc) return alt;
       const src = escapeXml(safeSrc);

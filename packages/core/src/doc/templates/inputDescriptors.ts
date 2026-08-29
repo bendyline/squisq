@@ -291,6 +291,24 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
     { key: 'rows', description: 'Table rows (supply via a data fence)' },
     { key: 'align', description: 'Per-column alignment (supply via a data fence)' },
     { key: 'colorScheme', description: 'Header color scheme', valueHint: COLOR_SCHEME_HINT },
+    // Spreadsheet provenance. These do not affect rendering — they record where
+    // a table came from so `markdownDocToXlsx` can put it back at the right
+    // address instead of piling every table at A1. Declared here for the same
+    // reason `rows`/`align` are: so a round-tripped XLSX import doesn't light up
+    // with `unknown-input` warnings.
+    { key: 'sheet', description: 'Source worksheet name (XLSX round-trip)' },
+    { key: 'anchor', description: "Top-left cell of the region, e.g. 'B7'" },
+    {
+      key: 'role',
+      description: 'What the table holds within its region',
+      values: ['values', 'formulas', 'loose'],
+    },
+    {
+      key: 'headerRow',
+      description: 'Whether row 1 of the source region is a header row',
+      coerce: 'boolean',
+    },
+    { key: 'titleAnchor', description: 'Cell this heading text was absorbed from' },
   ],
   barChart: CHART_DESCRIPTORS([STACKED_DESCRIPTOR]),
   columnChart: CHART_DESCRIPTORS([STACKED_DESCRIPTOR]),

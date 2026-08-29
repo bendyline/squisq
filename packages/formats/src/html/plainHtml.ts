@@ -26,6 +26,7 @@ import {
 import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { resolveFontFamily, buildGoogleFontsUrl } from '@bendyline/squisq/schemas';
 import { resolveThemeForDoc } from '@bendyline/squisq/doc';
+import { FootnoteIndex, footnoteIds } from '../shared/footnotes.js';
 
 // ── Public Types ───────────────────────────────────────────────────
 
@@ -105,6 +106,12 @@ interface RenderCtx {
   images?: Map<string, string>;
   links?: Map<string, string>;
   htmlPolicy: HtmlPolicy;
+  /**
+   * Footnote numbering for the document being rendered. Undefined for the
+   * fragment helpers that render a node with no document around it — a
+   * reference then falls back to printing its identifier rather than a number.
+   */
+  footnotes?: FootnoteIndex;
 }
 
 // ── Public API ─────────────────────────────────────────────────────
@@ -144,8 +151,9 @@ export function markdownDocToPlainHtml(
   const theme =
     options.theme ??
     (resolveId ? resolveThemeForDoc(doc, resolveId, options.themeRegistry) : undefined);
-  const ctx: RenderCtx = { images, links, htmlPolicy };
-  const body = renderTopLevel(doc.children, ctx);
+  const footnotes = new FootnoteIndex(doc);
+  const ctx: RenderCtx = { images, links, htmlPolicy, footnotes };
+  const body = renderTopLevel(doc.children, ctx) + renderFootnotesSection(footnotes, ctx);
   const fontsLink = theme && externalResources === 'allow' ? renderFontsLink(theme) : '';
   // Resolve how to load FontAwesome — only when the doc actually uses
   // icons. When the host supplies `iconsCss` (typical for sandboxed
@@ -238,6 +246,44 @@ function renderTopLevel(children: MarkdownNode[], ctx: RenderCtx | undefined): s
     out.push(nodeToHtml(node as MarkdownNode, ctx));
   }
   return out.join('\n');
+}
+
+/**
+ * The document's footnotes as a trailing `<section>`, numbered in reference
+ * order, each with a backlink to the marker that cites it.
+ *
+ * Definitions are pulled OUT of the document flow (`nodeToHtml` renders them as
+ * nothing) because a GFM definition sits wherever the author wrote it, which is
+ * rarely where a reader wants to read it.
+ */
+function renderFootnotesSection(footnotes: FootnoteIndex, ctx: RenderCtx): string {
+  if (footnotes.isEmpty) return '';
+  const items = footnotes.ordered().map((fn) => {
+    const { def } = footnoteIds(fn.identifier);
+    const body = fn.definition
+      ? childrenToHtml(fn.definition as unknown as { children: MarkdownNode[] }, ctx)
+      : '';
+    // One backlink per citation, so a footnote cited three times can return the
+    // reader to any of the three places that cited it.
+    const backlinks = Array.from({ length: Math.max(fn.citations, 1) }, (_unused, i) => {
+      const { ref } = footnoteIds(fn.identifier, i + 1);
+      const label = fn.citations > 1 ? `↩${String.fromCharCode(0xfe0e)}${i + 1}` : '↩';
+      return (
+        `<a href="#${escapeAttr(ref)}" class="squisq-footnote-backref"` +
+        ` aria-label="Back to reference ${fn.number}">${label}</a>`
+      );
+    }).join(' ');
+    return `<li id="${escapeAttr(def)}">${body}${backlinks}</li>`;
+  });
+  const lines = [
+    '',
+    '<section class="squisq-footnotes" data-footnotes><hr>',
+    '<ol>',
+    ...items,
+    '</ol>',
+    '</section>',
+  ];
+  return lines.join('\n');
 }
 
 interface MarkdownHeadingLike {
@@ -632,6 +678,28 @@ function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): str
       return `<em>${childrenToHtml(node, ctx)}</em>`;
     case 'delete':
       return `<del>${childrenToHtml(node, ctx)}</del>`;
+    case 'superscript':
+      return `<sup>${childrenToHtml(node, ctx)}</sup>`;
+    case 'footnoteReference': {
+      if (!ctx?.footnotes) {
+        // Fragment rendering with no document around it: there is no numbering
+        // to consult and no definitions section to link to.
+        return `<sup class="squisq-footnote-ref">${escapeHtml(node.label ?? node.identifier)}</sup>`;
+      }
+      const { number, occurrence } = ctx.footnotes.cite(node.identifier);
+      const { ref, def } = footnoteIds(node.identifier, occurrence);
+      return (
+        `<sup class="squisq-footnote-ref">` +
+        `<a href="#${escapeAttr(def)}" id="${escapeAttr(ref)}">${number}</a></sup>`
+      );
+    }
+    case 'footnoteDefinition':
+      // Rendered by `renderFootnotesSection` at the end of the document, in
+      // reference order. Emitting it in place would put an unmarked paragraph
+      // wherever the author happened to write the definition.
+      return '';
+    case 'subscript':
+      return `<sub>${childrenToHtml(node, ctx)}</sub>`;
     case 'inlineCode':
       return `<code>${escapeHtml(node.value ?? '')}</code>`;
     case 'code': {

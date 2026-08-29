@@ -30,6 +30,7 @@ Third-party components remain under their respective license terms.
 | @monaco-editor/react _(bundled)_  | 4.7.0                | MIT                           | https://github.com/suren-atoyan/monaco-react  |
 | @monaco-editor/loader _(bundled)_ | 1.7.0                | MIT                           | https://github.com/suren-atoyan/monaco-loader |
 | state-local _(bundled)_           | 1.0.7                | MIT                           | https://github.com/suren-atoyan/state-local   |
+| harper.js _(peer)_                | ^2.7.0               | Apache-2.0                    | https://github.com/automattic/harper          |
 | monaco-editor _(peer)_            | ~0.50.0              | MIT                           | https://github.com/microsoft/monaco-editor    |
 | react _(peer)_                    | ^18.0.0 \|\| ^19.0.0 | MIT                           | https://github.com/facebook/react             |
 | react-dom _(peer)_                | ^18.0.0 \|\| ^19.0.0 | MIT                           | https://github.com/facebook/react             |

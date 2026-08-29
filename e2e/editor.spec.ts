@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
 import { switchView, viewTab, type ViewTab } from './view-tabs';
 
@@ -23,6 +23,60 @@ async function focusWysiwygParagraph(page: Page, position: 'first' | 'last' = 'l
   await paragraph.click({ position: { x: 8, y: 8 } });
   await expect(page.locator('[data-squisq-template-gallery-portal]')).toHaveCount(0);
   return editor;
+}
+
+/**
+ * Collapse the caret to the very end of `paragraph`.
+ *
+ * A raw DOM range is not authoritative in ProseMirror: it is adopted only when
+ * PM observes the `selectionchange`, and a React re-render scheduled by the
+ * click that focused the editor can write PM's previous selection back over it.
+ * So set the range, let the frame settle, and confirm the caret actually landed
+ * at the end before typing — otherwise a following Enter splits the paragraph
+ * wherever the click happened to land.
+ */
+async function placeCaretAtEnd(paragraph: Locator) {
+  const length = await paragraph.evaluate((el) => el.textContent?.length ?? 0);
+
+  await expect
+    .poll(async () => {
+      await paragraph.evaluate((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        (el.parentElement as HTMLElement).focus();
+      });
+
+      // Two frames: one for PM to read the selection, one for any re-render it
+      // schedules to flush (that flush is what would clobber the caret).
+      return paragraph.evaluate(
+        (el) =>
+          new Promise<number>((resolve) => {
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() => {
+                const selection = window.getSelection();
+                if (!selection?.isCollapsed || selection.rangeCount === 0) {
+                  resolve(-1);
+                  return;
+                }
+                const caret = selection.getRangeAt(0);
+                if (!el.contains(caret.startContainer)) {
+                  resolve(-1);
+                  return;
+                }
+                const before = document.createRange();
+                before.selectNodeContents(el);
+                before.setEnd(caret.startContainer, caret.startOffset);
+                resolve(before.toString().length);
+              }),
+            );
+          }),
+      );
+    })
+    .toBe(length);
 }
 
 /** Wait for Monaco editor to be ready */
@@ -156,18 +210,7 @@ test.describe('WYSIWYG editing', () => {
     // Start from top-level prose. The sample may end in a list (where `# `
     // correctly creates another list item instead of a Markdown heading).
     const editor = await focusWysiwygParagraph(page, 'first');
-    await editor
-      .locator(':scope > p')
-      .first()
-      .evaluate((paragraph) => {
-        const range = document.createRange();
-        range.selectNodeContents(paragraph);
-        range.collapse(false);
-        const selection = window.getSelection();
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-        (paragraph.parentElement as HTMLElement).focus();
-      });
+    await placeCaretAtEnd(editor.locator(':scope > p').first());
     await page.keyboard.press('Enter');
     await page.keyboard.type('# ');
 

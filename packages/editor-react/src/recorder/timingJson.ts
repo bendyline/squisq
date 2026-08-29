@@ -9,6 +9,8 @@
  * pick them up with no schema changes.
  */
 
+import type { NarrationTimingJsonV3 } from '@bendyline/squisq/narration';
+
 /**
  * Word-level timing bookmark — same shape as `AudioBookmark` in
  * `@bendyline/squisq`. Recorder output produces an empty `bookmarks`
@@ -53,6 +55,20 @@ export function buildTimingJson(sourceText: string, durationSec: number): Timing
 export function encodeTimingJson(timing: TimingJson): Uint8Array {
   const text = JSON.stringify(timing, null, 2);
   return new TextEncoder().encode(text);
+}
+
+/**
+ * Serialize a v3 narration timing sidecar — the richer payload carrying
+ * per-block ranges, which `applyNarrationTiming()` reads off a
+ * document-anchored clip.
+ *
+ * Lives here, beside {@link encodeTimingJson} and {@link timingPathFor}, so
+ * one module keeps owning sidecar encoding and pathing. v3 is a strict
+ * superset of the v1 {@link TimingJson} shape and they share a path, so a
+ * writer must pick exactly one — never both.
+ */
+export function encodeNarrationTimingJson(timing: NarrationTimingJsonV3): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(timing, null, 2));
 }
 
 /**

@@ -117,6 +117,10 @@ interface ConvertOpts {
   autoTemplates?: boolean;
   /** Commander `--no-infer-theme` negation: defaults true, false when passed. */
   inferTheme?: boolean;
+  /** Commander `--no-xlsx-regions` negation: defaults true, false when passed. */
+  xlsxRegions?: boolean;
+  /** Commander `--no-xlsx-formulas` negation: defaults true, false when passed. */
+  xlsxFormulas?: boolean;
   /** Commander `--no-infer-layouts` negation: defaults true, false when passed. */
   inferLayouts?: boolean;
   /** Explicit rendered-media animation preference; undefined uses format defaults. */
@@ -163,6 +167,14 @@ export function registerConvertCommand(program: Command): void {
       'Do not infer a Squisq theme from an office input file (PPTX theme colors/fonts)',
     )
     .option('--no-infer-layouts', 'Do not derive custom layout templates from PPTX slide layouts')
+    .option(
+      '--no-xlsx-regions',
+      'Import each XLSX worksheet as one whole-sheet table instead of splitting it into its data islands',
+    )
+    .option(
+      '--no-xlsx-formulas',
+      'Do not emit the companion formulas table for XLSX regions that contain formulas',
+    )
     .option('--animations', 'Enable slide animations/transitions in rendered media')
     .option('--no-animations', 'Disable slide animations/transitions in rendered media')
     .action(async (inputPath: string, opts: ConvertOpts) => {
@@ -251,6 +263,8 @@ async function runConvert(inputPath: string, opts: ConvertOpts): Promise<void> {
   const result = await readInput(resolvedInput, {
     inferTheme: opts.inferTheme,
     inferLayouts: opts.inferLayouts,
+    xlsxRegions: opts.xlsxRegions,
+    xlsxFormulas: opts.xlsxFormulas,
   });
 
   if (opts.theme) {

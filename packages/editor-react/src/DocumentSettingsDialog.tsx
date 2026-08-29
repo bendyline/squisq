@@ -32,6 +32,8 @@ import {
   omitFrontmatterDefault,
 } from './frontmatterSettings';
 import { useModalDialog } from './modal/useModalDialog';
+import { PROOF_DIALECTS, PROOF_FRONTMATTER_KEYS } from '@bendyline/squisq/proof';
+import { useProofingState } from './proofing/ProofingContext';
 
 // ── Frontmatter key constants ─────────────────────────────────────
 
@@ -108,6 +110,25 @@ export function DocumentSettingsDialog({
   const [theme, setTheme] = useState(currentTheme);
   const [transform, setTransform] = useState(currentTransform);
   const [captions, setCaptions] = useState(currentCaptions);
+  const proofingState = useProofingState();
+  const currentProofing = readFm(
+    frontmatter,
+    PROOF_FRONTMATTER_KEYS.enabled.canonical,
+    PROOF_FRONTMATTER_KEYS.enabled.legacy,
+  ).toLowerCase();
+  const currentProofDialect = readFm(
+    frontmatter,
+    PROOF_FRONTMATTER_KEYS.dialect.canonical,
+    PROOF_FRONTMATTER_KEYS.dialect.legacy,
+  );
+  const [proofingEnabled, setProofingEnabled] = useState(
+    typeof frontmatter?.[PROOF_FRONTMATTER_KEYS.enabled.canonical] === 'boolean'
+      ? String(frontmatter[PROOF_FRONTMATTER_KEYS.enabled.canonical])
+      : currentProofing === 'true' || currentProofing === 'false'
+        ? currentProofing
+        : '',
+  );
+  const [proofDialect, setProofDialect] = useState(currentProofDialect);
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLFormElement>(null);
@@ -166,8 +187,19 @@ export function DocumentSettingsDialog({
         ),
         [FRONTMATTER_SETTING_KEYS.captions.legacy]: null,
       };
+      // Proofing keys only when a capability exists — a doc edited in a
+      // host with no proofing shouldn't have its keys churned.
+      const proofingUpdates: Record<string, string | boolean | null> = proofingState
+        ? {
+            [PROOF_FRONTMATTER_KEYS.enabled.canonical]:
+              proofingEnabled === '' ? null : proofingEnabled === 'true',
+            [PROOF_FRONTMATTER_KEYS.enabled.legacy]: null,
+            [PROOF_FRONTMATTER_KEYS.dialect.canonical]: proofDialect || null,
+            [PROOF_FRONTMATTER_KEYS.dialect.legacy]: null,
+          }
+        : {};
 
-      const nextSource = setFrontmatterValues(markdownSource, updates);
+      const nextSource = setFrontmatterValues(markdownSource, { ...updates, ...proofingUpdates });
       onSave(nextSource);
     },
     [
@@ -176,6 +208,9 @@ export function DocumentSettingsDialog({
       theme,
       transform,
       captions,
+      proofingState,
+      proofingEnabled,
+      proofDialect,
       inferredTitle,
       inferredSubtitle,
       markdownSource,
@@ -304,6 +339,48 @@ export function DocumentSettingsDialog({
               ))}
             </select>
           </div>
+
+          {proofingState && (
+            <>
+              <div className="squisq-doc-settings-field">
+                <label className="squisq-doc-settings-label" htmlFor="squisq-doc-settings-proofing">
+                  Proofing
+                </label>
+                <select
+                  id="squisq-doc-settings-proofing"
+                  className="squisq-doc-settings-input"
+                  value={proofingEnabled}
+                  onChange={(e) => setProofingEnabled(e.target.value)}
+                >
+                  <option value="">Default</option>
+                  <option value="true">On</option>
+                  <option value="false">Off</option>
+                </select>
+              </div>
+
+              <div className="squisq-doc-settings-field">
+                <label
+                  className="squisq-doc-settings-label"
+                  htmlFor="squisq-doc-settings-proof-dialect"
+                >
+                  Proofing dialect
+                </label>
+                <select
+                  id="squisq-doc-settings-proof-dialect"
+                  className="squisq-doc-settings-input"
+                  value={proofDialect}
+                  onChange={(e) => setProofDialect(e.target.value)}
+                >
+                  <option value="">Default (American)</option>
+                  {PROOF_DIALECTS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="squisq-doc-settings-footer">

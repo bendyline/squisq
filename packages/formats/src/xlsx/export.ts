@@ -2,10 +2,17 @@
  * XLSX export — MarkdownDocument → SpreadsheetML (.xlsx).
  *
  * Tables-only fidelity (honestly documented): every `table` node in the
- * markdown AST becomes one worksheet; all other content (headings, prose,
- * lists, images, …) is dropped except that the nearest preceding heading is
- * used to name the sheet. This mirrors the import side (`xlsxToMarkdownDoc`),
- * which turns each worksheet grid back into a markdown table.
+ * markdown AST becomes worksheet cells; all other content (prose, lists,
+ * images, …) is dropped, and headings survive only as sheet names and as the
+ * carrier of placement metadata.
+ *
+ * Placement has two modes, decided per table by `workbookPlan.ts`. A table
+ * whose heading carries `{[dataTable sheet=… anchor=…]}` — what
+ * `xlsxToMarkdownDoc` emits for every data island it finds — is placed on the
+ * named sheet at the named cell, so several mini tables share one worksheet at
+ * their original addresses and formulas ride along. A table with no such
+ * annotation keeps the historical behavior exactly: its own worksheet, named
+ * from the nearest preceding heading, starting at A1.
  *
  * Cells are emitted as inline strings (`t="inlineStr"`) by default so no
  * sharedStrings part is needed and identifier-like numbers remain lossless.
@@ -26,16 +33,13 @@
 
 import type { Doc } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
-import type {
-  MarkdownDocument,
-  MarkdownBlockNode,
-  MarkdownTable,
-  MarkdownTableRow,
-} from '@bendyline/squisq/markdown';
+import type { MarkdownDocument, MarkdownInlineNode } from '@bendyline/squisq/markdown';
+import { inlineToPlainText } from '../shared/text.js';
 
 import { createPackage } from '../ooxml/writer.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
-import { extractPlainText } from '../shared/text.js';
+import { columnLetter } from './cells.js';
+import { keyCol, keyRow, planWorkbook, type PlannedCell, type SheetPlan } from './workbookPlan.js';
 import {
   NS_SML,
   NS_R,
@@ -62,18 +66,21 @@ export interface XlsxExportOptions {
   /** Prefix used for auto-named sheets when no heading precedes a table. Default: "Sheet". */
   sheetNamePrefix?: string;
   /**
-   * Emit canonical, Excel-safe number strings as numeric cells. Default false:
-   * Markdown tables have no column schema, so preserving authored text is the
-   * only lossless default. Leading-zero and >15-significant-digit values remain
-   * strings even when this option is enabled.
+   * Emit canonical, Excel-safe number strings as numeric cells.
+   *
+   * Defaults to false for hand-authored documents — markdown tables have no
+   * column schema, so preserving authored text is the only lossless choice —
+   * and to true when the document carries `sheet=` anchors, which only an XLSX
+   * import produces. Leading-zero and >15-significant-digit values remain
+   * strings either way. Set explicitly to override both defaults.
    */
   inferNumericCells?: boolean;
-}
-
-interface SheetData {
-  name: string;
-  /** Grid of cell text: first row is the header. */
-  grid: string[][];
+  /**
+   * Called for each non-fatal placement problem (a malformed anchor, an
+   * overlapping region, an unusable loose-cell reference). Export never throws
+   * for these — a hand-edited markdown file must still convert.
+   */
+  onWarning?: (message: string) => void;
 }
 
 /** A plain integer or decimal (optionally negative) — emitted as a numeric cell. */
@@ -94,8 +101,8 @@ function isSafeNumericCell(value: string): boolean {
  * Strips characters Excel forbids (`[]:*?/\`), caps at 31 chars, and
  * de-duplicates against already-used names by appending 2, 3, …
  */
-function cleanSheetName(value: string): string {
-  return value
+function cleanSheetName(raw: string): string {
+  return raw
     .replace(/[[\]:*?/\\]/g, '')
     .trim()
     .slice(0, 31)
@@ -103,105 +110,147 @@ function cleanSheetName(value: string): string {
     .replace(/^'+|'+$/g, '');
 }
 
-function sanitizeSheetName(raw: string, used: Set<string>, fallback: string): string {
-  const safeFallback = cleanSheetName(fallback) || 'Sheet';
-  const name = cleanSheetName(raw) || safeFallback;
-
-  const key = name.toLocaleLowerCase('en-US');
-  if (!used.has(key)) {
-    used.add(key);
-    return name;
+function sanitizeSheetName(candidate: string, used: Set<string>, fallback: string): string {
+  let base = cleanSheetName(candidate) || cleanSheetName(fallback) || 'Sheet';
+  let name = base;
+  let n = 2;
+  while (used.has(name.toLocaleLowerCase('en-US'))) {
+    const suffix = String(n++);
+    base = base.slice(0, 31 - suffix.length);
+    name = `${base}${suffix}`;
   }
-  // Dedupe: "Name", "Name2", "Name3", … keeping within the 31-char cap.
-  for (let n = 2; ; n++) {
-    const suffix = String(n);
-    const base = name.slice(0, 31 - suffix.length);
-    const candidate = `${base}${suffix}`;
-    const candidateKey = candidate.toLocaleLowerCase('en-US');
-    if (!used.has(candidateKey)) {
-      used.add(candidateKey);
-      return candidate;
-    }
-  }
+  used.add(name.toLocaleLowerCase('en-US'));
+  return name;
 }
 
-/** Convert a table node into a grid of plain-text cells. */
-function tableToGrid(table: MarkdownTable): string[][] {
-  return table.children.map((row: MarkdownTableRow) =>
-    row.children.map((cell) => extractPlainText(cell.children)),
-  );
+/** An Excel error literal, e.g. `#DIV/0!` or `#N/A`. */
+const ERROR_VALUE_RE = /^#[A-Z0-9_/]+[!?]?$/;
+
+/**
+ * One `<c>` element.
+ *
+ * A formula cell cannot use `t="inlineStr"` — that type carries an `<is>`
+ * child, and `<f>` has nowhere to live beside it — so a formula whose cached
+ * result is text uses `t="str"` (the formula-string type) instead, and one
+ * whose result is an error uses `t="e"`.
+ */
+function cellXml(cell: PlannedCell, ref: string, inferNumericCells: boolean): string {
+  const { text, formula } = cell;
+
+  if (formula !== undefined && formula !== '') {
+    const f = `<f>${escapeXml(formula)}</f>`;
+    if (text === '') return `<c r="${ref}">${f}</c>`;
+    if (isSafeNumericCell(text)) return `<c r="${ref}">${f}<v>${escapeXml(text)}</v></c>`;
+    if (ERROR_VALUE_RE.test(text)) return `<c r="${ref}" t="e">${f}<v>${escapeXml(text)}</v></c>`;
+    return `<c r="${ref}" t="str">${f}<v>${escapeXml(text)}</v></c>`;
+  }
+
+  if (inferNumericCells && isSafeNumericCell(text)) {
+    return `<c r="${ref}"><v>${escapeXml(text)}</v></c>`;
+  }
+  if (cell.rich) {
+    return `<c r="${ref}" t="inlineStr"><is>${richRunsXml(cell.rich)}</is></c>`;
+  }
+  return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
 }
 
-/** Walk the document, pairing each table with the nearest preceding heading. */
-function collectSheets(doc: MarkdownDocument, prefix: string): SheetData[] {
-  const used = new Set<string>();
-  const sheets: SheetData[] = [];
-  let pendingHeading: string | null = null;
+/**
+ * A cell's inline content as SpreadsheetML rich-text `<r>` runs.
+ *
+ * Excel splits a rich string at every formatting boundary, which is exactly
+ * what the walk below reproduces: one run per contiguous stretch of the same
+ * vertical alignment. A run's `<rPr>` carries only `vertAlign` — the rest of
+ * the cell's look is the worksheet's own styling, and inventing fonts or sizes
+ * here would override it.
+ */
+function richRunsXml(nodes: MarkdownInlineNode[]): string {
+  const runs: string[] = [];
+  const emit = (text: string, vertAlign: 'superscript' | 'subscript' | null): void => {
+    if (text === '') return;
+    const rPr = vertAlign ? `<rPr><vertAlign val="${vertAlign}"/></rPr>` : '';
+    runs.push(`<r>${rPr}<t xml:space="preserve">${escapeXml(text)}</t></r>`);
+  };
 
-  const visit = (nodes: MarkdownBlockNode[]): void => {
-    for (const node of nodes) {
-      if (node.type === 'heading') {
-        pendingHeading = extractPlainText(node.children);
-      } else if (node.type === 'table') {
-        const fallback = `${prefix}${sheets.length + 1}`;
-        const name = sanitizeSheetName(pendingHeading ?? fallback, used, fallback);
-        sheets.push({ name, grid: tableToGrid(node) });
-        pendingHeading = null;
+  const walk = (
+    list: MarkdownInlineNode[],
+    vertAlign: 'superscript' | 'subscript' | null,
+  ): void => {
+    for (const node of list) {
+      if (node.type === 'superscript' || node.type === 'subscript') {
+        // A nested `<sub>` inside a `<sup>` cannot be expressed — the inner
+        // alignment wins, matching how the run walkers in the OOXML exporters
+        // resolve conflicting formats.
+        walk(node.children, node.type === 'superscript' ? 'superscript' : 'subscript');
+      } else if ('children' in node && Array.isArray(node.children)) {
+        walk(node.children as MarkdownInlineNode[], vertAlign);
+      } else {
+        emit(inlineToPlainText(node), vertAlign);
       }
     }
   };
 
-  visit(doc.children);
-  return sheets;
+  walk(nodes, null);
+  return runs.join('');
 }
 
-/** Column letters for a zero-based index (0 → "A", 26 → "AA"). */
-function columnLetter(index: number): string {
-  let n = index + 1;
-  let letters = '';
-  while (n > 0) {
-    const rem = (n - 1) % 26;
-    letters = String.fromCharCode(65 + rem) + letters;
-    n = Math.floor((n - 1) / 26);
-  }
-  return letters;
-}
-
-function cellXml(value: string, ref: string, inferNumericCells: boolean): string {
-  if (inferNumericCells && isSafeNumericCell(value)) {
-    return `<c r="${ref}"><v>${escapeXml(value)}</v></c>`;
-  }
-  return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(value)}</t></is></c>`;
-}
-
-function worksheetXml(grid: string[][], inferNumericCells: boolean): string {
+/**
+ * A worksheet from a sparse cell map.
+ *
+ * Rows and cells are emitted in ascending order and blanks are skipped
+ * entirely. Both matter now that placement is anchored rather than dense: the
+ * gaps between islands must cost nothing, and readers rely on ascending refs,
+ * which a dense grid used to give for free.
+ */
+function worksheetXml(sheet: SheetPlan, inferNumericCells: boolean): string {
+  const keys = [...sheet.cells.keys()].sort((a, b) => a - b);
   const rows: string[] = [];
-  for (let r = 0; r < grid.length; r++) {
-    const cells = grid[r]!;
-    const cellsXml = cells
-      .map((value, c) => cellXml(value, `${columnLetter(c)}${r + 1}`, inferNumericCells))
-      .join('');
-    rows.push(`<row r="${r + 1}">${cellsXml}</row>`);
+  let maxRow = 0;
+  let maxCol = 0;
+
+  let i = 0;
+  while (i < keys.length) {
+    const rowIdx = keyRow(keys[i]!);
+    let cellsXml = '';
+    while (i < keys.length && keyRow(keys[i]!) === rowIdx) {
+      const key = keys[i]!;
+      const col = keyCol(key);
+      if (col > maxCol) maxCol = col;
+      cellsXml += cellXml(
+        sheet.cells.get(key)!,
+        `${columnLetter(col)}${rowIdx + 1}`,
+        inferNumericCells,
+      );
+      i++;
+    }
+    if (rowIdx > maxRow) maxRow = rowIdx;
+    rows.push(`<row r="${rowIdx + 1}">${cellsXml}</row>`);
   }
+
+  const dimension = keys.length > 0 ? `A1:${columnLetter(maxCol)}${maxRow + 1}` : 'A1';
   return (
     `${xmlDeclaration()}\n` +
     `<worksheet xmlns="${NS_SML}" xmlns:r="${NS_R}">` +
+    `<dimension ref="${dimension}"/>` +
     `<sheetData>${rows.join('')}</sheetData>` +
     `</worksheet>`
   );
 }
 
-function workbookXml(sheets: SheetData[]): string {
+function workbookXml(sheets: SheetPlan[], hasFormulas: boolean): string {
   const sheetEls = sheets
     .map(
       (sheet, i) =>
         `<sheet name="${escapeXml(sheet.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`,
     )
     .join('');
+  // Cached results are only as fresh as the markdown they came from, and a
+  // formula cell may carry none at all. Asking for a full recalculation on load
+  // is what stops Excel from showing a blank where a value belongs.
+  const calcPr = hasFormulas ? `<calcPr calcId="0" fullCalcOnLoad="1"/>` : '';
   return (
     `${xmlDeclaration()}\n` +
     `<workbook xmlns="${NS_SML}" xmlns:r="${NS_R}">` +
-    `<sheets>${sheetEls}</sheets>` +
+    `<sheets>${sheetEls}</sheets>${calcPr}` +
     `</workbook>`
   );
 }
@@ -232,24 +281,39 @@ export async function markdownDocToXlsx(
 ): Promise<ArrayBuffer> {
   options.signal?.throwIfAborted();
   const prefix = cleanSheetName(options.sheetNamePrefix ?? 'Sheet') || 'Sheet';
-  const inferNumericCells = options.inferNumericCells ?? false;
-  let sheets = collectSheets(doc, prefix);
   const maxCells = options.maxCells ?? 100_000;
   if (!Number.isSafeInteger(maxCells) || maxCells < 0) {
     throw new RangeError('maxCells must be a non-negative safe integer');
   }
-  const cellCount = sheets.reduce(
-    (total, sheet) => total + sheet.grid.reduce((sum, row) => sum + row.length, 0),
-    0,
-  );
-  if (cellCount > maxCells) {
+
+  const plan = planWorkbook(doc, { sheetNamePrefix: prefix, sanitize: sanitizeSheetName });
+  for (const warning of plan.warnings) options.onWarning?.(warning);
+  if (plan.cellCount > maxCells) {
     throw new RangeError(`XLSX export exceeds the ${maxCells}-cell safety limit`);
   }
 
+  let sheets = plan.sheets;
   // Zero tables → one empty sheet so the file is still valid.
   if (sheets.length === 0) {
-    sheets = [{ name: sanitizeSheetName(`${prefix}1`, new Set(), 'Sheet1'), grid: [] }];
+    sheets = [
+      {
+        name: sanitizeSheetName(`${prefix}1`, new Set(), 'Sheet1'),
+        cells: new Map(),
+        anchored: false,
+      },
+    ];
   }
+
+  // A table that carries a `sheet=` anchor is provably spreadsheet-origin — no
+  // hand-authored markdown produces one — so its canonical numbers can safely
+  // go back as numbers. An unannotated table keeps the conservative default,
+  // where preserving the authored text is the only lossless choice.
+  const anchored = sheets.some((sheet) => sheet.anchored);
+  const inferNumericCells = options.inferNumericCells ?? anchored;
+  const hasFormulas = sheets.some((sheet) => {
+    for (const cell of sheet.cells.values()) if (cell.formula) return true;
+    return false;
+  });
 
   const pkg = createPackage();
 
@@ -257,11 +321,7 @@ export async function markdownDocToXlsx(
   sheets.forEach((sheet, i) => {
     if ((i & 31) === 0) options.signal?.throwIfAborted();
     const sheetPath = `xl/worksheets/sheet${i + 1}.xml`;
-    pkg.addPart(
-      sheetPath,
-      worksheetXml(sheet.grid, inferNumericCells),
-      CONTENT_TYPE_XLSX_WORKSHEET,
-    );
+    pkg.addPart(sheetPath, worksheetXml(sheet, inferNumericCells), CONTENT_TYPE_XLSX_WORKSHEET);
     pkg.addRelationship('xl/workbook.xml', {
       id: `rId${i + 1}`,
       type: REL_WORKSHEET,
@@ -278,7 +338,7 @@ export async function markdownDocToXlsx(
   });
 
   // Workbook + root relationship.
-  pkg.addPart('xl/workbook.xml', workbookXml(sheets), CONTENT_TYPE_XLSX_WORKBOOK);
+  pkg.addPart('xl/workbook.xml', workbookXml(sheets, hasFormulas), CONTENT_TYPE_XLSX_WORKBOOK);
   pkg.addRelationship('', {
     id: 'rId1',
     type: REL_OFFICE_DOCUMENT,

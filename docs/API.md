@@ -24,6 +24,7 @@
   - [Icons](#subpath-icons)
   - [Recommend](#subpath-recommend)
   - [Narration](#subpath-narration)
+  - [Proof](#subpath-proof)
 - [`@bendyline/squisq-react`](#bendylinesquisq-react)
 - [`@bendyline/squisq-formats`](#bendylinesquisq-formats)
 - [`@bendyline/squisq-editor-react`](#bendylinesquisq-editor-react)
@@ -1509,6 +1510,61 @@ defaults.
 
 ---
 
+### Subpath: Proof
+
+**Import:** `@bendyline/squisq/proof` — proofing (grammar + spellcheck)
+support. Pure and zero-dependency: engine-agnostic finding types, the
+lint-kind → tier map, protected-span masking, joined-segment offset math, and
+the frontmatter settings codec. The harper.js engine adapter and every piece
+of UI live in `@bendyline/squisq-editor-react` (see its Proofing section and
+`docs/proofing.md`).
+
+```ts
+// Finding model — offsets are UTF-16 code units into the linted string.
+type ProofCategory = 'spelling' | 'grammar' | 'style';
+interface ProofFinding {
+  id: string; start: number; end: number;
+  category: ProofCategory; kind: string;      // raw engine kind, e.g. 'Typo'
+  message: string; originalText: string;      // staleness check before applying
+  suggestions: { text: string; kind: 'replace' | 'remove' | 'insertAfter' }[];
+}
+type ProofDialect = 'American' | 'British' | 'Australian' | 'Canadian' | 'Indian';
+const PROOF_DIALECTS: readonly ProofDialect[];
+
+// harper LintKind (21 kinds) → squiggle tier; unknown future kinds → 'style'.
+const LINT_KIND_CATEGORIES: Readonly<Record<string, ProofCategory>>;
+function categorizeLintKind(kind: string): ProofCategory;
+
+// {[…]} annotations blanked to equal-length spaces — every other offset stays
+// byte-identical — and findings that intersect a blanked range are dropped.
+function blankProtectedSpans(text: string): { text: string; blanked: ProofRange[] };
+function dropMaskedFindings<T extends ProofRange>(findings: readonly T[], blanked: readonly ProofRange[]): T[];
+
+// Many textblocks → ONE engine call: join with a paragraph separator, then
+// map result spans back (null for spans touching separators / crossing segments).
+const PROOF_JOIN_SEPARATOR: '
+
+';
+function buildJoinedText(segments: readonly string[]): JoinedSegments;
+function mapJoinedSpanToSegment(joined: JoinedSegments, start: number, end: number): SegmentSpan | null;
+
+// Doc-level settings in frontmatter. squisq-proof-ignored is an OPAQUE engine
+// export containing integers above 2^53 — round-tripped verbatim, never parsed.
+const PROOF_FRONTMATTER_KEYS: {
+  enabled: { canonical: 'squisq-proofing'; legacy: 'proofing' };
+  dialect: { canonical: 'squisq-proof-dialect'; legacy: 'proof-dialect' };
+  dictionary: { canonical: 'squisq-proof-dictionary'; legacy: 'proof-dictionary' };
+  ignored: { canonical: 'squisq-proof-ignored'; legacy: 'proof-ignored' };
+};
+const DEFAULT_PROOF_SETTINGS: { enabled: true; dialect: 'American' };
+function readProofingSettings(frontmatter?: Record<string, unknown>): ProofingSettings;
+function resolveProofDialect(value: unknown): ProofDialect | undefined;
+function parseProofDictionary(value: unknown): string[];
+function formatProofDictionary(words: readonly string[]): string | null; // null = remove the key
+```
+
+---
+
 ## `@bendyline/squisq-react`
 
 React component library for rendering docs, blocks, and controls. Depends on
@@ -2502,6 +2558,77 @@ In the Use view, the Presentation split button can fill only the current
 `EditorShell`, open a read-only audience window synchronized to the main
 playback/scroll position, or take over the entire screen. This is ephemeral UI
 state and is not written to document frontmatter.
+
+### Proofing (grammar + spellcheck)
+
+**Import:** `@bendyline/squisq-editor-react/proofing` (also re-exported from
+the root). Squiggle underlines (red = spelling, green = grammar, blue dotted =
+style) in the Write and Source views, a right-click suggestions menu (apply /
+Ignore / Add to dictionary / Add to document word list), a findings panel with
+navigation, a StatusBar count, and a Document Settings section (enable +
+dialect).
+
+The capability is host-injected — the `ffmpegWasm` semantics: no provider, no
+proofing UI, no engine bytes. **harper.js is an optional peer dependency**
+reached only through dynamic `import('harper.js')`; hosts install it, serve
+BOTH of its WASM binaries same-origin, and pass a provider. Full host guide
+(serving, CSP `'wasm-unsafe-eval'` + `worker-src blob:`, docblocks/gezel
+notes): `docs/proofing.md`.
+
+```ts
+// The engine adapter contract — plain data; no harper types anywhere public.
+interface ProofingProvider {
+  setup(): Promise<void>; // idempotent; retryable on rejection
+  lint(text: string, o?: { language?: 'plaintext' | 'markdown' }): Promise<ProofFinding[]>;
+  ignoreFinding(findingId: string): Promise<void>; // iterates stacked same-span rules
+  addWord(word: string): Promise<void>; // APP scope — fires onDictionaryWord
+  addWords(words: readonly string[]): Promise<void>; // session/doc scope — no callback
+  exportIgnored(): Promise<string>; // OPAQUE — never JSON.parse
+  importIgnored(json: string): Promise<void>;
+  setDialect(dialect: ProofDialect): Promise<void>;
+  dispose(): void;
+  /** False ⇒ the editor hides "Add to dictionary" (host stores nothing). */
+  readonly hasAppDictionary?: boolean;
+}
+type ProofingCapability = ProofingProvider | (() => ProofingProvider);
+
+function createHarperProofingProvider(config?: {
+  wasmUrl?: string; // root-relative OK — absolutized for the blob worker
+  dialect?: ProofDialect;
+  initialWords?: readonly string[];
+  ignoredLintsJson?: string;
+  onDictionaryWord?: (word: string) => void;
+  onIgnoredLintsChange?: (json: string) => void;
+  binary?: unknown; // escape hatch (Node tests pass harper's binaryInlined)
+}): ProofingProvider;
+```
+
+`EditorShell` props: `proofing?: ProofingCapability | null` (an _instance_ is
+host-owned and survives shell remounts — keep one warm across `key=` swaps;
+a _factory_ is created on first use and disposed on unmount) and
+`proofingDefaultEnabled?: boolean` (default `true`). Effective enable state
+resolves `session toggle ?? doc frontmatter squisq-proofing ?? host default`,
+and the engine loads only once a markdown doc is actually active with proofing
+effective. While active, the editor suppresses Chrome's native spellcheck
+squiggles (restored on disable).
+
+Dismissing a finding ("Ignore") is host-persisted, never document-persisted:
+the editor calls `proofingIgnoreStore.save(docRef, opaqueJson)` and restores
+through `load`, keeping the engine's ignore set matched to the active
+document even when one warm provider is shared across documents and shells.
+
+Accepting a word is scope-explicit: **"Add to dictionary"** hands it to the
+host via `onDictionaryWord` and touches no document, while **"Add to document
+word list"** appends to the doc's `squisq-proof-dictionary` frontmatter so it
+travels with the file. The first item is hidden when the provider reports
+`hasAppDictionary: false`.
+
+Findings are computed **per view** — the Write pass lints the Tiptap
+document's own text (one joined plaintext engine call across textblocks,
+skipping code fences and atoms), the Source pass lints `model.getValue()` in
+markdown mode with `{[…]}` spans blanked — because wrap policy makes
+Write-view text differ from the source. Suggestions apply as one undo step in
+either view, guarded against stale text.
 
 ### Context
 

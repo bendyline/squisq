@@ -6,7 +6,7 @@
  * visually consistent with the page that opened it.
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { stringifyMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
 import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
@@ -389,6 +389,11 @@ export function ExportConfigModal({
   const [renderMode, setRenderMode] = useState<RenderMode>('document');
   const [htmlStyle, setHtmlStyle] = useState<HtmlStyle>('rendered');
   const [followLinks, setFollowLinks] = useState<boolean>(false);
+  // Whether the workspace actually holds documents this one could link TO.
+  // Every workspace is now a container — a storage slot's media, an empty
+  // in-memory one — so the container's mere existence no longer distinguishes
+  // "loaded from a zip of linked documents" from "nothing to follow".
+  const [hasLinkableDocuments, setHasLinkableDocuments] = useState(false);
   const [themeId, setThemeId] = useState<string>('');
   const [transformStyle, setTransformStyle] = useState<string>('');
   const [busy, setBusy] = useState(false);
@@ -397,6 +402,26 @@ export function ExportConfigModal({
   const [videoExportDoc, setVideoExportDoc] = useState<Doc | null>(null);
 
   const playerScriptRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!workspaceContainer) {
+      setHasLinkableDocuments(false);
+      return;
+    }
+    workspaceContainer
+      .listFiles()
+      .then((entries) => {
+        if (cancelled) return;
+        setHasLinkableDocuments(entries.some((entry) => entry.path.toLowerCase().endsWith('.md')));
+      })
+      .catch(() => {
+        if (!cancelled) setHasLinkableDocuments(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceContainer]);
 
   const themes = getThemeSummaries();
   const transforms = getTransformStyleSummaries();
@@ -735,10 +760,10 @@ export function ExportConfigModal({
               )}
 
               {/* Export linked documents — only meaningful for plain
-                  HTML+zip when a workspace container is available. We
-                  hide the toggle entirely otherwise so authors don't
-                  see a setting that can't do anything. */}
-              {format === 'htmlzip' && htmlStyle === 'plain' && workspaceContainer && (
+                  HTML+zip when the workspace holds other markdown files to
+                  follow. We hide the toggle entirely otherwise so authors
+                  don't see a setting that can't do anything. */}
+              {format === 'htmlzip' && htmlStyle === 'plain' && hasLinkableDocuments && (
                 <>
                   <label
                     style={{

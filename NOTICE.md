@@ -91,6 +91,7 @@ license terms.
 | @tiptap/suggestion             | 2.27.2    | MIT                           | https://tiptap.dev                           |
 | mermaid                        | 11.16.1   | MIT                           | https://github.com/mermaid-js/mermaid        |
 | type-fest                      | 4.41.0    | MIT OR CC0-1.0                | https://github.com/sindresorhus/type-fest    |
+| harper.js _(peer, optional)_   | ^2.7.0    | Apache-2.0                    | https://github.com/automattic/harper         |
 | monaco-editor _(peer)_         | >=0.50.0  | MIT                           | https://github.com/microsoft/monaco-editor   |
 | react _(peer)_                 | ^18 / ^19 | MIT                           | https://reactjs.org                          |
 | react-dom _(peer)_             | ^18 / ^19 | MIT                           | https://reactjs.org                          |
@@ -224,21 +225,21 @@ https://openfontlicense.org/open-font-license-official-text/
 
 ## License Summary
 
-| License                       | Packages                                                                      |
-| ----------------------------- | ----------------------------------------------------------------------------- |
-| MIT                           | Mermaid and the majority of dependencies                                      |
-| Apache-2.0                    | genson-js, localforage, pdfjs-dist, playwright-core, Roboto, Chevrotain types |
-| MPL-2.0 OR Apache-2.0         | DOMPurify (dual-licensed; Apache-2.0 option available)                        |
-| ISC                           | D3 and most current D3 modules used by Mermaid                                |
-| BSD-3-Clause                  | d3-sankey and related legacy D3 modules                                       |
-| Unlicense                     | robust-predicates                                                             |
-| OFL-1.1                       | 14 self-hosted Google Fonts (see table above) + FontAwesome font files        |
-| CC-BY-4.0                     | FontAwesome icon artwork (attribution required when redistributing icons)     |
-| GPL-2.0-or-later              | @ffmpeg/core WebAssembly runtime                                              |
-| MIT OR GPL-3.0-or-later       | jszip (dual-licensed; MIT option used)                                        |
-| MIT AND Zlib                  | pako (both permissive)                                                        |
-| 0BSD                          | tslib (maximally permissive)                                                  |
-| CC-BY-4.0 AND OFL-1.1 AND MIT | @fortawesome/fontawesome-free (composite — see editor-react table note)       |
+| License                       | Packages                                                                                 |
+| ----------------------------- | ---------------------------------------------------------------------------------------- |
+| MIT                           | Mermaid and the majority of dependencies                                                 |
+| Apache-2.0                    | genson-js, harper.js, localforage, pdfjs-dist, playwright-core, Roboto, Chevrotain types |
+| MPL-2.0 OR Apache-2.0         | DOMPurify (dual-licensed; Apache-2.0 option available)                                   |
+| ISC                           | D3 and most current D3 modules used by Mermaid                                           |
+| BSD-3-Clause                  | d3-sankey and related legacy D3 modules                                                  |
+| Unlicense                     | robust-predicates                                                                        |
+| OFL-1.1                       | 14 self-hosted Google Fonts (see table above) + FontAwesome font files                   |
+| CC-BY-4.0                     | FontAwesome icon artwork (attribution required when redistributing icons)                |
+| GPL-2.0-or-later              | @ffmpeg/core WebAssembly runtime                                                         |
+| MIT OR GPL-3.0-or-later       | jszip (dual-licensed; MIT option used)                                                   |
+| MIT AND Zlib                  | pako (both permissive)                                                                   |
+| 0BSD                          | tslib (maximally permissive)                                                             |
+| CC-BY-4.0 AND OFL-1.1 AND MIT | @fortawesome/fontawesome-free (composite — see editor-react table note)                  |
 
 Most dependencies use permissive licenses compatible with MIT. The jszip
 dual-license allows choosing MIT, and DOMPurify offers an Apache-2.0 option.

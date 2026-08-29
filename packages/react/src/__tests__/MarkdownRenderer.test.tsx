@@ -41,6 +41,17 @@ function parseNodes(markdown: string): MarkdownBlockNode[] {
 // ── Tests ──────────────────────────────────────────────────────────
 
 describe('MarkdownRenderer', () => {
+  it('renders superscript and subscript as real sup/sub elements', () => {
+    const { container } = render(
+      <MarkdownRenderer nodes={parseNodes('Fresh<sup>1</sup> and H<sub>2</sub>O')} />,
+    );
+    // Before the parser folded the tag pair, this produced an EMPTY
+    // `<sup></sup>` with the "1" stranded beside it as plain text.
+    expect(container.querySelector('sup')?.textContent).toBe('1');
+    expect(container.querySelector('sub')?.textContent).toBe('2');
+    expect(container.textContent).toContain('Fresh');
+  });
+
   it('renders null for empty nodes', () => {
     const { container } = render(<MarkdownRenderer nodes={[]} />);
     expect(container.innerHTML).toBe('');

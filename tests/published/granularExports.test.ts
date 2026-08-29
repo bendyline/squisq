@@ -20,6 +20,7 @@ const expectedSubpaths = {
     './image-editor': 'ImageEditor',
     './recorder': 'RecorderModal',
     './teleprompter': 'TeleprompterView',
+    './proofing': 'createHarperProofingProvider',
   },
   'video-react': {
     './components': 'VideoExportModal',

@@ -9,7 +9,8 @@
  * - Block: paragraph, heading, blockquote, list, code, table,
  *   thematicBreak, math, htmlBlock, definitionList, directives
  * - Inline: text, emphasis, strong, delete, inlineCode, link,
- *   image, break, inlineMath, htmlInline, footnoteReference
+ *   image, break, inlineMath, htmlInline, footnoteReference,
+ *   superscript, subscript
  *
  * All elements use the `squisq-md-*` CSS class prefix for styling.
  */
@@ -279,6 +280,20 @@ function renderInline(
           <del key={key} className="squisq-md-del">
             {renderInline(node.children, key, ctx)}
           </del>
+        );
+
+      case 'superscript':
+        return (
+          <sup key={key} className="squisq-md-sup">
+            {renderInline(node.children, key, ctx)}
+          </sup>
+        );
+
+      case 'subscript':
+        return (
+          <sub key={key} className="squisq-md-sub">
+            {renderInline(node.children, key, ctx)}
+          </sub>
         );
 
       case 'inlineCode':
