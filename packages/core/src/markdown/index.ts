@@ -70,6 +70,8 @@ export type {
   MarkdownEmphasis,
   MarkdownStrong,
   MarkdownStrikethrough,
+  MarkdownSuperscript,
+  MarkdownSubscript,
   MarkdownInlineCode,
   MarkdownLink,
   MarkdownImage,

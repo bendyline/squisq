@@ -61,6 +61,7 @@ import {
   inlineNodesToRuns,
   inlineNodeToRuns,
   type InlineRunHandlers,
+  type InlineRunFormat,
 } from '../shared/inlineRuns.js';
 import {
   NS_WML,
@@ -723,21 +724,17 @@ function convertFootnoteDefinition(node: MarkdownFootnoteDefinition, ctx: Export
 
 /**
  * Formatting state passed down through nested inline elements.
+ *
+ * An alias, not a copy: the shared walker in `shared/inlineRuns.ts` threads
+ * this object down the tree, so a second local declaration would silently stop
+ * tracking it as inline node types are added.
+ *
+ * On `color`: when set, every emitted run gets `<w:color>` directly in its
+ * `<w:rPr>` — bypassing Word's style inheritance, which some Word
+ * configurations silently override. Body paragraphs pass `ctx.bodyColor` here;
+ * headings leave it unset so the heading style's own color wins.
  */
-interface InlineFormat {
-  bold?: boolean;
-  italic?: boolean;
-  strike?: boolean;
-  code?: boolean;
-  /**
-   * Explicit run color (hex without `#`). When set, every emitted run
-   * gets `<w:color>` directly in its `<w:rPr>` — bypassing Word's style
-   * inheritance, which some Word configurations silently override.
-   * Body paragraphs pass `ctx.bodyColor` here; headings leave it unset
-   * so the heading style's own color wins.
-   */
-  color?: string;
-}
+type InlineFormat = InlineRunFormat;
 
 /**
  * DOCX leaf handlers for the shared run-based inline walker. The traversal
@@ -770,8 +767,9 @@ function makeRun(text: string, format: InlineFormat): string {
   if (!text) return '';
 
   // `w:rPr` children must follow the ECMA-376 `EG_RPrBase` sequence:
-  // rStyle → rFonts → b → i → strike → color → sz → u. Word tolerates other
-  // orders, but strict OOXML validators (and other consumers) reject them.
+  // rStyle → rFonts → b → i → strike → color → sz → u → vertAlign. Word
+  // tolerates other orders, but strict OOXML validators (and other consumers)
+  // reject them.
   const rPrParts: string[] = [];
   if (format.code) {
     rPrParts.push(`<w:rFonts w:ascii="${DEFAULT_CODE_FONT}" w:hAnsi="${DEFAULT_CODE_FONT}"/>`);
@@ -781,6 +779,8 @@ function makeRun(text: string, format: InlineFormat): string {
   if (format.strike) rPrParts.push('<w:strike/>');
   if (format.color) rPrParts.push(`<w:color w:val="${format.color}"/>`);
   if (format.code) rPrParts.push(`<w:sz w:val="${DEFAULT_CODE_FONT_SIZE}"/>`);
+  // `vertAlign` sits after `u` in EG_RPrBase, so it goes last.
+  if (format.vertAlign) rPrParts.push(`<w:vertAlign w:val="${format.vertAlign}"/>`);
 
   const rPr = rPrParts.length > 0 ? `<w:rPr>${rPrParts.join('')}</w:rPr>` : '';
 

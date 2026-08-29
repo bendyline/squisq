@@ -33,6 +33,7 @@ import type {
   MarkdownTable,
   MarkdownTableCell,
   MarkdownTableRow,
+  MarkdownInlineNode,
 } from '@bendyline/squisq/markdown';
 import {
   getPartXml,
@@ -146,33 +147,98 @@ function isPhonetic(el: Element, root: Element): boolean {
 }
 
 /**
- * Text of a SpreadsheetML string item — a shared `<si>` or an inline `<is>`.
+ * Vertical alignment of a rich-text run, from its `<rPr><vertAlign val="…"/>`.
  *
- * Both may carry rich text as a sequence of `<r>` runs, so every `<t>` has to
- * be concatenated; reading only the first drops all but the opening run.
+ * This is how a spreadsheet records a footnote marker: the `1` in `Fresh¹` is
+ * an ordinary character in an ordinary cell, distinguished only by a run
+ * property. Reading only `<t>` text — as this importer used to — turns the
+ * marker into a literal digit welded onto the end of the word, which is both
+ * wrong on the page and wrong for anything that later parses the value.
+ */
+function runVertAlign(run: Element): 'superscript' | 'subscript' | null {
+  const rPr = run.getElementsByTagNameNS(NS_SML, 'rPr')[0];
+  if (!rPr) return null;
+  const va = rPr.getElementsByTagNameNS(NS_SML, 'vertAlign')[0];
+  const val = va?.getAttribute('val');
+  return val === 'superscript' || val === 'subscript' ? val : null;
+}
+
+/** A string item's display text plus, when it has any, its formatted runs. */
+interface StringItem {
+  text: string;
+  /**
+   * Inline markdown for the item, present ONLY when a run carries formatting
+   * this importer preserves. Left undefined for the overwhelmingly common
+   * unformatted cell so that nothing downstream has to care.
+   */
+  rich?: MarkdownInlineNode[];
+}
+
+/**
+ * Read a SpreadsheetML string item — a shared `<si>` or an inline `<is>`.
+ *
+ * An item is either a single unformatted `<t>` or a sequence of `<r>` runs,
+ * each with its own optional `<rPr>`. Every `<t>` has to be concatenated for
+ * the display text; reading only the first drops all but the opening run.
  *
  * `textContent` is not a valid shortcut either: `<si>` may also hold `<rPh>`
  * phonetic (furigana) guides, whose `<t>` is a *pronunciation annotation* of
  * the neighbouring run rather than part of the cell's value. Splicing those in
  * turns Japanese "漢字" into "漢字かんじ". Skip any `<t>` under an `<rPh>`.
  */
-function stringItemText(root: Element): string {
+function readStringItem(root: Element): StringItem {
   const tEls = root.getElementsByTagNameNS(NS_SML, 't');
-  let out = '';
+  const rich: MarkdownInlineNode[] = [];
+  let text = '';
+  let formatted = false;
+
   for (let i = 0; i < tEls.length; i++) {
     const t = tEls[i]!;
     if (isPhonetic(t, root)) continue;
-    out += t.textContent ?? '';
+    const value = t.textContent ?? '';
+    if (value === '') continue;
+    text += value;
+
+    // `<t>`'s parent is the `<r>` run when the item is rich text, and the
+    // `<si>`/`<is>` itself when it is a bare string.
+    const parent = t.parentNode;
+    const run = parent && (parent as Element).localName === 'r' ? (parent as Element) : null;
+    const vertAlign = run ? runVertAlign(run) : null;
+    if (vertAlign) {
+      formatted = true;
+      rich.push({ type: vertAlign, children: [{ type: 'text', value }] });
+    } else {
+      rich.push({ type: 'text', value });
+    }
+  }
+
+  return formatted ? { text, rich: mergeAdjacentText(rich) } : { text };
+}
+
+/**
+ * Collapse runs that ended up as neighbouring plain-text nodes.
+ *
+ * Excel splits a string at every formatting boundary, so "Juice, ready to
+ * drink" plus a superscript "2" can arrive as four runs of which three are
+ * unformatted. Merging them keeps the emitted markdown as close as possible to
+ * what a person would have typed.
+ */
+function mergeAdjacentText(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  const out: MarkdownInlineNode[] = [];
+  for (const node of nodes) {
+    const prev = out[out.length - 1];
+    if (node.type === 'text' && prev?.type === 'text') prev.value += node.value;
+    else out.push(node);
   }
   return out;
 }
 
-async function readSharedStrings(pkg: OoxmlPackage): Promise<string[]> {
+async function readSharedStrings(pkg: OoxmlPackage): Promise<StringItem[]> {
   const doc = await getPartXml(pkg, 'xl/sharedStrings.xml');
   if (!doc) return [];
   const siEls = doc.getElementsByTagNameNS(NS_SML, 'si');
-  const out: string[] = [];
-  for (let i = 0; i < siEls.length; i++) out.push(stringItemText(siEls[i]!));
+  const out: StringItem[] = [];
+  for (let i = 0; i < siEls.length; i++) out.push(readStringItem(siEls[i]!));
   return out;
 }
 
@@ -301,7 +367,7 @@ interface SharedFormula {
 }
 
 interface SheetReadContext {
-  shared: string[];
+  shared: StringItem[];
   styles: CellStyle[];
   date1904: boolean;
   /** `si` → master, built as the sheet is read. Masters always precede followers. */
@@ -348,11 +414,17 @@ function readCell(cell: Element, row: number, col: number, ctx: SheetReadContext
     if (formula !== '') out.formula = formula;
     return out;
   };
+  const stringCell = (item: StringItem): XlsxCell => {
+    const out = withFormula(item.text, 'string');
+    // An empty cell has nothing to format, so never attach runs to one.
+    if (item.rich && out.kind !== 'empty') out.richText = item.rich;
+    return out;
+  };
 
   const t = cell.getAttribute('t');
   if (t === 'inlineStr') {
     const is = cell.getElementsByTagNameNS(NS_SML, 'is')[0];
-    return withFormula(is ? stringItemText(is) : '', 'string');
+    return stringCell(is ? readStringItem(is) : { text: '' });
   }
   const vEls = cell.getElementsByTagNameNS(NS_SML, 'v');
   const v = vEls.length ? (vEls[0]!.textContent ?? '') : '';
@@ -364,7 +436,7 @@ function readCell(cell: Element, row: number, col: number, ctx: SheetReadContext
   // untidy: a styled blank range is a fully occupied rectangle, and it would
   // fuse every island on the sheet into one.
   if (v === '') return withFormula('', 'empty');
-  if (t === 's') return withFormula(ctx.shared[Number.parseInt(v, 10)] ?? '', 'string');
+  if (t === 's') return stringCell(ctx.shared[Number.parseInt(v, 10)] ?? { text: '' });
   if (t === 'b') return withFormula(v === '1' ? 'TRUE' : 'FALSE', 'bool');
   if (t === 'e') return withFormula(v, 'error');
   if (t === 'str') return withFormula(v, 'string');
@@ -386,7 +458,7 @@ interface SheetContent {
 async function sheetToCells(
   pkg: OoxmlPackage,
   path: string,
-  shared: string[],
+  shared: StringItem[],
   styles: CellStyle[],
   date1904: boolean,
 ): Promise<SheetContent> {
@@ -442,17 +514,16 @@ async function sheetToCells(
   return { cells: grid, merges };
 }
 
-/** Build a GFM table from a text matrix; row 0 occupies the header slot. */
-function textGridToTable(grid: string[][]): MarkdownTable {
+/** Build a GFM table from an inline-content matrix; row 0 is the header slot. */
+function inlineGridToTable(grid: MarkdownInlineNode[][][]): MarkdownTable {
   const maxCols = grid.reduce((m, r) => Math.max(m, r.length), 1);
   const rows: MarkdownTableRow[] = grid.map((cells, rowIdx) => {
     const children: MarkdownTableCell[] = [];
     for (let c = 0; c < maxCols; c++) {
-      const value = cells[c] ?? '';
       children.push({
         type: 'tableCell',
         ...(rowIdx === 0 ? { isHeader: true } : {}),
-        children: value ? [{ type: 'text', value }] : [],
+        children: cells[c] ?? [],
       });
     }
     return { type: 'tableRow', children };
@@ -460,8 +531,15 @@ function textGridToTable(grid: string[][]): MarkdownTable {
   return { type: 'table', children: rows };
 }
 
+/** Build a GFM table from a text matrix; row 0 occupies the header slot. */
+function textGridToTable(grid: string[][]): MarkdownTable {
+  return inlineGridToTable(
+    grid.map((row) => row.map((value) => (value ? [{ type: 'text', value }] : []))),
+  );
+}
+
 function cellsToTable(cells: XlsxCell[][]): MarkdownTable {
-  return textGridToTable(cells.map((row) => row.map((cell) => cell.text)));
+  return inlineGridToTable(cells.map((row) => row.map(cellInline)));
 }
 
 /**
@@ -496,17 +574,34 @@ function formulasTable(cells: XlsxCell[][], rect: CellRect): MarkdownTable | nul
   return textGridToTable([header, ...body]);
 }
 
-/** The sheet's left-over single cells as one address-keyed table. */
+/** Inline content for one cell — its rich runs when it has them, else its text. */
+function cellInline(cell: XlsxCell): MarkdownInlineNode[] {
+  return cell.richText ?? (cell.text ? [{ type: 'text', value: cell.text }] : []);
+}
+
+/** Plain inline content for a string that is never rich (a ref, a formula). */
+function textInline(value: string): MarkdownInlineNode[] {
+  return value ? [{ type: 'text', value }] : [];
+}
+
+/**
+ * The sheet's left-over single cells as one address-keyed table.
+ *
+ * The Value column goes through {@link cellInline} rather than `.text`: a
+ * footnote line like "¹USDA, Agricultural Research Service" is a stray cell,
+ * and it carries exactly the superscript that makes it a footnote.
+ */
 function looseTable(strays: readonly StrayCell[]): MarkdownTable {
   const withFormula = strays.some((s) => s.cell.formula);
   const header = withFormula ? ['Cell', 'Value', 'Formula'] : ['Cell', 'Value'];
   const body = strays.map((s) => {
-    const ref = formatCellRef(s.row, s.col);
+    const ref = textInline(formatCellRef(s.row, s.col));
+    const value = cellInline(s.cell);
     return withFormula
-      ? [ref, s.cell.text, s.cell.formula ? `=${s.cell.formula}` : '']
-      : [ref, s.cell.text];
+      ? [ref, value, textInline(s.cell.formula ? `=${s.cell.formula}` : '')]
+      : [ref, value];
   });
-  return textGridToTable([header, ...body]);
+  return inlineGridToTable([header.map(textInline), ...body]);
 }
 
 /** A heading carrying a `{[dataTable …]}` annotation. */

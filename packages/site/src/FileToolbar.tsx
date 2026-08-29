@@ -2,7 +2,11 @@
  * FileToolbar — Download and Upload controls for the dev site.
  *
  * Download: Exports the current markdown source as .md, .docx, .pdf, .txt, or .zip.
- * Upload:   Ingests a .md, .docx, .txt, .pdf, or .zip file and replaces the editor content.
+ * Upload:   Ingests markdown/text directly, or converts any format the shared
+ *           format registry can import (.docx, .pptx, .xlsx, .pdf, .csv, .html,
+ *           .zip/.dbk) to markdown — see `documentImport.ts` — and replaces the
+ *           editor content. Conversion runs behind an `ImportProgressModal`,
+ *           since an office import is slow enough to look like a hang.
  *           When a storage slot is active, also accepts images (.jpg, .png, .gif,
  *           .webp, .svg) which are stored in the slot and inserted as markdown.
  */
@@ -11,7 +15,6 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   parseMarkdown,
-  stringifyMarkdown,
   inferDocumentTitle,
   readFrontmatterThemeId,
 } from '@bendyline/squisq/markdown';
@@ -26,19 +29,15 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { addSlotMedia } from './slotStorage';
 import { buildExportFilename } from './exportFilename';
-
-// Vite's ?url suffix returns a resolved asset URL at build time. The URL
-// string is tiny and doesn't pull pdfjs-dist code into the main chunk;
-// the format package itself is dynamic-imported in the pdf handlers
-// below, and `configurePdfWorker` is called once on first pdf use.
-import pdfjsWorkerUrl from 'pdfjs-dist/legacy/build/pdf.worker.mjs?url';
-let pdfWorkerConfigured = false;
-async function ensurePdfWorker() {
-  if (pdfWorkerConfigured) return;
-  const { configurePdfWorker } = await import('@bendyline/squisq-formats/pdf');
-  configurePdfWorker(pdfjsWorkerUrl);
-  pdfWorkerConfigured = true;
-}
+import {
+  IMPORTABLE_DOCUMENT_EXTENSIONS,
+  describeImportError,
+  extensionOf,
+  importDocumentFile,
+  isImportableDocument,
+} from './documentImport';
+import { ImportProgressModal, type ImportProgressState } from './ImportProgressModal';
+import { ensurePdfWorker } from './pdfWorker';
 
 // ============================================
 // Types
@@ -70,6 +69,19 @@ type DownloadFormat = 'md' | 'docx' | 'pptx' | 'pdf' | 'txt' | 'zip' | 'html' | 
 
 /** File extensions treated as images (stored in slot media, not imported as docs) */
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg']);
+
+/** Text formats the editor loads verbatim, with no conversion pass. */
+const TEXT_EXTENSIONS = ['md', 'markdown', 'txt'] as const;
+
+/** Every extension the upload input offers, derived so the three lists can't drift. */
+const UPLOAD_EXTENSIONS: readonly string[] = [
+  ...TEXT_EXTENSIONS,
+  ...IMPORTABLE_DOCUMENT_EXTENSIONS,
+  ...IMAGE_EXTENSIONS,
+];
+
+const UPLOAD_ACCEPT = UPLOAD_EXTENSIONS.map((ext) => `.${ext}`).join(',');
+const UPLOAD_SUPPORTED_SUMMARY = UPLOAD_EXTENSIONS.map((ext) => `.${ext}`).join(', ');
 
 // ============================================
 // Styles (inline, matching the existing top bar)
@@ -157,6 +169,8 @@ export function FileToolbar({
   const [busy, setBusy] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  /** Non-null while a document conversion is running, or after one failed. */
+  const [importState, setImportState] = useState<ImportProgressState | null>(null);
   const [videoExportDoc, setVideoExportDoc] = useState<Doc | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -335,30 +349,47 @@ export function FileToolbar({
 
       setBusy(true);
       try {
-        const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+        const ext = extensionOf(file.name);
 
         if (ext === 'md' || ext === 'txt' || ext === 'markdown') {
           const text = await file.text();
           onImport(text);
-        } else if (ext === 'docx') {
-          const buffer = await file.arrayBuffer();
-          const { docxToMarkdownDoc } = await import('@bendyline/squisq-formats/docx');
-          const mdDoc = await docxToMarkdownDoc(buffer);
-          const markdown = stringifyMarkdown(mdDoc);
-          onImport(markdown);
-        } else if (ext === 'pdf') {
-          const buffer = await file.arrayBuffer();
-          await ensurePdfWorker();
-          const { pdfToMarkdownDoc } = await import('@bendyline/squisq-formats/pdf');
-          const mdDoc = await pdfToMarkdownDoc(buffer);
-          const markdown = stringifyMarkdown(mdDoc);
-          onImport(markdown);
-        } else if (ext === 'zip') {
-          const buffer = await file.arrayBuffer();
-          const { zipToContainer } = await import('@bendyline/squisq-formats/container');
-          const container = await zipToContainer(buffer);
-          const markdown = (await container.readDocument()) ?? '';
-          onZipImport(markdown, container);
+        } else if (isImportableDocument(file.name)) {
+          // Every non-markdown document format converts through one pipeline.
+          // The dialog goes up before the first await so a slow converter never
+          // leaves the page silently frozen.
+          setImportState({
+            phase: 'working',
+            progress: { stage: 'reading', fileName: file.name, formatLabel: ext.toUpperCase() },
+          });
+          try {
+            const result = await importDocumentFile(file, (progress) =>
+              setImportState({ phase: 'working', progress }),
+            );
+            setImportState(null);
+            // A container-backed import (DOCX/PPTX/PDF/zip) also carries the
+            // document's extracted media, so it becomes the workspace.
+            if (result.container) {
+              onZipImport(result.markdown, result.container);
+            } else {
+              onImport(result.markdown);
+            }
+            if (!result.markdown.trim()) {
+              // Scanned PDFs and image-only decks are the common cause, and an
+              // empty editor with no explanation reads as a failed upload.
+              alert(
+                `${file.name} imported, but no text could be extracted from it. ` +
+                  'It may be image-only (a scan) rather than text.',
+              );
+            }
+          } catch (err: unknown) {
+            console.error('Import failed:', err);
+            setImportState({
+              phase: 'error',
+              fileName: file.name,
+              message: describeImportError(err, file.name),
+            });
+          }
         } else if (IMAGE_EXTENSIONS.has(ext)) {
           if (activeSlot === null) {
             alert('Select a storage slot first to upload images.');
@@ -371,9 +402,7 @@ export function FileToolbar({
           const imageMarkdown = `\n![${file.name}](${relativePath})\n`;
           onImport(currentSource + imageMarkdown);
         } else {
-          alert(
-            `Unsupported file type: .${ext}\nSupported: .md, .txt, .docx, .pdf, .zip, .jpg, .png, .gif, .webp, .svg`,
-          );
+          alert(`Unsupported file type: .${ext}\nSupported: ${UPLOAD_SUPPORTED_SUMMARY}`);
         }
       } catch (err: unknown) {
         console.error('Import failed:', err);
@@ -519,7 +548,7 @@ export function FileToolbar({
         onClick={handleUploadClick}
         disabled={busy}
         style={buttonStyle(isDark)}
-        title="Upload .md, .txt, .docx, .pdf, .zip, or image file"
+        title={`Upload a document or image (${UPLOAD_SUPPORTED_SUMMARY})`}
       >
         ↑ Upload
       </button>
@@ -528,10 +557,22 @@ export function FileToolbar({
       <input
         ref={fileInputRef}
         type="file"
-        accept=".md,.markdown,.txt,.docx,.pdf,.zip,.jpg,.jpeg,.png,.gif,.webp,.svg"
+        data-testid="site-upload-input"
+        accept={UPLOAD_ACCEPT}
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
+
+      {/* Import progress / failure dialog */}
+      {importState &&
+        createPortal(
+          <ImportProgressModal
+            state={importState}
+            colorScheme={isDark ? 'dark' : 'light'}
+            onClose={() => setImportState(null)}
+          />,
+          document.body,
+        )}
 
       {/* Video export modal */}
       {showVideoModal &&

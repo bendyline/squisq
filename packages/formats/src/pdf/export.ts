@@ -44,6 +44,8 @@ import type {
   MarkdownEmphasis,
   MarkdownStrong,
   MarkdownStrikethrough,
+  MarkdownSuperscript,
+  MarkdownSubscript,
   MarkdownInlineCode,
   MarkdownLink,
   MarkdownImage,
@@ -53,6 +55,7 @@ import type {
   MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
+import { FootnoteIndex } from '../shared/footnotes.js';
 
 import { WinAnsiTracker } from './winAnsi.js';
 import {
@@ -210,6 +213,12 @@ interface ExportContext {
   contentWidth: number;
   /** Bottom margin y position. */
   bottomY: number;
+  /**
+   * Footnote numbering for the document, so a marker and its definition show
+   * the same number and both agree with the HTML/EPUB exporters. Undefined
+   * only for documents with no footnotes.
+   */
+  footnotes?: FootnoteIndex;
   /** Resolved colors (may be overridden by theme). */
   colors: {
     text: RgbColor;
@@ -288,6 +297,7 @@ async function createExportContext(
     contentWidth: pageWidth - 2 * margin,
     bottomY: margin,
     colors: { text: colorText, heading: colorHeading, link: colorLink },
+    footnotes: new FootnoteIndex(doc),
     text: new WinAnsiTracker(),
     signal: options.signal,
   };
@@ -313,6 +323,19 @@ function newPage(ctx: ExportContext): void {
 // Inline "Span" Model
 // ============================================
 
+/** Superscript / subscript are drawn at this fraction of the surrounding size. */
+const VERT_ALIGN_SCALE = 0.72;
+
+/**
+ * Baseline offset in points for a shifted run, as a fraction of the
+ * SURROUNDING text size (not the shrunken one) so the shift stays visually
+ * constant. The subscript drop is smaller than the superscript rise because it
+ * has the glyph descenders to clear rather than the ascenders.
+ */
+function vertAlignShift(kind: 'superscript' | 'subscript', baseSize: number): number {
+  return kind === 'superscript' ? baseSize * 0.33 : baseSize * -0.14;
+}
+
 interface TextSpan {
   text: string;
   font: PDFFont;
@@ -320,6 +343,13 @@ interface TextSpan {
   color: { r: number; g: number; b: number };
   link?: string;
   strikethrough?: boolean;
+  /**
+   * Points to raise (positive) or lower (negative) this span off the line's
+   * baseline — how superscripts and subscripts are drawn, since pdf-lib has no
+   * concept of vertical alignment. Kept small enough that a shifted span stays
+   * inside the line box `getLineHeight` reserves.
+   */
+  baselineShift?: number;
 }
 
 /**
@@ -336,6 +366,7 @@ function flattenInlines(
     link?: string;
     color?: { r: number; g: number; b: number };
     strikethrough?: boolean;
+    vertAlign?: 'superscript' | 'subscript';
   },
 ): TextSpan[] {
   const spans: TextSpan[] = [];
@@ -348,13 +379,15 @@ function flattenInlines(
             ? ctx.fonts.monoBold
             : ctx.fonts.mono
           : pickFont(ctx, state.bold, state.italic);
+        const baseSize = state.code ? CODE_FONT_SIZE : ctx.fontSize;
         spans.push({
           text: ctx.text.clean((node as MarkdownText).value),
           font,
-          fontSize: state.code ? CODE_FONT_SIZE : ctx.fontSize,
+          fontSize: state.vertAlign ? baseSize * VERT_ALIGN_SCALE : baseSize,
           color: state.code ? COLOR_CODE_TEXT : (state.color ?? ctx.colors.text),
           link: state.link,
           strikethrough: state.strikethrough,
+          ...(state.vertAlign ? { baselineShift: vertAlignShift(state.vertAlign, baseSize) } : {}),
         });
         break;
       }
@@ -376,6 +409,16 @@ function flattenInlines(
           ...flattenInlines((node as MarkdownStrikethrough).children, ctx, {
             ...state,
             strikethrough: true,
+          }),
+        );
+        break;
+
+      case 'superscript':
+      case 'subscript':
+        spans.push(
+          ...flattenInlines((node as MarkdownSuperscript | MarkdownSubscript).children, ctx, {
+            ...state,
+            vertAlign: node.type === 'superscript' ? 'superscript' : 'subscript',
           }),
         );
         break;
@@ -479,11 +522,18 @@ function flattenInlines(
 
       case 'footnoteReference': {
         const ref = node as MarkdownFootnoteReference;
+        // A raised number, the way a printed footnote marker reads — the
+        // bracketed `[id]` this used to draw sat on the baseline and showed
+        // whatever identifier the source happened to use.
+        const marker = ctx.footnotes
+          ? String(ctx.footnotes.cite(ref.identifier).number)
+          : (ref.label ?? ref.identifier);
         spans.push({
-          text: ctx.text.clean(`[${ref.identifier}]`),
+          text: ctx.text.clean(marker),
           font: ctx.fonts.regular,
-          fontSize: ctx.fontSize * 0.75,
+          fontSize: ctx.fontSize * VERT_ALIGN_SCALE,
           color: ctx.colors.link,
+          baselineShift: vertAlignShift('superscript', ctx.fontSize),
         });
         break;
       }
@@ -542,9 +592,10 @@ function drawSpans(
 
     let x = x0;
     for (const span of line) {
+      const spanBaseline = ctx.y - span.fontSize + (span.baselineShift ?? 0);
       ctx.page.drawText(span.text, {
         x,
-        y: ctx.y - span.fontSize, // pdf-lib y is baseline
+        y: spanBaseline, // pdf-lib y is baseline
         size: span.fontSize,
         font: span.font,
         color: rgb(span.color.r, span.color.g, span.color.b),
@@ -554,7 +605,7 @@ function drawSpans(
 
       // Underline for links
       if (span.link) {
-        const baseline = ctx.y - span.fontSize;
+        const baseline = spanBaseline;
         ctx.page.drawLine({
           start: { x, y: baseline - 1 },
           end: { x: x + textWidth, y: baseline - 1 },
@@ -579,7 +630,7 @@ function drawSpans(
 
       // Strikethrough
       if (span.strikethrough) {
-        const midY = ctx.y - span.fontSize * 0.6;
+        const midY = spanBaseline + span.fontSize * 0.4;
         ctx.page.drawLine({
           start: { x, y: midY },
           end: { x: x + textWidth, y: midY },
@@ -1102,8 +1153,9 @@ function renderFootnoteDefinition(
   ctx: ExportContext,
   extraIndent: number,
 ): void {
-  // Draw footnote identifier
-  const label = ctx.text.clean(`[${node.identifier}]`);
+  // Draw the reader-facing number, matching the marker in the prose.
+  const number = ctx.footnotes?.numberFor(node.identifier);
+  const label = ctx.text.clean(number !== undefined ? `${number}.` : `[${node.identifier}]`);
   const lineH = ctx.fontSize * LINE_HEIGHT_FACTOR;
   ensureSpace(ctx, lineH);
 

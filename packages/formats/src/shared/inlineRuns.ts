@@ -30,6 +30,13 @@ export interface InlineRunFormat {
   italic?: boolean;
   strike?: boolean;
   code?: boolean;
+  /**
+   * Vertical alignment of the run's baseline. DOCX writes this as
+   * `w:vertAlign`, PPTX as the `baseline` attribute — both native, so a
+   * superscript footnote marker imported from a spreadsheet stays a real
+   * superscript all the way back out to Word or PowerPoint.
+   */
+  vertAlign?: 'superscript' | 'subscript';
   /** Explicit run color (hex without `#`); only some exporters use this. */
   color?: string;
 }
@@ -81,6 +88,10 @@ export function inlineNodeToRuns(
       return inlineNodesToRuns(node.children, handlers, { ...format, italic: true });
     case 'delete':
       return inlineNodesToRuns(node.children, handlers, { ...format, strike: true });
+    case 'superscript':
+      return inlineNodesToRuns(node.children, handlers, { ...format, vertAlign: 'superscript' });
+    case 'subscript':
+      return inlineNodesToRuns(node.children, handlers, { ...format, vertAlign: 'subscript' });
     case 'inlineCode':
       return handlers.run(node.value, { ...format, code: true });
     case 'inlineMath':

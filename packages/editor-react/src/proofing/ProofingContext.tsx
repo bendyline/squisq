@@ -11,6 +11,7 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { useEditorContext } from '../EditorContext';
 import { useProofing, type ProofingState } from './useProofing';
 import { ProofingMenu } from './ProofingMenu';
+import { ProofingTooltip } from './ProofingTooltip';
 
 const ProofingStateContext = createContext<ProofingState | null>(null);
 
@@ -28,6 +29,12 @@ export function ProofingRoot({ children }: { children: ReactNode }): JSX.Element
   const menuFinding =
     state?.menuAnchor != null
       ? (state.findings.find((finding) => finding.id === state.menuAnchor?.findingId) ?? null)
+      : null;
+  // The menu wins when both are live — it carries the same explanation
+  // plus the actions.
+  const hoverFinding =
+    state?.hoverAnchor != null && !state.menuAnchor
+      ? (state.findings.find((finding) => finding.id === state.hoverAnchor?.findingId) ?? null)
       : null;
 
   return (
@@ -56,6 +63,13 @@ export function ProofingRoot({ children }: { children: ReactNode }): JSX.Element
           }}
           canAddToAppDictionary={state.canAddToAppDictionary}
           onClose={state.closeMenu}
+        />
+      )}
+      {state && state.hoverAnchor && hoverFinding && (
+        <ProofingTooltip
+          anchor={state.hoverAnchor}
+          finding={hoverFinding}
+          colorScheme={colorScheme}
         />
       )}
     </ProofingStateContext.Provider>

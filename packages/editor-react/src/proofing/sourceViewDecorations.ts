@@ -12,6 +12,7 @@
 
 import type { editor as MonacoEditorNs, IPosition } from 'monaco-editor';
 import type { ProofFinding } from '@bendyline/squisq/proof';
+import { proofHoverMarkdown } from './findingText';
 
 /** Decoration options for one finding (shared by build + rebuild paths). */
 export function proofDecorationOptions(
@@ -19,7 +20,10 @@ export function proofDecorationOptions(
 ): MonacoEditorNs.IModelDecorationOptions {
   return {
     inlineClassName: `squisq-proof-underline squisq-proof-underline--${finding.category}`,
-    hoverMessage: { value: finding.message },
+    // Monaco's own hover card is the Source view's tooltip — it shows
+    // the same category / message / suggestions the Write view's
+    // `ProofingTooltip` does.
+    hoverMessage: { value: proofHoverMarkdown(finding) },
     // NeverGrowsWhenTypingAtEdges (1) — typing at a squiggle's edge
     // belongs to the surrounding text, not the finding.
     stickiness: 1,

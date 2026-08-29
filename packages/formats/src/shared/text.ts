@@ -24,6 +24,8 @@ export function inlineToPlainText(node: MarkdownInlineNode): string {
     case 'emphasis':
     case 'strong':
     case 'delete':
+    case 'superscript':
+    case 'subscript':
     case 'link':
       return extractPlainText(node.children);
     case 'image':

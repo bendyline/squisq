@@ -484,8 +484,128 @@ function convertInlineChildren(
     const node = convertInlineNode(child, parseHtml);
     if (node) result.push(node);
   }
+  // Post-parse inline pipeline. Each pass rewrites a flat sibling list into a
+  // more semantic one; order matters only in that folding runs LAST, so a
+  // mention or icon that sits inside `<sup>…</sup>` is already a single node
+  // by the time it becomes a child.
   const mentioned = coalesceMentions(result);
-  return applyIconSplit ? splitInlineIcons(mentioned) : mentioned;
+  const split = applyIconSplit ? splitInlineIcons(mentioned) : mentioned;
+  return foldPairedInlineHtml(split);
+}
+
+/**
+ * Inline HTML tags remark hands back as UNPAIRED siblings, and the node type
+ * each matched pair folds into.
+ *
+ * micromark emits `<sup>x</sup>` as three flat nodes — `html('<sup>')`,
+ * `text('x')`, `html('</sup>')` — because inline HTML in CommonMark is a run of
+ * raw text, not a container. Consumers that rebuild each node independently
+ * therefore render an EMPTY `<sup></sup>` followed by unstyled text: the markup
+ * survives a round-trip but never actually formats anything. Folding the pair
+ * into a real container node here fixes every consumer at once, and keeps the
+ * source form as plain inline HTML.
+ *
+ * Adding a tag is a two-line change here plus the matching node type — but only
+ * do it for tags whose meaning is purely "wrap these children": anything that
+ * carries attributes worth keeping belongs in `htmlInline`.
+ */
+const PAIRED_INLINE_HTML: ReadonlyMap<string, 'superscript' | 'subscript'> = new Map([
+  ['sup', 'superscript' as const],
+  ['sub', 'subscript' as const],
+]);
+
+/** `<sup>` / `<SUP >` → `sup`; anything with attributes or a slash → null. */
+function bareOpenTag(rawHtml: string): string | null {
+  const m = /^<([a-zA-Z][a-zA-Z0-9]*)\s*>$/.exec(rawHtml);
+  return m ? m[1]!.toLowerCase() : null;
+}
+
+/** `</sup>` / `</SUP >` → `sup`; anything else → null. */
+function bareCloseTag(rawHtml: string): string | null {
+  const m = /^<\/([a-zA-Z][a-zA-Z0-9]*)\s*>$/.exec(rawHtml);
+  return m ? m[1]!.toLowerCase() : null;
+}
+
+/**
+ * Fold balanced runs of bare paired inline-HTML tags into container nodes.
+ *
+ * Uses an explicit stack so nesting works (`<sup>a<sub>b</sub></sup>`), and
+ * commits a fold only when the matching close tag is found in the SAME sibling
+ * list. An unmatched tag — `<sup>` with no close, a close with no open, a pair
+ * split across a `**bold**` boundary — is left exactly as it was, so malformed
+ * or deliberately-literal markup still round-trips as raw `htmlInline`.
+ */
+function foldPairedInlineHtml(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  // Cheap bail-out: the overwhelming majority of inline runs have no HTML.
+  if (!nodes.some((n) => n.type === 'htmlInline')) return nodes;
+
+  interface Frame {
+    tag: string;
+    type: 'superscript' | 'subscript';
+    open: MarkdownInlineNode;
+    children: MarkdownInlineNode[];
+  }
+  const root: MarkdownInlineNode[] = [];
+  const stack: Frame[] = [];
+  const top = (): MarkdownInlineNode[] => stack[stack.length - 1]?.children ?? root;
+
+  for (const node of nodes) {
+    if (node.type !== 'htmlInline') {
+      top().push(node);
+      continue;
+    }
+
+    const open = bareOpenTag(node.rawHtml);
+    const foldType = open ? PAIRED_INLINE_HTML.get(open) : undefined;
+    if (open && foldType) {
+      stack.push({ tag: open, type: foldType, open: node, children: [] });
+      continue;
+    }
+
+    const close = bareCloseTag(node.rawHtml);
+    let closeIndex = -1;
+    if (close) {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i]!.tag === close) {
+          closeIndex = i;
+          break;
+        }
+      }
+    }
+    if (close && closeIndex >= 0) {
+      // Unwind any frames opened inside this one — they never closed, so they
+      // revert to raw tags rather than silently swallowing the close.
+      while (stack.length - 1 > closeIndex) {
+        const orphan = stack.pop()!;
+        top().push(orphan.open, ...orphan.children);
+      }
+      const frame = stack.pop()!;
+      top().push({
+        type: frame.type,
+        children: frame.children,
+        ...spanPosition(frame.open, node),
+      });
+      continue;
+    }
+
+    top().push(node);
+  }
+
+  // Anything still open never closed: restore it verbatim, outermost first.
+  while (stack.length > 0) {
+    const orphan = stack.pop()!;
+    top().push(orphan.open, ...orphan.children);
+  }
+  return root;
+}
+
+/** Source span covering both ends of a folded tag pair, when both are known. */
+function spanPosition(
+  open: MarkdownInlineNode,
+  close: MarkdownInlineNode,
+): { position?: MarkdownSourcePosition } {
+  if (!open.position || !close.position) return {};
+  return { position: { start: open.position.start, end: close.position.end } };
 }
 
 /**
@@ -1217,7 +1337,14 @@ function tableCellToMdast(cell: MarkdownTableCell): MdastNode {
 function inlineChildrenToMdast(nodes: MarkdownInlineNode[]): MdastNode[] {
   const out: MdastNode[] = [];
   for (const n of nodes) {
-    if (n.type === 'mention') {
+    if (n.type === 'superscript' || n.type === 'subscript') {
+      // Expand back into the same three flat tokens micromark produced, so a
+      // parse → stringify pass is byte-identical to the authored source.
+      const tag = n.type === 'superscript' ? 'sup' : 'sub';
+      out.push({ type: 'html', value: `<${tag}>`, ...mdastPosField(n.position) });
+      out.push(...inlineChildrenToMdast(n.children));
+      out.push({ type: 'html', value: `</${tag}>` });
+    } else if (n.type === 'mention') {
       out.push({ type: 'text', value: '@' });
       out.push({
         type: 'link',
@@ -1357,6 +1484,18 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
         ...mdastPosField(node.position),
       };
 
+    case 'superscript':
+    case 'subscript':
+      // Unreachable in practice: `inlineChildrenToMdast` is the only caller and
+      // it expands these into their `<sup>`/`</sup>` token triple first, which
+      // a single mdast node cannot represent. Degrade to the wrapped text
+      // rather than inventing a formatting mark that isn't there.
+      return {
+        type: 'text',
+        value: inlineNodesToPlainText(node.children),
+        ...mdastPosField(node.position),
+      };
+
     case 'inlineIcon':
       // Serialize back to the authored token so source round-trips
       // byte-stable. The token already carries the qualified form when
@@ -1375,6 +1514,18 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
 // ============================================
 // Helpers
 // ============================================
+
+/** Concatenated text of an inline subtree, ignoring all formatting. */
+function inlineNodesToPlainText(nodes: MarkdownInlineNode[]): string {
+  let out = '';
+  for (const node of nodes) {
+    if ('value' in node && typeof node.value === 'string') out += node.value;
+    else if ('children' in node && Array.isArray(node.children)) {
+      out += inlineNodesToPlainText(node.children as MarkdownInlineNode[]);
+    }
+  }
+  return out;
+}
 
 /** Escape text for interpolation into HTML character data. */
 function escapeHtmlText(value: string): string {

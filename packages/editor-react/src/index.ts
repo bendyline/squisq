@@ -260,6 +260,7 @@ export {
 
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';
+export { Superscript, Subscript } from './VerticalAlign.js';
 
 // Diagram editor — ASCII fences are the authored diagram format. The
 // AsciiDiagramExtension turns code fences containing box-and-line art

@@ -30,6 +30,11 @@ import {
 } from '@bendyline/squisq/markdown';
 import { docToMarkdown } from '@bendyline/squisq/doc';
 import type { Doc } from '@bendyline/squisq/schemas';
+import {
+  extractFootnoteSection,
+  linkFootnoteReferences,
+  buildFootnoteDefinitions,
+} from './footnoteImport.js';
 
 export interface HtmlImportOptions {
   /** Cancel before parsing. */
@@ -80,7 +85,10 @@ const DROP = new Set(['script', 'style', 'head', 'title', 'noscript', 'template'
 const INLINE_STRONG = new Set(['strong', 'b']);
 const INLINE_EM = new Set(['em', 'i']);
 const INLINE_DEL = new Set(['del', 's', 'strike']);
-const INLINE_TRANSPARENT = new Set(['span', 'font', 'abbr', 'mark', 'small', 'sub', 'sup', 'u']);
+const INLINE_SUP = new Set(['sup']);
+const INLINE_SUB = new Set(['sub']);
+// Tags with no Markdown counterpart: their CHILDREN are kept, the tag dropped.
+const INLINE_TRANSPARENT = new Set(['span', 'font', 'abbr', 'mark', 'small', 'u']);
 
 const isElement = (n: HtmlNode): n is HtmlElement => n.type === 'htmlElement';
 const isText = (n: HtmlNode): n is { type: 'htmlText'; value: string } => n.type === 'htmlText';
@@ -109,6 +117,10 @@ function inlinesFromNodes(nodes: HtmlNode[]): MarkdownInlineNode[] {
       out.push({ type: 'emphasis', children: inlinesFromNodes(node.children) });
     } else if (INLINE_DEL.has(tag)) {
       out.push({ type: 'delete', children: inlinesFromNodes(node.children) });
+    } else if (INLINE_SUP.has(tag)) {
+      out.push({ type: 'superscript', children: inlinesFromNodes(node.children) });
+    } else if (INLINE_SUB.has(tag)) {
+      out.push({ type: 'subscript', children: inlinesFromNodes(node.children) });
     } else if (tag === 'code' || tag === 'kbd' || tag === 'samp' || tag === 'tt') {
       out.push({ type: 'inlineCode', value: textContent(node) });
     } else if (tag === 'a') {
@@ -332,11 +344,31 @@ export function htmlToMarkdownDocSync(
   if (html.length > maxInputChars) {
     throw new RangeError(`HTML exceeds the ${maxInputChars}-character safety limit`);
   }
-  let nodes = parseHtmlToNodes(html);
+  const nodes = parseHtmlToNodes(html);
   const embedded = findEmbeddedSquisqDoc(nodes);
   if (embedded) return docToMarkdown(parseEmbeddedSquisqDoc(embedded));
-  if (options.sanitize !== false) nodes = sanitizeHtmlNodes(nodes);
-  return { type: 'document', children: blocksFromNodes(nodes) };
+  // Footnotes come apart in HTML: a marker anchor in the prose and a list item
+  // at the foot of the page, joined only by a fragment id. Lift the definitions
+  // out FIRST so they do not also import as an ordinary trailing list, then
+  // reconnect the markers that point at them.
+  //
+  // This runs BEFORE sanitization because the markers ARE the structure: a
+  // `<section data-footnotes>` is not on the sanitizer's element allowlist, so
+  // by the time it has run the wrapper is gone and only a bare `<ol>` remains.
+  // Both halves are sanitized below, so nothing skips the filter — the pass
+  // only reads the shape, it never trusts the content.
+  const { nodes: bodyNodes, bodies, identifiers } = extractFootnoteSection(nodes);
+  const clean = (input: HtmlNode[]): HtmlNode[] =>
+    options.sanitize === false ? input : sanitizeHtmlNodes(input);
+
+  const children = blocksFromNodes(clean(bodyNodes));
+  if (bodies.size > 0) {
+    linkFootnoteReferences(children, identifiers ?? new Map());
+    const definitions = new Map<string, MarkdownBlockNode[]>();
+    for (const [id, body] of bodies) definitions.set(id, blocksFromNodes(clean(body)));
+    children.push(...buildFootnoteDefinitions(definitions));
+  }
+  return { type: 'document', children };
 }
 
 /** Async, ArrayBuffer-accepting entry mirroring docx/pdf importers. */

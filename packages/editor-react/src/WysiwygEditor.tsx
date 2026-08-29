@@ -29,6 +29,7 @@ import { DEFAULT_THEME, flattenBlocks, markdownToDoc } from '@bendyline/squisq/d
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownWrapState } from '@bendyline/squisq/markdown';
 import { HeadingWithTemplate } from './TemplateAnnotation';
+import { Superscript, Subscript } from './VerticalAlign';
 import { AsciiDiagramExtension } from './asciiDiagram/AsciiDiagramExtension';
 import { RepairableDiagramExtension } from './asciiDiagram/RepairableDiagramExtension';
 import { applyRepairCommand } from './asciiDiagram/asciiDiagramCommands';
@@ -288,6 +289,8 @@ export function WysiwygEditor({
         },
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+      Superscript,
+      Subscript,
       BlockTagActivityExtension,
       AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
       MermaidDiagramExtension.configure({ themeStore: mermaidThemeStore }),

@@ -32,6 +32,7 @@ import type {
   MarkdownTableRow,
 } from '@bendyline/squisq/markdown';
 import { extractPlainText } from '../shared/text.js';
+import type { MarkdownInlineNode } from '@bendyline/squisq/markdown';
 import {
   MAX_COL_INDEX,
   MAX_ROW_INDEX,
@@ -45,6 +46,25 @@ export interface PlannedCell {
   text: string;
   /** Formula source without its leading `=`. */
   formula?: string;
+  /**
+   * The cell's inline content, kept ONLY when it carries superscript or
+   * subscript runs — the one piece of markdown inline formatting a worksheet
+   * cell can actually represent. Everything else about placement and typing
+   * still runs off `text`, so this cannot change where a cell lands or how it
+   * is typed; it only lets `cellXml` emit rich `<r>` runs instead of one flat
+   * `<t>`, which is what makes an imported footnote marker survive a re-export.
+   */
+  rich?: MarkdownInlineNode[];
+}
+
+/** Whether an inline subtree contains anything a worksheet cell can express. */
+export function hasRichCellContent(nodes: MarkdownInlineNode[]): boolean {
+  return nodes.some(
+    (n) =>
+      n.type === 'superscript' ||
+      n.type === 'subscript' ||
+      ('children' in n && Array.isArray(n.children) && hasRichCellContent(n.children)),
+  );
 }
 
 /** Row-major key, so a sheet's cells sort into write order numerically. */
@@ -98,6 +118,13 @@ interface TableEntry {
 function tableToGrid(table: MarkdownTable): string[][] {
   return table.children.map((row: MarkdownTableRow) =>
     row.children.map((cell) => extractPlainText(cell.children)),
+  );
+}
+
+/** The same grid as {@link tableToGrid}, but keeping rich cells' inline nodes. */
+function tableToRichGrid(table: MarkdownTable): (MarkdownInlineNode[] | undefined)[][] {
+  return table.children.map((row: MarkdownTableRow) =>
+    row.children.map((cell) => (hasRichCellContent(cell.children) ? cell.children : undefined)),
   );
 }
 
@@ -209,6 +236,7 @@ function placeValues(
   clashes: string[],
 ): void {
   const grid = tableToGrid(entry.table);
+  const richGrid = tableToRichGrid(entry.table);
   const anchorRaw = entry.params.anchor ?? 'A1';
   let anchor = parseCellRef(anchorRaw);
   if (!anchor) {
@@ -238,7 +266,8 @@ function placeValues(
     for (let c = 0; c < row.length; c++) {
       const text = row[c]!;
       if (text === '') continue;
-      place(cells, anchor.row + r, anchor.col + c, { text }, clashes);
+      const rich = richGrid[r]?.[c];
+      place(cells, anchor.row + r, anchor.col + c, rich ? { text, rich } : { text }, clashes);
     }
   }
 }
@@ -300,6 +329,7 @@ function placeLoose(
   clashes: string[],
 ): void {
   const grid = tableToGrid(entry.table);
+  const richGrid = tableToRichGrid(entry.table);
   let skipped = 0;
   for (let r = 1; r < grid.length; r++) {
     const row = grid[r]!;
@@ -312,7 +342,11 @@ function placeLoose(
     }
     const text = row[1] ?? '';
     const formula = formulaSource(row[2] ?? '');
-    place(cells, at.row, at.col, formula === '' ? { text } : { text, formula }, clashes);
+    const rich = richGrid[r]?.[1];
+    const planned: PlannedCell = { text };
+    if (formula !== '') planned.formula = formula;
+    if (rich) planned.rich = rich;
+    place(cells, at.row, at.col, planned, clashes);
   }
   if (skipped > 0) {
     warnings.push(

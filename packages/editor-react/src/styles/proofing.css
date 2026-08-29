@@ -234,6 +234,72 @@
   font-style: italic;
 }
 
+/* ── Hover tooltip (portaled; passive twin of the menu) ───────────── */
+
+.squisq-proof-tooltip {
+  max-width: 320px;
+  background: #fff;
+  border: 1px solid #d5d5d5;
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #333;
+  pointer-events: none;
+}
+
+.squisq-proof-tooltip-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.squisq-proof-tooltip-category {
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #666;
+}
+
+.squisq-proof-tooltip-message {
+  color: #222;
+}
+
+.squisq-proof-tooltip-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.squisq-proof-tooltip-label {
+  color: #777;
+  font-size: 11px;
+}
+
+.squisq-proof-tooltip-chip {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #f0f4ff;
+  color: #1a3d8f;
+  font-weight: 600;
+}
+
+.squisq-proof-tooltip-more {
+  color: #999;
+  font-size: 11px;
+}
+
+.squisq-proof-tooltip-hint {
+  margin-top: 6px;
+  color: #999;
+  font-size: 11px;
+}
+
 /* ── Status bar segment ─────────────────────────────────────────────── */
 
 .squisq-proof-status {
@@ -339,4 +405,30 @@
 
 .squisq-proof-menu[data-theme='dark'] .squisq-proof-menu-empty {
   color: #777;
+}
+
+.squisq-proof-tooltip[data-theme='dark'] {
+  background: #262626;
+  border-color: #454545;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  color: #ddd;
+}
+
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-category {
+  color: #aaa;
+}
+
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-message {
+  color: #eee;
+}
+
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-chip {
+  background: #333f52;
+  color: #cddcff;
+}
+
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-label,
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-more,
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-hint {
+  color: #888;
 }

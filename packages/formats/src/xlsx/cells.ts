@@ -14,6 +14,8 @@
  * result).
  */
 
+import type { MarkdownInlineNode } from '@bendyline/squisq/markdown';
+
 /** Excel's last column, `XFD`, zero-based. */
 export const MAX_COL_INDEX = 16_383;
 /** Excel's last row, 1048576, zero-based. */
@@ -24,12 +26,22 @@ export type XlsxCellKind = 'empty' | 'string' | 'number' | 'bool' | 'date' | 'er
 
 /** A single worksheet cell. */
 export interface XlsxCell {
-  /** Display text — exactly the string that goes into a markdown table cell. */
+  /** Display text — the plain string, with all run formatting flattened out. */
   text: string;
   /** What the cell holds. `empty` iff `text` is `''`. */
   kind: XlsxCellKind;
   /** Formula source WITHOUT the leading `=`, when the cell carries one. */
   formula?: string;
+  /**
+   * Inline markdown for a cell whose rich text carries formatting worth
+   * keeping — today, superscript/subscript runs (`Fresh<sup>1</sup>`).
+   *
+   * Deliberately additive: `text` remains the flattened string, so region
+   * detection, header sniffing, numeric inference and export placement all
+   * keep working on exactly the value they saw before. Only the markdown table
+   * cell reads this, and only when it is present.
+   */
+  richText?: MarkdownInlineNode[];
 }
 
 /** The empty cell. Shared because grids allocate a great many of them. */

@@ -10,6 +10,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { ProofFinding } from '@bendyline/squisq/proof';
 import { useEscapeDismissal } from '../useEscapeDismissal';
+import { proofSuggestionLabel } from './findingText';
 import type { ProofingMenuAnchor } from './useProofing';
 
 export interface ProofingMenuProps {
@@ -45,13 +46,6 @@ function computeStyle(anchor: ProofingMenuAnchor, element?: HTMLElement | null):
   }
   const left = Math.min(Math.max(margin, anchor.x), Math.max(margin, vw - width - margin));
   return { position: 'fixed', top, left, zIndex: 9999 };
-}
-
-function suggestionLabel(finding: ProofFinding, index: number): string {
-  const suggestion = finding.suggestions[index];
-  if (suggestion.kind === 'remove') return 'Remove';
-  if (suggestion.kind === 'insertAfter') return `Insert “${suggestion.text}” after`;
-  return suggestion.text;
 }
 
 export function ProofingMenu({
@@ -100,7 +94,7 @@ export function ProofingMenu({
   const actions: { key: string; label: string; run: () => void; className?: string }[] = [
     ...suggestions.map((_, index) => ({
       key: `s${index}`,
-      label: suggestionLabel(finding, index),
+      label: proofSuggestionLabel(finding.suggestions[index]),
       run: () => onApply(index),
       className: 'squisq-proof-menu-suggestion',
     })),

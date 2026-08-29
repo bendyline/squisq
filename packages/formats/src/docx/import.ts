@@ -39,6 +39,8 @@ import type {
   MarkdownEmphasis,
   MarkdownStrong,
   MarkdownStrikethrough,
+  MarkdownSuperscript,
+  MarkdownSubscript,
   MarkdownInlineCode,
   MarkdownLink,
   MarkdownImage,
@@ -55,6 +57,7 @@ import {
   getPartRelationships,
   requireMainPartPath,
 } from '../ooxml/reader.js';
+import { renumberFootnotes } from '../shared/footnotes.js';
 import type { OoxmlOpenOptions } from '../ooxml/reader.js';
 import type { OoxmlPackage, Relationship } from '../ooxml/types.js';
 import { NS_WML, NS_R } from '../ooxml/namespaces.js';
@@ -116,7 +119,13 @@ export async function docxToMarkdownDoc(
 
   const blocks = await convertDocumentStories(body, ctx);
 
-  return { type: 'document', children: blocks };
+  const doc: MarkdownDocument = { type: 'document', children: blocks };
+  // Word numbers its notes and gives them no label, so the identifiers above
+  // are this importer's invention (`fn1`, `endnote2`). Renumber to what a
+  // reader expects — and to what the author most likely typed — so a
+  // markdown → DOCX → markdown trip comes back spelled the way it went in.
+  renumberFootnotes(doc);
+  return doc;
 }
 
 /**
@@ -640,6 +649,12 @@ async function convertRun(runEl: Element, ctx: ImportContext): Promise<MarkdownI
         result.push({ type: 'inlineCode', value: text } satisfies MarkdownInlineCode);
       } else {
         let node: MarkdownInlineNode = { type: 'text', value: text } satisfies MarkdownText;
+        if (format.vertAlign) {
+          node =
+            format.vertAlign === 'superscript'
+              ? ({ type: 'superscript', children: [node] } satisfies MarkdownSuperscript)
+              : ({ type: 'subscript', children: [node] } satisfies MarkdownSubscript);
+        }
         if (format.strike) {
           node = { type: 'delete', children: [node] } satisfies MarkdownStrikethrough;
         }
@@ -778,10 +793,12 @@ interface RunFormat {
   italic: boolean;
   strike: boolean;
   code: boolean;
+  /** `w:vertAlign`, when it names a real offset (`baseline` counts as none). */
+  vertAlign: 'superscript' | 'subscript' | null;
 }
 
 function parseRunFormat(rPr: Element | null, ctx: ImportContext): RunFormat {
-  if (!rPr) return { bold: false, italic: false, strike: false, code: false };
+  if (!rPr) return { bold: false, italic: false, strike: false, code: false, vertAlign: null };
 
   const bold = hasChildElement(rPr, 'b') && !isFalseToggle(getFirstChildElement(rPr, 'b')!);
   const italic = hasChildElement(rPr, 'i') && !isFalseToggle(getFirstChildElement(rPr, 'i')!);
@@ -798,7 +815,15 @@ function parseRunFormat(rPr: Element | null, ctx: ImportContext): RunFormat {
   const fontName = rFonts ? (getAttr(rFonts, 'ascii') ?? getAttr(rFonts, 'hAnsi') ?? '') : '';
   const isMonospace = /consolas|courier|mono/i.test(fontName);
 
-  return { bold, italic, strike, code: isCodeStyle || isMonospace };
+  // Word's own footnote/endnote reference marks also carry `vertAlign`, but
+  // they live in a `w:footnoteReference` child rather than a `w:t`, so they are
+  // converted elsewhere and never reach the text branch that reads this.
+  const vertAlignEl = getFirstChildElement(rPr, 'vertAlign');
+  const vertAlignVal = vertAlignEl ? getAttr(vertAlignEl, 'val') : null;
+  const vertAlign =
+    vertAlignVal === 'superscript' || vertAlignVal === 'subscript' ? vertAlignVal : null;
+
+  return { bold, italic, strike, code: isCodeStyle || isMonospace, vertAlign };
 }
 
 function isFalseToggle(el: Element): boolean {
@@ -1272,6 +1297,8 @@ type ImportedInlineContainer =
   | MarkdownEmphasis
   | MarkdownStrong
   | MarkdownStrikethrough
+  | MarkdownSuperscript
+  | MarkdownSubscript
   | MarkdownLink;
 
 function isImportedInlineContainer(node: MarkdownInlineNode): node is ImportedInlineContainer {
@@ -1279,6 +1306,8 @@ function isImportedInlineContainer(node: MarkdownInlineNode): node is ImportedIn
     node.type === 'emphasis' ||
     node.type === 'strong' ||
     node.type === 'delete' ||
+    node.type === 'superscript' ||
+    node.type === 'subscript' ||
     node.type === 'link'
   );
 }

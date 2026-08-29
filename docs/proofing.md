@@ -169,44 +169,6 @@ and across several mounted shells — without it, one document's
 dismissals would silently suppress findings in another. Sharing one
 instance stays safe; the cost is a string comparison per pass.
 
-## Known-host notes
-
-### docblocks
-
-- Forward a `proofing` prop on `DocBlocksShell` beside `ffmpegWasm`
-  (`DocBlocksShell.tsx` ~:315) and supply it per surface, mirroring the
-  ffmpeg config exactly.
-- Clone `scripts/vite-ffmpeg-core.ts` into a harper plugin publishing
-  **both** wasm files + LICENSE.
-- ⚠️ **Workbox precache**: the site precaches `'**/*.wasm'` under a
-  64 MiB total budget with only ~5.5 MiB free — two ~15 MB binaries
-  cannot ride along. Exclude `harper*.wasm` from the precache glob
-  (they'll load on demand and land in the HTTP cache) or raise the
-  budget deliberately.
-- Add `'wasm-unsafe-eval'` to `script-src` if the site sets a CSP.
-- Bundle-size gates only count `.js`/`.css`; the dynamic `harper.js`
-  glue chunk stays out of entry budgets on its own.
-- Consider `proofingDefaultEnabled={false}` for the first release if the
-  ~7.6 MB×2 on-demand download per user is a concern.
-
-### gezel
-
-- Add `'.wasm': 'application/wasm'` to the daemon's static-UI MIME map
-  (`packages/service/src/http/server.ts` `contentType()` — a complete
-  map already exists at `http/mime.ts`); today `.wasm` falls through to
-  `application/octet-stream`.
-- ⚠️ **CSP**: the daemon sends `script-src 'self'` — add
-  **`'wasm-unsafe-eval'`**. `worker-src 'self' blob:` and
-  `connect-src 'self'` are already compatible.
-- Put both binaries under `packages/ui/public/harper/` (Vite copies
-  `public/` verbatim into `dist/ui`, which is already asar-unpacked so
-  the daemon can read it). Name them under `assets/` or extend
-  `static-ui.ts` if immutable caching is wanted.
-- Keep the provider import dynamic (it already is inside squisq) so the
-  harper glue stays out of the 950 kB entry-graph budget.
-- Inject the provider from the `SquisqIntegration` layer consumed by the
-  `EditorShell` mounts.
-
 ## Implementing a custom provider
 
 `ProofingProvider` (in `@bendyline/squisq-editor-react/proofing`) is a

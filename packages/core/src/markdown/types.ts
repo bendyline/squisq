@@ -454,6 +454,34 @@ export interface MarkdownStrikethrough extends MarkdownNodeBase {
 }
 
 /**
+ * Superscript text (`<sup>text</sup>`).
+ *
+ * Markdown has no native syntax for vertical alignment, so the source form is
+ * inline HTML — which is exactly what every importer that carries the
+ * information (DOCX `w:vertAlign`, SpreadsheetML `vertAlign`, HTML `<sup>`)
+ * can round-trip. The parser folds the `<sup>` … `</sup>` tag pair into this
+ * node so consumers treat it like {@link MarkdownStrong} rather than having to
+ * pair up two unrelated `htmlInline` nodes themselves; the serializer expands
+ * it back to the same three tokens, byte for byte.
+ *
+ * Only a BARE tag pair folds. `<sup class="fn">` keeps its attributes and stays
+ * `htmlInline`, because this node has nowhere to put them.
+ */
+export interface MarkdownSuperscript extends MarkdownNodeBase {
+  type: 'superscript';
+  children: MarkdownInlineNode[];
+}
+
+/**
+ * Subscript text (`<sub>text</sub>`). The vertical-alignment sibling of
+ * {@link MarkdownSuperscript}; see there for how the source form round-trips.
+ */
+export interface MarkdownSubscript extends MarkdownNodeBase {
+  type: 'subscript';
+  children: MarkdownInlineNode[];
+}
+
+/**
  * Inline code (`code`).
  */
 export interface MarkdownInlineCode extends MarkdownNodeBase {
@@ -635,6 +663,8 @@ export type MarkdownInlineNode =
   | MarkdownEmphasis
   | MarkdownStrong
   | MarkdownStrikethrough
+  | MarkdownSuperscript
+  | MarkdownSubscript
   | MarkdownInlineCode
   | MarkdownLink
   | MarkdownImage

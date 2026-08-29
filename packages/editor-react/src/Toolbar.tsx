@@ -679,6 +679,12 @@ export function Toolbar({
         case 'strikethrough':
           chain.toggleStrike().run();
           break;
+        case 'superscript':
+          chain.toggleSuperscript().run();
+          break;
+        case 'subscript':
+          chain.toggleSubscript().run();
+          break;
         case 'code':
           chain.toggleCode().run();
           break;
@@ -839,6 +845,14 @@ export function Toolbar({
           case 'strikethrough':
             wrapInline('~~', '~~', 'strikethrough');
             break;
+          // Markdown has no delimiter for vertical alignment — the source form
+          // is inline HTML, which core's parser folds back into a real node.
+          case 'superscript':
+            wrapInline('<sup>', '</sup>', '1');
+            break;
+          case 'subscript':
+            wrapInline('<sub>', '</sub>', '2');
+            break;
           case 'code':
             wrapInline('`', '`', 'code');
             break;
@@ -996,6 +1010,12 @@ export function Toolbar({
             break;
           case 'strikethrough':
             insertion = '~~strikethrough~~';
+            break;
+          case 'superscript':
+            insertion = '<sup>1</sup>';
+            break;
+          case 'subscript':
+            insertion = '<sub>2</sub>';
             break;
           case 'code':
             insertion = '`code`';
@@ -1453,6 +1473,8 @@ export function Toolbar({
     'bold',
     'italic',
     'strikethrough',
+    'superscript',
+    'subscript',
     'code',
     'link',
     'emoji',

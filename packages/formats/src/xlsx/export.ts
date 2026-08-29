@@ -33,7 +33,8 @@
 
 import type { Doc } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
-import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import type { MarkdownDocument, MarkdownInlineNode } from '@bendyline/squisq/markdown';
+import { inlineToPlainText } from '../shared/text.js';
 
 import { createPackage } from '../ooxml/writer.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
@@ -147,7 +148,49 @@ function cellXml(cell: PlannedCell, ref: string, inferNumericCells: boolean): st
   if (inferNumericCells && isSafeNumericCell(text)) {
     return `<c r="${ref}"><v>${escapeXml(text)}</v></c>`;
   }
+  if (cell.rich) {
+    return `<c r="${ref}" t="inlineStr"><is>${richRunsXml(cell.rich)}</is></c>`;
+  }
   return `<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(text)}</t></is></c>`;
+}
+
+/**
+ * A cell's inline content as SpreadsheetML rich-text `<r>` runs.
+ *
+ * Excel splits a rich string at every formatting boundary, which is exactly
+ * what the walk below reproduces: one run per contiguous stretch of the same
+ * vertical alignment. A run's `<rPr>` carries only `vertAlign` — the rest of
+ * the cell's look is the worksheet's own styling, and inventing fonts or sizes
+ * here would override it.
+ */
+function richRunsXml(nodes: MarkdownInlineNode[]): string {
+  const runs: string[] = [];
+  const emit = (text: string, vertAlign: 'superscript' | 'subscript' | null): void => {
+    if (text === '') return;
+    const rPr = vertAlign ? `<rPr><vertAlign val="${vertAlign}"/></rPr>` : '';
+    runs.push(`<r>${rPr}<t xml:space="preserve">${escapeXml(text)}</t></r>`);
+  };
+
+  const walk = (
+    list: MarkdownInlineNode[],
+    vertAlign: 'superscript' | 'subscript' | null,
+  ): void => {
+    for (const node of list) {
+      if (node.type === 'superscript' || node.type === 'subscript') {
+        // A nested `<sub>` inside a `<sup>` cannot be expressed — the inner
+        // alignment wins, matching how the run walkers in the OOXML exporters
+        // resolve conflicting formats.
+        walk(node.children, node.type === 'superscript' ? 'superscript' : 'subscript');
+      } else if ('children' in node && Array.isArray(node.children)) {
+        walk(node.children as MarkdownInlineNode[], vertAlign);
+      } else {
+        emit(inlineToPlainText(node), vertAlign);
+      }
+    }
+  };
+
+  walk(nodes, null);
+  return runs.join('');
 }
 
 /**
