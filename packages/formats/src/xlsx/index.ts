@@ -21,6 +21,13 @@ import { type XlsxImportOptions, xlsxToMarkdownDoc } from './import.js';
 export type { XlsxImportOptions } from './import.js';
 export { xlsxToMarkdownDoc } from './import.js';
 
+// The data path. `xlsxToMarkdownDoc` renders a workbook for people and its
+// number formatting is lossy by design; anything doing arithmetic reads this
+// instead. See tables.ts.
+export type { XlsxTable, XlsxTableColumn, XlsxTablesOptions } from './tables.js';
+export { gridToTables } from './tables.js';
+export { xlsxToTables } from './import.js';
+
 export type { XlsxExportOptions } from './export.js';
 export { markdownDocToXlsx, docToXlsx } from './export.js';
 

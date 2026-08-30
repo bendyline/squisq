@@ -58,6 +58,7 @@ import {
   type XlsxCellKind,
 } from './cells.js';
 import { detectRegions, sliceRect, type StrayCell } from './regions.js';
+import { type XlsxTable, type XlsxTablesOptions, gridToTables } from './tables.js';
 
 /** Conventional main part path; the root `officeDocument` rel wins when present. */
 const XLSX_MAIN_PART = 'xl/workbook.xml';
@@ -333,6 +334,30 @@ function excelTimeText(serial: number, includeSeconds: boolean, elapsedHours: bo
   return `${twoDigits(hours)}:${twoDigits(minutes)}${includeSeconds ? `:${twoDigits(seconds)}` : ''}`;
 }
 
+/**
+ * A date/time cell's value as an unambiguous ISO string.
+ *
+ * Mirrors {@link formattedNumberText}'s branches, but emits a fixed machine
+ * shape rather than the sheet's display format: a consumer storing this in a
+ * typed column needs `2026-08-04`, not `04/08/26`, and must not have to guess
+ * which of the day and month came first.
+ */
+function dateValueText(
+  serial: number,
+  kind: NumberFormatKind,
+  style: CellStyle | undefined,
+  date1904: boolean,
+): string | null {
+  if (!Number.isFinite(serial)) return null;
+  const normalized = style ? normalizeFormatCode(style.formatCode) : '';
+  if (kind === 'time')
+    return excelTimeText(serial, /s/.test(normalized), /\[[h]+\]/.test(normalized));
+  const date = excelDateText(serial, date1904);
+  if (!date) return null;
+  if (kind === 'datetime') return `${date} ${excelTimeText(serial, /s/.test(normalized), false)}`;
+  return date;
+}
+
 function formattedNumberText(raw: string, style: CellStyle | undefined, date1904: boolean): string {
   if (!style) return raw;
   const value = Number(raw);
@@ -409,13 +434,22 @@ function readFormula(cell: Element, row: number, col: number, ctx: SheetReadCont
 /** Read one `<c>` element into the richer cell model. */
 function readCell(cell: Element, row: number, col: number, ctx: SheetReadContext): XlsxCell {
   const formula = readFormula(cell, row, col, ctx);
-  const withFormula = (text: string, kind: XlsxCellKind): XlsxCell => {
+  // `value` is set alongside `text` at every branch rather than derived from
+  // it afterwards, because by then the information is already gone: `"15.0%"`
+  // cannot be turned back into `0.15` without knowing the format code, and
+  // `"007"` cannot be told from a genuine string.
+  const withFormula = (
+    text: string,
+    kind: XlsxCellKind,
+    value?: number | boolean | string,
+  ): XlsxCell => {
     const out: XlsxCell = { text, kind: text === '' ? 'empty' : kind };
     if (formula !== '') out.formula = formula;
+    if (value !== undefined && out.kind !== 'empty') out.value = value;
     return out;
   };
   const stringCell = (item: StringItem): XlsxCell => {
-    const out = withFormula(item.text, 'string');
+    const out = withFormula(item.text, 'string', item.text);
     // An empty cell has nothing to format, so never attach runs to one.
     if (item.rich && out.kind !== 'empty') out.richText = item.rich;
     return out;
@@ -437,16 +471,26 @@ function readCell(cell: Element, row: number, col: number, ctx: SheetReadContext
   // fuse every island on the sheet into one.
   if (v === '') return withFormula('', 'empty');
   if (t === 's') return stringCell(ctx.shared[Number.parseInt(v, 10)] ?? { text: '' });
-  if (t === 'b') return withFormula(v === '1' ? 'TRUE' : 'FALSE', 'bool');
+  if (t === 'b') return withFormula(v === '1' ? 'TRUE' : 'FALSE', 'bool', v === '1');
+  // An error cell has no value worth carrying — `#REF!` is a condition, not
+  // a datum — so `text` alone represents it.
   if (t === 'e') return withFormula(v, 'error');
-  if (t === 'str') return withFormula(v, 'string');
+  if (t === 'str') return withFormula(v, 'string', v);
 
   const style = ctx.styles[Number.parseInt(cell.getAttribute('s') ?? '0', 10)];
   const text = formattedNumberText(v, style, ctx.date1904);
   const dateLike = style ? numberFormatKind(style.formatCode) : 'general';
   const kind: XlsxCellKind =
     dateLike === 'date' || dateLike === 'time' || dateLike === 'datetime' ? 'date' : 'number';
-  return withFormula(text, kind);
+  const numeric = Number(v);
+  if (kind === 'date') {
+    // Normalized to ISO rather than left as a serial: the serial's meaning
+    // depends on the workbook's 1900/1904 epoch, which is context a consumer
+    // reading one cell cannot be expected to carry.
+    const iso = dateValueText(numeric, dateLike, style, ctx.date1904);
+    return withFormula(text, kind, iso ?? text);
+  }
+  return withFormula(text, kind, Number.isFinite(numeric) ? numeric : v);
 }
 
 /** One worksheet's cells plus the merge ranges that inform region detection. */
@@ -616,6 +660,43 @@ function annotatedHeading(
     children: [{ type: 'text', value: text }],
     templateAnnotation: { template: 'dataTable', params },
   };
+}
+
+/**
+ * Read a workbook as typed tables rather than as a document.
+ *
+ * The data counterpart to {@link xlsxToMarkdownDoc}: same package, same sheet
+ * selection, same region detection — but each island's cells arrive as their
+ * underlying values, so a consumer can sum a column without first undoing a
+ * number format.
+ */
+export async function xlsxToTables(
+  data: ArrayBuffer | Blob,
+  options: XlsxImportOptions & XlsxTablesOptions = {},
+): Promise<XlsxTable[]> {
+  const pkg = await openPackage(data, options);
+  const mainPart = requireMainPartPath(pkg, XLSX_MAIN_PART, 'XLSX');
+  const [{ sheets, date1904 }, shared, styles] = await Promise.all([
+    readWorkbook(pkg, mainPart),
+    readSharedStrings(pkg),
+    readCellStyles(pkg),
+  ]);
+
+  let selected = sheets;
+  if (options.sheet !== undefined) {
+    const picked =
+      typeof options.sheet === 'number'
+        ? sheets[options.sheet]
+        : sheets.find((s) => s.name === options.sheet);
+    selected = picked ? [picked] : [];
+  }
+
+  const out: XlsxTable[] = [];
+  for (const sheet of selected) {
+    const { cells, merges } = await sheetToCells(pkg, sheet.path, shared, styles, date1904);
+    out.push(...gridToTables(sheet.name, cells, merges, options));
+  }
+  return out;
 }
 
 export async function xlsxToMarkdownDoc(

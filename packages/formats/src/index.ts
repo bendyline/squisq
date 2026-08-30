@@ -37,8 +37,21 @@ export { markdownDocToPptx, docToPptx, pptxToMarkdownDoc, pptxToDoc } from './pp
 export type { PptxExportOptions, PptxImportOptions } from './pptx/index.js';
 
 // XLSX (import + export; export is tables-only → one worksheet per markdown table)
-export { markdownDocToXlsx, docToXlsx, xlsxToMarkdownDoc, xlsxToDoc } from './xlsx/index.js';
-export type { XlsxExportOptions, XlsxImportOptions } from './xlsx/index.js';
+export {
+  markdownDocToXlsx,
+  docToXlsx,
+  xlsxToMarkdownDoc,
+  xlsxToDoc,
+  xlsxToTables,
+  gridToTables,
+} from './xlsx/index.js';
+export type {
+  XlsxExportOptions,
+  XlsxImportOptions,
+  XlsxTable,
+  XlsxTableColumn,
+  XlsxTablesOptions,
+} from './xlsx/index.js';
 
 // CSV (import + export)
 export { csvToMarkdownDoc, csvToDoc, markdownDocToCsv, parseCsv } from './csv/index.js';
