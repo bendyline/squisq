@@ -42,6 +42,24 @@ export interface XlsxCell {
    * cell reads this, and only when it is present.
    */
   richText?: MarkdownInlineNode[];
+  /**
+   * The cell's value as the sheet stores it, before number formatting.
+   *
+   * `text` is a rendering for people, and rendering destroys information a
+   * consumer doing arithmetic needs: a percent-formatted `0.15` renders as
+   * `"15.0%"`, a date is a serial rendered as text, and a zero-padded `7`
+   * renders as `"007"`. Anything reading a sheet as *data* — rather than as a
+   * document — must read this instead.
+   *
+   * Normalized rather than literally raw, where a literal value would be
+   * useless: a date arrives as an ISO `YYYY-MM-DD` (or `YYYY-MM-DD HH:MM`)
+   * string rather than an Excel serial, because the serial's meaning depends
+   * on a workbook-level 1900/1904 epoch flag that no downstream consumer
+   * should have to carry. Numbers, booleans and strings are exact.
+   *
+   * Absent for `empty` and `error` cells, which have no value to speak of.
+   */
+  value?: number | boolean | string;
 }
 
 /** The empty cell. Shared because grids allocate a great many of them. */
