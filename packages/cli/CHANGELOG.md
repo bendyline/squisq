@@ -1,3 +1,16 @@
+## @bendyline/squisq-cli [2.7.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.6.1...@bendyline/squisq-cli@2.7.0) (2026-08-30)
+
+### Features
+
+* Grammar/spelling checker via H ([#48](https://github.com/bendyline/squisq/issues/48)) ([78a364c](https://github.com/bendyline/squisq/commit/78a364caac6da1cca6b5fee4fe8fce7eb433a24d))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.10.0
+* **@bendyline/squisq-formats:** upgraded to 2.5.0
+* **@bendyline/squisq-video:** upgraded to 2.3.2
+
 ## @bendyline/squisq-cli [2.6.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.6.0...@bendyline/squisq-cli@2.6.1) (2026-08-26)
 
 
