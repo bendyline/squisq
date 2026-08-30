@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.10.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.9.0...@bendyline/squisq@2.10.0) (2026-08-30)
+
+### Features
+
+* Grammar/spelling checker via H ([#48](https://github.com/bendyline/squisq/issues/48)) ([78a364c](https://github.com/bendyline/squisq/commit/78a364caac6da1cca6b5fee4fe8fce7eb433a24d))
+
 ## @bendyline/squisq [2.9.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.8.0...@bendyline/squisq@2.9.0) (2026-08-26)
 
 ### Features
