@@ -20,9 +20,9 @@
      a neutral light surface so the button is legible on photographic
      content even when no theme variables are set. The dark-theme block
      below overrides for [data-theme='dark']. */
-  color: var(--squisq-editor-text, #1f2937);
-  background: var(--squisq-editor-control-bg, rgba(255, 255, 255, 0.92));
-  border: 1px solid var(--squisq-editor-control-border, rgba(0, 0, 0, 0.18));
+  color: var(--squisq-editor-text);
+  background: var(--squisq-editor-control-bg);
+  border: 1px solid var(--squisq-editor-control-border);
   border-radius: 4px;
   cursor: pointer;
   z-index: 4;
@@ -32,27 +32,21 @@
 }
 
 .squisq-image-edit-affordance:hover {
-  background: var(--squisq-editor-control-bg-hover, rgba(245, 245, 247, 0.98));
+  background: var(--squisq-editor-control-bg-hover);
 }
 
 .squisq-image-edit-affordance:focus-visible {
-  outline: 2px solid var(--squisq-editor-accent, #4a9eff);
+  outline: 2px solid var(--squisq-editor-accent);
   outline-offset: 2px;
 }
 
 [data-theme='dark'] .squisq-image-edit-affordance,
 .squisq-editor-shell[data-theme='dark'] .squisq-image-edit-affordance {
-  color: var(--squisq-editor-text, #f3f4f6);
-  background: var(--squisq-editor-control-bg, rgba(20, 20, 20, 0.85));
-  border-color: var(--squisq-editor-control-border, rgba(255, 255, 255, 0.2));
+  color: var(--squisq-editor-text);
+  background: var(--squisq-editor-control-bg);
+  border-color: var(--squisq-editor-control-border);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
 }
-
-[data-theme='dark'] .squisq-image-edit-affordance:hover,
-.squisq-editor-shell[data-theme='dark'] .squisq-image-edit-affordance:hover {
-  background: var(--squisq-editor-control-bg-hover, rgba(45, 45, 45, 0.95));
-}
-
 /* ── Resize handle ──────────────────────────────────────────────
    Small grip at the bottom-right corner of a hovered/selected image.
    Mousedown starts an aspect-locked resize; double-click clears the
@@ -63,8 +57,8 @@
   bottom: -4px;
   width: 14px;
   height: 14px;
-  border: 1.5px solid var(--squisq-editor-accent, #4a9eff);
-  background: var(--squisq-editor-control-bg, rgba(255, 255, 255, 0.95));
+  border: 1.5px solid var(--squisq-editor-accent);
+  background: var(--squisq-editor-control-bg);
   border-radius: 2px;
   cursor: nwse-resize;
   z-index: 5;
@@ -74,12 +68,12 @@
 }
 
 .squisq-image-resize-handle:hover {
-  background: var(--squisq-editor-accent, #4a9eff);
+  background: var(--squisq-editor-accent);
 }
 
 [data-theme='dark'] .squisq-image-resize-handle,
 .squisq-editor-shell[data-theme='dark'] .squisq-image-resize-handle {
-  background: var(--squisq-editor-control-bg, rgba(20, 20, 20, 0.9));
+  background: var(--squisq-editor-control-bg);
 }
 
 .squisq-image-resize-readout {
@@ -88,7 +82,7 @@
   bottom: 8px;
   padding: 2px 6px;
   font: 500 11px/1.2 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
-  color: var(--squisq-editor-text, #fff);
+  color: var(--squisq-editor-text);
   background: rgba(0, 0, 0, 0.7);
   border-radius: 3px;
   pointer-events: none;
@@ -111,7 +105,7 @@
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #fff;
+  background: var(--squisq-surface);
   border-radius: 6px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
   overflow: hidden;
@@ -119,8 +113,8 @@
 
 [data-theme='dark'] .squisq-image-edit-modal__surface,
 .squisq-editor-shell[data-theme='dark'] .squisq-image-edit-modal__surface {
-  background: #1e1e1e;
-  color: #e4e4e4;
+  background: var(--squisq-surface-sunken);
+  color: var(--squisq-editor-text);
 }
 
 .squisq-image-edit-modal__header {
@@ -128,14 +122,14 @@
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
-  border-bottom: 1px solid #d4d4d4;
+  border-bottom: 1px solid var(--squisq-editor-control-border);
   font: 500 13px/1.2 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
-  background: #f5f5f5;
+  background: var(--squisq-bg);
 }
 
 [data-theme='dark'] .squisq-image-edit-modal__header {
-  background: #2a2a2a;
-  border-bottom-color: #3a3a3a;
+  background: var(--squisq-surface);
+  border-bottom-color: var(--squisq-border-subtle);
 }
 
 .squisq-image-edit-modal__title {
@@ -144,18 +138,13 @@
 
 .squisq-image-edit-modal__path {
   flex: 1;
-  color: #666;
+  color: var(--squisq-text-muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-[data-theme='dark'] .squisq-image-edit-modal__path {
-  color: #aaa;
-}
-
 .squisq-image-edit-modal__close {
   display: inline-flex;
   align-items: center;
@@ -193,9 +182,9 @@
   align-items: center;
   justify-content: center;
   font: 500 13px var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
-  color: #666;
+  color: var(--squisq-text-muted);
 }
 
 .squisq-image-edit-modal__error {
-  color: #c0392b;
+  color: var(--squisq-danger);
 }

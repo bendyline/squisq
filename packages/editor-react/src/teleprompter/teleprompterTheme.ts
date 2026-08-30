@@ -217,7 +217,7 @@ export const TELEPROMPTER_CSS = `
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--squisq-text-muted, #6b7280);
+  color: var(--squisq-text-muted, #4b5563);
   font-size: 14px;
 }
 

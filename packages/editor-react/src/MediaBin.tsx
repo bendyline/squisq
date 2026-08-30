@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MediaProvider, MediaEntry } from '@bendyline/squisq/schemas';
+import { ownsContextMenuProps } from './EditorContextMenu';
 import { SQUISQ_MEDIA_MIME, buildSquisqMediaReference } from './mediaDragMime';
 import { filterVisibleMediaEntries } from './mediaEntries';
 
@@ -415,6 +416,7 @@ export function MediaBin({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       aria-busy={loading}
+      {...ownsContextMenuProps}
     >
       {/* Header */}
       <div className="squisq-media-bin-header">

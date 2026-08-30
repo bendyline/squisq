@@ -21,7 +21,7 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: var(--squisq-surface, #ffffff);
+  background: var(--squisq-surface);
 }
 
 .squisq-mermaid-canvas-scroll {
@@ -61,16 +61,16 @@
 .squisq-mermaid-svg [data-squisq-node-id]:focus-visible,
 .squisq-mermaid-svg [data-squisq-text-id]:focus-visible {
   outline: none;
-  filter: drop-shadow(0 0 4px #4f46e5);
+  filter: drop-shadow(0 0 4px var(--squisq-accent));
 }
 
 .squisq-mermaid-svg .squisq-mermaid-node-selected,
 .squisq-mermaid-svg .squisq-mermaid-text-selected {
-  filter: drop-shadow(0 0 5px #4f46e5);
+  filter: drop-shadow(0 0 5px var(--squisq-accent));
 }
 
 .squisq-mermaid-svg .squisq-mermaid-connect-source {
-  filter: drop-shadow(0 0 6px #0d9488);
+  filter: drop-shadow(0 0 6px var(--squisq-success));
 }
 
 .squisq-mermaid-svg .edgePath,
@@ -88,7 +88,7 @@
 }
 
 .squisq-mermaid-svg .squisq-mermaid-edge-selected {
-  filter: drop-shadow(0 0 3px #4f46e5);
+  filter: drop-shadow(0 0 3px var(--squisq-accent));
 }
 
 /* Mermaid's default lineColor is #333, which is nearly invisible against a dark
@@ -100,8 +100,8 @@
  * light diagram card inside the dark shell, and these overrides would wash its
  * edges out. It also survives the maximize portal, which leaves the shell. */
 .squisq-mermaid-canvas[data-surface='dark'] .squisq-mermaid-svg {
-  --squisq-mermaid-edge: #cbd5e1;
-  --squisq-mermaid-edge-label-bg: rgba(15, 23, 42, 0.88);
+  --squisq-mermaid-edge: var(--squisq-text-soft);
+  --squisq-mermaid-edge-label-bg: rgb(var(--squisq-shadow-rgb) / 88%);
 }
 
 .squisq-mermaid-canvas[data-surface='dark']
@@ -146,9 +146,9 @@
   display: inline-flex;
   gap: 2px;
   padding: 3px;
-  border: 1px solid var(--squisq-border, #cbd5e1);
+  border: 1px solid var(--squisq-border);
   border-radius: 7px;
-  background: var(--squisq-surface, #ffffff);
+  background: var(--squisq-surface);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.2);
   transform: translate(-50%, calc(-100% - 8px));
 }
@@ -169,13 +169,13 @@
   width: 100%;
   min-height: 36px;
   padding: 6px 10px;
-  border: 2px solid var(--squisq-accent, #4f46e5);
+  border: 2px solid var(--squisq-accent);
   border-radius: 7px;
   outline: none;
-  background: var(--squisq-surface, #ffffff);
-  color: var(--squisq-text, #1e293b);
+  background: var(--squisq-surface);
+  color: var(--squisq-text);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--squisq-accent, #4f46e5) 22%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--squisq-accent) 22%, transparent),
     0 6px 18px rgba(15, 23, 42, 0.2);
   font: inherit;
   font-size: 16px;
@@ -184,7 +184,7 @@
 }
 
 .squisq-mermaid-inline-rename input:invalid {
-  border-color: #dc2626;
+  border-color: var(--squisq-danger);
 }
 
 .squisq-mermaid-inline-rename span {
@@ -192,10 +192,10 @@
   top: calc(100% + 6px);
   left: 50%;
   padding: 3px 7px;
-  border: 1px solid var(--squisq-border, #cbd5e1);
+  border: 1px solid var(--squisq-border);
   border-radius: 5px;
-  background: var(--squisq-surface, #ffffff);
-  color: var(--squisq-text-muted, #64748b);
+  background: var(--squisq-surface);
+  color: var(--squisq-text-muted);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.14);
   font-size: 11px;
   line-height: 1.2;
@@ -211,16 +211,16 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: var(--squisq-text, #1e293b);
+  color: var(--squisq-text);
   cursor: pointer;
 }
 
 .squisq-mermaid-selection-actions button:hover {
-  background: var(--squisq-surface-hover, #f1f5f9);
+  background: var(--squisq-surface-hover);
 }
 
 .squisq-mermaid-selection-actions button[data-danger='true'] {
-  color: #b91c1c;
+  color: var(--squisq-danger-strong);
 }
 
 .squisq-mermaid-connect-hint {
@@ -230,8 +230,8 @@
   z-index: 11;
   padding: 6px 10px;
   border-radius: 999px;
-  background: #312e81;
-  color: #fff;
+  background: var(--squisq-accent-soft);
+  color: var(--squisq-text-on-accent);
   font-size: 12px;
   transform: translateX(-50%);
   pointer-events: none;
@@ -250,10 +250,10 @@
   max-height: min(520px, 70vh);
   flex-direction: column;
   padding: 8px;
-  border: 1px solid var(--squisq-border, #e2e8f0);
+  border: 1px solid var(--squisq-border);
   border-radius: 8px;
-  background: var(--squisq-surface, #ffffff);
-  color: var(--squisq-text, #1e293b);
+  background: var(--squisq-surface);
+  color: var(--squisq-text);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
 }
 
@@ -281,28 +281,22 @@
 .squisq-mermaid-properties-footer button {
   min-height: 30px;
   padding: 5px 9px;
-  border: 1px solid var(--squisq-border, #cbd5e1);
+  border: 1px solid var(--squisq-border);
   border-radius: 6px;
-  background: var(
-    --squisq-surface-subtle,
-    var(--squisq-surface-raised, var(--squisq-input-bg, #f8fafc))
-  );
-  color: var(--squisq-text, #1e293b);
+  background: var(--squisq-surface-subtle);
+  color: var(--squisq-text);
   cursor: pointer;
 }
 
 .squisq-mermaid-properties-header button:hover,
 .squisq-mermaid-properties-footer button:hover {
-  border-color: var(--squisq-accent, #4f46e5);
-  background: var(
-    --squisq-surface-hover,
-    var(--squisq-surface-subtle, var(--squisq-input-bg, #f1f5f9))
-  );
+  border-color: var(--squisq-accent);
+  background: var(--squisq-surface-hover);
 }
 
 .squisq-mermaid-properties-header button:focus-visible,
 .squisq-mermaid-properties-footer button:focus-visible {
-  outline: 2px solid var(--squisq-accent, #4f46e5);
+  outline: 2px solid var(--squisq-accent);
   outline-offset: 2px;
 }
 
@@ -316,14 +310,14 @@
 }
 
 .squisq-mermaid-properties-footer button[data-primary='true'] {
-  border-color: var(--squisq-accent, #4f46e5);
-  background: var(--squisq-accent, #4f46e5);
-  color: var(--squisq-text-on-accent, #fff);
+  border-color: var(--squisq-accent);
+  background: var(--squisq-accent);
+  color: var(--squisq-text-on-accent);
 }
 
 .squisq-mermaid-properties-footer button[data-primary='true']:hover {
-  border-color: var(--squisq-accent-hover, var(--squisq-accent, #4338ca));
-  background: var(--squisq-accent-hover, var(--squisq-accent, #4338ca));
+  border-color: var(--squisq-accent-hover);
+  background: var(--squisq-accent-hover);
 }
 
 .squisq-mermaid-properties-fields {
@@ -338,7 +332,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   font-weight: 600;
 }
 
@@ -347,10 +341,10 @@
   width: 100%;
   min-height: 32px;
   padding: 5px 7px;
-  border: 1px solid var(--squisq-border, #cbd5e1);
+  border: 1px solid var(--squisq-border);
   border-radius: 6px;
-  background: var(--squisq-surface-subtle, #f8fafc);
-  color: var(--squisq-text, #1e293b);
+  background: var(--squisq-surface-subtle);
+  color: var(--squisq-text);
   font: inherit;
   font-weight: 400;
 }
@@ -360,11 +354,11 @@
   align-items: center;
   gap: 7px;
   min-height: 30px;
-  color: var(--squisq-text, #1e293b);
+  color: var(--squisq-text);
 }
 
 .squisq-mermaid-property-toggle input {
-  accent-color: var(--squisq-accent, #4f46e5);
+  accent-color: var(--squisq-accent);
 }
 
 .squisq-mermaid-shape-search {
@@ -372,9 +366,9 @@
   width: 100%;
   margin-bottom: 6px;
   padding: 7px 8px;
-  border: 1px solid var(--squisq-border, #cbd5e1);
+  border: 1px solid var(--squisq-border);
   border-radius: 6px;
-  background: var(--squisq-surface-subtle, #f8fafc);
+  background: var(--squisq-surface-subtle);
   color: inherit;
 }
 
@@ -387,7 +381,7 @@
 
 .squisq-mermaid-shape-heading {
   margin: 9px 3px 4px;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -429,9 +423,9 @@
 
 .squisq-mermaid-shape-item:hover,
 .squisq-mermaid-shape-item--selected {
-  border-color: #a5b4fc;
-  background: #eef2ff;
-  color: #3730a3;
+  border-color: var(--squisq-accent-border);
+  background: var(--squisq-accent-subtle);
+  color: var(--squisq-accent-strong);
 }
 
 .squisq-mermaid-direction-picker {
@@ -457,7 +451,7 @@
 }
 
 .squisq-mermaid-direction-heading span {
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   font-size: 11px;
 }
 
@@ -468,7 +462,7 @@
   align-items: stretch;
   gap: 5px;
   padding: 7px;
-  border: 1px solid var(--squisq-border, #cbd5e1);
+  border: 1px solid var(--squisq-border);
   border-radius: 7px;
   background: transparent;
   color: inherit;
@@ -481,8 +475,8 @@
   width: 100%;
   height: 64px;
   border-radius: 5px;
-  background: var(--squisq-surface-subtle, rgb(148 163 184 / 10%));
-  color: var(--squisq-text, #334155);
+  background: var(--squisq-surface-subtle);
+  color: var(--squisq-text);
 }
 
 .squisq-mermaid-direction-card svg rect,
@@ -517,15 +511,15 @@
 }
 
 .squisq-mermaid-direction-copy small {
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   font-size: 10px;
 }
 
 .squisq-mermaid-direction-card:hover,
 .squisq-mermaid-direction-card[aria-pressed='true'] {
-  border-color: #818cf8;
-  background: #eef2ff;
-  color: #3730a3;
+  border-color: var(--squisq-accent-border);
+  background: var(--squisq-accent-subtle);
+  color: var(--squisq-accent-strong);
 }
 
 .squisq-mermaid-direction-card:hover svg,
@@ -534,7 +528,7 @@
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-mermaid-direction-card svg {
-  color: #cbd5e1;
+  color: var(--squisq-text-soft);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-mermaid-connect-hint,
@@ -542,25 +536,25 @@
 .squisq-editor-shell[data-theme='dark'] .squisq-mermaid-shape-item--selected,
 .squisq-editor-shell[data-theme='dark'] .squisq-mermaid-direction-card:hover,
 .squisq-editor-shell[data-theme='dark'] .squisq-mermaid-direction-card[aria-pressed='true'] {
-  border-color: #6366f1;
-  background: #312e81;
-  color: #eef2ff;
+  border-color: var(--squisq-accent-border);
+  background: var(--squisq-accent-soft);
+  color: var(--squisq-accent-strong);
 }
 
 .squisq-mermaid-edit-notice {
   margin-top: 6px;
   padding: 7px 9px;
-  border: 1px solid #fbbf24;
+  border: 1px solid var(--squisq-warning-border);
   border-radius: 6px;
-  background: #fffbeb;
-  color: #92400e;
+  background: var(--squisq-warning-soft);
+  color: var(--squisq-warning-strong);
   font-size: 12px;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-mermaid-edit-notice {
-  border-color: #92400e;
-  background: #451a03;
-  color: #fde68a;
+  border-color: var(--squisq-warning-border);
+  background: var(--squisq-warning-soft);
+  color: var(--squisq-warning-strong);
 }
 
 .squisq-mermaid-status,
@@ -569,7 +563,7 @@
   min-height: 180px;
   align-items: center;
   justify-content: center;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   text-align: center;
 }
 
@@ -580,10 +574,10 @@
   align-items: flex-start;
   justify-content: flex-start;
   padding: 16px;
-  border: 1px solid #fca5a5;
+  border: 1px solid var(--squisq-danger-border);
   border-radius: 8px;
-  background: #fef2f2;
-  color: #991b1b;
+  background: var(--squisq-danger-soft);
+  color: var(--squisq-danger-strong);
   text-align: left;
 }
 
@@ -600,7 +594,7 @@
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-mermaid-error {
-  border-color: #7f1d1d;
-  background: #450a0a;
-  color: #fecaca;
+  border-color: var(--squisq-danger-border);
+  background: var(--squisq-danger-soft);
+  color: var(--squisq-danger-strong);
 }

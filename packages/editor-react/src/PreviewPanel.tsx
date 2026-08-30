@@ -470,7 +470,7 @@ export function PreviewPanel({
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
-          background: 'var(--squisq-bg, #f5f5f5)',
+          background: 'var(--squisq-bg)',
         }}
       >
         <div ref={mainSurfaceRef} className="squisq-preview-player" style={surfaceStyle}>

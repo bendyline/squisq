@@ -4,6 +4,9 @@
  */
 
 @import '@fortawesome/fontawesome-free/css/all.min.css';
+
+/* The chrome palette must load before every sheet that consumes it. */
+@import './chrome.css';
 @import './toolbar.css';
 @import './template-picker.css';
 @import './template-gallery.css';
@@ -20,6 +23,7 @@
 @import './tree-view.css';
 @import './host-fence.css';
 @import './ascii-timeline.css';
+@import './context-menu.css';
 @import './proofing.css';
 @import '../scene/scene.css';
 @import '../customTemplates/designer.css';

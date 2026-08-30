@@ -669,6 +669,61 @@ The Theme system provides unified visual styling for rendered docs. A `Theme` bu
 
 Users author their own themes in the editor (ThemePicker → "＋ Create custom theme"). A custom theme is a full `Theme` stored **in the document's frontmatter** under `squisq-custom-themes` (codec: `doc/customThemesFrontmatter.ts`) and surfaced as `Doc.customThemes: Theme[]` — the exact theme analog of `squisq-custom-templates` / `Doc.customTemplates`. Exactly one is active at a time via the `squisq-theme` selector (the doc-level counterpart of a block's `{[name]}` annotation). The editor mirrors the custom-templates lifecycle file-for-file in `editor-react/src/customThemes/`: a browser-local library (`customThemeLibrary.ts`, key `squisq:custom-theme-library`), a dual-catalog `CustomThemeContext` (doc + library, `applyTheme` copies library→doc for self-sufficiency), a `useDocCustomThemes` hook, and the `CustomThemeDialog` designer (base-theme picker + seed colors + N accents→`colorSchemes` + fonts + style presets, `saveTarget: 'doc' | 'library'`). The shared draft model + form rows live in `customThemes/themeDraft.ts` + `themeControls.tsx` (also used by the lighter `ThemeCustomizerPanel` popover). Both surfaces include an **"Import from file" section** (`customThemes/ImportThemeSection.tsx`): upload or drop a `.docx`/`.pptx`/`.xlsx` and its theme colors/fonts populate the draft via `@bendyline/squisq-formats/infer` (lazy-loaded) + `draftPatchFromImportedTheme`; in the `CustomThemeDialog`, a PPTX also yields inferred slide-layout custom templates that ride the save as `onSave(theme, target, extras)` and land in `squisq-custom-templates` in the **same** frontmatter write as the theme (single-write rule — see `PreviewControls.handleDesignerSave`). Resolution stays doc-scoped via `resolveThemeForDoc` — no global registry on the critical path.
 
+## Editor Chrome Palette
+
+The `Theme` system above dresses the **document**. The furniture around it —
+toolbar, menus, dialogs, pickers, outline, timeline, status bar — is themed
+separately, through the `--squisq-*` chrome palette in
+[`packages/editor-react/src/styles/chrome.css`](packages/editor-react/src/styles/chrome.css).
+The split is deliberate: a host wants its own app palette on the chrome while
+the document keeps the author's theme.
+
+**The rule: chrome CSS never names a color.** Every chrome color resolves to a
+token from `chrome.css`. A guard test
+(`editor-react/src/__tests__/chromePalette.test.ts`) fails on a literal in any
+chrome stylesheet, and on a token declared for one theme but not the other.
+The one exempt file is the image editor, a deliberate dark room in both themes
+because a photo is judged against a neutral dark field.
+
+**Token families.** Ink (`text-strong` → `text` → `text-soft` → `text-muted`
+→ `text-faint`), surfaces (`bg`, `surface`, `-subtle`, `-sunken`, `-hover`,
+`-raised`, `input-bg`, `row-hover`, plus the `desk-*` family the editing page
+floats on), lines (`border-subtle` / `border` / `border-strong`), and four
+state families that share one shape — `accent`, `danger`, `warning`, `success`
+— each with `-hover`, `-strong` (colored TEXT on a light ground, which needs
+more contrast than a fill), `-soft` (tinted fill), `-subtle` (faintest wash)
+and `-border`, plus `text-on-accent` / `text-on-danger`. Then the semantic
+one-offs that must NOT derive from the accent: proofing squiggles, timeline
+clip colors, find highlights, mentions.
+
+**Scoping.** Declarations sit inside `:where()`, so they carry zero
+specificity and a host rebinds any of them from a single plain class. Light
+values bind on `:root` and `[data-theme='light']`; dark values bind on any
+`[data-theme='dark']` element. Both matter, because menus and dialogs
+**portal to `document.body`**, outside the editor shell — before the palette
+existed, every portaled surface had to carry a private copy of the colors, and
+those copies drifted (an indigo family beside a blue one; a slate ramp beside
+a gray one).
+
+**Working in chrome CSS:**
+
+- Never declare a color token on `.squisq-editor-shell` or on a feature root.
+  That is what forced hosts to out-specify the shell to retone a pane. Put it
+  in `chrome.css`, keyed on `data-theme`.
+- Never write `var(--squisq-x, #literal)` for a token `chrome.css` declares —
+  the fallback is a second source of truth that silently diverges. Fallbacks
+  are still correct for tokens the palette does NOT own: fonts, the
+  `--squisq-theme-*` / `--squisq-page-*` document families, and the
+  teleprompter's float-window CSS, which is injected into a separate document
+  that never loads this stylesheet.
+- A dark rule that only restates the light rule's tokens is dead — the token
+  already flips. Delete it.
+- Per-feature families (`--squisq-layout-*`, `--squisq-block-props-*`,
+  `--squisq-preview-*`, `--squisq-template-gallery-*`) are kept as host API
+  but DEFAULT to core tokens, so binding `--squisq-accent` alone recolors them.
+
+Host-side integration notes live in [`docs/theming.md`](docs/theming.md).
+
 ## JSON Form System
 
 Squisq ships a friendly editor + viewer for arbitrary JSON values bound to a JSON Schema. The schema author drops a `squisq` key on any node to add UI hints; without hints, sensible defaults pick a control from type/format/enum cardinality. The same dispatcher (`chooseControl()` in core) drives both the read-only `<JsonView>` (in `react`) and the editable `<JsonEditor>` (in `editor-react`), so view and edit modes always agree on what each field _is_.

@@ -23,12 +23,8 @@ describe('recorder theme propagation', () => {
     expect(dialog.getAttribute('data-theme')).toBe('dark');
     expect(dialog.classList.contains('squisq-editor-shell')).toBe(true);
     expect(dialog.style.colorScheme).toBe('dark');
-    expect(dialog.style.getPropertyValue('--squisq-recorder-surface')).toBe(
-      'var(--squisq-bg, #1f2937)',
-    );
-    expect(dialog.style.getPropertyValue('--squisq-recorder-text')).toBe(
-      'var(--squisq-text, #e5e7eb)',
-    );
+    expect(dialog.style.getPropertyValue('--squisq-recorder-surface')).toBe('var(--squisq-bg)');
+    expect(dialog.style.getPropertyValue('--squisq-recorder-text')).toBe('var(--squisq-text)');
   });
 
   it('passes the requested scheme through the portaled panel wrapper', () => {

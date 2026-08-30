@@ -15,12 +15,12 @@
 }
 
 .squisq-ccx-section {
-  --ccx-fg: #57606a;
-  --ccx-fg-strong: #24292f;
-  --ccx-bg: rgba(175, 184, 193, 0.12);
-  --ccx-bg-hover: rgba(175, 184, 193, 0.22);
-  --ccx-border: rgba(140, 149, 159, 0.35);
-  --ccx-accent: #0969da;
+  --ccx-fg: var(--squisq-text-muted);
+  --ccx-fg-strong: var(--squisq-text-strong);
+  --ccx-bg: var(--squisq-surface-hover);
+  --ccx-bg-hover: var(--squisq-surface-raised);
+  --ccx-border: var(--squisq-border);
+  --ccx-accent: var(--squisq-accent);
   font-family: var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
   font-size: 12px;
   line-height: 1.45;
@@ -29,15 +29,6 @@
   background: var(--ccx-bg);
   margin: 2px 8px 2px 4px;
   border-radius: 4px;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-ccx-section {
-  --ccx-fg: #9198a1;
-  --ccx-fg-strong: #e6edf3;
-  --ccx-bg: rgba(110, 118, 129, 0.14);
-  --ccx-bg-hover: rgba(110, 118, 129, 0.26);
-  --ccx-border: rgba(110, 118, 129, 0.45);
-  --ccx-accent: #4493f8;
 }
 
 /* ── Collapsed strip ─────────────────────────────────────────────── */

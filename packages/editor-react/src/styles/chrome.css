@@ -1,0 +1,436 @@
+/*
+ * Squisq editor chrome palette — THE host theming seam.
+ *
+ * Every color in the editor's chrome (toolbars, menus, panels, dialogs,
+ * pickers, trees, status bars) resolves to one of the `--squisq-*` tokens
+ * declared here. Chrome CSS never writes a literal color: a host that
+ * rebinds this token set gets a coherently re-themed editor, and does not
+ * have to chase individual selectors across ~12k lines of stylesheet.
+ *
+ * This is the chrome counterpart to the document-side `Theme` object. The
+ * document being edited is themed through `Theme` and the
+ * `--squisq-theme-*` / `--squisq-page-*` variables; the furniture around it
+ * is themed here. The two are deliberately separate — a host wants its own
+ * app palette on the chrome while the document keeps the author's theme.
+ *
+ * Scoping. Declarations sit inside `:where()`, so they carry ZERO
+ * specificity and a host overrides any of them with a single plain class
+ * (`.my-app { --squisq-accent: … }`). Light values bind on the document
+ * root and on any explicitly-light subtree; dark values bind on any
+ * `[data-theme='dark']` element. Both selector families matter:
+ *   - `.squisq-editor-shell` carries `data-theme`, so shell chrome flips.
+ *   - Menus, dialogs and flyouts PORTAL to `document.body`, outside the
+ *     shell. They carry their own `data-theme`, which is why the dark rule
+ *     keys off the attribute rather than off the shell class.
+ *   - A host that stamps `data-theme` on `<html>` gets the whole set
+ *     flipped for free, including portals it does not know about.
+ *
+ * Adding a color to chrome CSS? Use a token from this file. If no token
+ * fits the role, add one HERE with both theme values and document the
+ * role — do not reach for a literal, and do not start a parallel
+ * per-feature palette. The per-feature families at the bottom are kept for
+ * hosts that already bind them, but they DEFAULT to the core tokens, so
+ * binding `--squisq-accent` alone recolors all of them.
+ */
+
+:where(:root),
+:where([data-theme='light']) {
+  /* ── Ink ──────────────────────────────────────────────
+     Five steps from the strongest heading ink down to the faintest
+     placeholder. `--squisq-text` is body copy; anything quieter is
+     `-muted`; `-faint` is for disabled/placeholder text that should
+     read as absent rather than merely secondary.
+
+     `-muted` is still real text, so it must clear 4.5:1 on every ground
+     the palette paints — not just `--squisq-surface`. A lighter gray
+     passes on white and then fails on the shell canvas, the desk, and
+     any `-soft`/`-subtle` tint, which is how a secondary label ends up
+     failing an audit only once a card is selected. */
+  --squisq-text-strong: #111827;
+  --squisq-text: #1f2937;
+  --squisq-text-soft: #374151;
+  --squisq-text-muted: #4b5563;
+  --squisq-text-faint: #9ca3af;
+
+  /* ── Surfaces ─────────────────────────────────────────
+     `--squisq-bg` is the shell's own canvas. `--squisq-surface` is the
+     face of a panel/menu/card floating on it. `-sunken` is pressed into
+     a surface (wells, tracks, code blocks); `-hover` and `-raised` are
+     the two interaction steps above it. */
+  --squisq-bg: #f5f5f5;
+  --squisq-surface: #ffffff;
+  --squisq-surface-subtle: #f9fafb;
+  --squisq-surface-sunken: #f3f4f6;
+  --squisq-surface-hover: #f3f4f6;
+  --squisq-surface-raised: #e5e7eb;
+  --squisq-input-bg: #ffffff;
+  --squisq-row-hover: #f3f4f6;
+
+  /* The "desk" — every chrome surface the editing page floats on: the
+     WYSIWYG container behind the page, the block card and its preview
+     panel, the inline-preview gutter, and the outline pane. One token so
+     hosts re-tone the whole field at once instead of overriding each
+     pane; a host palette that clashes with this beige only has to rebind
+     here. Panes that want to sit apart from the desk should shade *from*
+     this value, not pick an unrelated color. */
+  --squisq-desk-bg: #dcd8d0;
+
+  /* ── Lines ────────────────────────────────────────────
+     `-subtle` is a hairline that separates without drawing attention
+     (menu dividers, table rules); `--squisq-border` is the default
+     control edge; `-strong` is an edge that must be seen against a busy
+     surface. */
+  --squisq-border-subtle: #e5e7eb;
+  --squisq-border: #d1d5db;
+  --squisq-border-strong: #9ca3af;
+
+  /* ── Accent ───────────────────────────────────────────
+     One accent drives every active/selected/primary affordance in the
+     editor. `-soft` is a tinted fill behind selected content, `-subtle`
+     the faintest wash for a hovered row, `-strong` accent-colored TEXT
+     on a light ground (which needs more contrast than a fill does), and
+     `-border` an accent edge that must not shout. */
+  --squisq-accent: #2563eb;
+  --squisq-accent-hover: #1d4ed8;
+  --squisq-accent-strong: #1d4ed8;
+  --squisq-accent-soft: #dbeafe;
+  --squisq-accent-subtle: #eff6ff;
+  --squisq-accent-border: #93c5fd;
+  --squisq-text-on-accent: #ffffff;
+
+  /* ── Danger ───────────────────────────────────────────
+     Destructive actions and error states. Same shape as the accent
+     family so the two are interchangeable in a rule. */
+  --squisq-danger: #dc2626;
+  --squisq-danger-hover: #b91c1c;
+  --squisq-danger-strong: #b91c1c;
+  --squisq-danger-soft: #fef2f2;
+  --squisq-danger-border: #fecaca;
+  --squisq-text-on-danger: #ffffff;
+
+  /* ── Warning ──────────────────────────────────────────
+     Advisory state: a repairable diagram, a template that needs input.
+     Not an error — reserve the danger family for things that failed. */
+  --squisq-warning: #f59e0b;
+  --squisq-warning-hover: #d97706;
+  --squisq-warning-strong: #92400e;
+  --squisq-warning-soft: #fef3c7;
+  --squisq-warning-border: #fbbf24;
+
+  /* ── Success ──────────────────────────────────────────
+     A save landed, a check passed. */
+  --squisq-success: #059669;
+  --squisq-success-border: #10b981;
+
+  /* ── Proofing marks ───────────────────────────────────
+     The three squiggle hues harper reports against. Semantic, not
+     decorative — they must stay distinguishable from each other and
+     from the accent, so they are deliberately NOT derived from it. */
+  --squisq-proof-spelling: #d93025;
+  --squisq-proof-grammar: #188038;
+  --squisq-proof-style: #1a73e8;
+
+  /* ── Find highlights ──────────────────────────────────
+     Deliberately the SAME in both themes: a search hit is a marker pen on
+     the text, and a reader scanning for the next match should not have to
+     relearn its color when the app flips theme. Kept out of the warning
+     family for that reason — warning inverts, this must not. */
+  --squisq-find-match: #fde68a;
+  --squisq-find-match-current: #f59e0b;
+  --squisq-find-match-ring: #b45309;
+  --squisq-find-match-text: #111827;
+
+  /* ── Annotation chip ──────────────────────────────────
+     The `{[template]}` marker on a heading. A warm family adjacent to
+     warning but deliberately its own: the chip is a persistent authoring
+     affordance, not a transient advisory, and a host may well want the
+     two to read differently. */
+  --squisq-tag-text: #7c4a16;
+  --squisq-tag-bg: #f8f0e3;
+  --squisq-tag-border: #d8c2a2;
+  --squisq-tag-hover-bg: #ead6b8;
+  --squisq-tag-hover-border: #bb9563;
+  --squisq-tag-quiet: #c3a47d;
+  --squisq-tag-quiet-strong: #b89266;
+
+  /* The timeline rail and its toolbar — chrome that sits BACK from the
+     desk rather than on it, so it goes lighter in light mode and darker
+     in dark mode. */
+  --squisq-desk-rail: #efece6;
+
+  /* Edge of a desk surface — the rule between the block card and its
+     preview panel, the Monaco line-number margin's right edge. Shades
+     with `--squisq-desk-bg`, not with the control border. */
+  --squisq-desk-border: #b0a99a;
+
+  /* ── Inverted chip ────────────────────────────────────
+     A tooltip reads as a chip laid ON the page, so it inverts against the
+     surface rather than sitting on it. */
+  --squisq-inverse-surface: #1f2937;
+  --squisq-inverse-text: #f9fafb;
+
+  /* Letterbox behind video and media wells. Deep in both themes — a light
+     field around a video frame reads as a rendering fault. */
+  --squisq-media-well: #111827;
+
+  /* Mentions keep their own indigo-violet: they mark a person, and reusing
+     the accent would make every mention look like a selected control. */
+  --squisq-mention-bg: rgb(88 101 242 / 18%);
+  --squisq-mention-text: #1a2a8a;
+
+  /* Timeline clips are colored by media KIND, not by state — audio and
+     video have to stay tellable apart at a glance on a crowded rail, so
+     they do not derive from the accent. */
+  --squisq-clip-audio: #2f855a;
+  --squisq-clip-video: #2b6cb0;
+  --squisq-clip-video-strip: #1e3a5f;
+  --squisq-text-on-clip: #ffffff;
+
+  /* Alpha checkerboard behind transparent images. */
+  --squisq-checkerboard: #e5e7eb;
+
+  /* ── Depth ────────────────────────────────────────────
+     Elevations are built from one color so a warm or dark host palette
+     retints every shadow at once. */
+  --squisq-shadow-rgb: 15 23 42;
+  --squisq-shadow-sm: 0 1px 2px rgb(var(--squisq-shadow-rgb) / 8%);
+  --squisq-shadow-md: 0 4px 12px rgb(var(--squisq-shadow-rgb) / 12%);
+  --squisq-shadow-lg: 0 12px 32px rgb(var(--squisq-shadow-rgb) / 20%);
+  --squisq-scrim: rgb(var(--squisq-shadow-rgb) / 45%);
+
+  /* Keyboard focus. One token so a host can make focus louder or quieter
+     everywhere at once. */
+  --squisq-focus-ring: var(--squisq-accent);
+
+  /* Match Monaco's canvas while its lazy-loaded editor is being prepared.
+     RawEditor uses these for its editable loading fallback. */
+  --squisq-template-gallery-backdrop: rgb(var(--squisq-shadow-rgb) / 34%);
+  --squisq-template-gallery-backdrop-blur: 1px;
+
+  --squisq-editor-background: #ffffff;
+  --squisq-editor-foreground: #1f2937;
+}
+
+:where([data-theme='dark']) {
+  --squisq-text-strong: #f9fafb;
+  --squisq-text: #e5e7eb;
+  --squisq-text-soft: #d1d5db;
+  --squisq-text-muted: #9ca3af;
+  --squisq-text-faint: #6b7280;
+
+  --squisq-bg: #1f2937;
+  --squisq-surface: #1f2937;
+  --squisq-surface-subtle: #2a3144;
+  --squisq-surface-sunken: #111827;
+  --squisq-surface-hover: #374151;
+  --squisq-surface-raised: #4b5563;
+  --squisq-input-bg: #374151;
+  --squisq-row-hover: #374151;
+  --squisq-desk-bg: #0f1219;
+
+  --squisq-border-subtle: #374151;
+  --squisq-border: #4b5563;
+  --squisq-border-strong: #6b7280;
+
+  --squisq-accent: #60a5fa;
+  --squisq-accent-hover: #93c5fd;
+  --squisq-accent-strong: #93c5fd;
+  --squisq-accent-soft: #1e3a5f;
+  --squisq-accent-subtle: #172f4f;
+  --squisq-accent-border: #3b82f6;
+  --squisq-text-on-accent: #111827;
+
+  --squisq-danger: #f87171;
+  --squisq-danger-hover: #fca5a5;
+  --squisq-danger-strong: #fca5a5;
+  --squisq-danger-soft: #450a0a;
+  --squisq-danger-border: #991b1b;
+  --squisq-text-on-danger: #111827;
+
+  --squisq-warning: #f0b75a;
+  --squisq-warning-hover: #ffe3ad;
+  --squisq-warning-strong: #fde68a;
+  --squisq-warning-soft: #3a2818;
+  --squisq-warning-border: #d79a45;
+
+  --squisq-success: #34d399;
+  --squisq-success-border: #10b981;
+
+  --squisq-proof-spelling: #f28b82;
+  --squisq-proof-grammar: #81c995;
+  --squisq-proof-style: #8ab4f8;
+
+  --squisq-tag-text: #ffe3ad;
+  --squisq-tag-bg: #3a2818;
+  --squisq-tag-border: #d79a45;
+  --squisq-tag-hover-bg: #3a2818;
+  --squisq-tag-hover-border: #d79a45;
+  --squisq-tag-quiet: #f0b75a;
+  --squisq-tag-quiet-strong: #e0a84d;
+
+  --squisq-desk-rail: #0b0e14;
+  --squisq-desk-border: #2a3144;
+
+  --squisq-inverse-surface: #e5e7eb;
+  --squisq-inverse-text: #111827;
+  --squisq-mention-bg: rgb(128 140 255 / 22%);
+  --squisq-mention-text: #c8d0ff;
+
+  --squisq-checkerboard: #1f2937;
+
+  --squisq-shadow-rgb: 0 0 0;
+  --squisq-shadow-sm: 0 1px 2px rgb(var(--squisq-shadow-rgb) / 40%);
+  --squisq-shadow-md: 0 4px 12px rgb(var(--squisq-shadow-rgb) / 45%);
+  --squisq-shadow-lg: 0 12px 32px rgb(var(--squisq-shadow-rgb) / 55%);
+  --squisq-scrim: rgb(var(--squisq-shadow-rgb) / 60%);
+
+  --squisq-template-gallery-backdrop: rgb(var(--squisq-shadow-rgb) / 64%);
+  --squisq-template-gallery-backdrop-blur: 2px;
+
+  --squisq-editor-background: #1e1e1e;
+  --squisq-editor-foreground: #d4d4d4;
+}
+
+/*
+ * Per-feature families. These names predate the core palette and are
+ * already bound by hosts, so they stay — but their DEFAULTS now resolve to
+ * the core tokens above. A host that binds only `--squisq-accent` gets a
+ * coherent editor; a host that wants the layout designer to read
+ * differently from the toolbar can still say so.
+ *
+ * Declared for both themes at once: every value here is a `var()` onto a
+ * core token, so it flips with whichever theme block above is in force.
+ */
+:where(:root),
+:where([data-theme='light']),
+:where([data-theme='dark']) {
+  --squisq-toolbar-icon: var(--squisq-text-muted);
+
+  --squisq-preview-accent: var(--squisq-accent);
+  --squisq-preview-accent-muted: var(--squisq-text-muted);
+  --squisq-preview-gutter-bg: var(--squisq-desk-bg);
+  --squisq-preview-card-bg: var(--squisq-surface);
+  --squisq-preview-card-border: var(--squisq-border);
+  --squisq-preview-card-title: var(--squisq-text-strong);
+  --squisq-preview-card-svg-bg: var(--squisq-surface-subtle);
+  --squisq-preview-dot-halo: var(--squisq-desk-bg);
+  --squisq-preview-empty-bg: var(--squisq-surface);
+  --squisq-preview-empty-border: var(--squisq-border);
+  --squisq-preview-empty-text: var(--squisq-text-muted);
+
+  --squisq-block-props-accent: var(--squisq-accent);
+  --squisq-block-props-text: var(--squisq-text);
+  --squisq-block-props-muted: var(--squisq-text-muted);
+  --squisq-block-props-quiet: var(--squisq-text-faint);
+  --squisq-block-props-border: var(--squisq-border);
+  --squisq-block-props-divider: var(--squisq-border-subtle);
+  --squisq-block-props-surface: var(--squisq-surface);
+  --squisq-block-props-surface-hover: var(--squisq-surface-hover);
+  --squisq-block-props-input: var(--squisq-input-bg);
+
+  --squisq-layout-accent-text: var(--squisq-accent-strong);
+  --squisq-layout-accent-bg: var(--squisq-accent);
+  --squisq-layout-accent-bg-hover: var(--squisq-accent-hover);
+  --squisq-layout-accent-border: var(--squisq-accent);
+  --squisq-layout-accent-soft: var(--squisq-accent-subtle);
+  --squisq-layout-accent-soft-hover: var(--squisq-accent-soft);
+  --squisq-layout-accent-soft-border: var(--squisq-accent-border);
+  --squisq-layout-accent-hover-border: var(--squisq-accent-border);
+  --squisq-layout-border: var(--squisq-border-subtle);
+  --squisq-layout-border-strong: var(--squisq-border);
+  --squisq-layout-chrome: var(--squisq-surface-subtle);
+  --squisq-layout-subtle: var(--squisq-surface-subtle);
+  --squisq-layout-workspace: var(--squisq-surface-sunken);
+  --squisq-layout-thumb: var(--squisq-surface-subtle);
+  --squisq-layout-hover: var(--squisq-surface-hover);
+  --squisq-layout-input: var(--squisq-input-bg);
+  --squisq-layout-faint: var(--squisq-text-faint);
+  --squisq-layout-muted: var(--squisq-text-muted);
+  --squisq-layout-panel: var(--squisq-surface);
+  --squisq-layout-text: var(--squisq-text-strong);
+  --squisq-layout-text-soft: var(--squisq-text);
+
+  --squisq-template-gallery-selected-border: var(--squisq-accent);
+  --squisq-template-gallery-selected-bg: var(--squisq-accent-subtle);
+  --squisq-template-gallery-card-hover-border: var(--squisq-accent-border);
+  --squisq-template-gallery-section-title: var(--squisq-text-muted);
+  --squisq-template-gallery-description: var(--squisq-text-muted);
+  --squisq-template-gallery-search-border: var(--squisq-border);
+  --squisq-template-gallery-new-border: var(--squisq-accent-border);
+  --squisq-template-gallery-new-hover-border: var(--squisq-accent);
+  --squisq-template-gallery-new-plus-color: var(--squisq-accent);
+  --squisq-template-gallery-new-plus-border: var(--squisq-accent-border);
+  --squisq-template-gallery-new-label: var(--squisq-accent-strong);
+
+  --squisq-ascii-timeline-accent: var(--squisq-accent);
+  --squisq-mermaid-edge: var(--squisq-text-muted);
+  /* Legacy aliases kept for hosts that already bind them. */
+  --squisq-fg: var(--squisq-text);
+  --squisq-panel-bg: var(--squisq-surface);
+  --squisq-danger-bg: var(--squisq-danger-soft);
+  --squisq-danger-text: var(--squisq-danger-strong);
+  --squisq-presentation-bg: var(--squisq-bg);
+  --squisq-hover-bg: var(--squisq-surface-hover);
+  --squisq-surface-muted: var(--squisq-surface-subtle);
+
+  /* Floating controls over media and slides — the image-edit affordance,
+     the presentation and print chrome. */
+  --squisq-editor-accent: var(--squisq-accent);
+  --squisq-editor-text: var(--squisq-text);
+  --squisq-editor-control-bg: var(--squisq-surface);
+  --squisq-editor-control-bg-hover: var(--squisq-surface-hover);
+  --squisq-editor-control-border: var(--squisq-border);
+  --squisq-presentation-control-bg: var(--squisq-input-bg);
+  --squisq-presentation-control-border: var(--squisq-border);
+  --squisq-presentation-control-text: var(--squisq-text);
+  --squisq-print-slide-bg: var(--squisq-surface);
+
+  --squisq-jsonform-input-bg: var(--squisq-input-bg);
+  --squisq-jsonform-warning: var(--squisq-danger);
+
+  --squisq-template-gallery-bg: var(--squisq-surface);
+  --squisq-template-gallery-text: var(--squisq-text);
+  --squisq-template-gallery-shadow: var(--squisq-shadow-md);
+  --squisq-template-gallery-panel-bg: var(--squisq-surface);
+  --squisq-template-gallery-panel-border: var(--squisq-border-subtle);
+  --squisq-template-gallery-panel-shadow: var(--squisq-shadow-lg);
+  --squisq-template-gallery-header-bg: var(--squisq-surface);
+  --squisq-template-gallery-header-border: var(--squisq-border-subtle);
+  --squisq-template-gallery-title: var(--squisq-text-strong);
+  --squisq-template-gallery-close-color: var(--squisq-text-muted);
+  --squisq-template-gallery-close-bg: var(--squisq-surface);
+  --squisq-template-gallery-close-border: var(--squisq-border-subtle);
+  --squisq-template-gallery-close-hover-color: var(--squisq-text-strong);
+  --squisq-template-gallery-close-hover-border: var(--squisq-accent-border);
+  --squisq-template-gallery-close-hover-shadow: var(--squisq-shadow-sm);
+  --squisq-template-gallery-option-hover-shadow: var(--squisq-shadow-sm);
+  --squisq-template-gallery-border: var(--squisq-border-subtle);
+  --squisq-template-gallery-name: var(--squisq-text-strong);
+  --squisq-template-gallery-empty: var(--squisq-text-muted);
+  --squisq-template-gallery-section-border: var(--squisq-border-subtle);
+  --squisq-template-gallery-search-bg: var(--squisq-surface);
+  --squisq-template-gallery-search-icon: var(--squisq-text-faint);
+  --squisq-template-gallery-search-input: var(--squisq-text-strong);
+  --squisq-template-gallery-search-placeholder: var(--squisq-text-faint);
+  --squisq-template-gallery-option-bg: var(--squisq-accent-subtle);
+  --squisq-template-gallery-option-border: var(--squisq-border-subtle);
+  --squisq-template-gallery-option-hover-bg: var(--squisq-surface-subtle);
+  --squisq-template-gallery-option-hover-border: var(--squisq-accent-border);
+  --squisq-template-gallery-card-bg: transparent;
+  --squisq-template-gallery-card-border: var(--squisq-border-subtle);
+  --squisq-template-gallery-card-hover-bg: var(--squisq-surface-subtle);
+  --squisq-template-gallery-card-hover-shadow: var(--squisq-shadow-sm);
+  --squisq-template-gallery-card-icon-bg: var(--squisq-surface-subtle);
+  --squisq-template-gallery-card-icon-border: var(--squisq-border-subtle);
+  --squisq-template-gallery-selected-shadow: 0 0 0 2px var(--squisq-accent-soft);
+  --squisq-template-gallery-content-preview-bg: var(--squisq-surface-hover);
+  --squisq-template-gallery-new-bg: var(--squisq-accent-subtle);
+  --squisq-template-gallery-new-hover-bg: var(--squisq-accent-soft);
+  --squisq-template-gallery-new-plus-bg: var(--squisq-surface);
+  --squisq-template-gallery-new-desc: var(--squisq-text-muted);
+  --squisq-template-gallery-preview-warning-bg: rgb(var(--squisq-shadow-rgb) / 90%);
+  --squisq-template-gallery-preview-warning-border: rgb(255 255 255 / 22%);
+  --squisq-template-gallery-preview-warning-text: #ffffff;
+
+  --squisq-outline-accent: var(--squisq-accent);
+}

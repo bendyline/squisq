@@ -17,9 +17,9 @@
   flex-direction: column;
   overflow: hidden;
   resize: vertical;
-  border: 1px solid var(--squisq-border, #d1d5db);
+  border: 1px solid var(--squisq-border);
   border-radius: 8px;
-  background: var(--squisq-surface, var(--squisq-input-bg, #ffffff));
+  background: var(--squisq-surface);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
@@ -29,9 +29,9 @@
   min-height: 34px;
   align-items: center;
   padding: 0 10px;
-  border-bottom: 1px solid var(--squisq-border, #d1d5db);
-  background: var(--squisq-surface-muted, var(--squisq-input-bg, #f8fafc));
-  color: var(--squisq-text-muted, #64748b);
+  border-bottom: 1px solid var(--squisq-border);
+  background: var(--squisq-surface-muted);
+  color: var(--squisq-text-muted);
   font-family: var(--squisq-ux-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
   font-size: 12px;
   user-select: none;
@@ -42,7 +42,7 @@
   min-width: 0;
   align-items: center;
   gap: 7px;
-  color: var(--squisq-text, #334155);
+  color: var(--squisq-text);
   font-weight: 600;
 }
 
@@ -59,7 +59,7 @@
   height: 100%;
   align-items: center;
   justify-content: center;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   font-family: var(--squisq-ux-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
   font-size: 12px;
 }

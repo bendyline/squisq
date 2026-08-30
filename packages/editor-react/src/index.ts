@@ -51,6 +51,13 @@ export type {
   CoverImageSaveOutput,
   DashboardImageSaveOutput,
 } from './EditorContext.js';
+export { EditorContextMenuProvider, useEditorContextMenuItems } from './EditorContextMenu.js';
+export type {
+  EditorContextMenuContext,
+  EditorContextMenuItem,
+  EditorContextMenuItemVisibility,
+  EditorContextMenuProviderProps,
+} from './EditorContextMenu.js';
 
 // Block-at-a-time primitives — reusable outside EditorShell. `useBlockNavigator`
 // drives a one-block-at-a-time editing channel from any `(source, setSource)`

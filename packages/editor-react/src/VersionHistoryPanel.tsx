@@ -32,7 +32,7 @@ const lazyLoadingStyle: CSSProperties = {
   justifyContent: 'center',
   width: '100%',
   height: '100%',
-  color: 'var(--squisq-editor-muted-foreground, #6a6258)',
+  color: 'var(--squisq-text-muted)',
   fontSize: 12,
 };
 
