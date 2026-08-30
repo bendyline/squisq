@@ -1,3 +1,9 @@
+## @bendyline/squisq-formats [2.5.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.5.0...@bendyline/squisq-formats@2.5.1) (2026-08-30)
+
+### Bug Fixes
+
+* XMLdom package bump, spreadsheet values ([#49](https://github.com/bendyline/squisq/issues/49)) ([3d53729](https://github.com/bendyline/squisq/commit/3d53729805f2f7fbf314ead0ff24eeb2cced1350))
+
 ## @bendyline/squisq-formats [2.5.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.4.6...@bendyline/squisq-formats@2.5.0) (2026-08-30)
 
 ### Features
