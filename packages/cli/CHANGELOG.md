@@ -1,3 +1,9 @@
+## @bendyline/squisq-cli [2.7.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.7.1...@bendyline/squisq-cli@2.7.2) (2026-08-31)
+
+### Bug Fixes
+
+* Add proof/spelling flags, editor work ([#51](https://github.com/bendyline/squisq/issues/51)) ([2b523b5](https://github.com/bendyline/squisq/commit/2b523b5d9dc73043fa8248d9bb5cf3040aeec1ad))
+
 ## @bendyline/squisq-cli [2.7.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.7.0...@bendyline/squisq-cli@2.7.1) (2026-08-30)
 
 
