@@ -2612,6 +2612,13 @@ and the engine loads only once a markdown doc is actually active with proofing
 effective. While active, the editor suppresses Chrome's native spellcheck
 squiggles (restored on disable).
 
+`proofingSpellingEnabled?: boolean` and `proofingGrammarEnabled?: boolean`
+(both default `true`) filter findings by tier — spelling (red) and
+grammar + style (green/blue) respectively. They are app preferences, so they
+sit outside the enable stack and frontmatter does not override them; with both
+off the shell behaves exactly as if no capability were passed (nothing loads
+and the proofing UI hides), and flipping either re-lints the active document.
+
 Dismissing a finding ("Ignore") is host-persisted, never document-persisted:
 the editor calls `proofingIgnoreStore.save(docRef, opaqueJson)` and restores
 through `load`, keeping the engine's ignore set matched to the active

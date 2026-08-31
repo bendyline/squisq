@@ -513,6 +513,22 @@ describe('<EditorShell> Files badge', () => {
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('3');
   });
 
+  it('opens the accessory bin when opted in and files are present', async () => {
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        mediaProvider={mediaProviderWith(1)}
+        showFilesWhenNotEmpty
+      />,
+    );
+
+    expect(await screen.findByText('file-1.png')).toBeTruthy();
+    expect(screen.getByLabelText('Toggle Files panel, 1 file').getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+  });
+
   it('compacts large visible counts while keeping the full count in the label', async () => {
     const { container } = render(
       <EditorShell

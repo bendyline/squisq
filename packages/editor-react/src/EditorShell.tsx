@@ -218,6 +218,12 @@ export interface EditorShellProps {
   /** Show the Files toggle in the toolbar. Defaults to true when mediaProvider is passed. */
   showFilesToggle?: boolean;
   /**
+   * Open the Files panel when its accessory bin becomes non-empty. The user
+   * can still close it normally; it opens again only when the visible count
+   * changes. Defaults to false.
+   */
+  showFilesWhenNotEmpty?: boolean;
+  /**
    * Show the toolbar's built-in text, block, and contextual formatting
    * controls. The toolbar, Insert menu, and host-provided slots remain
    * visible when false. Defaults to true in document mode and false in chat
@@ -384,6 +390,18 @@ export interface EditorShellProps {
    * and the user's session toggle in the View menu override this.
    */
   proofingDefaultEnabled?: boolean;
+  /**
+   * Whether spelling findings (red squiggles) are shown (default `true`).
+   * A host-level preference, deliberately independent of the enable
+   * layers above: turning both this and `proofingGrammarEnabled` off is
+   * equivalent to turning proofing off, and loads no engine.
+   */
+  proofingSpellingEnabled?: boolean;
+  /**
+   * Whether grammar and style findings (green/blue squiggles) are shown
+   * (default `true`). See {@link EditorShellProps.proofingSpellingEnabled}.
+   */
+  proofingGrammarEnabled?: boolean;
   /**
    * Host-owned storage for findings the user dismissed with "Ignore",
    * scoped per document (`load`/`save` receive a
@@ -596,6 +614,7 @@ export function EditorShell({
   versioningAutoSaveIdleMs,
   onSaveVersion,
   showFilesToggle,
+  showFilesWhenNotEmpty = false,
   showFormattingControls = hostMode !== 'chat',
   showInsertControls = true,
   allowBinaryDownloads = true,
@@ -624,6 +643,8 @@ export function EditorShell({
   mentionProvider,
   proofing = null,
   proofingDefaultEnabled = true,
+  proofingSpellingEnabled = true,
+  proofingGrammarEnabled = true,
   proofingIgnoreStore = null,
   documentLinkProvider,
   fenceRenderers,
@@ -688,6 +709,8 @@ export function EditorShell({
         mentionProvider={mentionProvider}
         proofing={proofing}
         proofingDefaultEnabled={proofingDefaultEnabled}
+        proofingSpellingEnabled={proofingSpellingEnabled}
+        proofingGrammarEnabled={proofingGrammarEnabled}
         proofingIgnoreStore={proofingIgnoreStore}
         documentLinkProvider={documentLinkProvider}
         fenceRenderers={fenceRenderers}
@@ -726,6 +749,7 @@ export function EditorShell({
             mediaProvider={effectiveMediaProvider ?? null}
             workspaceContainer={effectiveContainer}
             filesToggleEnabled={filesToggleEnabled}
+            showFilesWhenNotEmpty={showFilesWhenNotEmpty}
             showFormattingControls={showFormattingControls}
             showInsertControls={showInsertControls}
             allowBinaryDownloads={allowBinaryDownloads}
@@ -777,6 +801,7 @@ interface EditorShellInnerProps {
   mediaProvider: MediaProvider | null;
   workspaceContainer?: ContentContainer | null;
   filesToggleEnabled: boolean;
+  showFilesWhenNotEmpty: boolean;
   showFormattingControls: boolean;
   showInsertControls: boolean;
   allowBinaryDownloads: boolean;
@@ -857,6 +882,7 @@ function EditorShellInner({
   mediaProvider,
   workspaceContainer,
   filesToggleEnabled,
+  showFilesWhenNotEmpty,
   showFormattingControls,
   showInsertControls,
   allowBinaryDownloads,
@@ -1045,6 +1071,10 @@ function EditorShellInner({
       cancelled = true;
     };
   }, [mediaProvider, mediaListRefreshKey]);
+
+  useEffect(() => {
+    if (showFilesWhenNotEmpty && mediaCount > 0) setShowFiles(true);
+  }, [mediaCount, showFilesWhenNotEmpty]);
 
   const handleToggleFiles = useCallback(() => {
     setShowFiles((prev) => !prev);

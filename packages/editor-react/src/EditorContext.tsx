@@ -400,6 +400,10 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * override it.
    */
   proofingDefaultEnabled: boolean;
+  /** Whether spelling findings are surfaced (host preference). */
+  proofingSpellingEnabled: boolean;
+  /** Whether grammar/style findings are surfaced (host preference). */
+  proofingGrammarEnabled: boolean;
   /**
    * Host-owned, per-document storage for dismissed findings. Ignores
    * are never written into the document; without a store they last only
@@ -522,6 +526,10 @@ export interface EditorProviderProps {
   proofing?: ProofingCapability | null;
   /** Host default enable state for proofing (default true). */
   proofingDefaultEnabled?: boolean;
+  /** Whether spelling findings are surfaced (default true). */
+  proofingSpellingEnabled?: boolean;
+  /** Whether grammar/style findings are surfaced (default true). */
+  proofingGrammarEnabled?: boolean;
   /** Host-owned per-document storage for dismissed proofing findings. */
   proofingIgnoreStore?: ProofingIgnoreStore | null;
   /**
@@ -689,6 +697,8 @@ export function EditorProvider({
   mentionProvider = null,
   proofing = null,
   proofingDefaultEnabled = true,
+  proofingSpellingEnabled = true,
+  proofingGrammarEnabled = true,
   proofingIgnoreStore = null,
   documentLinkProvider = null,
   fenceRenderers = null,
@@ -1322,6 +1332,8 @@ export function EditorProvider({
       mentionProvider,
       proofing,
       proofingDefaultEnabled,
+      proofingSpellingEnabled,
+      proofingGrammarEnabled,
       proofingIgnoreStore,
       articleId,
       documentLinkProvider,
@@ -1390,6 +1402,8 @@ export function EditorProvider({
       mentionProvider,
       proofing,
       proofingDefaultEnabled,
+      proofingSpellingEnabled,
+      proofingGrammarEnabled,
       proofingIgnoreStore,
       articleId,
       documentLinkProvider,

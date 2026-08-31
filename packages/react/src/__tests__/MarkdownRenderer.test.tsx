@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/react';
 import { MarkdownRenderer } from '../MarkdownRenderer';
+import { MediaContext } from '../hooks/MediaContext';
+import type { MediaProvider } from '@bendyline/squisq/schemas';
 import {
   parseMarkdown,
   type MarkdownBlockNode,
@@ -36,6 +38,26 @@ function heading(
 
 function parseNodes(markdown: string): MarkdownBlockNode[] {
   return parseMarkdown(markdown).children;
+}
+
+function mediaProviderWith(name: string): MediaProvider {
+  return {
+    async addMedia(filename: string) {
+      return filename;
+    },
+    async resolveUrl(path: string) {
+      return path;
+    },
+    async listMedia() {
+      return [{ name, mimeType: 'text/markdown', size: 42 }];
+    },
+    async removeMedia() {
+      // no-op
+    },
+    dispose() {
+      // no-op
+    },
+  };
 }
 
 // ── Tests ──────────────────────────────────────────────────────────
@@ -123,6 +145,20 @@ describe('MarkdownRenderer', () => {
     expect(a.href).toContain('example.com');
     expect(a.target).toBe('_blank');
     expect(a.textContent).toBe('click');
+  });
+
+  it('renders a link to an accessory-bin file as an inert attachment preview', async () => {
+    const { container } = render(
+      <MediaContext.Provider value={mediaProviderWith('attachments/brief.md')}>
+        <MarkdownRenderer nodes={parseNodes('[Project brief](attachments/brief.md)')} />
+      </MediaContext.Provider>,
+    );
+
+    await waitFor(() => expect(container.querySelector('.squisq-md-attachment')).toBeTruthy());
+    const attachment = container.querySelector('.squisq-md-attachment');
+    expect(attachment?.textContent).toBe('Project brief');
+    expect(attachment?.getAttribute('data-attachment-path')).toBe('attachments/brief.md');
+    expect(container.querySelector('a')).toBeNull();
   });
 
   it('renders unsafe links as inert text by default', () => {

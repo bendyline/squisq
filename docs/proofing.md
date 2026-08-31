@@ -57,6 +57,25 @@ The engine loads only once a markdown document is actually active with
 proofing effective — a code file, an opted-out doc, or a
 `proofingDefaultEnabled: false` shell fetches nothing.
 
+### Which findings are surfaced
+
+Two further shell props filter findings by tier, for hosts that expose
+"show inline spell checking" / "show inline grammar checking" as app
+preferences:
+
+| Prop                      | Default | Covers                                          |
+| ------------------------- | ------- | ----------------------------------------------- |
+| `proofingSpellingEnabled` | `true`  | `spelling` findings (red)                       |
+| `proofingGrammarEnabled`  | `true`  | `grammar` **and** `style` findings (green/blue) |
+
+These sit outside the enable stack above rather than inside it: they are
+an app preference, not a per-doc or per-session choice, so frontmatter
+does not override them. Turning **both** off is exactly equivalent to
+passing no capability at all: no engine bytes load, and the proofing UI
+(View-menu toggle, status segment, panel) hides itself rather than
+leaving a toggle that cannot toggle. Flipping either one re-lints the
+active document.
+
 ## Serving the WASM (read this — every item below was hit in practice)
 
 1. **Serve BOTH binaries side by side.** The engine derives

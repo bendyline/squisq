@@ -153,6 +153,8 @@ function Harness(): null {
 interface MountOptions {
   markdown?: string;
   proofingDefaultEnabled?: boolean;
+  proofingSpellingEnabled?: boolean;
+  proofingGrammarEnabled?: boolean;
   capability?: ProofingProvider | (() => ProofingProvider);
   ignoreStore?: ProofingIgnoreStore | null;
   articleId?: string;
@@ -184,22 +186,27 @@ const DEFAULT_MD = '# Title\n\nThis is teh body.\n';
 
 function mount(options: MountOptions = {}) {
   const provider = options.capability ?? makeFakeProvider();
-  const view = render(
+  const tree = (current: MountOptions) => (
     <EditorProvider
-      initialMarkdown={options.markdown ?? DEFAULT_MD}
+      initialMarkdown={current.markdown ?? DEFAULT_MD}
       initialView="wysiwyg"
       proofing={provider}
-      proofingDefaultEnabled={options.proofingDefaultEnabled}
-      proofingIgnoreStore={options.ignoreStore}
-      articleId={options.articleId}
-      fileName={options.fileName}
+      proofingDefaultEnabled={current.proofingDefaultEnabled}
+      proofingSpellingEnabled={current.proofingSpellingEnabled}
+      proofingGrammarEnabled={current.proofingGrammarEnabled}
+      proofingIgnoreStore={current.ignoreStore}
+      articleId={current.articleId}
+      fileName={current.fileName}
     >
       <ProofingRoot>
         <Harness />
       </ProofingRoot>
-    </EditorProvider>,
+    </EditorProvider>
   );
-  return { view, provider };
+  const view = render(tree(options));
+  /** Re-render the same mounted shell with changed host props. */
+  const update = (next: Partial<MountOptions>) => view.rerender(tree({ ...options, ...next }));
+  return { view, provider, update };
 }
 
 async function flush(): Promise<void> {
@@ -217,7 +224,7 @@ afterEach(() => {
 
 describe('activation', () => {
   it('sets up and lints when a capability is present (default on)', async () => {
-    const { provider } = mount() as { provider: FakeProvider; view: unknown };
+    const { provider } = mount();
     await flush();
     await vi.waitFor(() => expect(lastState?.status).toBe('ready'));
     await vi.waitFor(() => expect((provider as FakeProvider).lintCalls.length).toBeGreaterThan(0));
@@ -271,6 +278,92 @@ describe('activation', () => {
     });
     await vi.waitFor(() => expect((provider as FakeProvider).setupCalls).toBe(1));
     expect(lastState?.enabled).toBe(true);
+  });
+});
+
+describe('category preferences', () => {
+  /** A provider that flags one spelling and one grammar issue per pass. */
+  function makeMixedProvider(): FakeProvider {
+    const fake = makeFakeProvider();
+    fake.nextFindings = (text) => {
+      const findings: ProofFinding[] = [];
+      const typo = text.indexOf('teh');
+      if (typo >= 0) {
+        findings.push({
+          id: 'spell-1',
+          start: typo,
+          end: typo + 3,
+          category: 'spelling',
+          kind: 'Typo',
+          message: 'Did you mean `the`?',
+          originalText: 'teh',
+          suggestions: [{ text: 'the', kind: 'replace' }],
+        });
+      }
+      const agreement = text.indexOf('This is');
+      if (agreement >= 0) {
+        findings.push({
+          id: 'grammar-1',
+          start: agreement,
+          end: agreement + 7,
+          category: 'grammar',
+          kind: 'Agreement',
+          message: 'Consider `These are`.',
+          originalText: 'This is',
+          suggestions: [{ text: 'These are', kind: 'replace' }],
+        });
+      }
+      return findings;
+    };
+    return fake;
+  }
+
+  it('drops spelling findings when the host turns spell checking off', async () => {
+    mount({ capability: makeMixedProvider(), proofingSpellingEnabled: false });
+    await vi.waitFor(() => expect(lastState?.findings.length).toBe(1));
+    expect(lastState?.findings[0].category).toBe('grammar');
+    expect(tiptap!.view.dom.innerHTML).toContain('squisq-proof-underline--grammar');
+    expect(tiptap!.view.dom.innerHTML).not.toContain('squisq-proof-underline--spelling');
+  });
+
+  it('drops grammar findings when the host turns grammar checking off', async () => {
+    mount({ capability: makeMixedProvider(), proofingGrammarEnabled: false });
+    await vi.waitFor(() => expect(lastState?.findings.length).toBe(1));
+    expect(lastState?.findings[0].category).toBe('spelling');
+    expect(tiptap!.view.dom.innerHTML).not.toContain('squisq-proof-underline--grammar');
+  });
+
+  it('reads as an absent capability when both categories are off', async () => {
+    const { provider } = mount({
+      capability: makeMixedProvider(),
+      proofingSpellingEnabled: false,
+      proofingGrammarEnabled: false,
+    });
+    await flush();
+    await flush();
+    expect((provider as FakeProvider).setupCalls).toBe(0);
+    // Null, not a disabled state: the View-menu toggle and status segment
+    // key off this, and a toggle that cannot toggle is worse than none.
+    // (`lastSource` proves the harness rendered, so the null is the hook's.)
+    expect(lastSource).toContain('teh');
+    expect(lastState).toBe(null);
+  });
+
+  it('re-lints when a category preference flips', async () => {
+    const fake = makeMixedProvider();
+    const { update } = mount({ capability: fake });
+    await vi.waitFor(() => expect(lastState?.findings.length).toBe(2));
+
+    act(() => {
+      update({ proofingSpellingEnabled: false });
+    });
+    await vi.waitFor(() => expect(lastState?.findings.length).toBe(1));
+    expect(lastState?.findings[0].category).toBe('grammar');
+
+    act(() => {
+      update({ proofingSpellingEnabled: true });
+    });
+    await vi.waitFor(() => expect(lastState?.findings.length).toBe(2));
   });
 });
 
