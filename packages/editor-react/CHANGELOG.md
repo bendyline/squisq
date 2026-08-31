@@ -1,3 +1,9 @@
+## @bendyline/squisq-editor-react [2.10.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.10.1...@bendyline/squisq-editor-react@2.10.2) (2026-08-31)
+
+### Bug Fixes
+
+* Improve CSS tokens, custom context menu ([#50](https://github.com/bendyline/squisq/issues/50)) ([3f9375d](https://github.com/bendyline/squisq/commit/3f9375db89bbd4f6342a99690d4ec4f647bba18e))
+
 ## @bendyline/squisq-editor-react [2.10.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.10.0...@bendyline/squisq-editor-react@2.10.1) (2026-08-30)
 
 
