@@ -1,3 +1,15 @@
+## @bendyline/squisq-editor-react [2.10.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.10.2...@bendyline/squisq-editor-react@2.10.3) (2026-08-31)
+
+### Bug Fixes
+
+* Add proof/spelling flags, editor work ([#51](https://github.com/bendyline/squisq/issues/51)) ([2b523b5](https://github.com/bendyline/squisq/commit/2b523b5d9dc73043fa8248d9bb5cf3040aeec1ad))
+
+
+### Dependencies
+
+* **@bendyline/squisq-react:** upgraded to 2.10.1
+* **@bendyline/squisq-video-react:** upgraded to 2.4.3
+
 ## @bendyline/squisq-editor-react [2.10.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.10.1...@bendyline/squisq-editor-react@2.10.2) (2026-08-31)
 
 ### Bug Fixes
