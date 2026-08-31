@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.10.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.10.0...@bendyline/squisq-react@2.10.1) (2026-08-31)
+
+### Bug Fixes
+
+* Add proof/spelling flags, editor work ([#51](https://github.com/bendyline/squisq/issues/51)) ([2b523b5](https://github.com/bendyline/squisq/commit/2b523b5d9dc73043fa8248d9bb5cf3040aeec1ad))
+
 ## @bendyline/squisq-react [2.10.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.9.0...@bendyline/squisq-react@2.10.0) (2026-08-30)
 
 ### Features
