@@ -1284,6 +1284,34 @@
   text-underline-offset: 2px;
 }
 
+/* A Markdown link whose href matches a file in the accessory bin is an
+   attachment placeholder, not navigation. The DOM class is presentation-only
+   so the underlying link mark continues to serialize as ordinary Markdown. */
+.squisq-wysiwyg-editor a.squisq-attachment-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  max-width: 100%;
+  border: 1px solid var(--squisq-border);
+  border-radius: 999px;
+  padding: 0.1em 0.5em;
+  color: var(--squisq-text);
+  background: var(--squisq-surface-sunken);
+  font-size: 0.86em;
+  line-height: 1.35;
+  text-decoration: none;
+  vertical-align: middle;
+  cursor: text;
+}
+
+.squisq-wysiwyg-editor a.squisq-attachment-link::before {
+  content: '\f0c6';
+  flex: 0 0 auto;
+  color: var(--squisq-text-muted);
+  font-family: var(--fa-family-classic, 'Font Awesome 7 Free');
+  font-weight: 900;
+}
+
 /* A host-delegated link is actionable even inside an editable text surface,
    where the inherited cursor would otherwise remain an I-beam. */
 .squisq-editor-shell[data-link-handler='true'] a[href] {

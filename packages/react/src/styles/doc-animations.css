@@ -1,3 +1,31 @@
+/* Inline preview for a Markdown link that resolves to the active accessory
+   bin. It is intentionally inert; the authored Markdown link remains the
+   persistence format. */
+.squisq-md-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 999px;
+  padding: 0.1em 0.5em;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-size: 0.86em;
+  line-height: 1.35;
+  vertical-align: middle;
+}
+
+.squisq-md-attachment > .fa-paperclip {
+  flex: 0 0 auto;
+  opacity: 0.72;
+}
+
+.squisq-md-attachment-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /**
  * Doc Animations
  *

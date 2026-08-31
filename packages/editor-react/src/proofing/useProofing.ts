@@ -13,7 +13,9 @@
  *    discarded — mapped decorations keep tracking edits meanwhile;
  *  - enable state resolves `session override ?? doc frontmatter ??
  *    host default`, and the session override resets whenever the
- *    frontmatter value changes;
+ *    frontmatter value changes; the host's spelling/grammar category
+ *    preferences sit outside that stack — they filter findings, and
+ *    turning both off is equivalent to disabling proofing;
  *  - the engine loads only once a markdown doc is actually active with
  *    proofing effective — passing the capability alone fetches nothing.
  */
@@ -71,6 +73,21 @@ const HOVER_CLOSE_DELAY_MS = 260;
  * no engine calls.
  */
 const engineIgnoreOwner = new WeakMap<ProofingProvider, string>();
+
+/** Host preference for which finding tiers are surfaced. */
+interface ProofingCategoryFilter {
+  spelling: boolean;
+  grammar: boolean;
+}
+
+/**
+ * Whether a finding survives the host's category preferences. `style`
+ * rides with `grammar`: both are "the words are spelled right, the
+ * writing could be better", and no host has asked to split them.
+ */
+function categoryEnabled(finding: ProofFinding, filter: ProofingCategoryFilter): boolean {
+  return finding.category === 'spelling' ? filter.spelling : filter.grammar;
+}
 
 export type ProofingStatus = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -153,6 +170,8 @@ export function useProofing(): ProofingState | null {
   const {
     proofing,
     proofingDefaultEnabled,
+    proofingSpellingEnabled,
+    proofingGrammarEnabled,
     proofingIgnoreStore,
     articleId,
     fileName,
@@ -201,9 +220,14 @@ export function useProofing(): ProofingState | null {
 
   // ── Settings & effective enable ─────────────────────────────────────
   const settings = useMemo(() => readProofingSettings(markdownDoc?.frontmatter), [markdownDoc]);
+  // Both categories off is the same as off: no engine loads, nothing is
+  // linted. It is a host preference, so it sits outside the
+  // session/frontmatter/host-default stack rather than inside it.
+  const anyCategoryEnabled = proofingSpellingEnabled || proofingGrammarEnabled;
   const enabled =
     proofing != null &&
     editorMode === 'markdown' &&
+    anyCategoryEnabled &&
     (sessionEnabled ?? settings.enabled ?? proofingDefaultEnabled);
 
   // A Document Settings save must not be masked by a stale session toggle.
@@ -214,6 +238,13 @@ export function useProofing(): ProofingState | null {
 
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
+  // Read inside the pass (which holds no reactive deps of its own), so a
+  // preference flip takes effect on the re-lint the effect below schedules.
+  const categoriesRef = useRef<ProofingCategoryFilter>({
+    spelling: proofingSpellingEnabled,
+    grammar: proofingGrammarEnabled,
+  });
+  categoriesRef.current = { spelling: proofingSpellingEnabled, grammar: proofingGrammarEnabled };
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
   const tiptapRef = useRef(tiptapEditor);
@@ -320,6 +351,7 @@ export function useProofing(): ProofingState | null {
         const decorated: TiptapProofDecoration[] = [];
         const kept: ProofFinding[] = [];
         for (const finding of results) {
+          if (!categoryEnabled(finding, categoriesRef.current)) continue;
           const segment = mapJoinedSpanToSegment(joined, finding.start, finding.end);
           if (!segment) continue;
           const blanked = blankedRuns[segment.segmentIndex].blanked;
@@ -354,7 +386,9 @@ export function useProofing(): ProofingState | null {
           return;
         }
         const kept = results.filter(
-          (finding) => !blanked.some((r) => finding.start < r.end && finding.end > r.start),
+          (finding) =>
+            categoryEnabled(finding, categoriesRef.current) &&
+            !blanked.some((r) => finding.start < r.end && finding.end > r.start),
         );
         if (!collectionRef.current) {
           collectionRef.current = editor.createDecorationsCollection([]);
@@ -435,6 +469,19 @@ export function useProofing(): ProofingState | null {
   useEffect(() => {
     if (status === 'ready' && enabled) schedule('immediate');
   }, [status, enabled, schedule]);
+
+  // A category preference flip re-lints from scratch: the previous pass's
+  // squiggles belong to the old filter, so they go before the new pass runs.
+  const categoryKey = `${proofingSpellingEnabled}:${proofingGrammarEnabled}`;
+  const prevCategoryKeyRef = useRef(categoryKey);
+  useEffect(() => {
+    if (prevCategoryKeyRef.current === categoryKey) return;
+    prevCategoryKeyRef.current = categoryKey;
+    clearDecorations();
+    setFindings([]);
+    setActiveFindingId(null);
+    if (status === 'ready' && enabled) schedule('immediate');
+  }, [categoryKey, status, enabled, schedule, clearDecorations]);
 
   // ── Invalidation: source edits re-lint (both views write through
   // markdownSource synchronously), view switches re-lint immediately. ──
@@ -1029,7 +1076,10 @@ export function useProofing(): ProofingState | null {
   const canAddToAppDictionary = capabilityInstance?.hasAppDictionary !== false;
 
   return useMemo<ProofingState | null>(() => {
-    if (!proofing) return null;
+    // No capability, or every category switched off: the same absence.
+    // The View-menu toggle, status segment and panel all key off this, so
+    // returning state here would leave a toggle that cannot toggle.
+    if (!proofing || !anyCategoryEnabled) return null;
     return {
       status,
       errorMessage,
@@ -1059,6 +1109,7 @@ export function useProofing(): ProofingState | null {
     };
   }, [
     proofing,
+    anyCategoryEnabled,
     status,
     errorMessage,
     enabled,

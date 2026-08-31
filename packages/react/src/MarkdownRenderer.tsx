@@ -31,7 +31,7 @@ import {
   MarkdownTableRow,
   MarkdownTableCell,
 } from '@bendyline/squisq/markdown';
-import { useMediaUrl } from './hooks/MediaContext';
+import { useMediaProvider, useMediaUrl } from './hooks/MediaContext';
 import { useFenceRenderers } from './hooks/FenceRendererContext';
 import { InlineVideoPlayer } from './InlineVideoPlayer.js';
 import { InlineAudioPlayer } from './InlineAudioPlayer.js';
@@ -99,6 +99,7 @@ interface RenderCtx {
   showCodeCopyButton?: boolean;
   onCopyCode?: CodeBlockCopyHandler;
   fenceRenderers?: FenceRendererMap;
+  accessoryPaths?: ReadonlySet<string>;
 }
 
 const DEFAULT_CTX: RenderCtx = { htmlPolicy: 'sanitize' };
@@ -304,6 +305,21 @@ function renderInline(
         );
 
       case 'link': {
+        if (ctx.accessoryPaths?.has(node.url)) {
+          return (
+            <span
+              key={key}
+              className="squisq-md-attachment"
+              data-attachment-path={node.url}
+              title={node.title ?? `Attachment: ${node.url}`}
+            >
+              <i className="fa-solid fa-paperclip" aria-hidden="true" />
+              <span className="squisq-md-attachment-label">
+                {renderInline(node.children, key, ctx)}
+              </span>
+            </span>
+          );
+        }
         const href = sanitizeUrl(node.url, 'link', { extraLinkSchemes: ctx.linkSchemes });
         if (!href) {
           return (
@@ -859,6 +875,27 @@ export function MarkdownRenderer({
   // Ambient registry fallback: the explicit prop always wins (pass `{}`
   // to opt a surface out under a provider).
   const ambientFenceRenderers = useFenceRenderers();
+  const mediaProvider = useMediaProvider();
+  const [accessoryPaths, setAccessoryPaths] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    if (!mediaProvider) {
+      setAccessoryPaths(new Set());
+      return;
+    }
+
+    let cancelled = false;
+    mediaProvider.listMedia().then(
+      (entries) => {
+        if (!cancelled) setAccessoryPaths(new Set(entries.map((entry) => entry.name)));
+      },
+      () => {
+        if (!cancelled) setAccessoryPaths(new Set());
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaProvider]);
   if (!nodes || nodes.length === 0) return null;
 
   return (
@@ -869,6 +906,7 @@ export function MarkdownRenderer({
         theme,
         showCodeCopyButton,
         onCopyCode,
+        accessoryPaths,
         fenceRenderers: fenceRenderers ?? ambientFenceRenderers ?? undefined,
       })}
     </div>

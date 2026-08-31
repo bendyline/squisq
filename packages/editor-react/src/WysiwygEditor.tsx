@@ -78,6 +78,7 @@ import { uploadAndInsertImages } from './wysiwygImageUpload';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { FindHighlightExtension } from './find/FindHighlightExtension';
 import { ProofingExtension } from './proofing/ProofingExtension';
+import { syncAccessoryFileLinkPlaceholders } from './accessoryFileLinks';
 
 type MediaMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
 
@@ -166,6 +167,7 @@ export function WysiwygEditor({
     themeInheritance,
     colorScheme,
     bumpMediaRevision,
+    mediaRevision,
     sceneTextChannel,
     preserveSourceWrapping,
     layoutMode,
@@ -248,6 +250,26 @@ export function WysiwygEditor({
   useEffect(() => {
     mediaProviderRef.current = mediaProvider;
   }, [mediaProvider]);
+  const [accessoryPaths, setAccessoryPaths] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    if (!mediaProvider) {
+      setAccessoryPaths(new Set());
+      return;
+    }
+
+    let cancelled = false;
+    mediaProvider.listMedia().then(
+      (entries) => {
+        if (!cancelled) setAccessoryPaths(new Set(entries.map((entry) => entry.name)));
+      },
+      () => {
+        if (!cancelled) setAccessoryPaths(new Set());
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaProvider, mediaRevision]);
   // Preserve frontmatter across edits — hidden from WYSIWYG but prepended on
   // save. In block mode the bound slice carries no frontmatter, so this is an
   // empty string and the splice in `setEditorSource` keeps the doc's real
@@ -532,6 +554,18 @@ export function WysiwygEditor({
     }
     return () => setTiptapEditor(null);
   }, [editor, setTiptapEditor]);
+
+  useEffect(() => {
+    if (!editor) return;
+    const syncPlaceholders = () => {
+      syncAccessoryFileLinkPlaceholders(editor.view.dom, accessoryPaths);
+    };
+    syncPlaceholders();
+    editor.on('update', syncPlaceholders);
+    return () => {
+      editor.off('update', syncPlaceholders);
+    };
+  }, [accessoryPaths, editor]);
 
   // Tiptap reads `editable` only at creation; mirror later changes via
   // setEditable so flipping readOnly from the host takes effect without
