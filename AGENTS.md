@@ -376,35 +376,20 @@ squisq/
       vite.config.ts        # Serves/copies the pinned ffmpeg core for browser export
 ```
 
-## Installing Dependencies
+## Packages and Dependencies
 
-**Always install via `npm run install:safe`. Do not use a bare `npm install`.**
+**Always install via `npm run install:safe`. Do not use a bare `npm install`** —
+`.npmrc` sets `ignore-scripts=true`, so a bare install succeeds but leaves
+esbuild’s native binary missing and the next `npm run build` fails.
 
-```bash
-npm run install:safe       # Install all deps + run trusted install scripts (esbuild)
-```
-
-`.npmrc` sets `ignore-scripts=true`, so a bare `npm install` will succeed but
-**leave esbuild's native binary missing** — the next `npm run build` will fail
-with "Cannot find module @esbuild/<platform>".
-
-The reason for this posture: every third-party install / preinstall / postinstall
-script is disabled by default. An attacker who compromises a transitive dep
-cannot ship a malicious postinstall and have it execute. The only install scripts
-that run are the ones in the **explicit allowlist** at
-[`scripts/run-install-allowlist.mjs`](scripts/run-install-allowlist.mjs). Today
-that allowlist contains exactly one entry — `esbuild`, because tsup needs the
-native binary it downloads in its postinstall.
-
-**Adding a package to the allowlist:** read its install script, confirm what it
-does matches the package's docs, then add an entry to the `ALLOWLIST` array in
-`scripts/run-install-allowlist.mjs` with a one-line `reason` for the next
-reviewer.
-
-Dependency versions are pinned exactly (no `^` or `~` ranges) via
-`.npmrc`'s `save-exact=true`. PeerDependencies remain explicit ranges (e.g.
-`react ^18.0.0 || ^19.0.0`) because libraries need to be flexible about the
-versions their consumers bring.
+**Before any other package management** — adding, removing or updating a
+dependency, running `npm audit fix`, editing `overrides`, or otherwise touching
+`package-lock.json` — read **[`docs/dependencies.md`](docs/dependencies.md)**.
+It is the single source for the rules that gate all of it: exact version
+pinning, the 7-day cooldown on newly published versions
+(`npm run deps:cooldown`), the install-script allowlist and its content pins,
+notices regeneration, per-package dependency constraints, and the guardrail
+tests each of those trips.
 
 ## Build System
 
@@ -413,7 +398,7 @@ versions their consumers bring.
 - **Output:** `packages/*/dist/`
 
 ```bash
-npm run install:safe       # Install deps + run allowlisted install scripts (read this section ↑)
+npm run install:safe       # Install deps + run allowlisted install scripts (see docs/dependencies.md)
 npm run build              # Build all packages in dep order: core → formats → react → video
                            #   → video-react → editor → cli → site
 npm run build:core         # Build core only
@@ -435,9 +420,11 @@ npm run dev                # Build runtime packages, start their watchers, then 
                            # (Vite, port 5199) after every initial ESM watch build is ready
 npm run lint               # ESLint
 npm run format             # Prettier format
-npm run all                # install:safe + build + lint + format:check + typecheck + coverage +
-                           #   published + CLI + required native MP4/GIF + browser E2E
-                           #   (the full pre-release sweep; requires FFmpeg + Playwright browsers)
+npm run deps:cooldown      # Cooldown gate: versions this branch adds/changes (docs/dependencies.md)
+npm run deps:cooldown:all  # Cooldown gate: full lockfile audit
+npm run all                # install:safe + deps:cooldown:all + build + lint + format:check +
+                           #   typecheck + coverage + published + CLI + required native MP4/GIF +
+                           #   browser E2E (full pre-release sweep; needs network, FFmpeg, browsers)
 ```
 
 For CI / clean reproducible installs, run `npm ci && node scripts/run-install-allowlist.mjs`

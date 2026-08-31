@@ -1,0 +1,76 @@
+name: Dependency Cooldown
+
+# Refuse npm package versions that are younger than the cooldown window.
+#
+# Rationale and mechanics live in scripts/check-dependency-age.mjs. In short:
+# the dominant npm supply-chain attack is a hijacked patch release that gets
+# caught within hours to days, so requiring every resolved version to be at
+# least a week old is a cheap, high-value filter. `npm audit fix` in particular
+# will adopt an hours-old release without asking; this is the gate that notices.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'package-lock.json'
+      - 'package.json'
+      - 'packages/*/package.json'
+      - 'scripts/check-dependency-age.mjs'
+      - '.github/workflows/dependency-cooldown.yml'
+  # Weekly backstop: a full-lockfile sweep catches anything that reached main
+  # without passing the PR gate (a merge queue race, an admin override, a
+  # direct push).
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      min-age-days:
+        description: 'Cooldown window in days'
+        required: false
+        default: '7'
+
+permissions:
+  contents: read
+
+jobs:
+  changed:
+    name: New dependencies (vs base)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # The gate diffs the lockfile against the PR base, so that commit
+          # must be present locally.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: '.nvmrc'
+
+      # No `npm ci` on purpose: the check reads package-lock.json plus the
+      # registry, and installing dependencies is the act being gated.
+      - name: Check cooldown on new/changed versions
+        env:
+          SQUISQ_DEP_AGE_BASE: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/check-dependency-age.mjs --no-cache
+
+  full:
+    name: Full lockfile audit
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Audit every resolved version
+        run: node scripts/check-dependency-age.mjs --all --no-cache --min-age-days ${{ inputs.min-age-days || 7 }}
