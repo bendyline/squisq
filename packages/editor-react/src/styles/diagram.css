@@ -21,12 +21,12 @@
   position: relative;
   width: 100%;
   height: 420px;
-  border: 1px solid var(--squisq-border, #e2e8f0);
+  border: 1px solid var(--squisq-border);
   border-radius: 8px;
   overflow: hidden;
   /* --squisq-surface is optional; --squisq-bg is the editor's canonical
      light/dark canvas token and must win before the light fallback. */
-  background: var(--squisq-surface, var(--squisq-bg, #ffffff));
+  background: var(--squisq-surface);
 }
 
 .squisq-diagram-canvas {
@@ -57,11 +57,11 @@
   width: 44px;
   height: 4px;
   border-radius: 2px;
-  background: var(--squisq-border, #cbd5e1);
+  background: var(--squisq-border);
   transition: background 0.12s;
 }
 .squisq-diagram-resize-handle:hover::before {
-  background: var(--squisq-text-muted, #94a3b8);
+  background: var(--squisq-text-muted);
 }
 
 .squisq-diagram-canvas .react-flow {
@@ -85,12 +85,12 @@
 .squisq-diagram-empty-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--squisq-text, #1e293b);
+  color: var(--squisq-text);
 }
 
 .squisq-diagram-empty-hint {
   font-size: 12px;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   max-width: 320px;
   line-height: 1.45;
 }
@@ -101,8 +101,8 @@
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--squisq-text-on-accent, #ffffff);
-  background: var(--squisq-accent, #6366f1);
+  color: var(--squisq-text-on-accent);
+  background: var(--squisq-accent);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -110,7 +110,7 @@
 }
 
 .squisq-diagram-empty-btn:hover {
-  background: var(--squisq-accent-hover, #4f46e5);
+  background: var(--squisq-accent-hover);
 }
 
 .squisq-diagram-maximize-btn {
@@ -123,17 +123,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--squisq-surface, #ffffff);
-  border: 1px solid var(--squisq-border, #e2e8f0);
+  background: var(--squisq-surface);
+  border: 1px solid var(--squisq-border);
   border-radius: 6px;
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
-  color: var(--squisq-text, #1e293b);
+  color: var(--squisq-text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 .squisq-diagram-maximize-btn:hover {
-  background: var(--squisq-surface-hover, #f8fafc);
+  background: var(--squisq-surface-hover);
 }
 
 .squisq-diagram-maximized-overlay {
@@ -150,7 +150,7 @@
   position: relative;
   flex: 1;
   margin: 24px;
-  background: var(--squisq-surface, var(--squisq-bg, #ffffff));
+  background: var(--squisq-surface);
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
@@ -172,12 +172,12 @@
   /* Reserved space so the document layout doesn't jump when the canvas
    * portals into the maximize overlay. */
   height: 420px;
-  border: 1px dashed var(--squisq-border, #e2e8f0);
+  border: 1px dashed var(--squisq-border);
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   font-size: 14px;
 }
 .squisq-diagram-inline-placeholder::before {

@@ -7,6 +7,10 @@
  * custom properties on the `.squisq-image-editor` root.
  */
 
+/* Deliberate exception to the chrome palette: the image editor is a dark
+   room in BOTH themes, because a photo is judged against a neutral dark
+   field and a light surround shifts the perceived exposure. Hosts can still
+   rebind these tokens; they simply do not follow --squisq-surface. */
 .squisq-image-editor {
   --squisq-image-editor-bg: #14141a;
   --squisq-image-editor-panel-bg: #1d1d23;
@@ -39,7 +43,7 @@
   color: var(--squisq-image-editor-text-muted);
 }
 .squisq-image-editor-error {
-  color: #ff6b6b;
+  color: var(--squisq-danger);
 }
 
 /* ── Toolbar ───────────────────────────────────────────────────────── */

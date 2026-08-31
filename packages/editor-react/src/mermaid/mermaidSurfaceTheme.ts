@@ -28,7 +28,7 @@ const EDITOR_SURFACE: Record<MermaidSurfaceScheme, SurfaceNeutrals> = {
     background: '#ffffff',
     backgroundLight: '#f5f5f5',
     text: '#1f2937',
-    textMuted: '#6b7280',
+    textMuted: '#4b5563',
   },
   dark: {
     background: '#111827',

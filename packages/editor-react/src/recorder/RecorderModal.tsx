@@ -256,27 +256,27 @@ const overlayStyle: CSSProperties = {
 
 /**
  * The recorder is normally portaled to `document.body`, outside the editor
- * shell's CSS-variable scope. Copy the scheme onto a fresh scope and provide
- * inline fallbacks so the standalone RecorderModal/RecorderButton exports are
- * themed even when a host has not loaded the editor stylesheet.
+ * shell's CSS-variable scope — but styles/chrome.css binds the chrome palette
+ * on the document root and on any `[data-theme]` element, so a portal reaches
+ * it. All this has to do is name the scheme and re-express the palette under
+ * the recorder's own token names.
  */
 function recorderThemeStyle(colorScheme: RecorderColorScheme): CSSProperties {
-  const dark = colorScheme === 'dark';
   return {
     colorScheme,
-    '--squisq-recorder-surface': `var(--squisq-bg, ${dark ? '#1f2937' : '#fffdf7'})`,
-    '--squisq-recorder-surface-muted': `var(--squisq-panel-bg, ${dark ? '#111827' : '#f8f4e8'})`,
-    '--squisq-recorder-input': `var(--squisq-input-bg, ${dark ? '#374151' : '#fff'})`,
-    '--squisq-recorder-border': `var(--squisq-border, ${dark ? '#4b5563' : '#c9b98a'})`,
-    '--squisq-recorder-text': `var(--squisq-text, ${dark ? '#e5e7eb' : '#4a3c1f'})`,
-    '--squisq-recorder-muted': `var(--squisq-text-muted, ${dark ? '#9ca3af' : '#5a4a2a'})`,
-    '--squisq-recorder-accent': 'var(--squisq-accent, #8b6914)',
-    '--squisq-recorder-accent-text': '#fff',
-    '--squisq-recorder-danger': dark ? '#dc4c4c' : '#b33a3a',
-    '--squisq-recorder-danger-border': dark ? '#ef6a6a' : '#902929',
-    '--squisq-recorder-error-bg': dark ? '#3f151b' : '#fceeee',
-    '--squisq-recorder-error-border': dark ? '#7f1d1d' : '#d88a8a',
-    '--squisq-recorder-error-text': dark ? '#fecdd3' : '#8c2a2a',
+    '--squisq-recorder-surface': 'var(--squisq-bg)',
+    '--squisq-recorder-surface-muted': 'var(--squisq-surface-sunken)',
+    '--squisq-recorder-input': 'var(--squisq-input-bg)',
+    '--squisq-recorder-border': 'var(--squisq-border)',
+    '--squisq-recorder-text': 'var(--squisq-text)',
+    '--squisq-recorder-muted': 'var(--squisq-text-muted)',
+    '--squisq-recorder-accent': 'var(--squisq-accent)',
+    '--squisq-recorder-accent-text': 'var(--squisq-text-on-accent)',
+    '--squisq-recorder-danger': 'var(--squisq-danger)',
+    '--squisq-recorder-danger-border': 'var(--squisq-danger-border)',
+    '--squisq-recorder-error-bg': 'var(--squisq-danger-soft)',
+    '--squisq-recorder-error-border': 'var(--squisq-danger-border)',
+    '--squisq-recorder-error-text': 'var(--squisq-danger-strong)',
   } as CSSProperties;
 }
 

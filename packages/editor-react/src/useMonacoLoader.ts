@@ -50,11 +50,19 @@ async function loadMonacoProfile(
 
 async function loadMonacoModule(): Promise<SquisqMonacoModule> {
   if (!monacoPromise) {
-    monacoPromise = import('./monaco.js').then((monaco) => {
-      loader.config({ monaco });
-      monacoNamespace = monaco;
-      return monaco;
-    });
+    monacoPromise = import('./monaco.js')
+      .then((monaco) => {
+        loader.config({ monaco });
+        monacoNamespace = monaco;
+        return monaco;
+      })
+      .catch((error: unknown) => {
+        // A failed load must not poison the cache. Without this reset every
+        // later subscriber awaits the promise that already rejected, so a
+        // remount after the network recovers can never retry.
+        monacoPromise = null;
+        throw error;
+      });
   }
 
   return monacoPromise;
@@ -94,9 +102,16 @@ export function useMonacoLoader(
 
   useEffect(() => {
     let cancelled = false;
-    void loadMonacoProfile(requestKey, languageServices).then(() => {
-      if (!cancelled) setInitialReady(true);
-    });
+    void loadMonacoProfile(requestKey, languageServices)
+      .then(() => {
+        if (!cancelled) setInitialReady(true);
+      })
+      .catch(() => {
+        // Monaco could not load: offline, a stale chunk URL, or a test
+        // environment torn down mid-import. The consumer stays un-`ready` and
+        // keeps its fallback; a lazy editor chunk must never surface as an
+        // unhandled rejection in the host page.
+      });
     return () => {
       cancelled = true;
     };

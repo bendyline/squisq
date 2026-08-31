@@ -1312,16 +1312,16 @@ function clampPreviewPopoverLeft(
 // ── Shared styles ────────────────────────────────────────────────
 
 const labelStyle: React.CSSProperties = {
-  color: 'var(--squisq-text-muted, #6b7280)',
+  color: 'var(--squisq-text-muted)',
   fontSize: '12px',
   whiteSpace: 'nowrap',
 };
 
 const themeSaveErrorStyle: React.CSSProperties = {
   padding: '8px 10px',
-  border: '1px solid var(--squisq-danger-border, #d88a8a)',
-  background: 'var(--squisq-danger-bg, #fceeee)',
-  color: 'var(--squisq-danger-text, #8c2a2a)',
+  border: '1px solid var(--squisq-danger-border)',
+  background: 'var(--squisq-danger-soft)',
+  color: 'var(--squisq-danger-strong)',
   fontSize: '12px',
   maxWidth: '320px',
 };
@@ -1329,9 +1329,9 @@ const themeSaveErrorStyle: React.CSSProperties = {
 const selectStyle: React.CSSProperties = {
   padding: '2px 6px',
   borderRadius: '4px',
-  border: '1px solid var(--squisq-border, #d1d5db)',
-  background: 'var(--squisq-input-bg, #fff)',
-  color: 'var(--squisq-text, #1f2937)',
+  border: '1px solid var(--squisq-border)',
+  background: 'var(--squisq-input-bg)',
+  color: 'var(--squisq-text)',
   fontSize: '12px',
   cursor: 'pointer',
 };
@@ -1981,7 +1981,7 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
                 className="squisq-theme-save-error"
                 role="alert"
                 title={s.themeSaveError}
-                style={{ color: 'var(--squisq-danger-text, #8c2a2a)', fontSize: '12px' }}
+                style={{ color: 'var(--squisq-danger-strong)', fontSize: '12px' }}
               >
                 ⚠ Theme not saved
               </span>

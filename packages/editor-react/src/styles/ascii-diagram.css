@@ -25,7 +25,7 @@
 .squisq-ascii-diagram-warnings {
   margin-top: 4px;
   font-size: 12px;
-  color: var(--squisq-theme-text-muted, #6b7280);
+  color: var(--squisq-theme-text-muted, var(--squisq-text-muted));
 }
 
 .squisq-ascii-diagram-warnings summary {
@@ -47,22 +47,22 @@
   flex-wrap: wrap;
   margin: 4px 0 1rem;
   padding: 8px 12px;
-  border: 1px dashed var(--squisq-border, #d1d5db);
+  border: 1px dashed var(--squisq-border);
   border-radius: 8px;
-  background: var(--squisq-input-bg, #f9fafb);
+  background: var(--squisq-input-bg);
   font-size: 13px;
 }
 
 .squisq-repair-banner-text {
-  color: var(--squisq-text-muted, #6b7280);
+  color: var(--squisq-text-muted);
 }
 
 .squisq-repair-banner-btn {
   cursor: pointer;
-  border: 1px solid var(--squisq-accent, #6366f1);
+  border: 1px solid var(--squisq-accent);
   border-radius: 6px;
-  background: var(--squisq-accent, #6366f1);
-  color: #fff;
+  background: var(--squisq-accent);
+  color: var(--squisq-text-on-accent);
   padding: 4px 12px;
   font-size: 13px;
   font-weight: 500;

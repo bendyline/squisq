@@ -26,6 +26,7 @@ import {
 } from './rawEditorIsolation';
 import { preloadMonacoSuggestions, useMonacoLoader } from './useMonacoLoader';
 import { monacoLanguagesForDocument, normalizeMonacoLanguage } from './monacoLanguageDetection';
+import { useEditorContextMenuAvailable } from './EditorContextMenu';
 
 // Monaco is loaded lazily through `useMonacoLoader` (see the hook for the
 // rationale). The type-only `import type * as monaco from 'monaco-editor'`
@@ -107,6 +108,7 @@ export function RawEditor({
   submitOnEnter,
   readOnly = false,
 }: RawEditorProps) {
+  const contextMenuOwnedByShell = useEditorContextMenuAvailable();
   const { editorSource, setEditorSource, setMonacoEditor, language, mentionProvider, doc } =
     useEditorContext();
   const requestedLanguages = useDocumentMonacoLanguages(language, editorSource);
@@ -747,8 +749,8 @@ export function RawEditor({
           border: 0,
           outline: 0,
           padding: '12px 22px',
-          background: 'var(--squisq-editor-background, #ffffff)',
-          color: 'var(--squisq-editor-foreground, #1f2937)',
+          background: 'var(--squisq-editor-background)',
+          color: 'var(--squisq-editor-foreground)',
           fontFamily: 'var(--squisq-code-font, monospace)',
           fontSize,
           lineHeight: 1.5,
@@ -798,6 +800,9 @@ export function RawEditor({
           // color so the breathing room looks like it sits *inside* the
           // canvas rather than widening the gutter.
           lineDecorationsWidth: 22,
+          // EditorShell owns one consistent, host-extensible menu across
+          // Source, Write, and Preview. Proofing still intercepts squiggles.
+          contextmenu: !contextMenuOwnedByShell,
           readOnly,
           domReadOnly: readOnly,
         }}

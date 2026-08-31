@@ -18,11 +18,11 @@
 }
 
 .squisq-tree-outline {
-  border: 1px solid var(--squisq-border, #e2e8f0);
+  border: 1px solid var(--squisq-border);
   border-radius: 8px;
   padding: 8px 10px;
-  background: var(--squisq-input-bg, #ffffff);
-  color: var(--squisq-text, #1e293b);
+  background: var(--squisq-input-bg);
+  color: var(--squisq-text);
   font-size: 14px;
 }
 
@@ -38,14 +38,14 @@
   gap: 5px;
   font-size: 12px;
   padding: 3px 8px;
-  border: 1px solid var(--squisq-border, #e2e8f0);
+  border: 1px solid var(--squisq-border);
   border-radius: 5px;
-  background: var(--squisq-bg, #f8fafc);
-  color: var(--squisq-text, #1e293b);
+  background: var(--squisq-bg);
+  color: var(--squisq-text);
   cursor: pointer;
 }
 .squisq-tree-btn:hover {
-  border-color: var(--squisq-text-muted, #94a3b8);
+  border-color: var(--squisq-text-muted);
 }
 
 /* Include the widget wrapper so this reset wins over the editor's generic
@@ -57,7 +57,7 @@
   padding: 0;
 }
 .squisq-tree-rows .squisq-tree-rows {
-  border-left: 1px solid var(--squisq-border, #e2e8f0);
+  border-left: 1px solid var(--squisq-border);
   margin-left: 8px;
 }
 
@@ -90,7 +90,7 @@
   right: 0;
   height: 2px;
   border-radius: 999px;
-  background: #6366f1;
+  background: var(--squisq-accent);
   pointer-events: none;
 }
 .squisq-tree-item--drop-before > .squisq-tree-row::before {
@@ -103,7 +103,7 @@
 }
 .squisq-tree-item--drop-child > .squisq-tree-row {
   background: rgba(99, 102, 241, 0.12);
-  box-shadow: inset 0 0 0 1px #6366f1;
+  box-shadow: inset 0 0 0 1px var(--squisq-accent);
 }
 
 .squisq-tree-chevron {
@@ -112,7 +112,7 @@
   border: none;
   background: transparent;
   cursor: pointer;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   padding: 0;
   font-size: 11px;
 }
@@ -126,7 +126,7 @@
   border: none;
   background: transparent;
   cursor: pointer;
-  color: #6366f1;
+  color: var(--squisq-accent);
   padding: 0;
 }
 
@@ -137,13 +137,13 @@
   border-radius: 4px;
   padding: 1px 4px;
   font: inherit;
-  color: var(--squisq-text, #1e293b);
+  color: var(--squisq-text);
   background: transparent;
 }
 .squisq-tree-label:focus {
   outline: none;
-  border-color: #6366f1;
-  background: var(--squisq-bg, #f8fafc);
+  border-color: var(--squisq-accent);
+  background: var(--squisq-bg);
 }
 
 .squisq-tree-controls {
@@ -159,7 +159,7 @@
   align-items: center;
   justify-content: center;
   width: 16px;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   cursor: grab;
 }
 .squisq-tree-drag-handle:active {
@@ -169,21 +169,21 @@
   border: none;
   background: transparent;
   cursor: pointer;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   padding: 2px 4px;
   border-radius: 4px;
   font-size: 11px;
 }
 .squisq-tree-controls button:hover {
-  background: var(--squisq-bg, #f1f5f9);
-  color: var(--squisq-text, #1e293b);
+  background: var(--squisq-bg);
+  color: var(--squisq-text);
 }
 .squisq-tree-controls .squisq-tree-delete:hover {
-  color: #ef4444;
+  color: var(--squisq-danger);
 }
 
 .squisq-tree-warnings {
   margin-top: 6px;
   font-size: 12px;
-  color: var(--squisq-text-muted, #6b7280);
+  color: var(--squisq-text-muted);
 }

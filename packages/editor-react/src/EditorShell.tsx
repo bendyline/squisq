@@ -61,6 +61,7 @@ import { MediaBin } from './MediaBin';
 import { RecorderEntry } from './RecorderEntry';
 import { DropZoneOverlay } from './DropZoneOverlay';
 import { TooltipLayer } from './Tooltip';
+import { EditorContextMenuProvider } from './EditorContextMenu';
 import { useFileDrop, type DropTarget } from './hooks/useFileDrop';
 import {
   partitionFiles,
@@ -1234,7 +1235,7 @@ function EditorShellInner({
 
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;
 
-  return (
+  const shell = (
     <div
       ref={shellRef}
       onKeyDown={handleShellKeyDown}
@@ -1567,6 +1568,11 @@ function EditorShellInner({
         />
       )}
     </div>
+  );
+  return (
+    <EditorContextMenuProvider rootRef={shellRef} readOnly={readOnly}>
+      {shell}
+    </EditorContextMenuProvider>
   );
 }
 

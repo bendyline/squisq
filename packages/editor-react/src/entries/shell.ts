@@ -19,6 +19,13 @@ export type {
   BlockTagVisibility,
   LayoutMode,
 } from '../EditorContext.js';
+export { EditorContextMenuProvider, useEditorContextMenuItems } from '../EditorContextMenu.js';
+export type {
+  EditorContextMenuContext,
+  EditorContextMenuItem,
+  EditorContextMenuItemVisibility,
+  EditorContextMenuProviderProps,
+} from '../EditorContextMenu.js';
 export { RawEditor } from '../RawEditor.js';
 export type { RawEditorProps } from '../RawEditor.js';
 export { WysiwygEditor } from '../WysiwygEditor.js';

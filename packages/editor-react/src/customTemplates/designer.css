@@ -5,58 +5,18 @@
  */
 
 /* Both entry points are portaled to <body>, so they establish their own
-   editor-shell theme scope. These tokens keep the light palette unchanged
-   while giving every piece of designer chrome a dark-mode counterpart. */
+   theme scope. The palette itself lives in styles/chrome.css — the overlay
+   only has to declare which side of it applies, because `color-scheme`
+   drives the UA-rendered widgets (scrollbars, form controls) that a custom
+   property cannot reach. */
 .squisq-template-designer-overlay,
 .squisq-layout-manager-overlay {
   color-scheme: light;
-  --squisq-layout-panel: #ffffff;
-  --squisq-layout-chrome: #f9fafb;
-  --squisq-layout-subtle: #fafafa;
-  --squisq-layout-workspace: #f3f4f6;
-  --squisq-layout-input: #ffffff;
-  --squisq-layout-border: #e5e7eb;
-  --squisq-layout-border-strong: #d1d5db;
-  --squisq-layout-text: #111827;
-  --squisq-layout-text-soft: #1f2937;
-  --squisq-layout-muted: #6b7280;
-  --squisq-layout-faint: #9ca3af;
-  --squisq-layout-hover: #f1f5f9;
-  --squisq-layout-accent-text: #4338ca;
-  --squisq-layout-accent-bg: #4f46e5;
-  --squisq-layout-accent-bg-hover: #4338ca;
-  --squisq-layout-accent-border: #6366f1;
-  --squisq-layout-accent-soft: #eef2ff;
-  --squisq-layout-accent-soft-hover: #e0e7ff;
-  --squisq-layout-accent-soft-border: #c7d2fe;
-  --squisq-layout-accent-hover-border: #a5b4fc;
-  --squisq-layout-thumb: #f8fafc;
 }
 
 .squisq-template-designer-overlay[data-theme='dark'],
 .squisq-layout-manager-overlay[data-theme='dark'] {
   color-scheme: dark;
-  --squisq-layout-panel: #111827;
-  --squisq-layout-chrome: #1f2937;
-  --squisq-layout-subtle: #18212f;
-  --squisq-layout-workspace: #0f172a;
-  --squisq-layout-input: #111827;
-  --squisq-layout-border: #374151;
-  --squisq-layout-border-strong: #4b5563;
-  --squisq-layout-text: #f3f4f6;
-  --squisq-layout-text-soft: #e5e7eb;
-  --squisq-layout-muted: #9ca3af;
-  --squisq-layout-faint: #6b7280;
-  --squisq-layout-hover: #334155;
-  --squisq-layout-accent-text: #c7d2fe;
-  --squisq-layout-accent-bg: #4f46e5;
-  --squisq-layout-accent-bg-hover: #6366f1;
-  --squisq-layout-accent-border: #818cf8;
-  --squisq-layout-accent-soft: #312e81;
-  --squisq-layout-accent-soft-hover: #3730a3;
-  --squisq-layout-accent-soft-border: #4f46e5;
-  --squisq-layout-accent-hover-border: #6366f1;
-  --squisq-layout-thumb: #0f172a;
 }
 
 .squisq-template-designer-overlay {
@@ -549,7 +509,7 @@
 }
 
 .squisq-template-designer-btn--primary {
-  color: #ffffff;
+  color: var(--squisq-text-on-accent);
   background: var(--squisq-layout-accent-bg);
   border-color: var(--squisq-layout-accent-bg-hover);
 }

@@ -14,26 +14,26 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: var(--squisq-surface, #ffffff);
-  border: 1px solid var(--squisq-border, #e2e8f0);
+  background: var(--squisq-surface);
+  border: 1px solid var(--squisq-border);
   border-radius: 8px;
   overflow: hidden;
 }
 
+/* The scene canvas sits a step DEEPER than the surrounding panel so the
+   drawing surface reads as a well. Derived from the chrome palette rather
+   than pinned, so a host that retones the editor retones the canvas too. */
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-shell {
-  --squisq-surface: #0f172a;
-  --squisq-surface-raised: #111827;
-  --squisq-surface-hover: #1e293b;
-  --squisq-border: #475569;
-  --squisq-text: #f8fafc;
-  --squisq-text-muted: #94a3b8;
+  --squisq-surface: var(--squisq-surface-sunken);
+  --squisq-surface-raised: var(--squisq-surface);
+  --squisq-surface-hover: var(--squisq-surface-subtle);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-root,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-inline,
 .squisq-editor-shell[data-theme='dark'] .squisq-diagram-inline {
-  background: var(--squisq-surface, #0f172a);
-  border-color: var(--squisq-border, #475569);
+  background: var(--squisq-surface);
+  border-color: var(--squisq-border);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-layer--shape,
@@ -97,7 +97,7 @@
 }
 
 .squisq-scene-dot {
-  fill: var(--squisq-text-muted, #94a3b8);
+  fill: var(--squisq-text-muted);
   fill-opacity: 0.35;
 }
 
@@ -105,15 +105,15 @@
 
 .squisq-scene-selection-outline {
   fill: none;
-  stroke: var(--squisq-accent, #6366f1);
+  stroke: var(--squisq-accent);
   stroke-width: 1.5;
   stroke-dasharray: 4 3;
   vector-effect: non-scaling-stroke;
 }
 
 .squisq-scene-selection-handle {
-  fill: var(--squisq-surface, #ffffff);
-  stroke: var(--squisq-accent, #6366f1);
+  fill: var(--squisq-surface);
+  stroke: var(--squisq-accent);
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
 }
@@ -121,8 +121,8 @@
 /* ── Tool overlays ────────────────────────────────────────── */
 
 .squisq-scene-marquee {
-  fill: color-mix(in srgb, var(--squisq-accent, #6366f1) 12%, transparent);
-  stroke: var(--squisq-accent, #6366f1);
+  fill: color-mix(in srgb, var(--squisq-accent) 12%, transparent);
+  stroke: var(--squisq-accent);
   stroke-width: 1;
   stroke-dasharray: 4 3;
   vector-effect: non-scaling-stroke;
@@ -130,7 +130,7 @@
 
 .squisq-scene-connect-preview {
   fill: none;
-  stroke: var(--squisq-accent, #6366f1);
+  stroke: var(--squisq-accent);
   stroke-width: 2;
   stroke-dasharray: 6 4;
   vector-effect: non-scaling-stroke;
@@ -138,15 +138,15 @@
 }
 
 .squisq-scene-connection-point {
-  fill: var(--squisq-surface, #ffffff);
-  stroke: var(--squisq-accent, #6366f1);
+  fill: var(--squisq-surface);
+  stroke: var(--squisq-accent);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
 }
 
 .squisq-scene-connection-point--active {
-  fill: var(--squisq-accent, #6366f1);
+  fill: var(--squisq-accent);
 }
 
 /* ── Toolbar ──────────────────────────────────────────────── */
@@ -161,8 +161,8 @@
   flex-wrap: wrap;
   gap: 4px;
   padding: 4px;
-  background: var(--squisq-surface-raised, var(--squisq-surface, #ffffff));
-  border: 1px solid var(--squisq-border, #cbd5e1);
+  background: var(--squisq-surface-raised);
+  border: 1px solid var(--squisq-border);
   border-radius: 6px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
   max-width: calc(100% - 16px);
@@ -175,10 +175,10 @@
   min-width: 28px;
   height: 28px;
   padding: 0 8px;
-  background: var(--squisq-surface-raised, var(--squisq-surface, #ffffff));
+  background: var(--squisq-surface-raised);
   border: 1px solid transparent;
   border-radius: 4px;
-  color: var(--squisq-text, #1e293b);
+  color: var(--squisq-text);
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
@@ -187,26 +187,26 @@
 }
 
 .squisq-scene-tool:hover {
-  background: var(--squisq-surface-hover, #f1f5f9);
-  border-color: var(--squisq-border, #cbd5e1);
-  color: var(--squisq-text, #1e293b);
+  background: var(--squisq-surface-hover);
+  border-color: var(--squisq-border);
+  color: var(--squisq-text);
 }
 
 .squisq-scene-tool:focus-visible {
-  outline: 2px solid var(--squisq-accent, #6366f1);
+  outline: 2px solid var(--squisq-accent);
   outline-offset: 1px;
 }
 
 .squisq-scene-tool--active {
-  background: var(--squisq-accent, #6366f1);
-  border-color: var(--squisq-accent-hover, #4f46e5);
-  color: var(--squisq-text-on-accent, #ffffff);
+  background: var(--squisq-accent);
+  border-color: var(--squisq-accent-hover);
+  color: var(--squisq-text-on-accent);
 }
 
 .squisq-scene-tool--active:hover {
-  background: var(--squisq-accent-hover, #4f46e5);
-  border-color: var(--squisq-accent-hover, #4f46e5);
-  color: var(--squisq-text-on-accent, #ffffff);
+  background: var(--squisq-accent-hover);
+  border-color: var(--squisq-accent-hover);
+  color: var(--squisq-text-on-accent);
 }
 
 .squisq-scene-tool-label {
@@ -239,8 +239,8 @@
   flex-wrap: wrap;
   gap: 4px;
   padding: 3px;
-  background: var(--squisq-surface-raised, var(--squisq-surface, #ffffff));
-  border: 1px solid var(--squisq-border, #cbd5e1);
+  background: var(--squisq-surface-raised);
+  border: 1px solid var(--squisq-border);
   border-radius: 6px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
@@ -251,10 +251,10 @@
   gap: 4px;
   height: 28px;
   padding: 0 10px;
-  background: var(--squisq-surface-raised, var(--squisq-surface, #ffffff));
+  background: var(--squisq-surface-raised);
   border: 1px solid transparent;
   border-radius: 4px;
-  color: var(--squisq-text, #1e293b);
+  color: var(--squisq-text);
   cursor: pointer;
   font-size: 11px;
   font-weight: 600;
@@ -263,15 +263,15 @@
 }
 
 .squisq-scene-action:hover:not(:disabled) {
-  background: var(--squisq-surface-hover, #f1f5f9);
-  border-color: var(--squisq-border, #cbd5e1);
+  background: var(--squisq-surface-hover);
+  border-color: var(--squisq-border);
 }
 
 .squisq-scene-action--active,
 .squisq-scene-action--active:hover:not(:disabled) {
-  background: var(--squisq-accent, #6366f1);
-  border-color: var(--squisq-accent-hover, #4f46e5);
-  color: var(--squisq-text-on-accent, #ffffff);
+  background: var(--squisq-accent);
+  border-color: var(--squisq-accent-hover);
+  color: var(--squisq-text-on-accent);
 }
 
 .squisq-scene-action-popover-anchor {
@@ -280,7 +280,7 @@
 }
 
 .squisq-scene-action:focus-visible {
-  outline: 2px solid var(--squisq-accent, #6366f1);
+  outline: 2px solid var(--squisq-accent);
   outline-offset: 1px;
 }
 
@@ -302,55 +302,43 @@
 }
 
 .squisq-scene-action--danger {
-  color: #b91c1c;
+  color: var(--squisq-danger-strong);
 }
 
 .squisq-scene-action--danger:hover:not(:disabled) {
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #b91c1c;
+  background: var(--squisq-danger-soft);
+  border-color: var(--squisq-danger-border);
+  color: var(--squisq-danger-strong);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-toolbar,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-block-tools,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-block-actions,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-block-props {
-  background: var(--squisq-surface-raised, #111827);
-  border-color: var(--squisq-border, #475569);
-  color: var(--squisq-text, #e5e7eb);
+  background: var(--squisq-surface-raised);
+  border-color: var(--squisq-border);
+  color: var(--squisq-text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
 }
-
-.squisq-editor-shell[data-theme='dark'] .squisq-scene-tool,
-.squisq-editor-shell[data-theme='dark'] .squisq-scene-action {
-  background: var(--squisq-surface-raised, #111827);
-  color: var(--squisq-text, #e5e7eb);
-}
-
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-tool:hover,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-action:hover:not(:disabled) {
-  background: var(--squisq-surface-hover, #1f2937);
-  border-color: var(--squisq-border, #64748b);
-  color: var(--squisq-text, #f8fafc);
+  background: var(--squisq-surface-hover);
+  border-color: var(--squisq-border);
+  color: var(--squisq-text);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-tool--active,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-tool--active:hover,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-action--active,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-action--active:hover:not(:disabled) {
-  background: var(--squisq-accent, #6366f1);
-  border-color: var(--squisq-accent-hover, #818cf8);
-  color: var(--squisq-text-on-accent, #ffffff);
+  background: var(--squisq-accent);
+  border-color: var(--squisq-accent-hover);
+  color: var(--squisq-text-on-accent);
 }
-
-.squisq-editor-shell[data-theme='dark'] .squisq-scene-action--danger {
-  color: #fca5a5;
-}
-
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-action--danger:hover:not(:disabled) {
-  background: #450a0a;
-  border-color: #f87171;
-  color: #fecaca;
+  background: var(--squisq-danger-soft);
+  border-color: var(--squisq-danger);
+  color: var(--squisq-danger-strong);
 }
 
 /* Maximized overlay: a flex-filling canvas with the toolbar as a right-hand
@@ -452,10 +440,10 @@
   display: inline-flex;
   align-items: center;
   overflow: hidden;
-  border: 1px solid var(--squisq-border, #e2e8f0);
+  border: 1px solid var(--squisq-border);
   border-radius: 6px;
-  background: var(--squisq-surface, #ffffff);
-  color: var(--squisq-text, #1e293b);
+  background: var(--squisq-surface);
+  color: var(--squisq-text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
@@ -466,7 +454,7 @@
   height: 32px;
   padding: 0 8px;
   border: 0;
-  border-right: 1px solid var(--squisq-border, #e2e8f0);
+  border-right: 1px solid var(--squisq-border);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -485,25 +473,25 @@
 
 .squisq-scene-view-controls button:hover,
 .squisq-scene-view-fit[data-active='true'] {
-  background: var(--squisq-surface-hover, #f1f5f9);
+  background: var(--squisq-surface-hover);
 }
 
 .squisq-scene-view-fit[data-active='true'] {
-  background: var(--squisq-accent, #6366f1);
-  color: var(--squisq-text-on-accent, #ffffff);
+  background: var(--squisq-accent);
+  color: var(--squisq-text-on-accent);
   font-weight: 600;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-view-controls {
-  background: var(--squisq-surface-raised, #111827);
-  border-color: var(--squisq-border, #475569);
-  color: var(--squisq-text, #e5e7eb);
+  background: var(--squisq-surface-raised);
+  border-color: var(--squisq-border);
+  color: var(--squisq-text);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-view-controls button:hover,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-view-fit[data-active='true'] {
-  background: var(--squisq-accent, #6366f1);
-  color: var(--squisq-text-on-accent, #ffffff);
+  background: var(--squisq-accent);
+  color: var(--squisq-text-on-accent);
 }
 
 .squisq-scene-maximize-btn {
@@ -516,46 +504,39 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--squisq-surface-raised, var(--squisq-surface, #ffffff));
-  border: 1px solid var(--squisq-border, #cbd5e1);
+  background: var(--squisq-surface-raised);
+  border: 1px solid var(--squisq-border);
   border-radius: 6px;
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
-  color: var(--squisq-text, #1e293b);
+  color: var(--squisq-text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
 .squisq-scene-maximize-btn:hover {
-  background: var(--squisq-surface-hover, #f1f5f9);
-  border-color: var(--squisq-border, #94a3b8);
-  color: var(--squisq-text, #0f172a);
+  background: var(--squisq-surface-hover);
+  border-color: var(--squisq-border);
+  color: var(--squisq-text);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-maximize-btn {
-  background: var(--squisq-surface-raised, #111827);
-  border-color: var(--squisq-border, #475569);
-  color: var(--squisq-text, #e5e7eb);
+  background: var(--squisq-surface-raised);
+  border-color: var(--squisq-border);
+  color: var(--squisq-text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.32);
 }
-
-.squisq-editor-shell[data-theme='dark'] .squisq-scene-maximize-btn:hover {
-  background: var(--squisq-surface-hover, #1f2937);
-  border-color: var(--squisq-border, #64748b);
-  color: var(--squisq-text, #f8fafc);
-}
-
 /* ── Diagram node card (used by nodeCard.tsx) ─────────────── */
 
 .squisq-scene-node-card {
-  fill: var(--squisq-surface, #ffffff);
-  stroke: var(--squisq-text, #1e293b);
+  fill: var(--squisq-surface);
+  stroke: var(--squisq-text);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
 .squisq-scene-node-label {
-  fill: var(--squisq-text, #1e293b);
+  fill: var(--squisq-text);
   font-weight: 600;
   font-size: 22px;
   font-family:
@@ -565,34 +546,34 @@
 }
 
 .squisq-scene-node-handle {
-  fill: var(--squisq-text, #1e293b);
+  fill: var(--squisq-text);
   cursor: crosshair;
   pointer-events: all;
 }
 
 .squisq-scene-node-handle:hover {
-  fill: var(--squisq-accent, #6366f1);
+  fill: var(--squisq-accent);
 }
 
 .squisq-scene-edge-path {
   fill: none;
-  stroke: var(--squisq-text, #1e293b);
+  stroke: var(--squisq-text);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
 .squisq-scene-edge-arrow {
-  fill: var(--squisq-text, #1e293b);
+  fill: var(--squisq-text);
 }
 
 .squisq-scene-edge-marker-open {
   fill: none;
-  stroke: var(--squisq-text, #1e293b);
+  stroke: var(--squisq-text);
   stroke-width: 1.5;
 }
 
 .squisq-scene-edge-label {
-  fill: var(--squisq-text-muted, #64748b);
+  fill: var(--squisq-text-muted);
   font-size: 14px;
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
@@ -622,9 +603,9 @@
   max-height: 420px;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
-  color: #1e293b;
-  border: 1px solid #e2e8f0;
+  background: var(--squisq-surface);
+  color: var(--squisq-text);
+  border: 1px solid var(--squisq-border-subtle);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
   z-index: 30;
@@ -636,9 +617,9 @@
   box-sizing: border-box;
   padding: 6px 8px;
   margin-bottom: 6px;
-  background: #f8fafc;
+  background: var(--squisq-surface-subtle);
   color: inherit;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--squisq-border);
   border-radius: 6px;
 }
 
@@ -672,56 +653,46 @@
 }
 
 .squisq-shape-palette-item:hover {
-  background: #f1f5f9;
-  border-color: #e2e8f0;
+  background: var(--squisq-surface-hover);
+  border-color: var(--squisq-border-subtle);
 }
 
 .squisq-shape-thumb {
   fill: none;
-  stroke: #334155;
+  stroke: var(--squisq-text-soft);
   stroke-width: 1.5;
 }
 
 .squisq-shape-thumb-line {
-  stroke: #334155;
+  stroke: var(--squisq-text-soft);
   stroke-width: 1.5;
 }
 
 .squisq-shape-thumb-text {
-  fill: #334155;
+  fill: var(--squisq-text-soft);
   font-size: 22px;
   font-weight: 700;
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-shape-palette {
-  background: #111827;
-  color: #e5e7eb;
-  border-color: #475569;
+  background: var(--squisq-surface-sunken);
+  color: var(--squisq-text);
+  border-color: var(--squisq-border);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.42);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-shape-palette-search,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-prop-select {
-  background: #0f172a;
-  color: #e5e7eb;
-  border-color: #475569;
+  background: var(--squisq-surface-sunken);
+  color: var(--squisq-text);
+  border-color: var(--squisq-border);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-shape-palette-item:hover,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-prop-clear:hover {
-  background: #1f2937;
-  border-color: #64748b;
+  background: var(--squisq-surface);
+  border-color: var(--squisq-border-strong);
 }
-
-.squisq-editor-shell[data-theme='dark'] .squisq-shape-thumb,
-.squisq-editor-shell[data-theme='dark'] .squisq-shape-thumb-line {
-  stroke: #e5e7eb;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-shape-thumb-text {
-  fill: #e5e7eb;
-}
-
 /* Per-selection style controls, inline in the contextual toolbar (Fill /
    Stroke / Color swatches + connector dropdowns) — styled as a pill that
    matches the tools/actions groups. */
@@ -732,11 +703,11 @@
   align-items: center;
   gap: 8px;
   padding: 3px 8px;
-  background: var(--squisq-surface, #ffffff);
-  border: 1px solid var(--squisq-border, #cbd5e1);
+  background: var(--squisq-surface);
+  border: 1px solid var(--squisq-border);
   border-radius: 6px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-  color: #1e293b;
+  color: var(--squisq-text);
   font-size: 11px;
 }
 
@@ -758,15 +729,15 @@
   height: 22px;
   padding: 0;
   background: none;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--squisq-border);
   border-radius: 4px;
   cursor: pointer;
 }
 
 .squisq-scene-prop-select {
-  background: #f8fafc;
+  background: var(--squisq-surface-subtle);
   color: inherit;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--squisq-border);
   border-radius: 4px;
   padding: 2px 4px;
   font-size: 11px;
@@ -775,7 +746,7 @@
 .squisq-scene-prop-clear {
   font-size: 10px;
   background: none;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--squisq-border);
   color: inherit;
   border-radius: 4px;
   padding: 2px 5px;
@@ -783,14 +754,14 @@
 }
 
 .squisq-scene-prop-clear:hover {
-  background: #f1f5f9;
+  background: var(--squisq-surface-hover);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-prop-color,
 .squisq-editor-shell[data-theme='dark'] .squisq-scene-prop-clear {
-  background: #0f172a;
-  color: #e5e7eb;
-  border-color: #475569;
+  background: var(--squisq-surface-sunken);
+  color: var(--squisq-text);
+  border-color: var(--squisq-border);
 }
 
 /* ── Inline widget host (mirrors squisq-diagram-inline) ──── */
@@ -803,20 +774,20 @@
   position: relative;
   width: 100%;
   height: 420px;
-  border: 1px solid var(--squisq-border, #e2e8f0);
+  border: 1px solid var(--squisq-border);
   border-radius: 8px;
   overflow: hidden;
-  background: var(--squisq-surface, #ffffff);
+  background: var(--squisq-surface);
 }
 
 .squisq-scene-inline-placeholder {
   height: 420px;
-  border: 1px dashed var(--squisq-border, #e2e8f0);
+  border: 1px dashed var(--squisq-border);
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   font-size: 14px;
 }
 
@@ -848,12 +819,12 @@
 .squisq-scene-empty-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--squisq-text, #1e293b);
+  color: var(--squisq-text);
 }
 
 .squisq-scene-empty-hint {
   font-size: 12px;
-  color: var(--squisq-text-muted, #64748b);
+  color: var(--squisq-text-muted);
   max-width: 320px;
   line-height: 1.45;
 }
@@ -864,13 +835,13 @@
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--squisq-text-on-accent, #ffffff);
-  background: var(--squisq-accent, #6366f1);
+  color: var(--squisq-text-on-accent);
+  background: var(--squisq-accent);
   border: none;
   border-radius: 6px;
   cursor: pointer;
 }
 
 .squisq-scene-empty-btn:hover {
-  background: var(--squisq-accent-hover, #4f46e5);
+  background: var(--squisq-accent-hover);
 }

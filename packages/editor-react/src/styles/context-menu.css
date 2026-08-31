@@ -1,0 +1,82 @@
+/* Shared clipboard + host-extension menu for EditorShell text surfaces. */
+
+.squisq-editor-context-menu {
+  min-width: 210px;
+  max-width: 340px;
+  padding: 4px;
+  border: 1px solid var(--squisq-border);
+  border-radius: 8px;
+  background: var(--squisq-surface);
+  box-shadow: var(--squisq-shadow-lg);
+  color: var(--squisq-text);
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
+  font-size: 13px;
+}
+
+.squisq-editor-context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--squisq-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.squisq-editor-context-menu-item:hover:not(:disabled),
+.squisq-editor-context-menu-item:focus-visible:not(:disabled) {
+  background: var(--squisq-surface-hover);
+  color: var(--squisq-text-strong);
+  outline: none;
+}
+
+.squisq-editor-context-menu-item:disabled {
+  color: var(--squisq-text-faint);
+  cursor: default;
+}
+
+.squisq-editor-context-menu-icon {
+  display: inline-flex;
+  flex: 0 0 16px;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+}
+
+.squisq-editor-context-menu-icon > svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.squisq-editor-context-menu-label {
+  flex: 1 1 auto;
+}
+
+.squisq-editor-context-menu-shortcut {
+  flex: 0 0 auto;
+  margin-left: 18px;
+  color: var(--squisq-text-faint);
+  font-size: 11px;
+}
+
+.squisq-editor-context-menu-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--squisq-border-subtle);
+}
+
+.squisq-editor-context-menu-error {
+  max-width: 300px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--squisq-border-subtle);
+  color: var(--squisq-danger-strong);
+  font-size: 12px;
+}
