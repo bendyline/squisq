@@ -852,6 +852,17 @@ function renderHtmlNodes(
   });
 }
 
+/**
+ * Shared empty accessory set. Clearing through `clearAccessoryPaths` keeps the
+ * identity stable, so a renderer with no media provider settles in ONE render
+ * pass instead of always re-rendering once on mount — which matters because
+ * host fence renderers are invoked during render.
+ */
+const NO_ACCESSORY_PATHS: ReadonlySet<string> = new Set<string>();
+
+const clearAccessoryPaths = (prev: ReadonlySet<string>): ReadonlySet<string> =>
+  prev.size === 0 ? prev : NO_ACCESSORY_PATHS;
+
 // ── Main Component ─────────────────────────────────────────────────
 
 /**
@@ -876,10 +887,10 @@ export function MarkdownRenderer({
   // to opt a surface out under a provider).
   const ambientFenceRenderers = useFenceRenderers();
   const mediaProvider = useMediaProvider();
-  const [accessoryPaths, setAccessoryPaths] = useState<ReadonlySet<string>>(() => new Set());
+  const [accessoryPaths, setAccessoryPaths] = useState<ReadonlySet<string>>(NO_ACCESSORY_PATHS);
   useEffect(() => {
     if (!mediaProvider) {
-      setAccessoryPaths(new Set());
+      setAccessoryPaths(clearAccessoryPaths);
       return;
     }
 
@@ -889,7 +900,7 @@ export function MarkdownRenderer({
         if (!cancelled) setAccessoryPaths(new Set(entries.map((entry) => entry.name)));
       },
       () => {
-        if (!cancelled) setAccessoryPaths(new Set());
+        if (!cancelled) setAccessoryPaths(clearAccessoryPaths);
       },
     );
     return () => {
