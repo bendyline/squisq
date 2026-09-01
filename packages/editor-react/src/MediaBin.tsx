@@ -72,6 +72,15 @@ function iconForMime(mimeType: string): string {
   if (mimeType.startsWith('image/')) return '\u{1F5BC}';
   if (mimeType.startsWith('audio/')) return '\u{1F50A}';
   if (mimeType.startsWith('video/')) return '\u{1F3AC}';
+  if (
+    mimeType === 'text/csv' ||
+    mimeType === 'text/tab-separated-values' ||
+    mimeType.includes('spreadsheetml') ||
+    mimeType === 'application/vnd.ms-excel' ||
+    mimeType.includes('parquet')
+  ) {
+    return '\u{1F4CA}';
+  }
   if (mimeType.includes('json')) return '{ }';
   if (mimeType.includes('xml') || mimeType.includes('ssml')) return '\u{2329}/\u{232A}';
   return '\u{1F4C4}';

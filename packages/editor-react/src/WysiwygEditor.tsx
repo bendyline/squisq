@@ -38,6 +38,7 @@ import { MermaidDiagramExtension } from './mermaid/MermaidDiagramExtension';
 import { createMermaidThemeStore, type MermaidThemeStore } from './mermaid/mermaidThemeStore';
 import { CodeSnippetExtension } from './codeSnippet/CodeSnippetExtension';
 import { HostFenceExtension } from './fenceWidgets/HostFenceExtension';
+import { DataCardExtension } from './dataCard/DataCardExtension';
 import { fenceRendererLangs } from '@bendyline/squisq/fence';
 import { TreeViewExtension } from './treeview/TreeViewExtension';
 import { shouldPasteAsTreeFence } from './treeview/treePaste';
@@ -143,6 +144,11 @@ export interface WysiwygEditorProps {
   readOnly?: boolean;
   /** Host-controlled base text size and line spacing for the Write canvas. */
   writeCanvasSettings?: WriteCanvasSettings;
+  /**
+   * Open the shell's Files panel — the data card's "Show in Files" button.
+   * Omitted (e.g. no media provider host) hides the affordance.
+   */
+  onOpenFilesPanel?: () => void;
 }
 
 /**
@@ -155,6 +161,7 @@ export function WysiwygEditor({
   submitOnEnter,
   readOnly = false,
   writeCanvasSettings,
+  onOpenFilesPanel,
 }: WysiwygEditorProps) {
   const {
     editorSource,
@@ -247,6 +254,14 @@ export function WysiwygEditor({
   // Keep a ref so the editor's drop/paste handlers (created once) always
   // see the current MediaProvider without needing to recreate the editor.
   const mediaProviderRef = useRef(mediaProvider);
+  const mediaRevisionRef = useRef(mediaRevision);
+  useEffect(() => {
+    mediaRevisionRef.current = mediaRevision;
+  }, [mediaRevision]);
+  const onOpenFilesPanelRef = useRef(onOpenFilesPanel);
+  useEffect(() => {
+    onOpenFilesPanelRef.current = onOpenFilesPanel;
+  }, [onOpenFilesPanel]);
   useEffect(() => {
     mediaProviderRef.current = mediaProvider;
   }, [mediaProvider]);
@@ -322,6 +337,11 @@ export function WysiwygEditor({
       HostFenceExtension.configure({
         renderers: () => fenceRenderersRef.current ?? undefined,
         theme: () => activeThemeRef.current ?? undefined,
+      }),
+      DataCardExtension.configure({
+        mediaProvider: () => mediaProviderRef.current,
+        mediaRevision: () => mediaRevisionRef.current ?? 0,
+        onOpenFiles: () => onOpenFilesPanelRef.current?.(),
       }),
       RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
       TimelineViewExtension,

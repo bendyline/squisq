@@ -10,8 +10,10 @@
  * - **Container first.** When a format defines `importContainer`, that path
  *   wins over `importDoc`: the container carries the document's extracted media
  *   alongside the markdown, so an imported DOCX/PPTX keeps its images instead
- *   of leaving dangling links. Formats with no media to extract (XLSX, CSV,
- *   HTML — which inlines images as data URIs) only offer `importDoc`.
+ *   of leaving dangling links, and an imported XLSX/CSV keeps its original
+ *   bytes as a `_files/data/` sidecar when the data spills past the inline
+ *   thresholds. HTML (which inlines images as data URIs) only offers
+ *   `importDoc`.
  * - **Staged progress.** Office imports are slow enough (pdfjs parse, OOXML
  *   unzip, region detection) that a silent multi-second freeze reads as a
  *   broken button, so the conversion reports stages the caller can render.
@@ -62,6 +64,8 @@ export const IMPORTABLE_DOCUMENT_EXTENSIONS = [
   'xlsx',
   'pdf',
   'csv',
+  'tsv',
+  'parquet',
   'html',
   'htm',
   'zip',
@@ -120,8 +124,29 @@ export async function importDocumentFile(
 
   report('reading', ext.toUpperCase());
 
+  // Parquet has no registry importer yet: synthesize the sidecar container
+  // directly (the CSV-open-as-document shape — the file IS the content).
+  if (ext === 'parquet') {
+    const buffer = await readFileBytes(file);
+    report('converting', 'Parquet');
+    const [{ planDataSidecar, sidecarReferenceMarkdown }, { MemoryContentContainer }] =
+      await Promise.all([
+        import('@bendyline/squisq-formats/data'),
+        import('@bendyline/squisq/storage'),
+      ]);
+    const plan = planDataSidecar(file.name, 'data.parquet');
+    const container = new MemoryContentContainer();
+    const markdown = sidecarReferenceMarkdown(plan);
+    await container.writeDocument(markdown, plan.markdownFilename);
+    await container.writeFile(plan.sidecarPath, buffer, 'application/vnd.apache.parquet');
+    report('finishing', 'Parquet');
+    return { markdown, container, formatLabel: 'Parquet' };
+  }
+
   const { defaultRegistry } = await import('@bendyline/squisq-formats/registry');
-  const definition = defaultRegistry().byExtension(ext);
+  // `.tsv` rides the CSV importer with a tab delimiter; the registry keeps
+  // only `.csv` so export-by-extension semantics stay untouched.
+  const definition = defaultRegistry().byExtension(ext === 'tsv' ? 'csv' : ext);
   if (!definition || (!definition.importContainer && !definition.importDoc)) {
     throw new Error(`No importer is registered for .${ext} files.`);
   }
@@ -134,14 +159,28 @@ export async function importDocumentFile(
   const buffer = await readFileBytes(file);
   report('converting', formatLabel);
 
+  // Data imports thread the source file name through so the container's doc
+  // and `_files/data/` sidecar are named for the upload. Opening a CSV/TSV
+  // always sidecars (the file is the content); XLSX keeps the size threshold.
+  const importOptions = {
+    formatOptions: {
+      xlsx: { sourceName: file.name },
+      csv: {
+        sourceName: file.name,
+        ...(ext === 'tsv' ? { delimiter: '\t' } : {}),
+        ...(ext === 'csv' || ext === 'tsv' ? { sidecar: 'always' as const } : {}),
+      },
+    },
+  };
+
   if (definition.importContainer) {
-    const container = await definition.importContainer(buffer, {});
+    const container = await definition.importContainer(buffer, importOptions);
     report('finishing', formatLabel);
     return { markdown: (await container.readDocument()) ?? '', container, formatLabel };
   }
 
   // importDoc is guaranteed present by the capability guard above.
-  const markdownDoc = await definition.importDoc!(buffer, {});
+  const markdownDoc = await definition.importDoc!(buffer, importOptions);
   report('finishing', formatLabel);
   const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
   return { markdown: stringifyMarkdown(markdownDoc), container: null, formatLabel };

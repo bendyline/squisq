@@ -207,6 +207,7 @@ export type {
 
 export {
   partitionFiles,
+  processDataFiles,
   processMediaFiles,
   processTextFile,
   processTextFiles,
@@ -486,6 +487,25 @@ export {
   containFenceWidgetEvents,
   FENCE_WIDGET_CONTAINED_EVENTS,
 } from './fenceWidgets/fenceWidgetHost.js';
+
+// Data cards — the Write-view "rectangle" for `{[dataTable src=…]}` sidecar
+// references: a paragraph that is entirely one link to a relative data file
+// (csv/tsv/xlsx/parquet) renders as a read-only summary card. The paragraph
+// stays the source of truth, so markdown round-trips untouched.
+export {
+  DataCardExtension,
+  DATA_CARD_KEY,
+  dataLinkHrefOf,
+  findDataCardBlockPos,
+} from './dataCard/DataCardExtension.js';
+export type {
+  DataCardBlockEntry,
+  DataCardExtensionOptions,
+  DataCardPluginState,
+} from './dataCard/DataCardExtension.js';
+export { DataCardWidget } from './dataCard/DataCardWidget.js';
+export { loadDataPreview, dataExtensionOf } from './dataCard/dataPreview.js';
+export type { DataPreview } from './dataCard/dataPreview.js';
 
 // Timeline editor — authored marker-rail fences become an accessible canvas
 // with add-point affordances and a selected-point inspector. Semantic edits

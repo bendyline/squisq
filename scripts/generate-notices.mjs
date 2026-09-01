@@ -109,7 +109,7 @@ const configs = {
     heading: 'Runtime and generated-data dependencies',
     bundled: ['@fortawesome/fontawesome-free'],
   },
-  formats: { heading: 'Runtime dependencies' },
+  formats: { heading: 'Runtime and peer dependencies', peers: true },
   react: {
     heading: 'Runtime, peer, and bundled dependencies',
     bundled: ['preact'],

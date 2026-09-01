@@ -8,6 +8,7 @@ export default defineConfig({
     'pptx/index': 'src/pptx/index.ts',
     'xlsx/index': 'src/xlsx/index.ts',
     'csv/index': 'src/csv/index.ts',
+    'data/index': 'src/data/index.ts',
     'ooxml/index': 'src/ooxml/index.ts',
     'pdf/index': 'src/pdf/index.ts',
     'html/index': 'src/html/index.ts',
@@ -22,5 +23,12 @@ export default defineConfig({
   sourcemap: false,
   clean: true,
   esbuildPlugins: [bundleLicenseMetadata(import.meta.dirname, 'esm')],
-  external: ['@bendyline/squisq', '@pdf-lib/fontkit', 'jszip', 'pdf-lib', 'pdfjs-dist'],
+  external: [
+    '@bendyline/squisq',
+    '@pdf-lib/fontkit',
+    'jszip',
+    'pdf-lib',
+    'pdfjs-dist',
+    'hyparquet',
+  ],
 });

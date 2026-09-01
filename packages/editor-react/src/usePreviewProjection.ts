@@ -7,10 +7,33 @@
 
 import { useEffect, useState } from 'react';
 import type { AudioTrack, Doc } from '@bendyline/squisq/schemas';
-import { resolveAudioMapping } from '@bendyline/squisq/doc';
+import { resolveAudioMapping, resolveDataReferences } from '@bendyline/squisq/doc';
 import { applyTransform } from '@bendyline/squisq/transform';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { buildPreviewDoc } from './buildPreviewDoc';
+
+/** Preview window size for `{[dataTable src=…]}` sidecar references. */
+const DATA_PREVIEW_ROWS = 50;
+
+/**
+ * Fill `{[dataTable src=…]}` sidecar references with bounded previews.
+ * The readers live in `@bendyline/squisq-formats` and are loaded lazily —
+ * a document with no data references costs nothing. Any failure (module
+ * load, file read, parse) falls back to the input doc: the body link still
+ * renders, matching the resolver's own never-throw contract.
+ */
+async function resolveDataPreviews(doc: Doc, container: ContentContainer): Promise<Doc> {
+  try {
+    const { defaultDataReaders } = await import('@bendyline/squisq-formats/data');
+    const resolved = await resolveDataReferences(doc, container, {
+      readers: defaultDataReaders(),
+      maxPreviewRows: DATA_PREVIEW_ROWS,
+    });
+    return resolved.doc;
+  } catch {
+    return doc;
+  }
+}
 
 export interface PreviewProjection {
   /** Transformed content model shared by Page and Document. */
@@ -56,6 +79,11 @@ export function usePreviewProjection(
   transformStyle: string,
   workspaceContainer?: ContentContainer | null,
   documentTitle?: string,
+  /**
+   * Bump to re-run container discovery (audio + data previews) without a
+   * document change — e.g. after a sidecar file is re-uploaded.
+   */
+  mediaRevision?: number,
 ): PreviewProjection | null {
   const [projection, setProjection] = useState<PreviewProjection | null>(null);
 
@@ -93,16 +121,20 @@ export function usePreviewProjection(
     if (workspaceContainer) {
       let cancelled = false;
       const immediate = build(doc);
-      resolveAudioMapping(doc, workspaceContainer).then(
-        (audioDoc) => {
-          if (!cancelled) commit(build(audioDoc));
-        },
-        () => {
-          // Fall back to the immediate projection if optional audio discovery
-          // fails. Consume the rejection rather than leaking it.
-          if (!cancelled) commit(immediate);
-        },
-      );
+      resolveAudioMapping(doc, workspaceContainer)
+        // Data-reference previews resolve after audio (independent steps;
+        // resolveDataPreviews falls back to its input on any failure).
+        .then((audioDoc) => resolveDataPreviews(audioDoc, workspaceContainer))
+        .then(
+          (resolvedDoc) => {
+            if (!cancelled) commit(build(resolvedDoc));
+          },
+          () => {
+            // Fall back to the immediate projection if optional audio discovery
+            // fails. Consume the rejection rather than leaking it.
+            if (!cancelled) commit(immediate);
+          },
+        );
       // Audio discovery is authoritative for workspace previews. On first
       // projection show the un-timed build immediately rather than an empty
       // pane; on re-parses keep the previous (narration-timed) projection on
@@ -119,7 +151,7 @@ export function usePreviewProjection(
     }
 
     commit(build(doc));
-  }, [doc, transformStyle, workspaceContainer, documentTitle]);
+  }, [doc, transformStyle, workspaceContainer, documentTitle, mediaRevision]);
 
   return projection;
 }

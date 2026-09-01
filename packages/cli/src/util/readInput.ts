@@ -29,7 +29,7 @@ import {
 } from 'node:path';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
-import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
+import { markdownToDoc, resolveAudioMapping, resolveDataReferences } from '@bendyline/squisq/doc';
 import { resolveMediaSchedule, validateDocSchema } from '@bendyline/squisq/schemas';
 import type { Doc, DocDiagnostic, DocSchemaIssue } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -175,7 +175,15 @@ export async function readInput(
   // (`{[audio src=… anchor=document]}` + timing sidecar) re-times the
   // block timeline, and per-block audio files map into segments — so
   // `squisq convert`/`video` exports pace exactly like the editor preview.
-  const doc = await resolveAudioMapping(result.doc, result.container);
+  const audioDoc = await resolveAudioMapping(result.doc, result.container);
+  throwIfAborted(options?.signal);
+  // Data sidecars ride in the container too: `{[dataTable src=…]}` blocks
+  // resolve to bounded table previews, matching the editor preview. Failures
+  // degrade to diagnostics inside the resolver, never a throw.
+  const { defaultDataReaders } = await import('@bendyline/squisq-formats/data');
+  const { doc } = await resolveDataReferences(audioDoc, result.container, {
+    readers: defaultDataReaders(),
+  });
   throwIfAborted(options?.signal);
   assertValidDoc(doc, inputPath);
   return doc === result.doc ? result : { ...result, doc };

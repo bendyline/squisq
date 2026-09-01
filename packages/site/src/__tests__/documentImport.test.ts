@@ -31,8 +31,14 @@ describe('the advertised extension list', () => {
   // without loading the formats package. This is what keeps it honest.
   it('names only formats the registry can actually import', () => {
     const registry = defaultRegistry();
+    // Two entries are special-cased in importDocumentFile rather than
+    // registry-resolved: `.tsv` rides the CSV importer with a tab delimiter,
+    // and `.parquet` synthesizes a sidecar container directly.
+    const SPECIAL_CASED: Record<string, string | null> = { tsv: 'csv', parquet: null };
     for (const ext of IMPORTABLE_DOCUMENT_EXTENSIONS) {
-      const definition = registry.byExtension(ext);
+      const resolved = SPECIAL_CASED[ext] === undefined ? ext : SPECIAL_CASED[ext];
+      if (resolved === null) continue;
+      const definition = registry.byExtension(resolved);
       expect(definition, ext).toBeDefined();
       expect(Boolean(definition?.importContainer ?? definition?.importDoc), ext).toBe(true);
     }
@@ -68,13 +74,48 @@ describe('importDocumentFile', () => {
     expect(result.markdown).toContain('North');
     expect(result.markdown).toContain('120');
     expect(result.formatLabel).toBe('Excel (XLSX)');
-    // XLSX has no embedded media to extract, so there is no container to
-    // adopt as the editor's workspace.
-    expect(result.container).toBeNull();
+    // XLSX imports container-first now (data sidecars); a small workbook's
+    // container holds just the converted doc — no sidecar spilled.
+    expect(result.container).not.toBeNull();
+    expect(await result.container!.getDocumentPath()).toBe('sales.md');
+    expect((await result.container!.listFiles()).map((f) => f.path)).toEqual(['sales.md']);
     expect(stages.map((stage) => stage.stage)).toEqual(['reading', 'converting', 'finishing']);
     const last = stages[stages.length - 1];
     expect(last?.fileName).toBe('sales.xlsx');
     expect(last?.formatLabel).toBe('Excel (XLSX)');
+  });
+
+  it('always sidecars an opened CSV (the file is the content)', async () => {
+    const csv = 'Region,Total\nNorth,120\nSouth,95\n';
+
+    const result = await importDocumentFile(new File([csv], 'Q3 Sales.csv'));
+
+    expect(result.container).not.toBeNull();
+    expect(result.markdown).toContain('{[dataTable src=');
+    expect(result.markdown).toContain('q3-sales\\_files/data/Q3 Sales.csv');
+    const sidecar = await result.container!.readFile('q3-sales_files/data/Q3 Sales.csv');
+    expect(new TextDecoder().decode(sidecar!)).toBe(csv);
+  });
+
+  it('routes .tsv through the CSV importer with a tab delimiter', async () => {
+    const tsv = 'Region\tTotal\nNorth\t120\n';
+
+    const result = await importDocumentFile(new File([tsv], 'sales.tsv'));
+
+    expect(result.formatLabel).toBe('CSV');
+    expect(result.container).not.toBeNull();
+    expect(await result.container!.exists('sales_files/data/sales.tsv')).toBe(true);
+  });
+
+  it('synthesizes a sidecar container for parquet (no registry importer)', async () => {
+    const bytes = new Uint8Array([80, 65, 82, 49]); // not a real file; synthesis never parses
+
+    const result = await importDocumentFile(new File([bytes], 'metrics.parquet'));
+
+    expect(result.formatLabel).toBe('Parquet');
+    expect(result.markdown).toContain('{[dataTable src=');
+    expect(await result.container!.exists('metrics_files/data/metrics.parquet')).toBe(true);
+    expect(await result.container!.getDocumentPath()).toBe('metrics.md');
   });
 
   it('keeps the container for formats that extract media', async () => {

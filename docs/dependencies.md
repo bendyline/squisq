@@ -200,17 +200,17 @@ proposal in `specs/` rather than a direct dependency change.
 
 ## Per-package constraints
 
-| Package        | Constraint                                                                                            |
-| -------------- | ----------------------------------------------------------------------------------------------------- |
-| `core`         | **Zero framework dependencies and no Node-specific dependencies.** Must run in a browser and in Node. |
-| `formats`      | jszip, pdf-lib, pdfjs-dist; uses core's `MarkdownDocument` as the pivot format                        |
-| `react`        | Targets standard React; consumers may alias `preact/compat`                                           |
-| `editor-react` | `@tiptap` and `monaco-editor` are **peer** dependencies; `harper.js` is an **optional** peer          |
-| `video`        | Browser-pure, no Node deps                                                                            |
-| `video-react`  | `@bendyline/squisq-video`, `mp4-muxer`, `html2canvas`                                                 |
-| `cli`          | `commander` + `playwright-core`                                                                       |
+| Package        | Constraint                                                                                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `core`         | **Zero framework dependencies and no Node-specific dependencies.** Must run in a browser and in Node.                                     |
+| `formats`      | jszip, pdf-lib, pdfjs-dist; `hyparquet` is an **optional** peer (dynamic import only); uses core's `MarkdownDocument` as the pivot format |
+| `react`        | Targets standard React; consumers may alias `preact/compat`                                                                               |
+| `editor-react` | `@tiptap` and `monaco-editor` are **peer** dependencies; `harper.js` is an **optional** peer                                              |
+| `video`        | Browser-pure, no Node deps                                                                                                                |
+| `video-react`  | `@bendyline/squisq-video`, `mp4-muxer`, `html2canvas`                                                                                     |
+| `cli`          | `commander` + `playwright-core`                                                                                                           |
 
-**Optional peers** (`harper.js`, `@ffmpeg/*`) are reached only through a dynamic
+**Optional peers** (`harper.js`, `@ffmpeg/*`, `hyparquet`) are reached only through a dynamic
 import, so a consumer that does not want the feature ships zero bytes of it.
 That contract is enforced by `tests/published/harperOptionalPeer.test.ts`: no
 static import in any dist JavaScript, no mention in any published declaration,

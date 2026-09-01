@@ -19,7 +19,10 @@ import type {
   MarkdownTableCell,
   MarkdownTableRow,
 } from '@bendyline/squisq/markdown';
+import { stringifyMarkdown } from '@bendyline/squisq/markdown';
 import type { Doc } from '@bendyline/squisq/schemas';
+import { MemoryContentContainer, type ContentContainer } from '@bendyline/squisq/storage';
+import { planDataSidecar, sidecarReferenceDoc } from '../data/sidecar.js';
 
 export interface CsvImportOptions {
   /** Field delimiter. Default `,`. */
@@ -34,6 +37,28 @@ export interface CsvImportOptions {
   maxFieldChars?: number;
   /** Cancel during parsing checkpoints. */
   signal?: AbortSignal;
+  /**
+   * Sidecar spill mode — only honored by `csvToContainer`, which can actually
+   * write the sidecar file. `'auto'` (default) spills past the inline
+   * thresholds; `'always'` always sidecars (the CSV-open-as-document mode:
+   * opening a data file means the FILE is the content); `'never'` keeps the
+   * inline table (`csvToMarkdownDoc`'s only behavior).
+   */
+  sidecar?: 'auto' | 'always' | 'never';
+  /** Max data rows kept inline before spilling (container import). Default 100. */
+  maxInlineRows?: number;
+  /** Max source bytes kept inline before spilling (container import). Default 256 KiB. */
+  maxInlineBytes?: number;
+}
+
+/** Options for {@link csvToContainer}. */
+export interface CsvContainerOptions extends CsvImportOptions {
+  /**
+   * Source file name (e.g. `'Q3 Transactions.csv'`) — names the document
+   * (`q3-transactions.md`) and the sidecar path
+   * (`q3-transactions_files/data/Q3 Transactions.csv`). Default `'data.csv'`.
+   */
+  sourceName?: string;
 }
 
 export interface CsvExportOptions {
@@ -203,6 +228,56 @@ export async function csvToDoc(
   options: CsvImportOptions = {},
 ): Promise<Doc> {
   return markdownToDoc(await csvToMarkdownDoc(data, options));
+}
+
+/**
+ * Import a CSV into a ContentContainer: the markdown document plus, when the
+ * data crosses the inline thresholds (or `sidecar: 'always'`), the ORIGINAL
+ * bytes as a `<docbasename>_files/data/<name>` sidecar referenced via
+ * `{[dataTable src=…]}` with a body link.
+ *
+ * Below the thresholds the markdown is byte-identical to `csvToMarkdownDoc`'s
+ * output and no sidecar is written.
+ */
+export async function csvToContainer(
+  data: ArrayBuffer | Blob | string,
+  options: CsvContainerOptions = {},
+): Promise<ContentContainer> {
+  const plan = planDataSidecar(options.sourceName, 'data.csv');
+  const mode = options.sidecar ?? 'auto';
+  const text = (await toText(data)).replace(/^\uFEFF/, '');
+  const maxInlineRows = options.maxInlineRows ?? 100;
+  const maxInlineBytes = options.maxInlineBytes ?? 256 * 1024;
+
+  const originalBytes: ArrayBuffer =
+    typeof data === 'string'
+      ? (new TextEncoder().encode(data).buffer as ArrayBuffer)
+      : data instanceof Blob
+        ? await data.arrayBuffer()
+        : data;
+
+  // Size checks stay parse-free: byte length, then a newline count (an
+  // over-estimate when fields embed newlines, which only errs toward
+  // spilling). Parsing a file that is about to spill anyway would trip the
+  // parser's own safety caps on exactly the large inputs this path exists for.
+  let spillNeeded = mode === 'always';
+  if (!spillNeeded && mode === 'auto') {
+    const hasHeader = options.hasHeader ?? true;
+    const lineCount = (text.match(/\n/g) ?? []).length + (text.endsWith('\n') || !text ? 0 : 1);
+    const dataRows = Math.max(lineCount - (hasHeader ? 1 : 0), 0);
+    spillNeeded = originalBytes.byteLength > maxInlineBytes || dataRows > maxInlineRows;
+  }
+
+  const markdownDoc = spillNeeded
+    ? sidecarReferenceDoc(plan)
+    : await csvToMarkdownDoc(text, options);
+
+  const container = new MemoryContentContainer();
+  await container.writeDocument(stringifyMarkdown(markdownDoc), plan.markdownFilename);
+  if (spillNeeded) {
+    await container.writeFile(plan.sidecarPath, originalBytes, 'text/csv');
+  }
+  return container;
 }
 
 function escapeCsvField(value: string, delimiter: string): string {

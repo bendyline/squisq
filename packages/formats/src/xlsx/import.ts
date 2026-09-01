@@ -59,6 +59,9 @@ import {
 } from './cells.js';
 import { detectRegions, sliceRect, type StrayCell } from './regions.js';
 import { type XlsxTable, type XlsxTablesOptions, gridToTables } from './tables.js';
+import { stringifyMarkdown } from '@bendyline/squisq/markdown';
+import { MemoryContentContainer, type ContentContainer } from '@bendyline/squisq/storage';
+import { planDataSidecar } from '../data/sidecar.js';
 
 /** Conventional main part path; the root `officeDocument` rel wins when present. */
 const XLSX_MAIN_PART = 'xl/workbook.xml';
@@ -81,6 +84,42 @@ export interface XlsxImportOptions extends OoxmlOpenOptions {
   maxRegionsPerSheet?: number;
   /** Smallest island that stays a table of its own. Default 2 — single cells coalesce. */
   minRegionCells?: number;
+  /**
+   * Sidecar spill mode — only honored by `xlsxToContainer`, which can actually
+   * write the sidecar file the reference points at. `'auto'` (default) spills a
+   * region past the inline thresholds to a `{[dataTable src=…]}` reference;
+   * `'always'` spills every region; `'never'` keeps everything inline
+   * (`xlsxToMarkdownDoc`'s only behavior — a doc-only import has nowhere to
+   * put the bytes, and a `src` with no sidecar is a broken reference).
+   */
+  sidecar?: 'auto' | 'always' | 'never';
+  /** Max data rows a region keeps inline before spilling (container import). Default 100. */
+  maxInlineRows?: number;
+  /** Max cells a region keeps inline before spilling (container import). Default 2000. */
+  maxInlineCells?: number;
+}
+
+/** Options for {@link xlsxToContainer}. */
+export interface XlsxContainerOptions extends XlsxImportOptions {
+  /**
+   * Source file name (e.g. `'Q3 Report.xlsx'`) — names the document
+   * (`q3-report.md`) and the sidecar path
+   * (`q3-report_files/data/Q3 Report.xlsx`). Default `'workbook.xlsx'`.
+   */
+  sourceName?: string;
+}
+
+/** Spill state threaded through one container import. */
+interface SpillConfig {
+  /** Container path the `src` param references. */
+  src: string;
+  /** Sidecar file name, for body link text. */
+  fileName: string;
+  mode: 'auto' | 'always';
+  maxInlineRows: number;
+  maxInlineCells: number;
+  /** Set when at least one region spilled — the sidecar must be written. */
+  used: boolean;
 }
 
 interface SheetRef {
@@ -91,6 +130,13 @@ interface SheetRef {
 interface WorkbookInfo {
   sheets: SheetRef[];
   date1904: boolean;
+  /**
+   * `<calcPr fullCalcOnLoad="1"/>` — the producer telling Excel the cached
+   * formula values in this file are NOT to be trusted and must be recomputed
+   * on open. A cached-value oracle must exclude such files; squisq's own
+   * exporter sets it unconditionally on formula workbooks.
+   */
+  fullCalcOnLoad: boolean;
 }
 
 interface CellStyle {
@@ -131,9 +177,12 @@ async function readWorkbook(pkg: OoxmlPackage, mainPart: string): Promise<Workbo
   }
   const workbookPr = wb.getElementsByTagNameNS(NS_SML, 'workbookPr')[0];
   const date1904Value = workbookPr?.getAttribute('date1904');
+  const calcPr = wb.getElementsByTagNameNS(NS_SML, 'calcPr')[0];
+  const fullCalcValue = calcPr?.getAttribute('fullCalcOnLoad');
   return {
     sheets: out,
     date1904: date1904Value === '1' || date1904Value === 'true',
+    fullCalcOnLoad: fullCalcValue === '1' || fullCalcValue === 'true',
   };
 }
 
@@ -699,9 +748,103 @@ export async function xlsxToTables(
   return out;
 }
 
+/** One worksheet's raw cell grid, as parsed (formulas + cached values intact). */
+export interface XlsxSheetGrid {
+  name: string;
+  /** Row-major grid; rows may be ragged. Each cell keeps `formula` AND `value`. */
+  cells: XlsxCell[][];
+  merges: CellRect[];
+}
+
+/** A workbook as raw cell grids, plus the workbook-level calc facts. */
+export interface XlsxWorkbookGrids {
+  sheets: XlsxSheetGrid[];
+  date1904: boolean;
+  /**
+   * `<calcPr fullCalcOnLoad="1"/>`: the producer disowned its cached formula
+   * values. A cached-value oracle must skip such workbooks, and a consumer
+   * re-hosting the formulas in a calculation engine should recompute rather
+   * than trust `value`.
+   */
+  fullCalcOnLoad: boolean;
+}
+
+/**
+ * Read a workbook as raw cell grids — the lowest-level public view.
+ *
+ * Unlike {@link xlsxToTables} (typed regions, formulas dropped) and
+ * {@link xlsxToMarkdownDoc} (rendered for people), this hands over every
+ * parsed cell with its formula and cached value colocated. Two consumers:
+ * the corpus cached-value oracle (compare `formula` results against `value`)
+ * and calculation-engine feeding (`setUserInput`-style APIs need the raw
+ * grid, not a detected region).
+ */
+export async function xlsxToCellGrids(
+  data: ArrayBuffer | Blob,
+  options: XlsxImportOptions = {},
+): Promise<XlsxWorkbookGrids> {
+  const pkg = await openPackage(data, options);
+  const mainPart = requireMainPartPath(pkg, XLSX_MAIN_PART, 'XLSX');
+  const [{ sheets, date1904, fullCalcOnLoad }, shared, styles] = await Promise.all([
+    readWorkbook(pkg, mainPart),
+    readSharedStrings(pkg),
+    readCellStyles(pkg),
+  ]);
+
+  let selected = sheets;
+  if (options.sheet !== undefined) {
+    const picked =
+      typeof options.sheet === 'number'
+        ? sheets[options.sheet]
+        : sheets.find((s) => s.name === options.sheet);
+    selected = picked ? [picked] : [];
+  }
+
+  const out: XlsxSheetGrid[] = [];
+  for (const sheet of selected) {
+    const { cells, merges } = await sheetToCells(pkg, sheet.path, shared, styles, date1904);
+    out.push({ name: sheet.name, cells, merges });
+  }
+  return { sheets: out, date1904, fullCalcOnLoad };
+}
+
 export async function xlsxToMarkdownDoc(
   data: ArrayBuffer | Blob,
   options: XlsxImportOptions = {},
+): Promise<MarkdownDocument> {
+  return workbookToMarkdown(data, options, undefined);
+}
+
+/** True when a region's size crosses the inline thresholds. */
+function shouldSpillRegion(spill: SpillConfig, rect: CellRect, hasHeader: boolean): boolean {
+  if (spill.mode === 'always') return true;
+  const height = rect.bottom - rect.top + 1;
+  const width = rect.right - rect.left + 1;
+  const dataRows = height - (hasHeader ? 1 : 0);
+  return dataRows > spill.maxInlineRows || height * width > spill.maxInlineCells;
+}
+
+/** Whole-grid variant of {@link shouldSpillRegion} for the non-region paths. */
+function shouldSpillGrid(spill: SpillConfig, cells: readonly (readonly XlsxCell[])[]): boolean {
+  if (spill.mode === 'always') return true;
+  const width = cells.reduce((max, row) => Math.max(max, row.length), 0);
+  return cells.length - 1 > spill.maxInlineRows || cells.length * width > spill.maxInlineCells;
+}
+
+/** The graceful-degradation body link under a spilled reference heading. */
+function sidecarLinkParagraph(spill: SpillConfig): MarkdownBlockNode {
+  return {
+    type: 'paragraph',
+    children: [
+      { type: 'link', url: spill.src, children: [{ type: 'text', value: spill.fileName }] },
+    ],
+  };
+}
+
+async function workbookToMarkdown(
+  data: ArrayBuffer | Blob,
+  options: XlsxImportOptions,
+  spill: SpillConfig | undefined,
 ): Promise<MarkdownDocument> {
   const pkg = await openPackage(data, options);
   const mainPart = requireMainPartPath(pkg, XLSX_MAIN_PART, 'XLSX');
@@ -733,6 +876,14 @@ export async function xlsxToMarkdownDoc(
     if (cells.length === 0) continue;
 
     if (!useRegions) {
+      if (spill && shouldSpillGrid(spill, cells)) {
+        children.push(
+          annotatedHeading(single ? 1 : 2, sheet.name, { src: spill.src, sheet: sheet.name }),
+          sidecarLinkParagraph(spill),
+        );
+        spill.used = true;
+        continue;
+      }
       children.push(cellsToTable(cells));
       continue;
     }
@@ -748,6 +899,14 @@ export async function xlsxToMarkdownDoc(
     // still imports, just as one grid instead of several tables.
     for (const warning of plan.warnings) console.warn(`XLSX import: ${sheet.name}: ${warning}`);
     if (plan.degraded || (plan.regions.length === 0 && plan.strays.length === 0)) {
+      if (spill && shouldSpillGrid(spill, cells)) {
+        children.push(
+          annotatedHeading(single ? 1 : 2, sheet.name, { src: spill.src, sheet: sheet.name }),
+          sidecarLinkParagraph(spill),
+        );
+        spill.used = true;
+        continue;
+      }
       children.push(cellsToTable(cells));
       continue;
     }
@@ -757,6 +916,29 @@ export async function xlsxToMarkdownDoc(
       const slice = sliceRect(cells, region.rect, EMPTY_CELL);
       const anchor = formatCellRef(region.rect.top, region.rect.left);
       const title = region.title ?? `${sheet.name} — ${anchor}`;
+      const hasHeaderRow = inferHeader(slice);
+
+      if (spill && shouldSpillRegion(spill, region.rect, hasHeaderRow)) {
+        // An oversized region becomes a reference into the sidecar workbook:
+        // same sheet/anchor vocabulary, plus `src` naming the file. Formulas
+        // stay intact inside the sidecar itself, so no `role=formulas`
+        // companion is emitted for a spilled region.
+        children.push(
+          annotatedHeading(depth, title, {
+            src: spill.src,
+            sheet: sheet.name,
+            anchor,
+            ...(hasHeaderRow ? {} : { headerRow: 'false' }),
+            ...(region.titleCell
+              ? { titleAnchor: formatCellRef(region.titleCell.row, region.titleCell.col) }
+              : {}),
+          }),
+          sidecarLinkParagraph(spill),
+        );
+        spill.used = true;
+        continue;
+      }
+
       children.push(
         annotatedHeading(depth, title, {
           sheet: sheet.name,
@@ -765,7 +947,7 @@ export async function xlsxToMarkdownDoc(
           // says. (`headerRow`, not `header` — `dataTable` already declares a
           // `headers` input, and two params one letter apart in the same
           // annotation is a trap for anyone reading or editing the markdown.)
-          ...(inferHeader(slice) ? {} : { headerRow: 'false' }),
+          ...(hasHeaderRow ? {} : { headerRow: 'false' }),
           // A caption promoted into the heading has left its cell behind;
           // record where, so the reverse path can put the text back.
           ...(region.titleCell
@@ -799,4 +981,44 @@ export async function xlsxToMarkdownDoc(
     }
   }
   return { type: 'document', children };
+}
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/**
+ * Import a workbook into a ContentContainer: the markdown document plus, when
+ * a region crossed the inline thresholds (or `sidecar: 'always'`), the
+ * ORIGINAL workbook bytes as a `<docbasename>_files/data/<name>` sidecar that
+ * spilled regions reference via `{[dataTable src=… sheet=… anchor=…]}`.
+ *
+ * Small regions emit byte-identically to `xlsxToMarkdownDoc` — the historical
+ * round-trip contract is untouched below the thresholds, and with
+ * `sidecar: 'never'` the container is just the doc-only import in a box.
+ */
+export async function xlsxToContainer(
+  data: ArrayBuffer | Blob,
+  options: XlsxContainerOptions = {},
+): Promise<ContentContainer> {
+  const plan = planDataSidecar(options.sourceName, 'workbook.xlsx');
+  const mode = options.sidecar ?? 'auto';
+  const spill: SpillConfig | undefined =
+    mode === 'never'
+      ? undefined
+      : {
+          src: plan.sidecarPath,
+          fileName: plan.fileName,
+          mode,
+          maxInlineRows: options.maxInlineRows ?? 100,
+          maxInlineCells: options.maxInlineCells ?? 2000,
+          used: false,
+        };
+
+  const markdownDoc = await workbookToMarkdown(data, options, spill);
+  const container = new MemoryContentContainer();
+  await container.writeDocument(stringifyMarkdown(markdownDoc), plan.markdownFilename);
+  if (spill?.used) {
+    const bytes = data instanceof Blob ? await data.arrayBuffer() : data;
+    await container.writeFile(plan.sidecarPath, bytes, XLSX_MIME);
+  }
+  return container;
 }

@@ -34,7 +34,19 @@ const MEDIA_EXTENSIONS = new Set([
 
 const TEXT_EXTENSIONS = new Set(['md', 'txt', 'docx']);
 
-export type FileCategory = 'media' | 'text' | 'unknown';
+/** Sidecar data files: stored under `<docbasename>_files/data/` and inserted
+ *  as `{[dataTable src=…]}` reference blocks rather than media or text. */
+const DATA_EXTENSIONS = new Set(['csv', 'tsv', 'xlsx', 'parquet']);
+
+const DATA_MIME_TYPES = new Set([
+  'text/csv',
+  'text/tab-separated-values',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.apache.parquet',
+]);
+
+export type FileCategory = 'media' | 'text' | 'data' | 'unknown';
 export type DragContentType = 'media' | 'text' | 'mixed' | null;
 export type DropTarget = 'media' | 'insert' | 'replace';
 
@@ -47,6 +59,7 @@ export function classifyFile(file: { name: string; type: string }): FileCategory
   const ext = extensionOf(file.name);
   if (MEDIA_EXTENSIONS.has(ext)) return 'media';
   if (TEXT_EXTENSIONS.has(ext)) return 'text';
+  if (DATA_EXTENSIONS.has(ext)) return 'data';
 
   // Fallback to MIME type
   if (
@@ -58,6 +71,9 @@ export function classifyFile(file: { name: string; type: string }): FileCategory
   }
   if (file.type === 'text/plain' || file.type === 'text/markdown') {
     return 'text';
+  }
+  if (DATA_MIME_TYPES.has(file.type)) {
+    return 'data';
   }
   return 'unknown';
 }
@@ -77,6 +93,10 @@ function classifyDataTransferItems(items: DataTransferItemList): DragContentType
 
     const mime = item.type.toLowerCase();
     if (mime.startsWith('image/') || mime.startsWith('video/') || mime.startsWith('audio/')) {
+      hasMedia = true;
+    } else if (DATA_MIME_TYPES.has(mime)) {
+      // Data files ride the media zone (they land in the container like
+      // media does), so a typed csv/xlsx drag activates the drop zones.
       hasMedia = true;
     } else if (
       mime === 'text/plain' ||
