@@ -44,7 +44,11 @@ import {
   writeHeadingViewState,
 } from './viewStateBinding';
 import { saveCsvEdits, saveXlsxEdits } from './gridSave';
-import { createXlsxFormulaSession, type XlsxFormulaSession } from './formulaSupport';
+import {
+  createXlsxFormulaSession,
+  type CalcEngineFactory,
+  type XlsxFormulaSession,
+} from './formulaSupport';
 
 type GridModule = typeof import('@bendyline/squisq-grid-react');
 
@@ -69,6 +73,8 @@ export interface DataCardWidgetProps {
   getContainer?: (() => ContentContainer | null | undefined) | undefined;
   onOpenFiles?: ((relativePath: string) => void) | undefined;
   onMediaSaved?: (() => void) | undefined;
+  /** Calc backend for formula sessions (default: the in-house tier). */
+  getCalcEngineFactory?: (() => CalcEngineFactory | null | undefined) | undefined;
 }
 
 interface CardLink {
@@ -144,6 +150,7 @@ export function DataCardWidget({
   getContainer,
   onOpenFiles,
   onMediaSaved,
+  getCalcEngineFactory,
 }: DataCardWidgetProps): JSX.Element | null {
   const link = useCardLink(editor, blockId);
   const revision = useMediaRevision(getMediaRevision);
@@ -208,7 +215,11 @@ export function DataCardWidget({
           let formulaSession: XlsxFormulaSession | null = null;
           if (ingested.xlsx) {
             try {
-              formulaSession = await createXlsxFormulaSession(ingested.xlsx);
+              const engineFactory = getCalcEngineFactory?.();
+              formulaSession = await createXlsxFormulaSession(
+                ingested.xlsx,
+                engineFactory ? { engineFactory } : {},
+              );
             } catch {
               formulaSession = null;
             }

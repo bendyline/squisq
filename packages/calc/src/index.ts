@@ -83,3 +83,16 @@ export { formatNumberWithPattern } from './numfmt.js';
 
 // The in-house engine tier
 export { createInHouseEngine } from './engine.js';
+
+// The same tier behind a Web Worker (evaluation off the UI thread).
+export {
+  createLocalCalcTransport,
+  createWorkerCalcEngine,
+  type WorkerCalcEngineOptions,
+} from './workerEngine.js';
+export type {
+  CalcWorkerRequest,
+  CalcWorkerResponse,
+  CalcWorkerTransport,
+  SerializableEngineConfig,
+} from './worker/protocol.js';

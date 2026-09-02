@@ -35,6 +35,7 @@ import { isDataFilePath } from '@bendyline/squisq/doc';
 import { containFenceWidgetEvents } from '../fenceWidgets/fenceWidgetHost';
 import { mapFenceEntries, type FenceBlockEntry } from '../fenceWidgets/fenceRegistry';
 import { DataCardWidget } from './DataCardWidget';
+import type { CalcEngineFactory } from './formulaSupport';
 
 export type DataCardBlockEntry = FenceBlockEntry;
 
@@ -63,6 +64,8 @@ export interface DataCardExtensionOptions {
   onOpenFiles?: (relativePath: string) => void;
   /** Notified after a successful sidecar save (hosts bump mediaRevision). */
   onMediaSaved?: () => void;
+  /** Getter for the calc backend of formula sessions (default in-house). */
+  calcEngineFactory?: () => CalcEngineFactory | null | undefined;
 }
 
 /**
@@ -130,6 +133,7 @@ function buildDecorations(
               getContainer: () => options.container?.(),
               onOpenFiles: options.onOpenFiles,
               onMediaSaved: options.onMediaSaved,
+              getCalcEngineFactory: () => options.calcEngineFactory?.(),
             }),
           );
           (

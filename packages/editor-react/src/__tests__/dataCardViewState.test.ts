@@ -120,6 +120,23 @@ describe('writeHeadingViewState', () => {
     expect(markdown).toContain(`src=${HREF}`);
   });
 
+  it('preserves the heading’s other params (sheet/anchor/previewRows) on write', () => {
+    const xlsxHref = 'report_files/data/book.xlsx';
+    const editor = makeEditor(
+      [
+        `## Book {[dataTable src=${xlsxHref} sheet=Sales anchor=B4 previewRows=50]}`,
+        '',
+        `[book.xlsx](${xlsxHref})`,
+      ].join('\n'),
+    );
+    expect(writeHeadingViewState(editor, cardPosOf(editor), xlsxHref, SORT_VIEW)).toBe(true);
+    const markdown = emit(editor);
+    expect(markdown).toContain('sheet=Sales');
+    expect(markdown).toContain('anchor=B4');
+    expect(markdown).toContain('previewRows=50');
+    expect(markdown).toContain('sort=Revenue:desc');
+  });
+
   it('repeat writes of the same view are byte-stable', () => {
     const editor = makeEditor(OWNED_DOC);
     writeHeadingViewState(editor, cardPosOf(editor), HREF, SORT_VIEW);

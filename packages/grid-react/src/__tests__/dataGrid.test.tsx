@@ -406,4 +406,69 @@ describe('DataGrid', () => {
     provider.dispose();
     host.remove();
   });
+
+  it('pastes a TSV block anchored at the selection, one undoable batch', async () => {
+    const provider = makeProvider();
+    const journal = new EditJournal();
+    const { host, root } = await mount(
+      <DataGrid provider={provider} journal={journal} view={EMPTY_VIEW} />,
+    );
+
+    // Anchor the selection at the first cell (row 0, Region column).
+    const firstCell = host.querySelector('[role="gridcell"]') as HTMLElement;
+    await act(async () => firstCell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
+
+    // Paste a 2×2 block: text goes into Region; numbers into Revenue —
+    // with one uncoercible number ("oops") skipped, not guessed.
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: { getData: (type: string) => (type === 'text/plain' ? 'AA\t111\nBB\toops\n' : '') },
+    });
+    await act(async () => firstCell.dispatchEvent(paste));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const rows = host.querySelectorAll('.squisq-grid-body [role="row"]');
+    expect(rows[0]!.textContent).toContain('AA');
+    expect(rows[0]!.textContent).toContain('111');
+    expect(rows[1]!.textContent).toContain('BB');
+    expect(rows[1]!.textContent).toContain('2000'); // "oops" skipped, original kept
+    expect(journal.dirtyCount).toBe(3);
+    expect(host.querySelector('.squisq-grid-status')?.textContent).toContain(
+      'Pasted 3 cells (1 skipped)',
+    );
+
+    // One batch = one undo step: a single undo reverts the whole paste.
+    expect(journal.canUndo).toBe(true);
+    journal.undo();
+    expect(journal.dirtyCount).toBe(0);
+
+    await act(async () => root.unmount());
+    provider.dispose();
+    host.remove();
+  });
+
+  it('paste inside a filter input stays a normal text paste', async () => {
+    const provider = makeProvider();
+    const journal = new EditJournal();
+    const { host, root } = await mount(
+      <DataGrid provider={provider} journal={journal} view={EMPTY_VIEW} />,
+    );
+    const firstCell = host.querySelector('[role="gridcell"]') as HTMLElement;
+    await act(async () => firstCell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })));
+
+    const filter = host.querySelector('.squisq-grid-filterinput') as HTMLInputElement;
+    const paste = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, 'clipboardData', {
+      value: { getData: () => 'X\tY\n' },
+    });
+    await act(async () => filter.dispatchEvent(paste));
+    expect(paste.defaultPrevented).toBe(false);
+    expect(journal.dirtyCount).toBe(0);
+
+    await act(async () => root.unmount());
+    provider.dispose();
+    host.remove();
+  });
 });

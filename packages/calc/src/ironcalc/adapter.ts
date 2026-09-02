@@ -312,7 +312,15 @@ class IronCalcEngine implements CalcEngine {
     }
   }
 
-  getCell(address: CalcCellAddress): CalcCellState {
+  async getCell(address: CalcCellAddress): Promise<CalcCellState> {
+    return this.getCellSync(address);
+  }
+
+  async getCells(addresses: readonly CalcCellAddress[]): Promise<CalcCellState[]> {
+    return addresses.map((address) => this.getCellSync(address));
+  }
+
+  private getCellSync(address: CalcCellAddress): CalcCellState {
     this.assertLive();
     const sheetIdx = this.resolveSheet(address.sheet);
     if (sheetIdx === undefined) {
@@ -387,7 +395,7 @@ class IronCalcEngine implements CalcEngine {
    * recalculation per call: hosts doing preview/oracle workloads should
    * prefer the in-house tier for this path.
    */
-  evaluateFormula(formula: string, context?: CalcCellAddress): CalcValue {
+  async evaluateFormula(formula: string, context?: CalcCellAddress): Promise<CalcValue> {
     this.assertLive();
     const model = this.requireModel();
     const sheetIdx = context ? (this.resolveSheet(context.sheet) ?? 0) : 0;
@@ -407,7 +415,7 @@ class IronCalcEngine implements CalcEngine {
 
   // ── Graph queries (parser-derived: IronCalc exposes no graph API) ──
 
-  precedentsOf(address: CalcCellAddress): CalcRangeAddress[] {
+  async precedentsOf(address: CalcCellAddress): Promise<CalcRangeAddress[]> {
     this.assertLive();
     const sheetIdx = this.resolveSheet(address.sheet);
     if (sheetIdx === undefined) return [];
@@ -420,11 +428,11 @@ class IronCalcEngine implements CalcEngine {
     }
   }
 
-  dependentsOf(address: CalcCellAddress): CalcCellAddress[] {
+  async dependentsOf(address: CalcCellAddress): Promise<CalcCellAddress[]> {
     this.assertLive();
     const out: CalcCellAddress[] = [];
     for (const tracked of this.formulas.values()) {
-      for (const range of this.precedentsOf(tracked.address)) {
+      for (const range of await this.precedentsOf(tracked.address)) {
         if (
           range.sheet.toLowerCase() === address.sheet.toLowerCase() &&
           address.row >= range.startRow &&

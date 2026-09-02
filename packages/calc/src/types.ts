@@ -177,7 +177,13 @@ export interface CalcEngine {
   setCellFormula(address: CalcCellAddress, formula: string): void;
   clearCell(address: CalcCellAddress): void;
 
-  getCell(address: CalcCellAddress): CalcCellState;
+  /**
+   * Read one cell's state. ASYNC by contract: an engine may live behind a
+   * Web Worker, where synchronous reads are impossible. Batch reads go
+   * through {@link getCells} — one round-trip instead of N.
+   */
+  getCell(address: CalcCellAddress): Promise<CalcCellState>;
+  getCells(addresses: readonly CalcCellAddress[]): Promise<CalcCellState[]>;
 
   /** Batch-evaluate everything dirty, within budgets. */
   evaluateAll(budgets?: CalcBudgets): Promise<CalcEvaluationResult>;
@@ -189,10 +195,10 @@ export interface CalcEngine {
    * `context` anchors relative behavior (ROW()/COLUMN(), implicit
    * intersection); it defaults to A1 of the first sheet.
    */
-  evaluateFormula(formula: string, context?: CalcCellAddress): CalcValue;
+  evaluateFormula(formula: string, context?: CalcCellAddress): Promise<CalcValue>;
 
-  precedentsOf(address: CalcCellAddress): CalcRangeAddress[];
-  dependentsOf(address: CalcCellAddress): CalcCellAddress[];
+  precedentsOf(address: CalcCellAddress): Promise<CalcRangeAddress[]>;
+  dependentsOf(address: CalcCellAddress): Promise<CalcCellAddress[]>;
 
   dispose(): void;
 }

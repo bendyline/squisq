@@ -2143,6 +2143,12 @@ function isoFromSerial(serial: number, date1904: boolean): string | null;
 function serialFromIso(text: string, date1904: boolean): number | null;
 ```
 
+In the editor, the data card's XLSX formula sessions run on this contract:
+`EditorShell`'s `calcEngineFactory?: (config: CalcEngineConfig) =>
+Promise<CalcEngine>` swaps the backend (default: `createInHouseEngine`; a
+factory failure falls back to it). The dev site's Advanced options dialog
+demonstrates the switch with IronCalc.
+
 The corpus cached-value oracle (`tests/corpus/calcOracle.test.ts`) is the
 release gate: every eligible real-world formula evaluates in values context
 and must match its cached result (relative ε 5e-8).

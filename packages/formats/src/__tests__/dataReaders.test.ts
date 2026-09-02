@@ -194,6 +194,40 @@ describe('view-state application (sort/filter before windowing)', () => {
     expect(table.unfilteredTotalRows).toBe(50);
   });
 
+  it('applies the extended text ops through the reader path', async () => {
+    const csv = enc('Name,Amount\nNorth,1\nNorthwest,2\nSouth,3\nnorthern,4\n');
+
+    const starts = await csvDataReader.read(csv, { maxRows: 10, filter: 'Name^~No' });
+    expect(starts.rows.map((r) => r[0])).toEqual(['North', 'Northwest', 'northern']);
+
+    const ends = await csvDataReader.read(csv, { maxRows: 10, filter: 'Name$~west' });
+    expect(ends.rows.map((r) => r[0])).toEqual(['Northwest']);
+
+    // `*` = case-sensitive: equals now distinguishes 'North' from 'north…'.
+    const cs = await csvDataReader.read(csv, { maxRows: 10, filter: 'Name^~*No' });
+    expect(cs.rows.map((r) => r[0])).toEqual(['North', 'Northwest']);
+
+    const notContains = await csvDataReader.read(csv, { maxRows: 10, filter: 'Name!~north' });
+    expect(notContains.rows.map((r) => r[0])).toEqual(['South']);
+  });
+
+  it('combines multi-term sort with an AND filter', async () => {
+    const csv = enc(
+      'Region,Rep,Amount\nWest,Ann,5\nWest,Bo,9\nEast,Cy,9\nWest,Ann,1\nEast,Dee,2\n',
+    );
+    const table = await csvDataReader.read(csv, {
+      maxRows: 10,
+      sort: 'Amount:desc,Rep',
+      filter: 'Region=West;Amount>1',
+    });
+    expect(table.rows).toEqual([
+      ['West', 'Bo', '9'],
+      ['West', 'Ann', '5'],
+    ]);
+    expect(table.totalRows).toBe(2);
+    expect(table.unfilteredTotalRows).toBe(5);
+  });
+
   it('surfaces view issues instead of throwing', async () => {
     const table = await csvDataReader.read(enc('A,B\n1,2\n'), {
       maxRows: 10,

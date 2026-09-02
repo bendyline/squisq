@@ -5,7 +5,7 @@
  * for inspecting the parsed MarkdownDocument and Doc.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { EditorShell, ThemeCustomizerPanel } from '@bendyline/squisq-editor-react';
 import { siteProofingProvider, siteProofingIgnoreStore } from './harperConfig';
 import type {
@@ -22,6 +22,15 @@ import {
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { SAMPLES, CONTENT_SAMPLES, SAMPLE_GROUPS, getSampleLabel } from './samples';
 import { GENERATED_SAMPLES } from './dataSamples';
+import {
+  AdvancedOptionsDialog,
+  CALC_ENGINE_STORAGE_KEY,
+  loadCalcEngineChoice,
+  type CalcEngineChoice,
+} from './AdvancedOptionsDialog';
+import type { CalcEngineFactory } from '@bendyline/squisq-editor-react';
+import ironcalcWasmUrl from '@ironcalc/wasm/wasm_bg.wasm?url';
+import CalcWorker from '@bendyline/squisq-calc/worker?worker';
 import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
@@ -198,6 +207,8 @@ export function App() {
   const initialSampleKey = getInitialSampleKey();
   const [selectedSample, setSelectedSample] = useState(initialSampleKey);
   const [showDebug, setShowDebug] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [calcEngine, setCalcEngine] = useState<CalcEngineChoice>(() => loadCalcEngineChoice());
   const [showJsonDemo, setShowJsonDemo] = useState(false);
   const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
   const [showCodeContextDemo, setShowCodeContextDemo] = useState(false);
@@ -443,6 +454,48 @@ export function App() {
     [replaceWorkspace],
   );
 
+  // Both engines ride the same CalcEngine contract. The in-house tier runs
+  // BEHIND A WORKER (Vite's ?worker import emits + serves the asset — more
+  // reliable than the package's relative-URL spawn under bundling), falling
+  // back to the main thread; IronCalc loads its wasm via the asset URL.
+  // `window.__squisqCalcEngineKind` is a dev-harness debug global the E2E
+  // suite asserts against.
+  const calcEngineFactory = useMemo<CalcEngineFactory>(() => {
+    if (calcEngine === 'ironcalc') {
+      return async (config) => {
+        const { createIronCalcEngine } = await import('@bendyline/squisq-calc/ironcalc');
+        const engine = await createIronCalcEngine({ ...config, wasmSource: ironcalcWasmUrl });
+        (window as { __squisqCalcEngineKind?: string }).__squisqCalcEngineKind = 'ironcalc';
+        return engine;
+      };
+    }
+    return async (config) => {
+      const calc = await import('@bendyline/squisq-calc');
+      try {
+        const engine = await calc.createWorkerCalcEngine({
+          ...config,
+          workerFactory: () => new CalcWorker(),
+        });
+        (window as { __squisqCalcEngineKind?: string }).__squisqCalcEngineKind = 'worker';
+        return engine;
+      } catch {
+        (window as { __squisqCalcEngineKind?: string }).__squisqCalcEngineKind = 'main-thread';
+        return calc.createInHouseEngine(config);
+      }
+    };
+  }, [calcEngine]);
+
+  const handleCalcEngineChange = useCallback((choice: CalcEngineChoice) => {
+    setCalcEngine(choice);
+    try {
+      localStorage.setItem(CALC_ENGINE_STORAGE_KEY, choice);
+    } catch {
+      // Private windows: the choice just doesn't persist.
+    }
+    // Remount so open data cards rebuild their formula sessions.
+    setEditorKey((k) => k + 1);
+  }, []);
+
   return (
     <div
       style={{
@@ -532,6 +585,25 @@ export function App() {
           }}
         >
           {showDebug ? 'Hide' : 'Show'} Debug
+        </button>
+
+        <button
+          type="button"
+          data-testid="advanced-options-button"
+          onClick={() => setShowAdvanced(true)}
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            background: calcEngine === 'ironcalc' ? '#8B6914' : '#E8DFC6',
+            color: calcEngine === 'ironcalc' ? '#fff' : '#4a3c1f',
+            border: `1px solid ${calcEngine === 'ironcalc' ? '#7a5c10' : '#c9b98a'}`,
+            borderRadius: 0,
+          }}
+          title={`Calculation engine: ${calcEngine === 'ironcalc' ? 'IronCalc (wasm)' : 'in-house'}`}
+        >
+          Advanced…
         </button>
 
         <button
@@ -825,6 +897,8 @@ export function App() {
                 colorScheme={colorScheme}
                 height="100%"
                 mediaProvider={mediaProvider}
+                workspaceContainer={workspaceContainer}
+                calcEngineFactory={calcEngineFactory}
                 themeOverride={customTheme}
                 writeCanvasSettings={writeCanvasSettings}
                 themeInheritance={writeThemeInheritance}
@@ -835,6 +909,14 @@ export function App() {
               />
             </div>
 
+            {showAdvanced && (
+              <AdvancedOptionsDialog
+                isDark={isDark}
+                calcEngine={calcEngine}
+                onCalcEngineChange={handleCalcEngineChange}
+                onClose={() => setShowAdvanced(false)}
+              />
+            )}
             {showDebug && (
               <div
                 style={{

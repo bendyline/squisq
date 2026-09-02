@@ -50,40 +50,40 @@ beforeAll(async () => {
 describe('IronCalc adapter', () => {
   it('loads, evaluates, and reads typed values back', async () => {
     const cellC1 = { sheet: 'Data', row: 0, col: 2 };
-    expect(engine.getCell(cellC1).staleness).toBe('neverEvaluated');
+    expect((await engine.getCell(cellC1)).staleness).toBe('neverEvaluated');
     const result = await engine.evaluateAll();
     expect(result.status).toBe('complete');
     expect(result.evaluatedCells).toBe(5);
 
-    expect(engine.getCell(cellC1)).toMatchObject({
+    expect(await engine.getCell(cellC1)).toMatchObject({
       value: 20,
       staleness: 'current',
       formula: 'A1*2',
     });
-    expect(engine.getCell({ sheet: 'Data', row: 1, col: 2 }).value).toBe(30);
-    expect(engine.getCell({ sheet: 'Data', row: 2, col: 2 }).value).toBe('alpha!');
-    expect(engine.getCell({ sheet: 'Q3 Notes', row: 0, col: 0 }).value).toBe(15);
+    expect((await engine.getCell({ sheet: 'Data', row: 1, col: 2 })).value).toBe(30);
+    expect((await engine.getCell({ sheet: 'Data', row: 2, col: 2 })).value).toBe('alpha!');
+    expect((await engine.getCell({ sheet: 'Q3 Notes', row: 0, col: 0 })).value).toBe(15);
   });
 
-  it('preserves seeded value types: numeric strings and =text stay text', () => {
-    expect(engine.getCell({ sheet: 'Data', row: 1, col: 1 }).value).toBe('123');
-    expect(engine.getCell({ sheet: 'Data', row: 2, col: 1 }).value).toBe('=danger');
-    expect(engine.getCell({ sheet: 'Data', row: 2, col: 0 }).value).toBe(true);
-    expect(engine.getCell({ sheet: 'Data', row: 3, col: 0 }).value).toBeNull();
+  it('preserves seeded value types: numeric strings and =text stay text', async () => {
+    expect((await engine.getCell({ sheet: 'Data', row: 1, col: 1 })).value).toBe('123');
+    expect((await engine.getCell({ sheet: 'Data', row: 2, col: 1 })).value).toBe('=danger');
+    expect((await engine.getCell({ sheet: 'Data', row: 2, col: 0 })).value).toBe(true);
+    expect((await engine.getCell({ sheet: 'Data', row: 3, col: 0 })).value).toBeNull();
   });
 
-  it('maps engine errors into the branded error space', () => {
-    const value = engine.getCell({ sheet: 'Data', row: 3, col: 2 }).value;
+  it('maps engine errors into the branded error space', async () => {
+    const value = (await engine.getCell({ sheet: 'Data', row: 3, col: 2 })).value;
     expect(isCalcError(value) && value.code === '#DIV/0!').toBe(true);
   });
 
   it('recomputes after edits, with staleness tracked adapter-side', async () => {
     engine.setCellValue({ sheet: 'Data', row: 0, col: 0 }, 100);
-    expect(engine.getCell({ sheet: 'Data', row: 0, col: 2 }).staleness).toBe('dirty');
+    expect((await engine.getCell({ sheet: 'Data', row: 0, col: 2 })).staleness).toBe('dirty');
     const result = await engine.evaluateAll();
     expect(result.status).toBe('complete');
-    expect(engine.getCell({ sheet: 'Data', row: 0, col: 2 }).value).toBe(200);
-    expect(engine.getCell({ sheet: 'Data', row: 1, col: 2 }).value).toBe(120);
+    expect((await engine.getCell({ sheet: 'Data', row: 0, col: 2 })).value).toBe(200);
+    expect((await engine.getCell({ sheet: 'Data', row: 1, col: 2 })).value).toBe(120);
     // Restore for the other tests.
     engine.setCellValue({ sheet: 'Data', row: 0, col: 0 }, 10);
     await engine.evaluateAll();
@@ -92,10 +92,10 @@ describe('IronCalc adapter', () => {
   it('supports formula edits and reference-shaped defined names', async () => {
     engine.setCellFormula({ sheet: 'Data', row: 3, col: 0 }, 'FirstAmount*0.25');
     await engine.evaluateAll();
-    expect(engine.getCell({ sheet: 'Data', row: 3, col: 0 }).value).toBeCloseTo(2.5);
+    expect((await engine.getCell({ sheet: 'Data', row: 3, col: 0 })).value).toBeCloseTo(2.5);
     engine.clearCell({ sheet: 'Data', row: 3, col: 0 });
     await engine.evaluateAll();
-    expect(engine.getCell({ sheet: 'Data', row: 3, col: 0 }).value).toBeNull();
+    expect((await engine.getCell({ sheet: 'Data', row: 3, col: 0 })).value).toBeNull();
   });
 
   it('enforces the pre-flight work budget without starting the wasm call', async () => {
@@ -107,28 +107,28 @@ describe('IronCalc adapter', () => {
     // Dirty cells are still dirty; a real budget then completes the batch.
     const finished = await engine.evaluateAll();
     expect(finished.status).toBe('complete');
-    expect(engine.getCell({ sheet: 'Data', row: 0, col: 2 }).value).toBe(22);
+    expect((await engine.getCell({ sheet: 'Data', row: 0, col: 2 })).value).toBe(22);
     engine.setCellValue({ sheet: 'Data', row: 0, col: 0 }, 10);
     await engine.evaluateAll();
   });
 
-  it('evaluates one-off formulas via the scratch cell', () => {
-    expect(engine.evaluateFormula('SUM(Data!A1:A2)+1')).toBe(31);
-    expect(engine.evaluateFormula('Data!B1&"?"')).toBe('alpha?');
-    const bad = engine.evaluateFormula('NOSUCHFN(1)');
+  it('evaluates one-off formulas via the scratch cell', async () => {
+    expect(await engine.evaluateFormula('SUM(Data!A1:A2)+1')).toBe(31);
+    expect(await engine.evaluateFormula('Data!B1&"?"')).toBe('alpha?');
+    const bad = await engine.evaluateFormula('NOSUCHFN(1)');
     expect(isCalcError(bad) && bad.code === '#NAME?').toBe(true);
   });
 
-  it('answers graph queries from the parser (IronCalc has no graph API)', () => {
-    const precedents = engine.precedentsOf({ sheet: 'Data', row: 1, col: 2 });
+  it('answers graph queries from the parser (IronCalc has no graph API)', async () => {
+    const precedents = await engine.precedentsOf({ sheet: 'Data', row: 1, col: 2 });
     expect(precedents).toEqual([{ sheet: 'Data', startRow: 0, startCol: 0, endRow: 1, endCol: 0 }]);
-    const dependents = engine.dependentsOf({ sheet: 'Data', row: 0, col: 0 });
+    const dependents = await engine.dependentsOf({ sheet: 'Data', row: 0, col: 0 });
     expect(dependents).toContainEqual({ sheet: 'Data', row: 0, col: 2 });
     expect(dependents).toContainEqual({ sheet: 'Data', row: 1, col: 2 });
     expect(dependents).toContainEqual({ sheet: 'Q3 Notes', row: 0, col: 0 });
   });
 
-  it('declares honest capabilities', () => {
+  it('declares honest capabilities', async () => {
     expect(engine.capabilities.dynamicArrays).toBe(true);
     expect(engine.capabilities.iterativeCalc).toBe(false);
     expect(engine.capabilities.leapYear1900Bug).toBe(true);

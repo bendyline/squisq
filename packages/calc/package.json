@@ -38,6 +38,11 @@
       "types": "./dist/ironcalc/index.d.ts",
       "import": "./dist/ironcalc/index.js",
       "default": "./dist/ironcalc/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker/index.d.ts",
+      "import": "./dist/worker/index.js",
+      "default": "./dist/worker/index.js"
     }
   },
   "scripts": {

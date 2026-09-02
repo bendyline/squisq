@@ -240,4 +240,167 @@ describe('calc engine vs cached-value oracle', () => {
       expect(passRate).toBeGreaterThanOrEqual(SUPPORTED_PASS_FLOOR);
     },
   );
+
+  // The values-context gate above proves FUNCTION semantics; this proves the
+  // ENGINE — dependency-graph evaluateAll over every workbook: topological
+  // ordering, shared whole-column ranges, memoized precedent lookup, and the
+  // NHS stress workbook, at corpus scale. Formula cells EXCLUDED from the
+  // oracle (volatile, external refs, HYPERLINK) are seeded as their cached
+  // VALUES — inputs, not formulas — so their nondeterminism cannot cascade
+  // into scored cells.
+  it(
+    'whole-graph evaluateAll matches the cached values across the corpus',
+    { timeout: 900_000 },
+    async () => {
+      if (!corpusAvailable()) return;
+      const entries = presentEntries('xlsx');
+      if (entries.length === 0) return;
+
+      const { xlsxToCellGrids, formatCellRef } = await import('@bendyline/squisq-formats/xlsx');
+      const { createInHouseEngine, isCalcError, isoFromSerial, serialFromIso } =
+        await import('@bendyline/squisq-calc');
+
+      let compared = 0;
+      let passed = 0;
+      let unsupported = 0;
+      let budgetStoppedFiles = 0;
+      let slowestMs = 0;
+      let slowestFile = '';
+      const mismatches: Mismatch[] = [];
+
+      const eligible = (
+        cell: { formula?: string; value?: unknown; kind: string },
+        fullCalc: boolean,
+      ): boolean => {
+        if (!cell.formula || fullCalc || cell.value === undefined || cell.kind === 'error') {
+          return false;
+        }
+        const names = functionsIn(cell.formula);
+        if (names.some((name) => VOLATILE.has(name))) return false;
+        if (/\[\d+\]/.test(cell.formula)) return false;
+        if (names.includes('HYPERLINK')) return false;
+        return true;
+      };
+
+      for (const entry of entries) {
+        let grids;
+        try {
+          grids = await xlsxToCellGrids(entryBytes(entry));
+        } catch {
+          continue;
+        }
+
+        const engine = createInHouseEngine({ date1904: grids.date1904 });
+        await engine.loadWorkbook({
+          date1904: grids.date1904,
+          sheets: grids.sheets.map((sheet) => ({
+            name: sheet.name,
+            cells: sheet.cells.map((row) =>
+              row.map((cell) => {
+                if (!cell) return null;
+                if (cell.formula !== undefined && eligible(cell, grids.fullCalcOnLoad)) {
+                  return { formula: cell.formula };
+                }
+                if (cell.value === undefined) return null;
+                if (cell.kind === 'date' && typeof cell.value === 'string') {
+                  const serial = serialFromIso(cell.value, grids.date1904);
+                  return serial === null ? { value: cell.value } : { value: serial };
+                }
+                return { value: cell.value };
+              }),
+            ),
+          })),
+        });
+
+        const result = await engine.evaluateAll({
+          maxEvalTimeMs: 120_000,
+          maxWorkUnits: 500_000_000,
+        });
+        if (result.elapsedMs > slowestMs) {
+          slowestMs = result.elapsedMs;
+          slowestFile = entry.id;
+        }
+        if (result.status === 'budget-exceeded') {
+          budgetStoppedFiles++;
+          engine.dispose();
+          continue;
+        }
+
+        for (const sheet of grids.sheets) {
+          for (let row = 0; row < sheet.cells.length; row++) {
+            const cells = sheet.cells[row]!;
+            for (let col = 0; col < cells.length; col++) {
+              const cell = cells[col];
+              if (!cell || !eligible(cell, grids.fullCalcOnLoad)) continue;
+
+              const actual = engine.getCell({ sheet: sheet.name, row, col }).value;
+              if (isCalcError(actual) && actual.code === '#NAME?') {
+                unsupported++;
+                continue;
+              }
+
+              compared++;
+              const expected = cell.value;
+              let match = false;
+              if (isCalcError(actual)) {
+                match = false;
+              } else if (typeof expected === 'number' && typeof actual === 'number') {
+                match = numbersMatch(actual, expected);
+              } else if (typeof expected === 'boolean') {
+                match = actual === expected;
+              } else if (typeof expected === 'string') {
+                if (typeof actual === 'string') match = actual === expected;
+                else if (typeof actual === 'number' && cell.kind === 'date') {
+                  match = isoFromSerial(actual, grids.date1904) === expected;
+                }
+              }
+
+              if (match) passed++;
+              else if (mismatches.length < 50) {
+                mismatches.push({
+                  file: entry.id,
+                  sheet: sheet.name,
+                  ref: formatCellRef(row, col),
+                  formula: cell.formula!,
+                  expected,
+                  actual: isCalcError(actual) ? actual.code : actual,
+                });
+              }
+            }
+          }
+        }
+        engine.dispose();
+      }
+
+      const passRate = compared === 0 ? 0 : passed / compared;
+      mkdirSync(REPORT_DIR, { recursive: true });
+      writeFileSync(
+        resolve(REPORT_DIR, 'calc-graph-oracle.json'),
+        `${JSON.stringify(
+          {
+            workbooks: entries.length,
+            compared,
+            passed,
+            passRate: Number(passRate.toFixed(4)),
+            unsupported,
+            budgetStoppedFiles,
+            slowest: { file: slowestFile, elapsedMs: slowestMs },
+            mismatchSample: mismatches,
+          },
+          null,
+          2,
+        )}\n`,
+      );
+      console.log(
+        `[corpus] graph oracle: ${passed}/${compared} pass (${(passRate * 100).toFixed(2)}%), ` +
+          `${unsupported} unsupported, ${budgetStoppedFiles} budget-stopped files; ` +
+          `slowest evaluateAll ${slowestMs}ms (${slowestFile}).`,
+      );
+
+      expect(compared).toBeGreaterThanOrEqual(MIN_SUPPORTED_PAIRS);
+      expect(passRate).toBeGreaterThanOrEqual(SUPPORTED_PASS_FLOOR);
+      // The NHS-class workbook must complete or degrade — never hang: the
+      // per-file budget above IS the assertion (a hang would time the test out).
+    },
+  );
 });

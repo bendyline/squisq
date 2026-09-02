@@ -516,7 +516,12 @@ export {
 export type { HeadingViewBinding } from './dataCard/viewStateBinding.js';
 export { saveCsvEdits, saveXlsxEdits } from './dataCard/gridSave.js';
 export { createXlsxFormulaSession } from './dataCard/formulaSupport.js';
-export type { FormulaEditRecord, XlsxFormulaSession } from './dataCard/formulaSupport.js';
+export type {
+  CalcEngineFactory,
+  FormulaEditRecord,
+  FormulaSessionOptions,
+  XlsxFormulaSession,
+} from './dataCard/formulaSupport.js';
 export type {
   GridSaveResult,
   SaveCsvEditsOptions,

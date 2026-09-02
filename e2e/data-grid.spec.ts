@@ -112,6 +112,14 @@ test.describe('data grid', () => {
     await expect(revenueCell).toBeVisible();
     await expect(revenueCell).toHaveAttribute('title', '=B2*C2');
 
+    // The engine really runs in a Web Worker (dev-harness debug global) —
+    // a silent fall back to the main thread would fail here.
+    await expect
+      .poll(async () =>
+        page.evaluate(() => (window as { __squisqCalcEngineKind?: string }).__squisqCalcEngineKind),
+      )
+      .toBe('worker');
+
     // Edit Widget's Units (130 → 100): Revenue (24×130=3120) must recalc to
     // 2400 and the SUM total (14161) must follow, live, before any save.
     const widgetRow = page.locator('.squisq-grid-body [role="row"]', { hasText: 'Widget' });
@@ -132,5 +140,53 @@ test.describe('data grid', () => {
     await editor.press('Enter');
     await expect(widgetRow).toContainText('4800');
     await expect(page.locator('.squisq-grid-dirtybar')).toBeVisible();
+  });
+
+  test('the advanced-options engine switch: LET fails in-house, works on IronCalc', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await waitForAppReady(page);
+    await page.locator('select').first().selectOption('data-xlsx-formulas');
+    await switchView(page, 'Editor');
+
+    const grid = page.locator('.squisq-data-card-grid[role="grid"]');
+    await expect(grid).toBeVisible({ timeout: 20_000 });
+    const widgetRow = page.locator('.squisq-grid-body [role="row"]', { hasText: 'Widget' });
+    const editor = page.locator('.squisq-grid-editor');
+
+    // In-house tier (the default): LET is honest about being unsupported.
+    // (SUMIFS used to be the contrast function — then the in-house tier
+    // grew the -IFS family and this test failed by computing correctly.)
+    await widgetRow.locator('[role="gridcell"]').nth(3).dblclick();
+    await editor.fill('=LET(v,C2,v*2)');
+    await editor.press('Enter');
+    await expect(widgetRow).toContainText('#NAME?');
+
+    // Switch the engine behind Advanced options — the editor remounts.
+    await page.getByTestId('advanced-options-button').click();
+    await expect(page.getByTestId('advanced-options-dialog')).toBeVisible();
+    await page.getByRole('radio', { name: /IronCalc/ }).check();
+    await page.getByTestId('advanced-options-dialog').getByLabel('Close').click();
+    await expect(page.getByTestId('advanced-options-dialog')).toBeHidden();
+
+    // Same edit on the wasm engine (downloaded on first use): it computes.
+    await expect(grid).toBeVisible({ timeout: 20_000 });
+    await expect
+      .poll(async () =>
+        page.evaluate(() => (window as { __squisqCalcEngineKind?: string }).__squisqCalcEngineKind),
+      )
+      .toBe('ironcalc');
+    const freshRow = page.locator('.squisq-grid-body [role="row"]', { hasText: 'Widget' });
+    await freshRow.locator('[role="gridcell"]').nth(3).dblclick();
+    await expect(editor).toBeVisible({ timeout: 20_000 });
+    await editor.fill('=LET(v,C2,v*2)');
+    await editor.press('Enter');
+    await expect(freshRow).toContainText('260', { timeout: 20_000 });
+
+    // Leave the harness back on the default for the other tests.
+    await page.getByTestId('advanced-options-button').click();
+    await page.getByRole('radio', { name: /In-house/ }).check();
+    await page.getByTestId('advanced-options-overlay').click({ position: { x: 5, y: 5 } });
   });
 });

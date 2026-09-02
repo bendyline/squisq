@@ -513,6 +513,105 @@ export function DataGrid({
     return true;
   }, [applyCacheUpdates, cellAt, editing, formulaSupport, journal, onCellEdited, provider, schema]);
 
+  /**
+   * Paste a rectangular block (Excel/Sheets ship TSV on text/plain) with the
+   * selection's top-left as the anchor. One journal batch = one undo step.
+   * Cells that don't fit — locked, uncoercible into the column kind, beyond
+   * the grid, or not yet fetched — are skipped and counted, never guessed.
+   */
+  const handlePaste = useCallback(
+    (event: React.ClipboardEvent) => {
+      if (!selection || !schema || !journal || !provider.applyEdits || editing) return;
+      const target = event.target as HTMLElement | null;
+      // Text fields (filter inputs, the cell editor) keep their own paste.
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      const text = event.clipboardData.getData('text/plain');
+      if (!text) return;
+      event.preventDefault();
+
+      const lines = text.replace(/\r\n?/g, '\n').split('\n');
+      if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+      const block = lines.map((line) => line.split('\t'));
+
+      const { r0, c0 } = normalizedRange(selection);
+      const entries: { rowId: number; col: number; prev: TableCellValue; next: TableCellValue }[] =
+        [];
+      let skipped = 0;
+      for (let dr = 0; dr < block.length; dr++) {
+        const row = r0 + dr;
+        if (row >= viewRowCount) {
+          skipped += block[dr]!.length;
+          continue;
+        }
+        const located = cellAt(row);
+        if (!located) {
+          skipped += block[dr]!.length;
+          continue;
+        }
+        for (let dc = 0; dc < block[dr]!.length; dc++) {
+          const col = c0 + dc;
+          const kind = schema.columns[col]?.kind;
+          if (kind === undefined || isCellLocked?.(located.rowId, col)) {
+            skipped++;
+            continue;
+          }
+          const coerced = coerceInput(block[dr]![dc]!, kind);
+          if (typeof coerced === 'object' && coerced !== null && 'error' in coerced) {
+            skipped++;
+            continue;
+          }
+          const prev = located.cells[col] ?? null;
+          const next = coerced as TableCellValue;
+          if (prev === next) continue;
+          entries.push({ rowId: located.rowId, col, prev, next });
+          located.cells[col] = next; // optimistic cache update
+        }
+      }
+
+      if (entries.length === 0) {
+        if (skipped > 0) setAnnounce(`Nothing pasted (${skipped} cells skipped).`);
+        return;
+      }
+      journal.commit(entries);
+      void (async () => {
+        const edits = entries.map(({ rowId, col, next }) => ({ rowId, col, value: next }));
+        const result = await provider.applyEdits!(edits);
+        if (result.staleView) setStaleView(true);
+        // Mirror into the host's engine sequentially, applying any
+        // recalculated dependents it reports.
+        const dependents: TableCellEdit[] = [];
+        for (const edit of edits) {
+          const extra = await onCellEdited?.(edit);
+          if (extra) dependents.push(...extra);
+        }
+        if (dependents.length > 0) {
+          const applied = await provider.applyEdits!(dependents);
+          if (applied.staleView) setStaleView(true);
+          applyCacheUpdates(dependents);
+        }
+        setDirtyTick((t) => t + 1);
+        setFetchTick((t) => t + 1);
+        setAnnounce(
+          `Pasted ${entries.length} cell${entries.length === 1 ? '' : 's'}` +
+            (skipped > 0 ? ` (${skipped} skipped)` : '') +
+            '.',
+        );
+      })();
+    },
+    [
+      applyCacheUpdates,
+      cellAt,
+      editing,
+      isCellLocked,
+      journal,
+      onCellEdited,
+      provider,
+      schema,
+      selection,
+      viewRowCount,
+    ],
+  );
+
   const runJournal = useCallback(
     async (direction: 'undo' | 'redo') => {
       if (!journal || !provider.applyEdits) return;
@@ -782,6 +881,7 @@ export function DataGrid({
       aria-multiselectable="true"
       onKeyDown={handleKeyDown}
       onCopy={handleCopy}
+      onPaste={handlePaste}
       onMouseDownCapture={(event) => {
         // Any press outside the operator menu/button closes it (the widget's
         // event containment means a document-level listener can't be trusted).

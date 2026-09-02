@@ -144,4 +144,132 @@ describe('XLSX formula session', () => {
     expect(record).toMatchObject({ formula: '40*5', cachedValue: 200 });
     session.dispose();
   });
+
+  it('uses an injected engine factory, falling back to in-house on failure', async () => {
+    const bytes = await workbookBytes();
+    const ingested = await ingestSidecarBytes(bytes, 'xlsx', {});
+    const { createInHouseEngine } = await import('@bendyline/squisq-calc');
+
+    // Injected factory: same contract, provenance tracked.
+    let factoryCalls = 0;
+    const session = (await createXlsxFormulaSession(ingested.xlsx!, {
+      engineFactory: async (config) => {
+        factoryCalls++;
+        expect(config.date1904).toBe(false);
+        return createInHouseEngine(config);
+      },
+    }))!;
+    expect(factoryCalls).toBe(1);
+    const commit = await session.commitFormula(2, 1, 'B2*2');
+    expect(commit.ok).toBe(true);
+    expect(commit.updates).toContainEqual({ rowId: 2, col: 1, value: 200 });
+    session.dispose();
+
+    // A factory that cannot boot must not cost the user formula editing.
+    const fallback = (await createXlsxFormulaSession(ingested.xlsx!, {
+      engineFactory: async () => {
+        throw new Error('wasm unavailable');
+      },
+    }))!;
+    expect(fallback).not.toBeNull();
+    const viaFallback = await fallback.commitFormula(2, 1, 'B2+B3');
+    expect(viaFallback.ok).toBe(true);
+    fallback.dispose();
+  });
+
+  it('an over-budget commit reverts the engine instead of leaving it half-dirty', async () => {
+    const bytes = await workbookBytes();
+    const ingested = await ingestSidecarBytes(bytes, 'xlsx', {});
+    const { createInHouseEngine } = await import('@bendyline/squisq-calc');
+
+    // Wrapper engine: evaluateAll reports budget-exceeded exactly once,
+    // on the commit's own evaluation (boot + revert evaluate normally).
+    let failNext = false;
+    const session = (await createXlsxFormulaSession(ingested.xlsx!, {
+      engineFactory: async (config) => {
+        const inner = createInHouseEngine(config);
+        return {
+          ...inner,
+          capabilities: inner.capabilities,
+          setCellValue: inner.setCellValue.bind(inner),
+          setCellFormula: inner.setCellFormula.bind(inner),
+          clearCell: inner.clearCell.bind(inner),
+          getCell: inner.getCell.bind(inner),
+          getCells: inner.getCells.bind(inner),
+          loadWorkbook: inner.loadWorkbook.bind(inner),
+          evaluateFormula: inner.evaluateFormula.bind(inner),
+          precedentsOf: inner.precedentsOf.bind(inner),
+          dependentsOf: inner.dependentsOf.bind(inner),
+          dispose: inner.dispose.bind(inner),
+          evaluateAll: async (budgets) => {
+            if (failNext) {
+              failNext = false;
+              return {
+                status: 'budget-exceeded' as const,
+                evaluatedCells: 0,
+                dirtyRemaining: [],
+                workUnits: 0,
+                elapsedMs: 0,
+                cycleCells: [],
+              };
+            }
+            return inner.evaluateAll(budgets);
+          },
+        };
+      },
+    }))!;
+
+    failNext = true;
+    const commit = await session.commitFormula(2, 1, 'B2*B3');
+    expect(commit.ok).toBe(false);
+    expect(commit.error).toMatch(/budget/);
+    // The session reverted: the original formula still stands and computes.
+    expect(session.getFormula(2, 1)).toBe('B2+B3');
+    expect(session.dirtyCount).toBe(0);
+    const retry = await session.commitFormula(2, 1, 'B2*B3');
+    expect(retry.ok).toBe(true);
+    expect(retry.updates).toContainEqual({ rowId: 2, col: 1, value: 25_000 });
+    session.dispose();
+  });
+
+  it('#NAME? shows honestly on the edited cell but never overwrites cached neighbors', async () => {
+    const bytes = await workbookBytes();
+    const ingested = await ingestSidecarBytes(bytes, 'xlsx', {});
+    const session = (await createXlsxFormulaSession(ingested.xlsx!))!;
+
+    const commit = await session.commitFormula(2, 1, 'NOSUCHFN(B2)');
+    expect(commit.ok).toBe(true);
+    expect(commit.updates).toContainEqual({ rowId: 2, col: 1, value: '#NAME?' });
+    // Recorded for save WITHOUT a cachedValue (the engine has no result).
+    expect(session.formulaEdits().get('2:1')).toEqual({ formula: 'NOSUCHFN(B2)' });
+
+    // A later value edit must not push the #NAME? cell as a "dependent
+    // update" over its display either.
+    const liveUpdates = await session.noteValueEdit(0, 1, 500);
+    expect(liveUpdates.find((u) => u.rowId === 2 && u.col === 1)).toBeUndefined();
+    session.dispose();
+  });
+
+  it('a value patch aimed at a formula cell surfaces the patch refusal on save', async () => {
+    const bytes = await workbookBytes();
+    const ingested = await ingestSidecarBytes(bytes, 'xlsx', {});
+    // Bypass the grid's lock: a raw journal value-edit on the formula cell
+    // (body row 2, col 1 = sheet B4) must be refused by the patcher and
+    // surface as an error result — all-or-nothing, nothing written.
+    const journal = new EditJournal();
+    journal.commit([{ rowId: 2, col: 1, prev: 350, next: 999 }]);
+    const provider = makeProvider();
+    const result = await saveXlsxEdits({
+      path: 'r_files/data/book.xlsx',
+      originalBytes: bytes,
+      xlsx: ingested.xlsx!,
+      journal,
+      formulaEdits: new Map(),
+      mediaProvider: provider,
+      container: null,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/formula/i);
+    expect(provider.saved).toHaveLength(0);
+  });
 });

@@ -79,6 +79,90 @@ function countIf(rangeNode: Expr, criterionNode: Expr, ctx: EvalContext): number
   return count;
 }
 
+type MultiCriteriaMode = 'sum' | 'count' | 'average' | 'max' | 'min';
+
+/**
+ * SUMIFS/COUNTIFS/AVERAGEIFS/MAXIFS/MINIFS. COUNTIFS is all pairs; the
+ * others lead with the aggregation range. Every range must match the
+ * first's dimensions (#VALUE! otherwise — Excel's rule), and criteria pairs
+ * AND together.
+ */
+function multiCriteria(args: Expr[], ctx: EvalContext, mode: MultiCriteriaMode): EvalResult {
+  const hasValueRange = mode !== 'count';
+  const pairArgs = hasValueRange ? args.slice(1) : args;
+  if (pairArgs.length === 0 || pairArgs.length % 2 !== 0) return VALUE_ERROR;
+
+  const valueView = hasValueRange ? argRange(args[0]!, ctx) : null;
+  if (valueView !== null && isCalcError(valueView)) return valueView;
+
+  const pairs: {
+    view: Exclude<ReturnType<typeof argRange>, CalcErrorValue>;
+    matches: ReturnType<typeof buildCriteria>;
+  }[] = [];
+  for (let i = 0; i < pairArgs.length; i += 2) {
+    const view = argRange(pairArgs[i]!, ctx);
+    if (isCalcError(view)) return view;
+    pairs.push({ view, matches: buildCriteria(argScalar(pairArgs[i + 1]!, ctx)) });
+  }
+
+  const reference = valueView ?? pairs[0]!.view;
+  const rows = reference.rows;
+  const cols = reference.cols;
+  for (const { view } of pairs) {
+    if (view.rows !== rows || view.cols !== cols) return VALUE_ERROR;
+  }
+  if (valueView && (valueView.rows !== rows || valueView.cols !== cols)) return VALUE_ERROR;
+
+  const effRows = Math.max(reference.effectiveRows, ...pairs.map(({ view }) => view.effectiveRows));
+  const effCols = Math.max(reference.effectiveCols, ...pairs.map(({ view }) => view.effectiveCols));
+  ctx.budget.charge(effRows * effCols * (pairs.length + 1));
+
+  let count = 0;
+  let sum = 0;
+  let best: number | null = null;
+  let error: CalcErrorValue | null = null;
+  for (let r = 0; r < effRows && !error; r++) {
+    for (let c = 0; c < effCols; c++) {
+      let pass = true;
+      for (const { view, matches } of pairs) {
+        if (!matches(view.get(r, c))) {
+          pass = false;
+          break;
+        }
+      }
+      if (!pass) continue;
+      if (!hasValueRange) {
+        count++;
+        continue;
+      }
+      const value = valueView!.get(r, c);
+      if (isCalcError(value)) {
+        error = value;
+        break;
+      }
+      if (typeof value !== 'number') continue; // non-numeric never aggregates
+      count++;
+      sum += value;
+      if (best === null) best = value;
+      else if (mode === 'max') best = Math.max(best, value);
+      else if (mode === 'min') best = Math.min(best, value);
+    }
+  }
+  if (error) return error;
+  switch (mode) {
+    case 'count':
+      return count;
+    case 'sum':
+      return sum;
+    case 'average':
+      return count === 0 ? DIV0 : sum / count;
+    case 'max':
+      return best ?? 0;
+    case 'min':
+      return best ?? 0;
+  }
+}
+
 /** The SUBTOTAL function_num table (10x-codes ignore manual-hide — no such concept here). */
 // Codes 2 (COUNT) and 3 (COUNTA) are handled inline in SUBTOTAL — they
 // count by type and cannot use the numeric collector.
@@ -279,6 +363,34 @@ export const mathFunctions: Record<string, Def> = {
       return count === 0 ? DIV0 : total / count;
     },
   },
+  /* The -IFS family: pairs of (criteria_range, criterion) ANDed together,
+   * all ranges dimension-matched against the first. */
+  SUMIFS: {
+    minArgs: 3,
+    maxArgs: Number.POSITIVE_INFINITY,
+    fn: (args, ctx) => multiCriteria(args, ctx, 'sum'),
+  },
+  COUNTIFS: {
+    minArgs: 2,
+    maxArgs: Number.POSITIVE_INFINITY,
+    fn: (args, ctx) => multiCriteria(args, ctx, 'count'),
+  },
+  AVERAGEIFS: {
+    minArgs: 3,
+    maxArgs: Number.POSITIVE_INFINITY,
+    fn: (args, ctx) => multiCriteria(args, ctx, 'average'),
+  },
+  MAXIFS: {
+    minArgs: 3,
+    maxArgs: Number.POSITIVE_INFINITY,
+    fn: (args, ctx) => multiCriteria(args, ctx, 'max'),
+  },
+  MINIFS: {
+    minArgs: 3,
+    maxArgs: Number.POSITIVE_INFINITY,
+    fn: (args, ctx) => multiCriteria(args, ctx, 'min'),
+  },
+
   SUMPRODUCT: {
     minArgs: 1,
     maxArgs: Number.POSITIVE_INFINITY,

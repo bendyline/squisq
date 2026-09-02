@@ -20,13 +20,36 @@
  */
 
 import type { TableCellEdit, TableCellValue } from '@bendyline/squisq/table';
-import type { CalcEngine, CalcValue, CalcWorkbookSeed } from '@bendyline/squisq-calc';
+import type {
+  CalcEngine,
+  CalcEngineConfig,
+  CalcValue,
+  CalcWorkbookSeed,
+} from '@bendyline/squisq-calc';
 import type { XlsxSourceMeta } from './ingestAdapters';
 
 type CalcModule = typeof import('@bendyline/squisq-calc');
 
-/** Kept modest: a formula edit must feel interactive, never hang the tab. */
-const SESSION_BUDGETS = { maxWorkUnits: 5_000_000, maxEvalTimeMs: 5_000 };
+/**
+ * Builds the engine a formula session runs on. The default is the in-house
+ * tier; a host may inject any `CalcEngine` backend (e.g. IronCalc via
+ * `@bendyline/squisq-calc/ironcalc`) — the session only speaks the
+ * contract. A factory failure falls back to the in-house tier.
+ */
+export type CalcEngineFactory = (config: CalcEngineConfig) => Promise<CalcEngine>;
+
+export interface FormulaSessionOptions {
+  engineFactory?: CalcEngineFactory;
+}
+
+/**
+ * Generous now that evaluation runs OFF the UI thread by default (the
+ * whole-graph corpus oracle clocks the NHS stress workbook at ~31ms, so
+ * these bounds only catch genuinely pathological workbooks). The
+ * main-thread fallback shares them: an over-budget batch still degrades
+ * to value-only editing rather than hanging.
+ */
+const SESSION_BUDGETS = { maxWorkUnits: 100_000_000, maxEvalTimeMs: 15_000 };
 
 export interface FormulaEditRecord {
   formula: string;
@@ -93,6 +116,7 @@ function buildSeed(calc: CalcModule, meta: XlsxSourceMeta): CalcWorkbookSeed {
  */
 export async function createXlsxFormulaSession(
   meta: XlsxSourceMeta,
+  options: FormulaSessionOptions = {},
 ): Promise<XlsxFormulaSession | null> {
   let calc: CalcModule;
   try {
@@ -101,10 +125,31 @@ export async function createXlsxFormulaSession(
     return null;
   }
 
-  const engine: CalcEngine = calc.createInHouseEngine({
+  const engineConfig: CalcEngineConfig = {
     date1904: meta.grids.date1904,
     budgets: SESSION_BUDGETS,
-  });
+  };
+  let engine: CalcEngine;
+  let injectedEngine = false;
+  if (options.engineFactory) {
+    try {
+      engine = await options.engineFactory(engineConfig);
+      injectedEngine = true;
+    } catch {
+      // A backend that fails to boot (missing wasm, blocked download) must
+      // not cost the user formula editing — fall back to the in-house tier.
+      engine = calc.createInHouseEngine(engineConfig);
+    }
+  } else {
+    // Default: the in-house tier BEHIND A WORKER, so no evaluation ever
+    // janks the editor; environments without workers (or a host bundler
+    // that can't serve the worker asset) fall back to the main thread.
+    try {
+      engine = await calc.createWorkerCalcEngine(engineConfig);
+    } catch {
+      engine = calc.createInHouseEngine(engineConfig);
+    }
+  }
   await engine.loadWorkbook(buildSeed(calc, meta));
   const initial = await engine.evaluateAll();
   if (initial.status === 'budget-exceeded') {
@@ -124,31 +169,37 @@ export async function createXlsxFormulaSession(
   const edits = new Map<string, FormulaEditRecord>();
   let disposed = false;
 
-  /** Engine values for every formula-bearing region cell, for diffing. */
-  const snapshotRegion = (): Map<string, TableCellValue> => {
-    const snapshot = new Map<string, TableCellValue>();
-    for (const key of formulas.keys()) {
-      const [row, col] = key.split(':').map(Number) as [number, number];
-      snapshot.set(key, displayValue(calc, engine.getCell(toAddress(row, col)).value));
-    }
-    return snapshot;
+  /** Batch-read engine values for a set of body-cell keys — ONE round-trip
+   * even when the engine lives in a worker. */
+  const readValues = async (keys: readonly string[]): Promise<Map<string, TableCellValue>> => {
+    const coords = keys.map((key) => key.split(':').map(Number) as [number, number]);
+    const states = await engine.getCells(coords.map(([row, col]) => toAddress(row, col)));
+    const out = new Map<string, TableCellValue>();
+    keys.forEach((key, index) => out.set(key, displayValue(calc, states[index]!.value)));
+    return out;
   };
 
-  const diffAgainst = (
+  const snapshotRegion = (): Promise<Map<string, TableCellValue>> =>
+    readValues([...formulas.keys()]);
+
+  const diffAgainst = async (
     before: Map<string, TableCellValue>,
     keys: Iterable<string> = formulas.keys(),
-  ): TableCellEdit[] => {
+  ): Promise<TableCellEdit[]> => {
+    const keyList = [...new Set(keys)];
+    const coords = keyList.map((key) => key.split(':').map(Number) as [number, number]);
+    const states = await engine.getCells(coords.map(([row, col]) => toAddress(row, col)));
     const updates: TableCellEdit[] = [];
-    for (const key of new Set(keys)) {
-      const [row, col] = key.split(':').map(Number) as [number, number];
-      const raw = engine.getCell(toAddress(row, col)).value;
+    keyList.forEach((key, index) => {
+      const raw = states[index]!.value;
       // Unsupported-function results never overwrite the cached display.
-      if (calc.isCalcError(raw) && raw.code === '#NAME?') continue;
+      if (calc.isCalcError(raw) && raw.code === '#NAME?') return;
       const value = displayValue(calc, raw);
       if (before.get(key) !== value) {
+        const [row, col] = coords[index]!;
         updates.push({ rowId: row, col, value });
       }
-    }
+    });
     return updates;
   };
 
@@ -165,16 +216,21 @@ export async function createXlsxFormulaSession(
       try {
         calc.parseFormula(formula);
       } catch (err: unknown) {
-        return {
-          ok: false,
-          error: err instanceof calc.CalcParseError ? err.message : 'invalid formula',
-        };
+        // Our parser is only the gatekeeper for the in-house tier; an
+        // injected backend may accept syntax it doesn't (structured refs,
+        // LAMBDA forms) — let that engine judge the formula itself.
+        if (!injectedEngine) {
+          return {
+            ok: false,
+            error: err instanceof calc.CalcParseError ? err.message : 'invalid formula',
+          };
+        }
       }
 
       const key = `${bodyRow}:${col}`;
       const address = toAddress(bodyRow, col);
-      const previous = engine.getCell(address);
-      const before = snapshotRegion();
+      const previous = await engine.getCell(address);
+      const before = await snapshotRegion();
       // The edited cell diffs like any other region formula cell once its
       // formula is registered; seed its "before" from the store-visible value.
       if (!before.has(key)) before.set(key, displayValue(calc, previous.value));
@@ -195,13 +251,13 @@ export async function createXlsxFormulaSession(
       }
 
       formulas.set(key, formula);
-      const selfRaw = engine.getCell(address).value;
+      const selfRaw = (await engine.getCell(address)).value;
       if (calc.isCalcError(selfRaw) && selfRaw.code === '#NAME?') {
         // The engine can't evaluate it — honest error instead of a silent
         // wrong display; the formula itself may still be valid Excel.
         const record: FormulaEditRecord = { formula };
         edits.set(key, record);
-        const updates = diffAgainst(before);
+        const updates = await diffAgainst(before);
         updates.push({ rowId: bodyRow, col, value: '#NAME?' });
         return { ok: true, updates };
       }
@@ -210,7 +266,7 @@ export async function createXlsxFormulaSession(
       if (!calc.isCalcError(selfRaw) && selfRaw !== null) record.cachedValue = selfRaw;
       edits.set(key, record);
 
-      return { ok: true, updates: diffAgainst(before) };
+      return { ok: true, updates: await diffAgainst(before) };
     },
 
     async noteValueEdit(bodyRow, col, value) {
@@ -218,7 +274,7 @@ export async function createXlsxFormulaSession(
       const key = `${bodyRow}:${col}`;
       formulas.delete(key);
       edits.delete(key);
-      const before = snapshotRegion();
+      const before = await snapshotRegion();
       engine.setCellValue(toAddress(bodyRow, col), value);
       const result = await engine.evaluateAll();
       // Over budget: the engine may be part-stale, but the store's own value
@@ -234,7 +290,7 @@ export async function createXlsxFormulaSession(
     formulaEdits: () => edits,
 
     async discard() {
-      const before = snapshotRegion();
+      const before = await snapshotRegion();
       const staleKeys = new Set(formulas.keys());
       formulas.clear();
       for (const [key, formula] of meta.formulas) formulas.set(key, formula);

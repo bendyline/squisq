@@ -24,16 +24,16 @@ describe('engine lifecycle', () => {
       ],
     });
 
-    expect(engine.getCell(addr(0, 2)).staleness).toBe('neverEvaluated');
+    expect((await engine.getCell(addr(0, 2))).staleness).toBe('neverEvaluated');
     const result = await engine.evaluateAll();
     expect(result.status).toBe('complete');
     expect(result.evaluatedCells).toBe(1);
-    expect(engine.getCell(addr(0, 2))).toMatchObject({ value: 6, staleness: 'current' });
+    expect(await engine.getCell(addr(0, 2))).toMatchObject({ value: 6, staleness: 'current' });
 
     engine.setCellValue(addr(0, 0), 10);
-    expect(engine.getCell(addr(0, 2)).staleness).toBe('dirty');
+    expect((await engine.getCell(addr(0, 2))).staleness).toBe('dirty');
     await engine.evaluateAll();
-    expect(engine.getCell(addr(0, 2)).value).toBe(30);
+    expect((await engine.getCell(addr(0, 2))).value).toBe(30);
     engine.dispose();
   });
 
@@ -48,14 +48,14 @@ describe('engine lifecycle', () => {
       ],
     });
     await engine.evaluateAll();
-    expect(engine.getCell(addr(0, 1)).value).toBe(3);
-    expect(engine.getCell(addr(0, 2)).value).toBe(30);
+    expect((await engine.getCell(addr(0, 1))).value).toBe(3);
+    expect((await engine.getCell(addr(0, 2))).value).toBe(30);
 
     engine.setCellValue(addr(1, 0), 9);
-    expect(engine.getCell(addr(0, 1)).staleness).toBe('dirty');
-    expect(engine.getCell(addr(0, 2)).staleness).toBe('dirty'); // transitive
+    expect((await engine.getCell(addr(0, 1))).staleness).toBe('dirty');
+    expect((await engine.getCell(addr(0, 2))).staleness).toBe('dirty'); // transitive
     await engine.evaluateAll();
-    expect(engine.getCell(addr(0, 2)).value).toBe(100);
+    expect((await engine.getCell(addr(0, 2))).value).toBe(100);
     engine.dispose();
   });
 
@@ -68,7 +68,7 @@ describe('engine lifecycle', () => {
     await engine.loadWorkbook({ sheets: [{ name: 'S', cells: rows }] });
     const result = await engine.evaluateAll();
     expect(result.status).toBe('complete');
-    expect(engine.getCell(addr(19_999, 0)).value).toBe(20_000);
+    expect((await engine.getCell(addr(19_999, 0))).value).toBe(20_000);
     engine.dispose();
   });
 
@@ -81,11 +81,11 @@ describe('engine lifecycle', () => {
       sheets: [{ name: 'S', cells: [[{ formula: 'DAY(TODAY())' }]] }],
     });
     await engine.evaluateAll();
-    expect(engine.getCell(addr(0, 0)).value).toBe(1);
-    expect(engine.getCell(addr(0, 0)).volatile).toBe(true);
+    expect((await engine.getCell(addr(0, 0))).value).toBe(1);
+    expect((await engine.getCell(addr(0, 0))).volatile).toBe(true);
     tick = 5;
     await engine.evaluateAll();
-    expect(engine.getCell(addr(0, 0)).value).toBe(6);
+    expect((await engine.getCell(addr(0, 0))).value).toBe(6);
     engine.dispose();
   });
 
@@ -95,7 +95,7 @@ describe('engine lifecycle', () => {
       sheets: [{ name: 'S', cells: [[{ formula: 'Table1[Sales]' }]] }],
     });
     await engine.evaluateAll();
-    const value = engine.getCell(addr(0, 0)).value;
+    const value = (await engine.getCell(addr(0, 0))).value;
     expect(isCalcError(value) && value.code === '#NAME?').toBe(true);
     engine.dispose();
   });
@@ -110,7 +110,7 @@ describe('cycles', () => {
     const result = await engine.evaluateAll();
     expect(result.status).toBe('cycle-error');
     expect(result.cycleCells.length).toBeGreaterThan(0);
-    const value = engine.getCell(addr(0, 0)).value;
+    const value = (await engine.getCell(addr(0, 0))).value;
     expect(isCalcError(value) && value.code === '#CALC!').toBe(true);
     engine.dispose();
   });
@@ -123,8 +123,8 @@ describe('cycles', () => {
     });
     const result = await engine.evaluateAll();
     expect(result.status).toBe('complete');
-    expect(engine.getCell(addr(0, 0)).value as number).toBeCloseTo(2, 2);
-    expect(engine.getCell(addr(0, 1)).value as number).toBeCloseTo(1, 2);
+    expect((await engine.getCell(addr(0, 0))).value as number).toBeCloseTo(2, 2);
+    expect((await engine.getCell(addr(0, 1))).value as number).toBeCloseTo(1, 2);
     engine.dispose();
   });
 });
@@ -146,7 +146,7 @@ describe('budgets', () => {
     // A later, unconstrained batch finishes the job.
     const finished = await engine.evaluateAll();
     expect(finished.status).toBe('complete');
-    expect(engine.getCell(addr(499, 1)).value).toBe(998);
+    expect((await engine.getCell(addr(499, 1))).value).toBe(998);
     engine.dispose();
   });
 
@@ -155,7 +155,7 @@ describe('budgets', () => {
     for (let i = 0; i < 2_000; i++) rows.push([{ value: i }]);
     const engine = createInHouseEngine({ budgets: { maxWorkUnits: 100 } });
     await engine.loadWorkbook({ sheets: [{ name: 'S', cells: rows }] });
-    const value = engine.evaluateFormula('SUM(A:A)');
+    const value = await engine.evaluateFormula('SUM(A:A)');
     expect(isCalcError(value) && value.code === '#CALC!').toBe(true);
     engine.dispose();
   });
@@ -169,10 +169,10 @@ describe('graph queries', () => {
         { name: 'S', cells: [[{ value: 1 }, { formula: 'A1*2' }, { formula: 'SUM(A1:B1)' }]] },
       ],
     });
-    expect(engine.precedentsOf(addr(0, 1))).toEqual([
+    expect(await engine.precedentsOf(addr(0, 1))).toEqual([
       { sheet: 'S', startRow: 0, startCol: 0, endRow: 0, endCol: 0 },
     ]);
-    const dependents = engine.dependentsOf(addr(0, 0));
+    const dependents = await engine.dependentsOf(addr(0, 0));
     expect(dependents).toContainEqual(addr(0, 1));
     expect(dependents).toContainEqual(addr(0, 2));
     engine.dispose();

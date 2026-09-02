@@ -279,6 +279,13 @@ export interface EditorShellProps {
    */
   submitOnEnter?: () => void;
   /**
+   * Calc backend for the data card's XLSX formula sessions (default: the
+   * in-house tier from `@bendyline/squisq-calc`). Hosts inject e.g.
+   * IronCalc: `(config) => import('@bendyline/squisq-calc/ironcalc')
+   * .then((m) => m.createIronCalcEngine({ ...config, wasmSource }))`.
+   */
+  calcEngineFactory?: import('./dataCard/formulaSupport').CalcEngineFactory;
+  /**
    * Host-supplied context dictionary rendered inside the Monaco (raw / code)
    * surface: collapsible markdown sections injected above anchor lines, plus
    * an optional file-top summary. See {@link CodeContext}. Ignored in
@@ -631,6 +638,7 @@ export function EditorShell({
   allowPresentationFullscreen = true,
   allowPrint = true,
   submitOnEnter,
+  calcEngineFactory,
   codeContext,
   fullWidth = false,
   uxFont,
@@ -767,6 +775,7 @@ export function EditorShell({
             allowPresentationFullscreen={allowPresentationFullscreen}
             allowPrint={allowPrint}
             submitOnEnter={submitOnEnter}
+            calcEngineFactory={calcEngineFactory}
             codeContext={codeContext}
             fullWidth={fullWidth}
             uxFont={uxFont}
@@ -819,6 +828,13 @@ interface EditorShellInnerProps {
   allowPresentationFullscreen: boolean;
   allowPrint: boolean;
   submitOnEnter?: () => void;
+  /**
+   * Calc backend for the data card's XLSX formula sessions (default: the
+   * in-house tier from `@bendyline/squisq-calc`). Hosts inject e.g.
+   * IronCalc: `(config) => import('@bendyline/squisq-calc/ironcalc')
+   * .then((m) => m.createIronCalcEngine({ ...config, wasmSource }))`.
+   */
+  calcEngineFactory?: import('./dataCard/formulaSupport').CalcEngineFactory;
   codeContext?: CodeContext;
   fullWidth: boolean;
   uxFont?: string;
@@ -900,6 +916,7 @@ function EditorShellInner({
   allowPresentationFullscreen,
   allowPrint,
   submitOnEnter,
+  calcEngineFactory,
   codeContext,
   fullWidth,
   uxFont,
@@ -1547,6 +1564,7 @@ function EditorShellInner({
                         submitOnEnter={submitOnEnter}
                         placeholder={placeholder}
                         readOnly={readOnly}
+                        calcEngineFactory={calcEngineFactory}
                         onOpenFilesPanel={
                           mediaProvider
                             ? (relativePath) => {

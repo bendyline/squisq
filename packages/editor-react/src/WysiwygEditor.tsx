@@ -150,6 +150,12 @@ export interface WysiwygEditorProps {
    * to it. Omitted (e.g. no media provider host) hides the affordance.
    */
   onOpenFilesPanel?: (relativePath?: string) => void;
+  /**
+   * Calc backend for the data card's formula sessions. Default: the
+   * in-house tier. A host may inject another `CalcEngine` implementation
+   * (e.g. IronCalc via `@bendyline/squisq-calc/ironcalc`).
+   */
+  calcEngineFactory?: import('./dataCard/formulaSupport').CalcEngineFactory;
 }
 
 /**
@@ -163,6 +169,7 @@ export function WysiwygEditor({
   readOnly = false,
   writeCanvasSettings,
   onOpenFilesPanel,
+  calcEngineFactory,
 }: WysiwygEditorProps) {
   const {
     editorSource,
@@ -264,6 +271,10 @@ export function WysiwygEditor({
   useEffect(() => {
     onOpenFilesPanelRef.current = onOpenFilesPanel;
   }, [onOpenFilesPanel]);
+  const calcEngineFactoryRef = useRef(calcEngineFactory);
+  useEffect(() => {
+    calcEngineFactoryRef.current = calcEngineFactory;
+  }, [calcEngineFactory]);
   const workspaceContainerRef = useRef(workspaceContainer);
   useEffect(() => {
     workspaceContainerRef.current = workspaceContainer;
@@ -354,6 +365,7 @@ export function WysiwygEditor({
         container: () => workspaceContainerRef.current,
         onOpenFiles: (relativePath) => onOpenFilesPanelRef.current?.(relativePath),
         onMediaSaved: () => bumpMediaRevisionRef.current?.(),
+        calcEngineFactory: () => calcEngineFactoryRef.current,
       }),
       RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
       TimelineViewExtension,
