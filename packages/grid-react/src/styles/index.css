@@ -1,0 +1,329 @@
+/* @bendyline/squisq-grid-react — grid stylesheet.
+ *
+ * Every color resolves through a `--squisq-grid-*` token WITH a literal
+ * fallback, so the grid renders sensibly standalone; a host (editor-react's
+ * chrome.css does this) re-binds the tokens to its own palette. Do not
+ * consume `--squisq-*` chrome tokens directly here — this package must not
+ * assume the chrome stylesheet exists. */
+
+.squisq-grid {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--squisq-grid-border, #d1d5db);
+  border-radius: 8px;
+  background: var(--squisq-grid-bg, #ffffff);
+  color: var(--squisq-grid-text, #1f2937);
+  font-size: 0.82rem;
+  overflow: hidden;
+}
+
+.squisq-grid-scroller {
+  overflow: auto;
+  overscroll-behavior: contain;
+  position: relative;
+}
+
+.squisq-grid-header {
+  display: grid;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--squisq-grid-header-bg, #f9fafb);
+  border-bottom: 1px solid var(--squisq-grid-border, #d1d5db);
+  width: max-content;
+  min-width: 100%;
+}
+
+.squisq-grid-headercell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--squisq-grid-border-subtle, #e5e7eb);
+  min-width: 0;
+}
+
+.squisq-grid-sortbutton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--squisq-grid-header-text, #374151);
+  padding: 4px 8px 2px;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+
+.squisq-grid-colname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-grid-sortmark {
+  flex: none;
+  font-size: 0.65rem;
+  color: var(--squisq-grid-accent, #2563eb);
+}
+
+.squisq-grid-filterrow {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  margin: 0 6px 4px;
+  min-width: 0;
+}
+
+/* Operator prefix button: ~26px — a two-character glyph plus the caret. */
+.squisq-grid-opbutton {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 26px;
+  padding: 0;
+  border: 1px solid var(--squisq-grid-border-subtle, #e5e7eb);
+  border-radius: 4px;
+  background: var(--squisq-grid-input-bg, #ffffff);
+  color: var(--squisq-grid-text-muted, #6b7280);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.squisq-grid-opbutton:hover {
+  color: var(--squisq-grid-text, #1f2937);
+}
+
+/* Case-sensitive: the accent underline marks the stricter match. */
+.squisq-grid-opbutton--cs .squisq-grid-opglyph {
+  text-decoration: underline;
+  color: var(--squisq-grid-accent, #2563eb);
+}
+
+.squisq-grid-opcaret {
+  font-size: 0.55rem;
+  line-height: 1;
+}
+
+.squisq-grid-opmenu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 3;
+  min-width: 150px;
+  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--squisq-grid-border, #d1d5db);
+  border-radius: 6px;
+  background: var(--squisq-grid-bg, #ffffff);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font-weight: 400;
+}
+
+.squisq-grid-opoption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--squisq-grid-text, #1f2937);
+  font: inherit;
+  font-size: 0.74rem;
+  text-align: left;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.squisq-grid-opoption:hover {
+  background: var(--squisq-grid-row-hover, #f3f4f6);
+}
+
+.squisq-grid-opoption--active {
+  background: var(--squisq-grid-selection-bg, #eff6ff);
+}
+
+.squisq-grid-opoption .squisq-grid-opglyph {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-weight: 600;
+  color: var(--squisq-grid-text-muted, #6b7280);
+}
+
+.squisq-grid-opcase {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  padding: 4px 8px;
+  border-top: 1px solid var(--squisq-grid-border-subtle, #e5e7eb);
+  font-size: 0.72rem;
+  color: var(--squisq-grid-text, #1f2937);
+  cursor: pointer;
+}
+
+.squisq-grid-filterinput {
+  flex: 1 1 auto;
+  padding: 1px 6px;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 400;
+  border: 1px solid var(--squisq-grid-border-subtle, #e5e7eb);
+  border-radius: 4px;
+  background: var(--squisq-grid-input-bg, #ffffff);
+  color: var(--squisq-grid-text, #1f2937);
+  min-width: 0;
+}
+
+.squisq-grid-resizer {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+}
+
+.squisq-grid-resizer:hover {
+  background: var(--squisq-grid-resize-handle, #2563eb);
+  opacity: 0.5;
+}
+
+.squisq-grid-body {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+}
+
+.squisq-grid-row {
+  display: grid;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  min-width: 100%;
+}
+
+.squisq-grid-row:hover .squisq-grid-cell {
+  background: var(--squisq-grid-row-hover, #f3f4f6);
+}
+
+.squisq-grid-cell {
+  padding: 4px 8px;
+  border-right: 1px solid var(--squisq-grid-border-subtle, #e5e7eb);
+  border-bottom: 1px solid var(--squisq-grid-border-subtle, #e5e7eb);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  outline: none;
+  min-width: 0;
+}
+
+.squisq-grid-cell--num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.squisq-grid-cell--selected,
+.squisq-grid-row:hover .squisq-grid-cell--selected {
+  background: var(--squisq-grid-selection-bg, #eff6ff);
+}
+
+.squisq-grid-cell--focus {
+  box-shadow: inset 0 0 0 2px var(--squisq-grid-focus-ring, #2563eb);
+}
+
+.squisq-grid-cell--dirty {
+  box-shadow: inset 2px 0 0 0 var(--squisq-grid-dirty, #d97706);
+}
+
+/* Locked cell (formula/date under XLSX patching): muted, not-editable cue. */
+.squisq-grid-cell--locked {
+  color: var(--squisq-grid-text-muted, #6b7280);
+  cursor: not-allowed;
+}
+
+/* Formula cell (engine present): italic cue; hover shows the source. */
+.squisq-grid-cell--formula {
+  font-style: italic;
+}
+
+.squisq-grid-editor {
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  font: inherit;
+  padding: 0;
+  background: var(--squisq-grid-input-bg, #ffffff);
+  color: var(--squisq-grid-text, #1f2937);
+}
+
+.squisq-grid-editor--error {
+  box-shadow: inset 0 0 0 2px var(--squisq-grid-error, #dc2626);
+}
+
+.squisq-grid-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--squisq-grid-border, #d1d5db);
+  background: var(--squisq-grid-header-bg, #f9fafb);
+  font-size: 0.74rem;
+  color: var(--squisq-grid-text-muted, #6b7280);
+}
+
+.squisq-grid-status {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-grid-refresh,
+.squisq-grid-save,
+.squisq-grid-discard {
+  border: 1px solid var(--squisq-grid-border, #d1d5db);
+  border-radius: 5px;
+  background: var(--squisq-grid-bg, #ffffff);
+  color: var(--squisq-grid-text, #1f2937);
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.squisq-grid-save {
+  background: var(--squisq-grid-accent, #2563eb);
+  border-color: var(--squisq-grid-accent, #2563eb);
+  color: var(--squisq-grid-text-on-accent, #ffffff);
+}
+
+.squisq-grid-save:disabled,
+.squisq-grid-discard:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.squisq-grid-dirtybar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--squisq-grid-dirty, #d97706);
+  font-weight: 600;
+}
+
+.squisq-grid-readonly {
+  font-style: italic;
+}

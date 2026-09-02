@@ -146,9 +146,10 @@ export interface WysiwygEditorProps {
   writeCanvasSettings?: WriteCanvasSettings;
   /**
    * Open the shell's Files panel — the data card's "Show in Files" button.
-   * Omitted (e.g. no media provider host) hides the affordance.
+   * Receives the sidecar path so hosts with a focusable file list can jump
+   * to it. Omitted (e.g. no media provider host) hides the affordance.
    */
-  onOpenFilesPanel?: () => void;
+  onOpenFilesPanel?: (relativePath?: string) => void;
 }
 
 /**
@@ -175,6 +176,7 @@ export function WysiwygEditor({
     colorScheme,
     bumpMediaRevision,
     mediaRevision,
+    workspaceContainer,
     sceneTextChannel,
     preserveSourceWrapping,
     layoutMode,
@@ -262,6 +264,14 @@ export function WysiwygEditor({
   useEffect(() => {
     onOpenFilesPanelRef.current = onOpenFilesPanel;
   }, [onOpenFilesPanel]);
+  const workspaceContainerRef = useRef(workspaceContainer);
+  useEffect(() => {
+    workspaceContainerRef.current = workspaceContainer;
+  }, [workspaceContainer]);
+  const bumpMediaRevisionRef = useRef(bumpMediaRevision);
+  useEffect(() => {
+    bumpMediaRevisionRef.current = bumpMediaRevision;
+  }, [bumpMediaRevision]);
   useEffect(() => {
     mediaProviderRef.current = mediaProvider;
   }, [mediaProvider]);
@@ -341,7 +351,9 @@ export function WysiwygEditor({
       DataCardExtension.configure({
         mediaProvider: () => mediaProviderRef.current,
         mediaRevision: () => mediaRevisionRef.current ?? 0,
-        onOpenFiles: () => onOpenFilesPanelRef.current?.(),
+        container: () => workspaceContainerRef.current,
+        onOpenFiles: (relativePath) => onOpenFilesPanelRef.current?.(relativePath),
+        onMediaSaved: () => bumpMediaRevisionRef.current?.(),
       }),
       RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
       TimelineViewExtension,

@@ -23,6 +23,9 @@
 @import './tree-view.css';
 @import './host-fence.css';
 @import './data-card.css';
+/* Grid stylesheet from the grid package (bundled at build so editor hosts
+ * get grid styling without a second stylesheet import). */
+@import '@bendyline/squisq-grid-react/styles';
 @import './ascii-timeline.css';
 @import './context-menu.css';
 @import './proofing.css';

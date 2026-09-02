@@ -280,6 +280,47 @@ export async function csvToContainer(
   return container;
 }
 
+/** Options for {@link serializeCsvRows}. */
+export interface SerializeCsvRowsOptions {
+  /** Field delimiter. Default `,`. */
+  delimiter?: string;
+  /** Line terminator. Default `\n`. */
+  newline?: '\r\n' | '\n';
+  /** Emit a terminating newline after the last row. Default true. */
+  trailingNewline?: boolean;
+  /**
+   * Formula neutralization. Default **`'preserve'`** — the OPPOSITE of the
+   * export default, deliberately: this API re-serializes EXISTING data (the
+   * grid's save path), and `SPREADSHEET_FORMULA_PREFIX` matches a leading
+   * `-`/`+`, so blanket escaping would corrupt every negative number in a
+   * re-saved file. Callers neutralize specific cells themselves (the grid
+   * escapes only journal-edited, non-numeric cells).
+   */
+  formulaHandling?: 'escape' | 'preserve';
+}
+
+/**
+ * Serialize a plain row matrix to CSV text — the write half of `parseCsv`,
+ * used by the grid's sidecar save. RFC-4180 quoting via the same escaper
+ * the exporter uses.
+ */
+export function serializeCsvRows(
+  rows: readonly (readonly string[])[],
+  options: SerializeCsvRowsOptions = {},
+): string {
+  const delimiter = validateDelimiter(options.delimiter ?? ',');
+  const newline = options.newline ?? '\n';
+  const handling = options.formulaHandling ?? 'preserve';
+  const body = rows
+    .map((row) =>
+      row
+        .map((cell) => escapeCsvField(neutralizeSpreadsheetFormula(cell, handling), delimiter))
+        .join(delimiter),
+    )
+    .join(newline);
+  return options.trailingNewline === false ? body : `${body}${newline}`;
+}
+
 function escapeCsvField(value: string, delimiter: string): string {
   if (value.includes('"') || value.includes(delimiter) || /[\r\n]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;

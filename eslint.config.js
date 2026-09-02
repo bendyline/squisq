@@ -38,6 +38,7 @@ export default tseslint.config(
     files: [
       'packages/react/**/*.{ts,tsx}',
       'packages/editor-react/**/*.{ts,tsx}',
+      'packages/grid-react/**/*.{ts,tsx}',
       'packages/site/**/*.{ts,tsx}',
     ],
     plugins: {

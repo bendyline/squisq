@@ -38,6 +38,15 @@ export type { XlsxCell, XlsxCellKind, CellRect } from './cells.js';
 export type { XlsxExportOptions } from './export.js';
 export { markdownDocToXlsx, docToXlsx } from './export.js';
 
+// In-place cell-value patching — the grid's XLSX save path. Rewrites only
+// touched worksheet parts (+ the workbook calc flag); refuses formula/date
+// cells all-or-nothing via `XlsxPatchRefusal`. See patch.ts.
+export type { XlsxCellPatch, XlsxPatchOptions, XlsxPatchRefusalCode } from './patch.js';
+export { patchXlsxCellValues, XlsxPatchRefusal } from './patch.js';
+export type { SheetRef } from './import.js';
+export { listSheetParts } from './import.js';
+export { formatCellRef, parseCellRef } from './cells.js';
+
 /**
  * Convert a .xlsx file to a squisq Doc (via the markdown table model).
  */

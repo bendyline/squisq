@@ -506,6 +506,23 @@ export type {
 export { DataCardWidget } from './dataCard/DataCardWidget.js';
 export { loadDataPreview, dataExtensionOf } from './dataCard/dataPreview.js';
 export type { DataPreview } from './dataCard/dataPreview.js';
+export { ingestSidecarBytes, XLSX_LOCKED_REASON } from './dataCard/ingestAdapters.js';
+export type { CsvSourceMeta, IngestedSidecar, XlsxSourceMeta } from './dataCard/ingestAdapters.js';
+export {
+  readHeadingViewBinding,
+  writeHeadingViewState,
+  viewStateFromBinding,
+} from './dataCard/viewStateBinding.js';
+export type { HeadingViewBinding } from './dataCard/viewStateBinding.js';
+export { saveCsvEdits, saveXlsxEdits } from './dataCard/gridSave.js';
+export { createXlsxFormulaSession } from './dataCard/formulaSupport.js';
+export type { FormulaEditRecord, XlsxFormulaSession } from './dataCard/formulaSupport.js';
+export type {
+  GridSaveResult,
+  SaveCsvEditsOptions,
+  SaveXlsxEditsOptions,
+} from './dataCard/gridSave.js';
+export { findOwningHeadingPosition } from './blockTagActivity.js';
 
 // Timeline editor — authored marker-rail fences become an accessible canvas
 // with add-point affordances and a selected-point inspector. Semantic edits

@@ -122,7 +122,7 @@ interface SpillConfig {
   used: boolean;
 }
 
-interface SheetRef {
+export interface SheetRef {
   name: string;
   path: string;
 }
@@ -139,7 +139,7 @@ interface WorkbookInfo {
   fullCalcOnLoad: boolean;
 }
 
-interface CellStyle {
+export interface CellStyle {
   numFmtId: number;
   formatCode: string;
 }
@@ -159,7 +159,11 @@ function resolveTarget(baseDir: string, target: string): string {
   return stack.join('/');
 }
 
-async function readWorkbook(pkg: OoxmlPackage, mainPart: string): Promise<WorkbookInfo> {
+/**
+ * List the workbook's sheets — name plus resolved worksheet part path, in
+ * workbook order. Shared by import and the in-place cell patcher.
+ */
+export async function listSheetParts(pkg: OoxmlPackage, mainPart: string): Promise<SheetRef[]> {
   const wb = await getPartXml(pkg, mainPart);
   if (!wb) {
     throw new Error(`Invalid XLSX package: workbook part "${mainPart}" could not be parsed.`);
@@ -175,12 +179,21 @@ async function readWorkbook(pkg: OoxmlPackage, mainPart: string): Promise<Workbo
     const target = rid ? relById.get(rid) : undefined;
     if (target) out.push({ name, path: resolveTarget(baseDirOf(mainPart), target) });
   }
+  return out;
+}
+
+async function readWorkbook(pkg: OoxmlPackage, mainPart: string): Promise<WorkbookInfo> {
+  const wb = await getPartXml(pkg, mainPart);
+  if (!wb) {
+    throw new Error(`Invalid XLSX package: workbook part "${mainPart}" could not be parsed.`);
+  }
+  const sheets = await listSheetParts(pkg, mainPart);
   const workbookPr = wb.getElementsByTagNameNS(NS_SML, 'workbookPr')[0];
   const date1904Value = workbookPr?.getAttribute('date1904');
   const calcPr = wb.getElementsByTagNameNS(NS_SML, 'calcPr')[0];
   const fullCalcValue = calcPr?.getAttribute('fullCalcOnLoad');
   return {
-    sheets: out,
+    sheets,
     date1904: date1904Value === '1' || date1904Value === 'true',
     fullCalcOnLoad: fullCalcValue === '1' || fullCalcValue === 'true',
   };
@@ -309,7 +322,7 @@ const BUILTIN_NUMBER_FORMATS: Readonly<Record<number, string>> = Object.freeze({
   47: 'mmss.0',
 });
 
-async function readCellStyles(pkg: OoxmlPackage): Promise<CellStyle[]> {
+export async function readCellStyles(pkg: OoxmlPackage): Promise<CellStyle[]> {
   const doc = await getPartXml(pkg, 'xl/styles.xml');
   if (!doc) return [];
 
@@ -336,7 +349,7 @@ async function readCellStyles(pkg: OoxmlPackage): Promise<CellStyle[]> {
   return out;
 }
 
-type NumberFormatKind = 'date' | 'time' | 'datetime' | 'percent' | 'zero-pad' | 'general';
+export type NumberFormatKind = 'date' | 'time' | 'datetime' | 'percent' | 'zero-pad' | 'general';
 
 function normalizeFormatCode(formatCode: string): string {
   return formatCode
@@ -348,7 +361,7 @@ function normalizeFormatCode(formatCode: string): string {
     .toLowerCase();
 }
 
-function numberFormatKind(formatCode: string): NumberFormatKind {
+export function numberFormatKind(formatCode: string): NumberFormatKind {
   const normalized = normalizeFormatCode(formatCode);
   if (normalized === 'general') return 'general';
   if (normalized.includes('%')) return 'percent';
@@ -457,32 +470,45 @@ interface SheetReadContext {
  * to here". `translateFormula` performs that shift, so followers come back with
  * their own text rather than being silently dropped.
  */
-function readFormula(cell: Element, row: number, col: number, ctx: SheetReadContext): string {
+interface ReadFormulaResult {
+  text: string;
+  sharedRole?: 'master' | 'follower';
+}
+
+function readFormula(
+  cell: Element,
+  row: number,
+  col: number,
+  ctx: SheetReadContext,
+): ReadFormulaResult {
   const fEls = cell.getElementsByTagNameNS(NS_SML, 'f');
   const f = fEls.length ? fEls[0]! : null;
-  if (!f) return '';
+  if (!f) return { text: '' };
   const text = (f.textContent ?? '').trim();
-  if (f.getAttribute('t') !== 'shared') return text;
+  if (f.getAttribute('t') !== 'shared') return { text };
 
   const si = f.getAttribute('si');
-  if (si === null) return text;
+  if (si === null) return { text };
   if (text !== '') {
     ctx.sharedFormulas.set(si, { text, row, col });
-    return text;
+    return { text, sharedRole: 'master' };
   }
   const master = ctx.sharedFormulas.get(si);
-  if (!master) return '';
+  if (!master) return { text: '', sharedRole: 'follower' };
   try {
-    return translateFormula(master.text, row - master.row, col - master.col);
+    return {
+      text: translateFormula(master.text, row - master.row, col - master.col),
+      sharedRole: 'follower',
+    };
   } catch {
     // A formula we cannot confidently shift is better dropped than guessed at.
-    return '';
+    return { text: '', sharedRole: 'follower' };
   }
 }
 
 /** Read one `<c>` element into the richer cell model. */
 function readCell(cell: Element, row: number, col: number, ctx: SheetReadContext): XlsxCell {
-  const formula = readFormula(cell, row, col, ctx);
+  const { text: formula, sharedRole } = readFormula(cell, row, col, ctx);
   // `value` is set alongside `text` at every branch rather than derived from
   // it afterwards, because by then the information is already gone: `"15.0%"`
   // cannot be turned back into `0.15` without knowing the format code, and
@@ -494,6 +520,7 @@ function readCell(cell: Element, row: number, col: number, ctx: SheetReadContext
   ): XlsxCell => {
     const out: XlsxCell = { text, kind: text === '' ? 'empty' : kind };
     if (formula !== '') out.formula = formula;
+    if (sharedRole !== undefined) out.sharedFormulaRole = sharedRole;
     if (value !== undefined && out.kind !== 'empty') out.value = value;
     return out;
   };

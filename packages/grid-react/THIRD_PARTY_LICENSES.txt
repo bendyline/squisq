@@ -1,0 +1,8 @@
+THIRD-PARTY LICENSES FOR @bendyline/squisq-grid-react
+
+Generated from the actual esbuild input graph. Package-local license, copying,
+and notice files are reproduced verbatim. When an npm tarball omits its
+repository license, the pinned upstream copy is vendored and identified below.
+
+COMPONENTS
+

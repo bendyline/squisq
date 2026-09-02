@@ -58,9 +58,16 @@ export interface DataSourceTable {
   /** Preview window of data rows, cells stringified for display. */
   rows: string[][];
   align?: ('left' | 'center' | 'right' | null)[];
-  /** Full data-row count in the source (not just the preview window). */
+  /**
+   * Full data-row count in the source AFTER any view-state filter (not just
+   * the preview window). With no filter this is the raw row count.
+   */
   totalRows: number;
   totalCols: number;
+  /** Raw row count before filtering, when a filter was applied. */
+  unfilteredTotalRows?: number;
+  /** Problems parsing/applying `sort`/`filter` (see `@bendyline/squisq/table`). */
+  viewIssues?: import('../table/viewState.js').ViewIssue[];
 }
 
 export interface DataSourceReadOptions {
@@ -72,6 +79,15 @@ export interface DataSourceReadOptions {
   headerRow?: boolean;
   /** Maximum data rows to return in `rows`. */
   maxRows: number;
+  /**
+   * Raw view-state params (`{[dataTable … sort=… filter=…]}`). Readers parse
+   * them against their REAL headers and apply `applyTableViewState` on the
+   * full body BEFORE windowing to `maxRows` — the resolver cannot do it, the
+   * rows are already gone by then. Problems surface via
+   * `DataSourceTable.viewIssues`, never a throw.
+   */
+  sort?: string;
+  filter?: string;
 }
 
 /**
@@ -102,10 +118,13 @@ const DEFAULT_MAX_PREVIEW_ROWS = 50;
 
 /** Stats recorded on `templateData.srcStats` alongside the preview rows. */
 export interface DataSourceStats {
+  /** Data rows after any view-state filter. */
   totalRows: number;
   totalCols: number;
   previewRows: number;
   truncated: boolean;
+  /** Raw source rows before filtering, when a filter was applied. */
+  unfilteredTotalRows?: number;
 }
 
 /** True when the author already supplied table data for this block. */
@@ -220,6 +239,8 @@ export async function resolveDataReferences(
         ...(overrides.headerRow !== undefined
           ? { headerRow: overrides.headerRow !== 'false' }
           : {}),
+        ...(overrides.sort ? { sort: overrides.sort } : {}),
+        ...(overrides.filter ? { filter: overrides.filter } : {}),
         maxRows,
       });
     } catch (err: unknown) {
@@ -234,11 +255,23 @@ export async function resolveDataReferences(
       return null;
     }
 
+    for (const issue of table.viewIssues ?? []) {
+      diagnostics.push({
+        severity: 'info',
+        code: issue.code,
+        message: `Block "${block.id}": ${issue.message}`,
+        blockId: block.id,
+      });
+    }
+
     const srcStats: DataSourceStats = {
       totalRows: table.totalRows,
       totalCols: table.totalCols,
       previewRows: table.rows.length,
       truncated: table.rows.length < table.totalRows,
+      ...(table.unfilteredTotalRows !== undefined
+        ? { unfilteredTotalRows: table.unfilteredTotalRows }
+        : {}),
     };
 
     return {

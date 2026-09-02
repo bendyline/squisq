@@ -15,10 +15,36 @@ import type {
   DataSourceReadOptions,
   DataSourceTable,
 } from '@bendyline/squisq/doc';
+import { applyTableViewState, parseTableViewState } from '@bendyline/squisq/table';
+import type { ViewIssue } from '@bendyline/squisq/table';
 import { parseCsv } from '../csv/index.js';
 import { xlsxToTables } from '../xlsx/import.js';
 import { columnLetter, type XlsxTable } from '../xlsx/tables.js';
 import { parseCellRef } from '../xlsx/cells.js';
+
+// ── Shared view-state application ────────────────────────────────────
+
+/**
+ * Apply `sort`/`filter` params over the FULL body before windowing — the
+ * resolver can't do it (readers window before it sees rows), so the view
+ * lives here. Returns the (possibly re-ordered/filtered) body plus the
+ * counts and issues the resolver reports.
+ */
+function applyViewParams(
+  headers: string[],
+  body: string[][],
+  opts: DataSourceReadOptions,
+): { body: string[][]; unfilteredTotalRows?: number; viewIssues?: ViewIssue[] } {
+  if (!opts.sort && !opts.filter) return { body };
+  const { view, issues } = parseTableViewState(opts.sort, opts.filter, headers);
+  const applied = applyTableViewState(headers, body, view);
+  const filtered = applied.rows.length !== applied.unfilteredRowCount;
+  return {
+    body: applied.rows,
+    ...(filtered ? { unfilteredTotalRows: applied.unfilteredRowCount } : {}),
+    ...(issues.length > 0 ? { viewIssues: issues } : {}),
+  };
+}
 
 // ── CSV / TSV ────────────────────────────────────────────────────────
 
@@ -32,13 +58,16 @@ function csvToTable(rows: string[][], opts: DataSourceReadOptions): DataSourceTa
     headerRow && rows.length > 0
       ? pad(rows[0])
       : Array.from({ length: width }, (_, i) => columnLetter(i));
-  const body = headerRow ? rows.slice(1) : rows;
+  const rawBody = (headerRow ? rows.slice(1) : rows).map(pad);
+  const { body, unfilteredTotalRows, viewIssues } = applyViewParams(headers, rawBody, opts);
 
   return {
     headers,
-    rows: body.slice(0, opts.maxRows).map(pad),
+    rows: body.slice(0, opts.maxRows),
     totalRows: body.length,
     totalCols: width,
+    ...(unfilteredTotalRows !== undefined ? { unfilteredTotalRows } : {}),
+    ...(viewIssues ? { viewIssues } : {}),
   };
 }
 
@@ -130,15 +159,18 @@ export const xlsxDataReader: DataSourceReader = {
     const headers = demoteHeader
       ? table.columns.map((_, i) => columnLetter((ref?.col ?? 0) + i))
       : table.columns.map((c) => c.name);
-    const body = demoteHeader
+    const rawBody = demoteHeader
       ? [table.columns.map((c) => c.name), ...table.rows.map((row) => row.map(stringifyCell))]
       : table.rows.map((row) => row.map(stringifyCell));
+    const { body, unfilteredTotalRows, viewIssues } = applyViewParams(headers, rawBody, opts);
 
     return {
       headers,
       rows: body.slice(0, opts.maxRows),
       totalRows: body.length,
       totalCols: table.columns.length,
+      ...(unfilteredTotalRows !== undefined ? { unfilteredTotalRows } : {}),
+      ...(viewIssues ? { viewIssues } : {}),
     };
   },
 };
@@ -182,12 +214,15 @@ export const parquetDataReader: DataSourceReader = {
     const totalRows = Number(metadata.num_rows);
     const columnNames = hyparquet.parquetSchema(metadata).children.map((c) => c.element.name);
 
+    // With view state active the whole file must be read (sorting a window
+    // would sort only the window); otherwise read just the preview rows.
+    const hasView = Boolean(opts.sort || opts.filter);
     const rows: string[][] = [];
     await hyparquet.parquetRead({
       file: buffer,
       metadata,
       rowStart: 0,
-      rowEnd: Math.min(opts.maxRows, totalRows),
+      rowEnd: hasView ? totalRows : Math.min(opts.maxRows, totalRows),
       onComplete(read) {
         for (const row of read) {
           rows.push(row.map((cell) => (cell === null || cell === undefined ? '' : String(cell))));
@@ -195,11 +230,15 @@ export const parquetDataReader: DataSourceReader = {
       },
     });
 
+    const { body, unfilteredTotalRows, viewIssues } = applyViewParams(columnNames, rows, opts);
+
     return {
       headers: columnNames,
-      rows,
-      totalRows,
+      rows: body.slice(0, opts.maxRows),
+      totalRows: hasView ? body.length : totalRows,
       totalCols: columnNames.length,
+      ...(unfilteredTotalRows !== undefined ? { unfilteredTotalRows } : {}),
+      ...(viewIssues ? { viewIssues } : {}),
     };
   },
 };

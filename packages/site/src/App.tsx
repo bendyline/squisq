@@ -20,7 +20,8 @@ import {
   MemoryContentContainer,
 } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import { SAMPLES, CONTENT_SAMPLES, getSampleLabel } from './samples';
+import { SAMPLES, CONTENT_SAMPLES, SAMPLE_GROUPS, getSampleLabel } from './samples';
+import { GENERATED_SAMPLES } from './dataSamples';
 import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
@@ -38,10 +39,36 @@ const WRITE_CANVAS_STORAGE_KEY = 'squisq-site:writeCanvasSettings';
 const WRITE_THEME_STORAGE_KEY = 'squisq-site:writeThemeInheritance';
 const DEFAULT_SAMPLE_KEY = 'about-squisq';
 const SITE_BASE_URL = import.meta.env.BASE_URL;
-const SAMPLE_KEYS = [
-  DEFAULT_SAMPLE_KEY,
-  ...Object.keys(SAMPLES).filter((key) => key !== DEFAULT_SAMPLE_KEY),
-];
+/**
+ * The picker's grouped option model: every category from SAMPLE_GROUPS
+ * whose keys resolve to a known sample, plus a trailing "Other" group for
+ * anything not yet categorized (a new sample must never silently vanish).
+ * Rendered as native <optgroup>s — the browser draws the category tree and
+ * every Playwright `selectOption(key)` keeps working unchanged.
+ */
+const SAMPLE_OPTION_GROUPS = (() => {
+  const known = new Set([
+    ...Object.keys(SAMPLES),
+    ...Object.keys(GENERATED_SAMPLES),
+    ...Object.keys(CONTENT_SAMPLES),
+  ]);
+  const categorized = new Set<string>();
+  const groups: { label: string; entries: { key: string; label: string }[] }[] = [];
+  const labelFor = (key: string): string =>
+    GENERATED_SAMPLES[key]?.label ?? CONTENT_SAMPLES[key]?.label ?? getSampleLabel(key);
+  for (const group of SAMPLE_GROUPS) {
+    const entries = group.keys
+      .filter((key) => known.has(key))
+      .map((key) => ({ key, label: labelFor(key) }));
+    for (const entry of entries) categorized.add(entry.key);
+    if (entries.length > 0) groups.push({ label: group.label, entries });
+  }
+  const leftovers = [...known]
+    .filter((key) => !categorized.has(key))
+    .map((key) => ({ key, label: labelFor(key) }));
+  if (leftovers.length > 0) groups.push({ label: 'Other', entries: leftovers });
+  return groups;
+})();
 
 type DemoColorMode = 'auto' | EditorColorScheme;
 // The demo only exercises the numeric Write-canvas levers; the optional
@@ -319,6 +346,29 @@ export function App() {
       const key = e.target.value;
       setSelectedSample(key);
 
+      // Generated sample — build markdown + sidecar container in-browser
+      const generated = GENERATED_SAMPLES[key];
+      if (generated) {
+        setLoadingContent(true);
+        setActiveSlot(null);
+        generated
+          .build()
+          .then(({ markdown, container }) => {
+            setCurrentSource(markdown);
+            replaceWorkspace(container, null);
+            setEditorKey((k) => k + 1);
+          })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error('Failed to build generated sample:', msg);
+            setCurrentSource(`# Error\n\nCould not build sample: ${msg}`);
+            replaceWorkspace(new MemoryContentContainer(), null);
+            setEditorKey((k) => k + 1);
+          })
+          .finally(() => setLoadingContent(false));
+        return;
+      }
+
       // Content zip sample — fetch, unzip, extract markdown + media
       const contentSample = CONTENT_SAMPLES[key];
       if (contentSample) {
@@ -456,16 +506,14 @@ export function App() {
               opacity: loadingContent ? 0.6 : 1,
             }}
           >
-            {SAMPLE_KEYS.map((key) => (
-              <option key={key} value={key}>
-                {getSampleLabel(key)}
-              </option>
-            ))}
-            <option disabled>{'\u2500'.repeat(16)}</option>
-            {Object.entries(CONTENT_SAMPLES).map(([key, sample]) => (
-              <option key={key} value={key}>
-                {sample.label}
-              </option>
+            {SAMPLE_OPTION_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.entries.map((entry) => (
+                  <option key={entry.key} value={entry.key}>
+                    {entry.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </label>

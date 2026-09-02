@@ -45,6 +45,18 @@ license terms.
 | remark-stringify    | 11.0.0  | MIT        | https://github.com/remarkjs/remark/tree/main/packages/remark-stringify |
 | unified             | 11.0.5  | MIT        | https://unifiedjs.com                                                  |
 
+## @bendyline/squisq-calc
+
+| Package                 | Version | License        | Repository                           |
+| ----------------------- | ------- | -------------- | ------------------------------------ |
+| @ironcalc/wasm _(peer)_ | ^0.8.4  | MIT/Apache-2.0 | https://github.com/ironcalc/IronCalc |
+
+No third-party runtime dependencies — the engine contract, formula parser,
+and in-house evaluator tier are Squisq-authored (MIT). @ironcalc/wasm is an
+OPTIONAL peer of the `/ironcalc` subpath, reached only via dynamic import —
+no wasm bytes ship with, or load from, this package until a host creates an
+IronCalc engine.
+
 ## @bendyline/squisq-react
 
 | Package            | Version   | License | Repository          |
@@ -52,6 +64,15 @@ license terms.
 | @bendyline/squisq  | workspace | MIT     | (internal)          |
 | react _(peer)_     | ^18 / ^19 | MIT     | https://reactjs.org |
 | react-dom _(peer)_ | ^18 / ^19 | MIT     | https://reactjs.org |
+
+## @bendyline/squisq-grid-react
+
+| Package                 | Version   | License | Repository                          |
+| ----------------------- | --------- | ------- | ----------------------------------- |
+| @bendyline/squisq       | workspace | MIT     | (internal)                          |
+| @tanstack/react-virtual | 3.14.10   | MIT     | https://github.com/TanStack/virtual |
+| react _(peer)_          | ^18 / ^19 | MIT     | https://reactjs.org                 |
+| react-dom _(peer)_      | ^18 / ^19 | MIT     | https://reactjs.org                 |
 
 ## @bendyline/squisq-formats
 

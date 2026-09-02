@@ -55,4 +55,11 @@ export {
   VERSION_TIMESTAMP_PATTERN,
 } from './timestamp.js';
 
-export { VERSIONS_PREFIX, getDocBasename, buildVersionPath, parseVersionPath } from './paths.js';
+export {
+  VERSIONS_PREFIX,
+  DATA_BACKUP_PREFIX,
+  getDocBasename,
+  buildVersionPath,
+  parseVersionPath,
+  buildDataBackupPath,
+} from './paths.js';

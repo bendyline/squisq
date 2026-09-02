@@ -1,38 +1,80 @@
 /**
- * DataCardWidget — the React surface of the Write-view data card ("the
- * rectangle"): file identity (icon, name, size), shape (`rows × cols`), a
- * tiny table preview, and a "Show in Files" affordance. Read-only; the
- * underlying paragraph (a plain markdown link) stays the source of truth.
+ * DataCardWidget — the Write-view surface for a data sidecar reference.
  *
- * States: loading skeleton → resolved card; file absent from the media
- * provider → dashed error card; no reader / parse failure (e.g. parquet
- * without the optional peer) → metadata-only card. Never throws into the
- * editor.
+ * ALWAYS-GRID contract: every `{[dataTable src=…]}` block mounts the real
+ * virtualized grid (`@bendyline/squisq-grid-react`, lazily imported), with
+ * the summary card's identity strip (icon, name, size, rows×cols,
+ * Show-in-Files) as the grid's header. The compact preview card remains
+ * ONLY as the runtime fallback when the grid module fails to load — plus
+ * the unchanged missing/metadata error states.
+ *
+ * View state (sort/filter) binds to the OWNING heading's annotation params
+ * when the heading really owns this sidecar (see viewStateBinding.ts);
+ * otherwise it is session-only and the grid footer says so. CSV/TSV edits
+ * save in place through gridSave.ts; XLSX edits (values, and formulas when
+ * the calc-engine session boots within budget) save through in-place
+ * patching; parquet mounts read-only with a reason chip.
+ *
+ * The underlying PM paragraph is still never touched by the widget itself —
+ * only the heading's `dataTemplateParams` attribute changes, through the
+ * ordinary PM-undoable transaction path.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
-import { DATA_CARD_KEY } from './DataCardExtension';
-import { dataLinkHrefOf } from './DataCardExtension';
+import type { ContentContainer } from '@bendyline/squisq/storage';
+import type { TableViewState } from '@bendyline/squisq/table';
+import { EMPTY_TABLE_VIEW_STATE } from '@bendyline/squisq/table';
+import { DATA_CARD_KEY, dataLinkHrefOf } from './DataCardExtension';
 import {
   dataExtensionOf,
   loadDataPreview,
   loadDataPreviewCached,
   type DataPreview,
 } from './dataPreview';
+import { XLSX_LOCKED_REASON, ingestSidecarBytes, type IngestedSidecar } from './ingestAdapters';
+
+/** Lock tooltip when the calc engine IS active (formulas edit; these don't). */
+const XLSX_SESSION_LOCKED_REASON =
+  'Date cells and shared-formula masters stay locked; other formulas are editable';
+import {
+  readHeadingViewBinding,
+  viewStateFromBinding,
+  writeHeadingViewState,
+} from './viewStateBinding';
+import { saveCsvEdits, saveXlsxEdits } from './gridSave';
+import { createXlsxFormulaSession, type XlsxFormulaSession } from './formulaSupport';
+
+type GridModule = typeof import('@bendyline/squisq-grid-react');
+
+let gridModulePromise: Promise<GridModule | null> | null = null;
+function loadGridModule(): Promise<GridModule | null> {
+  // A FAILED load is not cached: a dev server mid-reoptimize (or any
+  // transient fetch failure) rejects one dynamic import, and pinning that
+  // null forever would lock every data card onto the fallback preview until
+  // a hard reload. Success is cached; failure retries on the next mount.
+  gridModulePromise ??= import('@bendyline/squisq-grid-react').catch(() => {
+    gridModulePromise = null;
+    return null;
+  });
+  return gridModulePromise;
+}
 
 export interface DataCardWidgetProps {
   editor: Editor;
   blockId: string;
   getMediaProvider: () => MediaProvider | null | undefined;
   getMediaRevision: () => number;
+  getContainer?: (() => ContentContainer | null | undefined) | undefined;
   onOpenFiles?: ((relativePath: string) => void) | undefined;
+  onMediaSaved?: (() => void) | undefined;
 }
 
 interface CardLink {
   href: string;
   label: string;
+  pos: number;
 }
 
 /** Resolve the claimed paragraph's link, re-reading on every transaction. */
@@ -54,7 +96,7 @@ function useCardLink(editor: Editor, blockId: string): CardLink | null {
     if (!node) return null;
     const href = dataLinkHrefOf(node);
     if (!href) return null;
-    return { href, label: node.textContent };
+    return { href, label: node.textContent, pos };
   }, [editor, blockId, version]);
 }
 
@@ -77,30 +119,50 @@ function formatBytes(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+interface GridState {
+  module: GridModule;
+  provider: InstanceType<GridModule['TableStoreClient']>;
+  journal: InstanceType<GridModule['EditJournal']>;
+  ingested: IngestedSidecar;
+  bytes: ArrayBuffer;
+  headers: string[];
+  /** Calc-engine session for XLSX formula editing (null = values only). */
+  formulaSession: XlsxFormulaSession | null;
+}
+
 type CardState =
   | { kind: 'loading' }
   | { kind: 'missing' }
-  | { kind: 'meta'; size: number | null }
-  | { kind: 'ready'; size: number | null; preview: DataPreview };
+  | { kind: 'meta'; size: number | null; preview: DataPreview | null }
+  | { kind: 'grid'; size: number | null; grid: GridState };
 
 export function DataCardWidget({
   editor,
   blockId,
   getMediaProvider,
   getMediaRevision,
+  getContainer,
   onOpenFiles,
+  onMediaSaved,
 }: DataCardWidgetProps): JSX.Element | null {
   const link = useCardLink(editor, blockId);
   const revision = useMediaRevision(getMediaRevision);
   const [state, setState] = useState<CardState>({ kind: 'loading' });
+  const [view, setView] = useState<TableViewState>(EMPTY_TABLE_VIEW_STATE);
+  const [viewPersisted, setViewPersisted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
+  const [formulaDirty, setFormulaDirty] = useState(0);
+  const gridRef = useRef<GridState | null>(null);
 
   const href = link?.href ?? null;
+  const cardPos = link?.pos ?? null;
 
   useEffect(() => {
-    if (!href) return;
+    if (!href || cardPos === null) return;
     const provider = getMediaProvider();
     if (!provider) {
-      setState({ kind: 'meta', size: null });
+      setState({ kind: 'meta', size: null, preview: null });
       return;
     }
 
@@ -117,30 +179,146 @@ export function DataCardWidget({
         }
         size = entry.size;
 
-        const preview = await loadDataPreviewCached(href, revision, async () => {
-          const url = await provider.resolveUrl(href);
-          // A provider that can't resolve returns the raw relative path;
-          // fetching that from a widget context would 404 confusingly.
-          if (url === href) return null;
-          const response = await fetch(url);
-          if (!response.ok) return null;
-          const bytes = await response.arrayBuffer();
-          return loadDataPreview(bytes, dataExtensionOf(href));
-        });
+        const url = await provider.resolveUrl(href);
+        if (url === href) {
+          if (!cancelled) setState({ kind: 'meta', size, preview: null });
+          return;
+        }
+        const response = await fetch(url);
+        if (!response.ok) {
+          if (!cancelled) setState({ kind: 'meta', size, preview: null });
+          return;
+        }
+        const bytes = await response.arrayBuffer();
+        const ext = dataExtensionOf(href);
 
+        const module = await loadGridModule();
+        if (module) {
+          const binding = readHeadingViewBinding(editor, cardPos, href);
+          const ingested = await ingestSidecarBytes(bytes, ext, {
+            ...(binding.params.sheet ? { sheet: binding.params.sheet } : {}),
+            ...(binding.params.anchor ? { anchor: binding.params.anchor } : {}),
+            ...(binding.params.headerRow !== undefined
+              ? { headerRow: binding.params.headerRow !== 'false' }
+              : {}),
+          });
+          if (cancelled) return;
+          // Formula editing rides a calc-engine session; a load failure or
+          // an over-budget workbook degrades to value-only editing.
+          let formulaSession: XlsxFormulaSession | null = null;
+          if (ingested.xlsx) {
+            try {
+              formulaSession = await createXlsxFormulaSession(ingested.xlsx);
+            } catch {
+              formulaSession = null;
+            }
+          }
+          if (cancelled) {
+            formulaSession?.dispose();
+            return;
+          }
+          gridRef.current?.formulaSession?.dispose();
+          gridRef.current?.provider.dispose();
+          const storeProvider = new module.TableStoreClient(ingested.ingest);
+          const journal = module.journalFor(href, revision);
+          const grid: GridState = {
+            module,
+            provider: storeProvider,
+            journal,
+            ingested,
+            bytes,
+            headers: ingested.ingest.headers,
+            formulaSession,
+          };
+          gridRef.current = grid;
+          setView(viewStateFromBinding(binding, ingested.ingest.headers));
+          setViewPersisted(binding.persisted);
+          setSaveNotice(null);
+          setFormulaDirty(0);
+          setState({ kind: 'grid', size, grid });
+          return;
+        }
+
+        // Grid module unavailable — the compact preview card is the fallback.
+        const preview = await loadDataPreviewCached(href, revision, () =>
+          loadDataPreview(bytes, ext),
+        );
         if (cancelled) return;
-        setState(preview ? { kind: 'ready', size, preview } : { kind: 'meta', size });
+        setState({ kind: 'meta', size, preview });
       } catch {
-        if (!cancelled) setState({ kind: 'meta', size });
+        if (!cancelled) setState({ kind: 'meta', size, preview: null });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [href, revision, getMediaProvider]);
+    // cardPos intentionally excluded: position churn must not re-ingest.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [href, revision, getMediaProvider, editor]);
+
+  useEffect(
+    () => () => {
+      gridRef.current?.formulaSession?.dispose();
+      gridRef.current?.provider.dispose();
+      gridRef.current = null;
+    },
+    [],
+  );
+
+  const handleViewChange = useCallback(
+    (next: TableViewState) => {
+      setView(next);
+      if (href !== null && cardPos !== null && viewPersisted) {
+        writeHeadingViewState(editor, cardPos, href, next);
+      }
+    },
+    [editor, cardPos, href, viewPersisted],
+  );
+
+  const handleSave = useCallback(async () => {
+    const grid = gridRef.current;
+    const provider = getMediaProvider();
+    if (!grid || !provider || !href || (!grid.ingested.csv && !grid.ingested.xlsx)) return;
+    setSaving(true);
+    try {
+      const shared = {
+        path: href,
+        originalBytes: grid.bytes,
+        journal: grid.journal,
+        mediaProvider: provider,
+        container: getContainer?.() ?? null,
+      };
+      const result = grid.ingested.csv
+        ? await saveCsvEdits({ ...shared, csv: grid.ingested.csv })
+        : await saveXlsxEdits({
+            ...shared,
+            xlsx: grid.ingested.xlsx!,
+            ...(grid.formulaSession ? { formulaEdits: grid.formulaSession.formulaEdits() } : {}),
+          });
+      setSaveNotice(
+        result.ok
+          ? result.notices.length > 0
+            ? `saved (${result.notices.join('; ')})`
+            : null
+          : (result.error ?? 'save failed'),
+      );
+      if (result.ok) {
+        gridRef.current?.formulaSession?.markSaved();
+        setFormulaDirty(0);
+        onMediaSaved?.();
+      }
+    } finally {
+      setSaving(false);
+    }
+  }, [getContainer, getMediaProvider, href, onMediaSaved]);
 
   if (!link || !href) return null;
   const fileName = href.split('/').pop() ?? href;
+  const size = state.kind === 'meta' || state.kind === 'grid' ? state.size : null;
+  const grid = state.kind === 'grid' ? state.grid : null;
+  const xlsxMeta = grid?.ingested.xlsx;
+  const editableGrid = Boolean(grid?.ingested.csv || xlsxMeta) && editor.isEditable;
+  const readOnlyReason = grid?.ingested.readOnlyReason;
 
   return (
     <div
@@ -157,17 +335,22 @@ export function DataCardWidget({
         <span className="squisq-data-card-meta">
           {state.kind === 'missing' && 'not found in this document’s files'}
           {state.kind === 'loading' && 'loading…'}
-          {(state.kind === 'ready' || state.kind === 'meta') && state.size !== null && (
-            <>{formatBytes(state.size)}</>
+          {size !== null && <>{formatBytes(size)}</>}
+          {grid && (
+            <>
+              {' · '}
+              {grid.ingested.ingest.cells.length.toLocaleString()} × {grid.headers.length} cells
+            </>
           )}
-          {state.kind === 'ready' &&
-            state.preview.totalRows !== null &&
-            state.preview.totalCols !== null && (
+          {state.kind === 'meta' &&
+            state.preview?.totalRows != null &&
+            state.preview.totalCols != null && (
               <>
                 {' · '}
                 {state.preview.totalRows.toLocaleString()} × {state.preview.totalCols} cells
               </>
             )}
+          {saveNotice ? ` · ${saveNotice}` : ''}
         </span>
         {onOpenFiles && state.kind !== 'missing' && (
           <button
@@ -179,7 +362,63 @@ export function DataCardWidget({
           </button>
         )}
       </div>
-      {state.kind === 'ready' && state.preview.rows.length > 0 && (
+
+      {grid && (
+        <grid.module.DataGrid
+          provider={grid.provider}
+          journal={editableGrid ? grid.journal : undefined}
+          view={view}
+          onViewChange={handleViewChange}
+          viewPersisted={viewPersisted}
+          onSave={editableGrid ? handleSave : undefined}
+          saving={saving}
+          readOnlyReason={editor.isEditable ? readOnlyReason : undefined}
+          isCellLocked={
+            grid.formulaSession
+              ? grid.formulaSession.isCellLocked
+              : xlsxMeta
+                ? (rowId, col) => xlsxMeta.locked.has(`${rowId}:${col}`)
+                : undefined
+          }
+          lockedReason={
+            grid.formulaSession
+              ? XLSX_SESSION_LOCKED_REASON
+              : xlsxMeta
+                ? XLSX_LOCKED_REASON
+                : undefined
+          }
+          formulaSupport={
+            grid.formulaSession
+              ? {
+                  getFormula: grid.formulaSession.getFormula,
+                  commitFormula: async (rowId, col, formula) => {
+                    const result = await grid.formulaSession!.commitFormula(rowId, col, formula);
+                    if (result.ok) setFormulaDirty(grid.formulaSession!.dirtyCount);
+                    return result;
+                  },
+                }
+              : undefined
+          }
+          onCellEdited={
+            grid.formulaSession
+              ? (edit) => grid.formulaSession!.noteValueEdit(edit.rowId, edit.col, edit.value)
+              : undefined
+          }
+          extraDirtyCount={formulaDirty}
+          onDiscardExtra={
+            grid.formulaSession
+              ? async () => {
+                  const updates = await grid.formulaSession!.discard();
+                  if (updates.length > 0) await grid.provider.applyEdits?.(updates);
+                  setFormulaDirty(0);
+                }
+              : undefined
+          }
+          className="squisq-data-card-grid"
+        />
+      )}
+
+      {state.kind === 'meta' && state.preview && state.preview.rows.length > 0 && (
         <div className="squisq-data-card-preview">
           <table>
             <thead>

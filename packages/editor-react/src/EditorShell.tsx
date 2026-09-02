@@ -1021,6 +1021,8 @@ function EditorShellInner({
   const [timelineCompositionVisible, setTimelineCompositionVisible] = useState(false);
   const timelinePreviewCount = Number(timelineVideoVisible) + Number(timelineCompositionVisible);
   const [showFiles, setShowFiles] = useState(false);
+  /** Sidecar path the Files panel should highlight (data card "Show in Files"). */
+  const [filesFocusPath, setFilesFocusPath] = useState<string | null>(null);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   const [mediaCount, setMediaCount] = useState(0);
   const [mediaBinRecorderOpen, setMediaBinRecorderOpen] = useState(false);
@@ -1545,7 +1547,14 @@ function EditorShellInner({
                         submitOnEnter={submitOnEnter}
                         placeholder={placeholder}
                         readOnly={readOnly}
-                        onOpenFilesPanel={mediaProvider ? () => setShowFiles(true) : undefined}
+                        onOpenFilesPanel={
+                          mediaProvider
+                            ? (relativePath) => {
+                                setFilesFocusPath(relativePath ?? null);
+                                setShowFiles(true);
+                              }
+                            : undefined
+                        }
                       />
                     </BlockCardView>
                     {isCardMode && inlinePreviewVisible && (
@@ -1604,6 +1613,7 @@ function EditorShellInner({
                   allowBinaryDownloads={allowBinaryDownloads}
                   onRecord={allowRecording ? handleOpenMediaBinRecorder : undefined}
                   isRecorderOpen={mediaBinRecorderOpen}
+                  highlightPath={filesFocusPath}
                 />
               )}
 

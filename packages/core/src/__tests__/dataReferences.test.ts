@@ -222,6 +222,43 @@ describe('resolveDataReferences', () => {
     expect(result.doc.blocks[0].templateData?.headers).toEqual(['Region', 'Revenue']);
   });
 
+  it('forwards sort/filter params and reports view issues + filtered stats', async () => {
+    const container = await containerWithCsv();
+    let seen: unknown;
+    const reader: DataSourceReader = {
+      extensions: ['csv'],
+      async read(_data, opts) {
+        seen = { sort: opts.sort, filter: opts.filter };
+        return {
+          headers: ['Region'],
+          rows: [['West']],
+          totalRows: 1,
+          totalCols: 1,
+          unfilteredTotalRows: 4,
+          viewIssues: [{ code: 'data-view-unknown-column', message: 'sort column "Nope"…' }],
+        };
+      },
+    };
+    const doc = docWith([
+      dataBlock('q3', {
+        src: 'report_files/data/q3.csv',
+        sort: 'Nope:desc',
+        filter: 'Region=West',
+      }),
+    ]);
+
+    const result = await resolveDataReferences(doc, container, { readers: [reader] });
+
+    expect(seen).toEqual({ sort: 'Nope:desc', filter: 'Region=West' });
+    expect(result.diagnostics).toMatchObject([
+      { severity: 'info', code: 'data-view-unknown-column', blockId: 'q3' },
+    ]);
+    expect(result.doc.blocks[0].templateData?.srcStats).toMatchObject({
+      totalRows: 1,
+      unfilteredTotalRows: 4,
+    });
+  });
+
   it('passes sheet/anchor/headerRow through to the reader for workbooks', async () => {
     const container = new MemoryContentContainer();
     await container.writeFile('report_files/data/book.xlsx', new Uint8Array([1]));

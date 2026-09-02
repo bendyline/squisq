@@ -105,3 +105,10 @@
   color: var(--squisq-text-muted);
   font-size: 0.72rem;
 }
+
+/* Grid embedded in the card: the card supplies the outer chrome. */
+.squisq-data-card .squisq-data-card-grid {
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--squisq-border-subtle);
+}

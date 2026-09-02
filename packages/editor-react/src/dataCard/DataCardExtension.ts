@@ -30,6 +30,7 @@ import type { Editor } from '@tiptap/react';
 import { createRoot, type Root } from 'react-dom/client';
 import { createElement } from 'react';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 import { isDataFilePath } from '@bendyline/squisq/doc';
 import { containFenceWidgetEvents } from '../fenceWidgets/fenceWidgetHost';
 import { mapFenceEntries, type FenceBlockEntry } from '../fenceWidgets/fenceRegistry';
@@ -52,8 +53,16 @@ export interface DataCardExtensionOptions {
   mediaProvider?: () => MediaProvider | null | undefined;
   /** Getter for the media revision; a bump re-resolves mounted cards. */
   mediaRevision?: () => number;
+  /**
+   * Getter for the workspace container — enables the grid save flow's
+   * `.versions/data/` pre-save backups. Absent = saves proceed without a
+   * backup (and say so).
+   */
+  container?: () => ContentContainer | null | undefined;
   /** Open the Files panel focused on a sidecar path. */
   onOpenFiles?: (relativePath: string) => void;
+  /** Notified after a successful sidecar save (hosts bump mediaRevision). */
+  onMediaSaved?: () => void;
 }
 
 /**
@@ -118,7 +127,9 @@ function buildDecorations(
               blockId,
               getMediaProvider: () => options.mediaProvider?.(),
               getMediaRevision: () => options.mediaRevision?.() ?? 0,
+              getContainer: () => options.container?.(),
               onOpenFiles: options.onOpenFiles,
+              onMediaSaved: options.onMediaSaved,
             }),
           );
           (

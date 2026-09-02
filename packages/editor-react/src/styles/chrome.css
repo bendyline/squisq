@@ -328,6 +328,28 @@
   --squisq-block-props-surface-hover: var(--squisq-surface-hover);
   --squisq-block-props-input: var(--squisq-input-bg);
 
+  /* Data grid (@bendyline/squisq-grid-react). The grid's own stylesheet
+   * carries literal fallbacks so it works standalone; inside the editor
+   * these aliases bind it to the chrome palette. Selection maps onto the
+   * accent family — chrome has no dedicated selection tokens. */
+  --squisq-grid-bg: var(--squisq-surface);
+  --squisq-grid-text: var(--squisq-text);
+  --squisq-grid-text-muted: var(--squisq-text-muted);
+  --squisq-grid-text-on-accent: var(--squisq-text-on-accent);
+  --squisq-grid-border: var(--squisq-border);
+  --squisq-grid-border-subtle: var(--squisq-border-subtle);
+  --squisq-grid-header-bg: var(--squisq-surface-subtle);
+  --squisq-grid-header-text: var(--squisq-text-strong);
+  --squisq-grid-input-bg: var(--squisq-input-bg);
+  --squisq-grid-row-hover: var(--squisq-row-hover);
+  --squisq-grid-selection-bg: var(--squisq-accent-subtle);
+  --squisq-grid-selection-border: var(--squisq-accent-border);
+  --squisq-grid-focus-ring: var(--squisq-focus-ring);
+  --squisq-grid-accent: var(--squisq-accent);
+  --squisq-grid-dirty: var(--squisq-warning);
+  --squisq-grid-error: var(--squisq-danger);
+  --squisq-grid-resize-handle: var(--squisq-accent);
+
   --squisq-layout-accent-text: var(--squisq-accent-strong);
   --squisq-layout-accent-bg: var(--squisq-accent);
   --squisq-layout-accent-bg-hover: var(--squisq-accent-hover);

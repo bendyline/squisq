@@ -4,7 +4,17 @@ import { resolve } from 'node:path';
 const repoRoot = resolve(import.meta.dirname, '..');
 const checkOnly = process.argv.includes('--check');
 
-const packageDirs = ['core', 'formats', 'react', 'editor-react', 'video', 'video-react', 'cli'];
+const packageDirs = [
+  'core',
+  'calc',
+  'formats',
+  'react',
+  'grid-react',
+  'editor-react',
+  'video',
+  'video-react',
+  'cli',
+];
 const manifests = new Map(
   packageDirs.map((dir) => [dir, readJson(resolve(repoRoot, 'packages', dir, 'package.json'))]),
 );
@@ -109,7 +119,9 @@ const configs = {
     heading: 'Runtime and generated-data dependencies',
     bundled: ['@fortawesome/fontawesome-free'],
   },
+  calc: { heading: 'Runtime and peer dependencies', peers: true },
   formats: { heading: 'Runtime and peer dependencies', peers: true },
+  'grid-react': { heading: 'Runtime and peer dependencies', peers: true },
   react: {
     heading: 'Runtime, peer, and bundled dependencies',
     bundled: ['preact'],

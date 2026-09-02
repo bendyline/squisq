@@ -164,6 +164,90 @@ describe('xlsxDataReader', () => {
   });
 });
 
+describe('view-state application (sort/filter before windowing)', () => {
+  it('sorts the FULL body before the window — not just the preview', async () => {
+    // 120 rows with descending values; ascending sort must surface the LAST
+    // source rows first, which a window-then-sort would never show.
+    const lines = ['Id,Amount'];
+    for (let i = 0; i < 120; i++) lines.push(`T${i},${1000 - i}`);
+    const table = await csvDataReader.read(enc(lines.join('\n')), {
+      maxRows: 3,
+      sort: 'Amount',
+    });
+
+    expect(table.rows.map((r) => r[1])).toEqual(['881', '882', '883']);
+    expect(table.totalRows).toBe(120);
+    expect(table.unfilteredTotalRows).toBeUndefined();
+    expect(table.viewIssues).toBeUndefined();
+  });
+
+  it('filters before windowing and reports both counts', async () => {
+    const lines = ['Region,Amount'];
+    for (let i = 0; i < 50; i++) lines.push(`${i % 2 ? 'West' : 'East'},${i}`);
+    const table = await csvDataReader.read(enc(lines.join('\n')), {
+      maxRows: 10,
+      filter: 'Region=West',
+    });
+
+    expect(table.rows.every((r) => r[0] === 'West')).toBe(true);
+    expect(table.totalRows).toBe(25);
+    expect(table.unfilteredTotalRows).toBe(50);
+  });
+
+  it('surfaces view issues instead of throwing', async () => {
+    const table = await csvDataReader.read(enc('A,B\n1,2\n'), {
+      maxRows: 10,
+      sort: 'Nope:desc',
+    });
+
+    expect(table.viewIssues?.map((i) => i.code)).toEqual(['data-view-unknown-column']);
+    expect(table.rows).toEqual([['1', '2']]);
+  });
+
+  it('applies view state to XLSX regions', async () => {
+    const markdown = [
+      '## Data {[dataTable sheet=Data anchor=A1]}',
+      '',
+      '| Region | Revenue |',
+      '| ------ | ------- |',
+      '| West   | 100     |',
+      '| East   | 900     |',
+      '| West   | 500     |',
+      '',
+    ].join('\n');
+    const bytes = await markdownDocToXlsx(parseMarkdown(markdown));
+
+    const table = await xlsxDataReader.read(bytes, {
+      sheet: 'Data',
+      anchor: 'A1',
+      maxRows: 10,
+      sort: 'Revenue:desc',
+      filter: 'Region=West',
+    });
+
+    expect(table.rows).toEqual([
+      ['West', '500'],
+      ['West', '100'],
+    ]);
+    expect(table.unfilteredTotalRows).toBe(3);
+  });
+
+  it('applies view state to parquet (full read when view active)', async () => {
+    const path = resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      'fixtures',
+      'data-sample.parquet',
+    );
+    const buf = readFileSync(path);
+    const bytes = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+
+    const table = await parquetDataReader.read(bytes, { maxRows: 2, sort: 'revenue:desc' });
+
+    expect(table.rows.map((r) => r[0])).toEqual(['East', 'North']);
+    expect(table.totalRows).toBe(6);
+  });
+});
+
 describe('parquetDataReader', () => {
   function fixtureBytes(): ArrayBuffer {
     const path = resolve(

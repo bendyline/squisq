@@ -170,6 +170,18 @@ function DATA_SRC_DESCRIPTORS(): readonly TemplateInputDescriptor[] {
     // Written by `resolveDataReferences` onto templateData (totalRows/totalCols/
     // previewRows/truncated) — declared so resolved docs don't lint as unknown.
     { key: 'srcStats', description: 'Preview stats recorded by data-reference resolution' },
+    // Non-destructive view state over the src data (see @bendyline/squisq/table
+    // for the grammar) — applied by the readers before windowing, so previews
+    // and exports show the author's curated view.
+    {
+      key: 'sort',
+      description: "Sort order over src data: 'Col:desc,Other' (quote names containing , or :)",
+    },
+    {
+      key: 'filter',
+      description:
+        "Row filter over src data: 'Col=value;Other>=10' (ops = != > < >= <= ~ !~; AND only)",
+    },
   ];
 }
 

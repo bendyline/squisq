@@ -1,0 +1,61 @@
+{
+  "name": "@bendyline/squisq-calc",
+  "version": "0.1.0",
+  "description": "Spreadsheet calculation for squisq: the engine adapter contract (staleness, spill, budgets, cycle policy), an Excel formula parser, a pure-TypeScript in-house evaluator tier, and an IronCalc wasm backend behind the /ironcalc subpath (optional peer)",
+  "license": "MIT",
+  "author": "Bendyline",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bendyline/squisq.git",
+    "directory": "packages/calc"
+  },
+  "homepage": "https://github.com/bendyline/squisq",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "LICENSE",
+    "NOTICE.md",
+    "THIRD_PARTY_LICENSES.txt"
+  ],
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./ironcalc": {
+      "types": "./dist/ironcalc/index.d.ts",
+      "import": "./dist/ironcalc/index.js",
+      "default": "./dist/ironcalc/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup && node ../../scripts/generate-bundle-licenses.mjs . && node ../../scripts/remove-empty-chunks.mjs dist",
+    "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@ironcalc/wasm": "0.8.4",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3"
+  },
+  "peerDependencies": {
+    "@ironcalc/wasm": "^0.8.4"
+  },
+  "peerDependenciesMeta": {
+    "@ironcalc/wasm": {
+      "optional": true
+    }
+  }
+}

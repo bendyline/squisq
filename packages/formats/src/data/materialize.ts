@@ -88,6 +88,10 @@ export async function materializeDataReferences(
         ...(params?.sheet ? { sheet: params.sheet } : {}),
         ...(params?.anchor ? { anchor: params.anchor } : {}),
         ...(params?.headerRow !== undefined ? { headerRow: params.headerRow !== 'false' } : {}),
+        // Exports honor the author's curated view: the sort/filter params
+        // shape the embedded full table exactly as they shape previews.
+        ...(params?.sort ? { sort: params.sort } : {}),
+        ...(params?.filter ? { filter: params.filter } : {}),
       });
       const mdTable: MarkdownTable = {
         type: 'table',
