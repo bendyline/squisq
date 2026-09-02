@@ -60,6 +60,7 @@ export type KernelRequest =
   | { type: 'setView'; seq: number; sort: KernelSortTerm[]; filter: KernelFilterClause[] }
   | { type: 'rows'; seq: number; start: number; count: number }
   | { type: 'applyEdits'; seq: number; edits: KernelCellEdit[] }
+  | { type: 'distinct'; seq: number; col: number; limit: number }
   | { type: 'dispose' };
 
 export type KernelCell = number | string | boolean | null;
@@ -69,6 +70,13 @@ export type KernelResponse =
   | { type: 'viewResult'; seq: number; viewRowCount: number }
   | { type: 'rowsResult'; seq: number; start: number; rowIds: number[]; cells: KernelCell[][] }
   | { type: 'editResult'; seq: number; staleView: boolean }
+  | {
+      type: 'distinctResult';
+      seq: number;
+      values: string[];
+      totalDistinct: number;
+      hasBlank: boolean;
+    }
   | { type: 'error'; seq: number; message: string };
 
 /** The structural slice of a worker global scope the kernel needs. */
@@ -328,6 +336,66 @@ export function tableKernel(scope: KernelScope): void {
           activeSort.some((term) => touched.has(term.col)) ||
           activeFilter.some((clause) => touched.has(clause.col));
         scope.postMessage({ type: 'editResult', seq: message.seq, staleView });
+        return;
+      }
+      if (message.type === 'distinct') {
+        // Full-SOURCE distinct sweep (not the filtered view — a value picker
+        // must offer values the current filter hides). Dictionary columns
+        // are nearly free: collect USED codes (edits can orphan dictionary
+        // entries) and order by the collator rank the sort already builds.
+        const column = columns[message.col];
+        const limit = Math.max(1, message.limit);
+        let hasBlank = false;
+        let values: string[] = [];
+        let totalDistinct = 0;
+        if (column && (column.kind === 'string' || column.kind === 'date')) {
+          const dict = column.dict ?? [];
+          const used = new Uint8Array(dict.length);
+          const codes = column.data as Int32Array;
+          for (let row = 0; row < rowCount; row++) {
+            const code = codes[row]!;
+            if (code < 0) hasBlank = true;
+            else used[code] = 1;
+          }
+          const rank = ensureRank(column);
+          const present: number[] = [];
+          for (let code = 0; code < used.length; code++) {
+            if (used[code] === 1) present.push(code);
+          }
+          present.sort((a, b) => rank[a]! - rank[b]!);
+          totalDistinct = present.length;
+          values = present.slice(0, limit).map((code) => dict[code]!);
+        } else if (column && column.kind === 'number') {
+          const data = column.data as Float64Array;
+          const seen = new Set<number>();
+          for (let row = 0; row < rowCount; row++) {
+            if (!column.valid || column.valid[row] === 0) hasBlank = true;
+            else seen.add(data[row]!);
+          }
+          const sorted = [...seen].sort((a, b) => a - b);
+          totalDistinct = sorted.length;
+          values = sorted.slice(0, limit).map((value) => String(value));
+        } else if (column) {
+          let sawTrue = false;
+          let sawFalse = false;
+          const data = column.data as Uint8Array;
+          for (let row = 0; row < rowCount; row++) {
+            if (!column.valid || column.valid[row] === 0) hasBlank = true;
+            else if (data[row] === 1) sawTrue = true;
+            else sawFalse = true;
+          }
+          if (sawFalse) values.push('false');
+          if (sawTrue) values.push('true');
+          totalDistinct = values.length;
+          values = values.slice(0, limit);
+        }
+        scope.postMessage({
+          type: 'distinctResult',
+          seq: message.seq,
+          values,
+          totalDistinct,
+          hasBlank,
+        });
         return;
       }
       if (message.type === 'dispose') {

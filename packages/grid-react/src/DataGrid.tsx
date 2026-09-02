@@ -41,6 +41,7 @@ import type {
   FilterOp,
   TableCellEdit,
   TableCellValue,
+  TableDistinctResult,
   TableColumnKind,
   TableQueryProvider,
   TableSchema,
@@ -157,6 +158,12 @@ interface FilterOpChoice {
   op: FilterOp;
   glyph: string;
   label: string;
+  /**
+   * Takes no value: the clause matches on blankness alone (`=`/`!=` with an
+   * empty value in the persisted grammar), the filter input clears and
+   * disables while active.
+   */
+  unary?: true;
 }
 
 /** Text-matching choices (string/date columns; case toggle applies). */
@@ -179,12 +186,24 @@ const COMPARE_OP_CHOICES: readonly FilterOpChoice[] = [
   { op: '>=', glyph: '≥', label: 'At least' },
 ];
 
+/** Value-less blankness tests, offered on every column kind. In the
+ * persisted grammar these are `=`/`!=` with an empty (quoted) value —
+ * `filter=Notes=""` — which the reference matcher and kernel already
+ * define as "cell is blank". */
+const UNARY_OP_CHOICES: readonly FilterOpChoice[] = [
+  { op: '=', glyph: '∅', label: 'Is empty', unary: true },
+  { op: '!=', glyph: '≠∅', label: 'Is not empty', unary: true },
+];
+
 function opChoicesFor(kind: TableColumnKind): readonly FilterOpChoice[] {
-  if (kind === 'number' || kind === 'boolean') return COMPARE_OP_CHOICES;
+  if (kind === 'number' || kind === 'boolean') {
+    return [...COMPARE_OP_CHOICES, ...UNARY_OP_CHOICES];
+  }
   // Text-ish columns hold anything ("mixed"), so they get both families.
   return [
     ...TEXT_OP_CHOICES,
     ...COMPARE_OP_CHOICES.filter((choice) => choice.op !== '=' && choice.op !== '!='),
+    ...UNARY_OP_CHOICES,
   ];
 }
 
@@ -192,13 +211,26 @@ function defaultOpFor(kind: TableColumnKind): FilterOp {
   return kind === 'number' || kind === 'boolean' ? '=' : '~';
 }
 
-function glyphFor(kind: TableColumnKind, op: FilterOp): string {
+interface FilterOpState {
+  op: FilterOp;
+  caseSensitive: boolean;
+  unary?: boolean;
+}
+
+function choiceMatches(choice: FilterOpChoice, state: FilterOpState): boolean {
+  return choice.op === state.op && (choice.unary === true) === (state.unary === true);
+}
+
+function glyphFor(kind: TableColumnKind, state: FilterOpState): string {
   return (
-    opChoicesFor(kind).find((choice) => choice.op === op)?.glyph ??
-    TEXT_OP_CHOICES.find((choice) => choice.op === op)?.glyph ??
-    op
+    opChoicesFor(kind).find((choice) => choiceMatches(choice, state))?.glyph ??
+    TEXT_OP_CHOICES.find((choice) => choice.op === state.op)?.glyph ??
+    state.op
   );
 }
+
+/** Distinct values offered in the filter value picker before capping. */
+const VALUE_MENU_LIMIT = 100;
 
 /** Ops the case-sensitivity toggle applies to. */
 const CASE_CAPABLE_OPS: readonly FilterOp[] = ['=', '!=', '~', '!~', '^~', '$~'];
@@ -240,11 +272,15 @@ export function DataGrid({
   );
   const [colWidths, setColWidths] = useState<Record<number, number>>({});
   /** Per-column filter operator + case flag (defaults derive from kind/view). */
-  const [filterOps, setFilterOps] = useState<
-    Record<number, { op: FilterOp; caseSensitive: boolean }>
-  >({});
+  const [filterOps, setFilterOps] = useState<Record<number, FilterOpState>>({});
   /** Column whose operator menu is open, if any. */
   const [opMenuCol, setOpMenuCol] = useState<number | null>(null);
+  /** Column whose distinct-values menu is open, and its (async) payload. */
+  const [valueMenuCol, setValueMenuCol] = useState<number | null>(null);
+  const [valueMenuData, setValueMenuData] = useState<{
+    col: number;
+    result: TableDistinctResult;
+  } | null>(null);
   const [dirtyTick, setDirtyTick] = useState(0);
   const [announce, setAnnounce] = useState('');
   // Re-render + refetch signal. It must be a REAL dependency of the windowed
@@ -649,15 +685,18 @@ export function DataGrid({
     [onViewChange],
   );
 
-  /** The header filter row owns ONE clause per column, whatever its op. */
+  /** The header filter row owns ONE clause per column, whatever its op. A
+   * unary (Is empty / Is not empty) clause is active with an EMPTY value —
+   * the one case an empty text does not mean "no filter". */
   const setColumnFilter = useCallback(
-    (columnName: string, text: string, op: FilterOp, caseSensitive: boolean) => {
+    (columnName: string, text: string, op: FilterOp, caseSensitive: boolean, unary = false) => {
       const current = viewRef.current;
       const others = current.filter.filter((clause) => clause.column !== columnName);
       onViewChange?.({
         ...current,
-        filter:
-          text.trim() === ''
+        filter: unary
+          ? [...others, { column: columnName, op, value: '' }]
+          : text.trim() === ''
             ? others
             : [
                 ...others,
@@ -675,26 +714,87 @@ export function DataGrid({
     [onViewChange],
   );
 
-  /** Resolve a column's operator state: local choice ▸ view clause ▸ kind default. */
+  /** Resolve a column's operator state: local choice ▸ view clause ▸ kind
+   * default. A clause with an empty value can only be a unary one (empty
+   * text otherwise removes the clause), which is how a controlled view
+   * carrying `Notes=""` reads back as "Is empty". */
   const opStateFor = useCallback(
-    (col: number, columnName: string): { op: FilterOp; caseSensitive: boolean } => {
+    (col: number, columnName: string): FilterOpState => {
       const local = filterOps[col];
       if (local) return local;
       const clause = viewRef.current.filter.find((entry) => entry.column === columnName);
-      if (clause) return { op: clause.op, caseSensitive: clause.caseSensitive === true };
+      if (clause) {
+        return {
+          op: clause.op,
+          caseSensitive: clause.caseSensitive === true,
+          ...(clause.value === '' && (clause.op === '=' || clause.op === '!=')
+            ? { unary: true }
+            : {}),
+        };
+      }
       return { op: defaultOpFor(schema?.columns[col]?.kind ?? 'string'), caseSensitive: false };
     },
     [filterOps, schema],
   );
 
   const chooseFilterOp = useCallback(
-    (col: number, columnName: string, next: { op: FilterOp; caseSensitive: boolean }) => {
+    (col: number, columnName: string, next: FilterOpState) => {
       setFilterOps((prev) => ({ ...prev, [col]: next }));
       setOpMenuCol(null);
       const clause = viewRef.current.filter.find((entry) => entry.column === columnName);
-      if (clause && clause.value.trim() !== '') {
+      if (next.unary) {
+        // Value-less: activates immediately and clears any typed text.
+        setColumnFilter(columnName, '', next.op, false, true);
+      } else if (clause && clause.value.trim() !== '') {
         setColumnFilter(columnName, clause.value, next.op, next.caseSensitive);
+      } else if (clause) {
+        // Leaving a unary op with nothing typed: the empty-value clause
+        // must not linger as a blankness filter under the new op.
+        setColumnFilter(columnName, '', next.op, next.caseSensitive);
       }
+    },
+    [setColumnFilter],
+  );
+
+  /** The "(Clear filter)" menu action: drop the clause, keep the menu's
+   * operator for the next filter (a unary op reverts to the kind default —
+   * it would otherwise re-activate on the first keystroke). */
+  const clearColumnFilter = useCallback(
+    (col: number, columnName: string) => {
+      const prior = opStateFor(col, columnName);
+      setFilterOps((prev) => ({
+        ...prev,
+        [col]: prior.unary
+          ? { op: defaultOpFor(schema?.columns[col]?.kind ?? 'string'), caseSensitive: false }
+          : { op: prior.op, caseSensitive: prior.caseSensitive },
+      }));
+      setOpMenuCol(null);
+      setColumnFilter(columnName, '', prior.op, prior.caseSensitive);
+    },
+    [opStateFor, schema, setColumnFilter],
+  );
+
+  /** Toggle the distinct-values picker; values load async on open. */
+  const openValueMenu = useCallback(
+    (col: number) => {
+      setOpMenuCol(null);
+      if (valueMenuCol === col) {
+        setValueMenuCol(null);
+        return;
+      }
+      setValueMenuCol(col);
+      void provider.distinct?.(col, VALUE_MENU_LIMIT).then((result) => {
+        setValueMenuData({ col, result });
+      });
+    },
+    [provider, valueMenuCol],
+  );
+
+  const chooseFilterValue = useCallback(
+    (col: number, columnName: string, value: string) => {
+      setFilterOps((prev) => ({ ...prev, [col]: { op: '=', caseSensitive: false } }));
+      setValueMenuCol(null);
+      setColumnFilter(columnName, value, '=', false);
     },
     [setColumnFilter],
   );
@@ -883,14 +983,23 @@ export function DataGrid({
       onCopy={handleCopy}
       onPaste={handlePaste}
       onMouseDownCapture={(event) => {
-        // Any press outside the operator menu/button closes it (the widget's
+        // Any press outside a header menu/its button closes it (the widget's
         // event containment means a document-level listener can't be trusted).
-        if (opMenuCol === null) return;
         const target = event.target as HTMLElement | null;
-        if (!target?.closest('.squisq-grid-opmenu, .squisq-grid-opbutton')) setOpMenuCol(null);
+        if (opMenuCol !== null && !target?.closest('.squisq-grid-opmenu, .squisq-grid-opbutton')) {
+          setOpMenuCol(null);
+        }
+        if (
+          valueMenuCol !== null &&
+          !target?.closest('.squisq-grid-valuemenu, .squisq-grid-valuebutton')
+        ) {
+          setValueMenuCol(null);
+        }
       }}
       onKeyDownCapture={(event) => {
-        if (opMenuCol !== null && event.key === 'Escape') setOpMenuCol(null);
+        if (event.key !== 'Escape') return;
+        if (opMenuCol !== null) setOpMenuCol(null);
+        if (valueMenuCol !== null) setValueMenuCol(null);
       }}
     >
       <div className="squisq-grid-scroller" ref={bodyRef} style={{ height }}>
@@ -926,6 +1035,9 @@ export function DataGrid({
                   {(() => {
                     const opState = opStateFor(col, column.name);
                     const caseCapable = column.kind !== 'number' && column.kind !== 'boolean';
+                    const filterActive = view.filter.some(
+                      (clause) => clause.column === column.name,
+                    );
                     return (
                       <>
                         <button
@@ -936,13 +1048,13 @@ export function DataGrid({
                           aria-label={`Filter operator for ${column.name}`}
                           aria-expanded={opMenuCol === col}
                           title={`${
-                            opChoicesFor(column.kind).find((c) => c.op === opState.op)?.label ??
-                            opState.op
+                            opChoicesFor(column.kind).find((c) => choiceMatches(c, opState))
+                              ?.label ?? opState.op
                           }${opState.caseSensitive ? ' (case-sensitive)' : ''}`}
                           onClick={() => setOpMenuCol((open) => (open === col ? null : col))}
                         >
                           <span className="squisq-grid-opglyph">
-                            {glyphFor(column.kind, opState.op)}
+                            {glyphFor(column.kind, opState)}
                           </span>
                           <span className="squisq-grid-opcaret" aria-hidden="true">
                             ▾
@@ -950,19 +1062,32 @@ export function DataGrid({
                         </button>
                         {opMenuCol === col && (
                           <div className="squisq-grid-opmenu" role="menu">
+                            {filterActive && (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="squisq-grid-opoption squisq-grid-opclear"
+                                onClick={() => clearColumnFilter(col, column.name)}
+                              >
+                                (Clear filter)
+                              </button>
+                            )}
                             {opChoicesFor(column.kind).map((choice) => (
                               <button
-                                key={choice.op}
+                                key={`${choice.op}${choice.unary ? '0' : ''}`}
                                 type="button"
                                 role="menuitemradio"
-                                aria-checked={choice.op === opState.op}
+                                aria-checked={choiceMatches(choice, opState)}
                                 className={`squisq-grid-opoption${
-                                  choice.op === opState.op ? ' squisq-grid-opoption--active' : ''
+                                  choiceMatches(choice, opState)
+                                    ? ' squisq-grid-opoption--active'
+                                    : ''
                                 }`}
                                 onClick={() =>
                                   chooseFilterOp(col, column.name, {
                                     op: choice.op,
                                     caseSensitive: opState.caseSensitive,
+                                    ...(choice.unary ? { unary: true } : {}),
                                   })
                                 }
                               >
@@ -979,6 +1104,7 @@ export function DataGrid({
                                     chooseFilterOp(col, column.name, {
                                       op: opState.op,
                                       caseSensitive: event.target.checked,
+                                      ...(opState.unary ? { unary: true } : {}),
                                     })
                                   }
                                 />
@@ -990,7 +1116,14 @@ export function DataGrid({
                         <input
                           className="squisq-grid-filterinput"
                           aria-label={`Filter ${column.name}`}
-                          placeholder="filter"
+                          placeholder={
+                            opState.unary
+                              ? opState.op === '='
+                                ? '(empty)'
+                                : '(not empty)'
+                              : 'filter'
+                          }
+                          disabled={opState.unary === true}
                           value={filterValueFor(column.name)}
                           onChange={(event) =>
                             setColumnFilter(
@@ -1001,6 +1134,92 @@ export function DataGrid({
                             )
                           }
                         />
+                        {provider.distinct && (
+                          <button
+                            type="button"
+                            className="squisq-grid-valuebutton"
+                            aria-label={`Filter ${column.name} by value`}
+                            aria-expanded={valueMenuCol === col}
+                            title="Filter by value"
+                            onClick={() => openValueMenu(col)}
+                          >
+                            ▾
+                          </button>
+                        )}
+                        {valueMenuCol === col && (
+                          <div className="squisq-grid-valuemenu" role="menu">
+                            {valueMenuData?.col === col ? (
+                              <>
+                                {filterActive && (
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="squisq-grid-opoption squisq-grid-opclear"
+                                    onClick={() => {
+                                      setValueMenuCol(null);
+                                      clearColumnFilter(col, column.name);
+                                    }}
+                                  >
+                                    (All)
+                                  </button>
+                                )}
+                                {valueMenuData.result.hasBlank && (
+                                  <button
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={filterActive && opState.unary === true}
+                                    className={`squisq-grid-opoption${
+                                      filterActive && opState.unary === true
+                                        ? ' squisq-grid-opoption--active'
+                                        : ''
+                                    }`}
+                                    onClick={() => {
+                                      setValueMenuCol(null);
+                                      chooseFilterOp(col, column.name, {
+                                        op: '=',
+                                        caseSensitive: false,
+                                        unary: true,
+                                      });
+                                    }}
+                                  >
+                                    (Blanks)
+                                  </button>
+                                )}
+                                {valueMenuData.result.values.map((value) => {
+                                  const active =
+                                    filterActive &&
+                                    !opState.unary &&
+                                    opState.op === '=' &&
+                                    filterValueFor(column.name) === value;
+                                  return (
+                                    <button
+                                      key={value}
+                                      type="button"
+                                      role="menuitemradio"
+                                      aria-checked={active}
+                                      className={`squisq-grid-opoption squisq-grid-valueoption${
+                                        active ? ' squisq-grid-opoption--active' : ''
+                                      }`}
+                                      title={value}
+                                      onClick={() => chooseFilterValue(col, column.name, value)}
+                                    >
+                                      {value}
+                                    </button>
+                                  );
+                                })}
+                                {valueMenuData.result.totalDistinct >
+                                  valueMenuData.result.values.length && (
+                                  <div className="squisq-grid-valuemenu-note">
+                                    showing {valueMenuData.result.values.length} of{' '}
+                                    {valueMenuData.result.totalDistinct.toLocaleString()} values
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div className="squisq-grid-valuemenu-note">loading…</div>
+                            )}
+                          </div>
+                        )}
                       </>
                     );
                   })()}
@@ -1112,9 +1331,13 @@ export function DataGrid({
       <div className="squisq-grid-footer">
         <span className="squisq-grid-status" aria-live="polite">
           {announce ||
-            `${viewRowCount.toLocaleString()} rows${
+            `${viewRowCount.toLocaleString()} row${viewRowCount === 1 ? '' : 's'}${
               schema && viewRowCount !== schema.rowCount
                 ? ` (of ${schema.rowCount.toLocaleString()})`
+                : ''
+            }${
+              schema
+                ? `, ${schema.columns.length} column${schema.columns.length === 1 ? '' : 's'}`
                 : ''
             }`}
           {issueNote ? ` · ${issueNote}` : ''}

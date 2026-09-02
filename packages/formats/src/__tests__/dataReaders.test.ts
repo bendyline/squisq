@@ -194,6 +194,21 @@ describe('view-state application (sort/filter before windowing)', () => {
     expect(table.unfilteredTotalRows).toBe(50);
   });
 
+  it('reads a large CSV past the inline parser caps (sidecar tier limits)', async () => {
+    // 30k rows × 5 cols = 150k cells — over both conservative parseCsv
+    // defaults. The sidecar readers window AFTER a full-body read, so they
+    // must carry SIDECAR_CSV_LIMITS or big files dead-end at the cap.
+    const lines = ['A,B,C,D,E'];
+    for (let i = 0; i < 30_000; i++) lines.push(`r${i},${30_000 - i},2,3,4`);
+    const table = await csvDataReader.read(enc(lines.join('\n') + '\n'), {
+      maxRows: 3,
+      sort: 'B',
+    });
+    expect(table.totalRows).toBe(30_000);
+    expect(table.rows).toHaveLength(3);
+    expect(table.rows[0]![1]).toBe('1'); // full-body sort surfaced the tail
+  });
+
   it('applies the extended text ops through the reader path', async () => {
     const csv = enc('Name,Amount\nNorth,1\nNorthwest,2\nSouth,3\nnorthern,4\n');
 

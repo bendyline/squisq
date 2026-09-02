@@ -62,6 +62,27 @@ async function mount(ui: React.ReactElement): Promise<{ host: HTMLElement; root:
 
 const EMPTY_VIEW: TableViewState = { sort: [], filter: [] };
 
+/** Controlled harness factory — the widget feeds the view back, so
+ * re-emits read the ACTIVE clause from the view prop. */
+function controlledHarness(
+  provider: TableStoreClient,
+  changes: TableViewState[],
+): () => React.ReactElement {
+  return function Harness() {
+    const [view, setView] = useState<TableViewState>(EMPTY_VIEW);
+    return (
+      <DataGrid
+        provider={provider}
+        view={view}
+        onViewChange={(v) => {
+          changes.push(v);
+          setView(v);
+        }}
+      />
+    );
+  };
+}
+
 describe('DataGrid', () => {
   it('renders headers, grid roles, and the row-count footer', async () => {
     const provider = makeProvider();
@@ -75,7 +96,7 @@ describe('DataGrid', () => {
       (el) => el.querySelector('.squisq-grid-colname')?.textContent,
     );
     expect(headers).toEqual(['Region', 'Revenue']);
-    expect(host.querySelector('.squisq-grid-status')?.textContent).toContain('3 rows');
+    expect(host.querySelector('.squisq-grid-status')?.textContent).toContain('3 rows, 2 columns');
 
     await act(async () => root.unmount());
     provider.dispose();
@@ -327,21 +348,7 @@ describe('DataGrid', () => {
   it('filter operator menu: anchors, case toggle, and numeric defaults', async () => {
     const provider = makeProvider();
     const changes: TableViewState[] = [];
-    // Controlled harness — the widget feeds the view back, and the case
-    // toggle's re-emit reads the ACTIVE clause from the view prop.
-    function Harness() {
-      const [view, setView] = useState<TableViewState>(EMPTY_VIEW);
-      return (
-        <DataGrid
-          provider={provider}
-          view={view}
-          onViewChange={(v) => {
-            changes.push(v);
-            setView(v);
-          }}
-        />
-      );
-    }
+    const Harness = controlledHarness(provider, changes);
     const { host, root } = await mount(<Harness />);
 
     // Region (string): defaults to contains; Revenue (number): equals.
@@ -366,6 +373,8 @@ describe('DataGrid', () => {
       'Greater than',
       'At most',
       'At least',
+      'Is empty',
+      'Is not empty',
     ]);
     expect(menu.querySelector('.squisq-grid-opcase')).not.toBeNull();
 
@@ -443,6 +452,232 @@ describe('DataGrid', () => {
     expect(journal.canUndo).toBe(true);
     journal.undo();
     expect(journal.dirtyCount).toBe(0);
+
+    await act(async () => root.unmount());
+    provider.dispose();
+    host.remove();
+  });
+
+  it('Is empty / Is not empty activate valueless and disable the input', async () => {
+    const provider = new TableStoreClient(
+      {
+        headers: ['Region', 'Revenue'],
+        cells: [
+          ['West', 100],
+          ['', 2000],
+          ['North', 30],
+        ],
+      },
+      { forceLocal: true },
+    );
+    const changes: TableViewState[] = [];
+    const Harness = controlledHarness(provider, changes);
+    const { host, root } = await mount(<Harness />);
+    const opButton = host.querySelector('.squisq-grid-opbutton') as HTMLButtonElement;
+
+    // Is empty: the clause lands with an EMPTY value — the one case that
+    // does not mean "no filter" — and only the blank row survives.
+    await act(async () => opButton.click());
+    const isEmpty = [...host.querySelectorAll('.squisq-grid-opoption')].find(
+      (el) => el.textContent!.includes('Is empty') && !el.textContent!.includes('not'),
+    ) as HTMLButtonElement;
+    await act(async () => isEmpty.click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(changes[changes.length - 1]?.filter).toEqual([{ column: 'Region', op: '=', value: '' }]);
+    const filterInput = host.querySelector('.squisq-grid-filterinput') as HTMLInputElement;
+    expect(filterInput.disabled).toBe(true);
+    expect(filterInput.placeholder).toBe('(empty)');
+    expect(opButton.textContent).toContain('∅');
+    expect(host.querySelector('.squisq-grid-status')?.textContent).toContain('1 row (of 3)');
+
+    // Is not empty: the inverse clause.
+    await act(async () => opButton.click());
+    const isNotEmpty = [...host.querySelectorAll('.squisq-grid-opoption')].find((el) =>
+      el.textContent!.includes('Is not empty'),
+    ) as HTMLButtonElement;
+    await act(async () => isNotEmpty.click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(changes[changes.length - 1]?.filter).toEqual([
+      { column: 'Region', op: '!=', value: '' },
+    ]);
+    expect((host.querySelector('.squisq-grid-filterinput') as HTMLInputElement).placeholder).toBe(
+      '(not empty)',
+    );
+    expect(host.querySelector('.squisq-grid-status')?.textContent).toContain('2 rows (of 3)');
+
+    // Switching back to a text op must not leave the empty-value clause
+    // lingering as a blankness filter: with nothing typed, no filter.
+    await act(async () => opButton.click());
+    const contains = [...host.querySelectorAll('.squisq-grid-opoption')].find(
+      (el) => el.textContent!.trim() === '~Contains',
+    ) as HTMLButtonElement;
+    await act(async () => contains.click());
+    expect(changes[changes.length - 1]?.filter).toEqual([]);
+    expect((host.querySelector('.squisq-grid-filterinput') as HTMLInputElement).disabled).toBe(
+      false,
+    );
+
+    await act(async () => root.unmount());
+    provider.dispose();
+    host.remove();
+  });
+
+  it('a controlled view carrying an empty-value clause reads back as Is empty', async () => {
+    const provider = makeProvider();
+    const view: TableViewState = {
+      sort: [],
+      filter: [{ column: 'Region', op: '=', value: '' }],
+    };
+    const { host, root } = await mount(<DataGrid provider={provider} view={view} />);
+    const opButton = host.querySelector('.squisq-grid-opbutton') as HTMLButtonElement;
+    expect(opButton.textContent).toContain('∅');
+    expect(opButton.title).toBe('Is empty');
+    const filterInput = host.querySelector('.squisq-grid-filterinput') as HTMLInputElement;
+    expect(filterInput.disabled).toBe(true);
+
+    await act(async () => root.unmount());
+    provider.dispose();
+    host.remove();
+  });
+
+  it('(Clear filter) tops the menu only while a filter is active, and clears it', async () => {
+    const provider = makeProvider();
+    const changes: TableViewState[] = [];
+    const Harness = controlledHarness(provider, changes);
+    const { host, root } = await mount(<Harness />);
+    const opButton = host.querySelector('.squisq-grid-opbutton') as HTMLButtonElement;
+
+    // Inert filter → no clear item.
+    await act(async () => opButton.click());
+    expect(host.querySelector('.squisq-grid-opclear')).toBeNull();
+    await act(async () => opButton.click()); // close
+
+    // Type a filter → the item appears first in the menu.
+    const filterInput = host.querySelector('.squisq-grid-filterinput') as HTMLInputElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    await act(async () => {
+      setter.call(filterInput, 'We');
+      filterInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => opButton.click());
+    const clear = host.querySelector('.squisq-grid-opclear') as HTMLButtonElement;
+    expect(clear).not.toBeNull();
+    expect(clear.textContent).toBe('(Clear filter)');
+    expect(host.querySelector('.squisq-grid-opmenu')!.firstElementChild).toBe(clear);
+
+    // Clicking empties the textbox and makes the filter inert.
+    await act(async () => clear.click());
+    expect(changes[changes.length - 1]?.filter).toEqual([]);
+    expect((host.querySelector('.squisq-grid-filterinput') as HTMLInputElement).value).toBe('');
+    expect(host.querySelector('.squisq-grid-opmenu')).toBeNull();
+
+    // Clearing a unary filter also reverts the op to the column default.
+    await act(async () => opButton.click());
+    const isEmpty = [...host.querySelectorAll('.squisq-grid-opoption')].find(
+      (el) => el.textContent!.includes('Is empty') && !el.textContent!.includes('not'),
+    ) as HTMLButtonElement;
+    await act(async () => isEmpty.click());
+    await act(async () => opButton.click());
+    await act(async () =>
+      (host.querySelector('.squisq-grid-opclear') as HTMLButtonElement).click(),
+    );
+    expect(changes[changes.length - 1]?.filter).toEqual([]);
+    expect(opButton.textContent).toContain('~'); // string default restored
+    expect((host.querySelector('.squisq-grid-filterinput') as HTMLInputElement).disabled).toBe(
+      false,
+    );
+
+    await act(async () => root.unmount());
+    provider.dispose();
+    host.remove();
+  });
+
+  it('the value picker lists distinct values and filters on click', async () => {
+    const provider = new TableStoreClient(
+      {
+        headers: ['Region', 'Revenue'],
+        cells: [
+          ['West', 100],
+          ['East', 2000],
+          ['', 30],
+          ['West', 5],
+        ],
+      },
+      { forceLocal: true },
+    );
+    const changes: TableViewState[] = [];
+    const Harness = controlledHarness(provider, changes);
+    const { host, root } = await mount(<Harness />);
+
+    // One picker per column (the provider implements distinct).
+    const pickers = host.querySelectorAll('.squisq-grid-valuebutton');
+    expect(pickers).toHaveLength(2);
+
+    // Open Region's: sorted distinct values plus (Blanks); no (All) yet.
+    await act(async () => (pickers[0] as HTMLButtonElement).click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const menu = host.querySelector('.squisq-grid-valuemenu')!;
+    expect(menu).not.toBeNull();
+    expect(
+      [...menu.querySelectorAll('.squisq-grid-valueoption')].map((el) => el.textContent),
+    ).toEqual(['East', 'West']);
+    expect(menu.textContent).toContain('(Blanks)');
+    expect(menu.textContent).not.toContain('(All)');
+
+    // Clicking a value filters with equals and closes the menu.
+    const west = [...menu.querySelectorAll('.squisq-grid-valueoption')].find(
+      (el) => el.textContent === 'West',
+    ) as HTMLButtonElement;
+    await act(async () => west.click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(changes[changes.length - 1]?.filter).toEqual([
+      { column: 'Region', op: '=', value: 'West' },
+    ]);
+    expect(host.querySelector('.squisq-grid-valuemenu')).toBeNull();
+    expect(host.querySelector('.squisq-grid-status')?.textContent).toContain('2 rows (of 4)');
+    expect((host.querySelector('.squisq-grid-filterinput') as HTMLInputElement).value).toBe('West');
+
+    // Reopen: the active value is checked and (All) now leads; (Blanks)
+    // routes to Is empty.
+    await act(async () => (pickers[0] as HTMLButtonElement).click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const reopened = host.querySelector('.squisq-grid-valuemenu')!;
+    expect(
+      [...reopened.querySelectorAll('.squisq-grid-valueoption')]
+        .filter((el) => el.getAttribute('aria-checked') === 'true')
+        .map((el) => el.textContent),
+    ).toEqual(['West']);
+    const blanks = [...reopened.querySelectorAll('.squisq-grid-opoption')].find(
+      (el) => el.textContent === '(Blanks)',
+    ) as HTMLButtonElement;
+    await act(async () => blanks.click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(changes[changes.length - 1]?.filter).toEqual([{ column: 'Region', op: '=', value: '' }]);
+    expect(host.querySelector('.squisq-grid-status')?.textContent).toContain('1 row (of 4)');
+
+    // (All) clears the filter entirely.
+    await act(async () => (pickers[0] as HTMLButtonElement).click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const all = [...host.querySelectorAll('.squisq-grid-valuemenu .squisq-grid-opoption')].find(
+      (el) => el.textContent === '(All)',
+    ) as HTMLButtonElement;
+    expect(all).toBeTruthy();
+    await act(async () => all.click());
+    expect(changes[changes.length - 1]?.filter).toEqual([]);
 
     await act(async () => root.unmount());
     provider.dispose();

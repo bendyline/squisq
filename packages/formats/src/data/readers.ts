@@ -17,7 +17,7 @@ import type {
 } from '@bendyline/squisq/doc';
 import { applyTableViewState, parseTableViewState } from '@bendyline/squisq/table';
 import type { ViewIssue } from '@bendyline/squisq/table';
-import { parseCsv } from '../csv/index.js';
+import { SIDECAR_CSV_LIMITS, parseCsv } from '../csv/index.js';
 import { xlsxToTables } from '../xlsx/import.js';
 import { columnLetter, type XlsxTable } from '../xlsx/tables.js';
 import { parseCellRef } from '../xlsx/cells.js';
@@ -80,7 +80,7 @@ export const csvDataReader: DataSourceReader = {
     // the first line so a `.tsv` splits correctly.
     const firstLine = text.slice(0, text.indexOf('\n') + 1 || text.length);
     const delimiter = firstLine.includes('\t') && !firstLine.includes(',') ? '\t' : ',';
-    return csvToTable(parseCsv(text, delimiter), opts);
+    return csvToTable(parseCsv(text, delimiter, SIDECAR_CSV_LIMITS), opts);
   },
 };
 

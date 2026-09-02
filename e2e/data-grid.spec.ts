@@ -49,7 +49,7 @@ test.describe('data grid', () => {
     const regionFilter = page.locator('.squisq-grid-filterinput').first();
     await regionFilter.click();
     await regionFilter.pressSequentially('orth');
-    await expect(status).toContainText('1 rows (of 4)', { timeout: 10_000 });
+    await expect(status).toContainText('1 row (of 4)', { timeout: 10_000 });
     await expect(page.locator('.squisq-grid-editor')).toHaveCount(0);
     await expect(page.locator('.squisq-grid-dirtybar')).toHaveCount(0);
 

@@ -106,6 +106,13 @@
   font-size: 0.72rem;
 }
 
+.squisq-data-card-error {
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--squisq-border-subtle);
+  color: var(--squisq-danger-strong);
+  font-size: 0.72rem;
+}
+
 /* Grid embedded in the card: the card supplies the outer chrome. */
 .squisq-data-card .squisq-data-card-grid {
   border: none;

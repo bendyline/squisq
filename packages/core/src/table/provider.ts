@@ -65,6 +65,19 @@ export interface TableEditResult {
   staleView: boolean;
 }
 
+/** Result of a {@link TableQueryProvider.distinct} sweep over one column. */
+export interface TableDistinctResult {
+  /**
+   * Distinct non-blank values as display text, sorted (numerically for
+   * numeric columns, collated otherwise), capped at the requested limit.
+   */
+  values: string[];
+  /** Total distinct non-blank values in the column (may exceed `values`). */
+  totalDistinct: number;
+  /** Whether any cell in the column is blank. */
+  hasBlank: boolean;
+}
+
 export interface TableQueryProvider {
   describe(): Promise<TableSchema>;
   /** Apply a view; subsequent `rows()` windows are in view coordinates. */
@@ -72,5 +85,12 @@ export interface TableQueryProvider {
   rows(start: number, count: number): Promise<TableRowsPage>;
   /** Optional: providers without write support omit it (read-only grid). */
   applyEdits?(edits: TableCellEdit[]): Promise<TableEditResult>;
+  /**
+   * Optional: distinct values of one column over the FULL source (not the
+   * filtered view), for value-picker UIs. Cheap for the columnar store —
+   * string columns are dictionary-encoded — so renderers feature-detect
+   * this rather than aggregating rows themselves.
+   */
+  distinct?(col: number, limit: number): Promise<TableDistinctResult>;
   dispose(): void;
 }

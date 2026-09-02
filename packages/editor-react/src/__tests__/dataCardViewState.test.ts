@@ -177,4 +177,19 @@ describe('writeHeadingViewState', () => {
     const roundTripped = viewStateFromBinding(binding, ['Region', 'Revenue']);
     expect(roundTripped.filter).toEqual(view.filter);
   });
+
+  it('round-trips a blankness filter (Is empty) through the document', () => {
+    const editor = makeEditor(OWNED_DOC);
+    const view: TableViewState = {
+      sort: [],
+      filter: [{ column: 'Region', op: '=', value: '' }],
+    };
+    writeHeadingViewState(editor, cardPosOf(editor), HREF, view);
+    const markdown = emit(editor);
+    expect(markdown).toContain('Region=""');
+    const reparsed = makeEditor(markdown);
+    const binding = readHeadingViewBinding(reparsed, cardPosOf(reparsed), HREF);
+    const roundTripped = viewStateFromBinding(binding, ['Region', 'Revenue']);
+    expect(roundTripped.filter).toEqual(view.filter);
+  });
 });

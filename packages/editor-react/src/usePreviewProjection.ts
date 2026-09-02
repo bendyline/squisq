@@ -7,7 +7,11 @@
 
 import { useEffect, useState } from 'react';
 import type { AudioTrack, Doc } from '@bendyline/squisq/schemas';
-import { resolveAudioMapping, resolveDataReferences } from '@bendyline/squisq/doc';
+import {
+  resolveAudioMapping,
+  resolveDataReferences,
+  type DataSourceTable,
+} from '@bendyline/squisq/doc';
 import { applyTransform } from '@bendyline/squisq/transform';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { buildPreviewDoc } from './buildPreviewDoc';
@@ -16,18 +20,48 @@ import { buildPreviewDoc } from './buildPreviewDoc';
 const DATA_PREVIEW_ROWS = 50;
 
 /**
+ * Per-container memo of full reader reads for the resolver's `tableCache`
+ * seam. The projection re-resolves on EVERY editor debounce, and a reader
+ * read parses the sidecar's full body (view state applies before
+ * windowing) — for a 20 MB CSV that is seconds of main-thread work per
+ * keystroke without this. Scoped by container (WeakMap — dropped with the
+ * workspace) and cleared whenever mediaRevision moves (re-uploads/saves).
+ */
+const dataTableCaches = new WeakMap<
+  ContentContainer,
+  { revision: number; cache: Map<string, Promise<DataSourceTable>> }
+>();
+
+function dataTableCacheFor(
+  container: ContentContainer,
+  revision: number,
+): Map<string, Promise<DataSourceTable>> {
+  let entry = dataTableCaches.get(container);
+  if (!entry || entry.revision !== revision) {
+    entry = { revision, cache: new Map() };
+    dataTableCaches.set(container, entry);
+  }
+  return entry.cache;
+}
+
+/**
  * Fill `{[dataTable src=…]}` sidecar references with bounded previews.
  * The readers live in `@bendyline/squisq-formats` and are loaded lazily —
  * a document with no data references costs nothing. Any failure (module
  * load, file read, parse) falls back to the input doc: the body link still
  * renders, matching the resolver's own never-throw contract.
  */
-async function resolveDataPreviews(doc: Doc, container: ContentContainer): Promise<Doc> {
+async function resolveDataPreviews(
+  doc: Doc,
+  container: ContentContainer,
+  mediaRevision: number,
+): Promise<Doc> {
   try {
     const { defaultDataReaders } = await import('@bendyline/squisq-formats/data');
     const resolved = await resolveDataReferences(doc, container, {
       readers: defaultDataReaders(),
       maxPreviewRows: DATA_PREVIEW_ROWS,
+      tableCache: dataTableCacheFor(container, mediaRevision),
     });
     return resolved.doc;
   } catch {
@@ -124,7 +158,7 @@ export function usePreviewProjection(
       resolveAudioMapping(doc, workspaceContainer)
         // Data-reference previews resolve after audio (independent steps;
         // resolveDataPreviews falls back to its input on any failure).
-        .then((audioDoc) => resolveDataPreviews(audioDoc, workspaceContainer))
+        .then((audioDoc) => resolveDataPreviews(audioDoc, workspaceContainer, mediaRevision ?? 0))
         .then(
           (resolvedDoc) => {
             if (!cancelled) commit(build(resolvedDoc));

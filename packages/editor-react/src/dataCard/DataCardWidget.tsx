@@ -139,7 +139,9 @@ interface GridState {
 type CardState =
   | { kind: 'loading' }
   | { kind: 'missing' }
-  | { kind: 'meta'; size: number | null; preview: DataPreview | null }
+  /** `reason` = why the grid (and preview) could not load — always rendered,
+   * because a silent bare strip reads as "stuck" to the user. */
+  | { kind: 'meta'; size: number | null; preview: DataPreview | null; reason?: string }
   | { kind: 'grid'; size: number | null; grid: GridState };
 
 export function DataCardWidget({
@@ -188,12 +190,26 @@ export function DataCardWidget({
 
         const url = await provider.resolveUrl(href);
         if (url === href) {
-          if (!cancelled) setState({ kind: 'meta', size, preview: null });
+          if (!cancelled) {
+            setState({
+              kind: 'meta',
+              size,
+              preview: null,
+              reason: 'the host did not provide the file bytes',
+            });
+          }
           return;
         }
         const response = await fetch(url);
         if (!response.ok) {
-          if (!cancelled) setState({ kind: 'meta', size, preview: null });
+          if (!cancelled) {
+            setState({
+              kind: 'meta',
+              size,
+              preview: null,
+              reason: `the file could not be fetched (${response.status})`,
+            });
+          }
           return;
         }
         const bytes = await response.arrayBuffer();
@@ -256,8 +272,15 @@ export function DataCardWidget({
         );
         if (cancelled) return;
         setState({ kind: 'meta', size, preview });
-      } catch {
-        if (!cancelled) setState({ kind: 'meta', size, preview: null });
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setState({
+            kind: 'meta',
+            size,
+            preview: null,
+            reason: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     })();
     return () => {
@@ -344,24 +367,19 @@ export function DataCardWidget({
           {fileName}
         </span>
         <span className="squisq-data-card-meta">
-          {state.kind === 'missing' && 'not found in this document’s files'}
-          {state.kind === 'loading' && 'loading…'}
-          {size !== null && <>{formatBytes(size)}</>}
-          {grid && (
-            <>
-              {' · '}
-              {grid.ingested.ingest.cells.length.toLocaleString()} × {grid.headers.length} cells
-            </>
-          )}
-          {state.kind === 'meta' &&
-            state.preview?.totalRows != null &&
-            state.preview.totalCols != null && (
-              <>
-                {' · '}
-                {state.preview.totalRows.toLocaleString()} × {state.preview.totalCols} cells
-              </>
-            )}
-          {saveNotice ? ` · ${saveNotice}` : ''}
+          {/* The strip is the file's IDENTITY, not its stats. Whenever data
+              renders below — the grid (its status bar reports rows +
+              columns) or the compact preview table (its footer reports the
+              window) — the strip stays clean. Size shows only in the
+              data-less states, where nothing else describes the file. */}
+          {[
+            state.kind === 'missing' ? 'not found in this document’s files' : null,
+            state.kind === 'loading' ? 'loading…' : null,
+            state.kind === 'meta' && !state.preview && size !== null ? formatBytes(size) : null,
+            saveNotice,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </span>
         {onOpenFiles && state.kind !== 'missing' && (
           <button
@@ -449,13 +467,25 @@ export function DataCardWidget({
               ))}
             </tbody>
           </table>
-          {state.preview.totalRows !== null &&
-            state.preview.totalRows > state.preview.rows.length && (
-              <div className="squisq-data-card-truncation">
-                showing {state.preview.rows.length} of {state.preview.totalRows.toLocaleString()}{' '}
-                rows
-              </div>
-            )}
+          {/* With the strip stats gone, this footer is the card's one stats
+              line — mirror the grid's status-bar shape (rows, columns). */}
+          {state.preview.totalRows !== null && (
+            <div className="squisq-data-card-truncation">
+              {state.preview.totalRows > state.preview.rows.length
+                ? `showing ${state.preview.rows.length} of ${state.preview.totalRows.toLocaleString()} rows`
+                : `${state.preview.totalRows.toLocaleString()} row${
+                    state.preview.totalRows === 1 ? '' : 's'
+                  }`}
+              {state.preview.totalCols !== null
+                ? `, ${state.preview.totalCols} column${state.preview.totalCols === 1 ? '' : 's'}`
+                : ''}
+            </div>
+          )}
+        </div>
+      )}
+      {state.kind === 'meta' && state.reason && (
+        <div className="squisq-data-card-error" role="status">
+          data view unavailable — {state.reason}
         </div>
       )}
     </div>

@@ -14,6 +14,7 @@
 
 import type {
   TableCellEdit,
+  TableDistinctResult,
   TableEditResult,
   TableQueryProvider,
   TableRowsPage,
@@ -211,6 +212,17 @@ export class TableStoreClient implements TableQueryProvider {
     }));
     if (response.type !== 'editResult') throw new Error('unexpected kernel response');
     return { staleView: response.staleView };
+  }
+
+  async distinct(col: number, limit: number): Promise<TableDistinctResult> {
+    await this.ready;
+    const response = await this.request((seq) => ({ type: 'distinct', seq, col, limit }));
+    if (response.type !== 'distinctResult') throw new Error('unexpected kernel response');
+    return {
+      values: response.values,
+      totalDistinct: response.totalDistinct,
+      hasBlank: response.hasBlank,
+    };
   }
 
   /** Row count under the current view (post-filter). */

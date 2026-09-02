@@ -129,6 +129,39 @@ describe('tableKernel protocol', () => {
 });
 
 describe('toString() shipping guards', () => {
+  it('distinct sweeps the full source: dict order, blanks, orphaned entries', () => {
+    const host = drive(tableKernel);
+    host.send({ type: 'init', seq: 1, columns: initPayload(), rowCount: 4 });
+
+    // Region (string dict): 'West','East','North' — sorted by collator.
+    let res = host.send({ type: 'distinct', seq: 2, col: 0, limit: 100 });
+    expect(res).toMatchObject({
+      type: 'distinctResult',
+      values: ['East', 'North', 'West'],
+      totalDistinct: 3,
+      hasBlank: false,
+    });
+
+    // Revenue (number): sorted numerically; the null cell reports hasBlank.
+    res = host.send({ type: 'distinct', seq: 3, col: 1, limit: 100 });
+    expect(res).toMatchObject({
+      values: ['30', '100', '2000'],
+      totalDistinct: 3,
+      hasBlank: true,
+    });
+
+    // Edit the only 'North' away: the orphaned dictionary entry must not
+    // appear (distinct reflects CELLS, not the dictionary), and the new
+    // value joins the list.
+    host.send({ type: 'applyEdits', seq: 4, edits: [{ rowId: 3, col: 0, value: 'South' }] });
+    res = host.send({ type: 'distinct', seq: 5, col: 0, limit: 100 });
+    expect(res).toMatchObject({ values: ['East', 'South', 'West'], totalDistinct: 3 });
+
+    // The limit caps values but totalDistinct stays honest.
+    res = host.send({ type: 'distinct', seq: 6, col: 0, limit: 2 });
+    expect(res).toMatchObject({ values: ['East', 'South'], totalDistinct: 3 });
+  });
+
   it('isolation: the kernel source runs in a bare scope with no module closure', () => {
     const source = buildKernelSource();
     const responses: unknown[] = [];
@@ -196,6 +229,25 @@ describe('TableStoreClient (local host end-to-end)', () => {
 
     const edited = await client.applyEdits([{ rowId: 1, col: 1, value: 5 }]);
     expect(edited.staleView).toBe(true);
+    client.dispose();
+  });
+
+  it('distinct rides the provider contract through the local host', async () => {
+    const client = new TableStoreClient(
+      {
+        headers: ['Region', 'Qty'],
+        cells: [
+          ['West', 1],
+          ['East', 2],
+          ['West', null],
+        ],
+      },
+      { forceLocal: true },
+    );
+    const region = await client.distinct(0, 100);
+    expect(region).toEqual({ values: ['East', 'West'], totalDistinct: 2, hasBlank: false });
+    const qty = await client.distinct(1, 1);
+    expect(qty).toEqual({ values: ['1'], totalDistinct: 2, hasBlank: true });
     client.dispose();
   });
 

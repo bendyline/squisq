@@ -94,6 +94,20 @@ const DEFAULT_MAX_CSV_CELLS = 100_000;
 const DEFAULT_MAX_CSV_ROWS = 10_000;
 const DEFAULT_MAX_CSV_FIELD_CHARS = 1024 * 1024;
 
+/**
+ * Generous caps for the DATA-SIDECAR tier — the grid ingest and the
+ * full-body sidecar readers. The conservative `parseCsv` defaults protect
+ * the INLINE pipeline (a 100k-cell markdown table can't reparse anyway),
+ * but sidecar data exists precisely because it is big: it renders windowed
+ * and virtualized, so the ceiling here is the columnar store's ~20M-cell
+ * design wall, not the editor debounce. Every sidecar-path caller passes
+ * these; without them a 20 MB upload silently dead-ends at the parser cap.
+ */
+export const SIDECAR_CSV_LIMITS: CsvSafetyLimits = Object.freeze({
+  maxCells: 20_000_000,
+  maxRows: 2_000_000,
+});
+
 async function toText(data: ArrayBuffer | Blob | string): Promise<string> {
   if (typeof data === 'string') return data;
   if (typeof Blob !== 'undefined' && data instanceof Blob) return data.text();

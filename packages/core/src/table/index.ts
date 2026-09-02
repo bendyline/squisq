@@ -45,5 +45,6 @@ export type {
   TableViewResult,
   TableCellEdit,
   TableEditResult,
+  TableDistinctResult,
   TableQueryProvider,
 } from './provider.js';

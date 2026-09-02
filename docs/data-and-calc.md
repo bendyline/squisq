@@ -48,7 +48,10 @@ filter=Region=West;Revenue>=1000    AND-only conjunction
 
 Filter ops: text-matching `= != ~ !~ ^~ $~` (equals, contains, starts-with
 `^~`, ends-with `$~`) are **case-insensitive by default**; a `*` suffix
-makes a match case-sensitive (`Region=*West`). Comparisons `> < >= <=` are
+makes a match case-sensitive (`Region=*West`). An **empty value** on
+`=`/`!=` matches on blankness alone — `filter=Notes=""` keeps only rows
+with a blank Notes cell, `Notes!=""` drops them (the grid's _Is empty_ /
+_Is not empty_ operator choices). Comparisons `> < >= <=` are
 numeric on numeric columns (every non-blank cell parses to a finite number,
 no leading zeros) and collator-based otherwise. Names/values containing
 structural characters quote CSV-style with `""` doubling — no backslashes.
@@ -85,6 +88,10 @@ Contract points worth knowing:
   refusals (shared-formula masters, date-styled cells) are all-or-nothing.
 - The grid supports paste (TSV from Excel/Sheets, anchored at the
   selection, one undo step) and copy (TSV + HTML table).
+- Each filter input carries an operator dropdown (text/comparison ops,
+  case toggle, Is empty / Is not empty, a Clear-filter item) and a
+  distinct-values picker — powered by the provider's optional `distinct`
+  sweep, which the columnar store answers from its string dictionaries.
 
 Standalone (no editor): `new TableStoreClient(ingestTable)` implements
 `TableQueryProvider` over a Blob-URL worker (or in-process with

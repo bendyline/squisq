@@ -59,6 +59,18 @@ describe('ingestSidecarBytes — csv/tsv', () => {
     expect(result.ingest.headers).toEqual(['A', 'Column 2', 'C']);
     expect(result.ingest.cells[0]).toEqual(['x', null, null]);
   });
+
+  it('ingests a large CSV past the inline parser caps (the sidecar tier limits)', async () => {
+    // 30k rows × 5 cols = 150k cells — over BOTH conservative parseCsv
+    // defaults (100k cells / 10k rows). Sidecar data exists because it is
+    // big; the grid ingest must ride SIDECAR_CSV_LIMITS, not the inline caps.
+    const lines = ['A,B,C,D,E'];
+    for (let i = 0; i < 30_000; i++) lines.push(`r${i},1,2,3,4`);
+    const result = await ingestSidecarBytes(encode(lines.join('\n') + '\n'), 'csv', {});
+    expect(result.ingest.headers).toEqual(['A', 'B', 'C', 'D', 'E']);
+    expect(result.ingest.cells).toHaveLength(30_000);
+    expect(result.readOnlyReason).toBeUndefined();
+  });
 });
 
 describe('ingestSidecarBytes — xlsx', () => {

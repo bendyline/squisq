@@ -134,6 +134,62 @@ describe('resolveDataReferences', () => {
     expect(result.diagnostics).toEqual([]);
   });
 
+  it('memoizes reader reads through a caller-owned tableCache', async () => {
+    const container = await containerWithCsv();
+    let reads = 0;
+    const reader: DataSourceReader = {
+      extensions: ['csv'],
+      async read(_data, opts) {
+        reads++;
+        return {
+          headers: ['Region'],
+          rows: Array.from({ length: Math.min(opts.maxRows, 3) }, (_, i) => [`R${i}`]),
+          totalRows: 3,
+          totalCols: 1,
+        };
+      },
+    };
+    const doc = docWith([dataBlock('b1', { src: 'report_files/data/q3.csv' })]);
+    const tableCache = new Map();
+
+    await resolveDataReferences(doc, container, { readers: [reader], tableCache });
+    await resolveDataReferences(doc, container, { readers: [reader], tableCache });
+    expect(reads).toBe(1); // second pass rode the cache
+
+    // A view change is a different key — never a stale hit.
+    const sorted = docWith([
+      dataBlock('b1', { src: 'report_files/data/q3.csv', sort: 'Region:desc' }),
+    ]);
+    await resolveDataReferences(sorted, container, { readers: [reader], tableCache });
+    expect(reads).toBe(2);
+
+    // A fresh map (the caller's revision-bump invalidation) re-reads.
+    await resolveDataReferences(doc, container, { readers: [reader], tableCache: new Map() });
+    expect(reads).toBe(3);
+    // No cache passed → no memoization, unchanged behavior.
+    await resolveDataReferences(doc, container, { readers: [reader] });
+    expect(reads).toBe(4);
+  });
+
+  it('a cached FAILED read still reports its diagnostic on every pass', async () => {
+    const container = await containerWithCsv();
+    let reads = 0;
+    const reader: DataSourceReader = {
+      extensions: ['csv'],
+      async read() {
+        reads++;
+        throw new Error('CSV exceeds the safety limit');
+      },
+    };
+    const doc = docWith([dataBlock('b1', { src: 'report_files/data/q3.csv' })]);
+    const tableCache = new Map();
+    const first = await resolveDataReferences(doc, container, { readers: [reader], tableCache });
+    const second = await resolveDataReferences(doc, container, { readers: [reader], tableCache });
+    expect(reads).toBe(1); // the failure is cached — parsed once, not per pass
+    expect(first.diagnostics.map((d) => d.code)).toEqual(['data-src-parse']);
+    expect(second.diagnostics.map((d) => d.code)).toEqual(['data-src-parse']);
+  });
+
   it('reports a missing file and leaves the block untouched', async () => {
     const container = new MemoryContentContainer();
     const doc = docWith([dataBlock('q3', { src: 'report_files/data/q3.csv' })]);

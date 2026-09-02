@@ -1,4 +1,4 @@
-# Squisq API Reference
+cçç# Squisq API Reference
 
 > Reference for the seven published packages and their subpath exports. Types
 > and signatures below are transcribed from source; when in doubt, the `.d.ts`
@@ -1580,6 +1580,8 @@ readers, and exports.
 //   text ops  = != ~ !~ ^~ $~         equals/contains/starts-with/ends-with,
 //                                     case-INSENSITIVE; suffix * = case-sensitive
 //   compare   > < >= <=               numeric on numeric columns, collator otherwise
+//   blankness Notes="" / Notes!=""    empty value on =/!= matches blank cells
+//                                     (the grid's Is empty / Is not empty)
 // Names/values quote CSV-style ("" doubling — no backslashes; ^ $ * force quoting).
 interface SortTerm {
   column: string;
@@ -1629,7 +1631,16 @@ interface TableQueryProvider {
   setView(view: TableViewState): Promise<TableViewResult>;
   rows(start: number, count: number): Promise<TableRowsPage>;
   applyEdits?(edits: TableCellEdit[]): Promise<TableEditResult>; // staleView: edit hit an
-  dispose(): void; //   active sort/filter column
+  //   active sort/filter column
+  // Optional full-SOURCE distinct sweep of one column (value-picker UIs);
+  // near-free on the columnar store's dictionary-encoded string columns.
+  distinct?(col: number, limit: number): Promise<TableDistinctResult>;
+  dispose(): void;
+}
+interface TableDistinctResult {
+  values: string[]; // sorted, capped at `limit`
+  totalDistinct: number; // may exceed values.length
+  hasBlank: boolean;
 }
 ```
 

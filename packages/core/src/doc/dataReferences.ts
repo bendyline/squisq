@@ -106,6 +106,16 @@ export interface ResolveDataReferencesOptions {
   readers: readonly DataSourceReader[];
   /** Preview window size when a block has no `previewRows` param. Default 50. */
   maxPreviewRows?: number;
+  /**
+   * Caller-owned memo of reader reads, keyed by src + read options. A
+   * reader read is a FULL-body parse (view state applies before
+   * windowing), and the editor's projection path re-resolves on every
+   * debounce — for a 20 MB sidecar that cost per keystroke is not
+   * acceptable. The CALLER owns invalidation: clear or replace the map
+   * when the underlying bytes may have changed (the editor scopes its
+   * cache to the container and clears it on every mediaRevision bump).
+   */
+  tableCache?: Map<string, Promise<DataSourceTable>>;
 }
 
 export interface ResolvedDataReferences {
@@ -231,18 +241,34 @@ export async function resolveDataReferences(
         ? parsedPreviewRows
         : maxPreviewRows;
 
+    const readOpts: DataSourceReadOptions = {
+      ...(overrides.sheet ? { sheet: overrides.sheet } : {}),
+      ...(overrides.anchor ? { anchor: overrides.anchor } : {}),
+      ...(overrides.headerRow !== undefined ? { headerRow: overrides.headerRow !== 'false' } : {}),
+      ...(overrides.sort ? { sort: overrides.sort } : {}),
+      ...(overrides.filter ? { filter: overrides.filter } : {}),
+      maxRows,
+    };
     let table: DataSourceTable;
     try {
-      table = await reader.read(bytes, {
-        ...(overrides.sheet ? { sheet: overrides.sheet } : {}),
-        ...(overrides.anchor ? { anchor: overrides.anchor } : {}),
-        ...(overrides.headerRow !== undefined
-          ? { headerRow: overrides.headerRow !== 'false' }
-          : {}),
-        ...(overrides.sort ? { sort: overrides.sort } : {}),
-        ...(overrides.filter ? { filter: overrides.filter } : {}),
-        maxRows,
-      });
+      // The PROMISE is cached, failures included — a broken 20 MB file must
+      // fail once per revision, not re-parse per pass (each pass still
+      // re-awaits, so its diagnostic is emitted every time).
+      const cacheKey = [
+        src,
+        readOpts.sheet ?? '',
+        readOpts.anchor ?? '',
+        String(readOpts.headerRow ?? ''),
+        readOpts.sort ?? '',
+        readOpts.filter ?? '',
+        String(maxRows),
+      ].join('\u0000');
+      let pending = options.tableCache?.get(cacheKey);
+      if (!pending) {
+        pending = reader.read(bytes, readOpts);
+        options.tableCache?.set(cacheKey, pending);
+      }
+      table = await pending;
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : String(err);
       const sheetMiss = /sheet|worksheet/i.test(reason) && WORKBOOK_EXTENSIONS.has(ext);

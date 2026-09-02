@@ -102,6 +102,21 @@ describe('serializeTableViewState', () => {
   it('omits empty halves', () => {
     expect(serializeTableViewState({ sort: [], filter: [] })).toEqual({});
   });
+
+  it('round-trips blankness filters (empty value = Is empty / Is not empty)', () => {
+    const view: TableViewState = {
+      sort: [],
+      filter: [
+        { column: 'Region', op: '=', value: '' },
+        { column: 'Note', op: '!=', value: '' },
+      ],
+    };
+    const raw = serializeTableViewState(view);
+    expect(raw.filter).toBe('Region="";Note!=""');
+    const reparsed = parseTableViewState(undefined, raw.filter, HEADERS);
+    expect(reparsed.issues).toEqual([]);
+    expect(reparsed.view.filter).toEqual(view.filter);
+  });
 });
 
 describe('numeric-column inference', () => {

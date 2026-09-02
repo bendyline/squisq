@@ -78,14 +78,16 @@
   min-width: 0;
 }
 
-/* Operator prefix button: ~26px — a two-character glyph plus the caret. */
+/* Operator prefix button: a two-character glyph plus the caret. min-width
+ * keeps single-glyph buttons uniform; wide unary glyphs may grow it. */
 .squisq-grid-opbutton {
   flex: none;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 1px;
-  width: 26px;
+  min-width: 26px;
+  white-space: nowrap;
   padding: 0;
   border: 1px solid var(--squisq-grid-border-subtle, #e5e7eb);
   border-radius: 4px;
@@ -131,6 +133,7 @@
 .squisq-grid-opoption {
   display: flex;
   align-items: center;
+  white-space: nowrap;
   gap: 8px;
   border: none;
   border-radius: 4px;
@@ -151,11 +154,21 @@
   background: var(--squisq-grid-selection-bg, #eff6ff);
 }
 
+.squisq-grid-opclear {
+  margin-bottom: 2px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--squisq-grid-border-subtle, #e5e7eb);
+  border-radius: 4px 4px 0 0;
+  color: var(--squisq-grid-text-muted, #6b7280);
+  font-style: italic;
+}
+
 .squisq-grid-opoption .squisq-grid-opglyph {
   flex: none;
-  width: 16px;
+  min-width: 24px;
   text-align: center;
   font-weight: 600;
+  white-space: nowrap;
   color: var(--squisq-grid-text-muted, #6b7280);
 }
 
@@ -182,6 +195,64 @@
   background: var(--squisq-grid-input-bg, #ffffff);
   color: var(--squisq-grid-text, #1f2937);
   min-width: 0;
+}
+
+/* Distinct-values picker: a slim suffix button + a right-aligned menu. */
+.squisq-grid-valuebutton {
+  flex: none;
+  width: 18px;
+  padding: 0;
+  border: 1px solid var(--squisq-grid-border-subtle, #e5e7eb);
+  border-radius: 4px;
+  background: var(--squisq-grid-input-bg, #ffffff);
+  color: var(--squisq-grid-text-muted, #6b7280);
+  font: inherit;
+  font-size: 0.55rem;
+  cursor: pointer;
+}
+
+.squisq-grid-valuebutton:hover {
+  color: var(--squisq-grid-text, #1f2937);
+}
+
+.squisq-grid-valuemenu {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  z-index: 3;
+  min-width: 150px;
+  max-width: 260px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--squisq-grid-border, #d1d5db);
+  border-radius: 6px;
+  background: var(--squisq-grid-bg, #ffffff);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font-weight: 400;
+}
+
+.squisq-grid-valueoption {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squisq-grid-valuemenu-note {
+  padding: 4px 8px;
+  border-top: 1px solid var(--squisq-grid-border-subtle, #e5e7eb);
+  color: var(--squisq-grid-text-muted, #6b7280);
+  font-size: 0.7rem;
+  font-style: italic;
+}
+
+.squisq-grid-filterinput:disabled {
+  background: var(--squisq-grid-row-hover, #f3f4f6);
+  color: var(--squisq-grid-text-muted, #6b7280);
+  font-style: italic;
+  cursor: default;
 }
 
 .squisq-grid-resizer {

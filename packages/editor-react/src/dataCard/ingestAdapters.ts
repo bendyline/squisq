@@ -80,7 +80,7 @@ export async function ingestSidecarBytes(
   params: { sheet?: string; anchor?: string; headerRow?: boolean },
 ): Promise<IngestedSidecar> {
   if (ext === 'csv' || ext === 'tsv') {
-    const { parseCsv } = await import('@bendyline/squisq-formats/csv');
+    const { SIDECAR_CSV_LIMITS, parseCsv } = await import('@bendyline/squisq-formats/csv');
     // Detect the BOM from the raw bytes; TextDecoder strips it by default,
     // so the decoded string never carries it.
     const view = new Uint8Array(bytes);
@@ -89,7 +89,7 @@ export async function ingestSidecarBytes(
     const firstLine = text.slice(0, text.indexOf('\n') + 1 || text.length);
     const delimiter =
       ext === 'tsv' || (firstLine.includes('\t') && !firstLine.includes(',')) ? '\t' : ',';
-    const rows = parseCsv(text, delimiter);
+    const rows = parseCsv(text, delimiter, SIDECAR_CSV_LIMITS);
     const hasHeader = params.headerRow !== false && rows.length > 0;
     const width = rows.reduce((max, row) => Math.max(max, row.length), 0);
     const headers = hasHeader
