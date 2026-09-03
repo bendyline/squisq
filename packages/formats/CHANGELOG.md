@@ -1,3 +1,18 @@
+## @bendyline/squisq-formats [2.6.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.5.1...@bendyline/squisq-formats@2.6.0) (2026-09-03)
+
+### Features
+
+* Grid/data sidecars ([#52](https://github.com/bendyline/squisq/issues/52)) ([1d300be](https://github.com/bendyline/squisq/commit/1d300be19c380baa3f4726d03aa4e0807990902b))
+
+### Bug Fixes
+
+* Updates for video production ([#53](https://github.com/bendyline/squisq/issues/53)) ([f0d1306](https://github.com/bendyline/squisq/commit/f0d1306a6c0df51ae2c4aa67021bce2ddbeede8f))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.0
+
 ## @bendyline/squisq-formats [2.5.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.5.0...@bendyline/squisq-formats@2.5.1) (2026-08-30)
 
 ### Bug Fixes
