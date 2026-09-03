@@ -537,10 +537,11 @@ function DocPlayerContent({
   const [isSlideshowPickerOpen, setIsSlideshowPickerOpen] = useState(false);
   const slideshowCoverInitKeyRef = useRef('');
   useEffect(() => {
-    slideshowCoverInitKeyRef.current = '';
-  }, [doc]);
-  useEffect(() => {
-    const initKey = `${isSlideshowMode}:${hasManagedCover}:${renderMode}`;
+    // Projection enrichment (audio/data resolution) replaces `doc` with an
+    // equivalent object. Key cover initialization to the document identity so
+    // that background refresh cannot reopen a cover the user already left.
+    // A genuinely different article still starts at its own cover.
+    const initKey = `${doc.articleId}:${isSlideshowMode}:${hasManagedCover}:${renderMode}`;
     if (slideshowCoverInitKeyRef.current === initKey) return;
     slideshowCoverInitKeyRef.current = initKey;
     if (isSlideshowMode && hasManagedCover && !renderMode) {
@@ -549,7 +550,7 @@ function DocPlayerContent({
     } else {
       setSlideshowCoverVisible(false);
     }
-  }, [isSlideshowMode, hasManagedCover, renderMode, pause]);
+  }, [doc.articleId, isSlideshowMode, hasManagedCover, renderMode, pause]);
 
   // Render-mode cover block control: allows Playwright to force-show the cover block
   const [coverForced, setCoverForced] = useState(false);

@@ -39,6 +39,8 @@ const PACKAGE_DIRS = [
   'core',
   'formats',
   'react',
+  'grid-react',
+  'calc',
   'video',
   'video-react',
   'editor-react',

@@ -29,6 +29,7 @@ import type { Block, Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { generateExternalHtml } from './htmlTemplate.js';
 import {
   collectLinkRefs,
+  isBundledDataAssetPath,
   isInScope,
   normalizePath,
   posixDirname,
@@ -135,6 +136,14 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
       const resolved = resolveRelative(docDir, parsed.path);
       if (resolved === null) continue;
       if (!isInScope(resolved, scopeRoot)) continue;
+      // Carry linked data sidecars at their authored paths (same convention
+      // as the plain bundle) so the links resolve after unzip.
+      if (isBundledDataAssetPath(resolved)) {
+        const data = await readBinary(resolved);
+        const safe = data ? sanitizeZipPath(resolved) : null;
+        if (data && safe) zip.file(safe, data);
+        continue;
+      }
       if (!resolved.toLowerCase().endsWith('.md')) continue;
 
       const htmlTarget = htmlPathFor(resolved);

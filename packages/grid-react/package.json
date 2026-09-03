@@ -1,0 +1,62 @@
+{
+  "name": "@bendyline/squisq-grid-react",
+  "version": "0.1.0",
+  "description": "Virtualized data grid for squisq data sidecars: columnar worker store, TableQueryProvider, and a TanStack-Virtual React renderer",
+  "license": "MIT",
+  "author": "Bendyline",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bendyline/squisq.git",
+    "directory": "packages/grid-react"
+  },
+  "homepage": "https://github.com/bendyline/squisq",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "LICENSE",
+    "NOTICE.md",
+    "THIRD_PARTY_LICENSES.txt"
+  ],
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./styles": "./dist/styles/index.css"
+  },
+  "scripts": {
+    "build": "tsup && node ../../scripts/build-styles.mjs && node ../../scripts/generate-bundle-licenses.mjs . && node ../../scripts/remove-empty-chunks.mjs dist",
+    "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bendyline/squisq": "2.10.0",
+    "@tanstack/react-virtual": "3.14.10"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.28",
+    "@types/react-dom": "18.3.7",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3"
+  }
+}

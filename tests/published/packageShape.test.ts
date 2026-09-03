@@ -52,6 +52,9 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // DOCX/PDF/PPTX/EPUB inline-icon export.
   '@bendyline/squisq-formats': 700_000,
   '@bendyline/squisq-react': 2_750_000,
+  // Columnar store + kernel + TanStack-Virtual renderer; tiny by design.
+  '@bendyline/squisq-grid-react': 60_000,
+  '@bendyline/squisq-calc': 110_000,
   '@bendyline/squisq-video': 35_000,
   // Ships the MP4/GIF export graph plus the single-frame cover-image and
   // dashboard-image entries.

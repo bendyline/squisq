@@ -5,7 +5,7 @@
  * for inspecting the parsed MarkdownDocument and Doc.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { EditorShell, ThemeCustomizerPanel } from '@bendyline/squisq-editor-react';
 import { siteProofingProvider, siteProofingIgnoreStore } from './harperConfig';
 import type {
@@ -20,7 +20,17 @@ import {
   MemoryContentContainer,
 } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import { SAMPLES, CONTENT_SAMPLES, getSampleLabel } from './samples';
+import { SAMPLES, CONTENT_SAMPLES, SAMPLE_GROUPS, getSampleLabel } from './samples';
+import { GENERATED_SAMPLES } from './dataSamples';
+import { AdvancedOptionsDialog } from './AdvancedOptionsDialog';
+import {
+  CALC_ENGINE_STORAGE_KEY,
+  loadCalcEngineChoice,
+  type CalcEngineChoice,
+} from './calcEngineChoice';
+import type { CalcEngineFactory } from '@bendyline/squisq-editor-react';
+import ironcalcWasmUrl from '@ironcalc/wasm/wasm_bg.wasm?url';
+import CalcWorker from '@bendyline/squisq-calc/worker?worker';
 import { DebugPanel } from './DebugPanel';
 import { FileToolbar } from './FileToolbar';
 import { StorageToolbar } from './StorageToolbar';
@@ -38,10 +48,36 @@ const WRITE_CANVAS_STORAGE_KEY = 'squisq-site:writeCanvasSettings';
 const WRITE_THEME_STORAGE_KEY = 'squisq-site:writeThemeInheritance';
 const DEFAULT_SAMPLE_KEY = 'about-squisq';
 const SITE_BASE_URL = import.meta.env.BASE_URL;
-const SAMPLE_KEYS = [
-  DEFAULT_SAMPLE_KEY,
-  ...Object.keys(SAMPLES).filter((key) => key !== DEFAULT_SAMPLE_KEY),
-];
+/**
+ * The picker's grouped option model: every category from SAMPLE_GROUPS
+ * whose keys resolve to a known sample, plus a trailing "Other" group for
+ * anything not yet categorized (a new sample must never silently vanish).
+ * Rendered as native <optgroup>s — the browser draws the category tree and
+ * every Playwright `selectOption(key)` keeps working unchanged.
+ */
+const SAMPLE_OPTION_GROUPS = (() => {
+  const known = new Set([
+    ...Object.keys(SAMPLES),
+    ...Object.keys(GENERATED_SAMPLES),
+    ...Object.keys(CONTENT_SAMPLES),
+  ]);
+  const categorized = new Set<string>();
+  const groups: { label: string; entries: { key: string; label: string }[] }[] = [];
+  const labelFor = (key: string): string =>
+    GENERATED_SAMPLES[key]?.label ?? CONTENT_SAMPLES[key]?.label ?? getSampleLabel(key);
+  for (const group of SAMPLE_GROUPS) {
+    const entries = group.keys
+      .filter((key) => known.has(key))
+      .map((key) => ({ key, label: labelFor(key) }));
+    for (const entry of entries) categorized.add(entry.key);
+    if (entries.length > 0) groups.push({ label: group.label, entries });
+  }
+  const leftovers = [...known]
+    .filter((key) => !categorized.has(key))
+    .map((key) => ({ key, label: labelFor(key) }));
+  if (leftovers.length > 0) groups.push({ label: 'Other', entries: leftovers });
+  return groups;
+})();
 
 type DemoColorMode = 'auto' | EditorColorScheme;
 // The demo only exercises the numeric Write-canvas levers; the optional
@@ -171,6 +207,8 @@ export function App() {
   const initialSampleKey = getInitialSampleKey();
   const [selectedSample, setSelectedSample] = useState(initialSampleKey);
   const [showDebug, setShowDebug] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [calcEngine, setCalcEngine] = useState<CalcEngineChoice>(() => loadCalcEngineChoice());
   const [showJsonDemo, setShowJsonDemo] = useState(false);
   const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
   const [showCodeContextDemo, setShowCodeContextDemo] = useState(false);
@@ -319,6 +357,29 @@ export function App() {
       const key = e.target.value;
       setSelectedSample(key);
 
+      // Generated sample — build markdown + sidecar container in-browser
+      const generated = GENERATED_SAMPLES[key];
+      if (generated) {
+        setLoadingContent(true);
+        setActiveSlot(null);
+        generated
+          .build()
+          .then(({ markdown, container }) => {
+            setCurrentSource(markdown);
+            replaceWorkspace(container, null);
+            setEditorKey((k) => k + 1);
+          })
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error('Failed to build generated sample:', msg);
+            setCurrentSource(`# Error\n\nCould not build sample: ${msg}`);
+            replaceWorkspace(new MemoryContentContainer(), null);
+            setEditorKey((k) => k + 1);
+          })
+          .finally(() => setLoadingContent(false));
+        return;
+      }
+
       // Content zip sample — fetch, unzip, extract markdown + media
       const contentSample = CONTENT_SAMPLES[key];
       if (contentSample) {
@@ -393,6 +454,48 @@ export function App() {
     [replaceWorkspace],
   );
 
+  // Both engines ride the same CalcEngine contract. The in-house tier runs
+  // BEHIND A WORKER (Vite's ?worker import emits + serves the asset — more
+  // reliable than the package's relative-URL spawn under bundling), falling
+  // back to the main thread; IronCalc loads its wasm via the asset URL.
+  // `window.__squisqCalcEngineKind` is a dev-harness debug global the E2E
+  // suite asserts against.
+  const calcEngineFactory = useMemo<CalcEngineFactory>(() => {
+    if (calcEngine === 'ironcalc') {
+      return async (config) => {
+        const { createIronCalcEngine } = await import('@bendyline/squisq-calc/ironcalc');
+        const engine = await createIronCalcEngine({ ...config, wasmSource: ironcalcWasmUrl });
+        (window as { __squisqCalcEngineKind?: string }).__squisqCalcEngineKind = 'ironcalc';
+        return engine;
+      };
+    }
+    return async (config) => {
+      const calc = await import('@bendyline/squisq-calc');
+      try {
+        const engine = await calc.createWorkerCalcEngine({
+          ...config,
+          workerFactory: () => new CalcWorker(),
+        });
+        (window as { __squisqCalcEngineKind?: string }).__squisqCalcEngineKind = 'worker';
+        return engine;
+      } catch {
+        (window as { __squisqCalcEngineKind?: string }).__squisqCalcEngineKind = 'main-thread';
+        return calc.createInHouseEngine(config);
+      }
+    };
+  }, [calcEngine]);
+
+  const handleCalcEngineChange = useCallback((choice: CalcEngineChoice) => {
+    setCalcEngine(choice);
+    try {
+      localStorage.setItem(CALC_ENGINE_STORAGE_KEY, choice);
+    } catch {
+      // Private windows: the choice just doesn't persist.
+    }
+    // Remount so open data cards rebuild their formula sessions.
+    setEditorKey((k) => k + 1);
+  }, []);
+
   return (
     <div
       style={{
@@ -456,16 +559,14 @@ export function App() {
               opacity: loadingContent ? 0.6 : 1,
             }}
           >
-            {SAMPLE_KEYS.map((key) => (
-              <option key={key} value={key}>
-                {getSampleLabel(key)}
-              </option>
-            ))}
-            <option disabled>{'\u2500'.repeat(16)}</option>
-            {Object.entries(CONTENT_SAMPLES).map(([key, sample]) => (
-              <option key={key} value={key}>
-                {sample.label}
-              </option>
+            {SAMPLE_OPTION_GROUPS.map((group) => (
+              <optgroup key={group.label} label={group.label}>
+                {group.entries.map((entry) => (
+                  <option key={entry.key} value={entry.key}>
+                    {entry.label}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </label>
@@ -484,6 +585,25 @@ export function App() {
           }}
         >
           {showDebug ? 'Hide' : 'Show'} Debug
+        </button>
+
+        <button
+          type="button"
+          data-testid="advanced-options-button"
+          onClick={() => setShowAdvanced(true)}
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            padding: '4px 12px',
+            cursor: 'pointer',
+            background: calcEngine === 'ironcalc' ? '#8B6914' : '#E8DFC6',
+            color: calcEngine === 'ironcalc' ? '#fff' : '#4a3c1f',
+            border: `1px solid ${calcEngine === 'ironcalc' ? '#7a5c10' : '#c9b98a'}`,
+            borderRadius: 0,
+          }}
+          title={`Calculation engine: ${calcEngine === 'ironcalc' ? 'IronCalc (wasm)' : 'in-house'}`}
+        >
+          Advanced…
         </button>
 
         <button
@@ -777,6 +897,8 @@ export function App() {
                 colorScheme={colorScheme}
                 height="100%"
                 mediaProvider={mediaProvider}
+                workspaceContainer={workspaceContainer}
+                calcEngineFactory={calcEngineFactory}
                 themeOverride={customTheme}
                 writeCanvasSettings={writeCanvasSettings}
                 themeInheritance={writeThemeInheritance}
@@ -787,6 +909,14 @@ export function App() {
               />
             </div>
 
+            {showAdvanced && (
+              <AdvancedOptionsDialog
+                isDark={isDark}
+                calcEngine={calcEngine}
+                onCalcEngineChange={handleCalcEngineChange}
+                onClose={() => setShowAdvanced(false)}
+              />
+            )}
             {showDebug && (
               <div
                 style={{

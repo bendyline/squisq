@@ -10,6 +10,8 @@
 
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import type { Block, Doc } from '@bendyline/squisq/schemas';
+import { isDataFilePath } from '@bendyline/squisq/doc';
 import { ConversionError } from './errors.js';
 import { markdownFidelityWarnings } from '../shared/fidelity.js';
 import type {
@@ -77,28 +79,67 @@ async function markdownOf(input: NormalizedInput): Promise<MarkdownDocument> {
   return docToMarkdown(input.doc);
 }
 
+const IMAGE_ASSET_RE = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)$/i;
+
+/** Data sidecar files referenced via `{[dataTable src=…]}` + body links. */
+const DATA_ASSET_RE = /\.(csv|tsv|xlsx|parquet)$/i;
+
 /**
- * Collect image files from a container, keyed by both their container path and
- * their bare filename. Exporters that resolve by url (PPTX) and the standalone
- * player (HTML) both match against one of those two keys.
+ * Collect container files matching `pattern`, keyed by container path.
+ * With `flattenBasenames`, each file is ALSO keyed by its bare filename —
+ * exporters that resolve by url (PPTX) and the standalone player (HTML)
+ * match against one of those two keys. Data assets skip the flattening:
+ * their body links carry the exact path, and a bundle writer emits one
+ * file per map entry.
  */
-async function collectContainerImages(
+async function collectContainerAssets(
   container: ContentContainer,
+  pattern: RegExp,
   signal?: AbortSignal,
+  flattenBasenames = true,
 ): Promise<Map<string, ArrayBuffer>> {
-  const images = new Map<string, ArrayBuffer>();
+  const assets = new Map<string, ArrayBuffer>();
   const files = await container.listFiles();
   for (let index = 0; index < files.length; index++) {
     if ((index & 63) === 0) signal?.throwIfAborted();
     const file = files[index]!;
-    if (!/\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)$/i.test(file.path)) continue;
+    if (!pattern.test(file.path)) continue;
     const data = await container.readFile(file.path);
     if (!data) continue;
-    images.set(file.path, data);
+    assets.set(file.path, data);
+    if (!flattenBasenames) continue;
     const slash = file.path.lastIndexOf('/');
-    if (slash !== -1) images.set(file.path.slice(slash + 1), data);
+    if (slash !== -1) assets.set(file.path.slice(slash + 1), data);
   }
-  return images;
+  return assets;
+}
+
+async function collectContainerImages(
+  container: ContentContainer,
+  signal?: AbortSignal,
+): Promise<Map<string, ArrayBuffer>> {
+  return collectContainerAssets(container, IMAGE_ASSET_RE, signal);
+}
+
+/**
+ * Lossy-export warnings for `{[dataTable src=…]}` sidecar references: a
+ * format that cannot carry the referenced file alongside the document
+ * (single-file HTML, EPUB) ships the bounded preview and a dangling link.
+ */
+function dataReferenceWarnings(doc: Doc, formatLabel: string): string[] {
+  const srcs = new Set<string>();
+  const visit = (blocks: readonly Block[]): void => {
+    for (const block of blocks) {
+      const src = block.templateOverrides?.src;
+      if (src && isDataFilePath(src)) srcs.add(src);
+      if (block.children) visit(block.children);
+    }
+  };
+  visit(doc.blocks);
+  return [...srcs].map(
+    (src) =>
+      `${formatLabel} cannot embed the data sidecar "${src}"; the export carries its bounded preview and the link will not resolve outside the source container.`,
+  );
 }
 
 async function collectContainerDocxImages(
@@ -316,23 +357,35 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'Excel (XLSX)',
     mimeType: MIME.xlsx,
     extensions: ['.xlsx'],
+    async importContainer(data, options): Promise<ContentContainer> {
+      const { xlsxToContainer } = await import('../xlsx/index.js');
+      return xlsxToContainer(data, optionsFor(options, 'xlsx'));
+    },
     async importDoc(data, options): Promise<MarkdownDocument> {
       const { xlsxToMarkdownDoc } = await import('../xlsx/index.js');
       return xlsxToMarkdownDoc(data, optionsFor(options, 'xlsx'));
     },
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToXlsx } = await import('../xlsx/index.js');
-      const markdownDoc = await markdownOf(input);
+      const { materializeDataReferences } = await import('../data/materialize.js');
+      const warnings: string[] = [];
+      // A `{[dataTable src=…]}` reference has no inline table and would
+      // silently vanish from a tables-only export — resolve it to the FULL
+      // source table first (values only; sidecar formulas warn).
+      const markdownDoc = await materializeDataReferences(
+        await markdownOf(input),
+        input.container,
+        (message) => warnings.push(message),
+      );
       // XLSX fidelity is tables-only: `table` nodes become worksheets and
       // headings name them, but every other top-level block (prose, lists,
       // images, code, …) is dropped. Count those and warn honestly.
       const omitted = markdownDoc.children.filter(
         (n) => n.type !== 'table' && n.type !== 'heading',
       ).length;
-      const warnings =
-        omitted > 0
-          ? [`XLSX export is tables-only; ${omitted} non-table block(s) were omitted.`]
-          : [];
+      if (omitted > 0) {
+        warnings.push(`XLSX export is tables-only; ${omitted} non-table block(s) were omitted.`);
+      }
       const blob = await markdownDocToXlsx(markdownDoc, {
         ...optionsFor(options, 'xlsx'),
         ...(options.title !== undefined ? { title: options.title } : {}),
@@ -350,6 +403,10 @@ export function defaultFormats(): FormatDefinition[] {
     label: 'CSV',
     mimeType: MIME.csv,
     extensions: ['.csv'],
+    async importContainer(data, options): Promise<ContentContainer> {
+      const { csvToContainer } = await import('../csv/index.js');
+      return csvToContainer(data, optionsFor(options, 'csv'));
+    },
     async importDoc(data, options): Promise<MarkdownDocument> {
       const { csvToMarkdownDoc } = await import('../csv/index.js');
       return csvToMarkdownDoc(data, optionsFor(options, 'csv'));
@@ -410,7 +467,11 @@ export function defaultFormats(): FormatDefinition[] {
         themeId: resolveThemeId(input, options),
         themeRegistry: options.themeRegistry ?? raw.themeRegistry,
       });
-      return ok(new TextEncoder().encode(htmlText), MIME.html);
+      return ok(
+        new TextEncoder().encode(htmlText),
+        MIME.html,
+        dataReferenceWarnings(input.doc, 'Single-file HTML'),
+      );
     },
   };
 
@@ -425,7 +486,16 @@ export function defaultFormats(): FormatDefinition[] {
       const { docToHtmlZip } = await import('../html/index.js');
       const raw = optionsFor(options, 'htmlzip');
       const containerImages = await collectContainerImages(input.container, options.signal);
-      const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
+      // Data sidecars ride into the archive at their exact container paths
+      // (no basename flattening) so `{[dataTable src=…]}` body links resolve
+      // after unzip.
+      const containerData = await collectContainerAssets(
+        input.container,
+        DATA_ASSET_RE,
+        options.signal,
+        false,
+      );
+      const images = new Map([...containerImages, ...containerData, ...(raw.images ?? new Map())]);
       const blob = await docToHtmlZip(input.doc, {
         ...raw,
         playerScript,
@@ -458,7 +528,10 @@ export function defaultFormats(): FormatDefinition[] {
         themeRegistry: options.themeRegistry ?? raw.themeRegistry,
         images,
       });
-      return ok(await toBytes(buf), MIME.epub, markdownFidelityWarnings(markdownDoc, 'epub'));
+      return ok(await toBytes(buf), MIME.epub, [
+        ...markdownFidelityWarnings(markdownDoc, 'epub'),
+        ...dataReferenceWarnings(input.doc, 'EPUB'),
+      ]);
     },
   };
 

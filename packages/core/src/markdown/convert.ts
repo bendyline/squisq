@@ -489,7 +489,12 @@ function convertInlineChildren(
   // mention or icon that sits inside `<sup>…</sup>` is already a single node
   // by the time it becomes a child.
   const mentioned = coalesceMentions(result);
-  const split = applyIconSplit ? splitInlineIcons(mentioned) : mentioned;
+  // Directive-shred repair runs UNCONDITIONALLY (not just on the icon-split
+  // path): headings skip the icon split so annotation extraction sees raw
+  // text, but a `{[… sort=Revenue:desc]}` shredded by remark-directive must
+  // be whole BEFORE extraction or the annotation is silently lost.
+  const repaired = recombineDirectiveTokens(mentioned);
+  const split = applyIconSplit ? splitInlineIcons(repaired) : repaired;
   return foldPairedInlineHtml(split);
 }
 
@@ -637,40 +642,57 @@ export function splitInlineIcons(nodes: MarkdownInlineNode[]): MarkdownInlineNod
 }
 
 /**
- * When the user types `{[fa-solid:user]}`, remark's directive plugin
- * sees `:user` and emits a `textDirective` node. The result is a
- * three-node sequence `text("…{[fa-solid") + textDirective("user") +
- * text("]}…")`. This helper detects that shape and stitches the three
- * back into one text node so downstream icon detection works on the
- * authored token.
+ * remark's directive plugin turns any inline `:name` into a `textDirective`
+ * node — which shreds authored `{[…]}` spans that legitimately contain
+ * colons: `{[fa-solid:user]}` (icon tokens) becomes
+ * `text("…{[fa-solid") + textDirective(user) + text("]}…")`, and an
+ * annotation param like `{[dataTable sort=Revenue:desc]}` becomes
+ * `text("…sort=Revenue") + textDirective(desc) + text("]}")`.
+ *
+ * This helper stitches directives back into the surrounding text whenever
+ * the text so far carries an UNCLOSED `{[` — inside a span, a `:word` is
+ * always literal annotation text, never a directive. Multiple directives in
+ * one span (`a:b:c`) are re-absorbed in sequence. Directive labels and
+ * attributes are not reconstructed (matching the historical behavior; a
+ * `:name[label]{attr}` inside an annotation is pathological input).
  */
 function recombineDirectiveTokens(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
   const out: MarkdownInlineNode[] = [];
   for (let i = 0; i < nodes.length; i++) {
     const cur = nodes[i];
-    const next = nodes[i + 1];
-    const after = nodes[i + 2];
-    if (
-      cur?.type === 'text' &&
-      next?.type === 'textDirective' &&
-      after?.type === 'text' &&
-      /\{\[[a-zA-Z0-9_-]+$/.test(cur.value) &&
-      /^\]\}/.test(after.value)
-    ) {
-      const directive = next as unknown as { name?: string };
-      const directiveName = directive.name ?? '';
-      const merged: MarkdownInlineNode = {
-        type: 'text',
-        value: cur.value + ':' + directiveName + after.value,
-        ...(cur.position ? { position: cur.position } : {}),
-      };
-      out.push(merged);
-      i += 2;
-      continue;
+    if (cur?.type === 'text') {
+      let value = cur.value;
+      let j = i;
+      while (hasUnclosedAnnotationSpan(value) && nodes[j + 1]?.type === 'textDirective') {
+        const directive = nodes[j + 1] as unknown as { name?: string };
+        value += ':' + (directive.name ?? '');
+        j += 1;
+        const following = nodes[j + 1];
+        if (following?.type === 'text') {
+          value += following.value;
+          j += 1;
+        }
+      }
+      if (j !== i) {
+        out.push({
+          type: 'text',
+          value,
+          ...(cur.position ? { position: cur.position } : {}),
+        });
+        i = j;
+        continue;
+      }
     }
     out.push(cur);
   }
   return out;
+}
+
+/** True when `text` has a `{[` opener with no `]}` closer after it. */
+function hasUnclosedAnnotationSpan(text: string): boolean {
+  const open = text.lastIndexOf('{[');
+  if (open === -1) return false;
+  return !text.includes(']}', open);
 }
 
 const ICON_TOKEN_RE = /\{\[([a-zA-Z0-9_:-]+)\]\}/g;

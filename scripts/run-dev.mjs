@@ -19,8 +19,10 @@ const INITIAL_BUILD_TIMEOUT_MS = 120_000;
 
 export const PACKAGE_WATCHERS = [
   { name: 'core', command: 'npm:dev:packages:core', prefixColor: 'blue' },
+  { name: 'calc', command: 'npm:dev:packages:calc', prefixColor: 'gray' },
   { name: 'formats', command: 'npm:dev:packages:formats', prefixColor: 'cyan' },
   { name: 'react', command: 'npm:dev:packages:react', prefixColor: 'magenta' },
+  { name: 'grid', command: 'npm:dev:packages:grid', prefixColor: 'white' },
   { name: 'video', command: 'npm:dev:packages:video', prefixColor: 'yellow' },
   { name: 'video-react', command: 'npm:dev:packages:video-react', prefixColor: 'green' },
   { name: 'editor', command: 'npm:dev:packages:editor', prefixColor: 'red' },

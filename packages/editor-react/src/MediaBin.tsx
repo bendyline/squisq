@@ -56,6 +56,11 @@ export interface MediaBinProps {
    * URLs that the host otherwise exposes to the browser.
    */
   allowBinaryDownloads?: boolean;
+  /**
+   * Relative path of an entry to highlight and scroll into view — how the
+   * data card's "Show in Files" lands on the file it names.
+   */
+  highlightPath?: string | null;
 }
 
 // ============================================
@@ -72,6 +77,15 @@ function iconForMime(mimeType: string): string {
   if (mimeType.startsWith('image/')) return '\u{1F5BC}';
   if (mimeType.startsWith('audio/')) return '\u{1F50A}';
   if (mimeType.startsWith('video/')) return '\u{1F3AC}';
+  if (
+    mimeType === 'text/csv' ||
+    mimeType === 'text/tab-separated-values' ||
+    mimeType.includes('spreadsheetml') ||
+    mimeType === 'application/vnd.ms-excel' ||
+    mimeType.includes('parquet')
+  ) {
+    return '\u{1F4CA}';
+  }
   if (mimeType.includes('json')) return '{ }';
   if (mimeType.includes('xml') || mimeType.includes('ssml')) return '\u{2329}/\u{232A}';
   return '\u{1F4C4}';
@@ -138,8 +152,19 @@ export function MediaBin({
   onRecord,
   isRecorderOpen = false,
   allowBinaryDownloads = true,
+  highlightPath = null,
 }: MediaBinProps) {
   const [entries, setEntries] = useState<MediaEntry[]>([]);
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  // Scroll the highlighted entry into view once it exists in the list.
+  useEffect(() => {
+    if (!highlightPath || !listRef.current) return;
+    const item = listRef.current.querySelector(`[data-media-path="${CSS.escape(highlightPath)}"]`);
+    if (item instanceof HTMLElement) {
+      item.scrollIntoView({ block: 'nearest' });
+    }
+  }, [highlightPath, entries]);
   const [thumbUrls, setThumbUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [isDropActive, setIsDropActive] = useState(false);
@@ -458,7 +483,7 @@ export function MediaBin({
       </div>
 
       {/* File list */}
-      <div className="squisq-media-bin-list">
+      <div className="squisq-media-bin-list" ref={listRef}>
         {!mediaProvider && (
           <div className="squisq-media-bin-empty">
             No media context.
@@ -491,7 +516,12 @@ export function MediaBin({
           return (
             <div
               key={entry.name}
-              className="squisq-media-bin-item"
+              data-media-path={entry.name}
+              className={
+                entry.name === highlightPath
+                  ? 'squisq-media-bin-item squisq-media-bin-item--highlight'
+                  : 'squisq-media-bin-item'
+              }
               title={`${entry.name}\n${entry.mimeType}\n${formatSize(entry.size)}`}
               draggable
               tabIndex={0}

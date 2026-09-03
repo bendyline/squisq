@@ -188,11 +188,15 @@ async function runImage(inputPath: string, opts: ImageCommandOptions): Promise<v
   let doc: Doc = result.doc;
   if (result.markdownDoc) {
     if (opts.autoTemplates === false) {
-      const { markdownToDoc, resolveAudioMapping } = await import('@bendyline/squisq/doc');
-      doc = await resolveAudioMapping(
+      const { markdownToDoc, resolveAudioMapping, resolveDataReferences } =
+        await import('@bendyline/squisq/doc');
+      const { defaultDataReaders } = await import('@bendyline/squisq-formats/data');
+      const audioDoc = await resolveAudioMapping(
         markdownToDoc(result.markdownDoc, { autoTemplates: false }),
         container,
       );
+      doc = (await resolveDataReferences(audioDoc, container, { readers: defaultDataReaders() }))
+        .doc;
     }
   } else {
     console.error('Using pre-built Doc JSON');

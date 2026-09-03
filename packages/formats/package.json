@@ -63,6 +63,11 @@
       "import": "./dist/csv/index.js",
       "default": "./dist/csv/index.js"
     },
+    "./data": {
+      "types": "./dist/data/index.d.ts",
+      "import": "./dist/data/index.js",
+      "default": "./dist/data/index.js"
+    },
     "./ooxml": {
       "types": "./dist/ooxml/index.d.ts",
       "import": "./dist/ooxml/index.js",
@@ -110,16 +115,26 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@bendyline/squisq": "2.10.0",
     "@pdf-lib/fontkit": "1.1.1",
     "@pdf-lib/upng": "1.0.1",
     "@xmldom/xmldom": "0.9.12",
-    "@bendyline/squisq": "2.10.0",
     "jszip": "3.10.1",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "4.10.38"
   },
+  "peerDependencies": {
+    "hyparquet": "^1.29.1"
+  },
+  "peerDependenciesMeta": {
+    "hyparquet": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@fortawesome/fontawesome-free": "7.2.0",
+    "hyparquet": "1.29.1",
+    "hyparquet-writer": "0.16.6",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
   }

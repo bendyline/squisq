@@ -49,3 +49,26 @@ export function parseVersionPath(
 ): { basename: string; timestamp: Date; collision: number } | null {
   return parseSnapshotPath(DOCUMENT_VERSION_PATHS, path);
 }
+
+/** Subfolder holding pre-save backups of DATA sidecar files. */
+export const DATA_BACKUP_PREFIX = '.versions/data/';
+
+/**
+ * Build a pre-save backup path for a data sidecar file:
+ * `.versions/data/<path with '/' → '__'>.<stamp>[-n].<ext>`.
+ *
+ * The grid's save flow writes the ORIGINAL bytes here before overwriting a
+ * sidecar in place — the only cross-save undo the grid offers. Unlike
+ * `buildVersionPath` (markdown-only, single-basename), the flattened full
+ * path keeps same-named files in different folders distinct, and the
+ * extension follows the sidecar. The flattened name goes through the same
+ * safety rules as document snapshots (via a per-call strategy).
+ */
+export function buildDataBackupPath(sidecarPath: string, date: Date, collision = 0): string {
+  const slash = sidecarPath.lastIndexOf('.');
+  const extension = slash > 0 ? sidecarPath.slice(slash + 1).toLowerCase() : 'bin';
+  const withoutExt = slash > 0 ? sidecarPath.slice(0, slash) : sidecarPath;
+  const flattened = withoutExt.replace(/\//g, '__');
+  const strategy: SnapshotPathStrategy = { prefix: DATA_BACKUP_PREFIX, extension };
+  return buildSnapshotPath(strategy, flattened, date, collision);
+}

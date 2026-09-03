@@ -22,6 +22,7 @@ export default defineConfig({
     'narration/index': 'src/narration/index.ts',
     'fence/index': 'src/fence/index.ts',
     'proof/index': 'src/proof/index.ts',
+    'table/index': 'src/table/index.ts',
   },
   format: ['esm'],
   dts: true,

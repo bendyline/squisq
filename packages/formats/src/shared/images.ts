@@ -31,6 +31,11 @@ const EXT_TO_MIME: Record<string, string> = {
   ogg: 'audio/ogg',
   mp4: 'video/mp4',
   webm: 'video/webm',
+  // Sidecar data files (`{[dataTable src=…]}` references)
+  csv: 'text/csv',
+  tsv: 'text/tab-separated-values',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  parquet: 'application/vnd.apache.parquet',
 };
 
 /**

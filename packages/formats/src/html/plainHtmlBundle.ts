@@ -122,6 +122,14 @@ export async function markdownDocsToPlainHtmlBundle(
       const resolved = resolveRelative(docDir, parsed.path);
       if (resolved === null) continue; // escaped via ..
       if (!isInScope(resolved, scopeRoot)) continue;
+      // A linked data sidecar rides along at its authored path so the
+      // link still resolves after unzip. Missing files are non-fatal.
+      if (isBundledDataAssetPath(resolved)) {
+        const data = await readBinary(resolved);
+        const safe = data ? sanitizeZipPath(resolved) : null;
+        if (data && safe) zip.file(safe, data);
+        continue;
+      }
       if (!resolved.toLowerCase().endsWith('.md')) continue;
 
       // Compute the .html replacement relative to the current doc so
@@ -189,6 +197,17 @@ export async function markdownDocsToPlainHtmlBundle(
  * as authored, so callers can use them as both the linkMap *key* and
  * the basis for resolution.
  */
+/**
+ * Data sidecar files (`{[dataTable src=…]}` references and their body links)
+ * are carried into bundle exports at their authored relative paths so the
+ * links still resolve after unzip.
+ */
+const BUNDLE_DATA_ASSET_RE = /\.(csv|tsv|xlsx|parquet)$/i;
+
+export function isBundledDataAssetPath(path: string): boolean {
+  return BUNDLE_DATA_ASSET_RE.test(path);
+}
+
 export function collectLinkRefs(doc: MarkdownDocument): Set<string> {
   const refs = new Set<string>();
 

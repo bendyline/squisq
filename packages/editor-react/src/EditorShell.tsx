@@ -64,11 +64,15 @@ import { TooltipLayer } from './Tooltip';
 import { EditorContextMenuProvider } from './EditorContextMenu';
 import { useFileDrop, type DropTarget } from './hooks/useFileDrop';
 import {
+  classifyFile,
   partitionFiles,
+  processDataFiles,
   processMediaFiles,
   processTextFile,
   processTextFiles,
 } from './utils/dropUtils';
+import { dataSidecarPrefix } from '@bendyline/squisq/doc';
+import { needsQuoting, quoteAttrValue } from '@bendyline/squisq/markdown';
 import {
   collectMediaReferencesFromMarkdown,
   removeMediaReferencesFromMarkdown,
@@ -274,6 +278,13 @@ export interface EditorShellProps {
    * (Slack, Discord). When omitted, the editor behaves normally.
    */
   submitOnEnter?: () => void;
+  /**
+   * Calc backend for the data card's XLSX formula sessions (default: the
+   * in-house tier from `@bendyline/squisq-calc`). Hosts inject e.g.
+   * IronCalc: `(config) => import('@bendyline/squisq-calc/ironcalc')
+   * .then((m) => m.createIronCalcEngine({ ...config, wasmSource }))`.
+   */
+  calcEngineFactory?: import('./dataCard/formulaSupport').CalcEngineFactory;
   /**
    * Host-supplied context dictionary rendered inside the Monaco (raw / code)
    * surface: collapsible markdown sections injected above anchor lines, plus
@@ -627,6 +638,7 @@ export function EditorShell({
   allowPresentationFullscreen = true,
   allowPrint = true,
   submitOnEnter,
+  calcEngineFactory,
   codeContext,
   fullWidth = false,
   uxFont,
@@ -763,6 +775,7 @@ export function EditorShell({
             allowPresentationFullscreen={allowPresentationFullscreen}
             allowPrint={allowPrint}
             submitOnEnter={submitOnEnter}
+            calcEngineFactory={calcEngineFactory}
             codeContext={codeContext}
             fullWidth={fullWidth}
             uxFont={uxFont}
@@ -815,6 +828,13 @@ interface EditorShellInnerProps {
   allowPresentationFullscreen: boolean;
   allowPrint: boolean;
   submitOnEnter?: () => void;
+  /**
+   * Calc backend for the data card's XLSX formula sessions (default: the
+   * in-house tier from `@bendyline/squisq-calc`). Hosts inject e.g.
+   * IronCalc: `(config) => import('@bendyline/squisq-calc/ironcalc')
+   * .then((m) => m.createIronCalcEngine({ ...config, wasmSource }))`.
+   */
+  calcEngineFactory?: import('./dataCard/formulaSupport').CalcEngineFactory;
   codeContext?: CodeContext;
   fullWidth: boolean;
   uxFont?: string;
@@ -896,6 +916,7 @@ function EditorShellInner({
   allowPresentationFullscreen,
   allowPrint,
   submitOnEnter,
+  calcEngineFactory,
   codeContext,
   fullWidth,
   uxFont,
@@ -1017,6 +1038,8 @@ function EditorShellInner({
   const [timelineCompositionVisible, setTimelineCompositionVisible] = useState(false);
   const timelinePreviewCount = Number(timelineVideoVisible) + Number(timelineCompositionVisible);
   const [showFiles, setShowFiles] = useState(false);
+  /** Sidecar path the Files panel should highlight (data card "Show in Files"). */
+  const [filesFocusPath, setFilesFocusPath] = useState<string | null>(null);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   const [mediaCount, setMediaCount] = useState(0);
   const [mediaBinRecorderOpen, setMediaBinRecorderOpen] = useState(false);
@@ -1137,12 +1160,86 @@ function EditorShellInner({
     [activeView, tiptapEditor, monacoEditor, insertAtCursor, markdownSource, setMarkdownSource],
   );
 
+  // Doc basename for the data-sidecar convention (`<basename>_files/data/`),
+  // resolved from the workspace container's primary document path. The
+  // fallback keeps drops working in container-less hosts.
+  const docBasenameRef = useRef('document');
+  useEffect(() => {
+    let cancelled = false;
+    docBasenameRef.current = 'document';
+    if (!workspaceContainer) return;
+    void (async () => {
+      try {
+        const path = await workspaceContainer.getDocumentPath();
+        if (cancelled || !path) return;
+        const base = (path.split('/').pop() ?? '').replace(/\.[^.]+$/, '');
+        if (base) docBasenameRef.current = base;
+      } catch {
+        // keep the fallback
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceContainer]);
+
+  /**
+   * Insert a data-sidecar reference block: an annotated heading
+   * (`## <title> {[dataTable src=…]}`) plus the graceful-degradation body
+   * link. The sibling of `insertMediaRef` for csv/tsv/xlsx/parquet files.
+   */
+  const insertDataRef = useCallback(
+    (relativePath: string, name: string) => {
+      const title = name.replace(/\.[^.]+$/, '');
+      const srcValue = needsQuoting(relativePath) ? quoteAttrValue(relativePath) : relativePath;
+      const params = `src=${srcValue}`;
+      const snippet = `## ${title} {[dataTable ${params}]}\n\n[${name}](${relativePath})`;
+
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        tiptapEditor
+          .chain()
+          .focus()
+          .insertContent([
+            {
+              type: 'heading',
+              attrs: { level: 2, dataTemplate: 'dataTable', dataTemplateParams: params },
+              content: [{ type: 'text', text: title }],
+            },
+            {
+              type: 'paragraph',
+              content: [
+                {
+                  type: 'text',
+                  marks: [{ type: 'link', attrs: { href: relativePath } }],
+                  text: name,
+                },
+              ],
+            },
+          ])
+          .run();
+        return;
+      }
+      if (activeView === 'raw' && monacoEditor) {
+        insertAtCursor(snippet);
+        return;
+      }
+      setMarkdownSource(markdownSource ? `${markdownSource}\n\n${snippet}` : snippet);
+    },
+    [activeView, tiptapEditor, monacoEditor, insertAtCursor, markdownSource, setMarkdownSource],
+  );
+
   const handleMediaUploaded = useCallback(
     (relativePath: string, name: string, mimeType: string) => {
-      insertMediaRef(relativePath, name, mimeType);
+      // A data file uploaded through the Files panel becomes a reference
+      // block, not a bare attachment link.
+      if (classifyFile({ name, type: mimeType }) === 'data') {
+        insertDataRef(relativePath, name);
+      } else {
+        insertMediaRef(relativePath, name, mimeType);
+      }
       setMediaRefreshKey((k) => k + 1);
     },
-    [insertMediaRef],
+    [insertDataRef, insertMediaRef],
   );
 
   const handleMediaRemoved = useCallback(
@@ -1158,7 +1255,23 @@ function EditorShellInner({
   const handleFileDrop = useCallback(
     async (files: File[], target: DropTarget) => {
       try {
-        const { media, text } = partitionFiles(files);
+        const { media, text, data } = partitionFiles(files);
+
+        // Process data files (csv/tsv/xlsx/parquet): store under the doc's
+        // `_files/data/` sidecar and insert a reference block. Data ignores
+        // the 'replace' target — a document is never replaced by a card.
+        if (data.length > 0 && mediaProvider) {
+          const prefix = dataSidecarPrefix(docBasenameRef.current);
+          const paths = await processDataFiles(data, mediaProvider, prefix);
+          setMediaRefreshKey((k) => k + 1);
+          if (!showFiles) setShowFiles(true);
+          for (let i = 0; i < data.length; i++) {
+            const file = data[i];
+            const path = paths[i];
+            if (!file || !path) continue;
+            insertDataRef(path, file.name);
+          }
+        }
 
         // Process media files
         if (media.length > 0 && mediaProvider) {
@@ -1195,7 +1308,7 @@ function EditorShellInner({
         console.error('Failed to process dropped files:', err instanceof Error ? err.message : err);
       }
     },
-    [mediaProvider, showFiles, replaceAll, insertAtCursor, insertMediaRef],
+    [mediaProvider, showFiles, replaceAll, insertAtCursor, insertMediaRef, insertDataRef],
   );
 
   const { isDragging, dragContentType, containerProps, zoneProps } = useFileDrop({
@@ -1451,6 +1564,15 @@ function EditorShellInner({
                         submitOnEnter={submitOnEnter}
                         placeholder={placeholder}
                         readOnly={readOnly}
+                        calcEngineFactory={calcEngineFactory}
+                        onOpenFilesPanel={
+                          mediaProvider
+                            ? (relativePath) => {
+                                setFilesFocusPath(relativePath ?? null);
+                                setShowFiles(true);
+                              }
+                            : undefined
+                        }
                       />
                     </BlockCardView>
                     {isCardMode && inlinePreviewVisible && (
@@ -1509,6 +1631,7 @@ function EditorShellInner({
                   allowBinaryDownloads={allowBinaryDownloads}
                   onRecord={allowRecording ? handleOpenMediaBinRecorder : undefined}
                   isRecorderOpen={mediaBinRecorderOpen}
+                  highlightPath={filesFocusPath}
                 />
               )}
 

@@ -1,0 +1,163 @@
+/* DataCardExtension — the Write-view "rectangle" for data sidecar files.
+ * The link paragraph is hidden and the summary card mounts after it.
+ * All colors resolve to chrome.css tokens (chromePalette.test.ts guards). */
+
+.squisq-wysiwyg-editor p.squisq-data-card-hidden {
+  display: none;
+}
+
+.squisq-data-card-host {
+  margin: 0.6rem 0;
+}
+
+.squisq-data-card {
+  border: 1px solid var(--squisq-border);
+  border-radius: 8px;
+  background: var(--squisq-surface);
+  color: var(--squisq-text);
+  font-size: 0.85rem;
+  overflow: hidden;
+}
+
+.squisq-data-card--missing {
+  border-style: dashed;
+  border-color: var(--squisq-warning-border);
+  background: var(--squisq-warning-soft);
+}
+
+.squisq-data-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.squisq-data-card-icon {
+  flex: none;
+}
+
+.squisq-data-card-name {
+  font-weight: 600;
+  color: var(--squisq-text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-data-card-meta {
+  color: var(--squisq-text-soft);
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-data-card-action {
+  flex: none;
+  border: 1px solid var(--squisq-border);
+  border-radius: 6px;
+  background: var(--squisq-surface-subtle);
+  color: var(--squisq-text);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.55rem;
+  cursor: pointer;
+}
+
+.squisq-data-card-action:hover {
+  background: var(--squisq-surface-hover);
+}
+
+.squisq-data-card-preview {
+  border-top: 1px solid var(--squisq-border-subtle);
+  padding: 0.4rem 0.75rem 0.55rem;
+  overflow-x: auto;
+}
+
+.squisq-data-card-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.78rem;
+}
+
+.squisq-data-card-preview th,
+.squisq-data-card-preview td {
+  text-align: left;
+  padding: 0.15rem 0.6rem 0.15rem 0;
+  border-bottom: 1px solid var(--squisq-border-subtle);
+  white-space: nowrap;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squisq-data-card-preview th {
+  color: var(--squisq-text-soft);
+  font-weight: 600;
+}
+
+.squisq-data-card-preview tr:last-child td {
+  border-bottom: none;
+}
+
+.squisq-data-card-truncation {
+  margin-top: 0.3rem;
+  color: var(--squisq-text-muted);
+  font-size: 0.72rem;
+}
+
+.squisq-data-card-error {
+  padding: 0.4rem 0.75rem;
+  border-top: 1px solid var(--squisq-border-subtle);
+  color: var(--squisq-danger-strong);
+  font-size: 0.72rem;
+}
+
+/* Grid embedded in the card: the card supplies the outer chrome. */
+.squisq-data-card .squisq-data-card-grid {
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--squisq-border-subtle);
+}
+
+/* A height-capable component at the end of a single-block editor may use any
+ * vertical room left after its preceding content. The marker is deliberately
+ * opt-in: ordinary prose and components with intrinsic aspect ratios retain
+ * their natural size, and document view retains normal flowing layout. */
+.squisq-block-card-body .squisq-wysiwyg-editor:has(> .squisq-block-fill-available:last-child) {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.squisq-block-card-body .squisq-wysiwyg-editor > .squisq-block-fill-available:last-child {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+/* Carry the allocated height through the data-card wrappers. The grid's
+ * normal 420px scroller remains its flex basis/minimum experience; when the
+ * block has spare space, flex growth turns that space into visible rows. */
+.squisq-block-card-body
+  .squisq-wysiwyg-editor
+  > .squisq-data-card-host:last-child
+  > .squisq-data-card,
+.squisq-block-card-body
+  .squisq-wysiwyg-editor
+  > .squisq-data-card-host:last-child
+  > .squisq-data-card
+  > .squisq-data-card-grid {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.squisq-block-card-body
+  .squisq-wysiwyg-editor
+  > .squisq-data-card-host:last-child
+  .squisq-grid-scroller {
+  flex: 1 1 420px;
+  min-height: 0;
+}

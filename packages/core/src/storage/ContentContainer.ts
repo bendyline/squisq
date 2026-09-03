@@ -240,6 +240,10 @@ const EXTENSION_MIME_MAP: Record<string, string> = {
   '.css': 'text/css',
   '.html': 'text/html',
   '.js': 'application/javascript',
+  '.csv': 'text/csv',
+  '.tsv': 'text/tab-separated-values',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.parquet': 'application/vnd.apache.parquet',
 };
 
 function guessMimeType(path: string): string {

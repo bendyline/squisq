@@ -46,6 +46,60 @@ export function getSampleLabel(key: string): string {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+/**
+ * Category tree for the sample picker — rendered as `<optgroup>`s so the
+ * native `<select>` contract every Playwright spec drives
+ * (`selectOption(key)`) keeps working. Keys may name inline samples,
+ * generated samples (`dataSamples.ts`), or content zips; anything left
+ * uncategorized falls into a trailing "Other" group so a new sample can
+ * never silently vanish from the picker.
+ */
+export interface SampleGroup {
+  label: string;
+  keys: string[];
+}
+
+export const SAMPLE_GROUPS: SampleGroup[] = [
+  {
+    label: 'Start here',
+    keys: ['about-squisq', 'hello-world', 'features-demo', 'all-templates', 'inline-everything'],
+  },
+  {
+    label: 'Data & calc',
+    keys: ['data-csv-sales', 'data-xlsx-formulas', 'data-csv-large', 'chart-gallery'],
+  },
+  {
+    label: 'Diagrams & trees',
+    keys: [
+      'diagram-gallery',
+      'diagram-family-tree',
+      'diagram-architecture',
+      'diagram-nested-cluster',
+      'tree-gallery',
+      'tree-project-scaffold',
+      'drawing-org-chart',
+      'diagram-legacy-headings',
+      'diagram-broken',
+    ],
+  },
+  {
+    label: 'Templates & theming',
+    keys: ['custom-template-demo', 'gallery-template-demo', 'dashboard-demo', 'flashcards-demo'],
+  },
+  {
+    label: 'Media & narration',
+    keys: ['timeline-media', 'teleprompter-demo'],
+  },
+  {
+    label: 'Content packages',
+    keys: ['issaquah-highlands'],
+  },
+  {
+    label: 'Test fixtures',
+    keys: ['e2e-tiny', 'e2e-gif', 'e2e-tasklist'],
+  },
+];
+
 export const SAMPLES: Record<string, string> = {
   // Single-block fixture for E2E tests that drive the full export
   // pipeline. Kept intentionally tiny -- one block hits the 3-second

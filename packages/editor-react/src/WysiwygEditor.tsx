@@ -38,6 +38,7 @@ import { MermaidDiagramExtension } from './mermaid/MermaidDiagramExtension';
 import { createMermaidThemeStore, type MermaidThemeStore } from './mermaid/mermaidThemeStore';
 import { CodeSnippetExtension } from './codeSnippet/CodeSnippetExtension';
 import { HostFenceExtension } from './fenceWidgets/HostFenceExtension';
+import { DataCardExtension } from './dataCard/DataCardExtension';
 import { fenceRendererLangs } from '@bendyline/squisq/fence';
 import { TreeViewExtension } from './treeview/TreeViewExtension';
 import { shouldPasteAsTreeFence } from './treeview/treePaste';
@@ -143,6 +144,18 @@ export interface WysiwygEditorProps {
   readOnly?: boolean;
   /** Host-controlled base text size and line spacing for the Write canvas. */
   writeCanvasSettings?: WriteCanvasSettings;
+  /**
+   * Open the shell's Files panel — the data card's "Show in Files" button.
+   * Receives the sidecar path so hosts with a focusable file list can jump
+   * to it. Omitted (e.g. no media provider host) hides the affordance.
+   */
+  onOpenFilesPanel?: (relativePath?: string) => void;
+  /**
+   * Calc backend for the data card's formula sessions. Default: the
+   * in-house tier. A host may inject another `CalcEngine` implementation
+   * (e.g. IronCalc via `@bendyline/squisq-calc/ironcalc`).
+   */
+  calcEngineFactory?: import('./dataCard/formulaSupport').CalcEngineFactory;
 }
 
 /**
@@ -155,6 +168,8 @@ export function WysiwygEditor({
   submitOnEnter,
   readOnly = false,
   writeCanvasSettings,
+  onOpenFilesPanel,
+  calcEngineFactory,
 }: WysiwygEditorProps) {
   const {
     editorSource,
@@ -168,6 +183,7 @@ export function WysiwygEditor({
     colorScheme,
     bumpMediaRevision,
     mediaRevision,
+    workspaceContainer,
     sceneTextChannel,
     preserveSourceWrapping,
     layoutMode,
@@ -247,6 +263,26 @@ export function WysiwygEditor({
   // Keep a ref so the editor's drop/paste handlers (created once) always
   // see the current MediaProvider without needing to recreate the editor.
   const mediaProviderRef = useRef(mediaProvider);
+  const mediaRevisionRef = useRef(mediaRevision);
+  useEffect(() => {
+    mediaRevisionRef.current = mediaRevision;
+  }, [mediaRevision]);
+  const onOpenFilesPanelRef = useRef(onOpenFilesPanel);
+  useEffect(() => {
+    onOpenFilesPanelRef.current = onOpenFilesPanel;
+  }, [onOpenFilesPanel]);
+  const calcEngineFactoryRef = useRef(calcEngineFactory);
+  useEffect(() => {
+    calcEngineFactoryRef.current = calcEngineFactory;
+  }, [calcEngineFactory]);
+  const workspaceContainerRef = useRef(workspaceContainer);
+  useEffect(() => {
+    workspaceContainerRef.current = workspaceContainer;
+  }, [workspaceContainer]);
+  const bumpMediaRevisionRef = useRef(bumpMediaRevision);
+  useEffect(() => {
+    bumpMediaRevisionRef.current = bumpMediaRevision;
+  }, [bumpMediaRevision]);
   useEffect(() => {
     mediaProviderRef.current = mediaProvider;
   }, [mediaProvider]);
@@ -322,6 +358,14 @@ export function WysiwygEditor({
       HostFenceExtension.configure({
         renderers: () => fenceRenderersRef.current ?? undefined,
         theme: () => activeThemeRef.current ?? undefined,
+      }),
+      DataCardExtension.configure({
+        mediaProvider: () => mediaProviderRef.current,
+        mediaRevision: () => mediaRevisionRef.current ?? 0,
+        container: () => workspaceContainerRef.current,
+        onOpenFiles: (relativePath) => onOpenFilesPanelRef.current?.(relativePath),
+        onMediaSaved: () => bumpMediaRevisionRef.current?.(),
+        calcEngineFactory: () => calcEngineFactoryRef.current,
       }),
       RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
       TimelineViewExtension,

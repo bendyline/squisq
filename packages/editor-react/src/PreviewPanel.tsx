@@ -123,6 +123,7 @@ export function PreviewPanel({
     activeTransformStyle,
     workspaceContainer,
     documentTitleFromFileName(fileName),
+    mediaRevision,
   );
 
   const previewDoc = previewProjection?.playerDoc ?? null;
