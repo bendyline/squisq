@@ -154,6 +154,11 @@ jobs:
         run: node scripts/run-install-allowlist.mjs
 
       - name: Build
+        # The macOS ARM runner has 7 GB of RAM, so Node derives a heap limit
+        # that is too small for tsup's worker while it rolls up core's DTS
+        # entry points. This is only a ceiling; the worker allocates less.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npm run build
 
       - name: Typecheck
