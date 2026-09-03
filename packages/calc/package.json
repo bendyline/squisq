@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-calc",
-  "version": "0.1.0",
+  "version": "2.11.0",
   "description": "Spreadsheet calculation for squisq: the engine adapter contract (staleness, spill, budgets, cycle policy), an Excel formula parser, a pure-TypeScript in-house evaluator tier, and an IronCalc wasm backend behind the /ironcalc subpath (optional peer)",
   "license": "MIT",
   "author": "Bendyline",
@@ -10,11 +10,22 @@
     "directory": "packages/calc"
   },
   "homepage": "https://github.com/bendyline/squisq",
+  "keywords": [
+    "squisq",
+    "spreadsheet",
+    "formula",
+    "excel",
+    "calculation",
+    "xlsx",
+    "ironcalc"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/worker/index.js"
+  ],
   "files": [
     "dist",
     "!dist/**/*.map",

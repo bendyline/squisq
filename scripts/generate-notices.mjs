@@ -68,9 +68,16 @@ const footers = {
   core: `The generated icon catalog incorporates Font Awesome Free metadata. Exact
 third-party license texts for bundled code and data are shipped in
 THIRD_PARTY_LICENSES.txt.`,
+  calc: `The IronCalc wasm backend is an optional peer dependency, reached only through
+the \`@bendyline/squisq-calc/ironcalc\` subpath via dynamic import. It is not
+bundled, and consumers who never construct an IronCalc engine do not install
+it. Copyright and complete license texts for the listed dependencies are
+included in their respective npm distributions and source repositories.`,
   formats: `Squisq uses jszip under its MIT license option. Copyright and complete license
 texts for these dependencies are included in their respective npm
 distributions and source repositories.`,
+  'grid-react': `Copyright and complete license texts for these dependencies are included in
+their respective npm distributions and source repositories.`,
   react: `Mermaid is Copyright (c) 2014-2022 Knut Sveidqvist and is distributed under
 the MIT License. Preact is used by the standalone browser bundles. Exact
 third-party license texts for the complete standalone bundle graph are shipped
@@ -211,7 +218,7 @@ function normalizeRepository(metadata) {
 }
 
 function renderNotice(packageName, heading, rows, footer) {
-  return `# Third-Party Notices for ${packageName}
+  const body = `# Third-Party Notices for ${packageName}
 
 This notice applies to the \`${packageName}\` npm package.
 Squisq-authored code is licensed under the MIT license in \`LICENSE\`.
@@ -220,9 +227,11 @@ Third-party components remain under their respective license terms.
 ## ${heading}
 
 ${renderTable(rows)}
-
-${footer}
 `;
+  // A package with no footer prose must never interpolate `undefined` into a
+  // legal notice file. `notices:check` only compares generated output against
+  // the committed file, so it cannot catch a defect the generator emits itself.
+  return footer ? `${body}\n${footer}\n` : body;
 }
 
 function renderTable(rows) {

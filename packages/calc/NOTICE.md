@@ -10,4 +10,8 @@ Third-party components remain under their respective license terms.
 | ----------------------- | ------- | -------------- | ------------------------------------ |
 | @ironcalc/wasm _(peer)_ | ^0.8.4  | MIT/Apache-2.0 | https://github.com/ironcalc/IronCalc |
 
-undefined
+The IronCalc wasm backend is an optional peer dependency, reached only through
+the `@bendyline/squisq-calc/ironcalc` subpath via dynamic import. It is not
+bundled, and consumers who never construct an IronCalc engine do not install
+it. Copyright and complete license texts for the listed dependencies are
+included in their respective npm distributions and source repositories.
