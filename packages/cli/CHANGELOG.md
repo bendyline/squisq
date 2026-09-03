@@ -1,3 +1,16 @@
+## @bendyline/squisq-cli [2.8.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.7.2...@bendyline/squisq-cli@2.8.0) (2026-09-03)
+
+### Features
+
+* Grid/data sidecars ([#52](https://github.com/bendyline/squisq/issues/52)) ([1d300be](https://github.com/bendyline/squisq/commit/1d300be19c380baa3f4726d03aa4e0807990902b))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.0
+* **@bendyline/squisq-formats:** upgraded to 2.6.0
+* **@bendyline/squisq-video:** upgraded to 2.3.3
+
 ## @bendyline/squisq-cli [2.7.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.7.1...@bendyline/squisq-cli@2.7.2) (2026-08-31)
 
 ### Bug Fixes
