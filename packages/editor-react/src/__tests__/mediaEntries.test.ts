@@ -30,4 +30,12 @@ describe('isVisibleMediaEntry', () => {
       expect(isVisibleMediaEntry(entry(name))).toBe(true);
     },
   );
+
+  it.each([
+    'report_files/data/q3.csv',
+    'report_files/data/Q3 Sales.xlsx',
+    'report_files/data/metrics.parquet',
+  ])('keeps data sidecars visible in the Files panel: %s', (name) => {
+    expect(isVisibleMediaEntry(entry(name))).toBe(true);
+  });
 });

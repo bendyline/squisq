@@ -1,4 +1,4 @@
-# Squisq API Reference
+cçç# Squisq API Reference
 
 > Reference for the seven published packages and their subpath exports. Types
 > and signatures below are transcribed from source; when in doubt, the `.d.ts`
@@ -25,7 +25,10 @@
   - [Recommend](#subpath-recommend)
   - [Narration](#subpath-narration)
   - [Proof](#subpath-proof)
+  - [Table](#subpath-table)
 - [`@bendyline/squisq-react`](#bendylinesquisq-react)
+- [`@bendyline/squisq-grid-react`](#bendylinesquisq-grid-react)
+- [`@bendyline/squisq-calc`](#bendylinesquisq-calc)
 - [`@bendyline/squisq-formats`](#bendylinesquisq-formats)
 - [`@bendyline/squisq-editor-react`](#bendylinesquisq-editor-react)
 - [`@bendyline/squisq-video`](#bendylinesquisq-video)
@@ -1563,6 +1566,84 @@ function parseProofDictionary(value: unknown): string[];
 function formatProofDictionary(words: readonly string[]): string | null; // null = remove the key
 ```
 
+### Subpath: `table` {#subpath-table}
+
+**Import:** `@bendyline/squisq/table`
+
+The tabular-data view + provider contract shared by the grid, the sidecar
+readers, and exports.
+
+```ts
+// View-state grammar (rides `{[dataTable …]}` annotation params)
+//   sort=Revenue:desc,Region          multi-term; :asc|:desc, default asc
+//   filter=Region=West;Revenue>=1000  AND-only
+//   text ops  = != ~ !~ ^~ $~         equals/contains/starts-with/ends-with,
+//                                     case-INSENSITIVE; suffix * = case-sensitive
+//   compare   > < >= <=               numeric on numeric columns, collator otherwise
+//   blankness Notes="" / Notes!=""    empty value on =/!= matches blank cells
+//                                     (the grid's Is empty / Is not empty)
+// Names/values quote CSV-style ("" doubling — no backslashes; ^ $ * force quoting).
+interface SortTerm {
+  column: string;
+  dir: 'asc' | 'desc';
+}
+interface FilterClause {
+  column: string;
+  op: FilterOp;
+  value: string;
+  caseSensitive?: boolean; // the * modifier (text ops only)
+}
+interface TableViewState {
+  sort: SortTerm[];
+  filter: FilterClause[];
+}
+interface ViewIssue {
+  code: 'data-view-unknown-column' | 'data-view-invalid';
+  message: string;
+}
+
+// Never throws — bad terms drop with issues.
+function parseTableViewState(
+  sortRaw: string | undefined,
+  filterRaw: string | undefined,
+  headers: readonly string[],
+): ParsedTableViewState; // { view, issues }
+function serializeTableViewState(view: TableViewState): { sort?: string; filter?: string };
+const EMPTY_TABLE_VIEW_STATE: TableViewState;
+function isEmptyViewState(view: TableViewState): boolean;
+
+// Reference implementation (filter → stable sort, blanks last); the
+// grid-react worker kernel is parity-tested against it.
+function applyTableViewState(
+  headers: readonly string[],
+  rows: readonly (readonly string[])[],
+  view: TableViewState,
+): AppliedTableView; // { rows, rowIds, unfilteredRowCount }
+
+// Shared typing rules
+function isNumericCellText(text: string): boolean; // finite, no leading zeros
+function inferNumericColumn(cells: readonly string[]): boolean;
+function makeTableCollator(): Intl.Collator; // numeric-aware, locale default
+
+// Async provider the grid pulls from (rowId = immutable source row index)
+interface TableQueryProvider {
+  describe(): Promise<TableSchema>;
+  setView(view: TableViewState): Promise<TableViewResult>;
+  rows(start: number, count: number): Promise<TableRowsPage>;
+  applyEdits?(edits: TableCellEdit[]): Promise<TableEditResult>; // staleView: edit hit an
+  //   active sort/filter column
+  // Optional full-SOURCE distinct sweep of one column (value-picker UIs);
+  // near-free on the columnar store's dictionary-encoded string columns.
+  distinct?(col: number, limit: number): Promise<TableDistinctResult>;
+  dispose(): void;
+}
+interface TableDistinctResult {
+  values: string[]; // sorted, capped at `limit`
+  totalDistinct: number; // may exceed values.length
+  hasBlank: boolean;
+}
+```
+
 ---
 
 ## `@bendyline/squisq-react`
@@ -1923,6 +2004,196 @@ contract), with `getDuration() === 0` and no cover.
 
 ---
 
+## `@bendyline/squisq-grid-react`
+
+Virtualized data grid for sidecar tables. Depends on `@bendyline/squisq`
+(core) + `@tanstack/react-virtual`; peers `react`/`react-dom` (^18 || ^19).
+The editor's data card imports it lazily — hosts can also mount it directly.
+
+**Import:** `@bendyline/squisq-grid-react`
+**Styles:** `@bendyline/squisq-grid-react/styles` (only `var(--squisq-grid-*, <literal>)` tokens; the editor's chrome palette aliases them)
+
+```tsx
+// The component: row-virtualized, sticky sortable/filterable header,
+// rectangular selection + TSV/HTML clipboard, inline editor with kind
+// coercion, dirty/save bar, staleView refresh, ARIA grid roles.
+function DataGrid(props: {
+  provider: TableQueryProvider; // from @bendyline/squisq/table
+  journal?: EditJournal; // present = editable
+  view: TableViewState;
+  onViewChange?: (view: TableViewState) => void;
+  viewPersisted?: boolean; // false → "view not saved to document" hint
+  onSave?: () => void | Promise<void>;
+  saving?: boolean;
+  height?: number; // default 420, drag-resizable
+  readOnlyReason?: string; // whole-grid lock (e.g. parquet)
+  isCellLocked?: (rowId: number, col: number) => boolean; // per-cell lock (XLSX formula/date)
+  lockedReason?: string;
+  formulaSupport?: FormulaSupport; // engine-backed =formula editing
+  onCellEdited?: (edit: TableCellEdit) => void; // mirror value edits into an engine
+  extraDirtyCount?: number; // unsaved formula edits, for the save bar
+  onDiscardExtra?: () => void | Promise<void>;
+  className?: string;
+}): ReactElement;
+
+// Formula editing seam: a cell with a formula edits as `=source`; committed
+// `=` drafts route through commitFormula, whose updates (edited cell +
+// recalculated dependents) apply to the provider and the visible cache.
+interface FormulaSupport {
+  getFormula(rowId: number, col: number): string | undefined;
+  commitFormula(rowId: number, col: number, formula: string): Promise<FormulaCommitResult>;
+}
+interface FormulaCommitResult {
+  ok: boolean;
+  error?: string;
+  updates?: TableCellEdit[];
+}
+
+// The store: in-house columnar engine implementing TableQueryProvider.
+// Runs in a Web Worker built from a zero-import kernel shipped via
+// Function.prototype.toString → Blob URL (CSP: worker-src blob:), or
+// in-process via { forceLocal: true } (SSR/tests).
+class TableStoreClient implements TableQueryProvider {
+  constructor(table: IngestTable, options?: { forceLocal?: boolean });
+}
+interface IngestTable {
+  headers: string[];
+  cells: IngestCell[][]; // IngestCell = string|number|boolean|null
+  hints?: ({ kind: 'number' | 'boolean' | 'date' } | undefined)[];
+}
+
+// Unsaved edits, keyed by immutable source rowId; batches are the undo unit.
+class EditJournal {
+  get dirtyCount(): number;
+  get canUndo(): boolean;
+  get canRedo(): boolean;
+  isDirty(rowId: number, col: number): boolean;
+  commit(entries: JournalEntry[]): void;
+  undo(): TableCellEdit[];
+  redo(): TableCellEdit[]; // inverse edits for the store
+  entries(): JournalEntry[];
+  clear(): void;
+}
+function journalFor(path: string, revision: number): EditJournal; // module cache — widget
+function discardJournal(path: string): void; //   remounts keep edits
+```
+
+---
+
+## `@bendyline/squisq-calc`
+
+Spreadsheet calculation: the engine adapter contract, an Excel formula
+parser, and the pure-TS in-house evaluator tier. Zero runtime dependencies;
+browser + Node. High-fidelity backends (IronCalc) implement the same
+contract as separate adapter packages.
+
+**Import:** `@bendyline/squisq-calc`
+
+```ts
+// Values: null = empty cell; errors are branded objects, never strings.
+type CalcValue = number | string | boolean | CalcErrorValue | null;
+type CalcErrorCode =
+  | '#DIV/0!'
+  | '#N/A'
+  | '#NAME?'
+  | '#NULL!'
+  | '#NUM!'
+  | '#REF!'
+  | '#VALUE!'
+  | '#SPILL!'
+  | '#CALC!';
+function calcError(code: CalcErrorCode): CalcErrorValue;
+function isCalcError(value: unknown): value is CalcErrorValue;
+
+// The adapter contract (Formualizer vocabulary). Budgets are mandatory:
+// evaluation stops honestly at maxEvalTimeMs/maxWorkUnits and reports
+// dirtyRemaining instead of hanging the host.
+type Staleness = 'current' | 'dirty' | 'neverEvaluated';
+type SpillRole = 'anchor' | 'member' | 'none';
+interface CalcEngine {
+  readonly capabilities: CalcEngineCapabilities; // functions, landmines declared
+  loadWorkbook(seed: CalcWorkbookSeed): Promise<void>;
+  setCellValue(addr: CalcCellAddress, value: CalcScalar | null): void;
+  setCellFormula(addr: CalcCellAddress, formula: string): void; // no leading '='
+  clearCell(addr: CalcCellAddress): void;
+  getCell(addr: CalcCellAddress): CalcCellState; // value, staleness, spillRole, volatile
+  evaluateAll(budgets?: CalcBudgets): Promise<CalcEvaluationResult>;
+  //  → { status: 'complete'|'budget-exceeded'|'cycle-error', dirtyRemaining, cycleCells, … }
+  evaluateFormula(formula: string, context?: CalcCellAddress): CalcValue; // values-context
+  precedentsOf(addr: CalcCellAddress): CalcRangeAddress[];
+  dependentsOf(addr: CalcCellAddress): CalcCellAddress[];
+  dispose(): void;
+}
+
+// The in-house tier: ~85 functions (lookup/aggregate/logical/text/info/date),
+// explicit-stack topological recalc (no recursion overflow), whole-column
+// ranges clamped to used extent, cyclePolicy 'error' (#CALC!) | 'iterate'
+// (Excel defaults 100 × 0.001), injectable clock for NOW/TODAY.
+function createInHouseEngine(config?: CalcEngineConfig): CalcEngine;
+interface CalcEngineConfig {
+  date1904?: boolean; // epoch; 1900 system keeps the leap bug
+  cyclePolicy?: 'error' | 'iterate';
+  iterateMaxIterations?: number;
+  iterateMaxChange?: number;
+  budgets?: CalcBudgets; // { maxEvalTimeMs?, maxWorkUnits? }
+  now?: () => Date;
+}
+
+// Formula language (exposed for tooling)
+function parseFormula(source: string): Expr; // throws CalcParseError
+function collectReferences(
+  expr: Expr,
+  defaultSheet: string,
+): { ranges: CalcRangeAddress[]; names: string[] };
+
+// Value semantics shared with adapters + the oracle
+function compareValues(a: CalcValue, b: CalcValue): number | CalcErrorValue;
+function toNumber(v: CalcValue): number | CalcErrorValue; // Excel coercion
+function serialFromDateParts(y: number, m: number, d: number, date1904: boolean): number | null;
+function isoFromSerial(serial: number, date1904: boolean): string | null;
+function serialFromIso(text: string, date1904: boolean): number | null;
+```
+
+In the editor, the data card's XLSX formula sessions run on this contract:
+`EditorShell`'s `calcEngineFactory?: (config: CalcEngineConfig) =>
+Promise<CalcEngine>` swaps the backend (default: `createInHouseEngine`; a
+factory failure falls back to it). The dev site's Advanced options dialog
+demonstrates the switch with IronCalc.
+
+The corpus cached-value oracle (`tests/corpus/calcOracle.test.ts`) is the
+release gate: every eligible real-world formula evaluates in values context
+and must match its cached result (relative ε 5e-8).
+
+---
+
+### Subpath: IronCalc backend {#subpath-ironcalc}
+
+IronCalc behind the same `CalcEngine` contract, in the same package.
+`@ironcalc/wasm` is an **optional peer** of this subpath reached only via
+dynamic import — zero wasm bytes until a host creates an engine, and the
+ROOT entry never references it (guardrail-tested like harper.js).
+
+**Import:** `@bendyline/squisq-calc/ironcalc`
+
+```ts
+function createIronCalcEngine(options?: IronCalcEngineOptions): Promise<CalcEngine>;
+function isIronCalcAvailable(): Promise<boolean>;
+interface IronCalcEngineOptions extends CalcEngineConfig {
+  wasmSource?: unknown; // wasm bytes/URL; Node hosts MUST pass bytes
+  locale?: string; // default 'en'
+  timezone?: string; // default 'UTC'
+}
+```
+
+Adapter facts: budgets are PRE-FLIGHT (`maxWorkUnits` caps the dirty-formula
+count; a measured `maxEvalTimeMs` overrun makes the NEXT batch refuse — a
+wasm `evaluate()` in flight cannot be interrupted); graph queries derive
+from squisq-calc's parser; defined names must be sheet-qualified absolute
+references (`Sheet1!$A$1`); `evaluateFormula` uses a scratch cell and costs
+a full recalculation — prefer the in-house tier for preview workloads.
+
+---
+
 ## `@bendyline/squisq-formats`
 
 Document format converters. Uses `MarkdownDocument` from core as the pivot
@@ -2238,6 +2509,39 @@ interface XlsxExportOptions {
   author?: string; // core properties
   sheetNamePrefix?: string; // default 'Sheet' — used when no heading precedes a table
 }
+
+// In-place cell-value patching — the grid's XLSX save path. Only touched
+// worksheet parts (+ xl/workbook.xml's calc flag) are rewritten; every other
+// archive member keeps byte-identical uncompressed content. All-or-nothing:
+// a refused cell throws XlsxPatchRefusal before any output exists.
+function patchXlsxCellValues(
+  bytes: ArrayBuffer,
+  patches: readonly XlsxCellPatch[],
+  options?: XlsxPatchOptions, // zip safety limits, same contract as import
+): Promise<ArrayBuffer>;
+interface XlsxCellPatch {
+  sheet: string; // sheet name, exactly as the workbook lists it
+  ref: string; // A1-style cell reference
+  // Exactly ONE of value/formula:
+  value?: number | boolean | string | null; // null clears content, keeps style
+  formula?: string; // replace the cell's <f> (shared MASTER refused; a
+  //   FOLLOWER may leave its group)
+  cachedValue?: number | boolean | string; // engine result stored beside formula
+}
+class XlsxPatchRefusal extends Error {
+  code:
+    | 'sheet-missing'
+    | 'cell-ref-invalid'
+    | 'formula-cell'
+    | 'shared-formula-follower'
+    | 'date-value-unsupported'
+    | 'number-not-finite';
+  sheet: string;
+  ref: string;
+}
+function listSheetParts(pkg: OoxmlPackage, mainPart: string): Promise<SheetRef[]>;
+function formatCellRef(row: number, col: number): string; // 0-based → "B1"
+function parseCellRef(ref: string): { row: number; col: number } | null;
 ```
 
 ### Subpath: HTML

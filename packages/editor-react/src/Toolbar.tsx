@@ -1483,7 +1483,44 @@ export function Toolbar({
   // the inline marks — but NOT headings (their content is a sub-block body, so
   // a heading there would re-parse as a sibling sub-block).
   const BLOCK_SCENE_BUTTONS = new Set([...INLINE_SCENE_BUTTONS, 'ul', 'ol', 'quote', 'codeblock']);
+  // Focus inside a data-card grid: the grid owns the user's selection there,
+  // while every toolbar command would still apply to the EDITOR's remembered
+  // caret (clicking H1 retargets the sheet's owning heading). Per-cell/
+  // per-grid formatting is deliberately not a feature, so the formatting
+  // controls disable wholesale until focus returns to prose. Tracked via
+  // document-level focus events because the widget's event containment
+  // keeps the grid's own events from ever reaching the editor.
+  const [dataCardFocused, setDataCardFocused] = useState(false);
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const update = () => {
+      // Settle after the event: during focusout the next activeElement
+      // isn't assigned yet.
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        const active = document.activeElement;
+        // STICKY by surface: many mundane interactions drop focus on <body>
+        // while the grid still shows its selection (committing a cell edit
+        // unmounts the input; clicking the card's strip or dead space).
+        // Only an element that actually TAKES focus decides — entering
+        // prose (or any other surface) re-enables, focus lost to nowhere
+        // keeps the previous verdict.
+        if (!active || active === document.body || active === document.documentElement) return;
+        setDataCardFocused(active.closest('.squisq-data-card') != null);
+      }, 0);
+    };
+    document.addEventListener('focusin', update);
+    document.addEventListener('focusout', update);
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+      document.removeEventListener('focusin', update);
+      document.removeEventListener('focusout', update);
+    };
+  }, []);
+
   const buttonAllowed = (id: string): boolean => {
+    if (dataCardFocused) return false;
     if (!sceneTextLevel) return true;
     if (sceneTextLevel === 'rich') return true;
     if (sceneTextLevel === 'block') return BLOCK_SCENE_BUTTONS.has(id);
@@ -1937,7 +1974,13 @@ export function Toolbar({
                       ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
                       className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}${overflowed ? ' squisq-toolbar-button--overflowed' : ''}`}
                       data-btn-index={btnIndex}
-                      data-tooltip={disabled ? 'Insert image (requires media provider)' : btn.title}
+                      data-tooltip={
+                        dataCardFocused
+                          ? 'Formatting applies to document text — click into the prose first'
+                          : disabled
+                            ? 'Insert image (requires media provider)'
+                            : btn.title
+                      }
                       onClick={() => handleAction(btn.id)}
                       aria-label={btn.title}
                       aria-pressed={active}
@@ -1958,11 +2001,16 @@ export function Toolbar({
                 ref={insertMenuButtonRef}
                 className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}${showInsertInOverflow ? ' squisq-toolbar-button--overflowed' : ''}`}
                 data-btn-index={FIRST_MEDIA_INDEX}
-                data-tooltip="Insert..."
+                data-tooltip={
+                  dataCardFocused
+                    ? 'Inserts land in document text — click into the prose first'
+                    : 'Insert...'
+                }
                 onClick={() => (insertMenuAnchor ? closeInsertMenu() : openInsertMenu())}
                 aria-label="Insert"
                 aria-expanded={insertMenuAnchor !== null}
                 aria-haspopup="menu"
+                disabled={dataCardFocused}
               >
                 <Icon icon="fa-solid fa-plus" />
               </button>

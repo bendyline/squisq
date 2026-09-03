@@ -116,4 +116,20 @@ describe('resolveFileKind', () => {
   it('respects an explicit language=image override', () => {
     expect(resolveFileKind(undefined, 'image')).toEqual({ mode: 'image', language: 'image' });
   });
+
+  it('returns data mode for tabular data files', () => {
+    expect(resolveFileKind('q3.csv')).toEqual({ mode: 'data', language: 'plaintext' });
+    expect(resolveFileKind('Q3 Sales.TSV')).toEqual({ mode: 'data', language: 'plaintext' });
+    expect(resolveFileKind('metrics.parquet')).toEqual({ mode: 'data', language: 'plaintext' });
+  });
+
+  it('keeps xlsx out of data mode (it routes through the import pipeline)', () => {
+    expect(resolveFileKind('book.xlsx').mode).not.toBe('data');
+  });
+
+  it('lets an explicit language override data-mode detection', () => {
+    // Explicit language wins: 'plaintext' resolves through the normal ladder
+    // (markdown mode), never the data path.
+    expect(resolveFileKind('q3.csv', 'plaintext').mode).not.toBe('data');
+  });
 });

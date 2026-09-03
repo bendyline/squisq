@@ -14,20 +14,22 @@ export type { FileCategory };
 export { classifyFile };
 
 /**
- * Partition an array of files into media and text categories.
+ * Partition an array of files into media, text, and data categories.
  * Files with unknown type are skipped.
  */
-export function partitionFiles(files: File[]): { media: File[]; text: File[] } {
+export function partitionFiles(files: File[]): { media: File[]; text: File[]; data: File[] } {
   const media: File[] = [];
   const text: File[] = [];
+  const data: File[] = [];
 
   for (const file of files) {
     const cat = classifyFile(file);
     if (cat === 'media') media.push(file);
     else if (cat === 'text') text.push(file);
+    else if (cat === 'data') data.push(file);
   }
 
-  return { media, text };
+  return { media, text, data };
 }
 
 /**
@@ -85,6 +87,87 @@ export async function processMediaFiles(
     const mimeType = file.type || 'application/octet-stream';
     try {
       const path = await mediaProvider.addMedia(file.name, buffer, mimeType);
+      paths.push(path);
+    } catch (err: unknown) {
+      console.warn(
+        `[squisq-editor] Failed to save "${file.name}" via mediaProvider:`,
+        err instanceof Error ? err.message : err,
+      );
+      paths.push(null);
+    }
+  }
+
+  return paths;
+}
+
+/** MIME by data extension, for File objects whose `type` is empty. */
+const DATA_EXT_MIME: Record<string, string> = {
+  csv: 'text/csv',
+  tsv: 'text/tab-separated-values',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  parquet: 'application/vnd.apache.parquet',
+};
+
+/**
+ * Store data files (csv/tsv/xlsx/parquet) into the container behind a
+ * MediaProvider, under a caller-supplied directory prefix — conventionally
+ * `dataSidecarPrefix(docBasename)`, i.e. `<docbasename>_files/data/`.
+ *
+ * Same defensive read handling and index-aligned `null` slots as
+ * {@link processMediaFiles}. Name collisions inside the prefix get a
+ * ` -1`, `-2`, … suffix rather than overwriting an existing sidecar.
+ */
+export async function processDataFiles(
+  files: File[],
+  mediaProvider: MediaProvider,
+  dataDirPrefix: string,
+): Promise<(string | null)[]> {
+  const paths: (string | null)[] = [];
+  if (files.length === 0) return paths;
+
+  let existing: Set<string>;
+  try {
+    existing = new Set((await mediaProvider.listMedia()).map((entry) => entry.name));
+  } catch {
+    existing = new Set();
+  }
+
+  for (const file of files) {
+    let buffer: ArrayBuffer;
+    try {
+      buffer = await file.arrayBuffer();
+    } catch (err: unknown) {
+      console.warn(
+        `[squisq-editor] Skipped dropped file "${file.name}" — could not read its contents.`,
+        err instanceof Error ? err.message : err,
+      );
+      paths.push(null);
+      continue;
+    }
+
+    if (buffer.byteLength === 0) {
+      console.warn(
+        `[squisq-editor] Skipped dropped file "${file.name}" — its contents read as 0 bytes.`,
+      );
+      paths.push(null);
+      continue;
+    }
+
+    const baseName = file.name.split(/[\\/]/).pop() || 'data';
+    const dot = baseName.lastIndexOf('.');
+    const stem = dot > 0 ? baseName.slice(0, dot) : baseName;
+    const ext = dot > 0 ? baseName.slice(dot) : '';
+    const mimeType =
+      file.type || DATA_EXT_MIME[ext.replace('.', '').toLowerCase()] || 'application/octet-stream';
+
+    let candidate = `${dataDirPrefix}${baseName}`;
+    for (let suffix = 1; existing.has(candidate); suffix++) {
+      candidate = `${dataDirPrefix}${stem}-${suffix}${ext}`;
+    }
+
+    try {
+      const path = await mediaProvider.addMedia(candidate, buffer, mimeType);
+      existing.add(path);
       paths.push(path);
     } catch (err: unknown) {
       console.warn(

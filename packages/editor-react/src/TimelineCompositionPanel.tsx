@@ -47,12 +47,13 @@ export function TimelineCompositionPanel({
     activeCoverSlideDuration,
     activeCoverSlidePlayback,
   } = usePreviewSettings();
-  const { fileName } = useEditorContext();
+  const { fileName, mediaRevision } = useEditorContext();
   const projection = usePreviewProjection(
     doc,
     activeTransformStyle,
     workspaceContainer,
     documentTitleFromFileName(fileName),
+    mediaRevision,
   );
   const contentDoc = projection?.contentDoc ?? null;
   const playerDoc = projection?.playerDoc ?? null;

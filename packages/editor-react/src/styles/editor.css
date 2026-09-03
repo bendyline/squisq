@@ -2439,6 +2439,13 @@
   outline-offset: -2px;
 }
 
+/* Entry the data card's "Show in Files" jumped to. */
+.squisq-media-bin-item--highlight {
+  background: var(--squisq-accent-subtle);
+  outline: 1px solid var(--squisq-accent-border);
+  outline-offset: -1px;
+}
+
 .squisq-media-bin-thumb {
   width: 32px;
   height: 32px;
@@ -3998,10 +4005,6 @@
   min-height: 0;
   position: relative;
   display: flex;
-  /* A few px of beige "desk" above and below the block, so the framed card
-     sits off the toolbar and nav bar. The body background is transparent, so
-     this reveals the card's desk color. */
-  padding: 6px 0;
 }
 
 .squisq-block-card-body > .squisq-raw-editor-container,
@@ -4011,18 +4014,12 @@
   min-height: 0;
 }
 
-/* Frame just the editable surface — top and bottom — so a single block reads
-   as a discrete card. Scoped to the surface (not the full-width body) so the
-   line tracks the white page rather than stretching across the beige desk.
-   Uses the same seam color as the Monaco frame so it reads against the desk. */
+/* A single-block surface uses the full available width instead of retaining
+   the document view's centered 800px reading column. Wide content such as
+   data grids can then use the surrounding editor area. */
 .squisq-block-card-body .squisq-wysiwyg-editor {
-  border-top: 1px solid var(--squisq-desk-border);
-  border-bottom: 1px solid var(--squisq-desk-border);
-}
-
-.squisq-block-card-body > .squisq-raw-editor-container {
-  border-top: 1px solid var(--squisq-desk-border);
-  border-bottom: 1px solid var(--squisq-desk-border);
+  max-width: none;
+  margin: 0;
 }
 
 .squisq-block-card-nav {
@@ -4065,12 +4062,6 @@
 
 .squisq-block-card-add {
   margin-left: 8px;
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-block-card-body .squisq-wysiwyg-editor,
-.squisq-editor-shell[data-theme='dark'] .squisq-block-card-body > .squisq-raw-editor-container {
-  border-top-color: var(--squisq-desk-border);
-  border-bottom-color: var(--squisq-desk-border);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-block-card-nav {

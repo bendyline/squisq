@@ -239,8 +239,14 @@ export default defineConfig({
     exclude: [
       '@bendyline/squisq',
       '@bendyline/squisq-core',
+      '@bendyline/squisq-calc',
+      // The IronCalc wasm JS shim is reached only via dynamic import from
+      // the calc /ironcalc subpath; pre-bundling would break its
+      // relative wasm_bg.wasm resolution.
+      '@ironcalc/wasm',
       '@bendyline/squisq-editor-react',
       '@bendyline/squisq-react',
+      '@bendyline/squisq-grid-react',
       '@bendyline/squisq-formats',
       // squisq-video-react ships a separate `dist/workers/encode.worker.js`
       // that the runtime spawns via `new URL(...)`. Pre-bundling collapses

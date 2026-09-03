@@ -15,12 +15,22 @@ export interface FileKind {
   /**
    * 'markdown' keeps the full editor (WYSIWYG + Preview tabs); 'code' is
    * Monaco-only; 'image' renders a dedicated image viewer with no text
-   * editing surface.
+   * editing surface; 'data' marks a tabular data file (csv/tsv/parquet) the
+   * host should open as a sidecar-referencing document (or fall back to a
+   * plaintext Monaco view) rather than pasting raw bytes into the WYSIWYG
+   * markdown editor.
    */
-  mode: 'markdown' | 'code' | 'image';
+  mode: 'markdown' | 'code' | 'image' | 'data';
   /** Monaco language ID — passed to `<Editor defaultLanguage={...} />`. */
   language: string;
 }
+
+/**
+ * Data-file extensions that resolve to `mode: 'data'`. XLSX is deliberately
+ * absent — it is not text-openable and already routes through the import
+ * pipeline.
+ */
+const DATA_MODE_EXTENSIONS = new Set(['csv', 'tsv', 'parquet']);
 
 /**
  * Extension → Monaco language ID. Keys are lowercase, no leading dot.
@@ -150,6 +160,15 @@ export function detectLanguageFromFileName(fileName: string): string | null {
  * `fileName`. When nothing matches, falls back to markdown mode.
  */
 export function resolveFileKind(fileName?: string, language?: string): FileKind {
+  // Data files are decided by extension, before language resolution — they
+  // have no Monaco language of their own. An explicit `language` still wins.
+  if (!language && fileName) {
+    const ext = extractExtension(fileName);
+    if (ext && DATA_MODE_EXTENSIONS.has(ext)) {
+      return { mode: 'data', language: 'plaintext' };
+    }
+  }
+
   const requestedLanguage = language ?? (fileName ? detectLanguageFromFileName(fileName) : null);
   const resolvedLanguage = requestedLanguage
     ? (MONACO_LANGUAGE_ALIASES[requestedLanguage.toLowerCase()] ?? requestedLanguage)

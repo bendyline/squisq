@@ -25,6 +25,11 @@ const MUST_BE_CONTAINED = [
   'compositionstart',
   'compositionupdate',
   'compositionend',
+  // `copy` sits with cut/paste: ProseMirror's own copy handler on view.dom
+  // serializes the DOCUMENT selection, and as the ancestor handler it runs
+  // last and wins the clipboard over a widget's copy (a grid range, a rename
+  // field). Containing it keeps Ctrl/Cmd-C inside a widget widget-owned.
+  'copy',
   'paste',
   'cut',
 ];

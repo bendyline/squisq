@@ -159,6 +159,20 @@ export type {
 export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';
 export { applyNarrationTiming, type NarrationResolution } from './applyNarrationTiming.js';
 export {
+  DATA_FILE_EXTENSIONS,
+  isDataFilePath,
+  dataSidecarPrefix,
+  resolveDataReferences,
+} from './dataReferences.js';
+export type {
+  DataSourceTable,
+  DataSourceReadOptions,
+  DataSourceReader,
+  DataSourceStats,
+  ResolveDataReferencesOptions,
+  ResolvedDataReferences,
+} from './dataReferences.js';
+export {
   isDataFence,
   parseDataFence,
   replaceDataFence,

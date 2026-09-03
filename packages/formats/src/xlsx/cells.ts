@@ -43,6 +43,14 @@ export interface XlsxCell {
    */
   richText?: MarkdownInlineNode[];
   /**
+   * Set when the cell participates in a shared (fill-down) formula group:
+   * `'master'` holds the group's text, `'follower'` inherits by translation.
+   * Consumers that EDIT formulas need this — the in-place patcher refuses
+   * to replace a master (its followers' `si` would dangle) while a
+   * follower may safely leave its group.
+   */
+  sharedFormulaRole?: 'master' | 'follower';
+  /**
    * The cell's value as the sheet stores it, before number formatting.
    *
    * `text` is a rendering for people, and rendering destroys information a

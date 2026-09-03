@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
-import { CONTENT_SAMPLES, getSampleLabel, SAMPLES } from '../samples.js';
+import { CONTENT_SAMPLES, SAMPLE_GROUPS, getSampleLabel, SAMPLES } from '../samples.js';
+import { GENERATED_SAMPLES } from '../dataSamples.js';
 
 function collectAstNodes(value: unknown, nodes: Array<Record<string, unknown>> = []) {
   if (Array.isArray(value)) {
@@ -57,6 +58,44 @@ describe('site samples', () => {
       for (const imageUrl of imageUrls) {
         expect(imageUrl, `${sampleKey} uses a remote demo image`).not.toMatch(/^https?:\/\//i);
       }
+    }
+  });
+
+  it('keeps the sample category tree in sync with the sample registries', () => {
+    const known = new Set([
+      ...Object.keys(SAMPLES),
+      ...Object.keys(GENERATED_SAMPLES),
+      ...Object.keys(CONTENT_SAMPLES),
+    ]);
+    const categorized = new Set<string>();
+    for (const group of SAMPLE_GROUPS) {
+      for (const key of group.keys) {
+        // A group must never point at a sample that does not exist…
+        expect(known.has(key), `SAMPLE_GROUPS names unknown sample "${key}"`).toBe(true);
+        expect(categorized.has(key), `"${key}" appears in two groups`).toBe(false);
+        categorized.add(key);
+      }
+    }
+    // …and every sample belongs to a group (the picker's "Other" fallback
+    // exists as a runtime safety net, not as a place to leave things).
+    for (const key of known) {
+      expect(
+        categorized.has(key),
+        `sample "${key}" is uncategorized — add it to SAMPLE_GROUPS`,
+      ).toBe(true);
+    }
+  });
+
+  it('builds every generated data sample with its sidecar in place', async () => {
+    for (const [key, sample] of Object.entries(GENERATED_SAMPLES)) {
+      const { markdown, container } = await sample.build();
+      // The doc must reference a sidecar the container actually holds.
+      const src = /\{\[dataTable src=([^\s\]]+)/.exec(markdown)?.[1];
+      expect(src, `${key}: no {[dataTable src=…]} reference`).toBeTruthy();
+      const bytes = await container.readFile(src!);
+      expect(bytes, `${key}: sidecar "${src}" missing from container`).not.toBeNull();
+      expect(bytes!.byteLength).toBeGreaterThan(100);
+      expect(await container.readDocument()).toBe(markdown);
     }
   });
 });

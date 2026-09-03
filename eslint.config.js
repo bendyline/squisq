@@ -38,6 +38,7 @@ export default tseslint.config(
     files: [
       'packages/react/**/*.{ts,tsx}',
       'packages/editor-react/**/*.{ts,tsx}',
+      'packages/grid-react/**/*.{ts,tsx}',
       'packages/site/**/*.{ts,tsx}',
     ],
     plugins: {
@@ -82,7 +83,7 @@ export default tseslint.config(
   // ── Test file relaxations ──────────────────────────────────────
   // Tests legitimately use `as any` for test data construction
   {
-    files: ['**/__tests__/**/*.{ts,tsx}', '**/*.test.{ts,tsx}'],
+    files: ['**/__tests__/**/*.{ts,tsx}', '**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
       'no-console': 'off',

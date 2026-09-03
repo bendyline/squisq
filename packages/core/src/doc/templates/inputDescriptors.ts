@@ -135,7 +135,53 @@ function CHART_DESCRIPTORS(
       coerce: 'stringList',
     },
     { key: 'rows', description: 'Table rows (supply via a data fence)' },
+    ...DATA_SRC_DESCRIPTORS(),
+    { key: 'sheet', description: 'Worksheet inside the src workbook (XLSX src only)' },
+    {
+      key: 'anchor',
+      description: "Top-left cell of the region inside the src workbook, e.g. 'B7'",
+    },
+    {
+      key: 'headerRow',
+      description: 'Whether row 1 of the source region is a header row',
+      coerce: 'boolean',
+    },
     ...extra,
+  ];
+}
+
+/**
+ * Sidecar data-source params shared by `dataTable` and the chart family.
+ * `src` names a container-relative data file whose contents are resolved
+ * into a bounded preview by `resolveDataReferences` before projection.
+ */
+function DATA_SRC_DESCRIPTORS(): readonly TemplateInputDescriptor[] {
+  return [
+    {
+      key: 'src',
+      description:
+        'Container path to a sidecar data file (.csv/.tsv/.xlsx/.parquet) supplying the table',
+    },
+    {
+      key: 'previewRows',
+      description: 'Max data rows resolved from src for the bounded preview',
+      coerce: 'number',
+    },
+    // Written by `resolveDataReferences` onto templateData (totalRows/totalCols/
+    // previewRows/truncated) — declared so resolved docs don't lint as unknown.
+    { key: 'srcStats', description: 'Preview stats recorded by data-reference resolution' },
+    // Non-destructive view state over the src data (see @bendyline/squisq/table
+    // for the grammar) — applied by the readers before windowing, so previews
+    // and exports show the author's curated view.
+    {
+      key: 'sort',
+      description: "Sort order over src data: 'Col:desc,Other' (quote names containing , or :)",
+    },
+    {
+      key: 'filter',
+      description:
+        "Row filter over src data: 'Col=value;Other>=10' (ops = != > < >= <= ~ !~; AND only)",
+    },
   ];
 }
 
@@ -309,6 +355,10 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
       coerce: 'boolean',
     },
     { key: 'titleAnchor', description: 'Cell this heading text was absorbed from' },
+    // Sidecar data source (see DATA_SRC_DESCRIPTORS): `src` points at a
+    // container data file; `sheet`/`anchor`/`headerRow` above double as the
+    // in-workbook address when src names an .xlsx.
+    ...DATA_SRC_DESCRIPTORS(),
   ],
   barChart: CHART_DESCRIPTORS([STACKED_DESCRIPTOR]),
   columnChart: CHART_DESCRIPTORS([STACKED_DESCRIPTOR]),

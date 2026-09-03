@@ -41,9 +41,14 @@ export interface FenceBlockEntry {
  *    re-judged by its family's full detection gate, not handed the dead
  *    entry's id and lenient hysteresis treatment.
  */
-function survivedAsChurn(tr: Transaction, entry: FenceBlockEntry, mappedPos: number): boolean {
+function survivedAsChurn(
+  tr: Transaction,
+  entry: FenceBlockEntry,
+  mappedPos: number,
+  nodeTypeName: string,
+): boolean {
   const before = tr.before.nodeAt(entry.pos);
-  if (!before || before.type.name !== 'codeBlock') return false;
+  if (!before || before.type.name !== nodeTypeName) return false;
   return tr.mapping.map(entry.pos + before.nodeSize, -1) > mappedPos;
 }
 
@@ -67,6 +72,11 @@ export function mapFenceEntries(
   tr: Transaction,
   previous: readonly FenceBlockEntry[],
   doc: PMNode,
+  /**
+   * Node type the family claims. Defaults to `'codeBlock'` (every fence
+   * family); the data-card family passes `'paragraph'`.
+   */
+  nodeTypeName = 'codeBlock',
 ): Map<number, string> {
   const mapped = new Map<number, string>();
   const claimed = new Set<string>();
@@ -87,8 +97,8 @@ export function mapFenceEntries(
     if (claimed.has(entry.id)) continue;
     const result = tr.mapping.mapResult(entry.pos, 1);
     if (mapped.has(result.pos)) continue;
-    if (doc.nodeAt(result.pos)?.type.name !== 'codeBlock') continue;
-    if (!survivedAsChurn(tr, entry, result.pos)) continue;
+    if (doc.nodeAt(result.pos)?.type.name !== nodeTypeName) continue;
+    if (!survivedAsChurn(tr, entry, result.pos, nodeTypeName)) continue;
     mapped.set(result.pos, entry.id);
     claimed.add(entry.id);
   }

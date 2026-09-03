@@ -739,10 +739,14 @@ export function EditorProvider({
   const effectiveLayoutMode = viewPreferences?.layoutMode ?? layoutMode;
   // Resolve once per provider mount. Changing fileName/language after mount
   // would require recreating the Monaco model anyway, so treat it as static.
-  const { mode: editorMode, language: resolvedLanguage } = useMemo(
+  const { mode: fileMode, language: resolvedLanguage } = useMemo(
     () => resolveFileKind(fileName, language),
     [fileName, language],
   );
+  // A 'data' file (csv/tsv/parquet) that reaches the editor UNHANDLED opens
+  // as a plaintext Monaco view — the sidecar-document synthesis for data
+  // files happens at the host boundary (see resolveFileKind), never here.
+  const editorMode: EditorMode = fileMode === 'data' ? 'code' : fileMode;
   // In code mode, WYSIWYG and Preview aren't rendered — force the starting
   // view to 'raw' so we don't boot into an unmounted surface. Image mode
   // has no text-editing surface at all; keep the same fallback so that any

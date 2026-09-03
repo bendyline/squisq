@@ -25,6 +25,14 @@
 /**
  * Every event a mounted fence widget must keep to itself. Ordered
  * pointer → key → text-input → composition → clipboard.
+ *
+ * `copy` belongs with `cut`/`paste`: ProseMirror installs its own `copy`
+ * handler on `view.dom` that serializes the DOCUMENT selection into the
+ * clipboard, and since it sits on an ancestor it runs after a widget's own
+ * copy handler — whichever `setData` runs last wins, so a Ctrl/Cmd-C inside
+ * a widget (a selected grid range, a diagram label field) would ship the
+ * document selection instead of the widget's. Its absence while `cut` and
+ * `paste` were contained was an oversight, not a decision.
  */
 export const FENCE_WIDGET_CONTAINED_EVENTS = [
   'pointerdown',
@@ -37,6 +45,7 @@ export const FENCE_WIDGET_CONTAINED_EVENTS = [
   'compositionstart',
   'compositionupdate',
   'compositionend',
+  'copy',
   'paste',
   'cut',
 ] as const;
