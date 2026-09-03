@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-grid-react",
-  "version": "0.1.0",
+  "version": "2.11.0",
   "description": "Virtualized data grid for squisq data sidecars: columnar worker store, TableQueryProvider, and a TanStack-Virtual React renderer",
   "license": "MIT",
   "author": "Bendyline",
@@ -10,6 +10,15 @@
     "directory": "packages/grid-react"
   },
   "homepage": "https://github.com/bendyline/squisq",
+  "keywords": [
+    "squisq",
+    "data-grid",
+    "react",
+    "virtualized",
+    "table",
+    "csv",
+    "xlsx"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
