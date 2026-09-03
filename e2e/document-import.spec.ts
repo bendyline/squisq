@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownDocToDocx } from '@bendyline/squisq-formats/docx';
 import { markdownDocToPdf } from '@bendyline/squisq-formats/pdf';
@@ -26,6 +26,20 @@ async function docxFixture(markdown: string): Promise<Buffer> {
   return Buffer.from(bytes as ArrayBuffer);
 }
 
+/**
+ * Wait out the import dialog before touching the editor chrome.
+ *
+ * The dialog is a real modal — a full-viewport overlay at z-index 10000 — and
+ * conversion is not cancellable, so it stays up for the whole import and eats
+ * pointer events aimed at anything behind it. Clicking a view tab while it is
+ * open therefore does not race the import, it deadlocks against it: Playwright
+ * retries the click until the test times out. Gate on the dialog closing (which
+ * it only does on success) and the click lands on the first try.
+ */
+async function waitForImportToFinish(page: Page, timeout: number): Promise<void> {
+  await expect(page.getByTestId('import-progress-dialog')).toBeHidden({ timeout });
+}
+
 test.describe('document import', () => {
   test('converts an uploaded DOCX into editable markdown', async ({ page }) => {
     await page.goto('/');
@@ -37,16 +51,21 @@ test.describe('document import', () => {
       buffer: await docxFixture('# Quarterly Review\n\nRevenue climbed in every region.\n'),
     });
 
+    // The dialog closes itself on success — it is only dismissible on failure.
+    await waitForImportToFinish(page, 15_000);
+
     await switchView(page, 'Editor');
     await expect(page.locator('.tiptap.ProseMirror')).toContainText(
       'Revenue climbed in every region.',
       { timeout: 15_000 },
     );
-    // The dialog closes itself on success — it is only dismissible on failure.
-    await expect(page.getByTestId('import-progress-dialog')).toBeHidden();
   });
 
   test('converts an uploaded PDF into editable markdown', async ({ page }) => {
+    // pdfjs is the heaviest importer we ship, and on a cold single-worker CI
+    // run its first parse has exceeded the 30s default on its own.
+    test.setTimeout(90_000);
+
     await page.goto('/');
     await waitForAppReady(page);
 
@@ -58,6 +77,8 @@ test.describe('document import', () => {
       mimeType: 'application/pdf',
       buffer: Buffer.from(bytes as ArrayBuffer),
     });
+
+    await waitForImportToFinish(page, 60_000);
 
     await switchView(page, 'Editor');
     // pdfjs reflows extracted text, so match a phrase rather than a paragraph.
@@ -84,6 +105,8 @@ test.describe('document import', () => {
       mimeType: XLSX_MIME,
       buffer: Buffer.from(bytes),
     });
+
+    await waitForImportToFinish(page, 15_000);
 
     await switchView(page, 'Editor');
     await expect(page.locator('.tiptap.ProseMirror')).toContainText('North', {

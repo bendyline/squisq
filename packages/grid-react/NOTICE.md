@@ -12,4 +12,5 @@ Third-party components remain under their respective license terms.
 | react _(peer)_          | ^18.0.0 \|\| ^19.0.0 | MIT     | https://github.com/facebook/react   |
 | react-dom _(peer)_      | ^18.0.0 \|\| ^19.0.0 | MIT     | https://github.com/facebook/react   |
 
-undefined
+Copyright and complete license texts for these dependencies are included in
+their respective npm distributions and source repositories.
