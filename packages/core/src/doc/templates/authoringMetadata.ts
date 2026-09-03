@@ -58,6 +58,12 @@ export const TEMPLATE_AUTHORING_METADATA = {
     safeForContentFirst: true,
     placement: 'heading',
   },
+  transcript: {
+    role: 'content',
+    bodyPolicy: 'structured',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
   statHighlight: {
     role: 'highlight',
     bodyPolicy: 'derived',

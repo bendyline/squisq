@@ -49,8 +49,11 @@ export interface HtmlExportOptions {
    */
   audio?: Map<string, ArrayBuffer>;
 
-  /** Rendering mode: 'slideshow' (interactive, default) or 'static' (scrollable) */
-  mode?: 'slideshow' | 'static';
+  /**
+   * Rendering mode: 'slideshow' (interactive, default), 'video' (timed
+   * auto-advance movie playback), or 'static' (scrollable).
+   */
+  mode?: 'slideshow' | 'video' | 'static';
 
   /** HTML page title (default: 'Squisq Document') */
   title?: string;

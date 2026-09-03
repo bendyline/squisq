@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 interface PackageManifest {
@@ -7,8 +7,17 @@ interface PackageManifest {
   peerDependencies?: Record<string, string>;
 }
 
+function listDeclarationFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const entryPath = resolve(directory, entry.name);
+    if (entry.isDirectory()) return listDeclarationFiles(entryPath);
+    return entry.isFile() && entry.name.endsWith('.d.ts') ? [entryPath] : [];
+  });
+}
+
 describe('@bendyline/squisq-editor-react declaration dependencies', () => {
   const packageDir = resolve('packages/editor-react');
+  const distDir = resolve(packageDir, 'dist');
   const manifest = JSON.parse(
     readFileSync(resolve(packageDir, 'package.json'), 'utf8'),
   ) as PackageManifest;
@@ -23,4 +32,12 @@ describe('@bendyline/squisq-editor-react declaration dependencies', () => {
       expect({ ...manifest.peerDependencies, ...manifest.dependencies }).toHaveProperty(dependency);
     });
   }
+
+  it('does not rely on the global JSX namespace removed by React 19 types', () => {
+    const offenders = listDeclarationFiles(distDir)
+      .filter((file) => /(?<![\w.])JSX\.Element/u.test(readFileSync(file, 'utf8')))
+      .map((file) => relative(packageDir, file).replaceAll('\\', '/'));
+
+    expect(offenders).toEqual([]);
+  });
 });

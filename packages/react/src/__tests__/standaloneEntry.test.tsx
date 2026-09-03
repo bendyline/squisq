@@ -129,6 +129,21 @@ describe('standalone player instance handles', () => {
     expect(root.querySelector('.squisq-flashcards')).not.toBeNull();
   });
 
+  it('mounts video mode as timed playback with a live render API in render mode', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountedElements.push(root);
+
+    const handle = mount(root, doc('movie'), { mode: 'video', renderMode: true });
+    const api = await handle.renderAPI;
+    expect(api).not.toBeNull();
+    expect(api?.getBlocks()[0]?.id).toBe('movie-block');
+    // A segment-less doc must land on the synthetic clock, or the video
+    // timeline reports zero duration and playback never starts.
+    expect(api?.getDuration()).toBe(2);
+    await waitFor(() => expect(root.querySelector('.doc-player')).not.toBeNull());
+  });
+
   it('forwards the animationsEnabled render policy to the mounted player', async () => {
     const root = document.createElement('div');
     document.body.append(root);

@@ -143,6 +143,22 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
     ),
   },
   {
+    name: 'transcript',
+    label: 'Transcript',
+    description:
+      'A conversational beat: speaker avatar and message bubble, with thought, tool, and two-speaker handoff variants.',
+    icon: (
+      <TemplateIcon>
+        <circle cx={11} cy={13} r={5} fill={FA} />
+        <rect x={19} y={8} width={33} height={11} rx={3} fill={F1} opacity={0.5} />
+        <rect x={22} y={11} width={24} height={2.5} rx={1} fill={F2} />
+        <circle cx={45} cy={28} r={5} fill={F2} />
+        <rect x={4} y={23} width={33} height={11} rx={3} fill={F1} opacity={0.35} />
+        <rect x={7} y={26} width={24} height={2.5} rx={1} fill={F1} />
+      </TemplateIcon>
+    ),
+  },
+  {
     name: 'content',
     label: 'Content',
     description: 'Shows a heading and the complete body in a loss-averse content-first layout.',

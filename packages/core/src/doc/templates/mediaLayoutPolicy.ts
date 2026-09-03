@@ -171,6 +171,16 @@ export const BLOCK_MEDIA_LAYOUT_POLICIES = {
     unconsumedMedia: 'reserve-when-no-native-media',
     variants: TITLE_VARIANTS,
   },
+  transcript: {
+    summary:
+      'Speaker avatars are native media (initials medallions when absent); other media stays supplemental.',
+    noMedia: 'template-without-optional-media',
+    ownership: 'optional-native',
+    nativeLayout: 'accent-strip-or-inset',
+    additionalMediaLayout: 'overlay-inset',
+    unconsumedMedia: 'reserve-when-no-native-media',
+    variants: TEXT_VARIANTS,
+  },
   content: {
     summary:
       'Preserves the complete heading and body; supplemental media receives a companion field.',

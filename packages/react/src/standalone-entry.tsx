@@ -50,11 +50,14 @@ import animationCss from './styles/doc-animations.css';
 
 export interface MountOptions {
   /**
-   * Rendering mode: 'slideshow' (interactive, default), 'static'
+   * Rendering mode: 'slideshow' (interactive, default), 'video' (timed
+   * auto-advance playback with scrubber — the movie mode), 'static'
    * (scrollable page), 'dashboard' (one canvas of arranged blocks), or
    * 'flashcards' (progressively revealed study deck).
    */
-  mode?: 'slideshow' | 'static' | 'dashboard' | 'flashcards';
+  mode?: 'slideshow' | 'video' | 'static' | 'dashboard' | 'flashcards';
+  /** Loop playback when the timeline ends (video mode only, default: false). */
+  loop?: boolean;
   /** Dashboard-mode options (ignored by the other modes). */
   dashboard?: {
     /** Layout id or 'auto'. Overrides doc frontmatter. */
@@ -300,6 +303,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     images,
     audio,
     autoPlay = false,
+    loop = false,
     theme,
     videoPresentation,
     pipSize,
@@ -323,7 +327,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
   // on it), so both player-backed modes expect one in render mode.
   const handle = createPlayerHandle(
     element,
-    (mode === 'slideshow' || mode === 'dashboard') && renderMode,
+    (mode === 'slideshow' || mode === 'video' || mode === 'dashboard') && renderMode,
   );
   handles.set(element, handle);
 
@@ -356,8 +360,20 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     content = createElement(DocPlayer, {
       doc: finalDoc,
       basePath,
+      // A doc with no audio segments must run on the synthetic clock —
+      // the default media-driven clock has nothing to play, so video
+      // mode reports 0:00 and never advances (and the empty media src
+      // resolves to the page URL, which file:// hosts hard-block).
+      audioMode: finalDoc.audio?.segments?.length ? 'media' : 'synthetic',
       displayMode:
-        mode === 'dashboard' ? 'dashboard' : mode === 'flashcards' ? 'flashcards' : 'slideshow',
+        mode === 'dashboard'
+          ? 'dashboard'
+          : mode === 'flashcards'
+            ? 'flashcards'
+            : mode === 'video'
+              ? 'video'
+              : 'slideshow',
+      loop: mode === 'video' ? loop : undefined,
       dashboardLayout: dashboard?.layout,
       dashboardShowTitle: dashboard?.title,
       dashboardStyle: dashboard?.style,

@@ -49,6 +49,7 @@ export const TEMPLATE_TOKEN_NAMES: ReadonlySet<string> = new Set([
   'title',
   'sectionHeader',
   'bigText',
+  'transcript',
   'content',
   'statHighlight',
   'quote',

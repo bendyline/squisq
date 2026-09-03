@@ -333,6 +333,14 @@ describe('docToHtml', () => {
     expect(html).not.toContain('background:#fff');
   });
 
+  it('supports video mode for timed movie playback', () => {
+    const doc = makeDoc();
+    const html = docToHtml(doc, { playerScript: MOCK_PLAYER_SCRIPT, mode: 'video', autoPlay: true });
+
+    expect(html).toContain('"video"');
+    expect(html).toContain('autoPlay: true');
+  });
+
   it('passes the fenced-code Copy option to the standalone player', () => {
     const html = docToHtml(makeDoc(), {
       playerScript: MOCK_PLAYER_SCRIPT,
