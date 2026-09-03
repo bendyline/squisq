@@ -13,7 +13,7 @@
 import type { CaptionTrack, ViewportConfig } from '@bendyline/squisq/schemas';
 import { getCaptionAtTime } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
-import type { CaptionStyle } from './types';
+import type { CaptionPosition, CaptionStyle } from './types';
 import { SocialCaptionOverlay } from './SocialCaptionOverlay';
 
 interface CaptionOverlayProps {
@@ -27,10 +27,27 @@ interface CaptionOverlayProps {
   fontSize?: number;
   /** Caption display style (default: 'standard') */
   captionStyle?: CaptionStyle;
+  /**
+   * Frame placement. Omitted → each style's classic spot: standard at the
+   * top edge, social in the lower band.
+   */
+  captionPosition?: CaptionPosition;
   /** Theme for social-style caption colors and fonts */
   theme?: Theme;
   /** Viewport config for social-style font scaling */
   viewport?: ViewportConfig;
+}
+
+/** Standard-style band placement. */
+function standardPositionStyle(position: CaptionPosition): React.CSSProperties {
+  switch (position) {
+    case 'bottom':
+      return { bottom: '6px', left: '50%', transform: 'translateX(-50%)' };
+    case 'center':
+      return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
+    default:
+      return { top: '6px', left: '50%', transform: 'translateX(-50%)' };
+  }
 }
 
 export function CaptionOverlay({
@@ -39,6 +56,7 @@ export function CaptionOverlay({
   enabled = true,
   fontSize = 16,
   captionStyle = 'standard',
+  captionPosition,
   theme,
   viewport,
 }: CaptionOverlayProps) {
@@ -51,6 +69,7 @@ export function CaptionOverlay({
         enabled={enabled}
         theme={theme}
         viewport={viewport}
+        position={captionPosition ?? 'bottom'}
       />
     );
   }
@@ -64,9 +83,7 @@ export function CaptionOverlay({
       className="caption-overlay"
       style={{
         position: 'absolute',
-        top: '6px',
-        left: '50%',
-        transform: 'translateX(-50%)',
+        ...standardPositionStyle(captionPosition ?? 'top'),
         zIndex: 50,
         pointerEvents: 'none',
         maxWidth: '100%',

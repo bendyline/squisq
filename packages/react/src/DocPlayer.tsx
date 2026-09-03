@@ -215,6 +215,7 @@ function DocPlayerContent({
   theme,
   surface,
   captionStyle = 'standard',
+  captionPosition,
   videoPresentation,
   pipSize,
   pipShape,
@@ -1491,8 +1492,12 @@ function DocPlayerContent({
             captions={doc.captions}
             currentTime={currentTime}
             enabled={captionsEnabled && (renderMode || isPlaying || currentTime > 0)}
-            fontSize={16}
+            // Standard captions scale with the design viewport like the
+            // social style does — a fixed 16px is a whisker on a 1080
+            // basis (broadcast lower-thirds sit around 2.6% of height).
+            fontSize={Math.min(34, Math.max(16, Math.round(activeViewport.height * 0.026)))}
             captionStyle={activeCaptionStyle}
+            captionPosition={captionPosition}
             theme={effectiveTheme}
             viewport={activeViewport}
           />

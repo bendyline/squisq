@@ -77,6 +77,28 @@ describe('outside-in documents', () => {
     expect(readOutsideInMetadata(imported.markdown)?.format).toBe('html');
   });
 
+  it('round-trips CSV through an editable Markdown table', async () => {
+    const imported = await importOutsideInDocument({
+      targetPath: 'data/Inventory.csv',
+      data: new TextEncoder().encode('Item,Qty\nWidget,2\n'),
+    });
+    expect(imported.layout).toMatchObject({
+      format: 'csv',
+      markdownPath: 'data/Inventory_files/inventory.md',
+      backupPath: 'data/Inventory_files/.original/original.csv',
+    });
+    expect(imported.markdown).toContain('| Item');
+    expect(imported.markdown).toContain('| Widget');
+    expect(readOutsideInMetadata(imported.markdown)?.format).toBe('csv');
+
+    const rendered = await renderOutsideInDocument({
+      targetPath: imported.layout.targetPath,
+      markdown: withOutsideInMarkdownEditing(imported.markdown, imported.layout),
+      container: imported.container,
+    });
+    expect(new TextDecoder().decode(rendered.bytes)).toBe('Item,Qty\r\nWidget,2');
+  });
+
   it('retains an imported Office theme in the Markdown frontmatter', async () => {
     const imported = await importOutsideInDocument({
       targetPath: 'reports/Quarterly Review.docx',

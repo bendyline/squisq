@@ -345,6 +345,17 @@ describe('docToHtml', () => {
     expect(html).toContain('autoPlay: true');
   });
 
+  it('passes captionPosition through to the standalone player', () => {
+    const html = docToHtml(makeDoc(), {
+      playerScript: MOCK_PLAYER_SCRIPT,
+      captionStyle: 'social',
+      captionPosition: 'top',
+    });
+
+    expect(html).toContain('captionStyle: "social"');
+    expect(html).toContain('captionPosition: "top"');
+  });
+
   it('passes the fenced-code Copy option to the standalone player', () => {
     const html = docToHtml(makeDoc(), {
       playerScript: MOCK_PLAYER_SCRIPT,

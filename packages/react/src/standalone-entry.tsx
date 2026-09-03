@@ -112,6 +112,8 @@ export interface MountOptions {
   animationsEnabled?: boolean;
   /** Caption style: 'standard' or 'social'. Omit or set to undefined for no captions. */
   captionStyle?: 'standard' | 'social';
+  /** Caption placement over the frame; omit for the style's classic spot. */
+  captionPosition?: 'top' | 'center' | 'bottom';
   /** Show a Copy button on fenced code blocks in static mode (default: false). */
   showCodeCopyButton?: boolean;
   /** Optional host clipboard adapter; otherwise the browser Clipboard API is used. */
@@ -312,6 +314,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     renderMode = false,
     animationsEnabled = true,
     captionStyle,
+    captionPosition,
     globalKeyboardShortcuts = true,
     showCodeCopyButton = false,
     onCopyCode,
@@ -390,6 +393,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       pipPosition,
       captionsEnabled: !!captionStyle,
       captionStyle: captionStyle ?? 'standard',
+      captionPosition,
       globalKeyboardShortcuts,
       onRenderAPIReady: (api: SquisqRenderAPI | null) => handle.setRenderAPI(api),
     });

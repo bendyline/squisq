@@ -86,6 +86,7 @@ export type {
   ControlsLayout,
   DisplayMode,
   CaptionStyle,
+  CaptionPosition,
   CaptionMode,
   PipPosition,
   PipShape,

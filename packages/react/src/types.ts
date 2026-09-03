@@ -87,6 +87,14 @@ export type DisplayMode =
 export type CaptionStyle = 'standard' | 'social';
 
 /**
+ * Where captions sit over the frame. `'bottom'` is the classic lower band
+ * (social default), `'top'` keeps them clear of content that lives in the
+ * lower half (chat bubbles, summaries), `'center'` is the full-frame social
+ * look. Standard captions default to `'top'`, social to `'bottom'`.
+ */
+export type CaptionPosition = 'top' | 'center' | 'bottom';
+
+/**
  * Caption display mode — combines enable/disable with style selection.
  * The CC button cycles through: off → standard → social → off.
  */
