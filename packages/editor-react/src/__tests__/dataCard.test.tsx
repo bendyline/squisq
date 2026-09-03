@@ -62,6 +62,14 @@ describe('DataCardExtension claiming', () => {
     expect(dataLinkHrefOf(node!)).toBe('report_files/data/q3.csv');
   });
 
+  it('marks the rendered card as eligible to fill remaining single-block height', () => {
+    const editor = makeEditor(REFERENCE_DOC);
+
+    expect(editor.view.dom.querySelector('.squisq-data-card-host')?.classList).toContain(
+      'squisq-block-fill-available',
+    );
+  });
+
   it('claims xlsx and parquet links too', () => {
     const editor = makeEditor(
       '[book.xlsx](r_files/data/book.xlsx)\n\n[m.parquet](r_files/data/m.parquet)',

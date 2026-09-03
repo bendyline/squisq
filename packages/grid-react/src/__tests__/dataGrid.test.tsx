@@ -684,6 +684,45 @@ describe('DataGrid', () => {
     host.remove();
   });
 
+  it('header menus render at grid-root level, outside the clipping scroller', async () => {
+    const provider = makeProvider();
+    const { host, root } = await mount(<DataGrid provider={provider} view={EMPTY_VIEW} />);
+    const gridRoot = host.querySelector('.squisq-grid')!;
+
+    // The scroller's `overflow: auto` clipped in-cell menus at the card
+    // edges — both menus must be DIRECT children of the grid root, with an
+    // anchored (clamped) inline position.
+    await act(async () =>
+      (host.querySelector('.squisq-grid-opbutton') as HTMLButtonElement).click(),
+    );
+    const opMenu = host.querySelector('.squisq-grid-opmenu') as HTMLElement;
+    expect(opMenu.parentElement).toBe(gridRoot);
+    expect(opMenu.closest('.squisq-grid-scroller')).toBeNull();
+    expect(opMenu.style.left).toMatch(/px$/);
+
+    await act(async () =>
+      (host.querySelector('.squisq-grid-valuebutton') as HTMLButtonElement).click(),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(host.querySelector('.squisq-grid-opmenu')).toBeNull(); // mutually exclusive
+    const valueMenu = host.querySelector('.squisq-grid-valuemenu') as HTMLElement;
+    expect(valueMenu.parentElement).toBe(gridRoot);
+    expect(valueMenu.closest('.squisq-grid-scroller')).toBeNull();
+
+    // Scrolling moves the anchor buttons out from under the menus — close.
+    const scroller = host.querySelector('.squisq-grid-scroller') as HTMLElement;
+    await act(async () => {
+      scroller.dispatchEvent(new Event('scroll', { bubbles: false }));
+    });
+    expect(host.querySelector('.squisq-grid-valuemenu')).toBeNull();
+
+    await act(async () => root.unmount());
+    provider.dispose();
+    host.remove();
+  });
+
   it('paste inside a filter input stays a normal text paste', async () => {
     const provider = makeProvider();
     const journal = new EditJournal();

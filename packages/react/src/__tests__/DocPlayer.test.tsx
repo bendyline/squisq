@@ -759,6 +759,33 @@ describe('DocPlayer smoke test', () => {
     expect(container.textContent).not.toContain('Managed Cover');
   });
 
+  it('does not reopen a dismissed cover when the same document projection refreshes', async () => {
+    const initial = docWithCover();
+    const { container, rerender } = render(
+      <DocPlayer doc={initial} basePath="/test" displayMode="slideshow" />,
+    );
+    await waitFor(() => expect(screen.getByTestId('slide-counter').textContent).toBe('Cover'));
+    fireEvent.click(screen.getByTestId('slide-next'));
+    await waitFor(() => expect(screen.getByTestId('slide-counter').textContent).toBe('1 / 1'));
+
+    rerender(
+      <DocPlayer
+        doc={{
+          ...docWithCover(),
+          audio: {
+            segments: [{ name: 'resolved', src: 'resolved.mp3', startTime: 0, duration: 5 }],
+          },
+        }}
+        basePath="/test"
+        displayMode="slideshow"
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('slide-counter').textContent).toBe('1 / 1'));
+    expect(container.textContent).not.toContain('Managed Cover');
+    expect((screen.getByTestId('slide-prev') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('accepts controlled cover visibility for a synchronized audience mirror', async () => {
     const states: Array<{ isCoverVisible?: boolean }> = [];
     const { container, rerender } = render(

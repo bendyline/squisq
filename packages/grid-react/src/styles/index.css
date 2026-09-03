@@ -7,6 +7,7 @@
  * assume the chrome stylesheet exists. */
 
 .squisq-grid {
+  position: relative; /* positioning context for the header menus */
   display: flex;
   flex-direction: column;
   border: 1px solid var(--squisq-grid-border, #d1d5db);
@@ -114,10 +115,11 @@
   line-height: 1;
 }
 
+/* Header menus live at GRID-ROOT level with inline left/top from their
+ * button's rect, clamped in-bounds — inside a header cell the scroller's
+ * overflow clipped them at the card edges. */
 .squisq-grid-opmenu {
   position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
   z-index: 3;
   min-width: 150px;
   padding: 3px;
@@ -217,8 +219,6 @@
 
 .squisq-grid-valuemenu {
   position: absolute;
-  top: calc(100% + 2px);
-  right: 0;
   z-index: 3;
   min-width: 150px;
   max-width: 260px;
@@ -312,6 +312,13 @@
 
 .squisq-grid-cell--focus {
   box-shadow: inset 0 0 0 2px var(--squisq-grid-focus-ring, #2563eb);
+}
+
+/* Selection without focus: when DOM focus lives elsewhere the grid will
+ * not receive input, so the ring dims rather than impersonating an active
+ * selection (the standard inactive-selection treatment). */
+.squisq-grid:not(:focus-within) .squisq-grid-cell--focus {
+  box-shadow: inset 0 0 0 2px var(--squisq-grid-border, #d1d5db);
 }
 
 .squisq-grid-cell--dirty {

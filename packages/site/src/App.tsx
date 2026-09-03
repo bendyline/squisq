@@ -22,12 +22,12 @@ import {
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { SAMPLES, CONTENT_SAMPLES, SAMPLE_GROUPS, getSampleLabel } from './samples';
 import { GENERATED_SAMPLES } from './dataSamples';
+import { AdvancedOptionsDialog } from './AdvancedOptionsDialog';
 import {
-  AdvancedOptionsDialog,
   CALC_ENGINE_STORAGE_KEY,
   loadCalcEngineChoice,
   type CalcEngineChoice,
-} from './AdvancedOptionsDialog';
+} from './calcEngineChoice';
 import type { CalcEngineFactory } from '@bendyline/squisq-editor-react';
 import ironcalcWasmUrl from '@ironcalc/wasm/wasm_bg.wasm?url';
 import CalcWorker from '@bendyline/squisq-calc/worker?worker';

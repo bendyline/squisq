@@ -30,6 +30,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -275,6 +276,14 @@ export function DataGrid({
   const [filterOps, setFilterOps] = useState<Record<number, FilterOpState>>({});
   /** Column whose operator menu is open, if any. */
   const [opMenuCol, setOpMenuCol] = useState<number | null>(null);
+  /**
+   * Header menus render at GRID-ROOT level (the scroller's `overflow: auto`
+   * would clip a menu positioned inside a header cell at the card's edges),
+   * anchored to their button's rect at open time and clamped in-bounds by a
+   * layout effect once their real size is known.
+   */
+  const [opMenuPos, setOpMenuPos] = useState({ left: 0, top: 0 });
+  const [valueMenuPos, setValueMenuPos] = useState({ left: 0, top: 0 });
   /** Column whose distinct-values menu is open, and its (async) payload. */
   const [valueMenuCol, setValueMenuCol] = useState<number | null>(null);
   const [valueMenuData, setValueMenuData] = useState<{
@@ -291,7 +300,21 @@ export function DataGrid({
   const [fetchTick, setFetchTick] = useState(0);
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  /** Grid root — the positioning context both header menus clamp within. */
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const opMenuRef = useRef<HTMLDivElement | null>(null);
+  const valueMenuRef = useRef<HTMLDivElement | null>(null);
   const focusRef = useRef<HTMLDivElement | null>(null);
+  /** When the inline cell editor closes, DOM focus would fall to <body>
+   * (the input unmounts) — return it to the focused cell so keyboard flow
+   * continues and focus-scoped host chrome (the editor toolbar's
+   * formatting suppression) stays armed while the grid owns the
+   * selection. */
+  const wasEditingRef = useRef(false);
+  useEffect(() => {
+    if (wasEditingRef.current && !editing) focusRef.current?.focus();
+    wasEditingRef.current = editing !== null;
+  }, [editing]);
   const cache = useRef<PageCache>({ version: 0, pages: new Map() });
   const inFlight = useRef(new Set<number>());
   const selectionCells = useRef(new Map<number, TableCellValue[]>());
@@ -774,21 +797,52 @@ export function DataGrid({
     [opStateFor, schema, setColumnFilter],
   );
 
+  /** Anchor position (grid-root coordinates) under `anchor`'s bottom edge. */
+  const menuAnchorPos = useCallback((anchor: HTMLElement): { left: number; top: number } => {
+    const rootRect = rootRef.current?.getBoundingClientRect();
+    const rect = anchor.getBoundingClientRect();
+    if (!rootRect) return { left: 0, top: 0 };
+    return { left: rect.left - rootRect.left, top: rect.bottom - rootRect.top + 2 };
+  }, []);
+
+  const toggleOpMenu = useCallback(
+    (col: number, anchor: HTMLElement) => {
+      setValueMenuCol(null);
+      setOpMenuPos(menuAnchorPos(anchor));
+      setOpMenuCol((open) => (open === col ? null : col));
+    },
+    [menuAnchorPos],
+  );
+
   /** Toggle the distinct-values picker; values load async on open. */
   const openValueMenu = useCallback(
-    (col: number) => {
+    (col: number, anchor: HTMLElement) => {
       setOpMenuCol(null);
       if (valueMenuCol === col) {
         setValueMenuCol(null);
         return;
       }
+      setValueMenuPos(menuAnchorPos(anchor));
       setValueMenuCol(col);
       void provider.distinct?.(col, VALUE_MENU_LIMIT).then((result) => {
         setValueMenuData({ col, result });
       });
     },
-    [provider, valueMenuCol],
+    [menuAnchorPos, provider, valueMenuCol],
   );
+
+  // Clamp an open menu inside the grid box once its rendered size is known.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    for (const menu of [opMenuRef.current, valueMenuRef.current]) {
+      if (!menu) continue;
+      const maxLeft = root.clientWidth - menu.offsetWidth - 4;
+      const maxTop = root.clientHeight - menu.offsetHeight - 4;
+      menu.style.left = `${Math.max(4, Math.min(parseFloat(menu.style.left) || 0, maxLeft))}px`;
+      menu.style.top = `${Math.max(4, Math.min(parseFloat(menu.style.top) || 0, maxTop))}px`;
+    }
+  }, [opMenuCol, valueMenuCol, valueMenuData]);
 
   const chooseFilterValue = useCallback(
     (col: number, columnName: string, value: string) => {
@@ -974,6 +1028,7 @@ export function DataGrid({
 
   return (
     <div
+      ref={rootRef}
       className={`squisq-grid${className ? ` ${className}` : ''}`}
       role="grid"
       aria-rowcount={viewRowCount + 1}
@@ -1002,7 +1057,17 @@ export function DataGrid({
         if (valueMenuCol !== null) setValueMenuCol(null);
       }}
     >
-      <div className="squisq-grid-scroller" ref={bodyRef} style={{ height }}>
+      <div
+        className="squisq-grid-scroller"
+        ref={bodyRef}
+        style={{ height }}
+        onScroll={() => {
+          // The menus are anchored to where their button WAS; scrolling the
+          // sticky header horizontally moves the buttons, so just close.
+          if (opMenuCol !== null) setOpMenuCol(null);
+          if (valueMenuCol !== null) setValueMenuCol(null);
+        }}
+      >
         <div
           className="squisq-grid-header"
           role="row"
@@ -1034,10 +1099,6 @@ export function DataGrid({
                 <div className="squisq-grid-filterrow">
                   {(() => {
                     const opState = opStateFor(col, column.name);
-                    const caseCapable = column.kind !== 'number' && column.kind !== 'boolean';
-                    const filterActive = view.filter.some(
-                      (clause) => clause.column === column.name,
-                    );
                     return (
                       <>
                         <button
@@ -1051,7 +1112,7 @@ export function DataGrid({
                             opChoicesFor(column.kind).find((c) => choiceMatches(c, opState))
                               ?.label ?? opState.op
                           }${opState.caseSensitive ? ' (case-sensitive)' : ''}`}
-                          onClick={() => setOpMenuCol((open) => (open === col ? null : col))}
+                          onClick={(event) => toggleOpMenu(col, event.currentTarget)}
                         >
                           <span className="squisq-grid-opglyph">
                             {glyphFor(column.kind, opState)}
@@ -1060,59 +1121,6 @@ export function DataGrid({
                             ▾
                           </span>
                         </button>
-                        {opMenuCol === col && (
-                          <div className="squisq-grid-opmenu" role="menu">
-                            {filterActive && (
-                              <button
-                                type="button"
-                                role="menuitem"
-                                className="squisq-grid-opoption squisq-grid-opclear"
-                                onClick={() => clearColumnFilter(col, column.name)}
-                              >
-                                (Clear filter)
-                              </button>
-                            )}
-                            {opChoicesFor(column.kind).map((choice) => (
-                              <button
-                                key={`${choice.op}${choice.unary ? '0' : ''}`}
-                                type="button"
-                                role="menuitemradio"
-                                aria-checked={choiceMatches(choice, opState)}
-                                className={`squisq-grid-opoption${
-                                  choiceMatches(choice, opState)
-                                    ? ' squisq-grid-opoption--active'
-                                    : ''
-                                }`}
-                                onClick={() =>
-                                  chooseFilterOp(col, column.name, {
-                                    op: choice.op,
-                                    caseSensitive: opState.caseSensitive,
-                                    ...(choice.unary ? { unary: true } : {}),
-                                  })
-                                }
-                              >
-                                <span className="squisq-grid-opglyph">{choice.glyph}</span>
-                                {choice.label}
-                              </button>
-                            ))}
-                            {caseCapable && (
-                              <label className="squisq-grid-opcase">
-                                <input
-                                  type="checkbox"
-                                  checked={opState.caseSensitive}
-                                  onChange={(event) =>
-                                    chooseFilterOp(col, column.name, {
-                                      op: opState.op,
-                                      caseSensitive: event.target.checked,
-                                      ...(opState.unary ? { unary: true } : {}),
-                                    })
-                                  }
-                                />
-                                Case sensitive
-                              </label>
-                            )}
-                          </div>
-                        )}
                         <input
                           className="squisq-grid-filterinput"
                           aria-label={`Filter ${column.name}`}
@@ -1141,84 +1149,10 @@ export function DataGrid({
                             aria-label={`Filter ${column.name} by value`}
                             aria-expanded={valueMenuCol === col}
                             title="Filter by value"
-                            onClick={() => openValueMenu(col)}
+                            onClick={(event) => openValueMenu(col, event.currentTarget)}
                           >
                             ▾
                           </button>
-                        )}
-                        {valueMenuCol === col && (
-                          <div className="squisq-grid-valuemenu" role="menu">
-                            {valueMenuData?.col === col ? (
-                              <>
-                                {filterActive && (
-                                  <button
-                                    type="button"
-                                    role="menuitem"
-                                    className="squisq-grid-opoption squisq-grid-opclear"
-                                    onClick={() => {
-                                      setValueMenuCol(null);
-                                      clearColumnFilter(col, column.name);
-                                    }}
-                                  >
-                                    (All)
-                                  </button>
-                                )}
-                                {valueMenuData.result.hasBlank && (
-                                  <button
-                                    type="button"
-                                    role="menuitemradio"
-                                    aria-checked={filterActive && opState.unary === true}
-                                    className={`squisq-grid-opoption${
-                                      filterActive && opState.unary === true
-                                        ? ' squisq-grid-opoption--active'
-                                        : ''
-                                    }`}
-                                    onClick={() => {
-                                      setValueMenuCol(null);
-                                      chooseFilterOp(col, column.name, {
-                                        op: '=',
-                                        caseSensitive: false,
-                                        unary: true,
-                                      });
-                                    }}
-                                  >
-                                    (Blanks)
-                                  </button>
-                                )}
-                                {valueMenuData.result.values.map((value) => {
-                                  const active =
-                                    filterActive &&
-                                    !opState.unary &&
-                                    opState.op === '=' &&
-                                    filterValueFor(column.name) === value;
-                                  return (
-                                    <button
-                                      key={value}
-                                      type="button"
-                                      role="menuitemradio"
-                                      aria-checked={active}
-                                      className={`squisq-grid-opoption squisq-grid-valueoption${
-                                        active ? ' squisq-grid-opoption--active' : ''
-                                      }`}
-                                      title={value}
-                                      onClick={() => chooseFilterValue(col, column.name, value)}
-                                    >
-                                      {value}
-                                    </button>
-                                  );
-                                })}
-                                {valueMenuData.result.totalDistinct >
-                                  valueMenuData.result.values.length && (
-                                  <div className="squisq-grid-valuemenu-note">
-                                    showing {valueMenuData.result.values.length} of{' '}
-                                    {valueMenuData.result.totalDistinct.toLocaleString()} values
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <div className="squisq-grid-valuemenu-note">loading…</div>
-                            )}
-                          </div>
                         )}
                       </>
                     );
@@ -1327,6 +1261,159 @@ export function DataGrid({
           })}
         </div>
       </div>
+
+      {opMenuCol !== null &&
+        schema?.columns[opMenuCol] &&
+        (() => {
+          const col = opMenuCol;
+          const column = schema.columns[col]!;
+          const opState = opStateFor(col, column.name);
+          const caseCapable = column.kind !== 'number' && column.kind !== 'boolean';
+          const filterActive = view.filter.some((clause) => clause.column === column.name);
+          return (
+            <div
+              ref={opMenuRef}
+              className="squisq-grid-opmenu"
+              role="menu"
+              style={{ left: opMenuPos.left, top: opMenuPos.top }}
+            >
+              {filterActive && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="squisq-grid-opoption squisq-grid-opclear"
+                  onClick={() => clearColumnFilter(col, column.name)}
+                >
+                  (Clear filter)
+                </button>
+              )}
+              {opChoicesFor(column.kind).map((choice) => (
+                <button
+                  key={`${choice.op}${choice.unary ? '0' : ''}`}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={choiceMatches(choice, opState)}
+                  className={`squisq-grid-opoption${
+                    choiceMatches(choice, opState) ? ' squisq-grid-opoption--active' : ''
+                  }`}
+                  onClick={() =>
+                    chooseFilterOp(col, column.name, {
+                      op: choice.op,
+                      caseSensitive: opState.caseSensitive,
+                      ...(choice.unary ? { unary: true } : {}),
+                    })
+                  }
+                >
+                  <span className="squisq-grid-opglyph">{choice.glyph}</span>
+                  {choice.label}
+                </button>
+              ))}
+              {caseCapable && (
+                <label className="squisq-grid-opcase">
+                  <input
+                    type="checkbox"
+                    checked={opState.caseSensitive}
+                    onChange={(event) =>
+                      chooseFilterOp(col, column.name, {
+                        op: opState.op,
+                        caseSensitive: event.target.checked,
+                        ...(opState.unary ? { unary: true } : {}),
+                      })
+                    }
+                  />
+                  Case sensitive
+                </label>
+              )}
+            </div>
+          );
+        })()}
+
+      {valueMenuCol !== null &&
+        schema?.columns[valueMenuCol] &&
+        (() => {
+          const col = valueMenuCol;
+          const column = schema.columns[col]!;
+          const opState = opStateFor(col, column.name);
+          const filterActive = view.filter.some((clause) => clause.column === column.name);
+          return (
+            <div
+              ref={valueMenuRef}
+              className="squisq-grid-valuemenu"
+              role="menu"
+              style={{ left: valueMenuPos.left, top: valueMenuPos.top }}
+            >
+              {valueMenuData?.col === col ? (
+                <>
+                  {filterActive && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="squisq-grid-opoption squisq-grid-opclear"
+                      onClick={() => {
+                        setValueMenuCol(null);
+                        clearColumnFilter(col, column.name);
+                      }}
+                    >
+                      (All)
+                    </button>
+                  )}
+                  {valueMenuData.result.hasBlank && (
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={filterActive && opState.unary === true}
+                      className={`squisq-grid-opoption${
+                        filterActive && opState.unary === true
+                          ? ' squisq-grid-opoption--active'
+                          : ''
+                      }`}
+                      onClick={() => {
+                        setValueMenuCol(null);
+                        chooseFilterOp(col, column.name, {
+                          op: '=',
+                          caseSensitive: false,
+                          unary: true,
+                        });
+                      }}
+                    >
+                      (Blanks)
+                    </button>
+                  )}
+                  {valueMenuData.result.values.map((value) => {
+                    const active =
+                      filterActive &&
+                      !opState.unary &&
+                      opState.op === '=' &&
+                      filterValueFor(column.name) === value;
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={active}
+                        className={`squisq-grid-opoption squisq-grid-valueoption${
+                          active ? ' squisq-grid-opoption--active' : ''
+                        }`}
+                        title={value}
+                        onClick={() => chooseFilterValue(col, column.name, value)}
+                      >
+                        {value}
+                      </button>
+                    );
+                  })}
+                  {valueMenuData.result.totalDistinct > valueMenuData.result.values.length && (
+                    <div className="squisq-grid-valuemenu-note">
+                      showing {valueMenuData.result.values.length} of{' '}
+                      {valueMenuData.result.totalDistinct.toLocaleString()} values
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="squisq-grid-valuemenu-note">loading…</div>
+              )}
+            </div>
+          );
+        })()}
 
       <div className="squisq-grid-footer">
         <span className="squisq-grid-status" aria-live="polite">

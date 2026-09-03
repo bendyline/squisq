@@ -64,4 +64,39 @@ describe('<Toolbar> data-card focus suppression', () => {
     card.remove();
     prose.remove();
   });
+
+  it('suppression is sticky when focus falls to <body> (cell editor closing)', async () => {
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar />
+      </EditorProvider>,
+    );
+    const card = document.createElement('div');
+    card.className = 'squisq-data-card';
+    const cell = document.createElement('input');
+    card.appendChild(cell);
+    document.body.appendChild(card);
+    const prose = document.createElement('input');
+    document.body.appendChild(prose);
+    const bold = screen.getByRole('button', { name: 'Bold (Ctrl+B)' }) as HTMLButtonElement;
+
+    await act(async () => cell.focus());
+    await settleFocus();
+    expect(bold.disabled).toBe(true);
+
+    // Committing a cell edit unmounts the input → focus drops on <body>.
+    // The grid still owns the selection: formatting must STAY suppressed.
+    await act(async () => cell.blur());
+    await settleFocus();
+    expect(document.activeElement).toBe(document.body);
+    expect(bold.disabled).toBe(true);
+
+    // Only actually entering another surface re-enables.
+    await act(async () => prose.focus());
+    await settleFocus();
+    expect(bold.disabled).toBe(false);
+
+    card.remove();
+    prose.remove();
+  });
 });

@@ -1499,7 +1499,15 @@ export function Toolbar({
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => {
         timer = null;
-        setDataCardFocused(document.activeElement?.closest('.squisq-data-card') != null);
+        const active = document.activeElement;
+        // STICKY by surface: many mundane interactions drop focus on <body>
+        // while the grid still shows its selection (committing a cell edit
+        // unmounts the input; clicking the card's strip or dead space).
+        // Only an element that actually TAKES focus decides — entering
+        // prose (or any other surface) re-enables, focus lost to nowhere
+        // keeps the previous verdict.
+        if (!active || active === document.body || active === document.documentElement) return;
+        setDataCardFocused(active.closest('.squisq-data-card') != null);
       }, 0);
     };
     document.addEventListener('focusin', update);
