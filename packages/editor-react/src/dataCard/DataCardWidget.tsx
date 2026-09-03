@@ -20,7 +20,7 @@
  * ordinary PM-undoable transaction path.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import type { Editor } from '@tiptap/react';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -153,7 +153,7 @@ export function DataCardWidget({
   onOpenFiles,
   onMediaSaved,
   getCalcEngineFactory,
-}: DataCardWidgetProps): JSX.Element | null {
+}: DataCardWidgetProps): ReactElement | null {
   const link = useCardLink(editor, blockId);
   const revision = useMediaRevision(getMediaRevision);
   const [state, setState] = useState<CardState>({ kind: 'loading' });

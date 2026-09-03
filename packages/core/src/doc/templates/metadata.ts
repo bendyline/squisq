@@ -36,6 +36,11 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     description:
       'Gigantic uppercase display text — thumbnail-style — on a theme surface or over an image with a contrast bloom.',
   },
+  transcript: {
+    label: 'Transcript',
+    description:
+      'A conversational beat: speaker avatar and message bubble, with thought, tool, and two-speaker handoff variants.',
+  },
   content: {
     label: 'Content',
     description: 'Shows a heading and the complete body in a loss-averse content-first layout.',

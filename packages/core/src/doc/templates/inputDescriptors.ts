@@ -248,6 +248,23 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
     { key: 'ambientMotion', description: 'Slow zoom/pan effect', values: AMBIENT_MOTION_VALUES },
   ],
   content: [{ key: 'title', description: 'Heading shown above the complete body' }],
+  transcript: [
+    { key: 'speaker', description: 'Speaker display name' },
+    { key: 'speakerImage', description: 'Avatar image path (missing → initials medallion)' },
+    { key: 'side', description: 'Speaker column side', values: ['left', 'right'] },
+    { key: 'variant', description: 'Beat kind', values: ['speech', 'thought', 'tool'] },
+    { key: 'text', description: 'The message body' },
+    { key: 'toolName', description: 'Tool variant: invoked tool name (mono chip)' },
+    { key: 'resultText', description: 'Tool variant: bounded result line' },
+    { key: 'counterpartName', description: 'Handoff form: receiving speaker name' },
+    { key: 'counterpartImage', description: 'Handoff form: receiving speaker avatar path' },
+    { key: 'meta', description: 'Muted corner line (timestamp, step)' },
+    {
+      key: 'colorScheme',
+      description: 'Accent scheme (tool chip, handoff arrow)',
+      valueHint: COLOR_SCHEME_HINT,
+    },
+  ],
   statHighlight: [
     { key: 'stat', description: 'The statistic (e.g. "89%", "2x")' },
     { key: 'description', description: 'What the stat means' },

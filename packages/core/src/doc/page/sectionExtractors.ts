@@ -17,6 +17,7 @@ import type {
   AccentImage,
   ComparisonBarInput,
   ContentBlockInput,
+  TranscriptBlockInput,
   DataTableInput,
   DateEventInput,
   DefinitionCardInput,
@@ -163,6 +164,23 @@ const content: SectionExtractor = (input) => {
   return {
     kind: 'prose',
     slots: { title: c.title, body: bodyRichText(input) },
+  };
+};
+
+const transcript: SectionExtractor = (input) => {
+  const t = input as TranscriptBlockInput;
+  // On a page a conversational beat reads as an attributed quote band; a
+  // handoff attributes both speakers. Tool beats keep the tool name as
+  // the title so the invocation stays legible in prose form.
+  const attribution = t.counterpartName ? `${t.speaker} → ${t.counterpartName}` : t.speaker;
+  return {
+    kind: 'quote-band',
+    variant: 'plain',
+    slots: {
+      title: t.variant === 'tool' ? t.toolName : undefined,
+      body: { text: t.text ?? '' },
+      attribution,
+    },
   };
 };
 
@@ -496,6 +514,7 @@ export const sectionExtractors: Record<string, SectionExtractor> = {
   title,
   sectionHeader,
   bigText,
+  transcript,
   content,
   statHighlight,
   quote,

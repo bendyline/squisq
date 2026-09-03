@@ -16,6 +16,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactElement,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -226,7 +227,7 @@ export function EditorContextMenuProvider({
   rootRef,
   readOnly = false,
   children,
-}: EditorContextMenuProviderProps): JSX.Element {
+}: EditorContextMenuProviderProps): ReactElement {
   const { activeView, editorMode, colorScheme, monacoEditor, tiptapEditor } = useEditorContext();
   const itemGettersRef = useRef(new Set<ItemGetter>());
   const menuRef = useRef<HTMLDivElement>(null);

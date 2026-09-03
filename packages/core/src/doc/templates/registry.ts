@@ -44,12 +44,14 @@ import { treeBlock } from './treeBlock.js';
 import { timelineBlock } from './timelineBlock.js';
 import { drawingBlock } from './drawingBlock.js';
 import { layoutBlock } from './layoutBlock.js';
+import { transcriptBlock } from './transcriptBlock.js';
 
 /** Built-in templates keyed by the ids used in document annotations. */
 export const templateRegistry: TemplateRegistry = {
   title: titleBlock,
   sectionHeader,
   bigText,
+  transcript: transcriptBlock,
   content: contentBlock,
   statHighlight,
   quote: quoteBlock,

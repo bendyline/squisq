@@ -184,6 +184,39 @@ export interface BigTextInput extends BaseTemplateBlock {
 }
 
 /**
+ * Transcript block - one conversational beat: speaker (avatar + name)
+ * and a message bubble. Variants: plain `speech`, private `thought`
+ * (muted italic), and `tool` (mono chip + optional result line). A
+ * `counterpartName` turns the beat into a two-avatar handoff — how
+ * agent-to-agent delegation renders in recorded-session playback.
+ */
+export interface TranscriptBlockInput extends BaseTemplateBlock {
+  template: 'transcript';
+  /** Speaker display name. */
+  speaker: string;
+  /** Avatar image path (relative media). Missing → initials medallion. */
+  speakerImage?: string;
+  /** Which side the speaker column sits on. Default 'left'. */
+  side?: 'left' | 'right';
+  /** Beat kind. Default 'speech'. */
+  variant?: 'speech' | 'thought' | 'tool';
+  /** The message body. */
+  text: string;
+  /** Tool variant: the invoked tool's name, shown as a mono chip. */
+  toolName?: string;
+  /** Tool variant: bounded result line under the bubble. */
+  resultText?: string;
+  /** Handoff form: the receiving speaker's display name. */
+  counterpartName?: string;
+  /** Handoff form: the receiving speaker's avatar image path. */
+  counterpartImage?: string;
+  /** Muted corner line (timestamp, step, etc.). */
+  meta?: string;
+  /** Color scheme for the accent (tool chip, handoff arrow). */
+  colorScheme?: ColorScheme;
+}
+
+/**
  * Content block - loss-averse heading and body layout.
  *
  * This is the safe default for agent-authored presentation drafts: it renders
@@ -835,6 +868,7 @@ export type TemplateBlock =
   | TitleBlockInput
   | SectionHeaderInput
   | BigTextInput
+  | TranscriptBlockInput
   | ContentBlockInput
   | StatHighlightInput
   | QuoteBlockInput
