@@ -335,7 +335,11 @@ describe('docToHtml', () => {
 
   it('supports video mode for timed movie playback', () => {
     const doc = makeDoc();
-    const html = docToHtml(doc, { playerScript: MOCK_PLAYER_SCRIPT, mode: 'video', autoPlay: true });
+    const html = docToHtml(doc, {
+      playerScript: MOCK_PLAYER_SCRIPT,
+      mode: 'video',
+      autoPlay: true,
+    });
 
     expect(html).toContain('"video"');
     expect(html).toContain('autoPlay: true');

@@ -70,7 +70,9 @@ export function transcriptBlock(rawInput: TranscriptBlockInput, context: Templat
   const columnX = side === 'left' ? '20%' : '18%';
   const bubbleWidthPct = 62;
 
-  layers.push(...avatarLayers('speaker', input.speaker, input.speakerImage, avatarX, '34%', context));
+  layers.push(
+    ...avatarLayers('speaker', input.speaker, input.speakerImage, avatarX, '34%', context),
+  );
   layers.push({
     type: 'text',
     id: 'speaker-name',
@@ -93,8 +95,7 @@ export function transcriptBlock(rawInput: TranscriptBlockInput, context: Templat
   const bubbleWidthPx = ((bubbleWidthPct - 5) / 100) * context.viewport.width;
   const textHeightPct = Math.min(
     46,
-    (estimateTextHeight(input.text, textFontSize, bubbleWidthPx, 1.35) /
-      context.viewport.height) *
+    (estimateTextHeight(input.text, textFontSize, bubbleWidthPx, 1.35) / context.viewport.height) *
       100 +
       8,
   );
