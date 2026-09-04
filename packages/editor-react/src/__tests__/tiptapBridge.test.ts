@@ -8,6 +8,69 @@ import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 // markdownToTiptap
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Inline code spans that cross a soft line break
+// ---------------------------------------------------------------------------
+
+describe('markdownToTiptap — wrapped inline code spans', () => {
+  it('stitches a code span that a hard wrap split across two lines', () => {
+    const html = markdownToTiptap(
+      '- **Components:** `collider` `{shape: "circle"|"aabb", layer, mask,\n' +
+        '  isStatic?}`; `kinematicBody` `{vel: Vec3}`.',
+    );
+    expect(html).toContain(
+      '<code>{shape: &quot;circle&quot;|&quot;aabb&quot;, layer, mask, isStatic?}</code>',
+    );
+    expect(html).toContain('<code>kinematicBody</code>');
+    // The whole item stays ONE list item, and no delimiter leaks as text.
+    expect(html.match(/<li>/g)).toHaveLength(1);
+    expect(html.replace(/<[^>]+>/g, '')).not.toContain('`');
+  });
+
+  it('does not let an orphaned opener style the rest of the paragraph', () => {
+    const html = markdownToTiptap(
+      'an ECS `rigidbody` component (`{body: "dynamic"|\n' +
+        '  "kinematicPosition", mass}`) is the authoring source. It calls\n' +
+        '  `rapierWorld.step()` in the `physics` phase.',
+    );
+    // The line ending inside the span becomes the space CommonMark renders.
+    expect(html).toContain(
+      '<code>{body: &quot;dynamic&quot;| &quot;kinematicPosition&quot;, mass}</code>',
+    );
+    expect(html).toContain('<code>rapierWorld.step()</code>');
+    expect(html).toContain('<code>physics</code>');
+    // The prose between the spans must NOT have been swallowed into a span.
+    expect(html).not.toContain('<code>) is the authoring source');
+  });
+
+  it('leaves a lone backtick that never closes exactly as written', () => {
+    const html = markdownToTiptap('a lone ` tick here\nand a following line');
+    expect(html).toBe('<p>a lone ` tick here</p><p>and a following line</p>');
+  });
+
+  it('does not join across a blank line', () => {
+    const html = markdownToTiptap('open ` here\n\nclosed ` there');
+    expect(html).toBe('<p>open ` here</p><p>closed ` there</p>');
+  });
+
+  it('never rewrites lines inside a fence', () => {
+    const src = '```ts\nconst a = `tpl\nliteral`;\n```';
+    expect(markdownToTiptap(src)).toContain('const a = `tpl\nliteral`;');
+  });
+
+  it('round-trips a wrapped span as a single-line span', () => {
+    const src =
+      'an ECS `rigidbody` component (`{body: "dynamic"|\n' +
+      '  "kinematicPosition", mass}`) is the source.';
+    const editor = new Editor({ extensions: [StarterKit, Link], content: markdownToTiptap(src) });
+    const out = tiptapToMarkdown(editor.getHTML());
+    editor.destroy();
+    expect(out.trim()).toBe(
+      'an ECS `rigidbody` component (`{body: "dynamic"| "kinematicPosition", mass}`) is the source.',
+    );
+  });
+});
+
 describe('markdownToTiptap', () => {
   it('returns empty paragraph for empty input', () => {
     expect(markdownToTiptap('')).toBe('<p></p>');

@@ -12,6 +12,14 @@
  * whitespace-formatting lint. Hard breaks become `\n`, which keeps
  * sentences apart while still letting the engine see across the break.
  *
+ * Text carrying the inline `code` mark is machine vocabulary for the same
+ * reason a fence is — `raycast(origin, dir, maxDist)` is an API signature,
+ * not a sentence with a misspelling in it — so it becomes an equal-length
+ * run of spaces contributing NO span. Length is preserved so every
+ * surrounding offset stays exact; the missing span is what drops the
+ * findings, since `resolveRunOffsets` needs both endpoints inside one
+ * — the same mechanism that already discards findings landing on atoms.
+ *
  * Heading `{[template]}` annotations never appear here — they live in
  * node attributes, not text (`TemplateAnnotation.ts`).
  */
@@ -33,7 +41,7 @@ export interface TextblockRun {
   spans: RunSpan[];
 }
 
-/** Collect prose textblock runs, skipping code blocks. */
+/** Collect prose textblock runs, skipping code blocks and inline code. */
 export function collectTextblockRuns(doc: ProseMirrorNode): TextblockRun[] {
   const runs: TextblockRun[] = [];
 
@@ -47,6 +55,11 @@ export function collectTextblockRuns(doc: ProseMirrorNode): TextblockRun[] {
     let text = '';
     node.descendants((child, offset) => {
       if (child.isText && child.text) {
+        if (child.marks.some((mark) => mark.type.name === 'code')) {
+          // Blanked, not skipped: equal length keeps later offsets exact.
+          text += ' '.repeat(child.text.length);
+          return true;
+        }
         const from = text.length;
         text += child.text;
         spans.push({ from, to: text.length, docFrom: pos + 1 + offset });
@@ -66,7 +79,7 @@ export function collectTextblockRuns(doc: ProseMirrorNode): TextblockRun[] {
 /**
  * Resolve a `[start, end)` offset range within one run to absolute PM
  * positions. Returns `null` when either endpoint lands outside a text
- * span (e.g. on an atom placeholder or hard break).
+ * span — an atom placeholder, a hard break, or blanked inline code.
  */
 export function resolveRunOffsets(
   run: TextblockRun,

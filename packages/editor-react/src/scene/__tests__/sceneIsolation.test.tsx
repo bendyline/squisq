@@ -97,6 +97,34 @@ describe('Scene instance isolation', () => {
     expect(second.get()).toBeNull();
   });
 
+  /**
+   * The dot grid is drawn in SCREEN space, so a fixed world step would pack
+   * the dots closer and closer as the user zooms out — the grid gets heavier
+   * exactly when the diagram gets smaller. Weight is ink per unit area, so
+   * that is what this pins.
+   */
+  it('holds the dot grid at a constant visual weight across the zoom range', () => {
+    const inkRatio = (scale: number): number => {
+      const { container } = render(
+        <SceneViewport width={200} height={200} transform={{ tx: 0, ty: 0, scale }}>
+          <g />
+        </SceneViewport>,
+      );
+      const pattern = container.querySelector('pattern') as SVGPatternElement;
+      const dot = container.querySelector('.squisq-scene-dot') as SVGCircleElement;
+      const step = Number(pattern.getAttribute('width'));
+      const r = Number(dot.getAttribute('r'));
+      expect(step).toBeGreaterThanOrEqual(18); // never a sub-pixel wash
+      return (Math.PI * r * r) / (step * step);
+    };
+    const baseline = inkRatio(1);
+    for (const scale of [0.02, 0.25, 0.5, 2]) {
+      expect(inkRatio(scale)).toBeLessThanOrEqual(baseline * 1.05);
+    }
+    // Zoomed out — the case that motivated this — is not heavier than 100%.
+    expect(inkRatio(0.25)).toBeCloseTo(baseline, 6);
+  });
+
   it('namespaces grid and edge marker definitions per canvas', () => {
     const edge = { id: 'e', source: 'a', target: 'b', endMarker: 'arrow' as const };
     const nodes = [

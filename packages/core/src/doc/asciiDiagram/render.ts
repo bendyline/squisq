@@ -15,7 +15,14 @@
  * moving children can never orphan them outside their box.
  */
 
-import { ASCII_VOCAB, UNICODE_VOCAB, cellWidth, toCells, type StyleVocab } from './chars.js';
+import {
+  ASCII_VOCAB,
+  UNICODE_VOCAB,
+  cellWidth,
+  isLineChar,
+  toCells,
+  type StyleVocab,
+} from './chars.js';
 import { MAX_BRIDGE_GAP } from './parse.js';
 import type { AsciiDiagram, AsciiDiagramEdge, AsciiDiagramNode } from './types.js';
 
@@ -542,6 +549,28 @@ interface AttachmentSlot {
   count: number;
 }
 
+/**
+ * Interior columns a top/bottom attachment must avoid: those where a label
+ * line char (`+`, `|`, `-`) is drawn. The parser tells structure from label
+ * text by CONTINUITY, so a stem parked directly above a label's `+` hands it
+ * a corner with a wall under it and the box splits in two — `terrain mesh +
+ * layer objects` re-parses as two nodes. The label is never rewritten to
+ * avoid this (see `normalizeLabelLines`); the stem moves instead.
+ */
+function blockedAttachmentColumns(p: PlacedNode): Set<number> {
+  const blocked = new Set<number>();
+  const innerW = p.rect.c1 - p.rect.c0 - 1;
+  const lines = p.isContainer ? p.labelLines.slice(1) : p.labelLines;
+  for (const line of lines) {
+    const cells = toCells(line);
+    const pad = Math.max(0, Math.floor((innerW - cells.length) / 2));
+    cells.forEach((ch, j) => {
+      if (isLineChar(ch)) blocked.add(p.rect.c0 + 1 + pad + j);
+    });
+  }
+  return blocked;
+}
+
 /** Deterministic per-(node, side) attachment positions, spread across the side. */
 function assignAttachments(
   plans: RoutePlan[],
@@ -578,9 +607,31 @@ function assignAttachments(
     const to = horizontal ? node.rect.c1 - 1 : node.rect.r1 - 1;
     const inner = Math.max(1, to - from + 1);
     const k = list.length;
+    // Nearest free cell to the ideal position: never on a label line char,
+    // and never adjacent to a sibling attachment (touching stems merge into
+    // one component on re-parse). Ties break low so the choice is stable.
+    const blocked = horizontal ? blockedAttachmentColumns(node) : new Set<number>();
+    const taken: number[] = [];
+    const place = (want: number): number => {
+      const free = (pos: number): boolean =>
+        pos >= from && pos <= to && !blocked.has(pos) && taken.every((t) => Math.abs(t - pos) >= 2);
+      for (let d = 0; d <= inner; d++) {
+        for (const pos of d === 0 ? [want] : [want - d, want + d]) {
+          if (!free(pos)) continue;
+          taken.push(pos);
+          return pos;
+        }
+      }
+      taken.push(want);
+      return want;
+    };
     if (k === 1) {
       // Single attachment lands on the side's center cell.
-      result.set(list[0].key, { pos: from + Math.floor((inner - 1) / 2), index: 0, count: 1 });
+      result.set(list[0].key, {
+        pos: place(from + Math.floor((inner - 1) / 2)),
+        index: 0,
+        count: 1,
+      });
     } else {
       // Stride-2 centered placement guarantees a blank cell between
       // consecutive attachments (min box sizing reserves the room), so
@@ -589,7 +640,7 @@ function assignAttachments(
       const span = 2 * k - 1;
       const start = from + Math.max(0, Math.floor((inner - span) / 2));
       list.forEach((req, i) => {
-        result.set(req.key, { pos: Math.min(to, start + 2 * i), index: i, count: k });
+        result.set(req.key, { pos: place(Math.min(to, start + 2 * i)), index: i, count: k });
       });
     }
   }

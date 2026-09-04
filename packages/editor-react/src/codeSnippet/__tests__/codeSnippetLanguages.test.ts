@@ -45,6 +45,30 @@ describe('code snippet languages', () => {
     expect(codeSnippetLanguageLabel('csharp')).toBe('C#');
   });
 
+  it('labels short monikers with the language friendly name', () => {
+    expect(codeSnippetLanguageLabel('ts')).toBe('TypeScript');
+    expect(codeSnippetLanguageLabel('TS')).toBe('TypeScript');
+    expect(codeSnippetLanguageLabel('sh')).toBe('Shell');
+    expect(codeSnippetLanguageLabel('py')).toBe('Python');
+    expect(codeSnippetLanguageLabel('yml')).toBe('YAML');
+    expect(codeSnippetLanguageLabel('cs')).toBe('C#');
+    expect(codeSnippetLanguageLabel('ps1')).toBe('PowerShell');
+    expect(codeSnippetLanguageLabel('toml')).toBe('TOML');
+    expect(codeSnippetLanguageLabel('objective-c')).toBe('Objective-C');
+    // Metadata after the syntax id never reaches the label.
+    expect(codeSnippetLanguageLabel('ts highlight-lines')).toBe('TypeScript');
+    // An unknown moniker still gets a presentable title-cased fallback.
+    expect(codeSnippetLanguageLabel('kusto-lite')).toBe('Kusto Lite');
+    expect(codeSnippetLanguageLabel('')).toBe('Code');
+  });
+
+  it('routes aliased monikers to the catalog Monaco language', () => {
+    expect(monacoLanguageForFence('sh')).toBe('shell');
+    expect(monacoLanguageForFence('rs')).toBe('rust');
+    expect(monacoLanguageForFence('pwsh')).toBe('powershell');
+    expect(monacoLanguageForFence('tf')).toBe('hcl');
+  });
+
   it('creates an explicit language-tagged Markdown fence', () => {
     expect(codeSnippetMarkdown('typescript', 'const n: number = 1;')).toBe(
       '\n```typescript\nconst n: number = 1;\n```\n',

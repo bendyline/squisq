@@ -164,6 +164,62 @@ export const ROUNDED_AND_DOUBLE = [
 export const SINGLE_BOX = ['┌────────┐', '│ Alone  │', '└────────┘'].join('\n');
 
 /** Every positive fixture the fixpoint suite must survive. */
+// ---------------------------------------------------------------------------
+// Rail diagrams — nodes are BARE TEXT, wired by `|` rails and `+---+` buses.
+// The form design docs and LLMs reach for when they do not draw boxes.
+// ---------------------------------------------------------------------------
+
+export const RAIL_LINEAR = [
+  'client request',
+  '      |',
+  '      v',
+  '  api gateway',
+  '      |',
+  '      v',
+  '   database',
+].join('\n');
+
+export const RAIL_FAN_OUT = [
+  '        ingest',
+  '          |',
+  '  +-------+-------+',
+  '  |       |       |',
+  'parse   verify   store',
+].join('\n');
+
+/** A bus carrying an edge label: `merge` is the EDGE, not a fourth node. */
+export const RAIL_BUS_LABEL = [
+  'source a          source b',
+  '   |                 |',
+  '   +---- merge ------+',
+  '           |',
+  '        sink node',
+].join('\n');
+
+/** Rail labels beside a drawn box: the box owns the coordinate space. */
+export const RAIL_MIXED_WITH_BOX = [
+  '+-----------+',
+  '|  gateway  |',
+  '+-----+-----+',
+  '      |',
+  '  worker pool',
+  '      |',
+  '   datastore',
+].join('\n');
+
+/**
+ * Stacked text rows with no rail between them are ONE node, and an isolated
+ * `+` between spaces is label text — the parser tells structure from prose by
+ * continuity, and neither `+` here continues a line.
+ */
+export const RAIL_MULTILINE_LABEL = [
+  '        terrain package',
+  '  manifest + independently tiled',
+  '                |',
+  '                v',
+  '   terrain mesh + layer objects',
+].join('\n');
+
 export const POSITIVE_FIXTURES: Record<string, string> = {
   TWO_BOX_VERTICAL,
   TWO_BOX_VERTICAL_ASCII,
@@ -183,6 +239,11 @@ export const POSITIVE_FIXTURES: Record<string, string> = {
   EDGE_LABEL_SPACED,
   DUPLICATE_LABELS,
   ROUNDED_AND_DOUBLE,
+  RAIL_LINEAR,
+  RAIL_FAN_OUT,
+  RAIL_BUS_LABEL,
+  RAIL_MIXED_WITH_BOX,
+  RAIL_MULTILINE_LABEL,
 };
 
 // ---------------------------------------------------------------------------
@@ -272,6 +333,34 @@ export const NEG_PROSE_HEAVY = [
   'ensuring that the fence is mostly prose rather than mostly diagram.',
 ].join('\n');
 
+/**
+ * A checklist that happens to be drawn with rules. Bare text becomes a rail
+ * node only when a RAIL reaches it, and nothing here connects anything —
+ * without that requirement every ruled list would become a diagram.
+ */
+export const NEG_RULED_LIST = [
+  '----------------------------',
+  'step one: fetch the manifest',
+  'step two: verify signatures',
+  'step three: install packages',
+  '----------------------------',
+].join('\n');
+
+/**
+ * Prose wrapped around a small drawn diagram. The text sits directly above
+ * and below box borders, which are NOT rails — reading it as nodes would
+ * both invent nodes and rescue the fence from the loose-ratio rejector.
+ */
+export const NEG_PROSE_AROUND_BOXES = [
+  'The compiler pipeline is summarised by the little sketch below, which',
+  'omits every error path so that the happy path stays readable at a glance.',
+  '+-------+   +--------+',
+  '| lexer |   | parser |',
+  '+-------+   +--------+',
+  'Both stages are pure functions over token slices and can be tested alone,',
+  'which is why they are drawn without any of the surrounding scaffolding.',
+].join('\n');
+
 export const NEGATIVE_FIXTURES: Record<string, string> = {
   NEG_MARKDOWN_TABLE,
   NEG_PSQL_TABLE,
@@ -283,5 +372,7 @@ export const NEGATIVE_FIXTURES: Record<string, string> = {
   NEG_YAML,
   NEG_LOG_COLUMNS,
   NEG_PROSE_HEAVY,
+  NEG_RULED_LIST,
+  NEG_PROSE_AROUND_BOXES,
   SINGLE_BOX,
 };

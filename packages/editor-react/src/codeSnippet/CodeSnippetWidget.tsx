@@ -1,8 +1,9 @@
 /** Monaco inset mounted in place of an ordinary language-tagged code fence. */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import MonacoEditor, { type OnChange, type OnMount } from '@monaco-editor/react';
 import type { Editor } from '@tiptap/react';
+import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { Icon } from '../Icon';
 import { useMonacoLoader } from '../useMonacoLoader';
 import { replaceCodeSnippetText } from './codeSnippetCommands';
@@ -28,6 +29,12 @@ export interface CodeSnippetWidgetProps {
   host?: HTMLElement | null;
   /** Focus this newly inserted snippet after Monaco has mounted. */
   focusOnMount?: boolean;
+  /**
+   * Getter for the host clipboard adapter. Read at click time so a host can
+   * swap its implementation without remounting the widget. When it yields
+   * nothing, the button falls back to `navigator.clipboard`.
+   */
+  onCopyCode?: () => CodeBlockCopyHandler | undefined;
 }
 
 function schemeFromHost(host: HTMLElement | null | undefined): 'light' | 'dark' {
@@ -74,6 +81,34 @@ function useHostColorScheme(host: HTMLElement | null | undefined): 'light' | 'da
   return scheme;
 }
 
+type CopyStatus = 'idle' | 'copied' | 'failed';
+
+const COPY_LABELS: Record<CopyStatus, string> = {
+  idle: 'Copy',
+  copied: 'Copied',
+  failed: 'Copy failed',
+};
+
+const COPY_ICONS: Record<CopyStatus, string> = {
+  idle: 'fa-regular fa-copy',
+  copied: 'fa-solid fa-check',
+  failed: 'fa-solid fa-triangle-exclamation',
+};
+
+async function writeSnippetToClipboard(
+  source: string,
+  language: string,
+  handler: CodeBlockCopyHandler | undefined,
+): Promise<void> {
+  if (handler) {
+    await handler(source, language ? { language } : {});
+    return;
+  }
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+    throw new Error('Clipboard access is unavailable in this host');
+  }
+  await navigator.clipboard.writeText(source);
+}
 function useEditorEditable(editor: Editor): boolean {
   const [editable, setEditable] = useState(editor.isEditable);
   useEffect(() => {
@@ -93,12 +128,39 @@ export function CodeSnippetWidget({
   blockId,
   host,
   focusOnMount = false,
+  onCopyCode,
 }: CodeSnippetWidgetProps) {
   const data = useCodeSnippetData(editor, blockId);
   const { ready } = useMonacoLoader(data?.monacoLanguage);
   const colorScheme = useHostColorScheme(host);
   const editable = useEditorEditable(editor);
   const [modelInstanceId] = useState(allocateCodeSnippetModelInstanceId);
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
+  const copyResetTimer = useRef<ReturnType<typeof setTimeout>>();
+  // Source and language are read through refs so the click handler survives
+  // every keystroke the author makes inside the snippet.
+  const sourceRef = useRef('');
+  sourceRef.current = data?.source ?? '';
+  const languageRef = useRef('');
+  languageRef.current = data?.fenceLanguage ?? '';
+
+  useEffect(
+    () => () => {
+      if (copyResetTimer.current !== undefined) clearTimeout(copyResetTimer.current);
+    },
+    [],
+  );
+
+  const handleCopy = useCallback(async () => {
+    try {
+      await writeSnippetToClipboard(sourceRef.current, languageRef.current, onCopyCode?.());
+      setCopyStatus('copied');
+    } catch {
+      setCopyStatus('failed');
+    }
+    if (copyResetTimer.current !== undefined) clearTimeout(copyResetTimer.current);
+    copyResetTimer.current = setTimeout(() => setCopyStatus('idle'), 1600);
+  }, [onCopyCode]);
 
   const handleChange: OnChange = useCallback(
     (value) => {
@@ -131,6 +193,20 @@ export function CodeSnippetWidget({
           <Icon icon="fa-solid fa-file-code" />
           <span>{data.label}</span>
         </span>
+        <button
+          type="button"
+          className="squisq-code-snippet-copy"
+          data-copy-state={copyStatus}
+          onClick={() => void handleCopy()}
+          // The widget host swallows mousedown to keep ProseMirror from moving
+          // the selection; preventing it here also keeps focus where it was.
+          onMouseDown={(event) => event.preventDefault()}
+          title={COPY_LABELS[copyStatus]}
+          aria-label={'Copy ' + data.label + ' snippet to clipboard'}
+        >
+          <Icon icon={COPY_ICONS[copyStatus]} />
+          <span>{COPY_LABELS[copyStatus]}</span>
+        </button>
       </div>
       <div className="squisq-code-snippet-editor" aria-label={`${data.label} code editor`}>
         {ready && colorScheme !== null ? (

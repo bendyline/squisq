@@ -27,6 +27,16 @@ const MIN_LINES = 3;
 const MAX_LOOSE_RATIO = 0.25;
 
 /**
+ * A row whose every non-blank cell is a routing glyph: the Box Drawing
+ * block, ASCII `+ - |`, and the arrowheads of both families. Two such rows
+ * are the cheap evidence that a CORNERLESS fence is rail art rather than
+ * prose — `client` / `|` / `gateway` draws no box for the corner prefilter
+ * to find.
+ */
+const ROUTING_ROW =
+  /^[\s\u2500-\u257F+\-|^v<>\u25B2\u25BC\u25C0\u25B6\u25C4\u25BA\u2190\u2192\u2191\u2193]+$/;
+
+/**
  * Box-drawing corners, junctions, and (Unicode) verticals — characters that
  * signal a box border leaked into a node's label, i.e. a mis-aligned parse.
  * ASCII `|`/`+`/`-` and the horizontal `─` are excluded: they occur in real
@@ -87,8 +97,19 @@ export function detectAsciiDiagram(
       const plusMatches = line.match(/\+[-+]/g);
       tlCandidates += plusMatches ? plusMatches.length : 0;
     }
-    if (tlCandidates < 2) {
-      return { isDiagram: false, reasons: [`too-few-corner-candidates(${tlCandidates})`] };
+    // Rail art draws no corners at all — `client → gateway → db` is three
+    // bare labels and two `|`/`v` rails — so corner candidates alone would
+    // gate it out before the parse that could recognize it. A ROUTING ROW
+    // (every non-blank cell is a line or arrow glyph) is the equivalent
+    // cheap evidence for that form; the parse still decides.
+    const routingRows = lines.filter(
+      (line) => line.trim().length > 0 && ROUTING_ROW.test(line),
+    ).length;
+    if (tlCandidates < 2 && routingRows < 2) {
+      return {
+        isDiagram: false,
+        reasons: [`too-few-corner-candidates(${tlCandidates}) routing-rows(${routingRows})`],
+      };
     }
   }
 
@@ -121,6 +142,13 @@ export function detectAsciiDiagram(
   }
 
   if (!explicit) {
+    // Rail art has no drawn boxes, so the rails ARE the evidence: text that
+    // nothing connects is a list, not a diagram. Box art earns the benefit
+    // of the doubt (a drawn box is already a deliberate figure); bare text
+    // does not.
+    if (stats.boxNodes === 0 && diagram.edges.length === 0) {
+      return { isDiagram: false, reasons: [`rail-labels-unconnected(${stats.railNodes})`] };
+    }
     // Table-lattice rejector: an edge-less shared-border grid of ≥2×2 boxes
     // is a psql/MySQL-style result table, not a diagram. Single-column
     // stacks still pass (a legitimate "layer stack" diagram).

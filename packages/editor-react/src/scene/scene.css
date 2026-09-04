@@ -98,7 +98,9 @@
 
 .squisq-scene-dot {
   fill: var(--squisq-text-muted);
-  fill-opacity: 0.35;
+  /* Faint enough to read as paper texture rather than content. Density is
+     held constant across zoom by `dotGrid` in SceneViewport. */
+  fill-opacity: 0.22;
 }
 
 /* ── Selection ─────────────────────────────────────────────── */

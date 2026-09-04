@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAsciiDiagram } from '../doc/asciiDiagram/index.js';
+import { detectAsciiDiagram, parseAsciiDiagram } from '../doc/asciiDiagram/index.js';
 import {
   BIDIRECTIONAL,
   CONTAINER_EMBEDDED_TITLE,
@@ -11,6 +11,11 @@ import {
   MULTILINE_LABELS,
   NESTED_CONTAINER,
   PARALLEL_DUPES,
+  RAIL_BUS_LABEL,
+  RAIL_FAN_OUT,
+  RAIL_LINEAR,
+  RAIL_MIXED_WITH_BOX,
+  RAIL_MULTILINE_LABEL,
   ROUNDED_AND_DOUBLE,
   SECTIONED_CARD,
   SINGLE_BOX,
@@ -229,5 +234,88 @@ describe('parseAsciiDiagram — hand-drawn robustness', () => {
     ].join('\n');
     const d = parseAsciiDiagram(art);
     expect(d.nodes.map((n) => n.label.split('\n')[0])).toEqual(['Alpha', 'Beta']);
+  });
+});
+
+/**
+ * Rail diagrams: nodes are bare text, wired by `|` rails and `+---+` buses.
+ * These cases are the boundary the promotion rule walks — everything here
+ * either IS a node or is one of the three things that look like one (an edge
+ * label on a bus, a side label on a rail, a box's overflowing text).
+ */
+describe('parseAsciiDiagram — rail labels', () => {
+  const labels = (art: string): string[] => parseAsciiDiagram(art).nodes.map((n) => n.label);
+  const edgeKeys = (art: string): string[] =>
+    parseAsciiDiagram(art)
+      .edges.map((e) => `${e.source}->${e.target}${e.label ? `[${e.label}]` : ''}`)
+      .sort();
+
+  it('promotes bare rail-connected text to nodes', () => {
+    expect(labels(RAIL_LINEAR)).toEqual(['client request', 'api gateway', 'database']);
+    expect(edgeKeys(RAIL_LINEAR)).toEqual(['api-gateway->database', 'client-request->api-gateway']);
+  });
+
+  it('reads a `+---+` fan-out bus as edges from the label above it', () => {
+    expect(labels(RAIL_FAN_OUT)).toEqual(['ingest', 'parse', 'verify', 'store']);
+    expect(edgeKeys(RAIL_FAN_OUT)).toEqual(['ingest->parse', 'ingest->store', 'ingest->verify']);
+  });
+
+  it('keeps a bus label as the EDGE label, never a fourth node', () => {
+    expect(labels(RAIL_BUS_LABEL)).toEqual(['source a', 'source b', 'sink node']);
+    expect(edgeKeys(RAIL_BUS_LABEL).join(' ')).toContain('[merge]');
+  });
+
+  it('does not promote a side label sitting against a vertical rail', () => {
+    const art = ['start node', '   |', '   | retry budget', '   |', ' end node'].join('\n');
+    expect(labels(art)).toEqual(['start node', 'end node']);
+  });
+
+  it('keeps an isolated `+` inside a label as text and stacks rows into one node', () => {
+    expect(labels(RAIL_MULTILINE_LABEL)).toEqual([
+      'terrain package' + '\n' + 'manifest + independently tiled',
+      'terrain mesh + layer objects',
+    ]);
+  });
+
+  it('leaves an overflowing label with the box it spilled out of', () => {
+    const art = [
+      '┌──────────┐',
+      '│ Alpha    │',
+      '│ a wide overflowing note',
+      '└────┬─────┘',
+      '     │',
+      '  Beta',
+    ].join('\n');
+    // The tail past the wall stays with the box, rather than standing up
+    // as a node of its own.
+    expect(labels(art)).toEqual(['Alpha\na wide ov', 'Beta']);
+  });
+
+  it('does not promote prose that merely sits against a box border', () => {
+    const art = [
+      'The pipeline below omits every error path for readability.',
+      '+-------+',
+      '| lexer |',
+      '+---+---+',
+      '    |',
+      ' parser',
+    ].join('\n');
+    expect(labels(art)).toEqual(['lexer', 'parser']);
+  });
+
+  it('declines rail labels that nothing connects', () => {
+    const art = ['--------', 'alpha', 'beta', 'gamma', '--------'].join('\n');
+    const detection = detectAsciiDiagram(art);
+    expect(detection.isDiagram).toBe(false);
+    expect(detection.reasons.join(' ')).toMatch(
+      /rail-labels-unconnected|too-few-boxes|too-few-corner-candidates/,
+    );
+  });
+
+  it('lets a drawn box keep the coordinate space in mixed art', () => {
+    const d = parseAsciiDiagram(RAIL_MIXED_WITH_BOX);
+    expect(d.nodes.map((n) => n.label)).toEqual(['gateway', 'worker pool', 'datastore']);
+    // Unscaled: the rail labels stay on the rows the author drew them on.
+    expect(d.nodes.map((n) => n.row)).toEqual([0, 3, 5]);
   });
 });

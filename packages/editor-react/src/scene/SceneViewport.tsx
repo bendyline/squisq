@@ -8,11 +8,39 @@
  *
  * Dot-grid background lives behind the layer group as an SVG `<pattern>`
  * so it scales/translates with the canvas exactly the way a "real"
- * canvas grid would.
+ * canvas grid would — see {@link dotGrid} for how its weight is held
+ * steady across the zoom range.
  */
 
 import { forwardRef, useId, type ReactNode, type WheelEvent } from 'react';
 import type { SceneTransform } from './hooks/useScenePanZoom';
+
+/** World-space spacing of the dot grid at 100% zoom. */
+const BASE_GRID_STEP = 24;
+/** Never let the grid tile closer than this on screen. */
+const MIN_SCREEN_STEP = 18;
+/** Beyond this the dots read as blobs rather than a texture. */
+const MAX_DOT_RADIUS = 2;
+
+/**
+ * Dot spacing and radius for the current zoom.
+ *
+ * The pattern is laid out in SCREEN space, so a fixed world step with a
+ * fixed dot radius makes the grid HEAVIER the further you zoom out: at 25%
+ * the 24px step lands 6px apart, which is ~16x the ink per unit area of the
+ * same grid at 100% and reads as noise behind the diagram (at the 0.02 zoom
+ * floor the tile is sub-pixel and the grid becomes a flat wash of muted
+ * colour). Doubling the world step until the on-screen spacing clears
+ * {@link MIN_SCREEN_STEP} keeps the texture legible, and scaling the radius
+ * with that step holds the ink-per-area — the visual weight the reader
+ * actually perceives — constant at any zoom.
+ */
+function dotGrid(scale: number): { step: number; radius: number } {
+  let step = BASE_GRID_STEP * (Number.isFinite(scale) && scale > 0 ? scale : 1);
+  // Bounded: the zoom floor is 0.02, so six doublings always suffice.
+  for (let i = 0; i < 8 && step < MIN_SCREEN_STEP; i++) step *= 2;
+  return { step, radius: Math.min(MAX_DOT_RADIUS, step / BASE_GRID_STEP) };
+}
 
 interface SceneViewportProps {
   width: number;
@@ -55,6 +83,7 @@ export const SceneViewport = forwardRef<SVGSVGElement, SceneViewportProps>(funct
 ) {
   const t = transform;
   const gridId = `squisq-scene-dot-grid-${useId().replace(/:/g, '')}`;
+  const grid = dotGrid(t.scale);
   const groupTransform = `translate(${t.tx} ${t.ty}) scale(${t.scale})`;
 
   return (
@@ -92,11 +121,11 @@ export const SceneViewport = forwardRef<SVGSVGElement, SceneViewportProps>(funct
           id={gridId}
           x={t.tx}
           y={t.ty}
-          width={24 * t.scale}
-          height={24 * t.scale}
+          width={grid.step}
+          height={grid.step}
           patternUnits="userSpaceOnUse"
         >
-          <circle cx={1} cy={1} r={1} className="squisq-scene-dot" />
+          <circle cx={grid.radius} cy={grid.radius} r={grid.radius} className="squisq-scene-dot" />
         </pattern>
       </defs>
       <rect width="100%" height="100%" fill={`url(#${gridId})`} />

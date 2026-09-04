@@ -19,6 +19,7 @@ import {
 } from 'react';
 import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
+import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 
 export type { FenceRendererMap };
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
@@ -434,6 +435,13 @@ export interface EditorContextValue extends EditorState, EditorActions {
    */
   fenceRenderers: FenceRendererMap | null;
   /**
+   * Host clipboard adapter for code copy affordances. When omitted, the
+   * copy button on a Write-view code snippet falls back to
+   * `navigator.clipboard.writeText`. Supply this for Electron, native
+   * shells, or hosts with their own clipboard permission handling.
+   */
+  onCopyCode: CodeBlockCopyHandler | undefined;
+  /**
    * File name the host opened this document as (e.g. `Longview Plan.md`), if
    * any. Used as a display-title fallback — for example, the header of a
    * heading-less leading "preamble" block in the slideshow preview when the
@@ -542,6 +550,11 @@ export interface EditorProviderProps {
    * leave every explicit-language fence to the built-in families.
    */
   fenceRenderers?: FenceRendererMap | null;
+  /**
+   * Host clipboard adapter shared by every code copy affordance. Omit to
+   * use `navigator.clipboard`.
+   */
+  onCopyCode?: CodeBlockCopyHandler;
   /**
    * Extra link schemes this host resolves itself. Threaded into the link
    * dialog's `sanitizeUrl` check so a host-custom protocol is accepted;
@@ -702,6 +715,7 @@ export function EditorProvider({
   proofingIgnoreStore = null,
   documentLinkProvider = null,
   fenceRenderers = null,
+  onCopyCode,
   linkSchemes,
   allowRecording = true,
   allowNarrate = true,
@@ -1342,6 +1356,7 @@ export function EditorProvider({
       articleId,
       documentLinkProvider,
       fenceRenderers,
+      onCopyCode,
       linkSchemes,
       fileName,
       saveCoverImageOutput,
@@ -1412,6 +1427,7 @@ export function EditorProvider({
       articleId,
       documentLinkProvider,
       fenceRenderers,
+      onCopyCode,
       linkSchemes,
       fileName,
       saveCoverImageOutput,

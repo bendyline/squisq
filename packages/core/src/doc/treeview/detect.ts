@@ -100,8 +100,10 @@ export function detectTree(text: string, opts: DetectTreeOptions = {}): TreeDete
   }
 
   // Mutual exclusion with the diagram codec: a fence with ≥2 closed boxes is
-  // a diagram, not a tree.
-  const boxes = parseAsciiDiagramWithStats(text).diagram.nodes.length;
+  // a diagram, not a tree. Counted as BOXES, never as diagram nodes: the
+  // diagram parser also recovers bare rail labels, and a tree's roots are
+  // exactly that shape — every tree would hand itself to the diagram codec.
+  const boxes = parseAsciiDiagramWithStats(text).stats.boxNodes;
   if (boxes >= 2) {
     return { isTree: false, reasons: [`has-boxes(${boxes})`] };
   }

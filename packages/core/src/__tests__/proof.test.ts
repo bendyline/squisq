@@ -95,6 +95,71 @@ describe('blankProtectedSpans', () => {
   });
 });
 
+describe('blankProtectedSpans — markdownCode', () => {
+  const opts = { markdownCode: true } as const;
+
+  it('leaves code alone unless asked', () => {
+    const text = 'call `raycast(dir)` now';
+    expect(blankProtectedSpans(text).text).toBe(text);
+  });
+
+  it('blanks an inline span, delimiters included, preserving length', () => {
+    const text = 'call `raycast(dir)` now';
+    const { text: blanked, blanked: ranges } = blankProtectedSpans(text, opts);
+    expect(blanked).toBe('call                now');
+    expect(blanked).toHaveLength(text.length);
+    expect(ranges).toEqual([{ start: 5, end: 19 }]);
+  });
+
+  it('blanks a fence, info string and delimiters included, keeping newlines', () => {
+    const text = 'a\n```ts\nconst dir = 1;\n```\nb';
+    const { text: blanked } = blankProtectedSpans(text, opts);
+    expect(blanked).toBe('a\n     \n              \n   \nb');
+    expect(blanked).toHaveLength(text.length);
+  });
+
+  it('does not treat backticks inside a fence as inline spans', () => {
+    const text = '```\na ` b\n```\nthen `code` here';
+    const { blanked } = blankProtectedSpans(text, opts);
+    expect(blanked).toHaveLength(2);
+    expect(text.slice(blanked[1].start, blanked[1].end)).toBe('`code`');
+  });
+
+  it('spans a soft line break but not a blank line', () => {
+    const wrapped = '`{shape: circle,\nisStatic}` ok';
+    expect(blankProtectedSpans(wrapped, opts).text).toBe('                \n           ok');
+
+    const across = 'open ` here\n\nclosed ` there';
+    expect(blankProtectedSpans(across, opts).text).toBe(across);
+  });
+
+  it('requires a closing run of the same length', () => {
+    const text = 'a ``holds a ` tick`` b';
+    const { text: blanked } = blankProtectedSpans(text, opts);
+    expect(blanked).toBe('a                    b');
+  });
+
+  it('runs an unclosed fence to the end of the document', () => {
+    const text = 'intro\n```js\nlet a;';
+    expect(blankProtectedSpans(text, opts).text).toBe('intro\n     \n      ');
+  });
+
+  it('merges an annotation that sits inside a fence', () => {
+    const text = '```\n{[dataTable src=a.csv]}\n```';
+    const { blanked } = blankProtectedSpans(text, opts);
+    expect(blanked).toEqual([{ start: 0, end: text.length }]);
+  });
+
+  it('keeps offsets exact across an astral character', () => {
+    const text = '\u{1F600} ok `dir`';
+    const { text: blanked, blanked: ranges } = blankProtectedSpans(text, opts);
+    expect(blanked).toHaveLength(text.length);
+    expect(blanked.startsWith('\u{1F600} ok ')).toBe(true);
+    // 6, not 7: the emoji is TWO UTF-16 units, and offsets are UTF-16.
+    expect(ranges).toEqual([{ start: 6, end: 11 }]);
+  });
+});
+
 describe('dropMaskedFindings', () => {
   const blanked = [{ start: 10, end: 20 }];
   it('drops findings intersecting a blanked range and keeps abutting ones', () => {

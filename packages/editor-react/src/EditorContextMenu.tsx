@@ -22,6 +22,8 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
+import { CellSelection } from '@tiptap/pm/tables';
+import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorContext, type EditorView } from './EditorContext';
 
 export interface EditorContextMenuContext {
@@ -118,6 +120,11 @@ interface OpenMenu {
   error: string | null;
 }
 
+interface TableActionScope {
+  row: boolean;
+  column: boolean;
+}
+
 export interface EditorContextMenuProviderProps {
   rootRef: RefObject<HTMLElement | null>;
   readOnly?: boolean;
@@ -196,6 +203,105 @@ function shouldShowItem(item: EditorContextMenuItem, context: EditorContextMenuC
 
 function resolveDisabled(item: EditorContextMenuItem, context: EditorContextMenuContext): boolean {
   return typeof item.disabled === 'function' ? item.disabled(context) : Boolean(item.disabled);
+}
+
+/**
+ * Resolve which structural table commands apply to the current selection.
+ * A whole-row selection gets row actions, a whole-column selection gets
+ * column actions, and a cell/cell-range selection gets both. Selecting the
+ * entire table is both a row and column selection, so both groups remain.
+ */
+function tableActionScope(
+  editor: TiptapEditor | null,
+  context: EditorContextMenuContext,
+): TableActionScope | null {
+  if (context.view !== 'wysiwyg' || !editor?.view.dom.contains(context.target)) return null;
+  const cell = context.target.closest('td, th');
+  if (!cell || !editor.view.dom.contains(cell)) return null;
+
+  const { selection } = editor.state;
+  if (!(selection instanceof CellSelection)) return { row: true, column: true };
+
+  const selectsRows = selection.isRowSelection();
+  const selectsColumns = selection.isColSelection();
+  return {
+    row: selectsRows || !selectsColumns,
+    column: selectsColumns || !selectsRows,
+  };
+}
+
+function tableMenuItems(
+  editor: TiptapEditor | null,
+  context: EditorContextMenuContext,
+): EditorContextMenuItem[] {
+  const scope = tableActionScope(editor, context);
+  if (!scope || !editor) return [];
+
+  const disabled = !context.editable;
+  const items: EditorContextMenuItem[] = [];
+  if (scope.row) {
+    items.push(
+      {
+        id: 'squisq.table.insert-row-above',
+        label: 'Insert row above',
+        group: 'table-row',
+        disabled,
+        onSelect: () => {
+          editor.chain().focus().addRowBefore().run();
+        },
+      },
+      {
+        id: 'squisq.table.insert-row-below',
+        label: 'Insert row below',
+        group: 'table-row',
+        disabled,
+        onSelect: () => {
+          editor.chain().focus().addRowAfter().run();
+        },
+      },
+      {
+        id: 'squisq.table.delete-row',
+        label: 'Delete this row',
+        group: 'table-row',
+        disabled,
+        onSelect: () => {
+          editor.chain().focus().deleteRow().run();
+        },
+      },
+    );
+  }
+  if (scope.column) {
+    items.push(
+      {
+        id: 'squisq.table.insert-column-left',
+        label: 'Insert column to the left',
+        group: 'table-column',
+        disabled,
+        onSelect: () => {
+          editor.chain().focus().addColumnBefore().run();
+        },
+      },
+      {
+        id: 'squisq.table.insert-column-right',
+        label: 'Insert column to the right',
+        group: 'table-column',
+        disabled,
+        onSelect: () => {
+          editor.chain().focus().addColumnAfter().run();
+        },
+      },
+      {
+        id: 'squisq.table.delete-column',
+        label: 'Delete column',
+        group: 'table-column',
+        disabled,
+        onSelect: () => {
+          editor.chain().focus().deleteColumn().run();
+        },
+      },
+    );
+  }
+  return items;
 }
 
 function shortcutModifier(): string {
@@ -392,8 +498,9 @@ export function EditorContextMenuProvider({
           onSelect: interaction.paste,
         },
       ];
+      const tableItems = tableMenuItems(tiptapEditor, context);
       const hostItems = Array.from(itemGettersRef.current).flatMap((getItems) => getItems());
-      const items = [...baseItems, ...hostItems]
+      const items = [...baseItems, ...tableItems, ...hostItems]
         .filter((item) => shouldShowItem(item, context))
         .map((item) => ({ item, disabled: resolveDisabled(item, context) }));
       if (!items.some((item) => !item.disabled)) return false;
@@ -402,7 +509,7 @@ export function EditorContextMenuProvider({
       setMenu(nextMenu);
       return true;
     },
-    [buildInteraction],
+    [buildInteraction, tiptapEditor],
   );
 
   useEffect(() => {
