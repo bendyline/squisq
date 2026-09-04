@@ -73,6 +73,12 @@ export interface HtmlExportOptions {
   captionStyle?: 'standard' | 'social';
 
   /**
+   * Caption placement over the frame, passed through to `SquisqPlayer.mount`.
+   * Omitted = the style's classic spot (standard: top; social: lower band).
+   */
+  captionPosition?: 'top' | 'center' | 'bottom';
+
+  /**
    * Squisq theme ID to apply (e.g., 'documentary', 'cinematic').
    * When set, the theme is assigned to the Doc before rendering,
    * so the SquisqPlayer renders with that theme's colors and typography.
@@ -326,6 +332,7 @@ export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string
     autoPlay = false,
     showCodeCopyButton = false,
     captionStyle,
+    captionPosition,
     themeId,
     themeRegistry,
   } = options;
@@ -370,7 +377,7 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
   SquisqPlayer.mount(document.getElementById("squisq-root"), doc, {
     mode: ${JSON.stringify(mode)},
     images: images,
-    autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}
+    autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}${captionPosition ? `\n    captionPosition: ${JSON.stringify(captionPosition)},` : ''}
     showCodeCopyButton: ${JSON.stringify(showCodeCopyButton)},
     basePath: ${JSON.stringify(basePath)}
   });
@@ -397,6 +404,7 @@ export function generateExternalHtml(
     | 'autoPlay'
     | 'showCodeCopyButton'
     | 'captionStyle'
+    | 'captionPosition'
     | 'themeId'
     | 'themeRegistry'
     | 'basePath'
@@ -418,6 +426,7 @@ export function generateExternalHtml(
     autoPlay = false,
     showCodeCopyButton = false,
     captionStyle,
+    captionPosition,
     themeId,
     themeRegistry,
     basePath = '.',
@@ -455,7 +464,7 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
     mode: ${JSON.stringify(mode)},
     images: images,
     audio: audio,
-    autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}
+    autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}${captionPosition ? `\n    captionPosition: ${JSON.stringify(captionPosition)},` : ''}
     showCodeCopyButton: ${JSON.stringify(showCodeCopyButton)},
     basePath: ${JSON.stringify(basePath)}
   });

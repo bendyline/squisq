@@ -1540,7 +1540,14 @@ function categorizeLintKind(kind: string): ProofCategory;
 
 // {[…]} annotations blanked to equal-length spaces — every other offset stays
 // byte-identical — and findings that intersect a blanked range are dropped.
-function blankProtectedSpans(text: string): { text: string; blanked: ProofRange[] };
+interface BlankProtectedSpansOptions {
+  /** Also blank fenced code blocks and inline code spans (markdown SOURCE only). */
+  markdownCode?: boolean;
+}
+function blankProtectedSpans(
+  text: string,
+  options?: BlankProtectedSpansOptions,
+): { text: string; blanked: ProofRange[] };
 function dropMaskedFindings<T extends ProofRange>(findings: readonly T[], blanked: readonly ProofRange[]): T[];
 
 // Many textblocks → ONE engine call: join with a paragraph separator, then
@@ -2781,7 +2788,10 @@ interface EditorShellProps {
   onChange?: (source: string) => void;
   onLinkClick?: (href: string) => boolean | undefined; // false allows browser navigation
   showCodeCopyButton?: boolean; // default false; Document/Page preview fences
-  onCopyCode?: CodeBlockCopyHandler; // Electron/native clipboard bridge; browser fallback
+  onCopyCode?: CodeBlockCopyHandler; // Electron/native clipboard bridge; browser fallback.
+  // Also backs the Copy button on Write-view code snippets, which is always shown
+  // (it is editor chrome, not a rendered-document affordance, so showCodeCopyButton
+  // does not gate it).
   colorScheme?: EditorColorScheme; // 'light' | 'dark', default 'light'
   className?: string;
   height?: string; // default '100vh'

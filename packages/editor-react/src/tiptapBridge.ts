@@ -62,6 +62,8 @@ const ESCAPABLE_MD_CHARS: readonly string[] = ['*', '_', '~', '\\'];
 const RE_MD_ESCAPE = /\\([*_~\\])/g;
 
 const RE_INLINE_CODE = /`(.+?)`/g;
+const BACKTICK = '`';
+const FENCE = '```';
 // `*?` on the alt — an empty alt (`![](foo.png)`) is valid markdown and
 // the most common shape for pasted/uploaded images that don't yet have
 // a human-picked caption. Previously required at least one alt char,
@@ -100,6 +102,84 @@ const RE_IMG_TAG = /<img\b([^>]*)>/g;
 const RE_STRIP_TAGS = /<[^>]+>/g;
 
 /**
+ * Join the physical lines a single inline code span straddles.
+ *
+ * A code span may cross a soft line break — `` `{shape: "circle",\n  isStatic?}` ``
+ * is ONE span whose break CommonMark renders as a space, and a hard-wrapped
+ * document produces them constantly. This converter, though, turns one source
+ * LINE into one block, so each half reached `inlineToHtml` separately with an
+ * unbalanced backtick: the delimiters printed literally, the code text was
+ * re-parsed as prose (emphasis rules and all), and the orphaned opener paired
+ * with the NEXT span’s backtick, styling whole sentences as code. Because the
+ * Write view serializes the document it renders, that mangling was then written
+ * BACK to the file.
+ *
+ * Wrap-policy unwrapping cannot help here: the span is an immovable region, so
+ * `unwrapMarkdownSource` correctly refuses to touch the break inside it.
+ *
+ * Joining stops at anything that ends the paragraph — end of input, a blank
+ * line, or a fence — and an opener that never closes is a literal backtick, so
+ * both cases roll the join back and leave the lines exactly as written.
+ */
+function joinWrappedCodeSpans(lines: string[]): string[] {
+  // Cheap exit: no line can leave a span open without a backtick somewhere.
+  if (!lines.some((line) => line.includes(BACKTICK))) return lines;
+
+  const joined: string[] = [];
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Mirrors the fence test in the block loop below — the two must agree, or
+    // this pass could rewrite lines that loop treats as verbatim code.
+    if (line.startsWith(FENCE)) {
+      inFence = !inFence;
+      joined.push(line);
+      continue;
+    }
+    if (inFence || !leavesCodeSpanOpen(line)) {
+      joined.push(line);
+      continue;
+    }
+
+    let merged = line;
+    let next = i + 1;
+    let closed = false;
+    while (next < lines.length) {
+      const candidate = lines[next];
+      // A blank line or a fence ends the paragraph, so the span cannot reach
+      // past it; the backtick was literal after all.
+      if (candidate.trim() === '' || candidate.startsWith(FENCE)) break;
+      // The break becomes the space CommonMark says it is, and the
+      // continuation’s indent goes with it — that is what a lazy
+      // continuation line means.
+      merged = `${merged} ${candidate.replace(/^[ \t]+/, '')}`;
+      next++;
+      if (!leavesCodeSpanOpen(merged)) {
+        closed = true;
+        break;
+      }
+    }
+
+    if (!closed) {
+      joined.push(line);
+      continue;
+    }
+    joined.push(merged);
+    i = next - 1;
+  }
+  return joined;
+}
+
+/**
+ * Whether `text` ends with an unterminated inline code span. Deliberately
+ * modelled on `RE_INLINE_CODE` rather than on CommonMark’s backtick-run rule,
+ * so this pass and `inlineToHtml` always agree about what is a span.
+ */
+function leavesCodeSpanOpen(text: string): boolean {
+  return text.replace(RE_INLINE_CODE, '').includes(BACKTICK);
+}
+
+/**
  * Convert raw markdown source to Tiptap-consumable HTML content.
  * Uses a simple markdown-to-HTML conversion that maps cleanly to
  * Tiptap's ProseMirror schema.
@@ -110,8 +190,10 @@ export function markdownToTiptap(markdown: string): string {
   // Normalize line endings — content from zip archives may use \r\n
   const html = markdown.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // Process blocks line by line for accurate conversion
-  const lines = html.split('\n');
+  // Process blocks line by line for accurate conversion. A code span that
+  // crosses a soft line break is stitched back together first — one block per
+  // line cannot represent it (see `joinWrappedCodeSpans`).
+  const lines = joinWrappedCodeSpans(html.split('\n'));
   // Line index of a leading YAML frontmatter block's CLOSING `---`, or -1.
   // The bridge has never understood frontmatter (it renders the fences as
   // <hr> and the keys as paragraphs), but the setext-heading rule below must
@@ -713,7 +795,7 @@ export function tiptapToMarkdown(html: string): string {
         while ((cellExec = cellRegex.exec(rowHtml)) !== null) {
           const tag = cellExec[1];
           const attrs = cellExec[2];
-          const content = htmlToInline(cellExec[3].replace(/<\/?p>/g, ''));
+          const content = htmlToTableCell(cellExec[3].replace(/<\/?p>/g, ''));
           const alignExec = attrs.match(/text-align:\s*(left|center|right)/);
           cells.push({
             content,
@@ -1328,6 +1410,11 @@ function inlineToHtml(text: string): string {
     return stash(`<${name}>${inlineToHtml(inner)}</${name}>`);
   });
 
+  // A literal `<br>` is the only portable way to keep a hard break inside a
+  // one-line GFM table cell. The table serializer emits this form rather than
+  // a physical newline, so restore it as a real hard-break node on re-entry.
+  staged = staged.replace(/<br\s*\/?>/gi, () => stash('<br>'));
+
   // Images first: ![alt](src) — must be before links so the `!` prefix is consumed
   staged = staged.replace(RE_IMAGE, (_m, alt, src) =>
     stash(`<img alt="${escapeHtml(alt)}" src="${escapeHtml(src)}">`),
@@ -1786,6 +1873,18 @@ function htmlToInline(html: string): string {
   result = vault.restore(result);
 
   return restoreLeadingSpaces(unescapeHtml(result));
+}
+
+/**
+ * Convert a table cell without allowing an inline hard break to terminate the
+ * physical GFM table row. A normal paragraph can represent `<br>` as two
+ * trailing spaces plus a newline, but GFM has no multiline table-cell syntax:
+ * that newline makes every remaining cell part of a separate paragraph on the
+ * next parse. Inline HTML is portable GFM here and Tiptap understands it on
+ * re-entry, so keep the complete row on one line with a literal `<br>`.
+ */
+function htmlToTableCell(html: string): string {
+  return htmlToInline(html).replace(/ {2}\n/g, '<br>');
 }
 
 function preserveLeadingSpaces(html: string): string {

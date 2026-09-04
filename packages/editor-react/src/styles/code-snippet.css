@@ -46,6 +46,65 @@
   font-weight: 600;
 }
 
+.squisq-code-snippet-copy {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--squisq-text-muted);
+  font: inherit;
+  line-height: 1.6;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+/* Idle is a quiet affordance: the button only asserts itself once the
+   pointer is over the snippet, or while it is reporting a result. */
+.squisq-code-snippet-copy[data-copy-state='idle'] {
+  opacity: 0;
+}
+
+.squisq-code-snippet-shell:hover .squisq-code-snippet-copy[data-copy-state='idle'],
+.squisq-code-snippet-shell:focus-within .squisq-code-snippet-copy[data-copy-state='idle'] {
+  opacity: 1;
+}
+
+/* A touch device never hovers, so the reveal would never fire and the
+   button would stay invisible but tappable. Keep it visible there. */
+@media (hover: none) {
+  .squisq-code-snippet-copy[data-copy-state='idle'] {
+    opacity: 1;
+  }
+}
+
+.squisq-code-snippet-copy:hover {
+  border-color: var(--squisq-border);
+  background: var(--squisq-surface-hover);
+  color: var(--squisq-text);
+}
+
+.squisq-code-snippet-copy:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--squisq-accent);
+  outline-offset: 1px;
+}
+
+.squisq-code-snippet-copy[data-copy-state='copied'] {
+  color: var(--squisq-success);
+}
+
+.squisq-code-snippet-copy[data-copy-state='failed'] {
+  color: var(--squisq-danger-strong);
+}
+
 .squisq-code-snippet-editor {
   position: relative;
   min-height: 0;

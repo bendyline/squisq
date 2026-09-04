@@ -6,6 +6,7 @@ import type { AudioController } from './hooks/AudioController';
 import type { CodeBlockCopyHandler } from './MarkdownRenderer';
 import type {
   BlockMarker,
+  CaptionPosition,
   CaptionStyle,
   DisplayMode,
   PipPosition,
@@ -71,6 +72,12 @@ export interface DocPlayerProps {
   coverSlidePlayback?: CoverSlidePlayback;
   coverVisible?: boolean;
   captionStyle?: CaptionStyle;
+  /**
+   * Where captions sit over the frame. Omitted → the style's classic spot
+   * (standard: top edge; social: lower band). Use `'top'` when the lower
+   * half of the frame carries content the band would cover.
+   */
+  captionPosition?: CaptionPosition;
   /**
    * Placement of scheduled video relative to the slide content.
    * Defaults to `'background'` for backward compatibility.

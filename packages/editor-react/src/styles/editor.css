@@ -662,11 +662,11 @@
    modest top margins because their themed font size already creates separation. */
 .squisq-wysiwyg-editor h1 {
   font-size: 2em;
-  margin: 0.45em 0 0.4em;
+  margin: calc(0.45em + 4px) 0 calc(0.4em - 2px);
 }
 .squisq-wysiwyg-editor h2 {
   font-size: 1.5em;
-  margin: 0.8em 0 0.25em;
+  margin: calc(0.8em + 4px) 0 0.25em;
 }
 .squisq-wysiwyg-editor h3 {
   font-size: 1.17em;
@@ -674,19 +674,19 @@
      line-box height while they are hidden so active-mode hover does not make
      an H3 (and the content below it) jump by a pixel or two. */
   min-height: 26px;
-  margin: 1.3em 0 0.3em;
+  margin: calc(1.3em + 4px) 0 0.3em;
 }
 .squisq-wysiwyg-editor h4 {
   font-size: 1em;
-  margin: 1.4em 0 0.3em;
+  margin: calc(1.4em + 4px) 0 0.3em;
 }
 .squisq-wysiwyg-editor h5 {
   font-size: 0.83em;
-  margin: 1.5em 0 0.3em;
+  margin: calc(1.5em + 4px) 0 0.3em;
 }
 .squisq-wysiwyg-editor h6 {
   font-size: 0.67em;
-  margin: 1.6em 0 0.3em;
+  margin: calc(1.6em + 4px) 0 0.3em;
 }
 
 /* ProseMirror gives an empty text block a trailing <br> so its caret remains
@@ -711,6 +711,13 @@
      to scan without turning each paragraph into a separate card. */
   margin: 0.625em 0;
   line-height: var(--squisq-write-line-spacing, 1.7);
+}
+
+/* A heading's own bottom margin is smaller than a paragraph's top margin, so
+   margin collapsing lets the paragraph decide the gap under a heading. Tighten
+   it here rather than on the headings, which cannot win the collapse. */
+.squisq-wysiwyg-editor :is(h1, h2, h3, h4, h5, h6) + p {
+  margin-top: calc(0.625em - 2px);
 }
 
 .squisq-wysiwyg-editor blockquote {
@@ -826,6 +833,11 @@
   border-collapse: collapse;
   margin: 1em 0;
   width: 100%;
+  /* Column resizing writes widths into prosemirror-tables' <colgroup>. Under
+     the default `auto` layout the browser treats those as hints and re-solves
+     every column from its content, so a drag appears to resize other columns
+     instead of the one grabbed. `fixed` makes the colgroup authoritative. */
+  table-layout: fixed;
 }
 
 .squisq-wysiwyg-editor th,
@@ -833,6 +845,9 @@
   border: 1px solid var(--squisq-border);
   padding: 6px 12px;
   text-align: left;
+  /* A fixed-layout column no longer widens to fit its content, so long
+     unbreakable runs (URLs, inline code) must wrap rather than spill. */
+  overflow-wrap: break-word;
 }
 
 .squisq-wysiwyg-editor th {

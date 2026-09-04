@@ -6,7 +6,9 @@
  *  - findings are PER VIEW: the Write pass lints the Tiptap document's
  *    own text (which differs from the source when wrap-policy unwraps
  *    prose), the Source pass lints `model.getValue()` — never a shared
- *    offset space;
+ *    offset space, and each blanks the machine vocabulary its own
+ *    surface expresses (`{[…]}` annotations in both; code as a mark in
+ *    Write, as fences and backtick spans in Source);
  *  - one debounced (450 ms) single-flight pass at a time, with a dirty
  *    flag coalescing anything that arrives mid-flight into exactly one
  *    trailing pass; stale results (doc changed under the pass) are
@@ -377,7 +379,12 @@ export function useProofing(): ProofingState | null {
         if (!editor || !model) return;
         const versionId = model.getVersionId();
         const source = model.getValue();
-        const { text: blankedText, blanked } = blankProtectedSpans(source);
+        // `markdownCode` only applies HERE: the Write pass lints plain text
+        // whose code carries a mark instead of backticks, and blanks it
+        // during collection (`writeViewText.ts`).
+        const { text: blankedText, blanked } = blankProtectedSpans(source, {
+          markdownCode: true,
+        });
         const results = await provider.lint(blankedText, { language: 'markdown' });
         if (passId !== passIdRef.current) return;
         if (monacoRef.current !== editor || editor.getModel() !== model) return;

@@ -726,6 +726,7 @@ export function EditorShell({
         proofingIgnoreStore={proofingIgnoreStore}
         documentLinkProvider={documentLinkProvider}
         fenceRenderers={fenceRenderers}
+        onCopyCode={onCopyCode}
         linkSchemes={linkSchemes}
         allowRecording={allowRecording}
         allowNarrate={allowNarrate}

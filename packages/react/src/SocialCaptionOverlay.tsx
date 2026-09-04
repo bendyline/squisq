@@ -18,6 +18,19 @@ import { useMemo } from 'react';
 import type { CaptionTrack, CaptionPhrase, ViewportConfig } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
 import { resolveFontFamily } from '@bendyline/squisq/schemas';
+import type { CaptionPosition } from './types';
+
+/** Frame placement for the overlay band. */
+function positionStyle(position: CaptionPosition): React.CSSProperties {
+  switch (position) {
+    case 'top':
+      return { top: '8%' };
+    case 'center':
+      return { top: '50%', transform: 'translateY(-50%)' };
+    default:
+      return { bottom: '18%' };
+  }
+}
 
 /** Target words per visible chunk. */
 const TARGET_CHUNK_SIZE = 4;
@@ -110,6 +123,8 @@ interface SocialCaptionOverlayProps {
   enabled?: boolean;
   theme?: Theme;
   viewport?: ViewportConfig;
+  /** Frame placement (default `'bottom'`). */
+  position?: CaptionPosition;
 }
 
 export function SocialCaptionOverlay({
@@ -118,6 +133,7 @@ export function SocialCaptionOverlay({
   enabled = true,
   theme,
   viewport,
+  position = 'bottom',
 }: SocialCaptionOverlayProps) {
   // Build the word stream once when captions change (memoized)
   const { chunks } = useMemo(
@@ -131,7 +147,7 @@ export function SocialCaptionOverlay({
         className="social-caption-overlay"
         style={{
           position: 'absolute',
-          bottom: '18%',
+          ...positionStyle(position),
           left: 0,
           right: 0,
           zIndex: 50,
@@ -211,7 +227,7 @@ export function SocialCaptionOverlay({
       className="social-caption-overlay"
       style={{
         position: 'absolute',
-        bottom: '18%',
+        ...positionStyle(position),
         left: 0,
         right: 0,
         zIndex: 50,

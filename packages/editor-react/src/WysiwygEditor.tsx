@@ -178,6 +178,7 @@ export function WysiwygEditor({
     mediaProvider,
     mentionProvider,
     fenceRenderers,
+    onCopyCode,
     blockTagVisibility,
     themeInheritance,
     colorScheme,
@@ -246,6 +247,13 @@ export function WysiwygEditor({
   useEffect(() => {
     fenceRenderersRef.current = fenceRenderers;
   }, [fenceRenderers]);
+  // The host clipboard adapter rides the same getter-ref: swapping it must
+  // not force an editor remount, and a code snippet's Copy button reads it
+  // only at click time.
+  const onCopyCodeRef = useRef(onCopyCode);
+  useEffect(() => {
+    onCopyCodeRef.current = onCopyCode;
+  }, [onCopyCode]);
   const activeThemeRef = useRef(activeTheme);
   useEffect(() => {
     activeThemeRef.current = activeTheme;
@@ -354,6 +362,7 @@ export function WysiwygEditor({
       MermaidDiagramExtension.configure({ themeStore: mermaidThemeStore }),
       CodeSnippetExtension.configure({
         reservedLanguages: fenceRendererLangs(fenceRenderers ?? undefined),
+        onCopyCode: () => onCopyCodeRef.current,
       }),
       HostFenceExtension.configure({
         renderers: () => fenceRenderersRef.current ?? undefined,

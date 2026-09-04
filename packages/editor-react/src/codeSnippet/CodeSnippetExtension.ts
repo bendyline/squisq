@@ -11,6 +11,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Editor } from '@tiptap/react';
+import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { CodeSnippetWidget } from './CodeSnippetWidget';
@@ -45,6 +46,13 @@ export interface CodeSnippetExtensionOptions {
    * change freely behind the host extension's getter.
    */
   reservedLanguages?: readonly string[];
+  /**
+   * Getter for the host clipboard adapter used by each snippet's Copy
+   * button. A getter (not the handler itself) so a host can swap its
+   * clipboard implementation without re-configuring the editor — the
+   * same live-behind-a-getter contract `renderers` uses.
+   */
+  onCopyCode?: () => CodeBlockCopyHandler | undefined;
 }
 
 export const CODE_SNIPPET_KEY = new PluginKey<CodeSnippetPluginState>('squisq-code-snippet');
@@ -71,6 +79,7 @@ function buildDecorations(
   editor: Editor,
   focusBlockId: string | null = null,
   reserved?: ReadonlySet<string>,
+  onCopyCode?: () => CodeBlockCopyHandler | undefined,
 ): DecorationSet {
   const decorations: Decoration[] = [];
   for (const entry of entries) {
@@ -98,6 +107,7 @@ function buildDecorations(
               blockId,
               host: view.dom.parentElement ?? view.dom,
               focusOnMount: entry.id === focusBlockId,
+              onCopyCode,
             }),
           );
           (
@@ -167,6 +177,7 @@ function applyState(
   editor: Editor,
   doc: PMNode,
   reserved?: ReadonlySet<string>,
+  onCopyCode?: () => CodeBlockCopyHandler | undefined,
 ): CodeSnippetPluginState {
   if (!tr.docChanged) return previous;
   const { entries, seq } = remapEntries(tr, previous, doc, reserved);
@@ -179,7 +190,7 @@ function applyState(
     entries,
     seq,
     focusBlockId,
-    decorations: buildDecorations(doc, entries, editor, focusBlockId, reserved),
+    decorations: buildDecorations(doc, entries, editor, focusBlockId, reserved, onCopyCode),
   };
 }
 
@@ -197,6 +208,7 @@ export const CodeSnippetExtension = Extension.create<CodeSnippetExtensionOptions
       this.options.reservedLanguages && this.options.reservedLanguages.length > 0
         ? new Set(this.options.reservedLanguages.map((lang) => codeSnippetFenceLanguageToken(lang)))
         : undefined;
+    const onCopyCode = this.options.onCopyCode;
     return [
       new Plugin<CodeSnippetPluginState>({
         key: CODE_SNIPPET_KEY,
@@ -214,11 +226,11 @@ export const CodeSnippetExtension = Extension.create<CodeSnippetExtensionOptions
               entries,
               seq,
               focusBlockId: null,
-              decorations: buildDecorations(state.doc, entries, editor, null, reserved),
+              decorations: buildDecorations(state.doc, entries, editor, null, reserved, onCopyCode),
             };
           },
           apply: (tr, previous, _oldState, newState) =>
-            applyState(tr, previous, editor, newState.doc, reserved),
+            applyState(tr, previous, editor, newState.doc, reserved, onCopyCode),
         },
         props: {
           decorations(state) {

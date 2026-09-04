@@ -76,6 +76,25 @@ passing no capability at all: no engine bytes load, and the proofing UI
 leaving a toggle that cannot toggle. Flipping either one re-lints the
 active document.
 
+### What is never linted
+
+Some text in a document is machine vocabulary, and an engine asked to proof
+it returns nothing but noise — `raycast(origin, dir, maxDist)` draws a spelling
+finding on every one of those words. Both surfaces blank it before the engine
+sees it, each in the form its own surface uses:
+
+| Region                                                  | Write view                         | Source view                                       |
+| ------------------------------------------------------- | ---------------------------------- | ------------------------------------------------- |
+| `{[…]}` annotations                                     | blanked                            | blanked                                           |
+| Code fences (incl. diagrams, trees, timelines, mermaid) | the `codeBlock` subtree is skipped | the whole fence, info string included, is blanked |
+| Inline `` `code` `` spans                               | the `code` mark blanks its text    | the span, backticks included, is blanked          |
+| Icons, mentions, media atoms                            | become NUL                         | n/a (they are annotations here)                   |
+
+Blanking replaces the region with an equal-length run of spaces and never
+touches a newline, so every surrounding offset — and every line/column — stays
+exact; any finding that lands in a blanked region is then dropped. Nothing
+about this is configurable: linting code is never what an author wants.
+
 ## Serving the WASM (read this — every item below was hit in practice)
 
 1. **Serve BOTH binaries side by side.** The engine derives

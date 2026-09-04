@@ -85,7 +85,9 @@ export function detectAsciiTimeline(
   // two, but silently turning a single boxed callout into a timeline is worse
   // than leaving it as authored code. An explicit timeline may use one boxed
   // callout, while two or more still belong to the diagram codec.
-  const boxes = parseAsciiDiagramWithStats(text).diagram.nodes.length;
+  // Counted as BOXES, never as diagram nodes: the diagram parser also
+  // recovers bare rail labels, and a timeline's callouts read as those.
+  const boxes = parseAsciiDiagramWithStats(text).stats.boxNodes;
   if (boxes >= (explicit ? 2 : 1)) {
     return { isTimeline: false, reasons: [`has-boxes(${boxes})`] };
   }

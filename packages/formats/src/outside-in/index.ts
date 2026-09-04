@@ -27,7 +27,7 @@ import { convert } from '../registry/convert.js';
 import { defaultRegistry } from '../registry/registry.js';
 import type { ConversionResult, ConvertOptions, FormatRegistry } from '../registry/types.js';
 
-export const OUTSIDE_IN_FORMAT_IDS = ['html', 'docx', 'pdf', 'pptx', 'xlsx'] as const;
+export const OUTSIDE_IN_FORMAT_IDS = ['html', 'docx', 'pdf', 'pptx', 'xlsx', 'csv'] as const;
 
 export type OutsideInFormatId = (typeof OUTSIDE_IN_FORMAT_IDS)[number];
 
@@ -350,8 +350,22 @@ export async function importOutsideInDocument(
   const layout = requireLayout(source.targetPath);
   const data = arrayBufferOf(source.data);
   const registry = options.registry ?? defaultRegistry();
+  // Outside-in CSV must keep its table in Markdown. The CSV container's
+  // normal large-data spill mode would make the companion point at a copied
+  // CSV sidecar, then leave the registry exporter with no table from which to
+  // regenerate the visible target.
+  const importOptions: ConvertOptions =
+    layout.format === 'csv'
+      ? {
+          ...options,
+          formatOptions: {
+            ...options.formatOptions,
+            csv: { ...options.formatOptions?.csv, sidecar: 'never' },
+          },
+        }
+      : options;
   const imported = await importMarkdownDocument(data, layout, registry, {
-    ...options,
+    ...importOptions,
     registry,
     from: layout.format,
   });

@@ -14,6 +14,7 @@
 import {
   arrowDirection,
   asciiArrowDirection,
+  isAnyCorner,
   isAsciiStructural,
   isBlCorner,
   isBrCorner,
@@ -36,6 +37,10 @@ export interface AsciiParseStats {
   totalNonSpaceCells: number;
   looseNonSpaceCells: number;
   hasWideChars: boolean;
+  /** Nodes recovered from real traced boxes. */
+  boxNodes: number;
+  /** Nodes recovered from bare rail-attached text (see {@link findRailLabels}). */
+  railNodes: number;
 }
 
 export interface Rect {
@@ -51,6 +56,13 @@ interface ParsedBox extends Rect {
   parentIdx: number;
   labelLines: string[];
   id: string;
+  /**
+   * Geometry reported to callers, when it differs from the `Rect`. Set for
+   * RAIL nodes (bare text with no drawn border — see {@link findRailLabels}),
+   * whose `Rect` is the TEXT extent because that is what edges attach to,
+   * while `emit` is the box that text stands for.
+   */
+  emit?: Rect;
 }
 
 const MAX_TITLE_RUN = 60;
@@ -108,6 +120,15 @@ export function parseAsciiDiagramWithStats(text: string): {
   // ---- Boxes -------------------------------------------------------------
   const rects = traceBoxes(grid);
   const boxes = buildBoxes(grid, rects, warnings);
+  const boxNodes = boxes.length;
+
+  // ---- Rail labels: bare text nodes wired by `│`/`+---+` rails ------------
+  // Appended to `boxes` as zero-border pseudo-boxes so masking, perimeter
+  // ownership and edge snapping treat them exactly like drawn nodes.
+  const railBoxes = findRailLabels(grid, boxes);
+  for (const rail of railBoxes) boxes.push(rail);
+  const railNodes = railBoxes.length;
+  if (railNodes > 0) warnings.push(`rail-labels(${railNodes})`);
 
   // ---- Mask: box perimeters, leaf interiors, container label text --------
   const mask = new Uint8Array(W * H);
@@ -190,19 +211,24 @@ export function parseAsciiDiagramWithStats(text: string): {
   }
 
   // ---- Assemble -----------------------------------------------------------
-  const nodes: AsciiDiagramNode[] = boxes.map((box) => ({
-    id: box.id,
-    label: box.labelLines.join('\n'),
-    col: box.c0,
-    row: box.r0,
-    wCols: box.c1 - box.c0 + 1,
-    hRows: box.r1 - box.r0 + 1,
-    ...(box.parentIdx >= 0 ? { containerId: boxes[box.parentIdx].id } : {}),
-  }));
+  const nodes: AsciiDiagramNode[] = boxes
+    .map((box) => {
+      const rect = box.emit ?? box;
+      return {
+        id: box.id,
+        label: box.labelLines.join('\n'),
+        col: rect.c0,
+        row: rect.r0,
+        wCols: rect.c1 - rect.c0 + 1,
+        hRows: rect.r1 - rect.r0 + 1,
+        ...(box.parentIdx >= 0 ? { containerId: boxes[box.parentIdx].id } : {}),
+      };
+    })
+    .sort((a, b) => a.row - b.row || a.col - b.col);
 
   return {
     diagram: { nodes, edges, style, warnings },
-    stats: { totalNonSpaceCells, looseNonSpaceCells, hasWideChars },
+    stats: { totalNonSpaceCells, looseNonSpaceCells, hasWideChars, boxNodes, railNodes },
   };
 }
 
@@ -622,6 +648,300 @@ function slugify(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Rail labels (bare-text nodes)
+// ---------------------------------------------------------------------------
+
+/** Cells looked past (spaces only) when testing a run for bus-label context. */
+const BUS_LABEL_LOOKASIDE = 3;
+/** Padding added around a rail label's text so it reads as a box downstream. */
+const RAIL_LABEL_PAD = 1;
+/** Distance from a traced box within which stray text is read as its spillage. */
+const BOX_SPILL_GAP = 2;
+/**
+ * Text scale → box scale, for art made ENTIRELY of rail labels.
+ *
+ * A rail label is one row of text with a one-row rail under it; the box that
+ * replaces it is three rows tall and four columns wider, and a route between
+ * two boxes needs a lane of its own. Reporting rail nodes at their literal
+ * text coordinates therefore hands every consumer a pile of overlapping
+ * rectangles: the canvas shows boxes on top of each other, and the renderer's
+ * collision pass shoves them into a diagonal cascade that routes edges
+ * through labels. Spreading the coordinates preserves the arrangement the
+ * author drew — which is all that carries meaning — while giving boxes and
+ * routes the room the ASCII form never needed.
+ *
+ * Applied only when NO box was traced: in mixed art the drawn boxes own the
+ * coordinate space, and scaling the rail labels alone would tear the two
+ * apart.
+ */
+const RAIL_ROW_SCALE = 3;
+const RAIL_COL_SCALE = 2;
+
+/**
+ * The rectangle a rail label is reported as. In mixed art this is just the
+ * border the label would have had; clamping moves it into the grid rather
+ * than shrinking it, so a node does not lose a row for sitting on row 0.
+ */
+function railRect(text: Rect, lines: number, boxScale: boolean): Rect {
+  if (boxScale) {
+    const r0 = text.r0 * RAIL_ROW_SCALE;
+    const c0 = text.c0 * RAIL_COL_SCALE;
+    // Match `layoutSubtree`'s own minimum sizing exactly, so a re-render
+    // neither grows nor shrinks the box and the art stays byte-stable.
+    return {
+      r0,
+      c0,
+      r1: r0 + Math.max(3, lines + 2) - 1,
+      c1: c0 + Math.max(3, text.c1 - text.c0 + 1 + 4) - 1,
+    };
+  }
+  const top = Math.max(0, text.r0 - RAIL_LABEL_PAD);
+  const left = Math.max(0, text.c0 - RAIL_LABEL_PAD);
+  return {
+    r0: top,
+    c0: left,
+    r1: top + (text.r1 - text.r0) + 2 * RAIL_LABEL_PAD,
+    c1: left + (text.c1 - text.c0) + 2 * RAIL_LABEL_PAD,
+  };
+}
+
+interface TextRun {
+  row: number;
+  c0: number;
+  c1: number;
+  text: string;
+}
+
+/**
+ * Recover the nodes of a RAIL diagram — art whose nodes are bare text joined
+ * by `|` rails and `+-----+` buses instead of drawn boxes:
+ *
+ * ```text
+ * Earth/public data              invented-world content
+ *         |                                |
+ *         +-------- compiler adapters ------+
+ *                        |
+ *               terrain-package@1
+ * ```
+ *
+ * The box tracer finds nothing here, so without this pass every cell is
+ * loose text and the detector correctly-but-uselessly declines. Each
+ * accepted run becomes a zero-border pseudo-box whose `Rect` IS the text,
+ * so masking, perimeter ownership and edge snapping treat it exactly like a
+ * drawn node — the bus/junction edge machinery then reads the rails as
+ * edges (and `-- label --` buses as edge labels) with no changes at all.
+ *
+ * There is deliberately no boxless RENDER mode: a rail diagram normalizes
+ * into drawn boxes on the first canvas edit, the same way any other
+ * non-canonical art does. Untouched fences are never rewritten.
+ */
+function findRailLabels(grid: string[][], boxes: readonly ParsedBox[]): ParsedBox[] {
+  const H = grid.length;
+  const W = H > 0 ? grid[0].length : 0;
+  if (H === 0 || W === 0) return [];
+
+  const inBox = new Uint8Array(W * H);
+  for (const box of boxes) {
+    for (let r = Math.max(0, box.r0); r <= Math.min(H - 1, box.r1); r++) {
+      for (let c = Math.max(0, box.c0); c <= Math.min(W - 1, box.c1); c++) inBox[r * W + c] = 1;
+    }
+  }
+
+  const at = (r: number, c: number): string =>
+    r >= 0 && r < H && c >= 0 && c < W ? grid[r][c] : ' ';
+  const joins = (ch: string): boolean =>
+    isLineChar(ch) || isJunction(ch) || isPlus(ch) || isAnyCorner(ch);
+  const vertJoins = (ch: string): boolean => {
+    const arrow = arrowDirection(ch);
+    return joins(ch) || arrow === 'up' || arrow === 'down';
+  };
+  const horizJoins = (ch: string): boolean => {
+    const arrow = arrowDirection(ch);
+    return joins(ch) || arrow === 'left' || arrow === 'right';
+  };
+
+  // A row whose every non-space cell is a line/arrow char is pure routing.
+  // Those cells are structural whatever they touch — the lone `|` bridging a
+  // bus to the label below has no line neighbour in any direction, and
+  // reading it as text would swallow the rail into a node.
+  const routingRow: boolean[] = [];
+  for (let r = 0; r < H; r++) {
+    let any = false;
+    let all = true;
+    for (let c = 0; c < W && all; c++) {
+      const ch = grid[r][c];
+      if (ch === ' ') continue;
+      any = true;
+      if (!isLineChar(ch) && arrowDirection(ch) === null) all = false;
+    }
+    routingRow.push(any && all);
+  }
+
+  /**
+   * Is this cell diagram structure rather than label text? Outside a routing
+   * row a line char counts only when it CONTINUES one, so the isolated
+   * punctuation that real labels contain — `manifest + layers`,
+   * `stdin | stdout` — stays part of its run instead of shredding it.
+   */
+  const structural = (r: number, c: number): boolean => {
+    const ch = at(r, c);
+    if (ch === ' ') return false;
+    if (arrowDirection(ch) !== null) return true;
+    const ascii = asciiArrowDirection(ch);
+    if (ascii !== null && asciiArrowGate(grid, r, c, ascii)) return true;
+    if (!isLineChar(ch)) return false;
+    if (routingRow[r]) return true;
+    const vert = vertJoins(at(r - 1, c)) || vertJoins(at(r + 1, c));
+    if (isVert(ch)) return vert;
+    const horiz = horizJoins(at(r, c - 1)) || horizJoins(at(r, c + 1));
+    if (isHoriz(ch)) return horiz;
+    return vert || horiz;
+  };
+
+  const isTextCell = (r: number, c: number): boolean =>
+    c >= 0 && c < W && grid[r][c] !== ' ' && !inBox[r * W + c] && !structural(r, c);
+
+  // ---- Maximal text runs (single interior spaces keep phrases together) ---
+  const runs: TextRun[] = [];
+  for (let r = 0; r < H; r++) {
+    let start = -1;
+    let end = -1;
+    const flush = (): void => {
+      if (start >= 0) {
+        const text = grid[r]
+          .slice(start, end + 1)
+          .join('')
+          .trim();
+        if (text.length > 0) runs.push({ row: r, c0: start, c1: end, text });
+      }
+      start = -1;
+    };
+    for (let c = 0; c < W; c++) {
+      if (isTextCell(r, c)) {
+        if (start < 0) start = c;
+        end = c;
+      } else if (start >= 0 && grid[r][c] === ' ' && isTextCell(r, c + 1)) {
+        continue;
+      } else {
+        flush();
+      }
+    }
+    flush();
+  }
+
+  /**
+   * A run pressed up against structure on its own row is an EDGE label, not
+   * a node — both the bus form (`+---- compiler adapters ----+`) and the
+   * side form (`| generic tile residency`) that the edge extractor already
+   * reads for itself. Promoting one would invent a node AND destroy the
+   * label. A rail-diagram node, by contrast, floats in open space with its
+   * rails arriving from above or below.
+   */
+  const abutsRail = (run: TextRun): boolean =>
+    [-1, 1].some((dir) => {
+      for (let step = 1; step <= BUS_LABEL_LOOKASIDE; step++) {
+        const c = dir < 0 ? run.c0 - step : run.c1 + step;
+        if (at(run.row, c) === ' ') continue;
+        return structural(run.row, c);
+      }
+      return false;
+    });
+
+  /**
+   * Text on a box's own rows, right up against its walls, is that box's
+   * label SPILLING past a border it outgrew — the hand-drawn case the wall
+   * walker already tolerates. It belongs to the box, so reading the
+   * overflow as a free-floating node would both invent a node and split the
+   * label. A label genuinely standing beside a box is further away.
+   */
+  const spillsFromBox = (run: TextRun): boolean =>
+    boxes.some(
+      (box) =>
+        run.row >= box.r0 &&
+        run.row <= box.r1 &&
+        run.c0 <= box.c1 + BOX_SPILL_GAP &&
+        run.c1 >= box.c0 - BOX_SPILL_GAP,
+    );
+
+  const candidates = runs.filter(
+    (run) => /[a-z0-9]/i.test(run.text) && !abutsRail(run) && !spillsFromBox(run),
+  );
+
+  // ---- Merge vertically stacked runs into one multi-line label -----------
+  const groups: TextRun[][] = [];
+  let previousRow: TextRun[][] = [];
+  for (let r = 0; r < H; r++) {
+    const rowRuns = candidates.filter((run) => run.row === r);
+    const currentRow: TextRun[][] = [];
+    for (const run of rowRuns) {
+      const host = previousRow.find((group) => {
+        const last = group[group.length - 1];
+        return last.row === r - 1 && last.c0 <= run.c1 && run.c0 <= last.c1;
+      });
+      if (host) {
+        host.push(run);
+        currentRow.push(host);
+      } else {
+        const group = [run];
+        groups.push(group);
+        currentRow.push(group);
+      }
+    }
+    previousRow = currentRow;
+  }
+
+  /**
+   * A run only becomes a node when a RAIL reaches it from above or below —
+   * a free-standing vertical connector, never a box border. Prose that
+   * happens to sit above `┌───┐` is text next to a diagram, not a node in
+   * one, and the two are told apart by exactly this: rails are outside every
+   * traced box, and they run vertically.
+   */
+  const railHead = (r: number, c: number): boolean => {
+    if (r < 0 || r >= H || inBox[r * W + c] === 1 || !structural(r, c)) return false;
+    const ch = grid[r][c];
+    const arrow = arrowDirection(ch) ?? asciiArrowDirection(ch);
+    return isVert(ch) || isJunction(ch) || isPlus(ch) || arrow === 'up' || arrow === 'down';
+  };
+  const railAdjacent = (group: TextRun[]): boolean =>
+    group.some((run) =>
+      [run.row - 1, run.row + 1].some((r) => {
+        for (let c = Math.max(0, run.c0 - 1); c <= Math.min(W - 1, run.c1 + 1); c++) {
+          if (railHead(r, c)) return true;
+        }
+        return false;
+      }),
+    );
+
+  const usedIds = new Map<string, number>();
+  for (const box of boxes) usedIds.set(box.id, (usedIds.get(box.id) ?? 0) + 1);
+
+  const out: ParsedBox[] = [];
+  for (const group of groups) {
+    if (!railAdjacent(group)) continue;
+    const labelLines = group.map((run) => run.text);
+    const r0 = group[0].row;
+    const r1 = group[group.length - 1].row;
+    const c0 = Math.min(...group.map((run) => run.c0));
+    const c1 = Math.max(...group.map((run) => run.c1));
+    const base = slugify(labelLines[0]);
+    const count = usedIds.get(base) ?? 0;
+    usedIds.set(base, count + 1);
+    out.push({
+      r0,
+      c0,
+      r1,
+      c1,
+      parentIdx: -1,
+      labelLines,
+      id: count === 0 ? base : `${base}-${count + 1}`,
+      emit: railRect({ r0, c0, r1, c1 }, labelLines.length, boxes.length === 0),
+    });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Edge extraction
 // ---------------------------------------------------------------------------
 
@@ -884,6 +1204,37 @@ function extractEdges(
       const boxIdx = nearestOwner(r + dr, c + dc);
       if (boxIdx !== null && !attachmentsByBox.has(boxIdx)) {
         attachmentsByBox.set(boxIdx, { boxIdx, isArrowEnd: false });
+      }
+    }
+
+    // Rescue: a straight run wedged between two node borders attaches to
+    // BOTH. A one-cell `│` joining stacked nodes has a single endpoint, so
+    // it can only ever snap to one of them and would drop as dangling —
+    // the shape rail art (bare text labels, one row apart) is made of.
+    // Kept as a rescue rather than a general rule so richer components,
+    // where the endpoint/junction/arrow passes already agree, are untouched.
+    if (attachmentsByBox.size < 2) {
+      for (const idx of component) {
+        const r = Math.floor(idx / W);
+        const c = idx % W;
+        const ch = grid[r][c];
+        const axis = isVert(ch)
+          ? [
+              [-1, 0],
+              [1, 0],
+            ]
+          : isHoriz(ch)
+            ? [
+                [0, -1],
+                [0, 1],
+              ]
+            : [];
+        for (const [dr, dc] of axis) {
+          const boxIdx = nearestOwner(r + dr, c + dc);
+          if (boxIdx !== null && !attachmentsByBox.has(boxIdx)) {
+            attachmentsByBox.set(boxIdx, { boxIdx, isArrowEnd: false });
+          }
+        }
       }
     }
 

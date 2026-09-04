@@ -25,6 +25,8 @@ const EXPECTED_REJECT_REASONS: Record<string, RegExp> = {
   NEG_YAML: /too-few-corner-candidates|too-few-boxes/,
   NEG_LOG_COLUMNS: /too-few-corner-candidates|too-few-boxes/,
   NEG_PROSE_HEAVY: /loose-ratio/,
+  NEG_RULED_LIST: /rail-labels-unconnected|too-few-boxes|too-few-corner-candidates/,
+  NEG_PROSE_AROUND_BOXES: /loose-ratio|too-few-boxes/,
   SINGLE_BOX: /too-few-boxes|too-few-corner-candidates/,
 };
 

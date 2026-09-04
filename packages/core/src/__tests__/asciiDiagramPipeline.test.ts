@@ -6,7 +6,7 @@ import { materializeLayers } from './materializeTestUtils';
 import { profileBlockContents, recommendTemplatesForBlock } from '../recommend/templates';
 import type { Block, Layer } from '../schemas/Doc';
 import type { DiagramTemplateEdge, DiagramTemplateNode } from '../schemas/BlockTemplates';
-import { NESTED_CONTAINER, TWO_BOX_VERTICAL } from './fixtures/asciiDiagrams';
+import { NESTED_CONTAINER, RAIL_BUS_LABEL, TWO_BOX_VERTICAL } from './fixtures/asciiDiagrams';
 
 const fenced = (art: string, lang = ''): string => '```' + lang + '\n' + art + '\n```';
 
@@ -104,6 +104,31 @@ describe('auto-template conversion of ASCII diagram fences', () => {
     const md = ['## Architecture', '', prose, '', fenced(TWO_BOX_VERTICAL), ''].join('\n');
     const block = findBlock(convert(md), 'Architecture');
     expect(block?.template).not.toBe('diagram');
+  });
+});
+
+describe('auto-template conversion of rail (boxless) fences', () => {
+  const RAIL_DOC = ['# Systems', '', '## Pipeline', '', fenced(RAIL_BUS_LABEL, 'text'), ''].join(
+    '\n',
+  );
+
+  it('converts bare rail-wired labels into an ephemeral diagram block', () => {
+    const doc = convert(RAIL_DOC);
+    const block = findBlock(doc, 'Pipeline');
+    expect(block?.template).toBe('diagram');
+    expect(block?.autoTemplate).toBe(true);
+    const nodes = block?.templateData?.nodes as DiagramTemplateNode[];
+    expect(nodes?.map((n) => n.id)).toEqual(['source-a', 'source-b', 'sink-node']);
+    // Every node gets a real rectangle, so the canvas has something to draw.
+    expect(nodes?.every((n) => (n.w ?? 0) > 0 && (n.h ?? 0) > 0)).toBe(true);
+    const edges = block?.templateData?.edges as DiagramTemplateEdge[];
+    expect(edges?.length).toBeGreaterThan(0);
+  });
+
+  it('round-trips the rail fence byte-identically', () => {
+    const output = stringifyMarkdown(docToMarkdown(convert(RAIL_DOC)));
+    expect(output).toContain(RAIL_BUS_LABEL);
+    expect(output).not.toContain('{[diagram');
   });
 });
 

@@ -171,25 +171,195 @@ const SPECIAL_FENCE_LANGUAGES = new Set([
   'mermaid',
 ]);
 
-const MONACO_LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
-  c: 'c',
-  'c++': 'cpp',
-  'c#': 'csharp',
+/**
+ * Fence tokens that name a catalog language under a shorter spelling. Resolving
+ * these before the fallback is what labels a ```ts fence "TypeScript" rather
+ * than title-casing the moniker into "Ts".
+ */
+const FENCE_LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
+  cc: 'cpp',
+  cjs: 'javascript',
+  console: 'bash',
+  containerfile: 'dockerfile',
   cs: 'csharp',
+  cts: 'typescript',
+  'c#': 'csharp',
+  'c++': 'cpp',
   cxx: 'cpp',
   docker: 'dockerfile',
+  golang: 'go',
+  hh: 'cpp',
+  hpp: 'cpp',
   htm: 'html',
   js: 'javascript',
-  jsx: 'javascript',
-  jsonc: 'json',
+  ksh: 'bash',
+  kt: 'kotlin',
+  kts: 'kotlin',
   md: 'markdown',
+  mjs: 'javascript',
+  mts: 'typescript',
   py: 'python',
+  python3: 'python',
   rb: 'ruby',
-  sh: 'shell',
-  shell: 'shell',
+  rs: 'rust',
+  sh: 'bash',
+  shell: 'bash',
   ts: 'typescript',
-  tsx: 'typescript',
   yml: 'yaml',
+  zsh: 'bash',
+};
+
+/**
+ * Display names for languages the insert menu does not offer but a document may
+ * still fence. Without an entry the moniker is title-cased, which reads wrong
+ * for initialisms ("Toml", "Sql") and for names with their own casing ("MATLAB").
+ */
+const EXTRA_LANGUAGE_LABELS: Readonly<Record<string, string>> = {
+  apache: 'Apache',
+  asm: 'Assembly',
+  assembly: 'Assembly',
+  astro: 'Astro',
+  bat: 'Batch',
+  batch: 'Batch',
+  c: 'C',
+  clj: 'Clojure',
+  cljs: 'ClojureScript',
+  clojure: 'Clojure',
+  cmake: 'CMake',
+  cmd: 'Batch',
+  cobol: 'COBOL',
+  crystal: 'Crystal',
+  csv: 'CSV',
+  dart: 'Dart',
+  diff: 'Diff',
+  dot: 'Graphviz',
+  elisp: 'Emacs Lisp',
+  elixir: 'Elixir',
+  erl: 'Erlang',
+  erlang: 'Erlang',
+  ex: 'Elixir',
+  exs: 'Elixir',
+  fish: 'Fish',
+  fortran: 'Fortran',
+  fs: 'F#',
+  fsharp: 'F#',
+  'f#': 'F#',
+  gql: 'GraphQL',
+  gradle: 'Gradle',
+  graphql: 'GraphQL',
+  graphviz: 'Graphviz',
+  groovy: 'Groovy',
+  h: 'C',
+  handlebars: 'Handlebars',
+  haskell: 'Haskell',
+  hbs: 'Handlebars',
+  hcl: 'HCL',
+  hs: 'Haskell',
+  http: 'HTTP',
+  ini: 'INI',
+  jade: 'Pug',
+  jl: 'Julia',
+  jsonl: 'JSON Lines',
+  julia: 'Julia',
+  kql: 'Kusto',
+  kusto: 'Kusto',
+  latex: 'LaTeX',
+  less: 'Less',
+  lisp: 'Lisp',
+  lua: 'Lua',
+  make: 'Makefile',
+  makefile: 'Makefile',
+  matlab: 'MATLAB',
+  mysql: 'MySQL',
+  ndjson: 'JSON Lines',
+  nginx: 'nginx',
+  nim: 'Nim',
+  objc: 'Objective-C',
+  'objective-c': 'Objective-C',
+  objectivec: 'Objective-C',
+  ocaml: 'OCaml',
+  pascal: 'Pascal',
+  patch: 'Diff',
+  perl: 'Perl',
+  pgsql: 'PostgreSQL',
+  pl: 'Perl',
+  plsql: 'PL/SQL',
+  postgres: 'PostgreSQL',
+  postgresql: 'PostgreSQL',
+  powershell: 'PowerShell',
+  prisma: 'Prisma',
+  prolog: 'Prolog',
+  proto: 'Protocol Buffers',
+  protobuf: 'Protocol Buffers',
+  ps1: 'PowerShell',
+  psql: 'PostgreSQL',
+  pug: 'Pug',
+  pwsh: 'PowerShell',
+  r: 'R',
+  racket: 'Racket',
+  razor: 'Razor',
+  regex: 'Regex',
+  sass: 'Sass',
+  scala: 'Scala',
+  scheme: 'Scheme',
+  scss: 'SCSS',
+  sol: 'Solidity',
+  solidity: 'Solidity',
+  sqlite: 'SQLite',
+  stylus: 'Stylus',
+  svelte: 'Svelte',
+  svg: 'SVG',
+  tex: 'LaTeX',
+  terraform: 'Terraform',
+  tf: 'Terraform',
+  toml: 'TOML',
+  tsql: 'T-SQL',
+  tsv: 'TSV',
+  vb: 'Visual Basic',
+  vbnet: 'Visual Basic',
+  verilog: 'Verilog',
+  vhdl: 'VHDL',
+  'visual-basic': 'Visual Basic',
+  vue: 'Vue',
+  wasm: 'WebAssembly',
+  wat: 'WebAssembly',
+  xml: 'XML',
+  zig: 'Zig',
+};
+
+/** Monaco ids for tokens whose highlighting language is spelled differently. */
+const MONACO_LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
+  batch: 'bat',
+  c: 'c',
+  clj: 'clojure',
+  cljs: 'clojure',
+  cmd: 'bat',
+  ex: 'elixir',
+  exs: 'elixir',
+  fs: 'fsharp',
+  'f#': 'fsharp',
+  gql: 'graphql',
+  hbs: 'handlebars',
+  jade: 'pug',
+  jl: 'julia',
+  jsonl: 'json',
+  jsx: 'javascript',
+  ndjson: 'json',
+  objc: 'objective-c',
+  objectivec: 'objective-c',
+  pl: 'perl',
+  postgres: 'pgsql',
+  postgresql: 'pgsql',
+  proto: 'protobuf',
+  ps1: 'powershell',
+  psql: 'pgsql',
+  pwsh: 'powershell',
+  sol: 'solidity',
+  svg: 'xml',
+  terraform: 'hcl',
+  tf: 'hcl',
+  vbnet: 'vb',
+  'visual-basic': 'vb',
 };
 
 /** The first token is the syntax id; any remaining fence metadata stays untouched. */
@@ -204,19 +374,34 @@ export function isCodeSnippetFenceLanguage(language: string | null | undefined):
   return token.length > 0 && !SPECIAL_FENCE_LANGUAGES.has(token);
 }
 
+/** The catalog entry a fence token names, directly or through an alias. */
+function catalogEntryForToken(token: string): CodeSnippetLanguage | undefined {
+  const direct = BY_FENCE_LANGUAGE.get(token);
+  if (direct) return direct;
+  const canonical = FENCE_LANGUAGE_ALIASES[token];
+  return canonical ? BY_FENCE_LANGUAGE.get(canonical) : undefined;
+}
+
 export function monacoLanguageForFence(language: string | null | undefined): string {
   const token = codeSnippetFenceLanguageToken(language);
-  const catalogEntry = BY_FENCE_LANGUAGE.get(token);
+  const catalogEntry = catalogEntryForToken(token);
   return (catalogEntry?.monacoLanguage ?? MONACO_LANGUAGE_ALIASES[token] ?? token) || 'plaintext';
 }
 
 export function codeSnippetLanguageLabel(language: string | null | undefined): string {
   const token = codeSnippetFenceLanguageToken(language);
-  const catalogEntry = BY_FENCE_LANGUAGE.get(token);
+  const catalogEntry = catalogEntryForToken(token);
   if (catalogEntry) return catalogEntry.label;
+  const friendlyName = EXTRA_LANGUAGE_LABELS[token];
+  if (friendlyName) return friendlyName;
+  if (!token) return 'Code';
+  // Last resort: title-case the moniker's words so an unlisted fence still reads
+  // as a name ("shell-session" -> "Shell Session") rather than a raw token.
   return token
-    ? token.replace(/(^|[-_])([a-z])/g, (_match, _prefix, letter) => letter.toUpperCase())
-    : 'Code';
+    .split(/[-_.]+/)
+    .filter((word) => word.length > 0)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 /** Markdown insertion form. The caller decides whether to wrap selected text or use a starter. */
