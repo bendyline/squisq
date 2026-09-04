@@ -136,6 +136,11 @@ jobs:
           name: release-build
           path: packages
 
+      # Tags are recorded first so the metadata commit below can name exactly
+      # the packages this run released.
+      - name: Record tags before release
+        run: git tag --list | sort > "$RUNNER_TEMP/tags-before.txt"
+
       # The npm plugin creates each tarball after applying that package's next
       # version; the GitHub plugin attaches it to the corresponding release.
       - name: Semantic Release
@@ -148,6 +153,72 @@ jobs:
             args+=(--deps.release=inherit)
           fi
           npx multi-semantic-release "${args[@]}"
+
+      # `@semantic-release/git` is deliberately absent from .releaserc.cjs, so
+      # nothing above pushes to `main`. It used to commit and push once per
+      # released package, and GitHub intermittently applied one of those ref
+      # updates while still reporting it rejected, which aborted the run
+      # mid-publish and stranded tagged-but-unpublished packages.
+      #
+      # Everything the release wrote is committed and pushed here instead, in
+      # one commit, after every package has published. This runs even when the
+      # release step failed, so the repository still records whatever did
+      # publish; the job's own conclusion is unchanged.
+      - name: Commit release metadata
+        if: ${{ !cancelled() }}
+        env:
+          GIT_AUTHOR_NAME: semantic-release-bot
+          GIT_AUTHOR_EMAIL: semantic-release-bot@martynus.net
+          GIT_COMMITTER_NAME: semantic-release-bot
+          GIT_COMMITTER_EMAIL: semantic-release-bot@martynus.net
+        run: |
+          set -euo pipefail
+
+          # `:(glob)` stops `*` from crossing a `/`, so this cannot reach into
+          # a package's node_modules.
+          git add -- ':(glob)packages/*/package.json' ':(glob)packages/*/CHANGELOG.md'
+
+          if git diff --cached --quiet; then
+            echo "No version or changelog changes to commit."
+            exit 0
+          fi
+
+          git tag --list | sort > "$RUNNER_TEMP/tags-after.txt"
+          released=$(comm -13 "$RUNNER_TEMP/tags-before.txt" "$RUNNER_TEMP/tags-after.txt")
+
+          {
+            echo "chore(release): publish [skip ci]"
+            echo
+            if [ -n "$released" ]; then
+              printf '%s\n' "$released" | sed 's/^/- /'
+            else
+              echo "- no packages were tagged in this run"
+            fi
+          } > "$RUNNER_TEMP/release-commit-msg.txt"
+
+          git commit --file "$RUNNER_TEMP/release-commit-msg.txt"
+          git --no-pager show --stat --oneline HEAD
+
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              echo "Pushed release metadata."
+              exit 0
+            fi
+
+            # A rejected push that nonetheless landed is the exact failure this
+            # step exists to survive, so check for it before retrying.
+            git fetch --quiet origin main
+            if [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ]; then
+              echo "Remote main already points at this commit; the rejected push had in fact been applied."
+              exit 0
+            fi
+
+            echo "Push attempt ${attempt} did not land; retrying."
+            sleep $((attempt * 10))
+          done
+
+          echo "::error::Could not push the release metadata commit. Packages are published and tagged; push $(git rev-parse HEAD) to main to record the version bumps."
+          exit 1
 
   deploy-pages:
     name: Deploy Pages
