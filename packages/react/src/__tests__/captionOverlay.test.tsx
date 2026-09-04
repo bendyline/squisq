@@ -26,7 +26,9 @@ describe('CaptionOverlay placement', () => {
   });
 
   it('social captions sit in the lower band by default and move to the top on request', () => {
-    const lower = render(<CaptionOverlay captions={captions} currentTime={1} captionStyle="social" />);
+    const lower = render(
+      <CaptionOverlay captions={captions} currentTime={1} captionStyle="social" />,
+    );
     expect(overlayStyle(lower.container, 'social-caption-overlay').bottom).toBe('18%');
 
     const top = render(
