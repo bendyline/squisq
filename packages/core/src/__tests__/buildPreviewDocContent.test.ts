@@ -76,6 +76,31 @@ Implication: A massive industry wide change management process is happening`);
     );
   });
 
+  it('keeps a table in the rich content layer when prose shares its slide', () => {
+    const slide = firstPreviewSlide(`## Results
+
+Supporting context that must remain visible.
+
+| Model | Score |
+| :--- | ---: |
+| Alpha | 100 |`);
+
+    expect(slide.template).toBe('content');
+
+    const { layers } = materializeBlockLayers(slide as unknown as DocBlock);
+    const body = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'body',
+    );
+
+    expect(body?.content.html).toContain('<p>Supporting context that must remain visible.</p>');
+    expect(body?.content.html).toContain(
+      '<table><thead><tr><th align="left">Model</th><th align="right">Score</th></tr></thead>',
+    );
+    expect(body?.content.html).toContain(
+      '<tbody><tr><td align="left">Alpha</td><td align="right">100</td></tr></tbody></table>',
+    );
+  });
+
   it('preserves additional authored blank lines between body blocks', () => {
     const slide = firstPreviewSlide(`## A bit about me {[content]}
 
