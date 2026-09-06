@@ -42,13 +42,21 @@ module.exports = {
         provenance: true,
       },
     ],
-    [
-      '@semantic-release/git',
-      {
-        assets: ['CHANGELOG.md', 'package.json', 'package-lock.json'],
-        message: 'chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}',
-      },
-    ],
+    // NOTE: `@semantic-release/git` is deliberately NOT in this list.
+    //
+    // It commits and pushes the version bump per package, which in this
+    // monorepo meant one push to `main` for every released package: eight
+    // pushes to the same ref inside about forty seconds. GitHub intermittently
+    // applies such a ref update and still reports it rejected
+    // ("cannot lock ref 'refs/heads/main': is at X but expected Y"), which
+    // aborts multi-semantic-release mid-run and strands packages that were
+    // tagged but never published, plus published packages pinning versions
+    // that do not exist.
+    //
+    // The version bumps and changelogs written here are instead committed and
+    // pushed ONCE by the "Commit release metadata" step in
+    // .github/workflows/publish.yml, after every package has published.
+    // Keep that step and this omission in sync.
     [
       '@semantic-release/github',
       {

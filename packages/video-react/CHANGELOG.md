@@ -1,3 +1,9 @@
+## @bendyline/squisq-video-react [2.4.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.4.4...@bendyline/squisq-video-react@2.4.5) (2026-09-05)
+
+### Bug Fixes
+
+* **deps:** align workspace versions with published packages ([580e539](https://github.com/bendyline/squisq/commit/580e53961eeff2e6191e4f168327029a7116fbd2))
+
 ## @bendyline/squisq-video-react [2.4.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.4.3...@bendyline/squisq-video-react@2.4.4) (2026-09-03)
 
 
