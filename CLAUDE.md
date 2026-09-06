@@ -39,6 +39,38 @@ specific action in the current request — and even then, only the action they n
 If a task seems to need a new branch, worktree, or PR, surface that to the user and
 let them handle the git operation.
 
+### Never run git commands that discard work
+
+The working tree on this repo routinely carries uncommitted, unstaged changes
+that exist **nowhere else** — not in the index, not in the reflog, not in VSCode
+local history. A git command that overwrites one of those files destroys it
+permanently. There is no recovery, and the loss is silent: the command succeeds,
+prints nothing, and the damage only surfaces later when the user goes looking for
+their work.
+
+So never run, on any path, for any reason, without the user asking for that exact
+command in the current request:
+
+- `git checkout -- <path>` / `git checkout <ref> -- <path>`
+- `git restore <path>` (with or without `--staged` / `--source`)
+- `git reset --hard`, `git reset --merge`, `git reset <ref> -- <path>`
+- `git stash` (it removes the working-tree changes) and `git stash drop`/`clear`
+- `git clean` in any form
+- `git checkout <branch>` / `git switch` when the tree is dirty
+- `git apply -R`, `git revert`, `git rebase`, `git merge`, `git cherry-pick`
+- any `--force` push or fetch
+
+**Undoing your own bad edit is not an exception — it is the main way this goes
+wrong.** If you mangle a file you were editing, repair it with the editing tools
+(re-apply the correct text, or reverse your own change). Do not reach for git to
+clean up after yourself: your edit and the user’s uncommitted work live in the
+same file, and git cannot tell them apart. If you genuinely cannot repair a file
+by editing, stop and tell the user what state it is in rather than resetting it.
+
+Read-only git is always fine and encouraged: `git status`, `git diff`, `git log`,
+`git show`, `git blame`, `git stash list`. Use `git diff` BEFORE touching a file
+you did not create, so you know whether it already carries the user’s work.
+
 ## Repository Structure
 
 ```
