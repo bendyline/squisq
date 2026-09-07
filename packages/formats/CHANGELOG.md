@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.6.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.6.2...@bendyline/squisq-formats@2.6.3) (2026-09-07)
+
+### Bug Fixes
+
+* Table and slide fixes ([#59](https://github.com/bendyline/squisq/issues/59)) ([586affe](https://github.com/bendyline/squisq/commit/586affe3124ba1afa6d771fe7e56694f8b0deccd))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.3
+
 ## @bendyline/squisq-formats [2.6.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.6.1...@bendyline/squisq-formats@2.6.2) (2026-09-07)
 
 
