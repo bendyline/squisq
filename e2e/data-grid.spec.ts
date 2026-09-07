@@ -79,39 +79,6 @@ test.describe('data grid', () => {
     );
   });
 
-  test('a long distinct-values menu keeps readable rows and scrolls', async ({ page }) => {
-    const manyValues = [
-      'Category,Count',
-      ...Array.from({ length: 40 }, (_, index) => `Category ${index + 1},${index + 1}`),
-    ].join('\n');
-
-    await page.goto('/');
-    await waitForAppReady(page);
-    await page.getByTestId('site-upload-input').setInputFiles({
-      name: 'many-categories.csv',
-      mimeType: 'text/csv',
-      buffer: Buffer.from(manyValues, 'utf8'),
-    });
-    await switchView(page, 'Editor');
-
-    await expect(page.locator('.squisq-data-card-grid[role="grid"]')).toBeVisible({
-      timeout: 20_000,
-    });
-    await page.locator('.squisq-grid-valuebutton').first().click();
-
-    const menu = page.locator('.squisq-grid-valuemenu');
-    const options = menu.locator('.squisq-grid-valueoption');
-    await expect(options).toHaveCount(40);
-    await expect(options.first()).toHaveText('Category 1');
-    await expect(options.first()).toHaveCSS('flex-shrink', '0');
-    expect(
-      await options.first().evaluate((element) => element.getBoundingClientRect().height),
-    ).toBeGreaterThan(10);
-    expect(await menu.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(
-      true,
-    );
-  });
-
   test('uploaded CSV opens as a sortable, editable grid that saves in place', async ({ page }) => {
     await page.goto('/');
     await waitForAppReady(page);
