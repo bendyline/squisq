@@ -198,9 +198,11 @@ export function renderMarkdownBlocksHtml(nodes: readonly MarkdownBlockNode[]): s
         const [head, ...body] = node.children;
         const row = (cells: (typeof node.children)[number]['children'], header: boolean) =>
           `<tr>${cells
-            .map((cell) => {
+            .map((cell, columnIndex) => {
               const tag = header ? 'th' : 'td';
-              return `<${tag}>${renderInlineHtml(cell.children)}</${tag}>`;
+              const alignment = node.align?.[columnIndex];
+              const alignAttribute = alignment ? ` align="${alignment}"` : '';
+              return `<${tag}${alignAttribute}>${renderInlineHtml(cell.children)}</${tag}>`;
             })
             .join('')}</tr>`;
         const thead = head ? `<thead>${row(head.children, true)}</thead>` : '';

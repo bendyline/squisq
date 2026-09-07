@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '../markdown/parse.js';
-import { deriveTemplateInputs } from '../doc/templateInputs.js';
+import { deriveTemplateInputs, renderMarkdownBlocksHtml } from '../doc/templateInputs.js';
 
 function statInputs(heading: string, body: string): Record<string, unknown> | null {
   return deriveTemplateInputs('statHighlight', heading, parseMarkdown(body).children);
@@ -82,5 +82,20 @@ describe('quote template input derivation', () => {
       quote: 'Words worth quoting',
       title: 'Context',
     });
+  });
+});
+
+describe('slide rich-text projection', () => {
+  it('preserves GFM table alignment for content slides', () => {
+    const nodes = parseMarkdown(
+      '| Name | Score | Note |\n| :--- | ---: | :---: |\n| Alpha | 100 | Good |',
+    ).children;
+
+    const html = renderMarkdownBlocksHtml(nodes);
+
+    expect(html).toContain('<th align="left">Name</th>');
+    expect(html).toContain('<th align="right">Score</th>');
+    expect(html).toContain('<th align="center">Note</th>');
+    expect(html).toContain('<td align="right">100</td>');
   });
 });

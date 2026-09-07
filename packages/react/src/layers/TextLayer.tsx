@@ -437,6 +437,15 @@ function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
     `.${cls} ul,.${cls} ol{margin:0 0 .7em;padding-left:1.2em;list-style-position:${listStylePosition}}` +
     `.${cls} li{margin:0}` +
     `.${cls} li>p{display:inline;margin:0}` +
+    // Content slides can contain a table alongside prose, so they cannot use
+    // the dedicated TableLayer. Give those embedded tables the same basic
+    // visual contract: full-width layout, visible cell boundaries, a distinct
+    // header, comfortable padding, and safe wrapping for long values. The
+    // rgba declarations are fallbacks for browsers without color-mix().
+    `.${cls} table{width:100%;margin:.65em 0;border-collapse:collapse;border-spacing:0;table-layout:fixed}` +
+    `.${cls} th,.${cls} td{box-sizing:border-box;padding:.38em .55em;border:1px solid rgba(127,127,127,.55);border-color:color-mix(in srgb,currentColor 32%,transparent);vertical-align:top;white-space:normal;overflow-wrap:anywhere}` +
+    `.${cls} th{background:rgba(127,127,127,.16);background:color-mix(in srgb,currentColor 12%,transparent);font-weight:600}` +
+    `.${cls} tbody tr:nth-child(even){background:rgba(127,127,127,.07);background:color-mix(in srgb,currentColor 5%,transparent)}` +
     `.${cls} *:first-child{margin-top:0}.${cls} *:last-child{margin-bottom:0}` +
     `.${cls} a{color:inherit;text-decoration:underline}`;
 

@@ -85,4 +85,34 @@ describe('TextLayer rich text', () => {
     expect(gaps).toHaveLength(2);
     expect([...gaps].every((gap) => gap.getAttribute('aria-hidden') === 'true')).toBe(true);
   });
+
+  it('styles Markdown tables embedded alongside slide prose', () => {
+    const layer: TextLayerType = {
+      id: 'content-body',
+      type: 'text',
+      content: {
+        text: 'Summary\n\nName Value\nAlpha 100',
+        html: '<p>Summary</p><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody><tr><td>Alpha</td><td>100</td></tr></tbody></table>',
+        style: { fontSize: 28, color: '#e2e8f0' },
+      },
+      position: { x: 100, y: 200, width: 900, height: 400 },
+    };
+
+    const { container } = render(
+      <svg>
+        <TextLayer layer={layer} viewport={viewport} blockTime={0} />
+      </svg>,
+    );
+
+    expect(container.querySelectorAll('table th')).toHaveLength(2);
+    expect(container.querySelectorAll('table td')).toHaveLength(2);
+
+    const scopedCss = container.querySelector('style')?.textContent ?? '';
+    expect(scopedCss).toContain('table{width:100%');
+    expect(scopedCss).toContain('border-collapse:collapse');
+    expect(scopedCss).toContain('border:1px solid rgba(127,127,127,.55)');
+    expect(scopedCss).toContain('th{background:rgba(127,127,127,.16)');
+    expect(scopedCss).toContain('tbody tr:nth-child(even)');
+    expect(scopedCss).toContain('overflow-wrap:anywhere');
+  });
 });

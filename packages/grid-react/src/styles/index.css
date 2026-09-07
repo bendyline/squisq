@@ -234,6 +234,12 @@
   font-weight: 400;
 }
 
+/* The menu is a column flexbox. Its many value rows must overflow and scroll,
+ * not flex-shrink into sub-pixel-tall glyph fragments. */
+.squisq-grid-valuemenu > * {
+  flex: none;
+}
+
 .squisq-grid-valueoption {
   display: block;
   overflow: hidden;
