@@ -77,6 +77,15 @@ describe('DataCardExtension claiming', () => {
     expect(entriesOf(editor)).toHaveLength(2);
   });
 
+  it('normalizes CommonMark escapes in generated sidecar paths', () => {
+    const editor = makeEditor('[pg\\_catalog.csv](pg-catalog_files/data/pg\\_catalog.csv)');
+    const entries = entriesOf(editor);
+    expect(entries).toHaveLength(1);
+    expect(dataLinkHrefOf(editor.state.doc.nodeAt(entries[0]!.pos)!)).toBe(
+      'pg-catalog_files/data/pg_catalog.csv',
+    );
+  });
+
   it('ignores absolute and non-data links', () => {
     const editor = makeEditor(
       '[remote](https://example.com/q3.csv)\n\n[abs](/data/q3.csv)\n\n[doc](notes.md)',

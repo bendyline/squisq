@@ -68,10 +68,14 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
 
   if (content.shape === 'rect' && isCSSGradient && !content.gradient) {
     return (
+      // Shape layers are visual primitives. In particular, theme top-layers
+      // can cover the whole slide; they must not shield interactive table,
+      // map, or media layers underneath them from pointer/wheel input.
       <g
         className={`block-layer block-layer--shape ${animStyle.className}`}
         style={animStyle.style}
         data-layer-id={layer.id}
+        pointerEvents="none"
       >
         <foreignObject x={paintX} y={paintY} width={paintWidth} height={paintHeight}>
           <div
@@ -108,10 +112,13 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
   };
 
   return (
+    // Native SVG shapes follow the same visual-only interaction contract as
+    // the foreignObject gradient branch above.
     <g
       className={`block-layer block-layer--shape ${animStyle.className}`}
       style={animStyle.style}
       data-layer-id={layer.id}
+      pointerEvents="none"
     >
       {(fillDef || filterDef) && (
         <defs>

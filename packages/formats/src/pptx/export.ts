@@ -1083,7 +1083,13 @@ function buildLayerShape(layer: ShapeLayer, shapeId: number): string {
 }
 
 function buildTableLayerShapes(layer: TableLayer, ctx: SlideContext): string[] {
-  const rows = [layer.content.headers, ...layer.content.rows];
+  // A live table layer can scroll through a larger preview window. PPTX has
+  // no equivalent nested scroll surface, so preserve the initial slide view:
+  // the header followed by the first visible body rows.
+  const visibleBodyRows = layer.content.maxVisibleRows
+    ? layer.content.rows.slice(0, Math.max(1, Math.floor(layer.content.maxVisibleRows)))
+    : layer.content.rows;
+  const rows = [layer.content.headers, ...visibleBodyRows];
   const columnCount = Math.max(1, ...rows.map((row) => row.length));
   const rowCount = Math.max(1, rows.length);
   const rect = resolveLayerRect(layer.position, 1920, 1080);

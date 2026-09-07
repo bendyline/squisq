@@ -437,6 +437,7 @@ function validateTableContent(v: TemplateValidator, value: unknown, path: string
   } else {
     value.rows.forEach((row, index) => validateStringArray(v, row, `${path}.rows[${index}]`));
   }
+  optionalNumber(v, value, 'maxVisibleRows', path);
   if (value.align !== undefined) {
     if (!Array.isArray(value.align)) {
       v.error(`${path}.align`, 'expected array');

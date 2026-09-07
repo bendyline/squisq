@@ -17,6 +17,35 @@ import { switchView } from './view-tabs';
 const CSV_SOURCE = ['Region,Revenue', 'West,100', 'East,2000', 'North,30', 'South,-5'].join('\n');
 
 test.describe('data grid', () => {
+  test('an uploaded CSV remains visible in block-at-a-time mode', async ({ page }) => {
+    await page.goto('/');
+    await waitForAppReady(page);
+    await page.getByTestId('site-upload-input').setInputFiles({
+      // The converter escapes the underscore in Markdown destinations;
+      // Write view must normalize it back to the canonical sidecar path.
+      name: 'pg_catalog.csv',
+      mimeType: 'text/csv',
+      buffer: Buffer.from(CSV_SOURCE, 'utf8'),
+    });
+    await switchView(page, 'Editor');
+
+    await page.getByRole('button', { name: 'View options' }).click();
+    await page.getByRole('menuitemradio', { name: 'Block-at-a-time' }).click();
+    await page.keyboard.press('Escape');
+
+    const card = page.locator('.squisq-data-card');
+    const grid = page.locator('.squisq-data-card-grid[role="grid"]');
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card.locator('.squisq-data-card-name')).toHaveText('pg_catalog.csv');
+    await expect(grid).toBeVisible();
+    await expect(page.locator('.squisq-grid-status')).toContainText('4 rows');
+    await expect(page.locator('.squisq-grid-body [role="row"]').first()).toContainText('West');
+
+    const box = await grid.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(500);
+    expect(box?.height ?? 0).toBeGreaterThan(300);
+  });
+
   test('a long distinct-values menu keeps readable rows and scrolls', async ({ page }) => {
     const manyValues = [
       'Category,Count',

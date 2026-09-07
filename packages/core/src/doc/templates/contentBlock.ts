@@ -85,7 +85,7 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
           shadow: shouldUseShadow(context),
         },
       },
-      position: { x: '8%', y: '9%', width: '84%', height: '15%', anchor: 'top-left' },
+      position: { x: '8%', y: '9%', width: '84%', height: '10%', anchor: 'top-left' },
     });
   }
 
@@ -107,9 +107,9 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
       },
       position: {
         x: '8%',
-        y: title ? '28%' : '10%',
+        y: title ? '20%' : '10%',
         width: '84%',
-        height: title ? '64%' : '82%',
+        height: title ? '72%' : '82%',
         anchor: 'top-left',
       },
     });

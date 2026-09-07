@@ -70,6 +70,12 @@ export interface XlsxImportOptions extends OoxmlOpenOptions {
   /** Which sheet to import (0-based index or sheet name). Default: all sheets. */
   sheet?: number | string;
   /**
+   * Emit a plain level-1 heading for each sheet when importing all sheets.
+   * Default true. Set false when each data region should be a top-level block
+   * without a separate sheet cover block.
+   */
+  sheetHeadings?: boolean;
+  /**
    * Split each sheet into its contiguous data islands, one block each, anchored
    * with `{[dataTable sheet=… anchor=…]}`. Default true. Set false for the
    * historical one-table-per-sheet output.
@@ -897,7 +903,9 @@ async function workbookToMarkdown(
 
   for (const sheet of selected) {
     const { cells, merges } = await sheetToCells(pkg, sheet.path, shared, styles, date1904);
-    if (!single) {
+    const includeSheetHeading = !single && options.sheetHeadings !== false;
+    const depth: 1 | 2 = includeSheetHeading ? 2 : 1;
+    if (includeSheetHeading) {
       children.push({ type: 'heading', depth: 1, children: [{ type: 'text', value: sheet.name }] });
     }
     if (cells.length === 0) continue;
@@ -905,7 +913,7 @@ async function workbookToMarkdown(
     if (!useRegions) {
       if (spill && shouldSpillGrid(spill, cells)) {
         children.push(
-          annotatedHeading(single ? 1 : 2, sheet.name, { src: spill.src, sheet: sheet.name }),
+          annotatedHeading(depth, sheet.name, { src: spill.src, sheet: sheet.name }),
           sidecarLinkParagraph(spill),
         );
         spill.used = true;
@@ -928,7 +936,7 @@ async function workbookToMarkdown(
     if (plan.degraded || (plan.regions.length === 0 && plan.strays.length === 0)) {
       if (spill && shouldSpillGrid(spill, cells)) {
         children.push(
-          annotatedHeading(single ? 1 : 2, sheet.name, { src: spill.src, sheet: sheet.name }),
+          annotatedHeading(depth, sheet.name, { src: spill.src, sheet: sheet.name }),
           sidecarLinkParagraph(spill),
         );
         spill.used = true;
@@ -938,7 +946,6 @@ async function workbookToMarkdown(
       continue;
     }
 
-    const depth: 1 | 2 = single ? 1 : 2;
     for (const region of plan.regions) {
       const slice = sliceRect(cells, region.rect, EMPTY_CELL);
       const anchor = formatCellRef(region.rect.top, region.rect.left);

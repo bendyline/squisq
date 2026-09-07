@@ -103,6 +103,29 @@ describe('DataGrid', () => {
     host.remove();
   });
 
+  it('supports presentation sizing without rendering the filter row', async () => {
+    const provider = makeProvider();
+    const { host, root } = await mount(
+      <DataGrid
+        provider={provider}
+        view={EMPTY_VIEW}
+        rowHeight={52}
+        showFilters={false}
+        defaultColumnWidths={[220, 360]}
+      />,
+    );
+
+    expect(host.querySelector('.squisq-grid-filterrow')).toBeNull();
+    expect(host.querySelector<HTMLElement>('.squisq-grid-header')?.style.gridTemplateColumns).toBe(
+      '220px 360px',
+    );
+    expect(host.querySelector<HTMLElement>('.squisq-grid-row')?.style.height).toBe('52px');
+
+    await act(async () => root.unmount());
+    provider.dispose();
+    host.remove();
+  });
+
   it('cycles sort asc → desc → none through onViewChange', async () => {
     const provider = makeProvider();
     const changes: TableViewState[] = [];

@@ -21,9 +21,18 @@ import {
 import { pickContrastingText, withAlpha } from '../../schemas/colorUtils.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
+/** Body rows the slide viewport is designed to show before scrolling. */
+const MAX_VISIBLE_ROWS = 10;
+
 export function dataTable(input: DataTableInput, context: TemplateContext): Layer[] {
   const { title, headers, rows, align, colorScheme } = input;
   const { theme, viewport } = context;
+
+  // Data-backed blocks are materialized once before their sidecar preview has
+  // resolved. Keep that intermediate render valid: the async projection will
+  // replace these empty arrays with the bounded table window when it lands.
+  const resolvedHeaders = Array.isArray(headers) ? headers : [];
+  const resolvedRows = Array.isArray(rows) ? rows : [];
 
   const colors = resolveColorScheme(context, colorScheme);
   const titleFontSize = themedFontSize(48, context, true);
@@ -36,7 +45,10 @@ export function dataTable(input: DataTableInput, context: TemplateContext): Laye
   // group — a full-height band left a ~200px orphan gap under the title.
   // `rows` is required by the schema but may be missing on partially-
   // authored blocks in live preview; treat it as empty rather than throwing.
-  const rowCount = (Array.isArray(rows) ? rows.length : 0) + 1;
+  const rowCount = Math.max(
+    1,
+    Math.min(resolvedRows.length, MAX_VISIBLE_ROWS) + (resolvedHeaders.length > 0 ? 1 : 0),
+  );
   const naturalTableHPct = Math.min(74, ((rowCount * tableFontSize * 2.4) / viewport.height) * 100);
   const titleBandPct = title ? (titleFontSize * 2.2 * 100) / viewport.height : 0;
   const groupTopPct = Math.max(8, (100 - titleBandPct - naturalTableHPct) / 2);
@@ -74,8 +86,9 @@ export function dataTable(input: DataTableInput, context: TemplateContext): Laye
     type: 'table',
     id: 'table',
     content: {
-      headers,
-      rows,
+      headers: resolvedHeaders,
+      rows: resolvedRows,
+      maxVisibleRows: MAX_VISIBLE_ROWS,
       align,
       style: {
         headerBackground: colors.accent,

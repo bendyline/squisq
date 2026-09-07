@@ -4,6 +4,10 @@ export { ShapeLayer } from '../layers/ShapeLayer.js';
 export { PathLayer } from '../layers/PathLayer.js';
 export { VideoLayer } from '../layers/VideoLayer.js';
 export { TableLayer } from '../layers/TableLayer.js';
+export type {
+  TableLayerContentRenderer,
+  TableLayerContentRendererProps,
+} from '../layers/TableLayer.js';
 export { TreeLayer } from '../layers/TreeLayer.js';
 export { MapLayer } from '../layers/MapLayer.js';
 export { MermaidLayer } from '../layers/MermaidLayer.js';

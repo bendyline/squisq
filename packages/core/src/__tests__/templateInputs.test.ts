@@ -93,6 +93,9 @@ describe('slide rich-text projection', () => {
 
     const html = renderMarkdownBlocksHtml(nodes);
 
+    expect(html).toContain(
+      '<div data-squisq-table-scroll role="region" aria-label="Scrollable data table">',
+    );
     expect(html).toContain('<th align="left">Name</th>');
     expect(html).toContain('<th align="right">Score</th>');
     expect(html).toContain('<th align="center">Note</th>');

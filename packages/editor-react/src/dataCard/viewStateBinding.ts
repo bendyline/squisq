@@ -28,6 +28,7 @@ import { parseTableViewState, serializeTableViewState } from '@bendyline/squisq/
 import type { TableViewState } from '@bendyline/squisq/table';
 import { TABLE_FED_TEMPLATES, resolveTemplateName } from '@bendyline/squisq/doc';
 import { findOwningHeadingPosition } from '../blockTagActivity';
+import { normalizeDataLinkPath } from './DataCardExtension';
 
 export interface HeadingViewBinding {
   /** Heading node position, when an owning heading exists. */
@@ -73,7 +74,11 @@ export function readHeadingViewBinding(
   const attrs = node.attrs as HeadingAttrs;
   const params = paramsOf(attrs.dataTemplateParams);
   const template = attrs.dataTemplate ? resolveTemplateName(attrs.dataTemplate) : null;
-  const persisted = template !== null && TABLE_FED_TEMPLATES.has(template) && params.src === href;
+  const persisted =
+    template !== null &&
+    TABLE_FED_TEMPLATES.has(template) &&
+    params.src !== undefined &&
+    normalizeDataLinkPath(params.src) === href;
   return {
     headingPos,
     persisted,

@@ -20,33 +20,37 @@ import { useEditorContext } from './EditorContext';
 import { usePreviewSettingsOptional } from './PreviewControls';
 import { BlockThumbnail } from './TimelineBlockPreview';
 import { resolveBlockVisual } from './resolveBlockVisual';
+import { usePreviewProjection } from './usePreviewProjection';
 
 export interface BlockPreviewPanelProps {
   basePath?: string;
 }
 
 export function BlockPreviewPanel({ basePath = '/' }: BlockPreviewPanelProps) {
-  const { doc, activeBlockStartLine, mediaProvider } = useEditorContext();
+  const { doc, activeBlockStartLine, mediaProvider, workspaceContainer, fileName, mediaRevision } =
+    useEditorContext();
   const previewSettings = usePreviewSettingsOptional();
   const theme = previewSettings?.activeTheme ?? DEFAULT_THEME;
   const viewport: ViewportConfig = previewSettings?.activeViewport ?? VIEWPORT_PRESETS.landscape;
+  const projection = usePreviewProjection(doc, '', workspaceContainer, fileName, mediaRevision);
+  const previewDoc = projection?.contentDoc ?? doc;
 
   // The block the card editor is scoped to — matched by its heading's source
   // line (same key the timeline + outline use), falling back to the first
   // block (e.g. when a heading-less preamble is active).
   const block = useMemo(() => {
-    if (!doc) return null;
-    const blocks = flattenBlocks(doc.blocks);
+    if (!previewDoc) return null;
+    const blocks = flattenBlocks(previewDoc.blocks);
     if (blocks.length === 0) return null;
     return (
       blocks.find((b) => b.sourceHeading?.position?.start.line === activeBlockStartLine) ??
       blocks[0]
     );
-  }, [doc, activeBlockStartLine]);
+  }, [previewDoc, activeBlockStartLine]);
 
   const visual = useMemo(
-    () => (doc && block ? resolveBlockVisual(doc, block, theme, viewport) : null),
-    [doc, block, theme, viewport],
+    () => (previewDoc && block ? resolveBlockVisual(previewDoc, block, theme, viewport) : null),
+    [previewDoc, block, theme, viewport],
   );
 
   if (!visual) return null;

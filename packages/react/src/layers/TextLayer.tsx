@@ -42,6 +42,8 @@ interface TextLayerProps {
   viewport: { width: number; height: number };
   /** Current time relative to block start */
   blockTime: number;
+  /** Shared scale selected once for every text layer on this slide. */
+  textScale?: number;
 }
 
 /**
@@ -82,7 +84,7 @@ function iconRunsToHtml(text: string): string {
  * page). Height is derived from the wrapped, icon-free projection when the
  * layer has no explicit height, and overflow is visible to guard estimates.
  */
-function IconTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
+function IconTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerProps) {
   const { content, position, animation } = layer;
   const { text, style } = content;
 
@@ -127,7 +129,7 @@ function IconTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
     justifyContent: verticalJustify,
     padding,
     color: style.color,
-    fontSize: `${style.fontSize}px`,
+    fontSize: `${style.fontSize * textScale}px`,
     fontFamily: style.fontFamily || DEFAULT_DOC_FONT,
     fontWeight: style.fontWeight || 'normal',
     fontStyle: style.fontStyle || 'normal',
@@ -151,9 +153,12 @@ function IconTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
             flows inline instead of each node becoming a stacked flex item. */}
         <div
           {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)}
+          data-squisq-text-fit="html"
+          data-squisq-base-font-size={style.fontSize}
           style={boxStyle}
         >
           <div
+            data-squisq-text-content="true"
             style={{ width: '100%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
             aria-label={plain}
             dangerouslySetInnerHTML={{ __html: html }}
@@ -164,7 +169,7 @@ function IconTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   );
 }
 
-function PlainTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
+function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerProps) {
   const defsId = `${useId().replace(/:/g, '')}-${layer.id}`;
   const { content, position, animation } = layer;
   const { text, style } = content;
@@ -192,6 +197,20 @@ function PlainTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   const anchor = position.anchor ?? 'top-left';
   const x = pivotX(rawX, boxWidth, anchor, textAnchor);
   const y = pivotY(rawY, boxHeight, anchor, dominantBaseline);
+  const fitWidth =
+    boxWidth ??
+    (textAnchor === 'middle'
+      ? Math.max(0, Math.min(x, viewport.width - x) * 2)
+      : textAnchor === 'end'
+        ? Math.max(0, x)
+        : Math.max(0, viewport.width - x));
+  const fitHeight =
+    boxHeight ??
+    (dominantBaseline === 'middle'
+      ? Math.max(0, Math.min(y, viewport.height - y) * 2)
+      : dominantBaseline === 'text-after-edge'
+        ? Math.max(0, y)
+        : Math.max(0, viewport.height - y));
 
   // Get animation styles
   const animStyle = getAnimationStyle(animation, blockTime);
@@ -330,23 +349,37 @@ function PlainTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
         }
       />
 
-      {/* Text element with tspans for each line */}
-      <text
-        ref={textRef}
-        x={x}
-        y={y}
-        textAnchor={textAnchor as 'start' | 'middle' | 'end'}
-        dominantBaseline={dominantBaseline as 'text-before-edge' | 'middle' | 'text-after-edge'}
-        style={textStyles}
-        filter={filterId ? `url(#${filterId})` : undefined}
-        transform={fitTransform}
+      {/* A shared scale is applied around each layer's own alignment pivot.
+          Every text layer receives the same factor from BlockRenderer, so
+          headings, markers, and item bodies preserve their hierarchy. */}
+      <g
+        data-squisq-text-fit="svg"
+        data-squisq-fit-width={fitWidth}
+        data-squisq-fit-height={fitHeight}
+        style={{
+          transform: `scale(${textScale})`,
+          transformOrigin: `${x}px ${y}px`,
+          transformBox: 'view-box',
+        }}
       >
-        {lines.map((line, i) => (
-          <tspan key={i} x={x} dy={i === 0 ? firstLineDy : lineHeightPx}>
-            {line || '\u00A0'} {/* Non-breaking space for empty lines */}
-          </tspan>
-        ))}
-      </text>
+        <text
+          ref={textRef}
+          data-squisq-text-content="true"
+          x={x}
+          y={y}
+          textAnchor={textAnchor as 'start' | 'middle' | 'end'}
+          dominantBaseline={dominantBaseline as 'text-before-edge' | 'middle' | 'text-after-edge'}
+          style={textStyles}
+          filter={filterId ? `url(#${filterId})` : undefined}
+          transform={fitTransform}
+        >
+          {lines.map((line, i) => (
+            <tspan key={i} x={x} dy={i === 0 ? firstLineDy : lineHeightPx}>
+              {line || '\u00A0'} {/* Non-breaking space for empty lines */}
+            </tspan>
+          ))}
+        </text>
+      </g>
     </g>
   );
 }
@@ -359,7 +392,7 @@ function PlainTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
  * drag/resize stay aligned. `content.text` remains the plain projection
  * used by export/search.
  */
-function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
+function RichTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerProps) {
   const { content, position, animation } = layer;
   const { html, style } = content;
 
@@ -392,6 +425,7 @@ function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
         : 'flex-start';
 
   const hasBorder = !!(style.borderColor && (style.borderWidth ?? 0) > 0);
+
   // Box decoration uses CSS (foreignObject is HTML); gradients/backgroundOpacity
   // are deferred to the SVG path — solid background covers the common case.
   const boxStyle: CSSProperties = {
@@ -403,7 +437,7 @@ function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
     justifyContent: verticalJustify,
     padding: style.padding ?? 0,
     color: style.color,
-    fontSize: `${style.fontSize}px`,
+    fontSize: `${style.fontSize * textScale}px`,
     fontFamily: style.fontFamily || DEFAULT_DOC_FONT,
     fontWeight: style.fontWeight || 'normal',
     fontStyle: style.fontStyle || 'normal',
@@ -426,6 +460,10 @@ function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
   const cls = `squisq-rich-text-${cssId(layer.id)}`;
   const listStylePosition =
     style.textAlign === 'center' || style.textAlign === 'right' ? 'inside' : 'outside';
+  const stopEmbeddedTableEvent = (event: React.SyntheticEvent): void => {
+    const target = event.target as Element | null;
+    if (target?.closest?.('[data-squisq-table-scroll]')) event.stopPropagation();
+  };
   const scopedCss =
     `.${cls}{margin:0}` +
     `.${cls} p{margin:0 0 .4em}` +
@@ -438,13 +476,15 @@ function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
     `.${cls} li{margin:0}` +
     `.${cls} li>p{display:inline;margin:0}` +
     // Content slides can contain a table alongside prose, so they cannot use
-    // the dedicated TableLayer. Give those embedded tables the same basic
-    // visual contract: full-width layout, visible cell boundaries, a distinct
-    // header, comfortable padding, and safe wrapping for long values. The
-    // rgba declarations are fallbacks for browsers without color-mix().
-    `.${cls} table{width:100%;margin:.65em 0;border-collapse:collapse;border-spacing:0;table-layout:fixed}` +
-    `.${cls} th,.${cls} td{box-sizing:border-box;padding:.38em .55em;border:1px solid rgba(127,127,127,.55);border-color:color-mix(in srgb,currentColor 32%,transparent);vertical-align:top;white-space:normal;overflow-wrap:anywhere}` +
-    `.${cls} th{background:rgba(127,127,127,.16);background:color-mix(in srgb,currentColor 12%,transparent);font-weight:600}` +
+    // the dedicated TableLayer. The generated wrapper gives the table its own
+    // bounded scroll viewport; a slightly smaller table type scale lets a
+    // typical 5–6-row table fit without scrolling while retaining readable
+    // prose above it. The rgba declarations are fallbacks for browsers
+    // without color-mix().
+    `.${cls} [data-squisq-table-scroll]{width:100%;max-height:20em;margin:.35em 0;overflow:auto;overscroll-behavior:contain;box-sizing:border-box}` +
+    `.${cls} table{width:100%;min-width:48em;margin:0;border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:.76em;line-height:1.2}` +
+    `.${cls} th,.${cls} td{box-sizing:border-box;padding:.28em .45em;border:1px solid rgba(127,127,127,.55);border-color:color-mix(in srgb,currentColor 32%,transparent);vertical-align:top;white-space:normal;overflow-wrap:anywhere}` +
+    `.${cls} th{position:sticky;top:0;z-index:1;background:rgba(127,127,127,.16);background:color-mix(in srgb,currentColor 12%,transparent);font-weight:600}` +
     `.${cls} tbody tr:nth-child(even){background:rgba(127,127,127,.07);background:color-mix(in srgb,currentColor 5%,transparent)}` +
     `.${cls} *:first-child{margin-top:0}.${cls} *:last-child{margin-bottom:0}` +
     `.${cls} a{color:inherit;text-decoration:underline}`;
@@ -465,10 +505,17 @@ function RichTextLayer({ layer, viewport, blockTime }: TextLayerProps) {
         {/* xmlns is required for HTML inside SVG foreignObject (see TableLayer) */}
         <div
           {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)}
+          data-squisq-text-fit="html"
+          data-squisq-base-font-size={style.fontSize}
           style={boxStyle}
+          onPointerDown={stopEmbeddedTableEvent}
+          onClick={stopEmbeddedTableEvent}
+          onWheel={stopEmbeddedTableEvent}
+          onKeyDown={stopEmbeddedTableEvent}
         >
           <style>{scopedCss}</style>
           <div
+            data-squisq-text-content="true"
             className={cls}
             aria-label={content.text}
             // Keep the foreground on the XHTML content itself. html2canvas

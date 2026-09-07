@@ -31,6 +31,10 @@ import { TeleprompterView } from './teleprompter/TeleprompterView';
 import { usePresentationModeOptional } from './presentation/PresentationMode';
 import { usePrintModeOptional } from './print/PrintMode';
 import { PrintPreview } from './print/PrintPreview';
+import {
+  SlideshowDataGridProvider,
+  SlideshowDataGridRenderer,
+} from './slideshow/SlideshowDataGrid';
 
 export interface PreviewPanelProps {
   /** Base path for resolving media URLs in DocPlayer */
@@ -446,6 +450,9 @@ export function PreviewPanel({
         onPlaybackStateChange={
           !audience && audienceWindowOpen ? handlePlaybackStateChange : undefined
         }
+        tableContentRenderer={
+          !audience && activeDisplayMode === 'slideshow' ? SlideshowDataGridRenderer : undefined
+        }
       />
     );
   };
@@ -461,7 +468,11 @@ export function PreviewPanel({
   } as const;
 
   return (
-    <>
+    <SlideshowDataGridProvider
+      doc={doc}
+      container={workspaceContainer}
+      mediaRevision={mediaRevision}
+    >
       <div
         className={`squisq-preview-container ${className || ''}`}
         data-testid="preview-panel"
@@ -498,6 +509,6 @@ export function PreviewPanel({
             presentation.popupRoot,
           )
         : null}
-    </>
+    </SlideshowDataGridProvider>
   );
 }

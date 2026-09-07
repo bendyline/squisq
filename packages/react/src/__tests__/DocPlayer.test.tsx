@@ -17,6 +17,38 @@ function minimalDoc(): Doc {
   };
 }
 
+function docWithRichSlide(): Doc {
+  return {
+    ...minimalDoc(),
+    blocks: [
+      {
+        id: 'rich-slide',
+        startTime: 0,
+        duration: 5,
+        audioSegment: 0,
+        layers: [
+          {
+            id: 'title',
+            type: 'text',
+            content: { text: 'Title', style: { fontSize: 46, color: '#fff' } },
+            position: { x: 100, y: 100, width: 900, height: 100 },
+          },
+          {
+            id: 'body',
+            type: 'text',
+            content: {
+              text: 'Body',
+              html: '<p>Body</p>',
+              style: { fontSize: 28, color: '#fff' },
+            },
+            position: { x: 100, y: 250, width: 900, height: 500 },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 function docWithPresenter(): Doc {
   return {
     ...minimalDoc(),
@@ -356,6 +388,22 @@ describe('DocPlayer smoke test', () => {
       <DocPlayer doc={minimalDoc()} basePath="/test" displayMode="slideshow" />,
     );
     expect(container.firstChild).toBeTruthy();
+  });
+
+  it('enables shared text fitting only in slideshow mode', () => {
+    const doc = docWithRichSlide();
+    const { container, rerender } = render(
+      <DocPlayer doc={doc} basePath="/test" displayMode="slideshow" />,
+    );
+    const slideSvg = container.querySelector('.doc-player__block--active svg');
+    expect(slideSvg?.getAttribute('data-squisq-text-scale')).toBe('1');
+
+    rerender(<DocPlayer doc={doc} basePath="/test" displayMode="video" />);
+    expect(
+      container
+        .querySelector('.doc-player__block--active svg')
+        ?.hasAttribute('data-squisq-text-scale'),
+    ).toBe(false);
   });
 
   it('lists block summaries and jumps to a selected slideshow block', () => {
