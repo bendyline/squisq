@@ -45,6 +45,33 @@ export interface DataCardPluginState {
   seq: number;
 }
 
+/**
+ * Decode CommonMark backslash escapes in a link destination before treating
+ * it as a container path. remark-stringify can emit `pg\\_catalog.csv`; the
+ * browser bridge intentionally preserves the raw destination on the link
+ * mark, while ContentContainer paths are canonical and contain the bare `_`.
+ */
+export function normalizeDataLinkPath(value: string): string {
+  let normalized = '';
+  for (let index = 0; index < value.length; index++) {
+    const char = value[index]!;
+    const next = value[index + 1];
+    const code = next?.charCodeAt(0) ?? -1;
+    const escapable =
+      (code >= 33 && code <= 47) ||
+      (code >= 58 && code <= 64) ||
+      (code >= 91 && code <= 96) ||
+      (code >= 123 && code <= 126);
+    if (char === '\\' && next !== undefined && escapable) {
+      normalized += next;
+      index++;
+    } else {
+      normalized += char;
+    }
+  }
+  return normalized;
+}
+
 export const DATA_CARD_KEY = new PluginKey<DataCardPluginState>('squisq-data-card');
 
 export interface DataCardExtensionOptions {
@@ -83,8 +110,9 @@ export function dataLinkHrefOf(node: PMNode): string | null {
     const link = child.marks.find((mark) => mark.type.name === 'link');
     const childHref = (link?.attrs as { href?: unknown } | undefined)?.href;
     if (typeof childHref !== 'string') return null;
-    if (href === null) href = childHref;
-    else if (href !== childHref) return null;
+    const normalizedHref = normalizeDataLinkPath(childHref);
+    if (href === null) href = normalizedHref;
+    else if (href !== normalizedHref) return null;
   }
   return href !== null && isDataFilePath(href) ? href : null;
 }

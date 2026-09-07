@@ -209,7 +209,11 @@ export function renderMarkdownBlocksHtml(nodes: readonly MarkdownBlockNode[]): s
         const tbody = body.length
           ? `<tbody>${body.map((item) => row(item.children, false)).join('')}</tbody>`
           : '';
-        return `<table>${thead}${tbody}</table>`;
+        return (
+          '<div data-squisq-table-scroll role="region" aria-label="Scrollable data table">' +
+          `<table>${thead}${tbody}</table>` +
+          '</div>'
+        );
       }
       case 'math':
         return `<pre><code>${escapeInlineHtml(node.value)}</code></pre>`;

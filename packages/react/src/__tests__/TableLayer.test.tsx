@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { TableLayer } from '../layers/TableLayer';
 import type { TableLayer as TableLayerType } from '@bendyline/squisq/schemas';
@@ -131,6 +131,19 @@ describe('TableLayer', () => {
     expect(tbody).toBeFalsy();
   });
 
+  it('handles missing runtime table arrays without crashing', () => {
+    const layer = makeTableLayer();
+    layer.content = {
+      ...layer.content,
+      headers: undefined,
+      rows: undefined,
+    } as unknown as TableLayerType['content'];
+
+    const { container } = renderTableLayer(layer);
+    expect(container.querySelectorAll('th')).toHaveLength(0);
+    expect(container.querySelector('tbody')).toBeFalsy();
+  });
+
   it('sets foreignObject dimensions based on viewport percentage', () => {
     const { container } = renderTableLayer();
     const fo = container.querySelector('foreignObject');
@@ -138,6 +151,63 @@ describe('TableLayer', () => {
     expect(fo?.getAttribute('width')).toBe('1536');
     // 80% of 1080 = 864
     expect(fo?.getAttribute('height')).toBe('864');
+  });
+
+  it('renders a top-anchored independent scroll viewport with a sticky header', () => {
+    const { container } = renderTableLayer();
+    const scrollRegion = container.querySelector<HTMLElement>('.squisq-table-scroll');
+    const table = container.querySelector<HTMLTableElement>('table');
+    const header = container.querySelector<HTMLTableCellElement>('th');
+    const cell = container.querySelector<HTMLTableCellElement>('td');
+
+    expect(scrollRegion?.getAttribute('role')).toBe('region');
+    expect(scrollRegion?.style.overflow).toBe('auto');
+    expect(scrollRegion?.style.alignItems).toBe('');
+    expect(table?.style.width).toBe('max-content');
+    expect(header?.style.position).toBe('sticky');
+    expect(header?.style.top).toBe('0px');
+    expect(cell?.style.whiteSpace).toBe('nowrap');
+    expect(cell?.textContent).toBe('Alice');
+  });
+
+  it('lets an owning block provide interactive table content with the native table as fallback', () => {
+    const renderer = vi.fn(
+      ({
+        block,
+        width,
+        height,
+        fallback,
+      }: import('../layers/TableLayer').TableLayerContentRendererProps) => (
+        <div data-testid="custom-table" data-block={block.id} data-size={`${width}x${height}`}>
+          {fallback}
+        </div>
+      ),
+    );
+    const block = {
+      id: 'data-slide',
+      startTime: 0,
+      duration: 5,
+      audioSegment: 0,
+      layers: [],
+    };
+    const { container, getByTestId } = render(
+      <svg>
+        <TableLayer
+          block={block}
+          layer={makeTableLayer()}
+          viewport={viewport}
+          blockTime={0}
+          contentRenderer={renderer}
+        />
+      </svg>,
+    );
+
+    expect(getByTestId('custom-table').dataset.block).toBe('data-slide');
+    expect(getByTestId('custom-table').dataset.size).toBe('1536x864');
+    expect(container.querySelector('table')?.textContent).toContain('Alice');
+    expect(container.querySelector<HTMLElement>('.squisq-table-scroll')?.style.overflow).toBe(
+      'hidden',
+    );
   });
 
   // `getAnimationStyle` returns `{ className, style }`. Spreading that object

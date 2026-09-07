@@ -190,6 +190,9 @@ function validateLayerContent(
     case 'table':
       requiredStringArray(content, 'headers', `${path}.headers`, issues);
       validateStringRows(content.rows, `${path}.rows`, issues);
+      optionalFiniteNumber(content, 'maxVisibleRows', `${path}.maxVisibleRows`, issues, {
+        min: 1,
+      });
       requiredRecord(content, 'style', `${path}.style`, issues);
       break;
     case 'tree':

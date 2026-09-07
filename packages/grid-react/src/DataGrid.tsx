@@ -69,6 +69,12 @@ export interface DataGridProps {
   onSave?: () => void | Promise<void>;
   saving?: boolean;
   height?: number;
+  /** Virtual row height in CSS pixels (default 28). */
+  rowHeight?: number;
+  /** Show the per-column filter controls beneath the sortable header. */
+  showFilters?: boolean;
+  /** Initial/fallback widths for columns before user resizing. */
+  defaultColumnWidths?: readonly number[];
   /** Reason editing is unavailable (e.g. parquet sidecars). */
   readOnlyReason?: string;
   /**
@@ -254,6 +260,9 @@ export function DataGrid({
   onSave,
   saving = false,
   height = DEFAULT_HEIGHT,
+  rowHeight = ROW_HEIGHT,
+  showFilters = true,
+  defaultColumnWidths,
   readOnlyReason,
   isCellLocked,
   lockedReason,
@@ -366,7 +375,7 @@ export function DataGrid({
   const virtualizer = useVirtualizer({
     count: viewRowCount,
     getScrollElement: () => bodyRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     overscan: OVERSCAN,
     // Correct first paint before the scroll element is measured — and the
     // only measurement available in layout-less environments (jsdom).
@@ -1018,9 +1027,9 @@ export function DataGrid({
     const count = schema?.columns.length ?? 0;
     return Array.from(
       { length: count },
-      (_, col) => `${colWidths[col] ?? DEFAULT_COL_WIDTH}px`,
+      (_, col) => `${colWidths[col] ?? defaultColumnWidths?.[col] ?? DEFAULT_COL_WIDTH}px`,
     ).join(' ');
-  }, [colWidths, schema]);
+  }, [colWidths, defaultColumnWidths, schema]);
 
   const range = selection ? normalizedRange(selection) : null;
   const filterValueFor = (name: string): string =>
@@ -1096,73 +1105,79 @@ export function DataGrid({
                     </span>
                   )}
                 </button>
-                <div className="squisq-grid-filterrow">
-                  {(() => {
-                    const opState = opStateFor(col, column.name);
-                    return (
-                      <>
-                        <button
-                          type="button"
-                          className={`squisq-grid-opbutton${
-                            opState.caseSensitive ? ' squisq-grid-opbutton--cs' : ''
-                          }`}
-                          aria-label={`Filter operator for ${column.name}`}
-                          aria-expanded={opMenuCol === col}
-                          title={`${
-                            opChoicesFor(column.kind).find((c) => choiceMatches(c, opState))
-                              ?.label ?? opState.op
-                          }${opState.caseSensitive ? ' (case-sensitive)' : ''}`}
-                          onClick={(event) => toggleOpMenu(col, event.currentTarget)}
-                        >
-                          <span className="squisq-grid-opglyph">
-                            {glyphFor(column.kind, opState)}
-                          </span>
-                          <span className="squisq-grid-opcaret" aria-hidden="true">
-                            ▾
-                          </span>
-                        </button>
-                        <input
-                          className="squisq-grid-filterinput"
-                          aria-label={`Filter ${column.name}`}
-                          placeholder={
-                            opState.unary
-                              ? opState.op === '='
-                                ? '(empty)'
-                                : '(not empty)'
-                              : 'filter'
-                          }
-                          disabled={opState.unary === true}
-                          value={filterValueFor(column.name)}
-                          onChange={(event) =>
-                            setColumnFilter(
-                              column.name,
-                              event.target.value,
-                              opState.op,
-                              opState.caseSensitive,
-                            )
-                          }
-                        />
-                        {provider.distinct && (
+                {showFilters && (
+                  <div className="squisq-grid-filterrow">
+                    {(() => {
+                      const opState = opStateFor(col, column.name);
+                      return (
+                        <>
                           <button
                             type="button"
-                            className="squisq-grid-valuebutton"
-                            aria-label={`Filter ${column.name} by value`}
-                            aria-expanded={valueMenuCol === col}
-                            title="Filter by value"
-                            onClick={(event) => openValueMenu(col, event.currentTarget)}
+                            className={`squisq-grid-opbutton${
+                              opState.caseSensitive ? ' squisq-grid-opbutton--cs' : ''
+                            }`}
+                            aria-label={`Filter operator for ${column.name}`}
+                            aria-expanded={opMenuCol === col}
+                            title={`${
+                              opChoicesFor(column.kind).find((c) => choiceMatches(c, opState))
+                                ?.label ?? opState.op
+                            }${opState.caseSensitive ? ' (case-sensitive)' : ''}`}
+                            onClick={(event) => toggleOpMenu(col, event.currentTarget)}
                           >
-                            ▾
+                            <span className="squisq-grid-opglyph">
+                              {glyphFor(column.kind, opState)}
+                            </span>
+                            <span className="squisq-grid-opcaret" aria-hidden="true">
+                              ▾
+                            </span>
                           </button>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
+                          <input
+                            className="squisq-grid-filterinput"
+                            aria-label={`Filter ${column.name}`}
+                            placeholder={
+                              opState.unary
+                                ? opState.op === '='
+                                  ? '(empty)'
+                                  : '(not empty)'
+                                : 'filter'
+                            }
+                            disabled={opState.unary === true}
+                            value={filterValueFor(column.name)}
+                            onChange={(event) =>
+                              setColumnFilter(
+                                column.name,
+                                event.target.value,
+                                opState.op,
+                                opState.caseSensitive,
+                              )
+                            }
+                          />
+                          {provider.distinct && (
+                            <button
+                              type="button"
+                              className="squisq-grid-valuebutton"
+                              aria-label={`Filter ${column.name} by value`}
+                              aria-expanded={valueMenuCol === col}
+                              title="Filter by value"
+                              onClick={(event) => openValueMenu(col, event.currentTarget)}
+                            >
+                              ▾
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
                 <div
                   className="squisq-grid-resizer"
                   onPointerDown={(event) => {
                     event.preventDefault();
-                    startResize(col, event.clientX, colWidths[col] ?? DEFAULT_COL_WIDTH);
+                    startResize(
+                      col,
+                      event.clientX,
+                      colWidths[col] ?? defaultColumnWidths?.[col] ?? DEFAULT_COL_WIDTH,
+                    );
                   }}
                 />
               </div>
@@ -1182,7 +1197,7 @@ export function DataGrid({
                 style={{
                   transform: `translateY(${item.start}px)`,
                   gridTemplateColumns: gridTemplate,
-                  height: ROW_HEIGHT,
+                  height: rowHeight,
                 }}
               >
                 {schema?.columns.map((column, col) => {

@@ -5,7 +5,7 @@ import { TextLayer } from '../layers/TextLayer';
 
 const viewport = { width: 1920, height: 1080 };
 
-describe('TextLayer rich text', () => {
+describe('TextLayer', () => {
   it('sets the foreground directly on foreignObject content for export', () => {
     const layer: TextLayerType = {
       id: 'formatted-list-item',
@@ -92,7 +92,7 @@ describe('TextLayer rich text', () => {
       type: 'text',
       content: {
         text: 'Summary\n\nName Value\nAlpha 100',
-        html: '<p>Summary</p><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody><tr><td>Alpha</td><td>100</td></tr></tbody></table>',
+        html: '<p>Summary</p><div data-squisq-table-scroll role="region" aria-label="Scrollable data table"><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody><tr><td>Alpha</td><td>100</td></tr></tbody></table></div>',
         style: { fontSize: 28, color: '#e2e8f0' },
       },
       position: { x: 100, y: 200, width: 900, height: 400 },
@@ -106,13 +106,60 @@ describe('TextLayer rich text', () => {
 
     expect(container.querySelectorAll('table th')).toHaveLength(2);
     expect(container.querySelectorAll('table td')).toHaveLength(2);
+    expect(container.querySelector('[data-squisq-table-scroll]')?.getAttribute('role')).toBe(
+      'region',
+    );
 
     const scopedCss = container.querySelector('style')?.textContent ?? '';
-    expect(scopedCss).toContain('table{width:100%');
-    expect(scopedCss).toContain('border-collapse:collapse');
+    expect(scopedCss).toContain('[data-squisq-table-scroll]{width:100%;max-height:20em');
+    expect(scopedCss).toContain('table{width:100%;min-width:48em');
+    expect(scopedCss).toContain('border-collapse:separate');
     expect(scopedCss).toContain('border:1px solid rgba(127,127,127,.55)');
-    expect(scopedCss).toContain('th{background:rgba(127,127,127,.16)');
+    expect(scopedCss).toContain('th{position:sticky;top:0;z-index:1');
     expect(scopedCss).toContain('tbody tr:nth-child(even)');
     expect(scopedCss).toContain('overflow-wrap:anywhere');
+  });
+
+  it('applies the slide-wide scale to rich text', () => {
+    const layer: TextLayerType = {
+      id: 'content-body',
+      type: 'text',
+      content: {
+        text: 'Short body',
+        html: '<p>Short body</p>',
+        style: { fontSize: 28, color: '#fff' },
+      },
+      position: { x: 100, y: 200, width: 900, height: 400 },
+    };
+
+    const { container } = render(
+      <svg>
+        <TextLayer layer={layer} viewport={viewport} blockTime={0} textScale={1.5} />
+      </svg>,
+    );
+    const fitBox = container.querySelector<HTMLElement>('[data-squisq-text-fit="html"]');
+    expect(fitBox?.style.fontSize).toBe('42px');
+    expect(fitBox?.dataset.squisqBaseFontSize).toBe('28');
+  });
+
+  it('applies that same scale around a plain text layer pivot', () => {
+    const layer: TextLayerType = {
+      id: 'title',
+      type: 'text',
+      content: {
+        text: 'Slide title',
+        style: { fontSize: 46, color: '#fff' },
+      },
+      position: { x: 100, y: 200, width: 900, height: 100 },
+    };
+
+    const { container } = render(
+      <svg>
+        <TextLayer layer={layer} viewport={viewport} blockTime={0} textScale={1.5} />
+      </svg>,
+    );
+    const fitGroup = container.querySelector<SVGGElement>('[data-squisq-text-fit="svg"]');
+    expect(fitGroup?.style.transform).toBe('scale(1.5)');
+    expect(fitGroup?.style.transformOrigin).toBe('100px 200px');
   });
 });

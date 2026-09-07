@@ -70,6 +70,19 @@ describe('readHeadingViewBinding', () => {
     expect(binding.params.src).toBe(HREF);
   });
 
+  it('matches an escaped generated heading src to its normalized card path', () => {
+    const href = 'pg-catalog_files/data/pg_catalog.csv';
+    const editor = makeEditor(
+      [
+        '## pg\\_catalog {[dataTable src=pg-catalog\\_files/data/pg\\_catalog.csv]}',
+        '',
+        '[pg\\_catalog.csv](pg-catalog_files/data/pg\\_catalog.csv)',
+      ].join('\n'),
+    );
+    const binding = readHeadingViewBinding(editor, cardPosOf(editor), href);
+    expect(binding.persisted).toBe(true);
+  });
+
   it('reads existing sort/filter params into the binding', () => {
     const editor = makeEditor(
       [

@@ -225,6 +225,7 @@ function DocPlayerContent({
   showCodeCopyButton = false,
   onCopyCode,
   fenceRenderers,
+  tableContentRenderer,
 }: DocPlayerContentProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
@@ -1422,6 +1423,8 @@ function DocPlayerContent({
               muted={renderMode || muted}
               animationsEnabled={animationsEnabled}
               theme={effectiveTheme}
+              tableContentRenderer={tableContentRenderer}
+              growTextToFit={isSlideshowMode}
             />
           </div>
         )}
@@ -1443,6 +1446,8 @@ function DocPlayerContent({
               muted={renderMode || muted}
               animationsEnabled={animationsEnabled}
               theme={effectiveTheme}
+              tableContentRenderer={tableContentRenderer}
+              growTextToFit={isSlideshowMode}
             />
           </div>
         )}
@@ -1482,6 +1487,8 @@ function DocPlayerContent({
               muted={renderMode || muted}
               animationsEnabled={animationsEnabled}
               theme={effectiveTheme}
+              tableContentRenderer={tableContentRenderer}
+              growTextToFit={isSlideshowMode}
             />
           </div>
         )}

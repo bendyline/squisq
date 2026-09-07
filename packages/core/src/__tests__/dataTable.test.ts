@@ -142,4 +142,30 @@ describe('dataTable template', () => {
     const tableLayer = layers.find((l) => l.type === 'table') as TableLayer;
     expect(tableLayer.content.rows).toEqual([]);
   });
+
+  it('keeps a partially resolved data-reference preview renderable', () => {
+    const layers = materializeLayers(
+      makeDataTableBlock({ headers: undefined, rows: undefined }),
+      defaultContext,
+    );
+    const tableLayer = layers.find((l) => l.type === 'table') as TableLayer;
+
+    expect(tableLayer.content.headers).toEqual([]);
+    expect(tableLayer.content.rows).toEqual([]);
+  });
+
+  it('sizes large tables for ten visible body rows while retaining the scroll data', () => {
+    const rows = Array.from({ length: 25 }, (_, index) => [`Row ${index + 1}`, `${index + 1}`]);
+    const tenRows = materializeLayers(
+      makeDataTableBlock({ rows: rows.slice(0, 10) }),
+      defaultContext,
+    );
+    const largeTable = materializeLayers(makeDataTableBlock({ rows }), defaultContext);
+    const tenRowLayer = tenRows.find((l) => l.type === 'table') as TableLayer;
+    const largeTableLayer = largeTable.find((l) => l.type === 'table') as TableLayer;
+
+    expect(largeTableLayer.content.rows).toHaveLength(25);
+    expect(largeTableLayer.content.maxVisibleRows).toBe(10);
+    expect(largeTableLayer.position.height).toBe(tenRowLayer.position.height);
+  });
 });

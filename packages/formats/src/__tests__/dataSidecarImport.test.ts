@@ -87,6 +87,23 @@ describe('xlsxToContainer', () => {
     expect(await always.exists('big_files/data/big.xlsx')).toBe(true);
   });
 
+  it('can omit sheet cover headings so the first block is a data grid', async () => {
+    const container = await xlsxToContainer(await bigWorkbook(), {
+      sourceName: 'big.xlsx',
+      sidecar: 'always',
+      sheetHeadings: false,
+    });
+    const markdown = await readDoc(container);
+    const doc = markdownToDoc(parseMarkdown(markdown));
+
+    expect(markdown).not.toMatch(/^# Data$/m);
+    expect(doc.blocks[0]?.templateOverrides).toMatchObject({
+      src: 'big_files/data/big.xlsx',
+      sheet: 'Data',
+      anchor: 'B2',
+    });
+  });
+
   it('resolves a spilled reference end-to-end through the data readers', async () => {
     const container = await xlsxToContainer(await bigWorkbook(), {
       sourceName: 'Q3 Report.xlsx',

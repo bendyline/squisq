@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 import { BlockRenderer } from '../BlockRenderer';
+import { largestFittingTextScale } from '../utils/textFit';
 import type { Block } from '@bendyline/squisq/schemas';
 
 vi.mock('mermaid', () => ({
@@ -21,6 +22,12 @@ describe('BlockRenderer', () => {
     audioSegment: 0,
     layers: [],
   };
+
+  it('chooses one shared scale up to 2x', () => {
+    expect(largestFittingTextScale((scale) => scale <= 1.63)).toBe(1.62);
+    expect(largestFittingTextScale(() => true)).toBe(2);
+    expect(largestFittingTextScale(() => false)).toBe(1);
+  });
 
   it('renders an SVG element', () => {
     const { container } = render(
@@ -135,6 +142,31 @@ describe('BlockRenderer', () => {
     );
     // Text should be rendered somewhere in the SVG
     expect(container.textContent).toContain('Hello World');
+  });
+
+  it('marks the slide for one shared text-growth pass', () => {
+    const blockWithRichText: Block = {
+      ...minimalBlock,
+      layers: [
+        {
+          type: 'text',
+          id: 'body',
+          content: {
+            text: 'Short body',
+            html: '<p>Short body</p>',
+            style: { fontSize: 28, color: '#ffffff' },
+          },
+          position: { x: 100, y: 100, width: 900, height: 500 },
+        },
+      ],
+    };
+
+    const { container } = render(
+      <BlockRenderer block={blockWithRichText} blockTime={0} basePath="/test" growTextToFit />,
+    );
+
+    expect(container.querySelector('svg')?.dataset.squisqTextScale).toBe('1');
+    expect(container.querySelector('[data-squisq-text-fit="html"]')).not.toBeNull();
   });
 
   it('renders shape layers', () => {

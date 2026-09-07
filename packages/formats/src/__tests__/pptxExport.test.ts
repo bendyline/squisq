@@ -556,6 +556,34 @@ describe('docToPptx slideshow parity', () => {
     expect(size.getAttribute('cy')).toBe('6858000');
     expect(size.getAttribute('type')).toBe('screen16x9');
   });
+
+  it('exports the initial ten-row view of a scrollable data table', async () => {
+    const rows = Array.from({ length: 12 }, (_, index) => [
+      index === 9 ? 'VISIBLE_TENTH_ROW' : index === 10 ? 'HIDDEN_ELEVENTH_ROW' : `Row ${index + 1}`,
+      String(index + 1),
+    ]);
+    const doc = {
+      articleId: 'large-table-window',
+      duration: 5,
+      audio: { segments: [{ src: '', name: 'preview', duration: 5, startTime: 0 }] },
+      blocks: [
+        {
+          id: 'table',
+          template: 'dataTable',
+          title: 'Large table',
+          headers: ['Name', 'Value'],
+          rows,
+          startTime: 0,
+          duration: 5,
+          audioSegment: 0,
+        },
+      ],
+    } as unknown as Doc;
+
+    const [slideText] = await pptxSlideTexts(await docToPptx(doc, { includeCoverSlide: false }));
+    expect(slideText).toContain('VISIBLE_TENTH_ROW');
+    expect(slideText).not.toContain('HIDDEN_ELEVENTH_ROW');
+  });
 });
 
 // ============================================

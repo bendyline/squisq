@@ -49,6 +49,7 @@ import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { useEditorContext } from './EditorContext';
 import { templateLabel } from './TemplatePicker';
 import { useHeadingLayout } from './useHeadingLayout';
+import { usePreviewProjection } from './usePreviewProjection';
 
 // ── Helpers (mirrored from LinearDocView; kept local to avoid cross-package
 // churn — extract to a shared module if a fourth copy appears) ────────────
@@ -306,7 +307,9 @@ export function InlinePreviewGutter({
   connectorWidth = 24,
   mediaProvider = null,
 }: InlinePreviewGutterProps) {
-  const { doc } = useEditorContext();
+  const { doc, workspaceContainer, fileName, mediaRevision } = useEditorContext();
+  const projection = usePreviewProjection(doc, '', workspaceContainer, fileName, mediaRevision);
+  const previewDoc = projection?.contentDoc ?? doc;
   const gutterRef = useRef<HTMLElement | null>(null);
   const { entries: headingEntries, scrollToBlock } = useHeadingLayout(gutterRef);
   // Follow the document's active theme so the mini cards reflect the
@@ -320,8 +323,8 @@ export function InlinePreviewGutter({
 
   // Build the renderable PreviewItem list (just for annotated blocks).
   const items = useMemo<PreviewItem[]>(() => {
-    if (!doc || !doc.blocks.length) return [];
-    const flat = flattenBlocks(doc.blocks);
+    if (!previewDoc || !previewDoc.blocks.length) return [];
+    const flat = flattenBlocks(previewDoc.blocks);
     const totalBlocks = flat.length;
     const result: PreviewItem[] = [];
 
@@ -348,6 +351,10 @@ export function InlinePreviewGutter({
           block.contents,
           collectImagesDeep(block),
         ),
+        // Async sidecar resolution stores its bounded table window here.
+        // Forward it before authored params/overrides so document-mode cards
+        // render the same CSV/XLSX data as block and full-preview modes.
+        ...block.templateData,
         ...annotation.params,
         ...block.templateOverrides,
       };
@@ -357,7 +364,7 @@ export function InlinePreviewGutter({
         totalBlocks,
         theme: activeTheme,
         viewport,
-        customTemplates: doc.customTemplates,
+        customTemplates: previewDoc.customTemplates,
       };
 
       try {
@@ -380,7 +387,7 @@ export function InlinePreviewGutter({
     });
 
     return result;
-  }, [doc, viewport, activeTheme]);
+  }, [previewDoc, viewport, activeTheme]);
 
   // Heading top per item id — derived from the layout hook. The connector
   // dot tracks this even when stacking pushes the card below.

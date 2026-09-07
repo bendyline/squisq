@@ -105,6 +105,25 @@ describe('ShapeLayer fill/border', () => {
     expect(rect.getAttribute('height')).toBe('1002');
   });
 
+  it('keeps decorative shapes from shielding interactive layers below them', () => {
+    const { container } = render(
+      <svg>
+        <ShapeLayer
+          layer={makeFullBleedShape({
+            fill: '#000000',
+            filter: { type: 'noise', opacity: 0.04 },
+          })}
+          viewport={viewport}
+          blockTime={0}
+        />
+      </svg>,
+    );
+
+    expect(container.querySelector('g.block-layer--shape')?.getAttribute('pointer-events')).toBe(
+      'none',
+    );
+  });
+
   it('overscans a full-bleed CSS gradient shade and its HTML fill', () => {
     const { container } = render(
       <svg>

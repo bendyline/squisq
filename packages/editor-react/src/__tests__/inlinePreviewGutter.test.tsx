@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { EditorProvider } from '../EditorContext';
 import { InlinePreviewGutter } from '../InlinePreviewGutter';
 
@@ -58,5 +59,35 @@ describe('InlinePreviewGutter', () => {
     // Templates render their human-readable label (via `templateLabel`).
     expect(labels).toContain('Title');
     expect(labels).toContain('Stat Highlight');
+  });
+
+  it('renders rows resolved from a data sidecar', async () => {
+    const sidecar = 'report_files/data/report.csv';
+    const container = new MemoryContentContainer();
+    await container.writeFile(
+      sidecar,
+      new TextEncoder().encode('Name,Value\nAlpha,100\nBeta,200\n'),
+      'text/csv',
+    );
+    const markdown = [`# Report {[dataTable src=${sidecar}]}`, '', `[report.csv](${sidecar})`].join(
+      '\n',
+    );
+
+    const { container: rendered } = render(
+      <EditorProvider
+        initialMarkdown={markdown}
+        initialView="wysiwyg"
+        articleId="report"
+        workspaceContainer={container}
+        fileName="report_files/report.md"
+      >
+        <InlinePreviewGutter />
+      </EditorProvider>,
+    );
+
+    await waitFor(() => {
+      expect(rendered.querySelector('th')?.textContent).toBe('Name');
+      expect(rendered.querySelector('td')?.textContent).toBe('Alpha');
+    });
   });
 });

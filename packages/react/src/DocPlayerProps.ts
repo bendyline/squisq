@@ -4,6 +4,7 @@ import type { CoverSlidePlayback, CoverSlideTemplate } from '@bendyline/squisq/d
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
 import type { AudioController } from './hooks/AudioController';
 import type { CodeBlockCopyHandler } from './MarkdownRenderer';
+import type { TableLayerContentRenderer } from './layers/TableLayer';
 import type {
   BlockMarker,
   CaptionPosition,
@@ -101,4 +102,6 @@ export interface DocPlayerProps {
    * as SVG layers and do not consult it.
    */
   fenceRenderers?: FenceRendererMap;
+  /** Optional host renderer for interactive table-layer content. */
+  tableContentRenderer?: TableLayerContentRenderer;
 }

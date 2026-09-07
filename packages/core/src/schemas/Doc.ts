@@ -702,6 +702,8 @@ export interface TableLayer extends BaseLayer {
     headers: string[];
     /** Data rows (array of cell value arrays) */
     rows: string[][];
+    /** Maximum body rows intended to be visible before the table scrolls. */
+    maxVisibleRows?: number;
     /** Per-column alignment */
     align?: (('left' | 'right' | 'center') | null)[];
     /** Visual styling */
