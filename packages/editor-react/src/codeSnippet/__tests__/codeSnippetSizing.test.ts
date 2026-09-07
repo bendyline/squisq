@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { CODE_SNIPPET_LINE_HEIGHT, codeSnippetAutoHeight } from '../codeSnippetSizing';
 
 describe('codeSnippetAutoHeight', () => {
-  it('fits an empty or one-line snippet with one extra line', () => {
-    expect(codeSnippetAutoHeight('')).toBe(96);
-    expect(codeSnippetAutoHeight('const answer = 42;')).toBe(96);
+  it('fits an empty or one-line snippet with no spare trailing line', () => {
+    expect(codeSnippetAutoHeight('')).toBe(76);
+    expect(codeSnippetAutoHeight('const answer = 42;')).toBe(76);
   });
 
   it('adds one Monaco line-height for each physical source line', () => {
