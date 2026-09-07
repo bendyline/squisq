@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.11.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.1...@bendyline/squisq@2.11.2) (2026-09-07)
+
+### Bug Fixes
+
+* Text fixes ([#58](https://github.com/bendyline/squisq/issues/58)) ([202e1e7](https://github.com/bendyline/squisq/commit/202e1e79077975723e2f802f4ad197a0daee6d91))
+
 ## @bendyline/squisq [2.11.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.0...@bendyline/squisq@2.11.1) (2026-09-04)
 
 ### Bug Fixes
