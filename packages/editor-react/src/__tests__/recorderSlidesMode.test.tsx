@@ -233,6 +233,39 @@ describe('RecorderModal — slide timing capture', () => {
     return JSON.parse(new TextDecoder().decode(bytes!)) as NarrationTimingJsonV3;
   }
 
+  it('downloads the observed slide timings with a stable matching media filename', async () => {
+    renderDialog();
+    await recordWithAdvances();
+    const recording = screen.getByRole('link', { name: 'Download recording' });
+    const timingLink = screen.getByRole('link', { name: 'Download recording timings' });
+    const name = recording.getAttribute('download');
+    expect(timingLink.getAttribute('download')).toBe(name + '.timing.json');
+    const blobs = vi.mocked(URL.createObjectURL).mock.calls.map(([blob]) => blob);
+    const timingBlob = blobs.find(
+      (blob) => blob instanceof Blob && blob.type === 'application/json',
+    ) as Blob;
+    expect(timingBlob).toBeTruthy();
+    vi.useRealTimers();
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(timingBlob);
+    });
+    const timing = JSON.parse(text) as NarrationTimingJsonV3;
+    expect(timing.blocks.map((b) => [b.startSec, b.endSec])).toEqual([
+      [0, 10],
+      [10, 22],
+      [22, 30],
+    ]);
+    vi.useFakeTimers();
+    await advanceClock(5_000);
+    fireEvent.timeUpdate(document.querySelector('audio')!, { target: { currentTime: 10 } });
+    expect(recording.getAttribute('download')).toBe(name);
+    expect(timingLink.getAttribute('download')).toBe(name + '.timing.json');
+    expect(mediaProvider.addMedia).not.toHaveBeenCalled();
+  });
+
   it('writes a v3 sidecar whose ranges match where the presenter advanced', async () => {
     renderDialog();
     await recordWithAdvances();

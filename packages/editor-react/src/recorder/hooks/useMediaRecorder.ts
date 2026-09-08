@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { resolveMaxRecordingBytes } from '../recordingLimits.js';
 import {
   resolveFormat,
   supportsMediaRecorder,
@@ -74,6 +75,12 @@ export interface RecorderCameraLane {
 }
 
 export interface UseMediaRecorderOptions {
+  /**
+   * Combined byte threshold for automatically stopping every capture lane.
+   * Defaults to 90 MiB. Browser chunk delivery can be delayed, so the final
+   * blobs may exceed this threshold; all bytes are retained for recovery.
+   */
+  maxRecordingBytes?: number;
   /** Which capture pipeline to use (default: `'mic'`). */
   source?: RecorderSource;
   /**
@@ -136,6 +143,12 @@ export interface UseMediaRecorderOptions {
 }
 
 export interface UseMediaRecorderResult {
+  /** Bytes received across all capture lanes, including the final flush. */
+  recordedBytes: number;
+  /** Effective byte threshold for this recorder. */
+  maxRecordingBytes: number;
+  /** Whether the recorder automatically stopped after reaching its byte threshold. */
+  limitReached: boolean;
   /** Current recorder state. */
   state: RecorderState;
   /** `MediaStream` acquired by `request()`; live during preview/recording and
@@ -347,6 +360,9 @@ export function getCaptureKind(source: RecorderSource): CaptureKind {
 
 export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMediaRecorderResult {
   const [state, setState] = useState<RecorderState>('idle');
+  const [recordedBytes, setRecordedBytes] = useState(0);
+  const [limitReached, setLimitReached] = useState(false);
+  const recordedBytesRef = useRef(0);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [blob, setBlob] = useState<Blob | null>(null);
   const [format, setFormat] = useState<ResolvedFormat | null>(null);
@@ -455,7 +471,29 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
     setCameraOffsetSec(null);
   }, []);
 
+  const resetByteCount = useCallback(() => {
+    recordedBytesRef.current = 0;
+    setRecordedBytes(0);
+    setLimitReached(false);
+  }, []);
+
+  const recordChunk = useCallback((data: Blob, chunks: Blob[]) => {
+    if (data.size === 0) return;
+    // Retain the complete encoder output, including every final flush chunk.
+    chunks.push(data);
+    recordedBytesRef.current += data.size;
+    setRecordedBytes(recordedBytesRef.current);
+    if (
+      stateRef.current === 'recording' &&
+      recordedBytesRef.current >= resolveMaxRecordingBytes(optionsRef.current.maxRecordingBytes)
+    ) {
+      setLimitReached(true);
+      void stopFnRef.current?.();
+    }
+  }, []);
+
   const reset = useCallback(() => {
+    resetByteCount();
     setBlob(null);
     setDurationMs(0);
     setError(null);
@@ -478,9 +516,10 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
     } else {
       cancelFnRef.current?.();
     }
-  }, [clearTicker, transition]);
+  }, [clearTicker, resetByteCount, transition]);
 
   const cancel = useCallback(() => {
+    resetByteCount();
     lifecycleRef.current += 1;
     const rec = recorderRef.current;
     if (rec && rec.state !== 'inactive') {
@@ -508,7 +547,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
     setDurationMs(0);
     setError(null);
     transition('idle');
-  }, [clearTicker, releaseStream, releaseSecondary, transition]);
+  }, [clearTicker, releaseStream, releaseSecondary, resetByteCount, transition]);
 
   const request = useCallback(async () => {
     if (requestPromiseRef.current) return requestPromiseRef.current;
@@ -630,7 +669,8 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
           };
 
           primary.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+            if (lifecycle !== lifecycleRef.current || recorderRef.current !== primary) return;
+            if (e.data) recordChunk(e.data, chunksRef.current);
           };
           primary.onstart = () => {
             primaryStartMsRef.current = performance.now();
@@ -639,7 +679,9 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
           primary.onerror = (e) => laneError(primary, e);
 
           secondary.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) secondaryRef.current?.chunks.push(e.data);
+            const lane = secondaryRef.current;
+            if (lifecycle !== lifecycleRef.current || lane?.recorder !== secondary) return;
+            if (e.data) recordChunk(e.data, lane.chunks);
           };
           secondary.onstart = () => {
             secondaryStartMsRef.current = performance.now();
@@ -694,7 +736,8 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
         const recorder = new MediaRecorder(nextStream, recorderOptions);
 
         recorder.ondataavailable = (e) => {
-          if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+          if (lifecycle !== lifecycleRef.current || recorderRef.current !== recorder) return;
+          if (e.data) recordChunk(e.data, chunksRef.current);
         };
         recorder.onstop = () => {
           if (recorderRef.current !== recorder || lifecycle !== lifecycleRef.current) return;
@@ -756,7 +799,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
     })();
     requestPromiseRef.current = requestPromise;
     return requestPromise;
-  }, [clearTicker, deactivateCapture, transition]);
+  }, [clearTicker, deactivateCapture, recordChunk, transition]);
 
   const start = useCallback(() => {
     const rec = recorderRef.current;
@@ -767,6 +810,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
       return;
     }
     if (rec.state === 'recording') return;
+    resetByteCount();
     chunksRef.current = [];
     if (secondaryRef.current) secondaryRef.current.chunks = [];
     setBlob(null);
@@ -809,7 +853,7 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
         setDurationMs(Date.now() - startTimestampRef.current);
       }
     }, 100);
-  }, [clearTicker, deactivateCapture, transition]);
+  }, [clearTicker, deactivateCapture, resetByteCount, transition]);
 
   /**
    * Exact take-relative elapsed time, for stamping an event as it happens.
@@ -833,6 +877,10 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
       return Promise.resolve(blob);
     }
     transition('stopping');
+    clearTicker();
+    if (startTimestampRef.current !== null) {
+      setDurationMs(Math.max(0, Date.now() - startTimestampRef.current));
+    }
     const secondary = secondaryRef.current;
     const secondaryActive = secondary != null && secondary.recorder.state !== 'inactive';
     pendingLanesRef.current = secondaryActive ? 2 : 1;
@@ -909,6 +957,9 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
   }, [releaseStream, releaseSecondary, clearTicker]);
 
   return {
+    recordedBytes,
+    maxRecordingBytes: resolveMaxRecordingBytes(options.maxRecordingBytes),
+    limitReached,
     state,
     stream,
     blob,

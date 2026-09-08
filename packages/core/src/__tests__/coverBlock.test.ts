@@ -154,6 +154,47 @@ describe('coverBlock without hero image', () => {
     expect(subtitle!.position.y).not.toBe('82%');
   });
 
+  // The accent rule sat at a fixed 42%/58% slot and ran through the second
+  // line of a wrapped title. It now hangs from the title's estimated bottom
+  // edge, and with a subtitle stays above the subtitle's top edge.
+  describe('accent rule clears a wrapped title', () => {
+    const longTitle = 'Everything You Need to Know about Local Models';
+    const pct = (v: string | number | undefined) => parseFloat(String(v));
+    const titleBottom = (layers: ReturnType<typeof coverBlock>) => {
+      const title = findText(layers, 'cover-title')!;
+      const lines = Math.ceil(
+        longTitle.length / Math.floor((1920 * 0.8) / (title.content.style.fontSize * 0.52)),
+      );
+      return (
+        pct(title.position.y) + ((lines * title.content.style.fontSize * 1.4) / 2 / 1080) * 100
+      );
+    };
+
+    it('sits below the title when there is no subtitle', () => {
+      const layers = coverBlock({ title: longTitle }, landscapeContext);
+      const accent = findShape(layers, 'cover-accent')!;
+      expect(pct(accent.position.y)).toBeGreaterThan(titleBottom(layers));
+    });
+
+    it('sits between the title and the subtitle', () => {
+      const layers = coverBlock({ title: longTitle, subtitle: 'A field guide' }, landscapeContext);
+      const accent = findShape(layers, 'cover-accent')!;
+      const subtitle = findText(layers, 'cover-subtitle')!;
+      const subtitleTop =
+        pct(subtitle.position.y) - ((subtitle.content.style.fontSize * 1.5) / 2 / 1080) * 100;
+      expect(pct(accent.position.y)).toBeGreaterThanOrEqual(titleBottom(layers));
+      expect(pct(accent.position.y)).toBeLessThan(subtitleTop);
+    });
+
+    it('a short title keeps the rule clear of its descenders', () => {
+      const layers = coverBlock({ title: 'Short' }, landscapeContext);
+      const accent = findShape(layers, 'cover-accent')!;
+      const title = findText(layers, 'cover-title')!;
+      const oneLineBottom = 50 + ((title.content.style.fontSize * 1.4) / 2 / 1080) * 100;
+      expect(pct(accent.position.y)).toBeGreaterThan(oneLineBottom);
+    });
+  });
+
   it('uses high-contrast Standard Light cover text', () => {
     const layers = coverBlock(input, landscapeContext);
     const title = findText(layers, 'cover-title');

@@ -3,7 +3,7 @@
  *
  * The graceful-degradation guarantee: a block whose template can't render —
  * unknown template name, template function threw, or returned a non-array —
- * still renders its heading and body text as a plain, readable card instead
+ * still renders its heading and body text as a plain, left-aligned card instead
  * of a blank slide. A small notice line names the problem so authors (and
  * agents reviewing screenshots) can see *why* the block degraded.
  *
@@ -60,7 +60,7 @@ export function fallbackBlockLayers(
           fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: colors.text,
-          textAlign: 'center',
+          textAlign: 'left',
         },
       },
       position: {
@@ -82,7 +82,7 @@ export function fallbackBlockLayers(
           fontSize: themedFontSize(28, context),
           fontFamily: getThemeFont(context, 'body'),
           color: colors.text,
-          textAlign: 'center',
+          textAlign: 'left',
         },
       },
       position: {

@@ -431,6 +431,12 @@ export interface ListBlockInput extends BaseTemplateBlock {
   template: 'list';
   /** List items (3-5 recommended) */
   items: string[];
+  /**
+   * Whether the source list was numbered. Unordered Markdown lists render
+   * bullet markers; ordered lists (and legacy inputs that omit the flag)
+   * render `1.` `2.` … markers.
+   */
+  ordered?: boolean;
   /** Optional header above the list */
   title?: string;
   /** Color scheme for numbering accents */
@@ -587,8 +593,12 @@ export interface PullQuoteInput extends BaseTemplateBlock {
   text: string;
   /** Optional attribution */
   attribution?: string;
-  /** Background image (fills entire viewport) */
-  backgroundImage: { src: string; alt: string; credit?: string; license?: string };
+  /**
+   * Background image (fills entire viewport). Derived from the first image
+   * in a Markdown body; when absent the quote renders on a theme surface
+   * instead of the template producing a blank slide.
+   */
+  backgroundImage?: { src: string; alt: string; credit?: string; license?: string };
   /** Ambient motion for background image */
   ambientMotion?: 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight';
 }
@@ -632,13 +642,18 @@ export interface VideoPullQuoteInput extends BaseTemplateBlock {
   text: string;
   /** Optional attribution */
   attribution?: string;
-  /** Background video clip */
-  backgroundVideo: {
+  /**
+   * Background video clip. Derived from the first `<video>`/`.mp4` link in a
+   * Markdown body; when absent the quote renders on a theme surface instead
+   * of the template producing a blank slide. Clip bounds default like
+   * {@link VideoWithCaptionInput}: start 0, end at the block duration.
+   */
+  backgroundVideo?: {
     src: string;
     posterSrc?: string;
     alt: string;
-    clipStart: number;
-    clipEnd: number;
+    clipStart?: number;
+    clipEnd?: number;
     credit?: string;
     license?: string;
   };

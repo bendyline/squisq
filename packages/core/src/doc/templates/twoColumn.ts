@@ -5,6 +5,10 @@
  * Each column has a label and optional sublabel.
  * Adapts font sizes and positioning for different viewports.
  *
+ * The header (spanning both panels) stays centred; inside each panel the
+ * label and sublabel are left-aligned and share a left edge — a sublabel
+ * is usually a sentence or two, and centred prose reads as a ragged blob.
+ *
  * Portrait mode: Stacks columns vertically (top/bottom) instead of side-by-side.
  *
  * This is shared code used by both site and efb-app doc renderers.
@@ -21,6 +25,7 @@ import {
 } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { getTwoColumnPositions } from '../../schemas/LayoutStrategy.js';
+import { fitProse } from './captionUtils.js';
 
 export function twoColumn(input: TwoColumnInput, context: TemplateContext): Layer[] {
   const { left, right, header, leftColor = 'green', rightColor = 'blue' } = input;
@@ -91,25 +96,48 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
     });
   }
 
-  // Header position adjusts based on layout — always clear of the panels.
-  const headerY = isStacked ? '8%' : '12%';
-
-  // Add header if provided
+  // Add header if provided. It wraps inside the band above the panels and
+  // steps its type down for a long heading, so it never runs off the frame
+  // (an unbounded centre-anchored line did). The measured block is centred
+  // in the band so a short header keeps its familiar position.
   if (header) {
+    const { viewport } = context;
+    const bandTopPct = isStacked ? 3 : 4;
+    const bandBottomPct = isStacked ? 13 : panelTop - 2;
+    const bandWidthPct = 90;
+    const headerLineHeight = 1.2;
+    const headerFit = fitProse({
+      text: header,
+      baseFontSize: headerFontSize,
+      minFontSize: themedFontSize(22, context, true),
+      maxWidthPx: (bandWidthPct / 100) * viewport.width,
+      maxHeightPx: ((bandBottomPct - bandTopPct) / 100) * viewport.height,
+      lineHeight: headerLineHeight,
+    });
+    const headerHeightPct = (headerFit.heightPx / viewport.height) * 100;
+    const headerTopPct =
+      bandTopPct + Math.max(0, (bandBottomPct - bandTopPct - headerHeightPct) / 2);
     layers.push({
       type: 'text',
       id: 'header',
       content: {
         text: header,
         style: {
-          fontSize: headerFontSize,
+          fontSize: headerFit.fontSize,
           fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: theme.colors.text,
           textAlign: 'center',
+          lineHeight: headerLineHeight,
+          ...(headerFit.maxLines ? { maxLines: headerFit.maxLines } : {}),
         },
       },
-      position: { x: '50%', y: headerY, anchor: 'center' },
+      position: {
+        x: `${(100 - bandWidthPct) / 2}%`,
+        y: `${headerTopPct}%`,
+        width: `${bandWidthPct}%`,
+        anchor: 'top-left',
+      },
       animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 0.8 }),
     });
   }
@@ -146,7 +174,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         fontFamily: getThemeFont(context, 'body'),
         fontWeight: 'bold',
         color: leftColors.text,
-        textAlign: 'center',
+        textAlign: 'left',
         lineHeight: 1.3,
       },
     },
@@ -169,7 +197,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
           fontSize: sublabelFontSize,
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
-          textAlign: 'center',
+          textAlign: 'left',
           lineHeight: 1.4,
         },
       },
@@ -222,7 +250,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         fontFamily: getThemeFont(context, 'body'),
         fontWeight: 'bold',
         color: rightColors.text,
-        textAlign: 'center',
+        textAlign: 'left',
         lineHeight: 1.3,
       },
     },
@@ -245,7 +273,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
           fontSize: sublabelFontSize,
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
-          textAlign: 'center',
+          textAlign: 'left',
           lineHeight: 1.4,
         },
       },

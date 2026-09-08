@@ -36,6 +36,7 @@
     "playwright:install": "node scripts/ensure-playwright-browsers.mjs",
     "test:published": "vitest run --config vitest.published.config.ts",
     "screenshots:templates": "node scripts/generate-template-screenshots.mjs",
+    "screenshots:swatches": "tsx scripts/generate-swatches.ts",
     "site": "npm run dev",
     "dev": "npm run build:dev && node scripts/run-dev.mjs",
     "dev:site": "npm run dev -w squisq-site",

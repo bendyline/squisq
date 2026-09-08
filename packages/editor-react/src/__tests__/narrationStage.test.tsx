@@ -7,7 +7,7 @@
  * `showCameraToggleInRecordSlot`) suppress exactly the chrome the Record
  * media dialog replaces with its own.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
@@ -91,6 +91,9 @@ function stubRecorder(state: NarrationRecorderState): NarrationRecorderControlle
   return {
     state,
     error: null,
+    recordedBytes: 0,
+    maxRecordingBytes: 90 * 1024 * 1024,
+    limitReached: false,
     withCamera: false,
     setWithCamera: vi.fn(),
     cameraStream: null,
@@ -121,8 +124,18 @@ function stubHandle(overrides: Partial<NarrationStageHandle> = {}): NarrationSta
   };
 }
 
+beforeEach(() => {
+  let nextUrl = 0;
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true,
+    value: vi.fn(() => 'blob:narration-backup-' + nextUrl++),
+  });
+  Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
+});
+
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 describe('NarrationStage', () => {
@@ -211,8 +224,45 @@ describe('NarrationStage', () => {
 
     expect(screen.getByTestId('teleprompter-review')).toBeTruthy();
     expect(screen.getByRole('button', { name: '✓ Save narration' })).toBeTruthy();
+    expect(
+      screen.getByRole('link', { name: 'Download audio backup' }).getAttribute('download'),
+    ).toBe('narration.webm');
+    expect(
+      screen.getByRole('link', { name: 'Download timing backup' }).getAttribute('download'),
+    ).toBe('narration.webm.timing.json');
     expect(screen.getByRole('button', { name: '↺ Retake' })).toBeTruthy();
     expect(screen.getByRole('button', { name: '✕ Discard' })).toBeTruthy();
+  });
+
+  it('retains complete download links after a save failure and releases them on unmount', () => {
+    const handle = stubHandle();
+    handle.recorder = {
+      ...stubRecorder('review'),
+      error: new Error('Filesystem payload exceeds the limit'),
+      limitReached: true,
+      take: {
+        audioBlob: new Blob(['audio']),
+        audioMime: 'audio/webm',
+        audioExt: '.webm',
+        cameraBlob: new Blob(['camera']),
+        cameraMime: 'video/webm',
+        cameraExt: '.webm',
+        durationSec: 30,
+        cameraOffsetSec: 0.2,
+        trace: { samples: [] },
+        alignment: null,
+        script,
+      },
+    };
+    const { unmount } = render(<NarrationStage stage={handle} theme={DEFAULT_THEME} />);
+    expect(screen.getByRole('alert').textContent).toContain('Download a backup before leaving');
+    expect(screen.getByText(/Recording stopped at the 90.0 MiB size limit/)).toBeTruthy();
+    const camera = screen.getByRole('link', { name: 'Download camera backup' });
+    expect(camera.getAttribute('download')).toBe('narration-camera.webm');
+    expect(URL.createObjectURL).toHaveBeenCalledWith(handle.recorder.take?.cameraBlob);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(3);
   });
 
   it('showReviewActions={false} keeps the take info but drops the buttons', () => {
@@ -235,6 +285,8 @@ describe('NarrationStage', () => {
     };
     render(<NarrationStage stage={handle} theme={DEFAULT_THEME} showReviewActions={false} />);
 
+    expect(screen.getByRole('link', { name: 'Download audio backup' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Download timing backup' })).toBeTruthy();
     // The bar (take info + prompter-scrubbing playback) survives for hosts
     // that render Save/Retake in their own action row.
     expect(screen.getByTestId('teleprompter-review')).toBeTruthy();

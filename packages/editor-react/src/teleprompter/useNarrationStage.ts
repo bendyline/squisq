@@ -51,6 +51,8 @@ export interface UseNarrationStageOptions {
   micConstraints?: MediaTrackConstraints;
   /** Constraints for the optional narration camera lane. */
   cameraConstraints?: MediaTrackConstraints;
+  /** Combined narration audio/camera soft stop threshold, in bytes. */
+  maxRecordingBytes?: number;
   /** MediaRecorder hints for the narration audio file. */
   audioRecorderOptions?: NarrationMediaRecorderOptions;
   /** MediaRecorder hints for the optional narration camera file. */
@@ -87,6 +89,7 @@ export function useNarrationStage(opts: UseNarrationStageOptions): NarrationStag
     getWordPos: () => controllerRef.current.wordPos,
     getMicDeviceId: () => controllerRef.current.prefs.micDeviceId,
     cameraConstraints: opts.cameraConstraints,
+    maxRecordingBytes: opts.maxRecordingBytes,
     audioRecorderOptions: opts.audioRecorderOptions,
     cameraRecorderOptions: opts.cameraRecorderOptions,
     onRecordingStart: () => controllerRef.current.play(),

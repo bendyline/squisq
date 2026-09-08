@@ -158,6 +158,76 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     });
   });
 
+  it('keeps a failed save playable and downloadable without writing another asset', async () => {
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockResolvedValue(
+      new FakeStream([new FakeTrack('video'), new FakeTrack('audio')]) as unknown as MediaStream,
+    );
+    const failingProvider = fakeMediaProvider();
+    vi.mocked(failingProvider.addMedia).mockRejectedValue(
+      new Error('Filesystem payload exceeds the limit'),
+    );
+    const onClose = vi.fn();
+    render(
+      <RecorderModal initialMode="camera" mediaProvider={failingProvider} onClose={onClose} />,
+    );
+    await recordATake();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save to document' }));
+    });
+    expect(screen.getByRole('alert').textContent).toContain('Download a copy before closing');
+    const download = screen.getByRole('link', { name: 'Download recording' });
+    expect(download.getAttribute('href')).toBe('blob:take');
+    expect(download.getAttribute('download')).toMatch(/\.webm$/);
+    expect(document.querySelector('video[src="blob:take"]')).not.toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(failingProvider.addMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires confirmation to close an unsaved take and preserves downloads when cancelled', async () => {
+    const onClose = vi.fn();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<RecorderModal mediaProvider={mediaProvider} onClose={onClose} />);
+    await recordATake();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: 'Download recording' })).toBeTruthy();
+    confirm.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('does not ask to discard after a successful save', async () => {
+    const confirm = vi.spyOn(window, 'confirm');
+    const onClose = vi.fn();
+    render(<RecorderModal initialMode="camera" mediaProvider={mediaProvider} onClose={onClose} />);
+    await recordATake();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save to document' }));
+    });
+    expect(confirm).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('offers both camera and screen recordings for download', async () => {
+    render(
+      <RecorderModal initialMode="screen+camera" mediaProvider={mediaProvider} onClose={vi.fn()} />,
+    );
+    fireEvent.change(screen.getByLabelText('Filename (optional)'), { target: { value: 'backup' } });
+    await recordATake();
+    expect(
+      screen.getByRole('link', { name: 'Download screen recording' }).getAttribute('download'),
+    ).toBe('backup-screen.webm');
+    expect(
+      screen.getByRole('link', { name: 'Download camera recording' }).getAttribute('download'),
+    ).toBe('backup-camera.webm');
+  });
+
+  it('displays the default recording stop threshold before capture begins', () => {
+    render(<RecorderModal mediaProvider={mediaProvider} onClose={vi.fn()} />);
+    expect(screen.getByText(/Automatically stops at 900.0 MiB total/)).toBeTruthy();
+  });
+
   it('locks the capture-source toggles while an unsaved take is in review', async () => {
     render(<RecorderModal mediaProvider={mediaProvider} onClose={vi.fn()} />);
 

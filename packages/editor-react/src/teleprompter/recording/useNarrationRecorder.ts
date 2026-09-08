@@ -22,6 +22,7 @@ import {
   type NarrationTrace,
 } from '@bendyline/squisq/narration';
 import { resolveFormat } from '../../recorder/formats';
+import { resolveMaxRecordingBytes } from '../../recorder/recordingLimits';
 import { requestCameraStream } from '../../recorder/sources/cameraStream';
 import type { RecorderExtendedMediaOptions } from '../../recorder/hooks/useMediaRecorder';
 import type { MicAnalysisHandle } from '../useMicAnalysis';
@@ -63,6 +64,8 @@ export interface UseNarrationRecorderOptions {
   audioRecorderOptions?: NarrationMediaRecorderOptions;
   /** MediaRecorder hints for the camera companion file. */
   cameraRecorderOptions?: NarrationMediaRecorderOptions;
+  /** Combined audio/camera soft stop threshold; defaults to 90 MiB. Final chunks are retained. */
+  maxRecordingBytes?: number;
   /** Fired when capture actually starts (View starts the prompter). */
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
@@ -71,6 +74,9 @@ export interface UseNarrationRecorderOptions {
 export interface NarrationRecorderController {
   state: NarrationRecorderState;
   error: Error | null;
+  recordedBytes: number;
+  maxRecordingBytes: number;
+  limitReached: boolean;
   withCamera: boolean;
   setWithCamera: (on: boolean) => void;
   /** Live camera stream for the self-view while recording. */
@@ -102,6 +108,8 @@ interface ActiveCapture {
   startedAtMs: number;
   audioStartMs: number | null;
   cameraStartMs: number | null;
+  recordedBytes: number;
+  limitReached: boolean;
 }
 
 /** Average all channels into a mono Float32Array. */
@@ -147,6 +155,10 @@ export function useNarrationRecorder(
 ): NarrationRecorderController {
   const [state, setState] = useState<NarrationRecorderState>('idle');
   const [error, setError] = useState<Error | null>(null);
+  const [recordedBytes, setRecordedBytes] = useState(0);
+  const [limitReached, setLimitReached] = useState(false);
+  const maxRecordingBytes = resolveMaxRecordingBytes(options.maxRecordingBytes);
+  const stopRef = useRef<() => Promise<void>>(async () => {});
   const [withCamera, setWithCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [take, setTake] = useState<NarrationTake | null>(null);
@@ -210,8 +222,11 @@ export function useNarrationRecorder(
     const superseded = () => generationRef.current !== generation;
     startingRef.current = true;
     setError(null);
+    setRecordedBytes(0);
+    setLimitReached(false);
     applyTake(null);
     setState('starting');
+    const recordingByteLimit = resolveMaxRecordingBytes(opts.maxRecordingBytes);
 
     // Everything this attempt acquires, tracked locally: until `capture` is
     // installed on captureRef, teardownCapture() cannot see any of it, so an
@@ -307,16 +322,31 @@ export function useNarrationRecorder(
         startedAtMs: performance.now(),
         audioStartMs: null,
         cameraStartMs: null,
+        recordedBytes: 0,
+        limitReached: false,
+      };
+      const retainChunk = (chunks: Blob[], chunk: Blob) => {
+        if (chunk.size === 0 || superseded()) return;
+        // The final dataavailable event is part of the take, even after the
+        // soft cap. Dropping it can make the entire recording unplayable.
+        chunks.push(chunk);
+        capture.recordedBytes += chunk.size;
+        setRecordedBytes(capture.recordedBytes);
+        if (!capture.limitReached && capture.recordedBytes >= recordingByteLimit) {
+          capture.limitReached = true;
+          setLimitReached(true);
+          if (captureRef.current === capture) void stopRef.current();
+        }
       };
       audioRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) capture.audioChunks.push(e.data);
+        retainChunk(capture.audioChunks, e.data);
       };
       audioRecorder.onstart = () => {
         capture.audioStartMs = performance.now();
       };
       if (cameraRecorder) {
         cameraRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) capture.cameraChunks.push(e.data);
+          retainChunk(capture.cameraChunks, e.data);
         };
         cameraRecorder.onstart = () => {
           capture.cameraStartMs = performance.now();
@@ -381,8 +411,12 @@ export function useNarrationRecorder(
     processingRef.current = true;
     setState('processing');
 
-    await stopRecorder(capture.audioRecorder);
-    if (capture.cameraRecorder) await stopRecorder(capture.cameraRecorder);
+    // Ask both lanes to stop immediately; awaiting audio first would let the
+    // camera keep adding bytes while the primary recorder drains its tail.
+    await Promise.all([
+      stopRecorder(capture.audioRecorder),
+      ...(capture.cameraRecorder ? [stopRecorder(capture.cameraRecorder)] : []),
+    ]);
     for (const track of capture.cameraStream?.getTracks() ?? []) track.stop();
     setCameraStream(null);
 
@@ -462,10 +496,14 @@ export function useNarrationRecorder(
     setState('review');
   }, [applyTake, cancelPendingStart]);
 
+  stopRef.current = stop;
+
   const retake = useCallback(() => {
     teardownCapture();
     applyTake(null);
     setError(null);
+    setRecordedBytes(0);
+    setLimitReached(false);
     setState('idle');
   }, [applyTake, teardownCapture]);
 
@@ -473,6 +511,8 @@ export function useNarrationRecorder(
     teardownCapture();
     applyTake(null);
     setError(null);
+    setRecordedBytes(0);
+    setLimitReached(false);
     setState('idle');
   }, [applyTake, teardownCapture]);
 
@@ -482,6 +522,8 @@ export function useNarrationRecorder(
       if (ok) {
         applyTake(null);
         setError(null);
+        setRecordedBytes(0);
+        setLimitReached(false);
         setState('idle');
       } else {
         setError(saveError ?? new Error('Save failed'));
@@ -522,6 +564,9 @@ export function useNarrationRecorder(
   return {
     state,
     error,
+    recordedBytes,
+    maxRecordingBytes,
+    limitReached,
     withCamera,
     setWithCamera,
     cameraStream,

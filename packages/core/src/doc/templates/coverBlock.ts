@@ -20,6 +20,7 @@ import type { StartBlockConfig } from '../../schemas/Doc.js';
 import { getThemeFont, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
 import { relativeLuminance, withAlpha } from '../../schemas/colorUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
+import { estimateTextHeight } from './captionUtils.js';
 import type { CoverSlideTemplate } from '../coverSlideSettings.js';
 import { bigText } from './bigText.js';
 import { imageWithCaption } from './imageWithCaption.js';
@@ -138,7 +139,7 @@ function coverScrimGradient(background: string): string {
 export function coverBlock(input: CoverBlockInput, context: TemplateContext): Layer[] {
   const treatment = themedImageTreatment(context, input.imageTreatment);
   const { heroSrc, heroAlt, title, subtitle, ambientMotion, heroCredit, heroLicense } = input;
-  const { theme, layout } = context;
+  const { theme, layout, viewport } = context;
   const standardLightCover = !heroSrc && isStandardLightCover(context);
 
   // Scale font sizes for viewport - cover titles are larger than regular title blocks.
@@ -152,6 +153,26 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
   // unaffected (scale clamps at 1).
   const titleFontSize = themedFontSize(fitCoverTitleSize(title), context, true);
   const subtitleFontSize = themedFontSize(40, context, false);
+
+  // Where the title and subtitle land on the solid-background cover. The
+  // accent rule hangs from the title's estimated bottom edge (1.4 is the text
+  // layer's default line height) so it can never cut through a wrapped title
+  // the way a fixed slot did; with a subtitle it stops halfway to the
+  // subtitle's top edge when the two are closer than the preferred gap.
+  const titleYPct = subtitle ? parseFloat(layout.primaryY) : 50;
+  const maxWidthPx = (parseFloat(layout.maxTextWidth) / 100) * viewport.width;
+  const titleH = estimateTextHeight(title, titleFontSize, maxWidthPx, 1.4);
+  const px = (v: number) => (v / viewport.height) * 100;
+  const titleBottomPct = titleYPct + px(titleH / 2);
+  let accentYPct = titleBottomPct + px(40);
+  if (subtitle) {
+    const subH = estimateTextHeight(subtitle, subtitleFontSize, maxWidthPx, 1.5);
+    const subtitleTopPct = parseFloat(layout.secondaryY) - px(subH / 2);
+    accentYPct = Math.max(
+      titleBottomPct,
+      Math.min(accentYPct, (titleBottomPct + subtitleTopPct) / 2),
+    );
+  }
 
   const layers: Layer[] = [];
 
@@ -222,7 +243,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
       });
     }
 
-    // Subtle decorative accent line below title
+    // Subtle decorative accent line below the title's wrapped extent
     layers.push({
       type: 'shape',
       id: 'cover-accent',
@@ -234,7 +255,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
       },
       position: {
         x: '35%',
-        y: subtitle ? '42%' : '58%',
+        y: `${accentYPct}%`,
         width: '30%',
         height: '2px',
       },
@@ -258,7 +279,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
     },
     position: {
       x: '50%',
-      y: heroSrc ? (subtitle ? '70%' : '75%') : subtitle ? layout.primaryY : '50%',
+      y: heroSrc ? (subtitle ? '70%' : '75%') : `${titleYPct}%`,
       anchor: 'center',
       width: layout.maxTextWidth,
     },

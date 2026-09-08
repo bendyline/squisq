@@ -276,6 +276,131 @@ describe('canonical template materialization', () => {
     expect(textLayers.length).toBeGreaterThan(0);
   });
 
+  it('left-aligns prose lockups inside a centred column (only quote-style cards centre text)', () => {
+    // Body text derived from markdown is running prose — several paragraphs,
+    // often a list — and centred prose reads as a ragged blob. The column
+    // still floats at the slide's centre, but every text layer in it is
+    // left-aligned AND carries the column width: the renderer pins the text
+    // to the box's left edge only when a width exists, otherwise the pivot
+    // is the anchor point and left-aligned text would start mid-slide.
+    const context = createTemplateContext(DEFAULT_THEME, 0, 5, VIEWPORT_PRESETS.landscape);
+    const cases: Array<{ block: TemplateBlock; ids: string[] }> = [
+      {
+        block: {
+          template: 'factCard',
+          id: 'fc',
+          duration: 8,
+          audioSegment: 0,
+          fact: 'So what should you use?',
+          explanation: 'It depends.\nQwen for reasoning.\nGemma for writing.',
+          source: 'Community benchmarks',
+        },
+        ids: ['fact', 'explanation', 'source'],
+      },
+      {
+        block: {
+          template: 'definitionCard',
+          id: 'dc',
+          duration: 8,
+          audioSegment: 0,
+          term: 'Gezellig',
+          definition: 'A cosy, convivial atmosphere shared with good company.',
+          origin: 'Dutch',
+        },
+        ids: ['term', 'definition', 'origin'],
+      },
+      {
+        block: {
+          template: 'statHighlight',
+          id: 'sh',
+          duration: 8,
+          audioSegment: 0,
+          stat: '89%',
+          description: 'drop in salmon returns over the decade',
+          detail: 'Measured at the counting station.',
+        },
+        ids: ['stat', 'description', 'detail'],
+      },
+      {
+        block: {
+          template: 'dateEvent',
+          id: 'de',
+          duration: 8,
+          audioSegment: 0,
+          date: '1987',
+          description: 'The dam was decommissioned after a decade of debate.',
+          footer: 'Photo: county archive',
+        },
+        ids: ['date', 'description', 'footer'],
+      },
+      {
+        block: {
+          template: 'twoColumn',
+          id: 'tc',
+          duration: 8,
+          audioSegment: 0,
+          header: 'Then and now',
+          left: { label: 'Before', sublabel: 'Twelve barriers on the river.' },
+          right: { label: 'After', sublabel: 'A free-flowing channel.' },
+        },
+        ids: ['left-label', 'left-sublabel', 'right-label', 'right-sublabel'],
+      },
+    ];
+
+    for (const { block, ids } of cases) {
+      const layers = materializeTemplateForTest(block, context).layers ?? [];
+      for (const id of ids) {
+        const layer = layers.find((l): l is TextLayer => l.type === 'text' && l.id === id);
+        expect(layer, block.template + ' layer ' + id).toBeDefined();
+        expect(layer!.content.style.textAlign, block.template + ' layer ' + id).toBe('left');
+        expect(layer!.position.width, block.template + ' layer ' + id + ' width').toBeDefined();
+        expect(layer!.position.anchor, block.template + ' layer ' + id + ' anchor').toBe('center');
+      }
+    }
+
+    // The two-column header spans both panels, so it alone stays centred.
+    const tc = materializeTemplateForTest(cases[4].block, context).layers ?? [];
+    const header = tc.find((l): l is TextLayer => l.type === 'text' && l.id === 'header');
+    expect(header?.content.style.textAlign).toBe('center');
+  });
+
+  it('keeps the definition card separator on the text column left edge', () => {
+    const context = createTemplateContext(DEFAULT_THEME, 0, 5, VIEWPORT_PRESETS.landscape);
+    const block: TemplateBlock = {
+      template: 'definitionCard',
+      id: 'dc-rule',
+      duration: 8,
+      audioSegment: 0,
+      term: 'Term',
+      definition: 'Definition.',
+    };
+    const layers = materializeTemplateForTest(block, context).layers ?? [];
+    const term = layers.find((l): l is TextLayer => l.type === 'text' && l.id === 'term');
+    const rule = layers.find((l) => l.id === 'separator');
+    expect(term && rule).toBeTruthy();
+    // Default layout: column centred at 50% with 85% width → left edge 7.5%.
+    expect(term!.position.x).toBe('50%');
+    expect(term!.position.width).toBe('85%');
+    expect(rule!.position.x).toBe('7.5%');
+    expect(rule!.position.anchor).toBe('top-left');
+  });
+
+  it('quote-style cards keep centred text', () => {
+    const context = createTemplateContext(DEFAULT_THEME, 0, 5, VIEWPORT_PRESETS.landscape);
+    const block: TemplateBlock = {
+      template: 'quote',
+      id: 'q',
+      duration: 8,
+      audioSegment: 0,
+      quote: 'It depends.',
+      attribution: 'Everyone',
+    };
+    const layers = materializeTemplateForTest(block, context).layers ?? [];
+    const quote = layers.find((l): l is TextLayer => l.type === 'text' && l.id === 'quote');
+    expect(quote).toBeDefined();
+    expect(quote!.content.style.textAlign).toBe('center');
+  });
+
   it('returns empty layers for unknown template', () => {
     const block = {
       template: 'nonexistent',
@@ -1060,6 +1185,41 @@ describe('template input defects (regressions)', () => {
         expect(fill.fill).toMatch(VALID_COLOR);
         expect(fill.fill).not.toBe('#abc33');
       }
+    });
+
+    // The rule pair sat at fixed 40%/60% slots, so a section name that
+    // wrapped to two lines at 84px had the bottom rule drawn through it.
+    it('sectionHeader lines bracket a wrapped title instead of crossing it', () => {
+      const y = (layers: Layer[], id: string) =>
+        parseFloat(String(layers.find((l) => l.id === id)!.position.y));
+
+      const short = layersOf({
+        template: 'sectionHeader',
+        id: 'sh-short',
+        duration: 10,
+        audioSegment: 0,
+        title: 'Section',
+      });
+      expect(y(short, 'line-top')).toBe(40);
+      expect(y(short, 'line-bottom')).toBe(60);
+
+      const long = layersOf({
+        template: 'sectionHeader',
+        id: 'sh-long',
+        duration: 10,
+        audioSegment: 0,
+        title: 'Everything You Need to Know about Local Models',
+      });
+      const title = long.find((l): l is TextLayer => l.type === 'text' && l.id === 'title')!;
+      const fontSize = title.content.style.fontSize;
+      const lines = Math.ceil(
+        title.content.text.length / Math.floor((1920 * 0.8) / (fontSize * 0.52)),
+      );
+      expect(lines).toBeGreaterThan(1);
+      const halfTitlePct = ((lines * fontSize * 1.4) / 2 / 1080) * 100;
+      expect(y(long, 'line-top')).toBeLessThan(50 - halfTitlePct);
+      expect(y(long, 'line-bottom')).toBeGreaterThan(50 + halfTitlePct);
+      expect(y(long, 'line-top') + y(long, 'line-bottom')).toBeCloseTo(100, 6);
     });
 
     it('sectionHeader lines are translucent, not opaque', () => {
