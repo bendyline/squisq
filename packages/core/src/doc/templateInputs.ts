@@ -690,6 +690,21 @@ export function deriveTemplateInputs(
       }
       return inputs;
     }
+    case 'transcript': {
+      // The heading names the speaker and the body is the message — the
+      // natural authoring form (`## Ada Lovelace {[transcript]}` + a
+      // paragraph). An explicit `speaker=` / `text=` param still wins because
+      // coerced overrides are merged after derived inputs. Without this the
+      // template rendered an empty bubble for every Markdown-authored beat.
+      const text = extractBlockquoteText(contents) || bodyText;
+      if (!text && !headingText) {
+        return placeholders ? { speaker: 'Speaker', text: 'Message' } : null;
+      }
+      return {
+        speaker: headingText || (placeholders ? 'Speaker' : ''),
+        text: text || (placeholders ? 'Message' : ''),
+      };
+    }
     case 'quote': {
       const quote = extractBlockquoteText(contents) || bodyText;
       if (quote) return { quote, ...(headingText ? { title: headingText } : {}) };

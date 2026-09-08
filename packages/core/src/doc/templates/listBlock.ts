@@ -30,6 +30,7 @@ import {
   adjustY,
   DEFAULT_LAYOUT,
 } from './accentImage.js';
+import { estimateWrappedLineCount } from './captionUtils.js';
 
 const LIST_ITEM_LINE_HEIGHT = 1.2;
 const LIST_ITEM_BASE_FONT_PX = 34;
@@ -64,39 +65,10 @@ const LIST_CONDENSED_TOP_PCT = 8;
 const LIST_CONDENSED_TITLE_GAP_PX = 22;
 const LIST_TITLE_LINE_HEIGHT = 1.15;
 
-/**
- * Mirror the renderer's character-based wrapping closely enough to reserve
- * vertical space for each independently positioned text layer.
- */
-export function estimateWrappedLineCount(text: string, fontSize: number, maxWidth: number): number {
-  if (!text.trim()) return 1;
-
-  const charsPerLine = Math.floor(maxWidth / (fontSize * 0.5));
-  if (charsPerLine <= 0) return 1;
-
-  let lineCount = 0;
-  let currentLineLength = 0;
-
-  for (const word of text.split(/\s+/)) {
-    const testLineLength = currentLineLength ? currentLineLength + 1 + word.length : word.length;
-
-    if (testLineLength <= charsPerLine) {
-      currentLineLength = testLineLength;
-      continue;
-    }
-
-    if (currentLineLength) lineCount += 1;
-
-    let remainingLength = word.length;
-    while (remainingLength > charsPerLine) {
-      lineCount += 1;
-      remainingLength -= charsPerLine;
-    }
-    currentLineLength = remainingLength;
-  }
-
-  return Math.max(1, lineCount + (currentLineLength ? 1 : 0));
-}
+// The wrap estimator now lives with the other shared text-metric helpers so
+// every prose template reserves space the same way; re-exported here because
+// the list tests (and any external caller) import it from this module.
+export { estimateWrappedLineCount } from './captionUtils.js';
 
 interface ListItemGeometry {
   /** Right-aligned column holding the `N.` marker. */

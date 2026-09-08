@@ -1522,3 +1522,12 @@ describe('definitionList stringify', () => {
     expect(out).toContain('a &amp; b &lt; c');
   });
 });
+
+describe('extractPlainText table projection', () => {
+  it('keeps cells and rows apart instead of fusing every cell into one word', () => {
+    const table = parseMarkdown(
+      '| Segment | Before | After |\n| --- | --- | --- |\n| West | 1,200 | 2,900 |\n| East | 980 | 2,100 |',
+    ).children[0] as MarkdownTable;
+    expect(extractPlainText(table)).toBe('Segment Before After\nWest 1,200 2,900\nEast 980 2,100');
+  });
+});

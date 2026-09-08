@@ -90,8 +90,15 @@ export function extractPlainText(node: MarkdownNode): string {
   const children = getChildren(node);
   // Preserve boundaries between block-level elements (list items, paragraphs
   // inside list items, blockquotes) so downstream consumers like caption
-  // splitting can treat each item as a separate phrase.
-  const separator = node.type === 'list' || node.type === 'listItem' ? '\n' : '';
+  // splitting can treat each item as a separate phrase. Table rows break the
+  // same way and cells are spaced, so a table projects as readable lines
+  // ("Segment Before After") instead of one fused word ("SegmentBeforeAfter").
+  const separator =
+    node.type === 'list' || node.type === 'listItem' || node.type === 'table'
+      ? '\n'
+      : node.type === 'tableRow'
+        ? ' '
+        : '';
   return children.map(extractPlainText).join(separator);
 }
 

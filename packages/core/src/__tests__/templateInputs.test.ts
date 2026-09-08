@@ -102,3 +102,35 @@ describe('slide rich-text projection', () => {
     expect(html).toContain('<td align="right">100</td>');
   });
 });
+
+describe('transcript template input derivation', () => {
+  function transcriptInputs(heading: string, body: string): Record<string, unknown> | null {
+    return deriveTemplateInputs('transcript', heading, parseMarkdown(body).children);
+  }
+
+  it('reads the speaker from the heading and the message from the body', () => {
+    expect(
+      transcriptInputs('Ada Lovelace', 'The engine can arrange numbers like letters.'),
+    ).toEqual({
+      speaker: 'Ada Lovelace',
+      text: 'The engine can arrange numbers like letters.',
+    });
+  });
+
+  it('prefers a blockquote body as the message', () => {
+    expect(transcriptInputs('Ada', '> Quoted line.\n\nAside.')).toMatchObject({
+      text: 'Quoted line.',
+    });
+  });
+
+  it('leaves the message empty for a heading-only beat instead of echoing the heading', () => {
+    expect(transcriptInputs('Ada', '')).toEqual({ speaker: 'Ada', text: '' });
+  });
+
+  it('returns null in strict mode when neither heading nor body exist', () => {
+    expect(transcriptInputs('', '')).toBeNull();
+    expect(
+      deriveTemplateInputs('transcript', '', parseMarkdown('').children, { placeholders: true }),
+    ).toEqual({ speaker: 'Speaker', text: 'Message' });
+  });
+});
