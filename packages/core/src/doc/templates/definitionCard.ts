@@ -5,6 +5,11 @@
  * Good for explaining local words, place names, or cultural concepts.
  * Supports optional accent images.
  *
+ * The lockup sits in a centred column but reads left-aligned, like a
+ * dictionary entry: term, rule, definition and origin share one left
+ * edge. Every text layer carries the column width so the renderer pins
+ * the text to that edge rather than fanning it out around the anchor.
+ *
  * This is shared code used by both site and efb-app doc renderers.
  */
 
@@ -29,6 +34,10 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
 
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;
+  // Left edge of the text column — the separator rule hangs from it so it
+  // lines up with the left-aligned text above and below.
+  const columnLeft =
+    parseFloat(accentLayout.textCenterX) - parseFloat(accentLayout.textWidth) / 2 + '%';
 
   const termFontSize = themedFontSize(72, context, true);
   const defFontSize = themedFontSize(32, context, false);
@@ -58,13 +67,14 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
         fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: colors.text,
-        textAlign: 'center',
+        textAlign: 'left',
         shadow: shouldUseShadow(context),
       },
     },
     position: {
       x: accentLayout.textCenterX,
       y: adjustY('30%', accentLayout),
+      width: accentLayout.textWidth,
       anchor: 'center',
     },
     animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1.5 }),
@@ -79,11 +89,11 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
       fill: `${colors.text}33`, // accent color at 20% opacity
     },
     position: {
-      x: accentLayout.textCenterX,
+      x: columnLeft,
       y: adjustY('42%', accentLayout),
       width: '30%',
       height: '2px',
-      anchor: 'center',
+      anchor: 'top-left',
     },
   });
 
@@ -97,7 +107,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
         fontSize: defFontSize,
         fontFamily: getThemeFont(context, 'body'),
         color: theme.colors.text,
-        textAlign: 'center',
+        textAlign: 'left',
         lineHeight: 1.6,
         maxLines: 4,
         shadow: shouldUseShadow(context),
@@ -123,13 +133,14 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
           fontSize: originFontSize,
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
-          textAlign: 'center',
+          textAlign: 'left',
           shadow: shouldUseShadow(context),
         },
       },
       position: {
         x: accentLayout.textCenterX,
         y: adjustY('70%', accentLayout),
+        width: accentLayout.textWidth,
         anchor: 'center',
       },
       animation: { type: 'fadeIn', duration: 0.8, delay: 1.5 },

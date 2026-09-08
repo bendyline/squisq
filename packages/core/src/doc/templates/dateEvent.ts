@@ -5,6 +5,11 @@
  * Supports different moods: neutral, somber, celebratory.
  * Adapts font sizes and positioning for different viewports.
  *
+ * Date, description and footer share one left edge inside a centred
+ * column — the description is running prose, and centred prose reads as
+ * a ragged blob. Every text layer carries the column width so the
+ * renderer pins the text to the column's left edge.
+ *
  * Supports optional accent images that appear as tasteful side/bottom strips.
  *
  * This is shared code used by both site and efb-app doc renderers.
@@ -85,12 +90,14 @@ export function dateEvent(input: DateEventInput, context: TemplateContext): Laye
         fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: dateColor,
+        textAlign: 'left',
         shadow: shouldUseShadow(context),
       },
     },
     position: {
       x: accentLayout.textCenterX,
       y: adjustY('35%', accentLayout),
+      width: accentLayout.textWidth,
       anchor: 'center',
     },
     animation: { type: 'fadeIn', duration: 1.5 },
@@ -106,7 +113,7 @@ export function dateEvent(input: DateEventInput, context: TemplateContext): Laye
         fontSize: descFontSize,
         fontFamily: getThemeFont(context, 'body'),
         color: theme.colors.text,
-        textAlign: 'center',
+        textAlign: 'left',
         lineHeight: 1.6,
         shadow: shouldUseShadow(context),
       },
@@ -131,12 +138,14 @@ export function dateEvent(input: DateEventInput, context: TemplateContext): Laye
           fontSize: footerFontSize,
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
+          textAlign: 'left',
           shadow: shouldUseShadow(context),
         },
       },
       position: {
         x: accentLayout.textCenterX,
         y: adjustY('72%', accentLayout),
+        width: accentLayout.textWidth,
         anchor: 'center',
       },
       animation: { type: 'fadeIn', duration: 1, delay: 3 },

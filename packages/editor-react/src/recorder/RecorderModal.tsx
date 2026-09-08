@@ -42,6 +42,7 @@ import {
   type SlideAdvanceLog,
 } from '@bendyline/squisq/narration';
 import { useMediaRecorder, type RecorderSource } from './hooks/useMediaRecorder.js';
+import { formatRecordingBytes } from './recordingLimits.js';
 import { useStreamPreview } from './hooks/useStreamPreview.js';
 import { requestCameraStream } from './sources/cameraStream.js';
 import { RecorderDeviceSettingsPanel } from './RecorderDeviceSettingsPanel.js';
@@ -144,6 +145,8 @@ export interface RecorderSlidesOptions {
 }
 
 export interface RecorderModalProps {
+  /** Combined recording byte threshold. Defaults to 90 MiB; final chunks are retained. */
+  maxRecordingBytes?: number;
   /** Required — recordings are written here. */
   mediaProvider: MediaProvider;
   /**
@@ -715,6 +718,7 @@ export function RecorderModal({
   narration = null,
   slides = null,
   title = 'Record media',
+  maxRecordingBytes,
 }: RecorderModalProps) {
   const initialToggles = toggleStateFromMode(initialMode);
   const [micOn, setMicOn] = useState(initialToggles.micOn);
@@ -781,6 +785,7 @@ export function RecorderModal({
 
   const recorder = useMediaRecorder({
     source,
+    maxRecordingBytes,
     includeMicrophone: cameraOn ? micOn : undefined,
     audioConstraints,
     videoConstraints: cameraConstraints,
@@ -809,6 +814,7 @@ export function RecorderModal({
   basenameRef.current = basename;
   const stage = useNarrationStage({
     doc: narration?.doc ?? null,
+    maxRecordingBytes,
     recording: narration?.recording ?? null,
     getAudioBasename: () => basenameRef.current.trim() || undefined,
     micConstraints: audioConstraints,
@@ -880,7 +886,7 @@ export function RecorderModal({
   // reparses on a debounce, so the deck is rebuilt whenever anything at all in
   // the document changes. Resetting on identity would silently discard a
   // rolling take's advances because the presenter fixed a typo.
-  const slideDeckKey = slideDeck.map((slide) => slide.blockId).join(' ');
+  const slideDeckKey = slideDeck.map((slide) => slide.blockId).join('\x00');
   useEffect(() => {
     setAdvanceLog(EMPTY_ADVANCE_LOG);
     setSlideIndex(0);
@@ -1112,6 +1118,16 @@ export function RecorderModal({
   // take in flight (or unsaved in review) must be confirmed away first —
   // unmounting mid-take silently drops it.
   const handleClose = useCallback(() => {
+    if (!narrationOn) {
+      if (isSaving || recorder.state === 'stopping' || recorder.state === 'requesting') return;
+      if (
+        (recorder.blob || recorder.camera?.blob || recorder.state === 'recording') &&
+        !window.confirm(
+          'Discard this recording? Download or save it before closing to keep a copy.',
+        )
+      )
+        return;
+    }
     const s = stageRef.current;
     if (closeNeedsConfirm(narrationOn, s.recorder.state, s.recorder.take !== null)) {
       if (!window.confirm('Discard the current narration take?')) return;
@@ -1125,7 +1141,7 @@ export function RecorderModal({
     }
     recorder.cancel();
     onClose();
-  }, [narrationOn, recorder, onClose]);
+  }, [narrationOn, recorder, onClose, isSaving]);
   useModalDialog({
     rootRef: overlayRef,
     dialogRef,
@@ -1292,7 +1308,8 @@ export function RecorderModal({
         };
         dualSaveProgressRef.current = {};
         onSave?.(result);
-        handleClose();
+        recorder.cancel();
+        onClose();
       } catch (err: unknown) {
         setSaveError(err instanceof Error ? err.message : 'Failed to save recording');
       } finally {
@@ -1358,7 +1375,8 @@ export function RecorderModal({
         result.sourceText = slideTiming ? undefined : sourceText;
       }
       onSave?.(result);
-      handleClose();
+      recorder.cancel();
+      onClose();
     } catch (err: unknown) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save recording');
     } finally {
@@ -1377,7 +1395,7 @@ export function RecorderModal({
     mediaProvider,
     container,
     onSave,
-    handleClose,
+    onClose,
     writeSlideTimingSidecar,
   ]);
 
@@ -1415,6 +1433,54 @@ export function RecorderModal({
     () => (slides?.doc && showTimingCheckbox ? advanceCoverage(slides.doc, advanceLog) : null),
     [slides?.doc, showTimingCheckbox, advanceLog],
   );
+  const [timingDownloadUrl, setTimingDownloadUrl] = useState<string | null>(null);
+  // Keep backup names stable while playback and status updates re-render.
+  const downloadFilename = useMemo(
+    () =>
+      !recorder.blob
+        ? ''
+        : buildFilename(
+            source === 'mic' ? 'audio' : 'video',
+            recorder.extension ?? '.webm',
+            isDual && basename.trim() ? `${basename.trim()}-screen` : basename,
+            filenameSeed,
+          ),
+    [source, recorder.extension, recorder.blob, isDual, basename, filenameSeed],
+  );
+  const timingDownloadFilename = `${downloadFilename}.timing.json`;
+  useEffect(() => {
+    if (narrationOn || !canSave) {
+      setTimingDownloadUrl(null);
+      return;
+    }
+    const duration = recorder.durationMs / 1000;
+    const encoded =
+      slidesOn && slidesCaptureTimings && applySlideTimings && slides?.doc && advanceLog.length > 0
+        ? encodeNarrationTimingJson(buildAdvanceTimingJson(slides.doc, advanceLog, duration))
+        : source === 'mic'
+          ? encodeTimingJson(buildTimingJson(sourceText, duration))
+          : null;
+    if (encoded === null) {
+      setTimingDownloadUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(
+      new Blob([new Uint8Array(encoded)], { type: 'application/json' }),
+    );
+    setTimingDownloadUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [
+    narrationOn,
+    canSave,
+    recorder.durationMs,
+    slidesOn,
+    slidesCaptureTimings,
+    applySlideTimings,
+    slides?.doc,
+    advanceLog,
+    source,
+    sourceText,
+  ]);
   const slideCoverageWarning = slideCoverage
     ? unshownSlidesWarning(slideCoverage.total, slideCoverage.unshown)
     : null;
@@ -1429,7 +1495,10 @@ export function RecorderModal({
   // "Discard & re-record" button (already the affordance in this state),
   // which clears the take and re-enables these toggles.
   const togglesLocked =
-    recorder.state === 'recording' || recorder.state === 'requesting' || canSave;
+    recorder.state === 'recording' ||
+    recorder.state === 'requesting' ||
+    recorder.state === 'stopping' ||
+    canSave;
   const toggleLockReason = canSave
     ? 'Save or discard this recording before changing sources'
     : undefined;
@@ -1677,7 +1746,34 @@ export function RecorderModal({
             {!narrationOn && recorder.error && (
               <div style={errorStyle}>{recorder.error.message}</div>
             )}
-            {!narrationOn && saveError && <div style={errorStyle}>{saveError}</div>}
+            {!narrationOn && saveError && (
+              <div role="alert" style={errorStyle}>
+                {saveError}
+                <p style={{ marginBottom: 0 }}>
+                  Your recording is still available below. Download a copy before closing, or try
+                  saving again.
+                </p>
+              </div>
+            )}
+            {
+              <p style={summaryStyle}>
+                Recording size:{' '}
+                {formatRecordingBytes(
+                  narrationOn ? stage.recorder.recordedBytes : recorder.recordedBytes,
+                )}
+                . Automatically stops at{' '}
+                {formatRecordingBytes(
+                  narrationOn ? stage.recorder.maxRecordingBytes : recorder.maxRecordingBytes,
+                )}{' '}
+                total. Final encoding may add more data.
+              </p>
+            }
+            {!narrationOn && recorder.limitReached && (
+              <p role="status" style={recordingStatusStyle}>
+                Recording stopped at the size limit. Your complete recording is retained; download a
+                copy or save it to the document.
+              </p>
+            )}
             {narrationOn && (stage.recorder.error ?? stage.controller.mic.error) && (
               <div style={errorStyle}>
                 {(stage.recorder.error ?? stage.controller.mic.error)?.message}
@@ -1836,6 +1932,44 @@ export function RecorderModal({
                   ✓ Recorded {formatDurationMs(recorder.durationMs)}
                 </div>
                 <audio src={playbackUrl} controls style={{ width: '100%' }} />
+              </div>
+            )}
+
+            {!narrationOn && canSave && playbackUrl && (
+              <div
+                style={{
+                  ...buttonRowStyle,
+                  flexWrap: 'wrap',
+                  justifyContent: 'flex-start',
+                  marginBottom: 12,
+                }}
+              >
+                <a href={playbackUrl} download={downloadFilename} style={btnSecondary}>
+                  {isDual ? 'Download screen recording' : 'Download recording'}
+                </a>
+                {isDual && cameraPlaybackUrl && (
+                  <a
+                    href={cameraPlaybackUrl}
+                    download={buildFilename(
+                      'video',
+                      recorder.camera?.extension ?? '.webm',
+                      basename.trim() ? `${basename.trim()}-camera` : undefined,
+                      micOn ? 'camera-audio' : 'camera',
+                    )}
+                    style={btnSecondary}
+                  >
+                    Download camera recording
+                  </a>
+                )}
+                {timingDownloadUrl && (
+                  <a
+                    href={timingDownloadUrl}
+                    download={timingDownloadFilename}
+                    style={btnSecondary}
+                  >
+                    Download recording timings
+                  </a>
+                )}
               </div>
             )}
 

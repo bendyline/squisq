@@ -11,7 +11,7 @@
  * record slot's camera checkbox because its own left column provides both).
  */
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Theme } from '@bendyline/squisq/schemas';
 import { TeleprompterSurface } from './TeleprompterSurface';
@@ -20,6 +20,9 @@ import { TeleprompterSelfView } from './TeleprompterSelfView';
 import { drawPrompterFrame, type CanvasPrompterFrame } from './canvasRenderer';
 import { ensureTeleprompterStyles } from './teleprompterTheme';
 import type { NarrationStageHandle } from './useNarrationStage';
+import type { NarrationTake } from './recording/useNarrationRecorder';
+import { buildNarrationSavePlan } from './recording/narrationSave';
+import { formatRecordingBytes } from '../recorder/recordingLimits';
 
 export interface NarrationStageProps {
   stage: NarrationStageHandle;
@@ -58,6 +61,55 @@ export interface NarrationStageProps {
    * the prompter-scrubbing audio playback stay.
    */
   showReviewActions?: boolean;
+}
+
+/** Download the retained take independently of workspace writes. */
+function NarrationTakeBackups({ take, baseWpm }: { take: NarrationTake; baseWpm: number }) {
+  const [downloads, setDownloads] = useState<{ label: string; url: string; filename: string }[]>(
+    [],
+  );
+  useEffect(() => {
+    const timing = buildNarrationSavePlan({
+      script: take.script,
+      alignment: take.alignment,
+      durationSec: take.durationSec,
+      audioExt: take.audioExt,
+      cameraExt: take.cameraExt,
+      cameraOffsetSec: take.cameraOffsetSec,
+      baseWpm,
+    }).sidecarPayload;
+    const assets = [
+      {
+        label: 'Download audio backup',
+        blob: take.audioBlob,
+        filename: 'narration' + take.audioExt,
+      },
+      ...(take.cameraBlob
+        ? [
+            {
+              label: 'Download camera backup',
+              blob: take.cameraBlob,
+              filename: 'narration-camera' + (take.cameraExt ?? '.webm'),
+            },
+          ]
+        : []),
+      {
+        label: 'Download timing backup',
+        blob: new Blob([JSON.stringify(timing, null, 2)], { type: 'application/json' }),
+        filename: 'narration' + take.audioExt + '.timing.json',
+      },
+    ];
+    const next = assets.map(({ blob, ...asset }) => ({ ...asset, url: URL.createObjectURL(blob) }));
+    setDownloads(next);
+    return () => {
+      for (const download of next) URL.revokeObjectURL(download.url);
+    };
+  }, [take, baseWpm]);
+  return downloads.map(({ label, url, filename }) => (
+    <a key={label} href={url} download={filename}>
+      {label}
+    </a>
+  ));
 }
 
 export function NarrationStage(props: NarrationStageProps) {
@@ -210,6 +262,7 @@ export function NarrationStage(props: NarrationStageProps) {
   const recordSlot =
     recording && showRecordSlot ? (
       <span className="squisq-teleprompter-group" data-testid="teleprompter-record">
+        <span>Auto-stops at {formatRecordingBytes(recorder.maxRecordingBytes)}.</span>
         {recorder.state === 'idle' || recorder.state === 'error' ? (
           <>
             <button
@@ -234,9 +287,12 @@ export function NarrationStage(props: NarrationStageProps) {
             ) : null}
           </>
         ) : busyRecording ? (
-          <button type="button" onClick={() => void recorder.stop()}>
-            ⏹ Stop
-          </button>
+          <>
+            <span>{formatRecordingBytes(recorder.recordedBytes)} recorded</span>
+            <button type="button" onClick={() => void recorder.stop()}>
+              ⏹ Stop
+            </button>
+          </>
         ) : recorder.state === 'processing' ? (
           <span>Aligning take…</span>
         ) : recorder.state === 'saving' ? (
@@ -284,6 +340,12 @@ export function NarrationStage(props: NarrationStageProps) {
         {showSelfView ? <TeleprompterSelfView stream={recorder.cameraStream} /> : null}
       </div>
 
+      {recorder.limitReached ? (
+        <div className="squisq-teleprompter-review" role="status">
+          Recording stopped at the {formatRecordingBytes(recorder.maxRecordingBytes)} size limit.
+          The complete take is retained; save it or download a backup before leaving.
+        </div>
+      ) : null}
       {recorder.state === 'review' && recorder.take ? (
         <div className="squisq-teleprompter-review" data-testid="teleprompter-review">
           <span>
@@ -299,6 +361,7 @@ export function NarrationStage(props: NarrationStageProps) {
               onTimeUpdate={stage.handleReviewTimeUpdate}
             />
           ) : null}
+          <NarrationTakeBackups take={recorder.take} baseWpm={controller.prefs.baseWpm} />
           {showReviewActions ? (
             <>
               <button type="button" onClick={() => void stage.handleSave()}>
@@ -312,7 +375,12 @@ export function NarrationStage(props: NarrationStageProps) {
               </button>
             </>
           ) : null}
-          {recorder.error ? <span>⚠ {recorder.error.message}</span> : null}
+          {recorder.error ? (
+            <span role="alert">
+              ⚠ {recorder.error.message} Your take is still available. Download a backup before
+              leaving.
+            </span>
+          ) : null}
         </div>
       ) : null}
       {stage.saveNotice ? (

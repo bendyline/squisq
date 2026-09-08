@@ -52,8 +52,15 @@ const RE_STRIKETHROUGH = /~~(.+?)~~/g;
 // This recovers `**Implication: **Next` as `**Implication:** Next` without
 // interpreting intentionally literal whitespace-flanked forms such as
 // `** bold **` or `2 * 3 * 4` as emphasis.
-const RE_LEGACY_BOLD_STAR = /\*\*(?![\s*])(.+?)(?<![\s*])([ \t]+)\*\*(?=$|[^\s*])/g;
-const RE_LEGACY_ITALIC_STAR = /(?<!\*)\*(?![\s*])(.+?)(?<![\s*])([ \t]+)\*(?=$|[^\s*])/g;
+//
+// The captured content may not itself contain a delimiter run. Without that
+// restriction the lazy `.+?` happily skips PAST a well-formed pair to reach
+// the next opener that happens to sit after a space, so ordinary prose with
+// two emphasized phrases -- `is **bold** and this is **also bold** today` --
+// matched from the first `**` to the third and fused them into one mark,
+// leaving the interior delimiters as visible text.
+const RE_LEGACY_BOLD_STAR = /\*\*(?![\s*])((?:(?!\*\*).)+?)(?<![\s*])([ \t]+)\*\*(?=$|[^\s*])/g;
+const RE_LEGACY_ITALIC_STAR = /(?<!\*)\*(?![\s*])([^*]+?)(?<![\s*])([ \t]+)\*(?=$|[^\s*])/g;
 
 // The delimiters whose backslash escapes this pass understands. `\\` is
 // included so an even backslash run collapses correctly instead of
@@ -795,7 +802,7 @@ export function tiptapToMarkdown(html: string): string {
         while ((cellExec = cellRegex.exec(rowHtml)) !== null) {
           const tag = cellExec[1];
           const attrs = cellExec[2];
-          const content = htmlToTableCell(cellExec[3].replace(/<\/?p>/g, ''));
+          const content = htmlToTableCell(cellExec[3]);
           const alignExec = attrs.match(/text-align:\s*(left|center|right)/);
           cells.push({
             content,
@@ -1884,7 +1891,18 @@ function htmlToInline(html: string): string {
  * re-entry, so keep the complete row on one line with a literal `<br>`.
  */
 function htmlToTableCell(html: string): string {
-  return htmlToInline(html).replace(/ {2}\n/g, '<br>');
+  // A TableCell contains `block+` in ProseMirror, so pressing Enter or
+  // pasting multiline spreadsheet text produces sibling `<p>` nodes. Merely
+  // stripping those tags fuses their text (`Location: ...Population: ...`).
+  // Turn every paragraph boundary into an inline break first; the outer tags
+  // are then safe to remove. Empty paragraphs naturally become two adjacent
+  // `<br>` tags, preserving blank lines as well.
+  const withParagraphBreaks = html
+    .replace(/<\/p>\s*<p(?:\s[^>]*)?>/gi, '<br>')
+    .replace(/^\s*<p(?:\s[^>]*)?>/i, '')
+    .replace(/<\/p>\s*$/i, '');
+
+  return htmlToInline(withParagraphBreaks).replace(/ {2}\n/g, '<br>');
 }
 
 function preserveLeadingSpaces(html: string): string {

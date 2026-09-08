@@ -740,3 +740,83 @@ describe('useMediaRecorder — system audio mixed into mic / camera', () => {
     expect(sysVideo.stop).toHaveBeenCalled();
   });
 });
+
+describe('useMediaRecorder recording size limits', () => {
+  it('stops at the byte threshold and retains the complete final encoder flush', async () => {
+    const { result } = renderHook(() => useMediaRecorder({ maxRecordingBytes: 8 }));
+    await act(async () => {
+      await result.current.request();
+    });
+    act(() => result.current.start());
+    await act(async () => {
+      lastRecorder!.ondataavailable?.({ data: new Blob(['12345678']) });
+    });
+    expect(result.current.state).toBe('stopped');
+    expect(result.current.limitReached).toBe(true);
+    // The threshold chunk PLUS the five-byte final flush ('hello').
+    expect(result.current.blob?.size).toBe(13);
+    expect(result.current.recordedBytes).toBe(13);
+    expect(lastStream!.active).toBe(false);
+    act(() => result.current.reset());
+    expect(result.current.recordedBytes).toBe(0);
+    expect(result.current.limitReached).toBe(false);
+  });
+
+  it('counts both lanes and stops them together without discarding either final chunk', async () => {
+    const { result } = renderHook(() =>
+      useMediaRecorder({ source: 'screen+camera', maxRecordingBytes: 8 }),
+    );
+    await act(async () => {
+      await result.current.request();
+    });
+    act(() => result.current.start());
+    act(() => recorders[0].ondataavailable?.({ data: new Blob(['1234']) }));
+    expect(result.current.state).toBe('recording');
+    await act(async () => {
+      recorders[1].ondataavailable?.({ data: new Blob(['5678']) });
+    });
+    expect(result.current.state).toBe('stopped');
+    expect(result.current.limitReached).toBe(true);
+    expect(result.current.recordedBytes).toBe(18);
+    expect(result.current.blob?.size).toBe(9);
+    expect(result.current.camera?.blob?.size).toBe(9);
+    expect(recorders.every((recorder) => !recorder.stream.active)).toBe(true);
+  });
+
+  it('retains a delayed oversized chunk and waits for the final stop event', async () => {
+    const { result } = renderHook(() => useMediaRecorder({ maxRecordingBytes: 8 }));
+    await act(async () => {
+      await result.current.request();
+    });
+    act(() => result.current.start());
+    const recorder = lastRecorder!;
+    recorder.stop = vi.fn(() => {
+      recorder.state = 'inactive';
+    });
+    act(() => recorder.ondataavailable?.({ data: new Blob(['1234567890123456']) }));
+    expect(result.current.state).toBe('stopping');
+    expect(result.current.blob).toBeNull();
+    await act(async () => {
+      recorder.ondataavailable?.({ data: new Blob(['final']) });
+      recorder.onstop?.();
+    });
+    expect(result.current.state).toBe('stopped');
+    expect(result.current.blob?.size).toBe(21);
+    expect(result.current.recordedBytes).toBe(21);
+    expect(recorder.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores stale data from a discarded capture', async () => {
+    const { result } = renderHook(() => useMediaRecorder({ maxRecordingBytes: 8 }));
+    await act(async () => {
+      await result.current.request();
+    });
+    act(() => result.current.start());
+    const staleData = lastRecorder!.ondataavailable!;
+    act(() => result.current.cancel());
+    act(() => staleData({ data: new Blob(['123456789']) }));
+    expect(result.current.recordedBytes).toBe(0);
+    expect(result.current.limitReached).toBe(false);
+    expect(result.current.state).toBe('idle');
+  });
+});

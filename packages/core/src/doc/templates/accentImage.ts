@@ -86,7 +86,8 @@ export function mapAmbientMotion(
  * Accent strip width/height as percentage.
  * 35% gives the image enough presence to complement the text without overwhelming it.
  */
-const STRIP_SIZE = 35;
+export const ACCENT_STRIP_SIZE = 35;
+const STRIP_SIZE = ACCENT_STRIP_SIZE;
 const STRIP_SIZE_PCT = `${STRIP_SIZE}%`;
 
 /**

@@ -5,6 +5,12 @@
  * Great for emphasizing key data points.
  * Adapts font sizes and positioning for different viewports.
  *
+ * Reads as a KPI card: the stat, description and detail share one left
+ * edge inside a centred column. The description is frequently a whole
+ * paragraph (an unannotated heading + body lands here), and centred
+ * paragraphs read as a ragged blob. Every text layer carries the column
+ * width so the renderer pins the text to the column's left edge.
+ *
  * Supports optional accent images that appear as tasteful side/bottom strips.
  *
  * This is shared code used by both site and efb-app doc renderers.
@@ -74,12 +80,14 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
         fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: colors.text,
+        textAlign: 'left',
         shadow: shouldUseShadow(context),
       },
     },
     position: {
       x: accentLayout.textCenterX,
       y: adjustY('36%', accentLayout),
+      width: accentLayout.textWidth,
       anchor: 'center',
     },
     animation:
@@ -100,7 +108,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
         fontSize: descFontSize,
         fontFamily: getThemeFont(context, 'body'),
         color: theme.colors.textMuted,
-        textAlign: 'center',
+        textAlign: 'left',
         lineHeight: 1.5,
         shadow: shouldUseShadow(context),
       },
@@ -128,7 +136,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
           // schemes are tuned as chart/fill colors and drop below legible
           // contrast as body copy on light surfaces.
           color: colors.text,
-          textAlign: 'center',
+          textAlign: 'left',
           shadow: shouldUseShadow(context),
         },
       },

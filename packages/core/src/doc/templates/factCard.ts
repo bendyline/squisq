@@ -4,7 +4,12 @@
  * Key fact with explanation and optional source, composed as one
  * vertically-centered lockup: each element is placed relative to the
  * estimated height of the one above it, so short content doesn't leave
- * fixed-slot voids and long content doesn't collide.
+ * fixed-slot voids and long content doesn't collide. The column floats
+ * at the slide's centre but the text inside it is LEFT-aligned — the
+ * explanation is running prose (often several paragraphs or a list), and
+ * centred prose reads as a ragged blob. Every layer carries the column
+ * width so the renderer pins the text to the column's left edge instead
+ * of the anchor point.
  * Adapts font sizes and positioning for different viewports.
  *
  * Supports optional accent images that appear as tasteful side/bottom strips.
@@ -80,7 +85,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
         fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: theme.colors.text,
-        textAlign: 'center',
+        textAlign: 'left',
         lineHeight: 1.3,
         shadow: shouldUseShadow(context),
       },
@@ -104,7 +109,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
         fontSize: explainFontSize,
         fontFamily: getThemeFont(context, 'body'),
         color: theme.colors.textMuted,
-        textAlign: 'center',
+        textAlign: 'left',
         lineHeight: 1.5,
         shadow: shouldUseShadow(context),
       },
@@ -129,13 +134,14 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
           fontSize: sourceFontSize,
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
-          textAlign: 'center',
+          textAlign: 'left',
           shadow: shouldUseShadow(context),
         },
       },
       position: {
         x: accentLayout.textCenterX,
         y: adjustY(`${sourceY}%`, accentLayout),
+        width: accentLayout.textWidth,
         anchor: 'center',
       },
       animation: { type: 'fadeIn', duration: 0.8, delay: 1.5 },

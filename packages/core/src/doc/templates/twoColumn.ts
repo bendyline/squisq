@@ -5,6 +5,10 @@
  * Each column has a label and optional sublabel.
  * Adapts font sizes and positioning for different viewports.
  *
+ * The header (spanning both panels) stays centred; inside each panel the
+ * label and sublabel are left-aligned and share a left edge — a sublabel
+ * is usually a sentence or two, and centred prose reads as a ragged blob.
+ *
  * Portrait mode: Stacks columns vertically (top/bottom) instead of side-by-side.
  *
  * This is shared code used by both site and efb-app doc renderers.
@@ -146,7 +150,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         fontFamily: getThemeFont(context, 'body'),
         fontWeight: 'bold',
         color: leftColors.text,
-        textAlign: 'center',
+        textAlign: 'left',
         lineHeight: 1.3,
       },
     },
@@ -169,7 +173,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
           fontSize: sublabelFontSize,
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
-          textAlign: 'center',
+          textAlign: 'left',
           lineHeight: 1.4,
         },
       },
@@ -222,7 +226,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
         fontFamily: getThemeFont(context, 'body'),
         fontWeight: 'bold',
         color: rightColors.text,
-        textAlign: 'center',
+        textAlign: 'left',
         lineHeight: 1.3,
       },
     },
@@ -245,7 +249,7 @@ export function twoColumn(input: TwoColumnInput, context: TemplateContext): Laye
           fontSize: sublabelFontSize,
           fontFamily: getThemeFont(context, 'body'),
           color: theme.colors.textMuted,
-          textAlign: 'center',
+          textAlign: 'left',
           lineHeight: 1.4,
         },
       },

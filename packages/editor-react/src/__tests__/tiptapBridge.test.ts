@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { Editor } from '@tiptap/core';
 import Link from '@tiptap/extension-link';
 import StarterKit from '@tiptap/starter-kit';
+import Table from '@tiptap/extension-table';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
+import TableRow from '@tiptap/extension-table-row';
 import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 
 // ---------------------------------------------------------------------------
@@ -124,6 +128,26 @@ describe('markdownToTiptap', () => {
     expect(tiptapToMarkdown(html)).toBe(
       '**Implication:** A massive change and *an italic aside* follow.\n',
     );
+  });
+
+  it('keeps two emphasized phrases in one line separate', () => {
+    const source = 'This is **bold** as well as this is **also bold** today';
+    const html = markdownToTiptap(source);
+    expect(html).toBe(
+      '<p>This is <strong>bold</strong> as well as this is <strong>also bold</strong> today</p>',
+    );
+    expect(tiptapToMarkdown(html)).toBe(source + '\n');
+  });
+
+  it('keeps two emphasized phrases separate inside a list item', () => {
+    const source = '- This is **bold** and *italic* plus **also bold** and *also italic*';
+    const html = markdownToTiptap(source);
+    expect(html).toContain('<strong>bold</strong>');
+    expect(html).toContain('<strong>also bold</strong>');
+    expect(html).toContain('<em>italic</em>');
+    expect(html).toContain('<em>also italic</em>');
+    expect(html).not.toContain('**');
+    expect(tiptapToMarkdown(html)).toBe(source + '\n');
   });
 
   it('converts strikethrough text', () => {
@@ -520,6 +544,43 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('| Name | Age |');
     expect(md).toContain('| --- | --- |');
     expect(md).toContain('| Alice | 30 |');
+  });
+
+  it('preserves paragraph-style newlines inside table cells', () => {
+    const html =
+      '<table><thead><tr><th><p>Model</p></th><th><p>Notes</p></th></tr></thead>' +
+      '<tbody><tr><td><p>Qwen 3.5</p></td>' +
+      '<td><p>Location: Issaquah</p><p>Population: 56,000</p><p>Climate: Pacific Northwest</p></td>' +
+      '</tr></tbody></table>';
+
+    expect(tiptapToMarkdown(html)).toBe(
+      '| Model | Notes |\n' +
+        '| --- | --- |\n' +
+        '| Qwen 3.5 | Location: Issaquah<br>Population: 56,000<br>Climate: Pacific Northwest |\n',
+    );
+  });
+
+  it('keeps multiline table cells stable through a real Tiptap remount', () => {
+    const extensions = [StarterKit, Table, TableRow, TableCell, TableHeader];
+    const editedHtml =
+      '<table><thead><tr><th><p>Model</p></th><th><p>Notes</p></th></tr></thead>' +
+      '<tbody><tr><td><p>Qwen 3.5</p></td>' +
+      '<td><p>Location: Issaquah<br>Population: 56,000</p><p></p><p>Climate: Pacific Northwest</p></td>' +
+      '</tr></tbody></table>';
+    const editor = new Editor({ extensions, content: editedHtml });
+
+    const markdown = tiptapToMarkdown(editor.getHTML());
+    editor.destroy();
+
+    expect(markdown).toContain(
+      'Location: Issaquah<br>Population: 56,000<br><br>Climate: Pacific Northwest',
+    );
+
+    const remounted = new Editor({ extensions, content: markdownToTiptap(markdown) });
+    const afterRemount = tiptapToMarkdown(remounted.getHTML());
+    remounted.destroy();
+
+    expect(afterRemount).toBe(markdown);
   });
 
   it('preserves template annotations in headings', () => {
