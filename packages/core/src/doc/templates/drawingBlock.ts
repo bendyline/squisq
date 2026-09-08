@@ -19,11 +19,18 @@ import type { DrawingBlockInput, TemplateContext } from '../../schemas/BlockTemp
 import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
 import { computeDrawingLayout, type DrawingShape, type DrawingConnector } from './drawingLayout.js';
 import { shapePath, connectorPath, snapEndpoints } from '../utils/shapeGeometry.js';
+import {
+  CANVAS_PADDING,
+  canvasDescriptionLayer,
+  canvasTitleLayer,
+  placeCanvasGroup,
+  planCanvasFrame,
+} from './diagramBlock.js';
 
-const PADDING = 80;
+const PADDING = CANVAS_PADDING;
 
 export function drawingBlock(input: DrawingBlockInput, context: TemplateContext): Layer[] {
-  const { theme, viewport, children = [] } = context;
+  const { theme, children = [] } = context;
   const colors = resolveColorScheme(context, input.colorScheme);
   const defaultStroke = input.stroke ?? colors.text ?? theme.colors.text;
   const defaultFill = input.fill ?? 'none';
@@ -41,22 +48,19 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
   const minY = Math.min(...layout.shapes.map((s) => s.y));
   const maxY = Math.max(...layout.shapes.map((s) => s.y + s.height));
 
-  const titleHeight = input.title ? 120 : 0;
-  const availW = Math.max(1, viewport.width - PADDING * 2);
-  const availH = Math.max(1, viewport.height - PADDING * 2 - titleHeight);
+  // Frame plan shared with diagramBlock: the region an unconsumed-media
+  // overlay leaves free, the measured (wrapped, stepped-down) title and the
+  // block's prose description.
+  const frame = planCanvasFrame('drawing', input.title, context);
   const contentW = Math.max(1, maxX - minX);
   const contentH = Math.max(1, maxY - minY);
 
   // Uniform scale that fits both dimensions. Small drawings may grow
   // (shapes are vector) up to 1.8× so a three-shape sketch doesn't render
-  // as a tiny off-center cluster; the title and the scaled drawing are
-  // centered together as one group.
-  const scale = Math.min(availW / contentW, availH / contentH, 1.8);
-  const scaledW = contentW * scale;
-  const scaledH = contentH * scale;
-  const groupTop = Math.max(PADDING / 2, (viewport.height - titleHeight - scaledH) / 2);
-  const offsetX = PADDING + (availW - scaledW) / 2;
-  const offsetY = groupTop + titleHeight;
+  // as a tiny off-center cluster; the title, the scaled drawing and the
+  // description are centered together as one group.
+  const placement = placeCanvasGroup(frame, contentW, contentH);
+  const { scale, offsetX, offsetY } = placement;
 
   const tx = (x: number) => offsetX + (x - minX) * scale;
   const ty = (y: number) => offsetY + (y - minY) * scale;
@@ -65,21 +69,8 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
   const layers: Layer[] = [];
 
   if (input.title) {
-    layers.push({
-      type: 'text',
-      id: 'drawing-title',
-      content: {
-        text: input.title,
-        style: {
-          fontSize: themedFontSize(40, context, true),
-          fontFamily: getThemeFont(context, 'title'),
-          fontWeight: 'bold',
-          color: theme.colors.text,
-          textAlign: 'center',
-        },
-      },
-      position: { x: '50%', y: groupTop + titleHeight / 2 - 16, anchor: 'center' },
-    });
+    const titleLayer = canvasTitleLayer('drawing-title', input.title, frame, placement, context);
+    if (titleLayer) layers.push(titleLayer);
   }
 
   // Center lookup so connectors can clip to the shapes they join.
@@ -129,6 +120,10 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
     const h = s.height * scale;
     layers.push(...shapeLayers(s, x, y, w, h, context, defaultStroke, defaultFill, fontAdj));
   }
+
+  // Body prose the canvas itself cannot show, as a muted caption below it.
+  const descriptionLayer = canvasDescriptionLayer('drawing-description', frame, placement, context);
+  if (descriptionLayer) layers.push(descriptionLayer);
 
   return layers;
 }
@@ -314,9 +309,17 @@ function emptyHint(input: DrawingBlockInput, context: TemplateContext): TextLaye
         fontFamily: getThemeFont(context, 'title'),
         color: context.theme.colors.textMuted,
         textAlign: 'center',
+        maxLines: 3,
+        shrinkToFit: true,
       },
     },
-    position: { x: '50%', y: '50%', anchor: 'center' },
+    // Wrapped within the frame so a long heading cannot run off the slide.
+    position: {
+      x: '50%',
+      y: '50%',
+      anchor: 'center',
+      width: context.viewport.width - PADDING * 2,
+    },
   };
 }
 

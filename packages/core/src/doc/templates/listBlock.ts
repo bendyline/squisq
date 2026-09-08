@@ -30,7 +30,7 @@ import {
   adjustY,
   DEFAULT_LAYOUT,
 } from './accentImage.js';
-import { estimateWrappedLineCount } from './captionUtils.js';
+import { estimateProseLineCount, estimateWrappedLineCount } from './captionUtils.js';
 
 const LIST_ITEM_LINE_HEIGHT = 1.2;
 const LIST_ITEM_BASE_FONT_PX = 34;
@@ -91,8 +91,9 @@ function listItemGeometry(
   baseFontSize: number,
   itemCount: number,
   textWidthPx: number,
+  ordered = true,
 ): ListItemGeometry {
-  const markerText = `${itemCount}.`;
+  const markerText = ordered ? `${itemCount}.` : '•';
   const markerWidthPx = Math.max(fontSize, markerText.length * fontSize * 0.5);
   const markerGapPx = fontSize * 0.35;
   const bodyIndentPx = markerWidthPx + markerGapPx;
@@ -112,7 +113,8 @@ function measureListHeightPx(
 ): number {
   let heightPx = 0;
   for (const itemText of items) {
-    const lineCount = estimateWrappedLineCount(itemText, fontSize, geometry.bodyWidthPx);
+    // Nested sub-items arrive as `\n`-separated lines the renderer honours.
+    const lineCount = estimateProseLineCount(itemText, fontSize, geometry.bodyWidthPx);
     heightPx += lineCount * fontSize * LIST_ITEM_LINE_HEIGHT + geometry.gapPx;
   }
   return heightPx;
@@ -126,6 +128,9 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
   // so we render the title-and-background frame instead of blowing up
   // every keystroke with a TypeError.
   const items: string[] = Array.isArray(input.items) ? input.items : [];
+  // Unordered Markdown lists render bullets; ordered (and legacy unflagged)
+  // inputs keep the `1.` markers.
+  const ordered = input.ordered !== false;
   const richItems = extractRichListItems(context.block?.contents);
   const { theme } = context;
 
@@ -196,6 +201,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
     baseItemFontSize,
     items.length,
     textWidthPx,
+    ordered,
   );
   const relaxedStartY = title ? LIST_RELAXED_ITEMS_TOP_PCT : LIST_RELAXED_UNTITLED_TOP_PCT;
   const relaxedBottomPct =
@@ -250,7 +256,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
     measureListHeightPx(items, itemFontSize, geometry) > availablePx
   ) {
     itemFontSize -= 1;
-    geometry = listItemGeometry(itemFontSize, baseItemFontSize, items.length, textWidthPx);
+    geometry = listItemGeometry(itemFontSize, baseItemFontSize, items.length, textWidthPx, ordered);
   }
 
   // Render the number and body in separate columns. The body is therefore a
@@ -264,7 +270,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
   for (let i = 0; i < items.length; i++) {
     const itemText = items[i]!;
     const itemHtml = richItems[i]?.text === itemText ? richItems[i]?.html : undefined;
-    const lineCount = estimateWrappedLineCount(itemText, itemFontSize, bodyWidthPx);
+    const lineCount = estimateProseLineCount(itemText, itemFontSize, bodyWidthPx);
     const animation = themedEntrance(context, 'text', {
       type: 'fadeIn',
       duration: 0.8,
@@ -275,7 +281,8 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
       type: 'text',
       id: `item-${i}-marker`,
       content: {
-        text: `${i + 1}.`,
+        // Bullets stay bullets; only ordered (or legacy, unflagged) lists count.
+        text: ordered ? `${i + 1}.` : '•',
         style: {
           fontSize: itemFontSize,
           fontFamily: getThemeFont(context, 'body'),
@@ -312,6 +319,10 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
         x: bodyLeftX,
         y: adjustY(`${itemY}%`, accentLayout),
         width: bodyWidthPx,
+        // Rich (HTML) items render in a hidden-overflow box the renderer
+        // sizes from the plain text; size it here from the same line count
+        // that reserved the vertical space so nested sub-items are not cut off.
+        height: lineCount * itemFontSize * LIST_ITEM_LINE_HEIGHT + itemFontSize * 0.5,
       },
       animation,
     });

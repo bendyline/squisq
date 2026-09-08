@@ -713,27 +713,68 @@ export function deriveTemplateInputs(
       // authored text twice.
       return { quote: headingText };
     }
-    case 'fullBleedQuote':
-    case 'pullQuote': {
+    case 'fullBleedQuote': {
       // These templates take `text` (not `quote`).
       const text = extractBlockquoteText(contents) || bodyText || headingText;
       return { text };
     }
+    case 'pullQuote': {
+      // The first body image becomes the full-bleed backdrop; without one the
+      // template renders the quote on a theme surface rather than nothing.
+      const text = extractBlockquoteText(contents) || bodyText || headingText;
+      const img = extractFirstImage(contents);
+      return {
+        text,
+        ...(img ? { backgroundImage: { src: img.src, alt: img.alt || headingText } } : {}),
+      };
+    }
+    case 'videoPullQuote': {
+      const text = extractBlockquoteText(contents) || bodyText || headingText;
+      const video = extractFirstEmbeddedVideo(contents);
+      return {
+        text,
+        ...(video
+          ? {
+              backgroundVideo: {
+                src: video.src,
+                ...(video.posterSrc ? { posterSrc: video.posterSrc } : {}),
+                alt: video.alt || headingText,
+                ...(video.clipStart != null ? { clipStart: video.clipStart } : {}),
+                ...(video.clipEnd != null ? { clipEnd: video.clipEnd } : {}),
+              },
+            }
+          : {}),
+      };
+    }
     case 'factCard':
-      return { fact: headingText, explanation: bodyText || headingText };
+      // A heading-only card keeps its explanation empty rather than echoing
+      // the fact a second time.
+      return { fact: headingText, explanation: bodyText };
+    case 'twoColumn':
+      // The columns come from `left=`/`right=` params; the heading is the
+      // header band above them (it was silently dropped before).
+      return headingText ? { header: headingText } : placeholders ? {} : null;
     case 'comparisonBar':
       return placeholders
         ? { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 }
         : null;
     case 'list': {
       const items = extractListItems(contents);
-      if (items.length > 0) return { items, ...(headingText ? { title: headingText } : {}) };
+      const firstList = (contents ?? []).find((n): n is MarkdownList => n.type === 'list');
+      if (items.length > 0) {
+        return {
+          items,
+          // Bullets stay bullets: only a numbered source list renders `1.` markers.
+          ordered: firstList?.ordered === true,
+          ...(headingText ? { title: headingText } : {}),
+        };
+      }
       return placeholders ? { items: ['Item 1', 'Item 2', 'Item 3'] } : null;
     }
     case 'definitionCard':
-      return { term: headingText, definition: bodyText || headingText };
+      return { term: headingText, definition: bodyText };
     case 'dateEvent':
-      return { date: headingText, description: bodyText || headingText };
+      return { date: headingText, description: bodyText };
     case 'dataTable': {
       const tableData = extractTableFromContents(contents);
       if (tableData) return { ...tableData, ...(headingText ? { title: headingText } : {}) };

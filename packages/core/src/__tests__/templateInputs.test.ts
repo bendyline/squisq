@@ -134,3 +134,50 @@ describe('transcript template input derivation', () => {
     ).toEqual({ speaker: 'Speaker', text: 'Message' });
   });
 });
+
+describe('markdown-authored quote, list, column and card derivation', () => {
+  const derive = (template: string, heading: string, body: string) =>
+    deriveTemplateInputs(template, heading, parseMarkdown(body).children);
+
+  it('gives pullQuote its backdrop from the first body image and the quote from the prose', () => {
+    expect(
+      derive('pullQuote', 'Pull Quote', '![Harbor](/media/harbor.svg)\n\nMake it visible.'),
+    ).toEqual({
+      text: 'Make it visible.',
+      backgroundImage: { src: '/media/harbor.svg', alt: 'Harbor' },
+    });
+    expect(derive('pullQuote', 'Pull Quote', 'No image here.')).toEqual({ text: 'No image here.' });
+  });
+
+  it('gives videoPullQuote its clip from a body video tag', () => {
+    expect(
+      derive(
+        'videoPullQuote',
+        'Motion',
+        '<video src="/media/clip.mp4" poster="/media/poster.svg" aria-label="Poster"></video>\n\nStill frame first.',
+      ),
+    ).toEqual({
+      text: 'Still frame first.',
+      backgroundVideo: { src: '/media/clip.mp4', posterSrc: '/media/poster.svg', alt: 'Poster' },
+    });
+  });
+
+  it('keeps bullets as bullets and numbers only ordered lists', () => {
+    expect(derive('list', 'Steps', '- one\n- two')).toMatchObject({ ordered: false });
+    expect(derive('list', 'Steps', '1. one\n2. two')).toMatchObject({ ordered: true });
+  });
+
+  it('turns the heading into the twoColumn header band', () => {
+    expect(derive('twoColumn', 'Two Approaches', '')).toEqual({ header: 'Two Approaches' });
+    expect(derive('twoColumn', '', '')).toBeNull();
+  });
+
+  it('does not echo the heading into an empty explanation, definition or description', () => {
+    expect(derive('factCard', 'Reusable blocks', '')).toEqual({
+      fact: 'Reusable blocks',
+      explanation: '',
+    });
+    expect(derive('definitionCard', 'Gezellig', '')).toEqual({ term: 'Gezellig', definition: '' });
+    expect(derive('dateEvent', 'July 14', '')).toEqual({ date: 'July 14', description: '' });
+  });
+});

@@ -22,7 +22,14 @@ import {
 } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
-import { estimateTextHeight } from './captionUtils.js';
+import { fitProse } from './captionUtils.js';
+
+/** Line height the title renders at (the text layer's default, set explicitly). */
+const TITLE_LINE_HEIGHT = 1.4;
+/** Gap between the title's measured edge and each decorative rule, in px. */
+const RULE_GAP_PX = 40;
+/** Share of the frame the title may occupy before it steps its size down. */
+const TITLE_BUDGET = 0.5;
 
 export function sectionHeader(input: SectionHeaderInput, context: TemplateContext): Layer[] {
   const { title = '', colorScheme = 'blue', imageSrc, imageAlt, ambientMotion } = input;
@@ -38,12 +45,24 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
 
   // The rule pair brackets the title, so it has to key off the title's
   // wrapped extent: fixed 40%/60% slots ran straight through the second line
-  // of a long section name. The 1.4 line height is the text layer's default
-  // (the title sets none), and a 40px gap keeps a rule clear of descenders.
+  // of a long section name. A long heading steps its size down (and, at the
+  // readable floor, clamps its line count) so the block never exceeds half
+  // the frame; the explicit box + shrinkToFit then lets the renderer centre
+  // the wrapped block on 50% instead of hanging extra lines below it.
   // Short titles keep the established 40/60 composition.
   const maxWidthPx = (parseFloat(layout.maxTextWidth) / 100) * viewport.width;
-  const titleH = estimateTextHeight(title, titleFontSize, maxWidthPx, 1.4);
-  const ruleOffsetPct = Math.max(10, ((titleH / 2 + 40) / viewport.height) * 100);
+  const titleFit = fitProse({
+    text: title,
+    baseFontSize: titleFontSize,
+    minFontSize: Math.round(titleFontSize * 0.55),
+    maxWidthPx,
+    maxHeightPx: viewport.height * TITLE_BUDGET,
+    lineHeight: TITLE_LINE_HEIGHT,
+    step: 4,
+  });
+  const titleH = titleFit.heightPx;
+  const px = (v: number) => (v / viewport.height) * 100;
+  const ruleOffsetPct = Math.max(10, px(titleH / 2 + RULE_GAP_PX));
 
   const layers: Layer[] = [];
 
@@ -129,12 +148,15 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
     content: {
       text: title,
       style: {
-        fontSize: titleFontSize,
+        fontSize: titleFit.fontSize,
         fontFamily: getThemeFont(context, 'title'),
         fontWeight: 'bold',
         color: imageSrc ? theme.colors.text : colors.text,
         textAlign: 'center',
+        lineHeight: TITLE_LINE_HEIGHT,
         shadow: shouldUseShadow(context),
+        shrinkToFit: true,
+        ...(titleFit.maxLines ? { maxLines: titleFit.maxLines } : {}),
       },
     },
     position: {
@@ -142,6 +164,7 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
       y: '50%',
       anchor: 'center',
       width: layout.maxTextWidth,
+      height: `${px(titleH)}%`,
     },
     animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1.5 }),
   });
