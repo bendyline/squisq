@@ -989,6 +989,32 @@ describe('auto template picking (autoTemplates, default on)', () => {
     expect(block.contents?.map((node) => node.type)).toEqual(['table', 'code']);
   });
 
+  it('keeps compound prose and lists on the content-preserving default', () => {
+    const doc = toDocFromMd(`### What's in a model name
+
+Take: Qwen 3.6 35B-A3B-Q4
+
+- Qwen is family of models from Alibaba
+- Qwen 3.6 is a series of models from March
+- 35 billion parameters
+- 4 bit quantization
+
+Dense vs Mixture of Experts (MoE)
+
+- Dense models operate over all parameters, every token
+- Mixture of Experts choose a subset - here, A3B implies 3 billion are active`);
+    const block = doc.blocks[0];
+
+    expect(block.template).toBe('sectionHeader');
+    expect(block.autoTemplate).toBeUndefined();
+    expect(block.contents?.map((node) => node.type)).toEqual([
+      'paragraph',
+      'list',
+      'paragraph',
+      'list',
+    ]);
+  });
+
   it('alternates left/right feature for consecutive single-image sections', () => {
     const doc = toDocFromMd('# One\n\n![a](a.jpg)\n\n# Two\n\n![b](b.jpg)\n');
     expect(doc.blocks[0].template).toBe('leftFeature');

@@ -146,6 +146,52 @@ Fun fact: this slideshow is running from one of my apps`);
     expect(slide.template).toBe('list');
   });
 
+  it('preserves unordered and ordered markers through slideshow materialization', () => {
+    const markers = (markdown: string) => {
+      const slide = firstPreviewSlide(markdown);
+      const { layers } = materializeBlockLayers(slide as unknown as DocBlock);
+      return layers
+        .filter(
+          (layer): layer is TextLayer =>
+            layer.type === 'text' && /^item-\d+-marker$/.test(layer.id),
+        )
+        .map((layer) => layer.content.text);
+    };
+
+    expect(markers('# Bullets {[list]}\n\n- First\n- Second')).toEqual(['•', '•']);
+    expect(markers('# Steps {[list]}\n\n1. First\n2. Second')).toEqual(['1.', '2.']);
+  });
+
+  it('preserves prose-separated lists as complete content instead of a stat extraction', () => {
+    const slide = firstPreviewSlide(`### What's in a model name
+
+Take: Qwen 3.6 35B-A3B-Q4
+
+- Qwen is family of models from Alibaba
+- Qwen 3.6 is a series of models from March
+- 35 billion parameters
+- 4 bit quantization
+
+Dense vs Mixture of Experts (MoE)
+
+- Dense models operate over all parameters, every token
+- Mixture of Experts choose a subset - here, A3B implies 3 billion are active`);
+
+    expect(slide.template).toBe('content');
+
+    const { layers } = materializeBlockLayers(slide as unknown as DocBlock);
+    const body = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'body',
+    );
+
+    expect(body?.content.text).toContain(
+      '• 4 bit quantization\n\nDense vs Mixture of Experts (MoE)\n\n• Dense models operate',
+    );
+    expect(body?.content.html).toContain(
+      '</ul><p>Dense vs Mixture of Experts (MoE)</p><ul><li><p>Dense models operate',
+    );
+  });
+
   it('maps the leading bold metric to the large stat layer', () => {
     const slide = firstPreviewSlide(`### The Big Number {[statHighlight colorScheme=green]}
 
