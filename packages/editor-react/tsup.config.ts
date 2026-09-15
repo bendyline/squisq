@@ -12,6 +12,7 @@ export default defineConfig({
     'recorder/index': 'src/entries/recorder.ts',
     'teleprompter/index': 'src/entries/teleprompter.ts',
     'proofing/index': 'src/entries/proofing.ts',
+    'review/index': 'src/entries/review.ts',
   },
   format: ['esm'],
   dts: true,

@@ -132,6 +132,11 @@
       "import": "./dist/proof/index.js",
       "default": "./dist/proof/index.js"
     },
+    "./review": {
+      "types": "./dist/review/index.d.ts",
+      "import": "./dist/review/index.js",
+      "default": "./dist/review/index.js"
+    },
     "./table": {
       "types": "./dist/table/index.d.ts",
       "import": "./dist/table/index.js",

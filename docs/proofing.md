@@ -16,6 +16,11 @@ precedent: the host installs the engine, serves its WASM same-origin,
 and passes a provider into `EditorShell`. No provider → no proofing UI,
 no engine bytes, ever. There is no CDN fallback.
 
+Proofing is one kind of review. For a provider that streams, can be
+cancelled, and wants document structure — a model-backed reviewer, say — see
+the [review guide](review.md); a proofing engine is adapted into that pipeline
+rather than replaced by it.
+
 ## Wiring it up
 
 ```bash

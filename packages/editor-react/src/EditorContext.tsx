@@ -36,6 +36,7 @@ import {
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
 import { markdownToTiptap } from './tiptapBridge';
+import { getBlockSlices, sliceIndexAtOffset, type BlockSlice } from './blockRange';
 import { resolveFileKind } from './fileKind';
 import { useBlockNavigator } from './useBlockNavigator';
 import {
@@ -106,6 +107,16 @@ export type DocumentLinkProvider = (query: string) => Promise<DocumentLinkCandid
 // ─── Types ───────────────────────────────────────────────
 
 export type EditorView = 'raw' | 'wysiwyg' | 'preview';
+
+/** What is selected in the active editing surface. */
+export interface EditorSelectionInfo {
+  /** Which surface reported it. */
+  view: EditorView;
+  /** The selected text, empty when the selection is a bare cursor. */
+  text: string;
+  /** True when the selection is a bare cursor rather than a range. */
+  empty: boolean;
+}
 /**
  * Light/dark chrome mode for the editor shell (toolbar, tabs, status bar,
  * side panes). This is the editor's *UI color scheme* — distinct from a
@@ -252,6 +263,14 @@ export interface EditorState {
   activeBlockKey: number;
   /** 1-based source line where the active block begins, or null. */
   activeBlockStartLine: number | null;
+  /**
+   * Bumped on every selection change in either surface.
+   *
+   * Exists so a host can gate on "is there a selection" without subscribing to
+   * Tiptap or Monaco internals. The counter, rather than the selection itself,
+   * is what keeps a toolbar from re-rendering on every keystroke inside one.
+   */
+  selectionVersion: number;
 }
 
 export interface EditorActions {
@@ -299,6 +318,28 @@ export interface EditorActions {
   setBlockTagVisibility: (visibility: BlockTagVisibility) => void;
   /** Change how much of the active Squisq theme the WYSIWYG surface mirrors. */
   setThemeInheritance: (mode: ThemeInheritance) => void;
+  /**
+   * The current selection in the active surface, or null when the surface has
+   * no selection to report (Preview, or an editor that has not mounted).
+   */
+  getSelection: () => EditorSelectionInfo | null;
+  /**
+   * Replace the current selection with markdown, as ONE undoable edit.
+   *
+   * Returns false when the active surface cannot be edited, so a caller can
+   * offer to switch views rather than silently dropping the text. With an
+   * empty selection this inserts at the cursor.
+   */
+  replaceSelection: (markdown: string) => boolean;
+  /**
+   * The block containing the cursor.
+   *
+   * Exact in Source view. Null in Write view, where there is no public mapping
+   * from a ProseMirror position back to a markdown source offset — returning a
+   * plausible-but-wrong block would be worse than returning nothing, since a
+   * caller would edit the wrong paragraph.
+   */
+  getBlockAtCursor: () => BlockSlice | null;
   /** Insert text at the current cursor position in the active editor */
   insertAtCursor: (text: string) => void;
   /** Replace all editor content with the given text */
@@ -1143,6 +1184,83 @@ export function EditorProvider({
     addBlock,
   } = blockNav;
 
+  const [selectionVersion, setSelectionVersion] = useState(0);
+  useEffect(() => {
+    const bump = () => setSelectionVersion((version) => version + 1);
+    const disposers: Array<() => void> = [];
+    // Both subscriptions are feature-detected. This counter is an enhancement
+    // a host may ignore entirely, so a partial editor — a test double, or an
+    // instance from a version that predates the event — must degrade to "no
+    // selection updates" rather than take the whole editor down on mount.
+    if (typeof tiptapEditor?.on === 'function' && typeof tiptapEditor.off === 'function') {
+      tiptapEditor.on('selectionUpdate', bump);
+      disposers.push(() => tiptapEditor.off('selectionUpdate', bump));
+    }
+    if (typeof monacoEditor?.onDidChangeCursorSelection === 'function') {
+      const subscription = monacoEditor.onDidChangeCursorSelection(bump);
+      if (typeof subscription?.dispose === 'function') {
+        disposers.push(() => subscription.dispose());
+      }
+    }
+    return () => {
+      for (const dispose of disposers) dispose();
+    };
+  }, [tiptapEditor, monacoEditor]);
+
+  const getSelection = useCallback((): EditorSelectionInfo | null => {
+    if (activeView === 'wysiwyg' && tiptapEditor) {
+      const { from, to, empty } = tiptapEditor.state.selection;
+      return {
+        view: 'wysiwyg',
+        text: empty ? '' : tiptapEditor.state.doc.textBetween(from, to, '\n', ' '),
+        empty,
+      };
+    }
+    if (activeView === 'raw' && monacoEditor) {
+      const selection = monacoEditor.getSelection();
+      const model = monacoEditor.getModel();
+      if (!selection || !model) return null;
+      const text = model.getValueInRange(selection);
+      return { view: 'raw', text, empty: text.length === 0 };
+    }
+    return null;
+  }, [activeView, tiptapEditor, monacoEditor]);
+
+  const replaceSelection = useCallback(
+    (markdown: string): boolean => {
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        // insertContent replaces a non-empty selection and inserts at an empty
+        // one, in a single transaction — so one undo takes the whole edit back.
+        tiptapEditor.chain().focus().insertContent(markdownToTiptap(markdown)).run();
+        return true;
+      }
+      if (activeView === 'raw' && monacoEditor) {
+        const selection = monacoEditor.getSelection();
+        if (!selection) return false;
+        // Undo stops either side make this one entry in Monaco's history,
+        // rather than merging with whatever the user typed before it.
+        monacoEditor.pushUndoStop();
+        monacoEditor.executeEdits('replace-selection', [{ range: selection, text: markdown }]);
+        monacoEditor.pushUndoStop();
+        monacoEditor.focus();
+        return true;
+      }
+      return false;
+    },
+    [activeView, tiptapEditor, monacoEditor],
+  );
+
+  const getBlockAtCursor = useCallback((): BlockSlice | null => {
+    // Source view only: see the note on the action's declaration.
+    if (activeView !== 'raw' || !monacoEditor) return null;
+    const model = monacoEditor.getModel();
+    const position = monacoEditor.getPosition();
+    if (!model || !position) return null;
+    const slices = getBlockSlices(model.getValue());
+    if (slices.length === 0) return null;
+    return slices[sliceIndexAtOffset(slices, model.getOffsetAt(position))] ?? null;
+  }, [activeView, monacoEditor]);
+
   const insertAtCursor = useCallback(
     (text: string) => {
       if (activeView === 'wysiwyg' && tiptapEditor) {
@@ -1333,6 +1451,7 @@ export function EditorProvider({
       blockCount,
       activeBlockKey,
       activeBlockStartLine,
+      selectionVersion,
       imageEditTarget,
       mediaRevision,
       allowRecording,
@@ -1381,6 +1500,9 @@ export function EditorProvider({
       setBlockTagVisibility,
       setBlockTagsVisible,
       setThemeInheritance,
+      getSelection,
+      replaceSelection,
+      getBlockAtCursor,
       insertAtCursor,
       replaceAll,
       openImageEdit,
@@ -1409,6 +1531,7 @@ export function EditorProvider({
       blockCount,
       activeBlockKey,
       activeBlockStartLine,
+      selectionVersion,
       tiptapEditor,
       monacoEditor,
       activeSceneText,
@@ -1452,6 +1575,9 @@ export function EditorProvider({
       setBlockTagVisibility,
       setBlockTagsVisible,
       setThemeInheritance,
+      getSelection,
+      replaceSelection,
+      getBlockAtCursor,
       insertAtCursor,
       replaceAll,
       imageEditTarget,

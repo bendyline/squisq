@@ -30,6 +30,9 @@ import { BlockPreviewPanel } from './BlockPreviewPanel';
 import { OutlinePanel, OUTLINE_RESPONSIVE_WIDTH } from './OutlinePanel';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
 import { ProofingRoot } from './proofing/ProofingContext';
+import { ReviewRoot } from './review/ReviewContext';
+import { ReviewPanel } from './review/ReviewPanel';
+import type { ReviewCapability } from './review/types';
 import { ProofingPanel } from './proofing/ProofingPanel';
 import { CodeContextZones } from './codeContext/CodeContextZones';
 import type { CodeContext } from './codeContext/types';
@@ -252,6 +255,29 @@ export interface EditorShellProps {
   toolbarSlotRight?: ReactNode;
   /** Host-supplied content rendered at the right edge of the bottom status bar. */
   statusBarSlotRight?: ReactNode;
+  /**
+   * Host-supplied panel docked beside the editor, as a flex sibling of the
+   * preview — so opening it reflows the editor narrower rather than covering
+   * it. Renders nothing when absent.
+   *
+   * The built-in panels (Files, proofing, the theme designer) are fixed
+   * siblings here. This is the seam for a host's own: a review drawer, an
+   * assistant, an inspector. Without it a host has to portal into a DOM node
+   * it owns and give up the editor context in the process.
+   *
+   * Markdown modes only: the image and JSON surfaces have no panel row.
+   */
+  sidePanelSlot?: ReactNode;
+  /**
+   * Review providers, each scheduled independently.
+   *
+   * A list rather than one capability because the providers are independent: a
+   * spellchecker and a document reviewer disagree about latency, about what a
+   * suggestion is, and about which hue they draw in, and a host should be able
+   * to run either without the other. Absent or empty means no review at all —
+   * nothing is scheduled and no provider is constructed.
+   */
+  reviewProviders?: readonly ReviewCapability[];
   /**
    * Whether to show the "Play" (preview) tab in the toolbar. When false, the
    * tab and its preview panel are hidden, and ⌘3 becomes a no-op. Use this
@@ -633,6 +659,8 @@ export function EditorShell({
   toolbarSlotAfterActions,
   toolbarSlotRight,
   statusBarSlotRight,
+  sidePanelSlot,
+  reviewProviders,
   showPlayTab = true,
   allowPresentationWindow = true,
   allowPresentationFullscreen = true,
@@ -747,53 +775,56 @@ export function EditorShell({
         onViewPreferencesChange={onViewPreferencesChange}
       >
         <ProofingRoot>
-          <EditorShellInner
-            basePath={basePath}
-            defaultViewportPreset={defaultViewportPreset}
-            onChange={onChange}
-            onLinkClick={onLinkClick}
-            showCodeCopyButton={showCodeCopyButton}
-            onCopyCode={onCopyCode}
-            className={className}
-            height={height}
-            minHeight={minHeight}
-            maxHeight={maxHeight}
-            placeholder={placeholder}
-            mediaProvider={effectiveMediaProvider ?? null}
-            workspaceContainer={effectiveContainer}
-            filesToggleEnabled={filesToggleEnabled}
-            showFilesWhenNotEmpty={showFilesWhenNotEmpty}
-            showFormattingControls={showFormattingControls}
-            showInsertControls={showInsertControls}
-            allowBinaryDownloads={allowBinaryDownloads}
-            toolbarSlotLeft={toolbarSlotLeft}
-            toolbarSlotAfterActions={toolbarSlotAfterActions}
-            toolbarSlotRight={toolbarSlotRight}
-            statusBarSlotRight={statusBarSlotRight}
-            showPlayTab={showPlayTab}
-            hostMode={hostMode}
-            allowPresentationWindow={allowPresentationWindow}
-            allowPresentationFullscreen={allowPresentationFullscreen}
-            allowPrint={allowPrint}
-            submitOnEnter={submitOnEnter}
-            calcEngineFactory={calcEngineFactory}
-            codeContext={codeContext}
-            fullWidth={fullWidth}
-            uxFont={uxFont}
-            thinMargins={thinMargins}
-            writeCanvasSettings={writeCanvasSettings}
-            readOnly={readOnly}
-            imageSrc={imageSrc}
-            imageAlt={imageAlt}
-            imageMode={imageMode}
-            imageEditorContainer={imageEditorContainer}
-            onImageExport={onImageExport}
-            allowVersioning={allowVersioning}
-            versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-            inlinePreviewWidth={inlinePreviewWidth}
-            outlineWidth={outlineWidth}
-            themeOverride={themeOverride}
-          />
+          <ReviewRoot providers={reviewProviders}>
+            <EditorShellInner
+              basePath={basePath}
+              defaultViewportPreset={defaultViewportPreset}
+              onChange={onChange}
+              onLinkClick={onLinkClick}
+              showCodeCopyButton={showCodeCopyButton}
+              onCopyCode={onCopyCode}
+              className={className}
+              height={height}
+              minHeight={minHeight}
+              maxHeight={maxHeight}
+              placeholder={placeholder}
+              mediaProvider={effectiveMediaProvider ?? null}
+              workspaceContainer={effectiveContainer}
+              filesToggleEnabled={filesToggleEnabled}
+              showFilesWhenNotEmpty={showFilesWhenNotEmpty}
+              showFormattingControls={showFormattingControls}
+              showInsertControls={showInsertControls}
+              allowBinaryDownloads={allowBinaryDownloads}
+              toolbarSlotLeft={toolbarSlotLeft}
+              toolbarSlotAfterActions={toolbarSlotAfterActions}
+              toolbarSlotRight={toolbarSlotRight}
+              statusBarSlotRight={statusBarSlotRight}
+              sidePanelSlot={sidePanelSlot}
+              showPlayTab={showPlayTab}
+              hostMode={hostMode}
+              allowPresentationWindow={allowPresentationWindow}
+              allowPresentationFullscreen={allowPresentationFullscreen}
+              allowPrint={allowPrint}
+              submitOnEnter={submitOnEnter}
+              calcEngineFactory={calcEngineFactory}
+              codeContext={codeContext}
+              fullWidth={fullWidth}
+              uxFont={uxFont}
+              thinMargins={thinMargins}
+              writeCanvasSettings={writeCanvasSettings}
+              readOnly={readOnly}
+              imageSrc={imageSrc}
+              imageAlt={imageAlt}
+              imageMode={imageMode}
+              imageEditorContainer={imageEditorContainer}
+              onImageExport={onImageExport}
+              allowVersioning={allowVersioning}
+              versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+              inlinePreviewWidth={inlinePreviewWidth}
+              outlineWidth={outlineWidth}
+              themeOverride={themeOverride}
+            />
+          </ReviewRoot>
         </ProofingRoot>
       </EditorProvider>
     </MediaContext.Provider>
@@ -823,6 +854,7 @@ interface EditorShellInnerProps {
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
   statusBarSlotRight?: ReactNode;
+  sidePanelSlot?: ReactNode;
   showPlayTab: boolean;
   hostMode: EditorHostMode;
   allowPresentationWindow: boolean;
@@ -911,6 +943,7 @@ function EditorShellInner({
   toolbarSlotAfterActions,
   toolbarSlotRight,
   statusBarSlotRight,
+  sidePanelSlot,
   showPlayTab,
   hostMode,
   allowPresentationWindow,
@@ -1640,6 +1673,10 @@ function EditorShellInner({
               opening it reflows the preview narrower. Renders nothing when the
               designer is closed. */}
               {isMarkdownMode && <ProofingPanel />}
+
+              {isMarkdownMode && <ReviewPanel />}
+
+              {isMarkdownMode && sidePanelSlot}
 
               {isMarkdownMode && <ThemeDesignerDock />}
 
