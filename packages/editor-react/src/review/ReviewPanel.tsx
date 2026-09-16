@@ -10,9 +10,10 @@
 
 import { useReviewState } from './ReviewContext.js';
 import type { ReviewFinding } from '@bendyline/squisq/review';
+import type { ReactElement } from 'react';
 import type { ReviewProviderStatus } from './runner.js';
 
-export function ReviewPanel(): JSX.Element | null {
+export function ReviewPanel(): ReactElement | null {
   const state = useReviewState();
   if (!state || state.providers.length === 0) return null;
 
@@ -48,7 +49,7 @@ function ProviderGroup({
 }: {
   provider: ReviewProviderStatus;
   state: NonNullable<ReturnType<typeof useReviewState>>;
-}): JSX.Element {
+}): ReactElement {
   return (
     <section className="squisq-review-panel-group">
       <h3 className="squisq-review-panel-group-title">{provider.label}</h3>
@@ -87,7 +88,7 @@ function Row({
   finding: ReviewFinding;
   onGo: (id: string) => void;
   onDismiss: (id: string) => void;
-}): JSX.Element {
+}): ReactElement {
   return (
     <div className="squisq-review-panel-row">
       <button

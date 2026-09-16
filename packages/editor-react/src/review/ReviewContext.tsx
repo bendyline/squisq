@@ -8,7 +8,7 @@
  * would be felt.
  */
 
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, type ReactElement, type ReactNode } from 'react';
 import { useReview, type ReviewState } from './useReview.js';
 import type { ReviewCapability } from './types.js';
 
@@ -26,7 +26,7 @@ export function ReviewRoot({
 }: {
   providers?: readonly ReviewCapability[];
   children: ReactNode;
-}): JSX.Element {
+}): ReactElement {
   const state = useReview(providers);
   return <ReviewStateContext.Provider value={state}>{children}</ReviewStateContext.Provider>;
 }
