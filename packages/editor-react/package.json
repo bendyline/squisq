@@ -72,6 +72,10 @@
       "types": "./dist/proofing/index.d.ts",
       "import": "./dist/proofing/index.js"
     },
+    "./review": {
+      "types": "./dist/review/index.d.ts",
+      "import": "./dist/review/index.js"
+    },
     "./styles": {
       "types": "./dist/styles/index.d.ts",
       "default": "./dist/styles/index.css"

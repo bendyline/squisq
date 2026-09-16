@@ -122,13 +122,17 @@
   --squisq-success: #059669;
   --squisq-success-border: #10b981;
 
-  /* ── Proofing marks ───────────────────────────────────
-     The three squiggle hues harper reports against. Semantic, not
+  /* ── Review marks ─────────────────────────────────────
+     The squiggle hues a review provider draws in. Semantic, not
      decorative — they must stay distinguishable from each other and
-     from the accent, so they are deliberately NOT derived from it. */
+     from the accent, so they are deliberately NOT derived from it.
+     `assist` is the fourth, for a provider whose findings are
+     suggestions rather than mistakes: reusing the style blue would make
+     an opinion and a rule violation look identical. */
   --squisq-proof-spelling: #d93025;
   --squisq-proof-grammar: #188038;
   --squisq-proof-style: #1a73e8;
+  --squisq-review-assist: #6c4bd6;
 
   /* ── Find highlights ──────────────────────────────────
      Deliberately the SAME in both themes: a search hit is a marker pen on
@@ -259,6 +263,7 @@
   --squisq-proof-spelling: #f28b82;
   --squisq-proof-grammar: #81c995;
   --squisq-proof-style: #8ab4f8;
+  --squisq-review-assist: #b39ddb;
 
   --squisq-tag-text: #ffe3ad;
   --squisq-tag-bg: #3a2818;

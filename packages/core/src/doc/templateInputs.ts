@@ -651,9 +651,9 @@ export function autoTemplatePreservesContent(
     case 'leftFeature':
     case 'rightFeature':
     case 'statHighlight':
-      // Feature bodies retain all plain text; stat auto-derivation uses the
-      // preserveSourceHeading mode below and retains the remaining body.
-      return true;
+      // These templates retain paragraph text, but they do not retain the
+      // semantics or markers of lists/tables/quotes embedded beside it.
+      return nodes.length > 0 && nodes.every((node) => node.type === 'paragraph');
     default:
       return false;
   }

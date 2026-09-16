@@ -79,6 +79,7 @@ import { uploadAndInsertImages } from './wysiwygImageUpload';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { FindHighlightExtension } from './find/FindHighlightExtension';
 import { ProofingExtension } from './proofing/ProofingExtension';
+import { ReviewExtension } from './review/ReviewExtension';
 import { syncAccessoryFileLinkPlaceholders } from './accessoryFileLinks';
 
 type MediaMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
@@ -399,6 +400,7 @@ export function WysiwygEditor({
       InlineIcon,
       FindHighlightExtension,
       ProofingExtension,
+      ReviewExtension,
     ],
     content: markdownToTiptap(initialDisplayBodyRef.current),
     onUpdate: ({ editor: ed }) => {

@@ -38,6 +38,7 @@ export type {
   EditorState,
   EditorActions,
   EditorContextValue,
+  EditorSelectionInfo,
   EditorProviderProps,
   ImageDisplayMode,
   MentionCandidate,

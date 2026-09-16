@@ -24,7 +24,7 @@ import { extractPlainText, getChildren } from '../markdown/utils.js';
 import { iconMarker } from '../icons/inlineIconMarker.js';
 import type { IconFamily } from '../icons/index.js';
 import type { Block, Doc } from '../schemas/Doc.js';
-import type { MarkdownBlockNode, MarkdownList, MarkdownNode } from '../markdown/types.js';
+import type { MarkdownBlockNode, MarkdownNode } from '../markdown/types.js';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -145,20 +145,6 @@ function collectAllDocImages(blocks: Block[]): Array<{ src: string; alt: string 
   return images;
 }
 
-function extractListItems(contents: MarkdownBlockNode[] | undefined): string[] {
-  if (!contents) return [];
-  const items: string[] = [];
-  for (const node of contents) {
-    if (node.type === 'list') {
-      for (const item of (node as MarkdownList).children) {
-        const text = extractPlainText(item).trim();
-        if (text) items.push(text);
-      }
-    }
-  }
-  return items;
-}
-
 function getTemplateDefaults(
   templateName: string,
   headingText: string,
@@ -191,10 +177,16 @@ function getTemplateDefaults(
       return { fact: headingText, explanation: body || headingText };
     case 'comparisonBar':
       return { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 };
-    case 'list': {
-      const items = extractListItems(block.contents);
-      return { items: items.length > 0 ? items : ['Item 1', 'Item 2', 'Item 3'] };
-    }
+    case 'list':
+      // Preserve the source list kind in the player-ready slide. The slideshow
+      // projection removes `sourceHeading`, so its later materialization pass
+      // cannot re-derive `ordered` from `contents`; omitting it here made the
+      // list template fall back to its legacy numbered-list behaviour.
+      return (
+        deriveTemplateInputs(templateName, headingText, block.contents) ?? {
+          items: ['Item 1', 'Item 2', 'Item 3'],
+        }
+      );
     case 'definitionCard':
       return { term: headingText, definition: body || headingText };
     case 'dateEvent':

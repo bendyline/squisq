@@ -36,6 +36,34 @@ describe('template content previews', () => {
     expect(JSON.stringify(visual?.layers)).toContain('Draft the outline');
   });
 
+  it('renders compound list content intact only in the complete-body preview', () => {
+    const source = previewSource(`### What's in a model name
+
+Take: Qwen 3.6 35B-A3B-Q4
+
+- Family
+- Series
+
+Dense vs Mixture of Experts (MoE)
+
+- All parameters
+- A subset`);
+    const content = resolveTemplateContentPreviewResult('content', source);
+    const body = content.visual?.layers?.find((layer) => layer.id === 'body');
+
+    expect(body && body.type === 'text' ? body.content.html : '').toContain(
+      '</ul><p>Dense vs Mixture of Experts (MoE)</p><ul>',
+    );
+    expect(resolveTemplateContentPreviewResult('list', source)).toMatchObject({
+      visual: null,
+      warning: 'Use Content to preserve mixed prose and list structure',
+    });
+    expect(resolveTemplateContentPreviewResult('statHighlight', source)).toMatchObject({
+      visual: null,
+      warning: 'Use Content to preserve mixed prose and list structure',
+    });
+  });
+
   it('falls back for content-specific templates when the block is too sparse', () => {
     const visual = resolveTemplateContentPreview('list', previewSource('## About Squisq'));
 

@@ -5,6 +5,7 @@ import { profileBlockContents, recommendTemplatesForBlock } from '../recommend/t
 const ALL_TEMPLATES = [
   'title',
   'sectionHeader',
+  'content',
   'statHighlight',
   'quote',
   'factCard',
@@ -107,7 +108,7 @@ describe('recommendTemplatesForBlock', () => {
   it('falls back to universal defaults when nothing is detected', () => {
     const profile = profileBlockContents([]);
     const { recommended } = recommendTemplatesForBlock(profile, ALL_TEMPLATES);
-    expect(recommended).toEqual(['title', 'sectionHeader', 'factCard', 'twoColumn']);
+    expect(recommended).toEqual(['title', 'sectionHeader', 'content', 'factCard', 'twoColumn']);
   });
 
   it('keeps recommended ordering aligned with the input list', () => {
@@ -178,12 +179,20 @@ describe('recommendTemplatesForBlock', () => {
     expect(recommended).not.toContain('twoColumn');
   });
 
-  it('combines multiple signals additively', () => {
+  it('prefers complete-body content when multiple structures compete', () => {
     const profile = profileOf('![a](a.png)\n\n> a great line\n\n- alpha\n- beta');
     const { recommended } = recommendTemplatesForBlock(profile, ALL_TEMPLATES);
-    expect(recommended).toContain('imageWithCaption');
-    expect(recommended).toContain('quote');
-    expect(recommended).toContain('list');
+    expect(recommended).toEqual(['content']);
+  });
+
+  it('recommends only complete-body content for prose separated lists', () => {
+    const profile = profileOf(
+      'Take: Qwen 3.6 35B-A3B-Q4\n\n- family\n- series\n\nDense vs MoE\n\n- all parameters\n- subset',
+    );
+    const { recommended } = recommendTemplatesForBlock(profile, ALL_TEMPLATES);
+
+    expect(profile.hasCompoundBody).toBe(true);
+    expect(recommended).toEqual(['content']);
   });
 
   it('places unrecommended templates in the rest bucket', () => {

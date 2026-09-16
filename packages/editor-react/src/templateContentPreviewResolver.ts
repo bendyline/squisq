@@ -57,6 +57,22 @@ export function resolveTemplateContentPreviewResult(
   const { block, theme, viewport } = source;
   const headingText = getHeadingText(block);
   const bodyText = extractBodyPlainText(block.contents);
+  const topLevelLists = (block.contents ?? []).filter((node) => node.type === 'list').length;
+  const hasCompoundListBody =
+    topLevelLists > 1 ||
+    (topLevelLists === 1 && (block.contents ?? []).some((node) => node.type !== 'list'));
+
+  // A specialized thumbnail that silently drops prose or merges separate
+  // lists is misleading. Keep those templates available for an intentional
+  // transformation, but show their incompatibility instead of a mangled
+  // preview. `content` is the complete-body choice for this source shape.
+  if (templateName !== 'content' && hasCompoundListBody) {
+    return {
+      visual: null,
+      warning: 'Use Content to preserve mixed prose and list structure',
+    };
+  }
+
   const sameTemplate = block.template === templateName;
   const existingInputs =
     sameTemplate &&
@@ -115,6 +131,10 @@ function buildTemplatePreviewInputs(
   const text = [headingText, bodyText].filter(Boolean).join('\n');
 
   switch (templateName) {
+    case 'content':
+      // The content renderer reads the original AST from `context.block`.
+      // A non-null input is still needed to opt into a live gallery preview.
+      return { inputs: text ? { title: headingText } : null };
     case 'title':
       return {
         inputs: text

@@ -41,6 +41,12 @@ export interface BlockContentProfile {
   hasNumberHighlight: boolean;
   wordCount: number;
   /**
+   * True when a structural body node (list, table, quote, fence, etc.) has
+   * top-level siblings. Specialized templates generally consume only one
+   * structure; the complete-body template is the safe recommendation.
+   */
+  hasCompoundBody?: boolean;
+  /**
    * True when the body is dominated by exactly one code fence whose content
    * is an ASCII box-and-line diagram (see `doc/asciiDiagram/detect.ts`).
    * Optional so externally-constructed profiles keep compiling.
@@ -71,6 +77,7 @@ const EMPTY_PROFILE: BlockContentProfile = Object.freeze({
   hasDate: false,
   hasNumberHighlight: false,
   wordCount: 0,
+  hasCompoundBody: false,
 });
 
 const DATE_PATTERNS: RegExp[] = [
@@ -256,6 +263,7 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     hasDate,
     hasNumberHighlight,
     wordCount,
+    hasCompoundBody: nodes.length > 1 && nodes.some((node) => node.type !== 'paragraph'),
     hasAsciiDiagram,
     hasTimeline,
     hasTree,
@@ -264,7 +272,7 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
 
 // ── Recommendation rules ───────────────────────────────────────────
 
-const UNIVERSAL_DEFAULTS = ['title', 'sectionHeader', 'factCard', 'twoColumn'];
+const UNIVERSAL_DEFAULTS = ['title', 'sectionHeader', 'content', 'factCard', 'twoColumn'];
 
 /**
  * Given a content profile, return the canonical template-name list that
@@ -273,6 +281,11 @@ const UNIVERSAL_DEFAULTS = ['title', 'sectionHeader', 'factCard', 'twoColumn'];
  * template list (see {@link recommendTemplatesForBlock}).
  */
 function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
+  // A compound body needs the one template whose contract includes every
+  // authored body node. Recommending a list/stat/table template here presents
+  // a lossy extraction as though it were an equivalent layout choice.
+  if (profile.hasCompoundBody) return ['content'];
+
   const names = new Set<string>();
   let anyContentSignal = false;
 
@@ -340,9 +353,10 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
   }
 
   if (anyContentSignal) {
-    // Universal pair only — keep recommended focused.
+    // Content is always the loss-averse option beside specialized suggestions.
     names.add('title');
     names.add('sectionHeader');
+    names.add('content');
   } else {
     for (const n of UNIVERSAL_DEFAULTS) names.add(n);
   }
@@ -365,6 +379,7 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
  * the editor's template-picker UI instead.
  */
 export function pickAutoTemplate(profile: BlockContentProfile, blockIndex = 0): string | undefined {
+  if (profile.hasCompoundBody) return undefined;
   if (profile.hasAsciiDiagram) return 'diagram';
   if (profile.hasTimeline) return 'timeline';
   if (profile.hasTree) return 'tree';

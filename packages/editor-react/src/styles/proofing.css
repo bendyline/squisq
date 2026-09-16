@@ -22,6 +22,34 @@
   text-decoration-skip-ink: none;
 }
 
+/* Review marks. The same shape as a proofing squiggle so the two read as one
+   family, but a review provider draws in its own hue — `assist` is the fourth,
+   for findings that are suggestions rather than mistakes. Dashed rather than
+   wavy: an opinion should not look like a rule violation at a glance. */
+.squisq-review-underline {
+  text-decoration-skip-ink: none;
+}
+
+.squisq-review-underline--spelling {
+  text-decoration: underline wavy var(--squisq-proof-spelling) 1px;
+  text-decoration-skip-ink: none;
+}
+
+.squisq-review-underline--grammar {
+  text-decoration: underline wavy var(--squisq-proof-grammar) 1px;
+  text-decoration-skip-ink: none;
+}
+
+.squisq-review-underline--style {
+  text-decoration: underline dotted var(--squisq-proof-style) 1.5px;
+  text-decoration-skip-ink: none;
+}
+
+.squisq-review-underline--assist {
+  text-decoration: underline dashed var(--squisq-review-assist) 1.5px;
+  text-decoration-skip-ink: none;
+}
+
 /* Category dots (menu header + panel rows). */
 .squisq-proof-dot {
   display: inline-block;
@@ -466,4 +494,155 @@
 
 .squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-actions {
   border-top-color: var(--squisq-border-subtle);
+}
+
+/* Review panel. Same geometry as the proofing panel — it occupies the same
+   dock — but grouped by provider, because the providers answer different
+   questions and interleaving them by position reads as noise. */
+.squisq-review-panel {
+  width: 260px;
+  flex: 0 0 260px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border-left: 1px solid var(--squisq-border-subtle);
+  background: var(--squisq-surface-subtle);
+  min-height: 0;
+  font-size: 12px;
+}
+.squisq-editor-shell[data-theme='dark'] .squisq-review-panel {
+  background: var(--squisq-surface-sunken);
+  border-left-color: var(--squisq-border-subtle);
+}
+
+.squisq-review-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--squisq-border-subtle);
+}
+
+.squisq-review-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--squisq-text);
+}
+
+.squisq-review-panel-count {
+  color: var(--squisq-text-muted);
+  font-weight: 400;
+}
+
+.squisq-review-panel-button {
+  border: none;
+  background: transparent;
+  color: var(--squisq-text-soft);
+  cursor: pointer;
+  font: inherit;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.squisq-review-panel-button:hover:not(:disabled) {
+  background: var(--squisq-surface-hover);
+  color: var(--squisq-text);
+}
+.squisq-review-panel-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.squisq-review-panel-group-title {
+  margin: 0;
+  padding: 8px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-review-panel-empty {
+  padding: 4px 10px 8px;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-review-panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.squisq-review-panel-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+.squisq-review-panel-row:hover {
+  background: var(--squisq-row-hover);
+}
+
+.squisq-review-panel-row-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 6px 4px 6px 10px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.squisq-review-panel-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.squisq-review-panel-excerpt {
+  color: var(--squisq-text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-review-panel-message {
+  color: var(--squisq-text-soft);
+}
+
+.squisq-review-panel-rationale {
+  color: var(--squisq-text-muted);
+}
+
+/* Severity is carried by the message text as well as this dot, so a reader who
+   cannot distinguish the colours loses nothing. */
+.squisq-review-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex: 0 0 auto;
+  background: var(--squisq-text-muted);
+}
+.squisq-review-dot--error {
+  background: var(--squisq-proof-spelling);
+}
+.squisq-review-dot--warning {
+  background: var(--squisq-warning);
+}
+.squisq-review-dot--suggestion {
+  background: var(--squisq-review-assist);
+}
+.squisq-review-dot--info {
+  background: var(--squisq-text-faint);
 }
