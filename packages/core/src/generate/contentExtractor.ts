@@ -816,9 +816,12 @@ function cleanDescription(sentence: string, value: string): string {
   for (const pattern of prepositionPatterns) {
     desc = desc.replace(pattern, '');
   }
-  if (desc === sentence) {
-    desc = sentence.replace(value, '').trim();
-  }
+  // A statistic is often an essential noun-phrase complement rather than a
+  // disposable modifier: "reach a modest 125 feet" becomes the ungrammatical
+  // "reach a modest at their highest point" if the value is blindly removed.
+  // Keep the complete sentence unless the value arrived in one of the
+  // explicitly removable prepositional phrases above. Repeating the prominent
+  // value in the supporting copy is preferable to damaging the sentence.
 
   desc = desc.replace(/^[,:\-–—]+\s*/, '').replace(/\s*[,:\-–—]+$/, '');
   desc = desc.replace(

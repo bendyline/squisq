@@ -143,12 +143,12 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
   // same placement whether the media is an image or a clip.
   if (caption) {
     const captionBgY =
-      captionPosition === 'top' ? '7%' : captionPosition === 'center' ? '42%' : '68%';
+      captionPosition === 'top' ? '8%' : captionPosition === 'center' ? '43%' : '69%';
     const captionY =
       captionPosition === 'top' ? '13%' : captionPosition === 'center' ? '48%' : '74%';
 
-    // Compact caption band raised above media controls. Long archival captions
-    // are clamped so they don't sprawl across the image.
+    // Compact caption band raised above media controls. Its center is locked to
+    // the text anchor so short captions do not float inside an oversized scrim.
     layers.push({
       type: 'shape',
       id: 'caption-gradient',
@@ -160,7 +160,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
         x: 0,
         y: captionBgY,
         width: '100%',
-        height: '16%',
+        height: '10%',
       },
     });
 

@@ -67,7 +67,7 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
   if (caption) {
     const bg = theme.colors.background;
     const captionBgY =
-      captionPosition === 'top' ? '7%' : captionPosition === 'center' ? '42%' : '68%';
+      captionPosition === 'top' ? '8%' : captionPosition === 'center' ? '43%' : '69%';
     const captionY =
       captionPosition === 'top' ? '13%' : captionPosition === 'center' ? '48%' : '74%';
 
@@ -82,7 +82,7 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
         x: 0,
         y: captionBgY,
         width: '100%',
-        height: '16%',
+        height: '10%',
       },
     });
 

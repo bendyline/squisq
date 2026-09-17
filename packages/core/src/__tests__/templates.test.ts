@@ -484,11 +484,19 @@ describe('canonical template materialization', () => {
     const captionLayer = layers.find(
       (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'caption',
     );
+    const captionBand = layers.find((layer) => layer.id === 'caption-bg');
 
     expect(layers.some((layer) => layer.id.startsWith('grid-alt-'))).toBe(false);
     expect(captionLayer).toBeDefined();
+    expect(captionBand).toBeDefined();
     expect(captionLayer!.content.style.maxLines).toBe(1);
     expect(captionLayer!.position.width).toBe('78%');
+    expect(captionBand!.position.y).toBe('70%');
+    expect(captionBand!.position.height).toBe('8%');
+    expect(
+      parseFloat(String(captionBand!.position.y)) +
+        parseFloat(String(captionBand!.position.height)) / 2,
+    ).toBe(parseFloat(String(captionLayer!.position.y)));
   });
 
   it('clamps full-bleed media captions above playback controls', () => {
@@ -521,15 +529,27 @@ describe('canonical template materialization', () => {
     const videoCaption = (materializeTemplateForTest(videoBlock, context).layers ?? []).find(
       (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'caption',
     );
+    const imageBand = (materializeTemplateForTest(imageBlock, context).layers ?? []).find(
+      (layer) => layer.id === 'caption-gradient',
+    );
+    const videoBand = (materializeTemplateForTest(videoBlock, context).layers ?? []).find(
+      (layer) => layer.id === 'caption-gradient',
+    );
 
     expect(imageCaption).toBeDefined();
     expect(videoCaption).toBeDefined();
+    expect(imageBand).toBeDefined();
+    expect(videoBand).toBeDefined();
     expect(imageCaption!.content.style.maxLines).toBe(2);
     expect(videoCaption!.content.style.maxLines).toBe(2);
     expect(imageCaption!.position.y).toBe('74%');
     expect(videoCaption!.position.y).toBe('74%');
     expect(imageCaption!.position.width).toBe('78%');
     expect(videoCaption!.position.width).toBe('78%');
+    expect(imageBand!.position.y).toBe('69%');
+    expect(videoBand!.position.y).toBe('69%');
+    expect(imageBand!.position.height).toBe('10%');
+    expect(videoBand!.position.height).toBe('10%');
   });
 });
 
@@ -958,6 +978,8 @@ describe('template input defects (regressions)', () => {
       layersOf(block).find((l) => l.type === 'text' && l.id === 'caption')?.position.y;
     const bandY = (block: TemplateBlock): string | number | undefined =>
       layersOf(block).find((l) => l.id === 'caption-gradient')?.position.y;
+    const bandHeight = (block: TemplateBlock): string | number | undefined =>
+      layersOf(block).find((l) => l.id === 'caption-gradient')?.position.height;
 
     it('honours top / center / bottom', () => {
       expect(captionY(imageBlock('top'))).toBe('13%');
@@ -966,9 +988,18 @@ describe('template input defects (regressions)', () => {
     });
 
     it('moves the caption band with the caption', () => {
-      expect(bandY(imageBlock('top'))).toBe('7%');
-      expect(bandY(imageBlock('center'))).toBe('42%');
-      expect(bandY(imageBlock('bottom'))).toBe('68%');
+      expect(bandY(imageBlock('top'))).toBe('8%');
+      expect(bandY(imageBlock('center'))).toBe('43%');
+      expect(bandY(imageBlock('bottom'))).toBe('69%');
+    });
+
+    it('centers the compact caption band on the caption text', () => {
+      for (const pos of ['top', 'center', 'bottom'] as const) {
+        const bandTop = parseFloat(String(bandY(imageBlock(pos))));
+        const height = parseFloat(String(bandHeight(imageBlock(pos))));
+        expect(height).toBe(10);
+        expect(bandTop + height / 2).toBe(parseFloat(String(captionY(imageBlock(pos)))));
+      }
     });
 
     it('defaults to bottom', () => {

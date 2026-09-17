@@ -93,8 +93,8 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
   if (caption) {
     const captionFontSize = themedFontSize(layout.stackColumns ? 24 : 26, context, false);
     const captionY = layout.stackColumns ? '78%' : '74%';
-    const captionBgY = layout.stackColumns ? '72%' : '68%';
-    const captionHeight = layout.stackColumns ? '13%' : '16%';
+    const captionBgY = layout.stackColumns ? '73%' : '70%';
+    const captionHeight = layout.stackColumns ? '10%' : '8%';
     const bg = theme.colors.background;
 
     layers.push({
