@@ -1,3 +1,16 @@
+## @bendyline/squisq-cli [2.8.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.8.5...@bendyline/squisq-cli@2.8.6) (2026-09-17)
+
+### Bug Fixes
+
+* Move more capabilities from qualla to squisq ([#62](https://github.com/bendyline/squisq/issues/62)) ([b5750f6](https://github.com/bendyline/squisq/commit/b5750f6d8690c23e1f900cbd1a3e0a058df9bf42))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.6
+* **@bendyline/squisq-formats:** upgraded to 2.6.6
+* **@bendyline/squisq-video:** upgraded to 2.3.9
+
 ## @bendyline/squisq-cli [2.8.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.8.4...@bendyline/squisq-cli@2.8.5) (2026-09-16)
 
 
