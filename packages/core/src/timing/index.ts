@@ -15,3 +15,6 @@ export type {
   NarrationTimeEstimate,
   NarrationTimeOptions,
 } from './readingTime.js';
+
+export { buildCaptionTrack } from './captions.js';
+export type { BuildCaptionTrackOptions, CaptionSegmentSource } from './captions.js';

@@ -359,6 +359,10 @@ export async function resolveAudioMapping(doc: Doc, container: ContentContainer)
   const narration = await applyNarrationTiming(doc, container);
   doc = narration.doc;
 
+  // Explicit host-authored mappings are authoritative. Re-discovering the
+  // same files by fuzzy text similarity can reorder or duplicate segments.
+  if (doc.audio?.segments?.length > 0) return doc;
+
   const audioFiles = await discoverNarrationAudio(container);
 
   // Files already playing through the media schedule (documentMedia /

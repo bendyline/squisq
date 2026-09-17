@@ -643,6 +643,69 @@ export interface RenderDashboardPngResult {
   outputPath?: string;
 }
 
+/** Options for rendering the managed cover as a standalone PNG. */
+export interface RenderCoverPngOptions {
+  signal?: AbortSignal;
+  outputPath?: string;
+  width?: number;
+  height?: number;
+  animationsEnabled?: boolean;
+  onProgress?: (phase: string, percent: number) => void;
+}
+
+/** Result returned by {@link renderDocCoverToPng}. */
+export interface RenderCoverPngResult {
+  bytes: Uint8Array;
+  width: number;
+  height: number;
+  outputPath?: string;
+}
+
+/** Render a Doc's managed cover to a PNG with the canonical headless renderer. */
+export async function renderDocCoverToPng(
+  doc: Doc,
+  container: ContentContainer,
+  options: RenderCoverPngOptions = {},
+): Promise<RenderCoverPngResult> {
+  const width = options.width ?? 1920;
+  const height = options.height ?? 1080;
+  if (!doc.startBlock) throw new Error('Document has no managed cover to render');
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 64 || height < 64) {
+    throw new Error('Cover PNG dimensions must be integers of at least 64 pixels');
+  }
+  options.signal?.throwIfAborted();
+  const bytes = await withRenderPage(
+    doc,
+    container,
+    {
+      signal: options.signal,
+      width,
+      height,
+      includeAudio: false,
+      animationsEnabled: options.animationsEnabled ?? false,
+      displayMode: 'slideshow',
+      onProgress: options.onProgress,
+    },
+    async ({ page, renderAPI }) => {
+      options.onProgress?.('rendering cover', 50);
+      await renderAPI.evaluate((api) => api.showCover());
+      await page.waitForTimeout(100);
+      options.signal?.throwIfAborted();
+      options.onProgress?.('capturing image', 85);
+      return page.screenshot({ type: 'png' });
+    },
+  );
+  let writtenPath: string | undefined;
+  if (options.outputPath) {
+    const absolute = resolvePath(options.outputPath);
+    await mkdir(dirname(absolute), { recursive: true });
+    await writeFile(absolute, bytes);
+    writtenPath = absolute;
+  }
+  options.onProgress?.('done', 100);
+  return { bytes, width, height, ...(writtenPath ? { outputPath: writtenPath } : {}) };
+}
+
 /**
  * Render a Doc's Dashboard rendition to a single PNG image.
  *
