@@ -42,6 +42,7 @@
    tab cluster makes mode selection available before entering Use and frees the
    preview toolbar for format/theme/output settings. */
 .squisq-toolbar-use-tab {
+  position: relative;
   border-bottom: 2px solid transparent;
 }
 
@@ -53,6 +54,28 @@
 
 .squisq-toolbar-use-tab--active {
   border-bottom-color: var(--squisq-accent);
+}
+
+/* The Use tab is a split control: its label enters the current mode while the
+   chevron opens the mode menu. Suppress the browser outline around either
+   half and draw one balanced keyboard-focus ring around the compound control.
+   Keep it above the active underline so the two states remain distinct. */
+.squisq-toolbar-use-tab > .squisq-toolbar-view-tab:focus-visible,
+.squisq-toolbar-use-tab > .squisq-use-mode-trigger:focus-visible {
+  outline: none;
+}
+
+.squisq-toolbar-use-tab:has(
+    > .squisq-toolbar-view-tab:focus-visible,
+    > .squisq-use-mode-trigger:focus-visible
+  )::after {
+  content: '';
+  position: absolute;
+  inset: 2px 0 4px;
+  border: 2px solid var(--squisq-focus-ring);
+  border-radius: 6px;
+  box-sizing: border-box;
+  pointer-events: none;
 }
 
 .squisq-use-mode-trigger {

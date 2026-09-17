@@ -180,6 +180,50 @@ test.describe('Editor toolbar', () => {
     // Tabs should be white, toolbar should be non-white
     expect(tabsBg).not.toBe(toolbarBg);
   });
+
+  test('keyboard focus frames the whole Use split tab', async ({ page }) => {
+    const useTab = viewTab(page, 'Play');
+    const useTabGroup = page.locator('.squisq-toolbar-use-tab');
+    const modeTrigger = page.getByRole('button', { name: 'Choose Use mode', exact: true });
+
+    await useTab.click();
+    // Return by keyboard so Chromium applies :focus-visible to the tab.
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(useTab).toBeFocused();
+
+    const focusStyle = await useTabGroup.evaluate((group) => {
+      const ring = getComputedStyle(group, '::after');
+      const tab = group.querySelector<HTMLElement>('.squisq-toolbar-view-tab');
+      const trigger = group.querySelector<HTMLElement>('.squisq-use-mode-trigger');
+      return {
+        tabOutline: tab ? getComputedStyle(tab).outlineStyle : null,
+        ringContent: ring.content,
+        ringBorderStyle: ring.borderStyle,
+        ringBorderWidth: ring.borderWidth,
+        ringLeft: ring.left,
+        ringRight: ring.right,
+        groupWidth: group.getBoundingClientRect().width,
+        tabWidth: tab?.getBoundingClientRect().width ?? 0,
+        triggerWidth: trigger?.getBoundingClientRect().width ?? 0,
+      };
+    });
+
+    expect(focusStyle).toMatchObject({
+      tabOutline: 'none',
+      ringContent: '""',
+      ringBorderStyle: 'solid',
+      ringBorderWidth: '2px',
+      ringLeft: '0px',
+      ringRight: '0px',
+    });
+    expect(focusStyle.groupWidth).toBeCloseTo(focusStyle.tabWidth + focusStyle.triggerWidth, 4);
+
+    // Moving to the chevron keeps the same compound-control ring.
+    await page.keyboard.press('Tab');
+    await expect(modeTrigger).toBeFocused();
+    await expect(useTabGroup).toHaveCSS('position', 'relative');
+  });
 });
 
 // ── WYSIWYG Editing ─────────────────────────────────────────────────
