@@ -1,5 +1,7 @@
 export { LinearDocView } from '../LinearDocView.js';
 export type { LinearDocViewProps, ImageDisplayMode } from '../LinearDocView.js';
+export { PaginatedDocView } from '../PaginatedDocView.js';
+export type { PaginatedDocPage, PaginatedDocViewProps } from '../PaginatedDocView.js';
 export type { CodeBlockCopyContext, CodeBlockCopyHandler } from '../MarkdownRenderer.js';
 export { PageSectionView } from '../page/PageSectionView.js';
 export type { PageSectionViewProps } from '../page/PageSectionView.js';

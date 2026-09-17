@@ -21,6 +21,8 @@ export { MermaidDiagram } from './mermaid/MermaidDiagram.js';
 export type { MermaidDiagramProps } from './mermaid/MermaidDiagram.js';
 export { LinearDocView } from './LinearDocView.js';
 export type { LinearDocViewProps, ImageDisplayMode } from './LinearDocView.js';
+export { PaginatedDocView } from './PaginatedDocView.js';
+export type { PaginatedDocPage, PaginatedDocViewProps } from './PaginatedDocView.js';
 export { DashboardView } from './DashboardView.js';
 export type { DashboardViewProps } from './DashboardView.js';
 export { FlashcardFaceView, FlashcardView } from './FlashcardView.js';

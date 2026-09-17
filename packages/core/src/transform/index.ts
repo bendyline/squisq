@@ -1,4 +1,12 @@
 export { applyTransform } from './applyTransform.js';
+export { transformNarratedSegment } from './narratedSegment.js';
+export { allocateTiming } from './timingAllocator.js';
+export type {
+  NarratedSegmentInput,
+  NarratedSegmentResult,
+  NarratedSegmentTransformOptions,
+  NarratedSegmentVideo,
+} from './narratedSegment.js';
 export { createTransformStyleRegistry } from './registry.js';
 
 export {

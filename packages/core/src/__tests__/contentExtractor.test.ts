@@ -105,6 +105,34 @@ describe('extractContent', () => {
   });
 });
 
+describe('extractContent — statistic descriptions', () => {
+  it('keeps a mid-sentence statistic when removing it would damage the grammar', () => {
+    const sentence =
+      'The Barbuda Highlands, on the eastern side, reach a modest 125 feet at their highest point.';
+    const result = extractContent(sentence, { types: ['stat'] });
+    const stat = result.elements.find((element) => element.data.type === 'stat');
+
+    expect(stat?.data).toMatchObject({
+      type: 'stat',
+      value: '125 feet',
+      description: sentence,
+    });
+  });
+
+  it('still removes a statistic introduced by a separable prepositional phrase', () => {
+    const result = extractContent('From 10 feet, the lookout surveys the valley.', {
+      types: ['stat'],
+    });
+    const stat = result.elements.find((element) => element.data.type === 'stat');
+
+    expect(stat?.data).toMatchObject({
+      type: 'stat',
+      value: '10 feet',
+      description: 'The lookout surveys the valley.',
+    });
+  });
+});
+
 describe('extractContent — comparisons', () => {
   it('detects "from X to Y" comparisons', () => {
     const text = 'Temperatures range from 20 degrees to 70 degrees depending on altitude.';

@@ -51,6 +51,18 @@ async function containerWithConsolidatedTiming(): Promise<MemoryContentContainer
 }
 
 describe('resolveAudioMapping consolidated timing', () => {
+  it('preserves an explicit host-authored audio mapping', async () => {
+    const explicit = {
+      ...docWith([blockWithAudio('explicit', 'Explicit', 'explicit.mp3')]),
+      audio: {
+        segments: [{ src: 'audio/explicit.mp3', name: 'Explicit', duration: 9, startTime: 0 }],
+      },
+    };
+    const container = new MemoryContentContainer();
+    await container.writeFile('audio/other.mp3', new Uint8Array([1, 2, 3]));
+    const result = await resolveAudioMapping(explicit, container);
+    expect(result.audio.segments).toEqual(explicit.audio.segments);
+  });
   it('binds each recording to its own section when one name suffixes another', async () => {
     // `take-re-intro` ends with both `-intro` and `-re-intro`. Taking the
     // first suffix hit would hand it `intro`'s 10s timing and desync every
