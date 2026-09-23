@@ -1082,12 +1082,23 @@ export function getSegmentAtTime(audio: AudioTrack, time: number): number {
 }
 
 /**
+ * Seconds of tolerance before a block's start that still count as inside it.
+ * Media elements report `currentTime` at microsecond precision, so seeking to
+ * a computed start like 7.4015734 reads back as 7.401573 — a hair early, which
+ * would otherwise show the previous block after a seek-to-block.
+ */
+const BLOCK_START_TOLERANCE = 0.001;
+
+/**
  * Find which block should be visible at a given time.
  */
 export function getBlockAtTime(blocks: Block[], time: number): Block | null {
   for (let i = blocks.length - 1; i >= 0; i--) {
     const block = blocks[i];
-    if (time >= block.startTime && time < block.startTime + block.duration) {
+    if (
+      time + BLOCK_START_TOLERANCE >= block.startTime &&
+      time < block.startTime + block.duration
+    ) {
       return block;
     }
   }

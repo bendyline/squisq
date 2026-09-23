@@ -629,6 +629,52 @@ describe('expandDocBlocks', () => {
     expect(discrete.some((block) => block.id.includes('-split-'))).toBe(false);
   });
 
+  it('seats split parts directly after their source block, in timeline order', () => {
+    const blocks: TemplateBlock[] = [
+      {
+        template: 'factCard',
+        id: 'long',
+        duration: 45,
+        audioSegment: 0,
+        fact: 'F',
+        explanation: 'E',
+      },
+      {
+        template: 'factCard',
+        id: 'next',
+        duration: 10,
+        audioSegment: 0,
+        fact: 'G',
+        explanation: 'E',
+      },
+      {
+        template: 'factCard',
+        id: 'later',
+        duration: 10,
+        audioSegment: 1,
+        fact: 'H',
+        explanation: 'E',
+      },
+    ];
+    const audioSegments = [
+      { startTime: 0, duration: 55 },
+      { startTime: 55, duration: 10 },
+    ];
+
+    const paced = expandDocBlocks(blocks, { audioSegments });
+
+    expect(paced.map((block) => block.id)).toEqual([
+      'long',
+      'long-split-1',
+      'long-split-2',
+      'next',
+      'later',
+    ]);
+    for (let i = 1; i < paced.length; i++) {
+      expect(paced[i].startTime).toBeGreaterThanOrEqual(paced[i - 1].startTime);
+    }
+  });
+
   it('merges sub-gap blocks by default, but keeps them all when mergeShortBlocks is false', () => {
     // Eight beats sharing a 30s narration segment: each lands under the ~5s
     // minimum transition gap, so timed playback folds them into predecessors.

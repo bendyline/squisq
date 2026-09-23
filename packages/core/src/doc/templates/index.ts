@@ -299,6 +299,8 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
 
   // Expand blocks, timing them relative to their audio segment
   const expandedBlocks: Block[] = new Array(blocks.length);
+  // Pacing parts of over-long blocks, keyed by the block they continue.
+  const splitParts = new Map<Block, Block[]>();
 
   for (const [segmentIndex, segmentBlocks] of blocksBySegment) {
     const audioSegment = audioSegments[segmentIndex];
@@ -559,6 +561,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
             block.duration = partDuration;
 
             // Create additional blocks for remaining parts
+            const parts: Block[] = [];
             for (let p = 1; p < numParts; p++) {
               const splitBlock: Block = {
                 id: `${block.id}-split-${p}`,
@@ -572,13 +575,26 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
                 transition: { type: 'dissolve', duration: 1.0 },
                 template: block.template,
               };
-              // Insert into expanded blocks array
-              expandedBlocks.push(splitBlock);
+              parts.push(splitBlock);
             }
+            splitParts.set(block, parts);
           }
         }
       }
     }
+  }
+
+  // Seat split parts directly after their source block. Appending them to the
+  // end put them out of timeline order, so players indexing blocks by
+  // position showed a jumping slide counter and next/prev skipped around.
+  if (splitParts.size > 0) {
+    const sequenced: Block[] = [];
+    for (const block of expandedBlocks) {
+      sequenced.push(block);
+      const parts = block ? splitParts.get(block) : undefined;
+      if (parts) sequenced.push(...parts);
+    }
+    expandedBlocks.splice(0, expandedBlocks.length, ...sequenced);
   }
 
   // Filter out zero-duration blocks (eliminated in earlier passes). With
