@@ -95,22 +95,22 @@ IronCalc engine.
 | @bendyline/squisq-react        | workspace | MIT                           | (internal)                                   |
 | @fortawesome/fontawesome-free  | 7.2.0     | CC-BY-4.0 AND OFL-1.1 AND MIT | https://github.com/FortAwesome/Font-Awesome  |
 | @monaco-editor/react           | 4.7.0     | MIT                           | https://github.com/suren-atoyan/monaco-react |
-| @tiptap/core                   | 2.27.2    | MIT                           | https://github.com/ueberdosis/tiptap         |
-| @tiptap/extension-heading      | 2.27.2    | MIT                           | https://github.com/ueberdosis/tiptap         |
-| @tiptap/extension-image        | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/extension-link         | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/extension-mention      | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/extension-placeholder  | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/extension-table        | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/extension-table-cell   | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/extension-table-header | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/extension-table-row    | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/extension-task-item    | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/extension-task-list    | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/pm                     | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/react                  | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/starter-kit            | 2.27.2    | MIT                           | https://tiptap.dev                           |
-| @tiptap/suggestion             | 2.27.2    | MIT                           | https://tiptap.dev                           |
+| @tiptap/core                   | 2.27.3    | MIT                           | https://github.com/ueberdosis/tiptap         |
+| @tiptap/extension-heading      | 2.27.3    | MIT                           | https://github.com/ueberdosis/tiptap         |
+| @tiptap/extension-image        | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-link         | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-mention      | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-placeholder  | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-table        | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-table-cell   | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-table-header | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-table-row    | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-task-item    | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/extension-task-list    | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/pm                     | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/react                  | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/starter-kit            | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| @tiptap/suggestion             | 2.27.3    | MIT                           | https://tiptap.dev                           |
 | mermaid                        | 11.16.1   | MIT                           | https://github.com/mermaid-js/mermaid        |
 | type-fest                      | 4.41.0    | MIT OR CC0-1.0                | https://github.com/sindresorhus/type-fest    |
 | harper.js _(peer, optional)_   | ^2.7.0    | Apache-2.0                    | https://github.com/automattic/harper         |

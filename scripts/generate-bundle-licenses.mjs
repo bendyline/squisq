@@ -101,8 +101,8 @@ async function repositoryLicenseFallback(manifest) {
   let filename;
   if (manifest.name === 'remark-math' && manifest.version === '6.0.0') {
     filename = 'remark-math-6.0.0.txt';
-  } else if (manifest.name?.startsWith('@tiptap/') && manifest.version === '2.27.2') {
-    filename = 'tiptap-2.27.2.txt';
+  } else if (manifest.name?.startsWith('@tiptap/') && manifest.version === '2.27.3') {
+    filename = 'tiptap-2.27.3.txt';
   } else if (manifest.name === '@ffmpeg/ffmpeg' && manifest.version === '0.12.15') {
     filename = 'ffmpeg-wasm-0.12.15.txt';
   } else if (manifest.name === 'format' && manifest.version === '0.2.2') {
