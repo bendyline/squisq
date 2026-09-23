@@ -1,3 +1,10 @@
+## @bendyline/squisq-formats [2.6.7](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.6.6...@bendyline/squisq-formats@2.6.7) (2026-09-23)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.7
+
 ## @bendyline/squisq-formats [2.6.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.6.5...@bendyline/squisq-formats@2.6.6) (2026-09-17)
 
 

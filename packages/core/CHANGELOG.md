@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.11.7](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.6...@bendyline/squisq@2.11.7) (2026-09-23)
+
+### Bug Fixes
+
+* **editor-react:** upgrade Tiptap to 2.27.3 ([#63](https://github.com/bendyline/squisq/issues/63)) ([1d6daa9](https://github.com/bendyline/squisq/commit/1d6daa915609e11fde22797f7a6157c563db005a))
+
 ## @bendyline/squisq [2.11.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.5...@bendyline/squisq@2.11.6) (2026-09-17)
 
 ### Bug Fixes
