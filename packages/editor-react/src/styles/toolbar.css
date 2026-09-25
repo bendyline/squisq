@@ -780,18 +780,24 @@
 }
 
 /* Font Awesome glyphs sit a touch larger than the 13px text labels so
-   icon buttons read at a comfortable weight against H1–H6 etc. They
-   render in a lighter color than the text labels by default. */
+   icon buttons read at a comfortable weight against H1–H6 etc. Glyphs and
+   the heading buttons' text glyphs share the muted icon color at rest. */
 .squisq-toolbar-button > i {
   font-size: 15px;
   line-height: 1;
+}
+
+.squisq-toolbar-button > i,
+.squisq-toolbar-button > .squisq-toolbar-text-glyph {
   color: var(--squisq-toolbar-icon);
 }
 
 /* On hover / active, glyphs follow the button's color so the existing
    hover and toggled-on feedback still applies. */
 .squisq-toolbar-button:hover > i,
-.squisq-toolbar-button--active > i {
+.squisq-toolbar-button--active > i,
+.squisq-toolbar-button:hover > .squisq-toolbar-text-glyph,
+.squisq-toolbar-button--active > .squisq-toolbar-text-glyph {
   color: inherit;
 }
 

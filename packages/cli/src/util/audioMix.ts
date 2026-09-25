@@ -19,7 +19,8 @@
  * same schedule the renderer uses, keeping audio and video aligned.
  */
 
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, MediaClip } from '@bendyline/squisq/schemas';
+import { buildMediaRenderIndex, mediaClipRenderKey } from '@bendyline/squisq/mediaEdit';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { computeAudioTimeline } from '@bendyline/squisq-video';
 import type { AudioTimelineClip } from '@bendyline/squisq-video';
@@ -50,7 +51,11 @@ export async function buildMixedAudioTrack(
   signal?.throwIfAborted();
   // The native mixer currently consumes authored audio files. Browser MP4
   // export additionally demuxes the audio stream carried by video clips.
-  const timeline = computeAudioTimeline(doc, coverPreRoll, { includeVideoAudio: false });
+  const processedAudio = await processedAudioLookup(container);
+  const timeline = computeAudioTimeline(doc, coverPreRoll, {
+    includeVideoAudio: false,
+    ...(processedAudio ? { processedAudio } : {}),
+  });
   if (timeline.length === 0) return null;
 
   // Load each clip's bytes, caching reads by `src` (a src may back several clips).
@@ -75,6 +80,52 @@ export async function buildMixedAudioTrack(
   return mixTimelineClips(ffmpegPath, usable, signal);
 }
 
+/**
+ * A lookup of rendered `fx` audio, built from the container's `.mediaEdits/`
+ * listing. Null when the container holds no renders (the common case), so
+ * edited clips then mix their original audio.
+ */
+async function processedAudioLookup(
+  container: ContentContainer,
+): Promise<((clip: MediaClip) => string | undefined) | null> {
+  const entries = await container.listFiles();
+  const index = buildMediaRenderIndex(entries.map((e) => ({ name: e.path, size: e.size })));
+  if (index.size === 0) return null;
+  return (clip) => {
+    const key = mediaClipRenderKey(clip);
+    return key ? index.get(key)?.path : undefined;
+  };
+}
+
+/**
+ * The per-clip filter chain: trim the source window, reset timestamps, apply
+ * the recipe gain and fades, then delay to the clip's timeline start.
+ */
+export function clipFilterChain(clip: AudioTimelineClip): string {
+  const start = Math.max(0, clip.sourceInSec);
+  const duration = Math.max(0, clip.durationSec);
+  const delayMs = Math.max(0, Math.round(clip.startSec * 1000));
+  const parts = [`atrim=start=${start}:end=${start + duration}`, 'asetpts=PTS-STARTPTS'];
+  if (clip.gainDb) parts.push(`volume=${clip.gainDb}dB`);
+  let fadeIn = Math.max(0, clip.fadeInSec ?? 0);
+  let fadeOut = Math.max(0, clip.fadeOutSec ?? 0);
+  if (fadeIn + fadeOut > duration && duration > 0) {
+    const scale = duration / (fadeIn + fadeOut);
+    fadeIn *= scale;
+    fadeOut *= scale;
+  }
+  if (fadeIn > 0) parts.push(`afade=t=in:st=0:d=${round3(fadeIn)}`);
+  if (fadeOut > 0) {
+    parts.push(`afade=t=out:st=${round3(duration - fadeOut)}:d=${round3(fadeOut)}`);
+  }
+  parts.push(`adelay=${delayMs}|${delayMs}`);
+  return parts.join(',');
+}
+
+function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
+}
+
 /** Assemble the ffmpeg `amix` filtergraph and run it, returning the mixed MP3. */
 async function mixTimelineClips(
   ffmpegPath: string,
@@ -90,8 +141,6 @@ async function mixTimelineClips(
   const workDir = join(tmpdir(), `squisq-audio-mix-${randomBytes(8).toString('hex')}`);
   await mkdir(workDir, { recursive: true });
 
-  const ms = (s: number) => Math.max(0, Math.round(s * 1000));
-
   try {
     signal?.throwIfAborted();
     const inputs: string[] = [];
@@ -104,12 +153,7 @@ async function mixTimelineClips(
       await writeFile(p, new Uint8Array(buffer));
       signal?.throwIfAborted();
       const i = inputs.push(p) - 1;
-      const delayMs = ms(clip.startSec);
-      const start = Math.max(0, clip.sourceInSec);
-      const end = start + Math.max(0, clip.durationSec);
-      filters.push(
-        `[${i}:a]atrim=start=${start}:end=${end},asetpts=PTS-STARTPTS,adelay=${delayMs}|${delayMs}[a${i}]`,
-      );
+      filters.push(`[${i}:a]${clipFilterChain(clip)}[a${i}]`);
       labels.push(`[a${i}]`);
     }
 

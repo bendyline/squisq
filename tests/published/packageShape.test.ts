@@ -51,14 +51,21 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // Includes the three Font Awesome OpenType faces embedded for portable
   // DOCX/PDF/PPTX/EPUB inline-icon export.
   '@bendyline/squisq-formats': 700_000,
-  '@bendyline/squisq-react': 2_800_000,
+  // Ships the ESM entries plus the light and full standalone players, and the
+  // light player again as an embeddable string — so anything the player
+  // renders is paid roughly four times over.
+  '@bendyline/squisq-react': 2_900_000,
   // Columnar store + kernel + TanStack-Virtual renderer; tiny by design.
   '@bendyline/squisq-grid-react': 60_000,
   '@bendyline/squisq-calc': 110_000,
   '@bendyline/squisq-video': 35_000,
   // Ships the MP4/GIF export graph plus the single-frame cover-image and
-  // dashboard-image entries.
-  '@bendyline/squisq-video-react': 95_000,
+  // dashboard-image entries, with mediabunny's MP4/Matroska demuxers bundled
+  // so exports decode clip frames directly (~90 KB packed), plus the
+  // media-edit render engine: mediabunny's audio demuxers for imported
+  // formats and its WebM/WAV writers (~60 KB packed; RNNoise stays an
+  // external dependency).
+  '@bendyline/squisq-video-react': 300_000,
   '@bendyline/squisq-editor-react': 1_000_000,
   // Includes compressed light and full standalone players plus one shared
   // Font Awesome webfont payload so CLI video export remains self-contained

@@ -198,12 +198,23 @@ export const BUTTONS: ToolbarButton[] = [
     faIcon: 'fa-solid fa-object-group',
   },
   {
+    // Id stays `image` — hosts gate it by id (`buttonAllowed`/visibility).
     id: 'image',
     label: '🖼',
     icon: '🖼',
-    title: 'Insert image',
+    title: 'Insert Image/Media',
     group: 'media',
-    faIcon: 'fa-solid fa-image',
+    faIcon: 'fa-solid fa-photo-film',
+  },
+  {
+    // Any file: data (csv/tsv/xlsx/parquet) becomes a sidecar reference,
+    // media embeds as Image/Media does, anything else is linked.
+    id: 'file',
+    label: '📎',
+    icon: '📎',
+    title: 'Insert File',
+    group: 'media',
+    faIcon: 'fa-solid fa-file-arrow-up',
   },
   {
     id: 'emoji',
@@ -217,6 +228,8 @@ export const BUTTONS: ToolbarButton[] = [
 
 export const FIRST_MEDIA_INDEX = BUTTONS.findIndex((b) => b.group === 'media');
 export const MEDIA_BUTTONS = BUTTONS.filter((b) => b.group === 'media');
+/** Buttons that store a file through the MediaProvider — disabled without one. */
+export const FILE_STORING_BUTTONS: ReadonlySet<string> = new Set(['image', 'file']);
 export const CONVERT_BUTTONS = MEDIA_BUTTONS.filter((b) => b.id === 'table' || b.id === 'tasklist');
 export const INSERT_MENU_WIDTH = 200;
 export const CODE_SNIPPET_MENU_WIDTH = 220;
@@ -232,9 +245,19 @@ export const TASK_LIST_MARKDOWN = TASK_LIST_ITEMS.map((item) => `- [ ] ${item}`)
 // heading levels, the media group collapsed behind the Insert dropdown).
 export const BUTTON_INDEX_BY_ID = new Map(BUTTONS.map((b, i) => [b.id, i]));
 
-/** Renders a button's icon: a Font Awesome glyph when set, else the text label. */
+/**
+ * Renders a button's icon: a Font Awesome glyph when set, else the text label
+ * (headings). The label gets its own element so it can take the icon color —
+ * as a bare text node it could only inherit the button's brighter text color.
+ */
 export function buttonIcon(btn: ToolbarButton): ReactNode {
-  return btn.faIcon ? <Icon icon={btn.faIcon} /> : btn.icon;
+  return btn.faIcon ? (
+    <Icon icon={btn.faIcon} />
+  ) : (
+    <span className="squisq-toolbar-text-glyph" aria-hidden="true">
+      {btn.icon}
+    </span>
+  );
 }
 
 export function fileCountLabel(count: number): string {

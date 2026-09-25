@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { recordedMediaKind } from '../recorder/recordedMediaKind';
 
-function streamWithVideoTrack(count: number): Pick<MediaStream, 'getVideoTracks'> {
-  return {
-    getVideoTracks: () => Array.from({ length: count }) as MediaStreamTrack[],
-  };
+function streamWithVideoTrack(count: number) {
+  return { getVideoTracks: () => Array.from({ length: count }) };
 }
 
 describe('recordedMediaKind', () => {

@@ -27,7 +27,9 @@ describe('collectEmbeddedMedia', () => {
     const found = collectEmbeddedMedia(
       block('# Tips\n\n<video src="video/recording.webm" controls></video>\n'),
     );
-    expect(found).toEqual([{ src: 'video/recording.webm', kind: 'video', sourceLine: 3 }]);
+    expect(found).toEqual([
+      { src: 'video/recording.webm', kind: 'video', form: 'html', sourceLine: 3 },
+    ]);
   });
 
   it('reads timeline timing attributes from an inline video', () => {

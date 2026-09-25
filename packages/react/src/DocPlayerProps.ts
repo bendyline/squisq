@@ -1,4 +1,4 @@
-import type { Doc, SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
+import type { Doc, MediaScheduleOptions, SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
 import type { DashboardStyleId, ViewportConfig } from '@bendyline/squisq/doc';
 import type { CoverSlidePlayback, CoverSlideTemplate } from '@bendyline/squisq/doc';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
@@ -15,6 +15,7 @@ import type {
   PipSize,
   PlaybackActions,
   PlaybackState,
+  RenderVideoFrameSelector,
   SquisqRenderAPI,
   VideoPresentation,
 } from './types';
@@ -32,6 +33,18 @@ export interface DocPlayerProps {
   animationsEnabled?: boolean;
   /** Receives the instance-scoped render API, and `null` on cleanup. */
   onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
+  /**
+   * Render mode only: supplies video frames for `seekTo` instead of seeking
+   * the `<video>` elements. Videos it declines are seeked as usual.
+   */
+  renderVideoFrameSelector?: RenderVideoFrameSelector;
+  /**
+   * Processed-audio lookup for media-edit recipes (`fx`): returns the render
+   * path an edited clip should play instead of its own audio, or undefined
+   * while none exists (the clip then plays its original audio). Forwarded to
+   * `resolveMediaSchedule`; see docs/media-edits.md.
+   */
+  processedAudio?: MediaScheduleOptions['processedAudio'];
   autoPlay?: boolean;
   /** Restart Video-mode playback automatically when the timeline ends. */
   loop?: boolean;

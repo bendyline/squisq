@@ -55,6 +55,8 @@ export interface TimelineItemMenuProps {
   onBlockStartTime: (seconds: number | null) => void;
   onBlockTransition: (transition: TransitionFields) => void;
   onVideoPatch: (patch: MediaClipPatch) => void;
+  /** Open the audio editor on this clip. Omitted: the action is not offered. */
+  onEditMedia?: () => void;
   onClose: () => void;
 }
 
@@ -67,6 +69,7 @@ export function TimelineItemMenu({
   onBlockStartTime,
   onBlockTransition,
   onVideoPatch,
+  onEditMedia,
   onClose,
 }: TimelineItemMenuProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -138,7 +141,21 @@ export function TimelineItemMenu({
           onTransition={onBlockTransition}
         />
       ) : (
-        <VideoMenu target={target} onPatch={onVideoPatch} />
+        <>
+          <VideoMenu target={target} onPatch={onVideoPatch} />
+          {onEditMedia && (
+            <button
+              type="button"
+              className="squisq-timeline-item-menu-action"
+              onClick={() => {
+                onEditMedia();
+                onClose();
+              }}
+            >
+              Edit clip…
+            </button>
+          )}
+        </>
       )}
     </div>,
     document.body,

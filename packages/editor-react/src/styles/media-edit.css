@@ -1,0 +1,515 @@
+/* Media-edit modal — audio cleanup, timing and frame for one clip. Palette via the chrome tokens. */
+
+.squisq-media-edit-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--squisq-scrim);
+  z-index: 1000;
+  padding: 24px;
+}
+
+.squisq-media-edit-modal__surface {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: 100%;
+  background: var(--squisq-surface);
+  color: var(--squisq-editor-text);
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  font: 400 13px/1.4 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+}
+
+.squisq-media-edit-modal__header,
+.squisq-media-edit-modal__footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--squisq-bg);
+}
+
+.squisq-media-edit-modal__header {
+  border-bottom: 1px solid var(--squisq-editor-control-border);
+  font-weight: 500;
+}
+
+.squisq-media-edit-modal__footer {
+  border-top: 1px solid var(--squisq-editor-control-border);
+}
+
+.squisq-media-edit-modal__title {
+  font-weight: 600;
+}
+
+.squisq-media-edit-modal__path {
+  flex: 1;
+  color: var(--squisq-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-media-edit-modal__close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.squisq-media-edit-modal__close:hover {
+  background: var(--squisq-editor-control-bg-hover);
+}
+
+/* A tabbed dialog keeps one height across tabs: a centered dialog that
+   resized per tab would move its own tab strip out from under the pointer. */
+.squisq-media-edit-modal__surface--tabbed {
+  height: min(640px, 100%);
+}
+
+.squisq-media-edit-modal__body {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px 16px;
+}
+
+/* Tabs — one per section; the strip stays put while the panel scrolls. */
+.squisq-media-edit-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--squisq-border-subtle);
+}
+
+.squisq-media-edit-modal button.squisq-media-edit-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  margin-bottom: -1px;
+  padding: 10px 8px 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--squisq-text-muted);
+  font-weight: 500;
+}
+
+.squisq-media-edit-modal button.squisq-media-edit-tab:hover:not(:disabled) {
+  background: transparent;
+  color: var(--squisq-text);
+}
+
+.squisq-media-edit-modal button.squisq-media-edit-tab[aria-selected='true'] {
+  color: var(--squisq-text);
+  border-bottom-color: var(--squisq-accent);
+}
+
+/* The tab's settings would write something — hidden panels otherwise hide it. */
+.squisq-media-edit-tab[data-edited='true']::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--squisq-accent);
+}
+
+.squisq-media-edit-modal__empty {
+  padding: 24px 16px;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-media-edit-modal button,
+.squisq-media-edit-modal__footer button {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--squisq-editor-control-border);
+  border-radius: 4px;
+  background: var(--squisq-editor-control-bg);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.squisq-media-edit-modal button:hover:not(:disabled) {
+  background: var(--squisq-editor-control-bg-hover);
+}
+
+.squisq-media-edit-modal button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.squisq-media-edit-modal button[aria-pressed='true'] {
+  border-color: var(--squisq-accent-border);
+  background: var(--squisq-accent-soft);
+}
+
+.squisq-media-edit-modal button:focus-visible,
+.squisq-media-edit-modal input:focus-visible {
+  outline: 2px solid var(--squisq-focus-ring);
+  outline-offset: 1px;
+}
+
+.squisq-media-edit-modal__primary {
+  border-color: var(--squisq-accent) !important;
+  background: var(--squisq-accent) !important;
+  color: var(--squisq-bg) !important;
+}
+
+.squisq-media-edit-presets,
+.squisq-media-edit-chips,
+.squisq-media-edit-preview__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.squisq-media-edit-stages {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+}
+
+.squisq-media-edit-stage {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) 1fr 72px;
+  align-items: center;
+  column-gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--squisq-border-subtle);
+}
+
+.squisq-media-edit-stage__toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.squisq-media-edit-stage__slider {
+  width: 100%;
+  accent-color: var(--squisq-accent);
+}
+
+.squisq-media-edit-stage__value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-media-edit-stage[data-enabled='false'] .squisq-media-edit-stage__value {
+  opacity: 0.5;
+}
+
+.squisq-media-edit-stage__hint,
+.squisq-media-edit-chips {
+  grid-column: 1 / -1;
+  margin: 2px 0 0;
+}
+
+.squisq-media-edit-stage__hint,
+.squisq-media-edit-note {
+  color: var(--squisq-text-muted);
+  font-size: 12px;
+}
+
+.squisq-media-edit-chips {
+  margin-top: 6px;
+}
+
+.squisq-media-edit-preview {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.squisq-media-edit-preview__from {
+  display: grid;
+  gap: 4px;
+}
+
+.squisq-media-edit-preview__from input {
+  width: 100%;
+  accent-color: var(--squisq-accent);
+}
+
+.squisq-media-edit-preview__actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.squisq-media-edit-icon {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  fill: currentColor;
+}
+
+/* Playback position within the rendered preview window; follows the playhead. */
+.squisq-media-edit-playback {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+}
+
+.squisq-media-edit-playback input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--squisq-accent);
+}
+
+/* Wide enough for "Processed from 1200 s", so the bar holds still as it changes. */
+.squisq-media-edit-playback__label {
+  min-width: 10.5em;
+  color: var(--squisq-text-muted);
+  white-space: nowrap;
+}
+
+.squisq-media-edit-playback[data-playing] .squisq-media-edit-playback__label {
+  color: var(--squisq-text);
+}
+
+.squisq-media-edit-playback__time {
+  color: var(--squisq-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.squisq-media-edit-note {
+  margin: 4px 0;
+}
+
+.squisq-media-edit-note--error,
+.squisq-media-edit-status[data-state='failed'] {
+  color: var(--squisq-danger-text);
+}
+
+/* Background-render status: full line in the footer (left of the actions),
+   compact badge in the title bar. */
+.squisq-media-edit-status {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.squisq-media-edit-badge {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--squisq-accent-border);
+  border-radius: 999px;
+  background: var(--squisq-accent-soft);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.squisq-media-edit-badge[data-state='ready'] {
+  border-color: var(--squisq-success-border);
+  background: transparent;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-media-edit-badge[data-state='failed'] {
+  border-color: var(--squisq-danger-border);
+  background: var(--squisq-danger-soft);
+  color: var(--squisq-danger-text);
+}
+
+/* Node-view affordance: "Edit audio" on media atoms. */
+.squisq-media-edit-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.squisq-media-edit-button[data-edited='true']::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--squisq-accent);
+}
+
+/* Rendering: the spinner and progress stand in for the edited dot. */
+.squisq-media-edit-button[data-processing='true']::after {
+  display: none;
+}
+
+.squisq-media-edit-button__spinner {
+  flex: none;
+  box-sizing: border-box;
+  width: 11px;
+  height: 11px;
+  margin-left: 2px;
+  border: 2px solid var(--squisq-accent);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: squisq-media-edit-spin 0.8s linear infinite;
+}
+
+.squisq-media-edit-button__progress {
+  /* Fixed width + tabular digits: the toolbar does not shift as it counts. */
+  min-width: 3ch;
+  color: var(--squisq-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@keyframes squisq-media-edit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The percentage already says it is working. */
+  .squisq-media-edit-button__spinner {
+    animation: none;
+  }
+}
+
+.squisq-audio-node-toolbar {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* Timeline clip menu: "Edit audio…" action row. */
+.squisq-timeline-item-menu-action {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--squisq-editor-control-border);
+  border-radius: 4px;
+  background: var(--squisq-editor-control-bg);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.squisq-timeline-item-menu-action:hover {
+  background: var(--squisq-editor-control-bg-hover);
+}
+
+/* Timeline: a cut inside a clip bar. */
+.squisq-timeline-cut-mark {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 0;
+  border-left: 2px dashed var(--squisq-bg);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* Section (tab panel) content and simple slider rows. */
+.squisq-media-edit-section {
+  padding-bottom: 12px;
+}
+
+.squisq-media-edit-row {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) 1fr 72px;
+  align-items: center;
+  column-gap: 12px;
+  padding: 6px 0;
+}
+
+.squisq-media-edit-row input[type='range'] {
+  width: 100%;
+  accent-color: var(--squisq-accent);
+}
+
+.squisq-media-edit-row output {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--squisq-text-muted);
+}
+
+/* Frame: crop stage. */
+.squisq-media-edit-crop {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  aspect-ratio: 16 / 9;
+  margin: 8px 0;
+  overflow: hidden;
+  background: var(--squisq-surface-sunken);
+  border-radius: 4px;
+  touch-action: none;
+}
+
+.squisq-media-edit-crop video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.squisq-media-edit-crop__rect {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--squisq-accent);
+  box-shadow: 0 0 0 9999px var(--squisq-scrim);
+  cursor: move;
+}
+
+.squisq-media-edit-crop__rect:focus-visible {
+  outline: 2px solid var(--squisq-focus-ring);
+  outline-offset: 2px;
+}
+
+.squisq-media-edit-crop__handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--squisq-accent);
+  border: 2px solid var(--squisq-bg);
+  border-radius: 2px;
+}
+
+.squisq-media-edit-crop__handle--nw {
+  top: -7px;
+  left: -7px;
+  cursor: nwse-resize;
+}
+
+.squisq-media-edit-crop__handle--ne {
+  top: -7px;
+  right: -7px;
+  cursor: nesw-resize;
+}
+
+.squisq-media-edit-crop__handle--sw {
+  bottom: -7px;
+  left: -7px;
+  cursor: nesw-resize;
+}
+
+.squisq-media-edit-crop__handle--se {
+  bottom: -7px;
+  right: -7px;
+  cursor: nwse-resize;
+}

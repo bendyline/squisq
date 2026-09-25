@@ -71,11 +71,12 @@ import { looksLikeMarkdown } from './detectMarkdown';
 import {
   SQUISQ_MEDIA_MIME,
   parseSquisqMediaPayload,
-  squisqMediaKind,
+  squisqMediaNode,
   type SquisqMediaDragPayload,
 } from './mediaDragMime';
 import { usePreviewSettingsOptional } from './PreviewControls';
 import { uploadAndInsertImages } from './wysiwygImageUpload';
+import { isAllowedLinkHref } from './tiptap/linkHrefPolicy';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { FindHighlightExtension } from './find/FindHighlightExtension';
 import { ProofingExtension } from './proofing/ProofingExtension';
@@ -98,6 +99,17 @@ type MediaMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
  * title on both sides; this is the node-schema half of that contract.
  */
 export const LinkWithTitle = Link.extend({
+  addOptions() {
+    return {
+      // `?.` — Tiptap first evaluates this during `extend()`, before the
+      // parent is attached.
+      ...this.parent?.(),
+      // Tiptap's own href check refuses relative paths like `media/a.pdf`
+      // (see linkHrefPolicy). WysiwygEditor re-configures this with the
+      // host's link schemes.
+      isAllowedUri: (url, ctx) => isAllowedLinkHref(url, ctx.defaultValidate),
+    };
+  },
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -189,7 +201,11 @@ export function WysiwygEditor({
     sceneTextChannel,
     preserveSourceWrapping,
     layoutMode,
+    linkSchemes,
   } = useEditorContext();
+  // Read by the Link extension's href check, which is created once at mount.
+  const linkSchemesRef = useRef(linkSchemes);
+  linkSchemesRef.current = linkSchemes;
   // The wrap policy only makes sense over the whole document: block/timeline
   // slices are fragments whose "convention" is the document's, not their own.
   const wrapPolicyEnabled = preserveSourceWrapping && layoutMode === 'document';
@@ -391,6 +407,8 @@ export function WysiwygEditor({
         openOnClick: false,
         autolink: true,
         HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
+        isAllowedUri: (url, ctx) =>
+          isAllowedLinkHref(url, ctx.defaultValidate, linkSchemesRef.current),
       }),
       ImageWithMediaProvider.configure({ inline: false }),
       TiptapVideo,
@@ -1001,21 +1019,17 @@ function insertExistingMediaReference(
   view: MediaMutationView,
   payload: SquisqMediaDragPayload,
 ): boolean {
-  const kind = squisqMediaKind(payload.mimeType);
-  if (kind === 'image') {
-    insertImageNode(view, payload.name, payload.alt);
+  const spec = squisqMediaNode(payload);
+  if (spec?.type === 'image') {
+    insertImageNode(view, spec.attrs.src, spec.attrs.alt);
     return true;
   }
 
   const { state } = view;
-  if (kind === 'video' || kind === 'audio') {
-    const nodeType = state.schema.nodes[kind];
+  if (spec) {
+    const nodeType = state.schema.nodes[spec.type];
     if (!nodeType) return false;
-    const attrs =
-      kind === 'video'
-        ? { src: payload.name, controls: true, width: 480 }
-        : { src: payload.name, controls: true };
-    const node = nodeType.create(attrs);
+    const node = nodeType.create(spec.attrs);
     const { $from } = state.selection;
     const pos = $from.depth >= 1 ? $from.after(1) : state.doc.content.size;
     view.dispatch(state.tr.insert(pos, node).scrollIntoView());

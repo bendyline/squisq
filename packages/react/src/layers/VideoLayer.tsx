@@ -25,6 +25,7 @@
 
 import { useRef, useEffect } from 'react';
 import type { VideoLayer as VideoLayerType } from '@bendyline/squisq/schemas';
+import { isCaptureDrivenVideo } from '../docPlayer/renderReadiness';
 import { useMediaUrl } from '../hooks/MediaContext';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
 
@@ -126,7 +127,7 @@ export function VideoLayer({
       ? content.clipStart
       : Math.min(content.clipEnd, content.clipStart + Math.max(0, blockTime - startAt));
     if (
-      video.dataset.captureSequential !== 'true' &&
+      !isCaptureDrivenVideo(video) &&
       Math.abs(video.currentTime - targetTime) > VIDEO_SYNC_DRIFT_SECONDS
     ) {
       video.currentTime = targetTime;
@@ -149,7 +150,7 @@ export function VideoLayer({
       if (playPromise) {
         playPromise.catch(() => {});
       }
-    } else if (video.dataset.captureSequential !== 'true') {
+    } else if (!isCaptureDrivenVideo(video)) {
       video.pause();
     }
   }, [isPlaying, gated, blockTime, startAt, src, content.clipStart, content.clipEnd]);

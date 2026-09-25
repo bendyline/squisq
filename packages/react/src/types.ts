@@ -221,6 +221,20 @@ export interface SquisqRenderAPI {
   hasCoverBlock: () => boolean;
 }
 
+/**
+ * Render-mode hook that supplies a `<video>` element's pixels for a media
+ * time without moving the element itself.
+ *
+ * Resolve `true` once the frame at `targetTime` is ready to draw, or `false`
+ * to let the player seek the element (the default behavior). A capture host
+ * that decodes sources directly uses this to advance faster than realtime:
+ * an element can only reach its next frame by seeking or playing.
+ */
+export type RenderVideoFrameSelector = (
+  video: HTMLVideoElement,
+  targetTime: number,
+) => Promise<boolean>;
+
 /** Format time in seconds to MM:SS string */
 export function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);

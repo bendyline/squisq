@@ -20,6 +20,8 @@ export default tseslint.config(
       '**/*.config.js',
       '**/vitest.setup.ts',
       'scripts/**',
+      // Local audit output and throwaway harnesses (gitignored).
+      'reports/**',
       // Tool-created worktrees are checkouts under .claude and
       // must not be linted (their nested paths bypass the path-based
       // overrides below, producing spurious "rule not found" errors).

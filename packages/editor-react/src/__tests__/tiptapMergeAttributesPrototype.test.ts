@@ -19,7 +19,6 @@ function enumeratedKeys(value: object): string[] {
   const keys: string[] = [];
   // Deliberately `for…in`: it is how ProseMirror's serializer reads attributes,
   // and unlike Object.keys it reaches inherited properties.
-  // eslint-disable-next-line guard-for-in
   for (const key in value) keys.push(key);
   return keys;
 }

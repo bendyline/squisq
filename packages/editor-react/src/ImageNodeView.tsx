@@ -12,12 +12,16 @@
  * editor context, which `<EditorShell>` consumes to open a modal
  * `<ImageEditor>` on the source path. Only shown for paths that are
  * relative (i.e. live in the document's media container).
+ *
+ * An animated GIF / WebP / APNG carries play/pause controls
+ * (`AnimatedImageControls` from squisq-react) and no Edit affordance.
  */
 
 import { useEffect, useRef, useState } from 'react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import Image from '@tiptap/extension-image';
+import { AnimatedImageControls, useAnimatedImage } from '@bendyline/squisq-react';
 import { useEditorContext } from './EditorContext';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 
@@ -77,12 +81,20 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
     // same path — re-resolve so we pick up the fresh blob URL.
   }, [src, resolveAs, mediaProvider, mediaRevision]);
 
+  // An animated GIF/WebP/APNG gets play/pause controls. Until the provider
+  // has resolved a workspace path, `resolvedSrc` is still that raw path, so
+  // hold inspection back rather than fetch a URL that cannot load.
+  const awaitingResolution = mediaProvider !== null && resolveAs !== null && resolvedSrc === src;
+  const playback = useAnimatedImage(resolveAs ?? src ?? '', awaitingResolution ? '' : resolvedSrc);
+
   // The Edit affordance is only meaningful when:
   //  - the editor is editable (read-only previews skip it),
   //  - the path is relative (lives in the doc's container, so the editor
-  //    can read+write it back), and
-  //  - a media provider is wired (the modal resolves the URL through it).
-  const canEdit = isEditable && isRelative && mediaProvider !== null;
+  //    can read+write it back),
+  //  - a media provider is wired (the modal resolves the URL through it), and
+  //  - the image is not animated: the editor saves one still frame back over
+  //    the original path, which would silently destroy the animation.
+  const canEdit = isEditable && isRelative && mediaProvider !== null && !playback.animated;
   const showAffordance = canEdit && (selected || hovered);
   // Resize handle is shown for any selected image in an editable view —
   // even non-relative ones (external URLs, data URIs) — so authors can
@@ -173,7 +185,7 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
     >
       <img
         ref={imgRef}
-        src={resolvedSrc}
+        src={playback.displaySrc || resolvedSrc}
         alt={alt || ''}
         title={title || undefined}
         className={isThumbnail ? 'squisq-image squisq-image--thumbnail' : 'squisq-image'}
@@ -186,6 +198,7 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
         onDragStart={(e) => e.preventDefault()}
         data-selected={selected ? 'true' : undefined}
       />
+      <AnimatedImageControls playback={playback} imageRef={imgRef} />
       {showAffordance && (
         <button
           type="button"

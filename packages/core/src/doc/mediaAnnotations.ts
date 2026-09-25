@@ -19,6 +19,11 @@ import type {
   VideoPlacement,
 } from '../schemas/Media.js';
 import { parseStandaloneAnnotation, type ParsedAnnotation } from './standaloneAnnotation.js';
+import {
+  mediaEditValuesFromAttributes,
+  mediaEditValuesFromParams,
+  parseMediaEdits,
+} from '../mediaEdit/recipe.js';
 
 /** Annotation template names that produce a timed media clip. */
 const MEDIA_TEMPLATES = new Set(['audio', 'video', 'media']);
@@ -115,6 +120,9 @@ function toMediaClip(parsed: ParsedAnnotation, id: string): MediaClip | null {
   // `spillover` or `spillover=true` → true; absent/`false` → omitted.
   if (params.spillover === 'true' || params.spillover === '') clip.spillover = true;
 
+  const edits = parseMediaEdits(mediaEditValuesFromParams(params));
+  if (edits) clip.edits = edits;
+
   return clip;
 }
 
@@ -198,6 +206,8 @@ function htmlVideoClip(node: MarkdownBlockNode, id: string): MediaClip | null {
   // authored independent out-point in raw HTML, but only apply it while the
   // video is unlocked.
   if (!locked && clipEnd != null) clip.clipEnd = clipEnd;
+  const edits = parseMediaEdits(mediaEditValuesFromAttributes('video', element.attributes));
+  if (edits) clip.edits = edits;
   return clip;
 }
 

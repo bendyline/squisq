@@ -58,6 +58,8 @@ import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
 import { PreviewModeMenu, displayModeLabel, usePreviewSettingsOptional } from './PreviewControls';
 import { filterVisibleMediaEntries } from './mediaEntries';
+import { MEDIA_FILE_ACCEPT } from './mediaDragMime';
+import { addFileToDocument } from './mediaInsertion';
 import {
   selectionToTable,
   selectionToTableMarkdown,
@@ -143,6 +145,7 @@ import {
   fileCountLabel,
   FIRST_MEDIA_INDEX,
   INSERT_MENU_WIDTH,
+  FILE_STORING_BUTTONS,
   MEDIA_BUTTONS,
   MERMAID_TYPE_MENU_WIDTH,
   TASK_LIST_MARKDOWN,
@@ -259,6 +262,8 @@ export function Toolbar({
     colorScheme,
     mediaRevision,
     bumpMediaRevision,
+    workspaceContainer,
+    insertAtCursor,
   } = useEditorContext();
   const previewSettings = usePreviewSettingsOptional();
   const [useModeMenuRequest, requestUseModeMenu] = useReducer((count: number) => count + 1, 0);
@@ -307,6 +312,7 @@ export function Toolbar({
 
   // Hidden file input for image picker
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Link dialog — shared by WYSIWYG and Raw views.
   const [linkDialog, setLinkDialog] = useState<{
@@ -1251,36 +1257,29 @@ export function Toolbar({
     [activeView, monacoEditor, readSelectedText, tiptapEditor],
   );
 
-  // ── Image upload handler ───────────────────────────────
-  const handleImageFile = useCallback(
+  // ── Image/Media and File upload handler ─────────────
+  // Both pickers store the file and reference it the same way: data files
+  // (csv/tsv/xlsx/parquet) as a sidecar reference block, images as images
+  // (an animated GIF included — the renderers give it play/pause controls),
+  // video and audio as inline players, anything else as a link to the file.
+  // They differ only in what the picker offers.
+  const handlePickedFile = useCallback(
     async (file: File) => {
       if (!mediaProvider) return;
-      const buffer = await file.arrayBuffer();
-      const relativePath = await mediaProvider.addMedia(file.name, buffer, file.type);
-      bumpMediaRevision();
-      const altText = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-
-      if (activeView === 'wysiwyg' && tiptapEditor) {
-        tiptapEditor.chain().focus().setImage({ src: relativePath, alt: altText }).run();
-      } else if (monacoEditor) {
-        const selection = monacoEditor.getSelection();
-        const model = monacoEditor.getModel();
-        if (selection && model) {
-          const md = `![${altText}](${relativePath})`;
-          monacoEditor.executeEdits('toolbar', [{ range: selection, text: md }]);
-          monacoEditor.focus();
-        }
-      } else {
-        setMarkdownSource(markdownSource + `\n![${altText}](${relativePath})\n`);
-      }
+      const stored = await addFileToDocument(
+        file,
+        { activeView, tiptapEditor, monacoEditor, appendMarkdown: insertAtCursor },
+        { mediaProvider, workspaceContainer },
+      );
+      if (stored) bumpMediaRevision();
     },
     [
       mediaProvider,
+      workspaceContainer,
       activeView,
       tiptapEditor,
       monacoEditor,
-      markdownSource,
-      setMarkdownSource,
+      insertAtCursor,
       bumpMediaRevision,
     ],
   );
@@ -1289,6 +1288,10 @@ export function Toolbar({
     (id: string) => {
       if (id === 'image') {
         imageInputRef.current?.click();
+        return;
+      }
+      if (id === 'file') {
+        fileInputRef.current?.click();
         return;
       }
       if (id === 'emoji') {
@@ -1872,16 +1875,26 @@ export function Toolbar({
         findMode ? 'Find toolbar' : showFormattingControls ? 'Formatting toolbar' : 'Editor toolbar'
       }
     >
-      {/* Hidden file input for image picker */}
+      {/* Hidden file inputs for the Image/Media and File pickers */}
       <input
         ref={imageInputRef}
         type="file"
-        accept="image/*"
+        accept={MEDIA_FILE_ACCEPT}
         style={{ display: 'none' }}
         onChange={(e) => {
           const file = e.target.files?.[0];
-          if (file) handleImageFile(file);
+          if (file) void handlePickedFile(file);
           // Reset so the same file can be re-selected
+          e.target.value = '';
+        }}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) void handlePickedFile(file);
           e.target.value = '';
         }}
       />
@@ -1964,7 +1977,8 @@ export function Toolbar({
                       : formatActive && formattingEditor
                         ? isTiptapActive(formattingEditor, btn.id)
                         : false;
-                  const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
+                  const disabled =
+                    (FILE_STORING_BUTTONS.has(btn.id) && !mediaProvider) || !buttonAllowed(btn.id);
                   const btnIndex = BUTTON_INDEX_BY_ID.get(btn.id);
                   const overflowed =
                     overflowIndex !== null && btnIndex !== undefined && btnIndex >= overflowIndex;
@@ -1977,8 +1991,8 @@ export function Toolbar({
                       data-tooltip={
                         dataCardFocused
                           ? 'Formatting applies to document text — click into the prose first'
-                          : disabled
-                            ? 'Insert image (requires media provider)'
+                          : FILE_STORING_BUTTONS.has(btn.id) && !mediaProvider
+                            ? `${btn.title} (requires media provider)`
                             : btn.title
                       }
                       onClick={() => handleAction(btn.id)}
@@ -2254,7 +2268,8 @@ export function Toolbar({
                           ? isTiptapActive(formattingEditor, btn.id)
                           : false;
                     const disabled =
-                      (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
+                      (FILE_STORING_BUTTONS.has(btn.id) && !mediaProvider) ||
+                      !buttonAllowed(btn.id);
                     return (
                       <button
                         key={btn.id}
@@ -2542,7 +2557,8 @@ export function Toolbar({
               Insert
             </div>
             {MEDIA_BUTTONS.filter((b) => isButtonVisible(b.id)).map((btn) => {
-              const disabled = (btn.id === 'image' && !mediaProvider) || !buttonAllowed(btn.id);
+              const disabled =
+                (FILE_STORING_BUTTONS.has(btn.id) && !mediaProvider) || !buttonAllowed(btn.id);
               const stripped = btn.title.replace(/^Insert\s+/i, '');
               const label = stripped.charAt(0).toUpperCase() + stripped.slice(1);
               const hasMermaidTypeMenu = btn.id === 'complexdiagram';

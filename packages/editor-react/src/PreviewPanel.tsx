@@ -35,6 +35,7 @@ import {
   SlideshowDataGridProvider,
   SlideshowDataGridRenderer,
 } from './slideshow/SlideshowDataGrid';
+import { useProcessedAudio } from '@bendyline/squisq-video-react/media-edit';
 
 export interface PreviewPanelProps {
   /** Base path for resolving media URLs in DocPlayer */
@@ -82,7 +83,9 @@ export function PreviewPanel({
     colorScheme,
     fileName,
     fenceRenderers,
+    mediaEditRenders,
   } = useEditorContext();
+  const processedAudio = useProcessedAudio(mediaEditRenders);
   const mediaProvider = useMediaProvider();
   const presentation = usePresentationModeOptional();
   const printMode = usePrintModeOptional();
@@ -422,6 +425,7 @@ export function PreviewPanel({
         key={`${audience ? 'audience' : 'primary'}-${activeTransformStyle || 'none'}`}
         doc={previewDoc!}
         basePath={basePath}
+        processedAudio={processedAudio}
         audioMode={previewProjection?.contentDoc.audio?.segments?.length ? 'media' : 'synthetic'}
         showControls={!audience}
         muted={audience}

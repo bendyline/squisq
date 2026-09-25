@@ -28,6 +28,12 @@ import {
   waitForCaptureMediaResolutions,
   waitForVisualUpdate,
 } from '../hooks/useFrameCapture';
+import {
+  CaptureVideoFrameRegistry,
+  DecodedVideoCursor,
+  resolveCaptureVideoImage,
+  type DecodedFrameSampleSource,
+} from '../hooks/captureVideoFrames';
 
 const frameCaptureMocks = vi.hoisted(() => {
   const render = vi.fn();
@@ -1620,5 +1626,178 @@ describe('useFrameCapture', () => {
     expect(firstCanvas.height).toBe(0);
     expect(frameCaptureMocks.unmount).toHaveBeenCalledTimes(2);
     expect(document.querySelector('#squisq-capture-root')).toBeNull();
+  });
+
+  it('hands the hidden player a decoded-frame selector', async () => {
+    const api = {
+      getDuration: vi.fn(() => 1),
+      getRenderedTime: vi.fn(() => 0),
+      seekTo: vi.fn(async () => {}),
+      showCover: vi.fn(async () => {}),
+      hideCover: vi.fn(async () => {}),
+    };
+    const renderedProps: Array<Record<string, unknown>> = [];
+    frameCaptureMocks.render.mockImplementation((node: unknown) => {
+      const element = node as { props: Record<string, unknown> };
+      renderedProps.push(element.props);
+      (element.props.onRenderAPIReady as (value: typeof api) => void)(api);
+    });
+    const doc = {
+      articleId: 'decoded-selector-test',
+      duration: 1,
+      blocks: [],
+      audio: { segments: [] },
+    } as Doc;
+    const { result } = renderHook(() => useFrameCapture());
+
+    await result.current.init(doc, { width: 640, height: 360 });
+
+    const selector = renderedProps[0].renderVideoFrameSelector as (
+      video: HTMLVideoElement,
+      time: number,
+    ) => Promise<boolean>;
+    expect(typeof selector).toBe('function');
+    // Unbound elements are left for the player to seek.
+    await expect(selector(document.createElement('video'), 0)).resolves.toBe(false);
+
+    result.current.destroy();
+  });
+});
+
+describe('decoded capture videos', () => {
+  const decodedTracks: DecodedFrameSampleSource = {
+    async *samples(start: number) {
+      for (let index = Math.max(0, Math.floor(start * 30 + 1e-6)); index < 300; index += 1) {
+        yield {
+          timestamp: index / 30,
+          displayWidth: 1280,
+          displayHeight: 720,
+          draw: () => undefined,
+          close: () => undefined,
+        };
+      }
+    },
+  };
+
+  async function bindDecoded(root: HTMLElement): Promise<CaptureVideoFrameRegistry> {
+    document.body.appendChild(root);
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      {} as unknown as CanvasRenderingContext2D,
+    );
+    vi.spyOn(DecodedVideoCursor, 'open').mockImplementation(
+      async () =>
+        new DecodedVideoCursor(
+          decodedTracks,
+          () => undefined,
+          document.createElement('canvas'),
+          1280,
+          720,
+        ),
+    );
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(new Blob(['media']))),
+    );
+    const registry = new CaptureVideoFrameRegistry();
+    await registry.attach(root);
+    return registry;
+  }
+
+  function scheduledPip(): { root: HTMLElement; video: HTMLVideoElement } {
+    const root = document.createElement('div');
+    root.innerHTML =
+      '<div class="doc-player__media-clips" data-presentation="picture-in-picture">' +
+      '<video data-clip-id="camera" data-active="true" src="blob:decoded-camera"></video></div>';
+    const video = root.querySelector<HTMLVideoElement>('video')!;
+    vi.spyOn(video, 'pause').mockImplementation(() => {});
+    // The element's own metadata is stale or absent; only decoded pixels count.
+    Object.defineProperties(video, {
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+    });
+    return { root, video };
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('composites the decoded frame with its own geometry instead of the element', async () => {
+    const { root, video } = scheduledPip();
+    const registry = await bindDecoded(root);
+    await registry.selectFrame(video, 2);
+    const decoded = resolveCaptureVideoImage(video);
+    Object.defineProperty(video, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 480, top: 260, width: 150, height: 90 }),
+    });
+    Object.defineProperty(root, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 0, top: 0, width: 640, height: 360 }),
+    });
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      display: 'block',
+      visibility: 'visible',
+      opacity: '1',
+      objectFit: 'cover',
+      borderLeftWidth: '0px',
+      borderRightWidth: '0px',
+      borderTopWidth: '0px',
+      borderBottomWidth: '0px',
+      borderTopLeftRadius: '0px',
+      borderTopStyle: 'none',
+      borderTopColor: 'rgba(0, 0, 0, 0)',
+      boxShadow: 'none',
+    } as CSSStyleDeclaration);
+    const destination = document.createElement('canvas');
+    destination.width = 640;
+    destination.height = 360;
+    const drawImage = vi.fn();
+    vi.spyOn(destination, 'getContext').mockReturnValue({
+      save: vi.fn(),
+      restore: vi.fn(),
+      beginPath: vi.fn(),
+      rect: vi.fn(),
+      fill: vi.fn(),
+      clip: vi.fn(),
+      drawImage,
+    } as unknown as CanvasRenderingContext2D);
+
+    expect(decoded.source).not.toBe(video);
+    expect(drawScheduledVideosOnto(destination, root, [video])).toBe(1);
+    // 16:9 decoded source cropped to the 5:3 PIP box.
+    expect(drawImage).toHaveBeenCalledWith(decoded.source, 40, 0, 1200, 720, 480, 260, 150, 90);
+    registry.dispose();
+  });
+
+  it('keys repeated-frame reuse on the decoded frame, not the idle element clock', async () => {
+    const { root, video } = scheduledPip();
+    const registry = await bindDecoded(root);
+
+    await registry.selectFrame(video, 1);
+    const first = getFrameVisualStateKey(root, 1);
+    await registry.selectFrame(video, 1 + 1 / 60);
+    const sameFrame = getFrameVisualStateKey(root, 1 + 1 / 60);
+    await registry.selectFrame(video, 1 + 1 / 30);
+    const nextFrame = getFrameVisualStateKey(root, 1 + 1 / 30);
+
+    expect(video.currentTime).toBe(0);
+    expect(sameFrame).toBe(first);
+    expect(nextFrame).not.toBe(first);
+    registry.dispose();
+  });
+
+  it('never probes or steps a decoded element', async () => {
+    const { root, video } = scheduledPip();
+    Object.defineProperties(video, {
+      duration: { configurable: true, value: Number.POSITIVE_INFINITY },
+      readyState: { configurable: true, value: HTMLMediaElement.HAVE_METADATA },
+    });
+    const registry = await bindDecoded(root);
+
+    await expect(primeIndeterminateCaptureVideos(root)).resolves.toBe(0);
+    expect(video.dataset.captureSequential).toBeUndefined();
+    expect(planScheduledVideoComposite(root)?.overlays).toEqual([video]);
+    registry.dispose();
   });
 });

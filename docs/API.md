@@ -21,6 +21,7 @@ cçç# Squisq API Reference
   - [Versions](#subpath-versions)
   - [JSON Form](#subpath-jsonform)
   - [Image Edit](#subpath-imageedit)
+  - [Media Edit](#subpath-media-edit)
   - [Icons](#subpath-icons)
   - [Recommend](#subpath-recommend)
   - [Narration](#subpath-narration)
@@ -1315,7 +1316,8 @@ interface SquisqWhen {
 ### Subpath: Image Edit
 
 **Import:** `@bendyline/squisq/imageEdit` — layered raster authoring schema,
-sidecar persistence, and version history (mirrors `versions/` over JSON state).
+sidecar persistence, version history (mirrors `versions/` over JSON state), and
+animated-image inspection.
 
 ```ts
 interface ImageEditDoc {
@@ -1348,7 +1350,74 @@ function buildSvgString(doc, container): Promise<string>;
 class ImageEditVersionManager {
   /* saveVersion / listVersions / readVersion / revertToVersion / pruneVersions / coalesceVersions */
 }
+
+// animated-image inspection — reads container structure only (no pixel decode),
+// never throws; null for bytes that are not GIF / PNG / WebP
+interface AnimatedImageInfo {
+  format: 'gif' | 'png' | 'webp';
+  animated: boolean; // more than one frame
+  frameCount: number;
+  durationMs: number; // one pass, frames ≤10 ms played at 100 ms as browsers do
+  playCount: number; // 0 = loops forever
+}
+function inspectAnimatedImage(bytes: Uint8Array | ArrayBuffer): AnimatedImageInfo | null;
+function mayBeAnimatedImage(srcOrMime: string): boolean; // .gif/.webp/.apng or their MIME; PNG excluded
 ```
+
+---
+
+### Subpath: Media Edit
+
+**Import:** `@bendyline/squisq/mediaEdit` — non-destructive audio/video edits:
+the recipe grammar carried on `{[audio|video …]}` annotations and
+`data-squisq-{audio|video}-*` attributes, the trim + cuts time map, and the
+`.mediaEdits/` render-store layout. Host contract: [`docs/media-edits.md`](media-edits.md).
+
+```ts
+type MediaFxOpId = 'highpass' | 'denoise' | 'debreath' | 'loudness'; // fixed chain order
+interface MediaFxChain {
+  ops: { id: MediaFxOpId; value: number }[];
+  unknown: string[];
+}
+interface MediaEdits {
+  fx?: MediaFxChain;
+  cuts?: { start: number; end: number }[]; // removed SOURCE ranges, normalized
+  gain?: number; // dB
+  fadeIn?: number;
+  fadeOut?: number;
+  crop?: { x: number; y: number; w: number; h: number }; // normalized, video only
+  group?: string;
+}
+
+function parseMediaEdits(values: MediaEditParamValues): MediaEdits | undefined;
+function serializeMediaEdits(edits?: MediaEdits): Record<MediaEditParamKey, string | null>;
+function mediaEditValuesFromParams(params: Record<string, string>): MediaEditParamValues;
+function mediaEditValuesFromAttributes(
+  kind: 'audio' | 'video',
+  attrs: Record<string, string>,
+): MediaEditParamValues;
+function mediaEditHtmlAttribute(kind: 'audio' | 'video', key: MediaEditParamKey): string;
+
+// trim + cuts → played time (one definition, used by schedule, narration, timeline)
+function createMediaTimeMap(input: { clipStart?; clipEnd?; cuts?; sourceDuration? }): MediaTimeMap;
+
+// render store: .mediaEdits/<stem>.<key>.<ext> + .json manifest
+function mediaRenderKey(src: string, fx: MediaFxChain): string; // 12 hex
+function buildMediaRenderIndex(
+  entries: { name: string; size: number }[],
+): Map<string, MediaRenderEntry>;
+function mediaClipRenderKey(clip: MediaClip): string | null;
+function mediaRenderStaleness(manifest, current): 'source-changed' | 'engine-upgraded' | null;
+function selectMediaRendersForGc(index, referencedKeys, manifests, now?, olderThanDays?): string[];
+```
+
+`MediaClip.edits` carries a parsed recipe. `resolveMediaSchedule(doc, { processedAudio })`
+(in `/schemas`) expands cuts into contiguous `ScheduledClip` segments
+(`segment: { groupId, index, count }`), carries `gain` / `fadeIn` / `fadeOut` / `crop`,
+and — when `processedAudio(clip)` returns a render path — substitutes it for an
+audio clip, or marks a video `audioMuted` and emits a companion audio entry
+(`derivedFrom`). `scheduleMediaClip` schedules one clip the same way for hosts
+with their own media sources.
 
 ---
 
@@ -1685,6 +1754,7 @@ interface DocPlayerProps {
   renderMode?: boolean; // default false — headless capture mode
   animationsEnabled?: boolean; // default true — false removes layer animations + block transitions
   onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
+  renderVideoFrameSelector?: RenderVideoFrameSelector; // render mode: host-supplied video frames (declined videos are seeked)
   autoPlay?: boolean; // default false
   loop?: boolean; // default false — restart automatically in Video mode
   onEnded?: () => void;
@@ -1739,25 +1809,26 @@ interface BlockRendererProps {
 
 #### Other components
 
-| Component              | Summary                                                                                                                                                                                                |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DocPlayerWithSidebar` | `DocPlayer` composed with `DocControlsSidebar`.                                                                                                                                                        |
-| `LinearDocView`        | The "Page" rendition: theme-art-directed, variable-height HTML sections via core `materializePageSections`; SVG only for spatial canvas embeds (`LinearDocViewProps`).                                 |
-| `DashboardView`        | The "Dashboard" rendition: one static canvas of per-cell `BlockRenderer`s (plus each cell's `style` chrome) via core `materializeDashboard`; publishes a minimal render API for single-frame capture.  |
-| `FlashcardView`        | The "Flashcards" rendition: progressively revealed basic cards and multiple-choice quizzes via core `materializeFlashcards`; includes shuffle, self-rating, retry-missed, and keyboard study controls. |
-| `PageSectionView`      | Dispatches one `PageSection` to its section layout component.                                                                                                                                          |
-| `CanvasSection`        | Responsive SVG embed for spatial sections (diagram/tree/map/…).                                                                                                                                        |
-| `MarkdownRenderer`     | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                                                      |
-| `CaptionOverlay`       | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                                                      |
-| `SocialCaptionOverlay` | Large centered TikTok/Reels-style word-by-word captions.                                                                                                                                               |
-| `DocProgressBar`       | Block progress indicator with seek.                                                                                                                                                                    |
-| `DocControlsOverlay`   | Floating play/pause + prev/next over the player.                                                                                                                                                       |
-| `DocControlsBottom`    | Bottom bar with progress + counter.                                                                                                                                                                    |
-| `DocControlsSidebar`   | Side panel with block thumbnails.                                                                                                                                                                      |
-| `DocControlsSlideshow` | Minimal slideshow controls (arrows + counter).                                                                                                                                                         |
-| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                                                  |
-| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                                                           |
-| `JsonView`             | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                                                  |
+| Component               | Summary                                                                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DocPlayerWithSidebar`  | `DocPlayer` composed with `DocControlsSidebar`.                                                                                                                                                        |
+| `LinearDocView`         | The "Page" rendition: theme-art-directed, variable-height HTML sections via core `materializePageSections`; SVG only for spatial canvas embeds (`LinearDocViewProps`).                                 |
+| `DashboardView`         | The "Dashboard" rendition: one static canvas of per-cell `BlockRenderer`s (plus each cell's `style` chrome) via core `materializeDashboard`; publishes a minimal render API for single-frame capture.  |
+| `FlashcardView`         | The "Flashcards" rendition: progressively revealed basic cards and multiple-choice quizzes via core `materializeFlashcards`; includes shuffle, self-rating, retry-missed, and keyboard study controls. |
+| `PageSectionView`       | Dispatches one `PageSection` to its section layout component.                                                                                                                                          |
+| `CanvasSection`         | Responsive SVG embed for spatial sections (diagram/tree/map/…).                                                                                                                                        |
+| `MarkdownRenderer`      | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                                                      |
+| `CaptionOverlay`        | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                                                      |
+| `SocialCaptionOverlay`  | Large centered TikTok/Reels-style word-by-word captions.                                                                                                                                               |
+| `DocProgressBar`        | Block progress indicator with seek.                                                                                                                                                                    |
+| `DocControlsOverlay`    | Floating play/pause + prev/next over the player.                                                                                                                                                       |
+| `DocControlsBottom`     | Bottom bar with progress + counter.                                                                                                                                                                    |
+| `DocControlsSidebar`    | Side panel with block thumbnails.                                                                                                                                                                      |
+| `DocControlsSlideshow`  | Minimal slideshow controls (arrows + counter).                                                                                                                                                         |
+| `InlineVideoPlayer`     | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                                                  |
+| `InlineAudioPlayer`     | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                                                           |
+| `AnimatedImageControls` | Play/pause pill + paused still frame over an animated GIF/WebP/APNG `<img>`; driven by `useAnimatedImage`. `MarkdownRenderer` images and the editor's image node use it.                               |
+| `JsonView`              | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                                                  |
 
 ```ts
 interface LinearDocViewProps {
@@ -1895,6 +1966,19 @@ function useAutoSurface(enabled: boolean): SurfaceScheme; // live-tracks prefers
 const MediaContext: React.Context<MediaProvider | null>;
 function useMediaProvider(): MediaProvider | null;
 function useMediaUrl(relativePath: string, basePath: string): string;
+
+// Animated images: inspects blob:/data:/same-origin sources once (never a
+// cross-origin fetch), starts paused under prefers-reduced-motion, and replays
+// from the first frame via a fresh object URL. Pass resolvedUrl '' while resolving.
+function useAnimatedImage(src: string, resolvedUrl: string): AnimatedImagePlayback;
+interface AnimatedImagePlayback {
+  info: AnimatedImageInfo | null;
+  animated: boolean;
+  displaySrc: string; // the URL to put on the <img>
+  status: 'playing' | 'paused' | 'ended';
+  play(): void; // from the first frame
+  pause(): void;
+}
 ```
 
 ### Types & Utilities
@@ -1956,6 +2040,9 @@ interface SquisqRenderAPI {
   hideCover(): Promise<void>;
   hasCoverBlock(): boolean;
 }
+// Resolve true once `video`'s pixels for `targetTime` are ready to draw (the
+// host draws them in place of the element), or false to let the player seek it.
+type RenderVideoFrameSelector = (video: HTMLVideoElement, targetTime: number) => Promise<boolean>;
 function formatTime(seconds: number): string; // "M:SS"
 function getAnimationStyle(
   animation: Animation | undefined,

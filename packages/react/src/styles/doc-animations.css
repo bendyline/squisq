@@ -3055,6 +3055,47 @@
   width: 100%;
 }
 
+/* ── Animated image controls ─────────────────────────────────────── */
+/* <AnimatedImageControls> lays a play/pause pill over an animated GIF,
+ * WebP or APNG. Like native video controls it floats over arbitrary
+ * imagery, so it carries its own contrast rather than a page color; the
+ * custom properties let a host retune it. Position is set inline by the
+ * component, so only the look lives here. */
+
+.squisq-animated-image-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px 4px 7px;
+  font: 600 10px/1 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+  letter-spacing: 0.06em;
+  color: var(--squisq-animated-image-control-text, #fff);
+  background: var(--squisq-animated-image-control-bg, rgba(0, 0, 0, 0.62));
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  z-index: 3;
+  opacity: 0.85;
+  transition: opacity 120ms ease;
+  user-select: none;
+}
+
+.squisq-animated-image-toggle:hover,
+.squisq-animated-image-toggle:focus-visible {
+  opacity: 1;
+}
+
+.squisq-animated-image-toggle:focus-visible {
+  outline: 2px solid var(--squisq-animated-image-control-text, #fff);
+  outline-offset: 2px;
+}
+
+.squisq-animated-image-toggle svg {
+  width: 10px;
+  height: 10px;
+  fill: currentColor;
+}
+
 /* ============================================
    Reduced motion
    Freeze ambient/Ken Burns motion when the user asks for calm. Entrance

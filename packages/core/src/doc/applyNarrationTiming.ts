@@ -35,6 +35,7 @@ import {
 } from '../narration/sidecar.js';
 import { flattenRenderableBlocks, getBlockBodyText, getPinnedBlockMeta } from './markdownToDoc.js';
 import { scoreTextSimilarity } from './audioMapping.js';
+import { createMediaTimeMap, type MediaTimeMap } from '../mediaEdit/timeMap.js';
 
 export interface NarrationResolution {
   doc: Doc;
@@ -166,6 +167,41 @@ interface RetimeContext {
   shift: number;
 }
 
+/**
+ * The take's trim window + cuts as a time map, or null when the clip plays the
+ * whole take untouched (the common case keeps the ranges exactly as authored).
+ */
+function narrationTimeMap(clip: MediaClip, takeDuration: number): MediaTimeMap | null {
+  const trimmed = clip.clipStart != null || clip.clipEnd != null;
+  if (!trimmed && !clip.edits?.cuts?.length) return null;
+  return createMediaTimeMap({
+    clipStart: clip.clipStart,
+    clipEnd: clip.clipEnd,
+    cuts: clip.edits?.cuts,
+    sourceDuration: takeDuration,
+  });
+}
+
+/**
+ * Move sidecar ranges from take (source) time to played time: a trimmed
+ * head shifts everything earlier, and each cut closes up the timeline. A
+ * range endpoint inside a cut snaps to the cut, so a block whose narration
+ * was cut entirely collapses to zero length where the cut happened.
+ */
+function mapRangesToPlayed(
+  ranges: Map<string, BlockRangeSec>,
+  map: MediaTimeMap,
+): Map<string, BlockRangeSec> {
+  const mapped = new Map<string, BlockRangeSec>();
+  for (const [blockId, range] of ranges) {
+    mapped.set(blockId, {
+      startSec: map.snapSourceToPlayed(range.startSec),
+      endSec: map.snapSourceToPlayed(range.endSec),
+    });
+  }
+  return mapped;
+}
+
 /** Recursively clone blocks, re-timing matched blocks from their narration ranges. */
 function retimeBlocks(blocks: Block[], ctx: RetimeContext): Block[] {
   return blocks.map((block) => {
@@ -240,9 +276,12 @@ export async function applyNarrationTiming(
     if (!timing) continue;
 
     const flat = flattenRenderableBlocks(doc.blocks);
-    const ranges =
+    const takeRanges =
       timing.blocks.length > 0 ? matchSidecarBlocks(flat, timing) : proportionalRanges(doc, timing);
-    if (!ranges || ranges.size === 0) continue;
+    if (!takeRanges || takeRanges.size === 0) continue;
+    const timeMap = narrationTimeMap(clip, timing.duration);
+    const ranges = timeMap ? mapRangesToPlayed(takeRanges, timeMap) : takeRanges;
+    const playedDuration = timeMap ? timeMap.playedDuration : timing.duration;
 
     const ctx: RetimeContext = {
       clipStart: clip.startAt,
@@ -252,7 +291,7 @@ export async function applyNarrationTiming(
       shift: 0,
     };
     const blocks = retimeBlocks(doc.blocks, ctx);
-    const duration = Math.max(clip.startAt + timing.duration, ctx.cursor);
+    const duration = Math.max(clip.startAt + playedDuration, ctx.cursor);
     const retimed: Doc = {
       ...doc,
       blocks,

@@ -17,11 +17,17 @@ import {
   quoteAttrValue,
 } from '@bendyline/squisq/markdown';
 import type {
+  MediaEdits,
   VideoPipPosition,
   VideoPipShape,
   VideoPipSize,
   VideoPlacement,
 } from '@bendyline/squisq/schemas';
+import {
+  MEDIA_EDIT_PARAMS,
+  mediaEditHtmlAttribute,
+  serializeMediaEdits,
+} from '@bendyline/squisq/mediaEdit';
 import { setHeadingLineTransition, type TransitionFields } from './headingTransition';
 
 /** Format a seconds value compactly: integers bare, else up to 2 decimals. */
@@ -163,13 +169,20 @@ export interface MediaClipPatch {
   pipSize?: VideoPipSize | null;
   pipShape?: VideoPipShape | null;
   pipPosition?: VideoPipPosition | null;
+  /**
+   * The clip's complete edit recipe. Replaces every recipe parameter at once
+   * (fields absent from the recipe are removed); `null` clears them all.
+   * Unrelated parameters and attributes are untouched.
+   */
+  edits?: MediaEdits | null;
 }
 
 function setHtmlAttribute(openingTag: string, name: string, value: string | null): string {
   const attr = new RegExp(`\\s+${name}(?:\\s*=\\s*(?:"[^"]*"|'[^']*'|[^\\s>]+))?`, 'i');
   if (value === null) return openingTag.replace(attr, '');
-  if (attr.test(openingTag)) return openingTag.replace(attr, ` ${name}="${value}"`);
-  return openingTag.replace(/\s*\/?>(?=$)/, (end) => ` ${name}="${value}"${end.trimStart()}`);
+  const escaped = value.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  if (attr.test(openingTag)) return openingTag.replace(attr, () => ` ${name}="${escaped}"`);
+  return openingTag.replace(/\s*\/?>(?=$)/, (end) => ` ${name}="${escaped}"${end.trimStart()}`);
 }
 
 /** Patch timeline timing data on a standalone HTML audio/video element. */
@@ -225,7 +238,32 @@ function setHtmlMediaClipInLine(original: string, patch: MediaClipPatch): string
   if (tag === 'video' && patch.pipPosition !== undefined) {
     next = setHtmlAttribute(next, 'data-squisq-video-pip-position', patch.pipPosition);
   }
+  if (patch.edits !== undefined) {
+    const values = serializeMediaEdits(patch.edits ?? undefined);
+    for (const { key } of MEDIA_EDIT_PARAMS) {
+      next = setHtmlAttribute(next, mediaEditHtmlAttribute(tag, key), values[key]);
+    }
+  }
   return `${original.slice(0, opening.index)}${next}${original.slice(opening.index + opening[0].length)}`;
+}
+
+/**
+ * Apply one patch per line in a single rewrite — for edits that must land
+ * together (a recipe propagated across a group of companion clips), so the
+ * editor records them as one undo step. Returns null when any line is not a
+ * recognized media line (nothing is written then).
+ */
+export function setMediaClipsInSource(
+  source: string,
+  patches: ReadonlyArray<{ line: number; patch: MediaClipPatch }>,
+): string | null {
+  let next = source;
+  for (const { line, patch } of patches) {
+    const result = setMediaClipInSource(next, line, patch);
+    if (result == null) return null;
+    next = result;
+  }
+  return next;
 }
 
 /**
@@ -296,6 +334,10 @@ export function setMediaClipInSource(
   if (patch.pipSize !== undefined) apply('pipSize', patch.pipSize);
   if (patch.pipShape !== undefined) apply('pipShape', patch.pipShape);
   if (patch.pipPosition !== undefined) apply('pipPosition', patch.pipPosition);
+  if (patch.edits !== undefined) {
+    const values = serializeMediaEdits(patch.edits ?? undefined);
+    for (const { key } of MEDIA_EDIT_PARAMS) apply(key, values[key]);
+  }
 
   const parts = [template, ...order.map((k) => `${k}=${quoteAttrValue(params[k])}`)];
   const annotation = `{[${parts.join(' ')}]}`;
@@ -316,6 +358,8 @@ export interface ClipSpec {
   pipSize?: VideoPipSize;
   pipShape?: VideoPipShape;
   pipPosition?: VideoPipPosition;
+  /** Edit recipe, carried along when the clip is relocated. */
+  edits?: MediaEdits;
 }
 
 /** Build a `{[audio|video src=… startAt=… clipEnd=…]}` annotation string. */
@@ -332,6 +376,11 @@ export function buildClipAnnotation(spec: ClipSpec, startAt: number): string {
   }
   if (spec.clipEnd != null) parts.push(`clipEnd=${formatSeconds(spec.clipEnd)}`);
   if (spec.spillover) parts.push('spillover=true');
+  const edits = serializeMediaEdits(spec.edits);
+  for (const { key } of MEDIA_EDIT_PARAMS) {
+    const value = edits[key];
+    if (value != null) parts.push(`${key}=${quoteAttrValue(value)}`);
+  }
   return `{[${parts.join(' ')}]}`;
 }
 

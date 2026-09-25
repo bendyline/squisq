@@ -150,10 +150,15 @@ metadata but ships an MIT license file with its distribution.
 | @ffmpeg/core            | 0.12.9    | GPL-2.0-or-later | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | @ffmpeg/ffmpeg          | 0.12.15   | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | @ffmpeg/util            | 0.12.2    | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @shiguredo/rnnoise-wasm | 2025.1.5  | Apache-2.0       | https://github.com/shiguredo/rnnoise-wasm |
 | html2canvas             | 1.4.1     | MIT              | https://github.com/niklasvh/html2canvas   |
 | mp4-muxer               | 5.2.2     | MIT              | https://github.com/Vanilagy/mp4-muxer     |
 | react _(peer)_          | ^18 / ^19 | MIT              | https://reactjs.org                       |
 | react-dom _(peer)_      | ^18 / ^19 | MIT              | https://reactjs.org                       |
+
+`@shiguredo/rnnoise-wasm` embeds a WebAssembly build of RNNoise (BSD-3-Clause,
+Copyright Xiph.Org Foundation, Mozilla and contributors), used by media edits to
+reduce background noise. It runs locally and downloads nothing at runtime.
 
 `@ffmpeg/core` is the separately distributed single-thread WebAssembly runtime
 used by the browser fallback and GIF encoder. It is built from the upstream
@@ -247,21 +252,21 @@ https://openfontlicense.org/open-font-license-official-text/
 
 ## License Summary
 
-| License                       | Packages                                                                                 |
-| ----------------------------- | ---------------------------------------------------------------------------------------- |
-| MIT                           | Mermaid and the majority of dependencies                                                 |
-| Apache-2.0                    | genson-js, harper.js, localforage, pdfjs-dist, playwright-core, Roboto, Chevrotain types |
-| MPL-2.0 OR Apache-2.0         | DOMPurify (dual-licensed; Apache-2.0 option available)                                   |
-| ISC                           | D3 and most current D3 modules used by Mermaid                                           |
-| BSD-3-Clause                  | d3-sankey and related legacy D3 modules                                                  |
-| Unlicense                     | robust-predicates                                                                        |
-| OFL-1.1                       | 14 self-hosted Google Fonts (see table above) + FontAwesome font files                   |
-| CC-BY-4.0                     | FontAwesome icon artwork (attribution required when redistributing icons)                |
-| GPL-2.0-or-later              | @ffmpeg/core WebAssembly runtime                                                         |
-| MIT OR GPL-3.0-or-later       | jszip (dual-licensed; MIT option used)                                                   |
-| MIT AND Zlib                  | pako (both permissive)                                                                   |
-| 0BSD                          | tslib (maximally permissive)                                                             |
-| CC-BY-4.0 AND OFL-1.1 AND MIT | @fortawesome/fontawesome-free (composite — see editor-react table note)                  |
+| License                       | Packages                                                                                                          |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| MIT                           | Mermaid and the majority of dependencies                                                                          |
+| Apache-2.0                    | genson-js, harper.js, localforage, pdfjs-dist, playwright-core, Roboto, Chevrotain types, @shiguredo/rnnoise-wasm |
+| MPL-2.0 OR Apache-2.0         | DOMPurify (dual-licensed; Apache-2.0 option available)                                                            |
+| ISC                           | D3 and most current D3 modules used by Mermaid                                                                    |
+| BSD-3-Clause                  | d3-sankey and related legacy D3 modules, RNNoise (embedded in @shiguredo/rnnoise-wasm)                            |
+| Unlicense                     | robust-predicates                                                                                                 |
+| OFL-1.1                       | 14 self-hosted Google Fonts (see table above) + FontAwesome font files                                            |
+| CC-BY-4.0                     | FontAwesome icon artwork (attribution required when redistributing icons)                                         |
+| GPL-2.0-or-later              | @ffmpeg/core WebAssembly runtime                                                                                  |
+| MIT OR GPL-3.0-or-later       | jszip (dual-licensed; MIT option used)                                                                            |
+| MIT AND Zlib                  | pako (both permissive)                                                                                            |
+| 0BSD                          | tslib (maximally permissive)                                                                                      |
+| CC-BY-4.0 AND OFL-1.1 AND MIT | @fortawesome/fontawesome-free (composite — see editor-react table note)                                           |
 
 Most dependencies use permissive licenses compatible with MIT. The jszip
 dual-license allows choosing MIT, and DOMPurify offers an Apache-2.0 option.

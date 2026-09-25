@@ -37,6 +37,13 @@ export { InlineVideoPlayer } from './InlineVideoPlayer.js';
 export type { InlineVideoPlayerProps } from './InlineVideoPlayer.js';
 export { InlineAudioPlayer } from './InlineAudioPlayer.js';
 export type { InlineAudioPlayerProps } from './InlineAudioPlayer.js';
+export { AnimatedImageControls } from './animatedImage/AnimatedImageControls.js';
+export type { AnimatedImageControlsProps } from './animatedImage/AnimatedImageControls.js';
+export { useAnimatedImage } from './animatedImage/useAnimatedImage.js';
+export type {
+  AnimatedImagePlayback,
+  AnimatedImageStatus,
+} from './animatedImage/useAnimatedImage.js';
 
 // Layer components
 export { ImageLayer } from './layers/ImageLayer.js';
@@ -100,6 +107,7 @@ export type {
   VideoPresentation,
   SlideNavActions,
   SquisqRenderAPI,
+  RenderVideoFrameSelector,
   RenderBlockInfo,
   RenderAudioSegmentInfo,
   RenderCaptionInfo,

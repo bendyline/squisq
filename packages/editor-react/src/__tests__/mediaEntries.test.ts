@@ -24,6 +24,13 @@ describe('isVisibleMediaEntry', () => {
     expect(isVisibleMediaEntry(entry(name))).toBe(false);
   });
 
+  it.each(['.mediaEdits/take.a1b2c3d4e5f6.webm', 'notes_files/.mediaEdits/take.a1b2c3d4e5f6.json'])(
+    'hides processed-audio renders: %s',
+    (name) => {
+      expect(isVisibleMediaEntry(entry(name))).toBe(false);
+    },
+  );
+
   it.each(['state.json', 'attachments/data.json', 'document_files/hero.png'])(
     'keeps user-facing files visible: %s',
     (name) => {

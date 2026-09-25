@@ -6,15 +6,17 @@ Third-party components remain under their respective license terms.
 
 ## Runtime, peer, and bundled dependencies
 
-| Package               | Version              | License          | Repository                                |
-| --------------------- | -------------------- | ---------------- | ----------------------------------------- |
-| @ffmpeg/core          | 0.12.9               | GPL-2.0-or-later | https://github.com/ffmpegwasm/ffmpeg.wasm |
-| @ffmpeg/ffmpeg        | 0.12.15              | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
-| @ffmpeg/util          | 0.12.2               | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
-| html2canvas           | 1.4.1                | MIT              | https://github.com/niklasvh/html2canvas   |
-| mp4-muxer _(bundled)_ | 5.2.2                | MIT              | https://github.com/Vanilagy/mp4-muxer     |
-| react _(peer)_        | ^18.0.0 \|\| ^19.0.0 | MIT              | https://github.com/facebook/react         |
-| react-dom _(peer)_    | ^18.0.0 \|\| ^19.0.0 | MIT              | https://github.com/facebook/react         |
+| Package                 | Version              | License          | Repository                                |
+| ----------------------- | -------------------- | ---------------- | ----------------------------------------- |
+| @ffmpeg/core            | 0.12.9               | GPL-2.0-or-later | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/ffmpeg          | 0.12.15              | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/util            | 0.12.2               | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @shiguredo/rnnoise-wasm | 2025.1.5             | Apache-2.0       | https://github.com/shiguredo/rnnoise-wasm |
+| html2canvas             | 1.4.1                | MIT              | https://github.com/niklasvh/html2canvas   |
+| mediabunny _(bundled)_  | 1.57.0               | MPL-2.0          | https://github.com/Vanilagy/mediabunny    |
+| mp4-muxer _(bundled)_   | 5.2.2                | MIT              | https://github.com/Vanilagy/mp4-muxer     |
+| react _(peer)_          | ^18.0.0 \|\| ^19.0.0 | MIT              | https://github.com/facebook/react         |
+| react-dom _(peer)_      | ^18.0.0 \|\| ^19.0.0 | MIT              | https://github.com/facebook/react         |
 
 ## @ffmpeg/core WebAssembly runtime
 
@@ -38,3 +40,12 @@ that package version:
 mp4-muxer is bundled as a private runtime implementation detail so its legacy
 global WebCodecs declaration dependencies are not installed for consumers. Its
 exact license text is shipped in THIRD_PARTY_LICENSES.txt.
+
+## mediabunny
+
+mediabunny demuxes and decodes video sources during export. It is bundled for
+the same reason as mp4-muxer. mediabunny is distributed under the Mozilla
+Public License 2.0; this package ships its files unmodified, and their Source
+Code Form is available from the mediabunny npm package (which includes `src/`)
+at the version listed above and from https://github.com/Vanilagy/mediabunny.
+The complete MPL-2.0 text is shipped in THIRD_PARTY_LICENSES.txt.

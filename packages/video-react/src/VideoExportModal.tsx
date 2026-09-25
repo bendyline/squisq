@@ -8,9 +8,10 @@
  * the surface that opened it.
  */
 
-import { useState, useCallback, useId, useRef } from 'react';
+import { useState, useCallback, useEffect, useId, useRef } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { MediaEditRenderManager } from './mediaEdit/mediaEditRenderManager.js';
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 import { useModalDialog, type CaptionMode } from '@bendyline/squisq-react';
 import {
@@ -37,6 +38,11 @@ export interface VideoExportModalProps {
   images?: Map<string, ArrayBuffer>;
   /** Pre-collected audio map */
   audio?: Map<string, ArrayBuffer>;
+  /**
+   * Processed-audio renders for media-edit recipes. Export waits for pending
+   * renders, then mixes each edited clip's render instead of its original.
+   */
+  mediaEditRenders?: MediaEditRenderManager | null;
   /**
    * Seeds the modal's initial format, motion, quality, FPS, orientation, and
    * caption selections. It is merged (as a base) into the config passed to the
@@ -259,6 +265,7 @@ export function VideoExportModal({
   mediaProvider,
   images,
   audio,
+  mediaEditRenders,
   defaultConfig,
   colorScheme = 'light',
   uiPalette,
@@ -358,7 +365,25 @@ export function VideoExportModal({
     }
   }, []);
 
+  const [preparingEdits, setPreparingEdits] = useState(false);
+  const editsWaitRef = useRef<AbortController | null>(null);
+  useEffect(() => () => editsWaitRef.current?.abort(), []);
+
   const handleExport = useCallback(async () => {
+    // Edited clips mix their processed renders; wait for any still rendering.
+    if (includeAudio && mediaEditRenders) {
+      const controller = new AbortController();
+      editsWaitRef.current = controller;
+      setPreparingEdits(true);
+      try {
+        await mediaEditRenders.whenReady(doc, controller.signal);
+      } catch {
+        return; // closed while waiting
+      } finally {
+        editsWaitRef.current = null;
+        setPreparingEdits(false);
+      }
+    }
     const previewCanvas = previewCanvasRef.current;
     const previewContext = previewCanvas?.getContext('2d');
     if (previewCanvas && previewContext) {
@@ -378,6 +403,7 @@ export function VideoExportModal({
       images,
       audio,
       mediaProvider,
+      ...(mediaEditRenders ? { processedAudio: mediaEditRenders.processedAudio } : {}),
       // Only thread the bundle through when the host actually supplied one.
       ...(playerScript !== undefined ? { playerScript } : {}),
     };
@@ -394,6 +420,7 @@ export function VideoExportModal({
     images,
     audio,
     mediaProvider,
+    mediaEditRenders,
     playerScript,
     defaultConfig,
     startExport,
@@ -592,11 +619,24 @@ export function VideoExportModal({
               )}
             </div>
 
+            {preparingEdits && (
+              <p
+                role="status"
+                data-squisq-video-export-preparing-edits
+                style={{ fontSize: 12, color: palette.muted, margin: '0 0 12px' }}
+              >
+                Processing audio edits…
+              </p>
+            )}
             <div style={footerStyle}>
               <button style={themedSecondaryButtonStyle} onClick={handleClose}>
                 Cancel
               </button>
-              <button style={themedPrimaryButtonStyle} onClick={handleExport}>
+              <button
+                style={themedPrimaryButtonStyle}
+                onClick={handleExport}
+                disabled={preparingEdits}
+              >
                 {outputFormat === 'gif' ? 'Export GIF' : 'Export Video'}
               </button>
             </div>

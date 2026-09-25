@@ -385,6 +385,44 @@ describe('<EditorShell> instance boundaries', () => {
     await act(async () => Promise.resolve());
     expect(screen.getByTestId('markdown-source').textContent).toBe('# original');
   });
+
+  it('attaches a dropped file of no known kind as a link instead of discarding it', async () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="# original"
+        initialView="raw"
+        mediaProvider={mutableMediaProviderWith([]).provider}
+        toolbarSlotRight={<MarkdownSourceProbe />}
+      />,
+    );
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    const file = new File([new Uint8Array([0x50, 0x4b, 5, 6])], 'archive.zip', {
+      type: 'application/zip',
+    });
+    // jsdom's File lacks arrayBuffer().
+    if (typeof file.arrayBuffer !== 'function') {
+      Object.defineProperty(file, 'arrayBuffer', {
+        value: async () => new Uint8Array([0x50, 0x4b, 5, 6]).buffer,
+      });
+    }
+    const dataTransfer = {
+      types: ['Files'],
+      files: [file],
+      items: [{ kind: 'file', type: 'application/zip', getAsFile: () => file }],
+    };
+    fireEvent.dragEnter(shell, { dataTransfer });
+    const mediaZone = await waitFor(() => {
+      const zone = container.querySelector<HTMLElement>('.squisq-drop-zone--media');
+      expect(zone).toBeTruthy();
+      return zone!;
+    });
+    fireEvent.drop(mediaZone, { dataTransfer });
+    await waitFor(() =>
+      expect(screen.getByTestId('markdown-source').textContent).toContain(
+        '[archive.zip](archive.zip)',
+      ),
+    );
+  });
 });
 
 describe('<EditorShell> hostMode', () => {

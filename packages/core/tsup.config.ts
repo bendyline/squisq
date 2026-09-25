@@ -16,6 +16,7 @@ export default defineConfig({
     'versions/index': 'src/versions/index.ts',
     'jsonForm/index': 'src/jsonForm/index.ts',
     'imageEdit/index': 'src/imageEdit/index.ts',
+    'mediaEdit/index': 'src/mediaEdit/index.ts',
     'icons/index': 'src/icons/index.ts',
     'icons/inlineIconMarker': 'src/icons/inlineIconMarker.ts',
     'recommend/index': 'src/recommend/index.ts',

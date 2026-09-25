@@ -17,6 +17,9 @@ import {
   matchTrailingPandocAttr,
   tokenizeAttrTokens,
 } from '@bendyline/squisq/markdown';
+import { mediaEditHtmlAttribute } from '@bendyline/squisq/mediaEdit';
+import { mediaEditKeysFor } from './tiptap/mediaEditAttributes';
+import { needsAngleDestination, unwrapLinkDestination } from './markdownDestination';
 
 // Hoisted regex patterns for inline markdown ↔ HTML conversion
 //
@@ -611,7 +614,7 @@ export function markdownToTiptap(markdown: string): string {
     if (standaloneImageMatch) {
       flushList();
       const alt = escapeHtml(standaloneImageMatch[1] ?? '');
-      const src = escapeHtml(standaloneImageMatch[2] ?? '');
+      const src = escapeHtml(unwrapLinkDestination(standaloneImageMatch[2] ?? ''));
       pushBlock(`<img alt="${alt}" src="${src}">`);
       continue;
     }
@@ -894,7 +897,11 @@ export function tiptapToMarkdown(html: string): string {
       const src = /\bsrc="([^"]*)"/i.exec(attrs)?.[1];
       if (src) {
         const alt = /\balt="([^"]*)"/i.exec(attrs)?.[1] ?? '';
-        lines.push(serializeImage(src, alt, attrs));
+        const serialized = serializeImage(src, alt, attrs);
+        // The attribute values are still entity-encoded. The markdown
+        // shorthand wants them decoded (as the inline path's final
+        // `unescapeHtml` does); a sized raw `<img>` must stay encoded.
+        lines.push(serialized.startsWith('<') ? serialized : unescapeHtml(serialized));
         lines.push('');
       }
       remaining = remaining.slice(imgMatch[0].length);
@@ -1351,6 +1358,12 @@ function serializeMediaTag(tag: 'video' | 'audio', attrs: string): string {
   if (startAt != null) parts.push(` ${timingPrefix}-start-at="${startAt}"`);
   if (clipStart != null) parts.push(` ${timingPrefix}-clip-start="${clipStart}"`);
   if (clipEnd != null) parts.push(` ${timingPrefix}-clip-end="${clipEnd}"`);
+  // Edit recipe attributes, in canonical recipe order, verbatim.
+  for (const key of mediaEditKeysFor(tag)) {
+    const name = mediaEditHtmlAttribute(tag, key);
+    const value = new RegExp(`\\b${name}="([^"]*)"`, 'i').exec(attrs)?.[1];
+    if (value != null && value !== '') parts.push(` ${name}="${value}"`);
+  }
   parts.push(`></${tag}>`);
   return parts.join('');
 }
@@ -1360,7 +1373,7 @@ function serializeImage(src: string, alt: string, attrs: string): string {
   const height = /\bheight="([^"]*)"/i.exec(attrs)?.[1];
   const title = /\btitle="([^"]*)"/i.exec(attrs)?.[1];
   if (!width && !height) {
-    return `![${alt}](${src})`;
+    return `![${alt}](${escapedDestination(src)})`;
   }
   const parts = [`<img alt="${alt}" src="${src}"`];
   if (width) parts.push(` width="${width}"`);
@@ -1368,6 +1381,17 @@ function serializeImage(src: string, alt: string, attrs: string): string {
   if (title) parts.push(` title="${title}"`);
   parts.push('>');
   return parts.join('');
+}
+
+/**
+ * A link / image destination for markdown output, from a still HTML-ESCAPED
+ * attribute value. A path with a space (`Q3 Report.zip`) is only one
+ * destination in the angle-bracket form; the brackets go out as entities so
+ * the tag-strip pass leaves them alone and the final `unescapeHtml` restores
+ * them.
+ */
+function escapedDestination(attrValue: string): string {
+  return needsAngleDestination(attrValue) ? `&lt;${attrValue}&gt;` : attrValue;
 }
 
 function escapeHtml(text: string): string {
@@ -1423,8 +1447,8 @@ function inlineToHtml(text: string): string {
   staged = staged.replace(/<br\s*\/?>/gi, () => stash('<br>'));
 
   // Images first: ![alt](src) — must be before links so the `!` prefix is consumed
-  staged = staged.replace(RE_IMAGE, (_m, alt, src) =>
-    stash(`<img alt="${escapeHtml(alt)}" src="${escapeHtml(src)}">`),
+  staged = staged.replace(RE_IMAGE, (_m, alt, src: string) =>
+    stash(`<img alt="${escapeHtml(alt)}" src="${escapeHtml(unwrapLinkDestination(src))}">`),
   );
 
   // Mentions: @[Display](scheme:id) — must run before links so the
@@ -1575,7 +1599,7 @@ function splitLinkDestination(destination: string): { url: string; title: string
   const OPENER_FOR: Record<string, string> = { '"': '"', "'": "'", ')': '(' };
   const trimmed = destination.trimEnd();
   const opener = OPENER_FOR[trimmed[trimmed.length - 1] ?? ''];
-  if (!opener) return { url: destination.trim(), title: null };
+  if (!opener) return { url: unwrapLinkDestination(destination.trim()), title: null };
 
   // Walk backwards from just inside the closer. `"` and `'` are their own
   // closer, so scanning FORWARD (or taking the last index outright) would
@@ -1589,13 +1613,13 @@ function splitLinkDestination(destination: string): { url: string; title: string
     const url = trimmed.slice(0, index).trim();
     if (!url) continue;
     return {
-      url,
+      url: unwrapLinkDestination(url),
       // Backslash escapes inside a title are real escapes (`\"` is a literal
       // quote), matching core's parser.
       title: trimmed.slice(index + 1, -1).replace(/\\([\\"'()])/g, '$1'),
     };
   }
-  return { url: destination.trim(), title: null };
+  return { url: unwrapLinkDestination(destination.trim()), title: null };
 }
 
 /**
@@ -1857,7 +1881,7 @@ function htmlToInline(html: string): string {
     if (href === undefined) return match;
     const title = /\btitle="([^"]*)"/i.exec(attrs)?.[1];
     const titlePart = title ? ` "${escapeLinkTitleAttr(title)}"` : '';
-    return `[${text}](${href}${titlePart})`;
+    return `[${text}](${escapedDestination(href)}${titlePart})`;
   });
 
   // Images — order-agnostic attribute parsing (tiptap emits src-first,

@@ -17,6 +17,7 @@
  */
 
 import type { RecorderSaveResult } from './RecorderModal.js';
+import { recordingGroupId } from './recordingGroup.js';
 
 /** The two clips to insert for a dual (screen + camera) recording. */
 export interface DualClipInsertion {
@@ -62,12 +63,15 @@ export function buildDualClipInsertion(result: RecorderSaveResult): DualClipInse
   const startAt = offset >= SKEW_EPSILON ? fmtSeconds(offset) : undefined;
   const clipStart = offset <= -SKEW_EPSILON ? fmtSeconds(-offset) : undefined;
   const cameraClipEnd = fmtSeconds(result.camera.duration);
+  // Links the pair's edit recipes, so a cut or trim applied to one lands on both.
+  const group = recordingGroupId(result.relativePath);
 
   const screenTag =
     `<video src="${result.relativePath}" controls width="480"` +
     ` data-squisq-video-placement="overlay"` +
     ` data-squisq-video-lock-to-block="false"` +
-    ` data-squisq-video-clip-end="${screenClipEnd}"></video>`;
+    ` data-squisq-video-clip-end="${screenClipEnd}"` +
+    ` data-squisq-video-group="${group}"></video>`;
 
   const cameraTag =
     `<video src="${result.camera.relativePath}" controls width="240"` +
@@ -75,7 +79,8 @@ export function buildDualClipInsertion(result: RecorderSaveResult): DualClipInse
     ` data-squisq-video-lock-to-block="false"` +
     (startAt != null ? ` data-squisq-video-start-at="${startAt}"` : '') +
     (clipStart != null ? ` data-squisq-video-clip-start="${clipStart}"` : '') +
-    ` data-squisq-video-clip-end="${cameraClipEnd}"></video>`;
+    ` data-squisq-video-clip-end="${cameraClipEnd}"` +
+    ` data-squisq-video-group="${group}"></video>`;
 
   const screenAttrs: Record<string, unknown> = {
     src: result.relativePath,
@@ -84,6 +89,7 @@ export function buildDualClipInsertion(result: RecorderSaveResult): DualClipInse
     placement: 'overlay',
     lockToBlock: false,
     clipEnd: Number(screenClipEnd),
+    editGroup: group,
   };
 
   const cameraAttrs: Record<string, unknown> = {
@@ -93,6 +99,7 @@ export function buildDualClipInsertion(result: RecorderSaveResult): DualClipInse
     placement: 'picture-in-picture',
     lockToBlock: false,
     clipEnd: Number(cameraClipEnd),
+    editGroup: group,
   };
   if (startAt != null) cameraAttrs.startAt = Number(startAt);
   if (clipStart != null) cameraAttrs.clipStart = Number(clipStart);

@@ -45,19 +45,38 @@ describe('buildDualClipInsertion — emitted markup', () => {
     expect(buildDualClipInsertion(single)).toBeNull();
   });
 
+  it('links the pair with a shared edit group', () => {
+    const dual = buildDualClipInsertion(dualResult(0.42))!;
+    expect(dual.screenAttrs.editGroup).toBe('rec-screen-20260721-101500');
+    expect(dual.cameraAttrs.editGroup).toBe('rec-screen-20260721-101500');
+    const markdown = `# Demo
+
+${dual.screenTag}
+
+${dual.cameraTag}
+`;
+    const doc = markdownToDoc(parseMarkdown(markdown));
+    expect((doc.documentMedia ?? []).map((clip) => clip.edits?.group)).toEqual([
+      'rec-screen-20260721-101500',
+      'rec-screen-20260721-101500',
+    ]);
+  });
+
   it('omits start-at and clip-start when the skew is negligible', () => {
     const dual = buildDualClipInsertion(dualResult(0))!;
     expect(dual.screenTag).toBe(
       '<video src="video/screen-20260721-101500.webm" controls width="480"' +
         ' data-squisq-video-placement="overlay"' +
         ' data-squisq-video-lock-to-block="false"' +
-        ' data-squisq-video-clip-end="12.4"></video>',
+        ' data-squisq-video-clip-end="12.4"' +
+        ' data-squisq-video-group="rec-screen-20260721-101500"></video>',
     );
     expect(dual.cameraTag).toBe(
       '<video src="video/camera-20260721-101500.webm" controls width="240"' +
         ' data-squisq-video-placement="picture-in-picture"' +
         ' data-squisq-video-lock-to-block="false"' +
-        ' data-squisq-video-clip-end="12.4"></video>',
+        ' data-squisq-video-clip-end="12.4"' +
+        ' data-squisq-video-group="rec-screen-20260721-101500"></video>',
     );
     expect(dual.cameraTag).not.toContain('data-squisq-video-start-at');
     expect(dual.cameraTag).not.toContain('data-squisq-video-clip-start');

@@ -19,6 +19,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import type {
   Doc,
   MediaProvider,
+  MediaScheduleOptions,
   Theme,
   VideoPipPosition,
   VideoPipShape,
@@ -353,6 +354,12 @@ export interface VideoExportConfig {
    * degradation; `omit` intentionally skips audio.
    */
   audioPolicy?: VideoAudioPolicy;
+  /**
+   * Processed-audio lookup for media-edit recipes (`fx`): the mix uses an
+   * edited clip's render instead of its original audio. Hosts await pending
+   * renders before exporting; a clip without a render exports its original.
+   */
+  processedAudio?: MediaScheduleOptions['processedAudio'];
   /** Render authored animations and slide transitions (default: true for MP4, false for GIF). */
   animationsEnabled?: boolean;
   /** Encoding quality preset (default: 'normal') */
@@ -827,7 +834,11 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         // muxing without reporting the format limitation as an export error.
         const timeline =
           effectiveOutputFormat === 'mp4' && audioPolicy !== 'omit'
-            ? computeAudioTimeline(doc, coverPlan.audioOffset)
+            ? config.processedAudio
+              ? computeAudioTimeline(doc, coverPlan.audioOffset, {
+                  processedAudio: config.processedAudio,
+                })
+              : computeAudioTimeline(doc, coverPlan.audioOffset)
             : [];
         const aacSupported =
           timeline.length > 0

@@ -102,6 +102,11 @@
       "import": "./dist/imageEdit/index.js",
       "default": "./dist/imageEdit/index.js"
     },
+    "./mediaEdit": {
+      "types": "./dist/mediaEdit/index.d.ts",
+      "import": "./dist/mediaEdit/index.js",
+      "default": "./dist/mediaEdit/index.js"
+    },
     "./icons": {
       "types": "./dist/icons/index.d.ts",
       "import": "./dist/icons/index.js",

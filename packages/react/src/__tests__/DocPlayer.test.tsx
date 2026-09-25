@@ -1090,6 +1090,36 @@ describe('DocPlayer smoke test', () => {
     requestFrame.mockRestore();
   });
 
+  it('keeps the paint gate for block changes but not for seeks within a block', async () => {
+    const requestFrame = vi
+      .spyOn(window, 'requestAnimationFrame')
+      .mockImplementation((callback) => {
+        callback(0);
+        return 1;
+      });
+    const observed: Array<SquisqRenderAPI | null> = [];
+    render(
+      <DocPlayer
+        doc={docWithTransition()}
+        renderMode
+        audioController={controller({ currentTime: 0, totalDuration: 10 })}
+        onRenderAPIReady={(api) => observed.push(api)}
+      />,
+    );
+    const api = observed[observed.length - 1]!;
+
+    await act(async () => api.seekTo(1));
+    expect(requestFrame).toHaveBeenCalledTimes(1);
+
+    await act(async () => api.seekTo(1 + 1 / 30));
+    await act(async () => api.seekTo(1 + 2 / 30));
+    expect(requestFrame).toHaveBeenCalledTimes(1);
+
+    await act(async () => api.seekTo(5.1));
+    expect(requestFrame).toHaveBeenCalledTimes(2);
+    requestFrame.mockRestore();
+  });
+
   it('settles render-mode seeks when Chromium suspends animation frames', async () => {
     vi.useFakeTimers();
     const requestFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation(() => 1);
