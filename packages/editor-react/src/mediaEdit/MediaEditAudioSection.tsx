@@ -11,7 +11,13 @@ import type {
   MediaEditRenderManager,
 } from '@bendyline/squisq-video-react/media-edit';
 import { useResolvedMediaSrc } from '../tiptap/useResolvedMediaSrc';
-import { fxFromDraft, presetFx, type RecipeDraft, type StageDraft } from './mediaEditDraft';
+import {
+  formatClock,
+  fxFromDraft,
+  presetFx,
+  type RecipeDraft,
+  type StageDraft,
+} from './mediaEditDraft';
 import type { EditableMedia } from './mediaEditTargets';
 
 interface StageSpec {
@@ -104,18 +110,36 @@ function useMediaDuration(url: string): number | null {
 
 type Listening = 'original' | 'processed';
 
-/** Web Audio A/B player over two same-length PCM buffers; switching keeps the position. */
+/**
+ * Web Audio A/B player over two same-length PCM buffers, looping the preview
+ * window. Playing either side starts from the cue point — the window's start,
+ * or wherever the playback bar was last dropped — so both sides are heard
+ * over the same words. `position` (seconds into the window) follows playback.
+ */
 function usePreviewPlayer(preview: MediaEditPreviewResult | null) {
   const ctxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const startedRef = useRef<{ at: number; offset: number } | null>(null);
   const [playing, setPlaying] = useState<Listening | null>(null);
+  const cueRef = useRef(0);
+  const [position, setPosition] = useState(0);
+  const frames = preview?.original[0]?.length ?? 0;
+  const duration = preview && frames > 0 ? frames / preview.sampleRate : 0;
+
+  const currentOffset = useCallback(() => {
+    const ctx = ctxRef.current;
+    const started = startedRef.current;
+    if (!ctx || !started || duration <= 0) return cueRef.current;
+    return (started.offset + ctx.currentTime - started.at) % duration;
+  }, [duration]);
 
   const stop = useCallback(() => {
     sourceRef.current?.stop();
     sourceRef.current?.disconnect();
     sourceRef.current = null;
     startedRef.current = null;
+    cueRef.current = 0;
+    setPosition(0);
     setPlaying(null);
   }, []);
 
@@ -135,11 +159,8 @@ function usePreviewPlayer(preview: MediaEditPreviewResult | null) {
       const channels = which === 'original' ? preview.original : preview.processed;
       const length = channels[0]?.length ?? 0;
       if (length === 0) return;
-      const duration = length / preview.sampleRate;
-      let offset = 0;
-      if (startedRef.current) {
-        offset = (startedRef.current.offset + ctx.currentTime - startedRef.current.at) % duration;
-      }
+      const offset = cueRef.current;
+      setPosition(offset);
       sourceRef.current?.stop();
       sourceRef.current?.disconnect();
       const buffer = ctx.createBuffer(channels.length, length, preview.sampleRate);
@@ -156,7 +177,53 @@ function usePreviewPlayer(preview: MediaEditPreviewResult | null) {
     [preview],
   );
 
-  return { playing, play, stop };
+  const seek = useCallback(
+    (seconds: number) => {
+      // Stop short of the end: a looping source started AT its end wraps to 0.
+      cueRef.current = Math.min(Math.max(0, seconds), Math.max(0, duration - 0.05));
+      setPosition(cueRef.current);
+      if (playing) play(playing);
+    },
+    [duration, playing, play],
+  );
+
+  // Follow the playhead while playing.
+  useEffect(() => {
+    if (!playing) return;
+    let frame = requestAnimationFrame(function tick() {
+      setPosition(currentOffset());
+      frame = requestAnimationFrame(tick);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [playing, currentOffset]);
+
+  return { playing, play, stop, seek, position, duration };
+}
+
+function PlayIcon() {
+  return (
+    <svg
+      className="squisq-media-edit-icon"
+      viewBox="0 0 10 10"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M2 1 9 5 2 9Z" />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg
+      className="squisq-media-edit-icon"
+      viewBox="0 0 10 10"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="1.5" y="1.5" width="7" height="7" rx="1" />
+    </svg>
+  );
 }
 
 export interface MediaEditAudioSectionProps {
@@ -218,10 +285,7 @@ export function MediaEditAudioSection({
   }, [draftFx.ops.length, manager, item.src, knownFx, previewFrom]);
 
   return (
-    <section className="squisq-media-edit-section" aria-labelledby={`${idPrefix}-audio`}>
-      <h3 id={`${idPrefix}-audio`} className="squisq-media-edit-section__title">
-        Audio cleanup
-      </h3>
+    <div className="squisq-media-edit-section">
       <div className="squisq-media-edit-presets" role="group" aria-label="Presets">
         <button type="button" onClick={() => onChange({ ...draft, fx: presetFx('voice') })}>
           Clean up voice
@@ -310,28 +374,58 @@ export function MediaEditAudioSection({
             onClick={runPreview}
             disabled={previewing || draftFx.ops.length === 0}
           >
-            {previewing ? 'Rendering preview…' : preview ? 'Update preview' : 'Preview'}
-          </button>
-          <button
-            type="button"
-            aria-pressed={player.playing === 'original'}
-            disabled={!preview || previewing}
-            onClick={() => player.play('original')}
-          >
-            Original
-          </button>
-          <button
-            type="button"
-            aria-pressed={player.playing === 'processed'}
-            disabled={!preview || previewing}
-            onClick={() => player.play('processed')}
-          >
-            Processed
-          </button>
-          <button type="button" disabled={!player.playing} onClick={player.stop}>
-            Stop
+            {previewing ? 'Rendering preview…' : preview ? 'Update preview' : 'Create preview'}
           </button>
         </div>
+        {preview != null && player.duration > 0 && (
+          <>
+            <div className="squisq-media-edit-playback" data-playing={player.playing ?? undefined}>
+              <span className="squisq-media-edit-playback__label">
+                {player.playing
+                  ? `${player.playing === 'original' ? 'Original' : 'Processed'} from ${Math.round(preview.startSec)} s`
+                  : 'Stopped'}
+              </span>
+              <input
+                type="range"
+                aria-label="Playback position"
+                aria-valuetext={`${formatClock(player.position)} of ${formatClock(player.duration)}`}
+                min={0}
+                max={player.duration}
+                step={0.05}
+                value={player.position}
+                disabled={previewing}
+                onChange={(e) => player.seek(Number(e.target.value))}
+              />
+              <span className="squisq-media-edit-playback__time">
+                {formatClock(player.position)} / {formatClock(player.duration)}
+              </span>
+            </div>
+            <div className="squisq-media-edit-preview__actions">
+              <button
+                type="button"
+                aria-pressed={player.playing === 'original'}
+                disabled={previewing}
+                onClick={() => player.play('original')}
+              >
+                <PlayIcon />
+                Original
+              </button>
+              <button
+                type="button"
+                aria-pressed={player.playing === 'processed'}
+                disabled={previewing}
+                onClick={() => player.play('processed')}
+              >
+                <PlayIcon />
+                Processed
+              </button>
+              <button type="button" disabled={!player.playing} onClick={player.stop}>
+                <StopIcon />
+                Stop
+              </button>
+            </div>
+          </>
+        )}
         {preview != null && previewedFx !== knownFx && (
           <p className="squisq-media-edit-note">
             Settings changed — update the preview to hear them.
@@ -343,6 +437,6 @@ export function MediaEditAudioSection({
           </p>
         )}
       </div>
-    </section>
+    </div>
   );
 }

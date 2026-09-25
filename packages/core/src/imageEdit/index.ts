@@ -1,6 +1,6 @@
 /**
  * Image-editor primitives: schema re-exports, state helpers, persistence,
- * version history, and SVG → raster export.
+ * version history, SVG → raster export, and animated-image inspection.
  *
  * See `@bendyline/squisq/imageEdit` for the public subpath entry.
  */
@@ -72,3 +72,11 @@ export {
   type ImageEditExportFormat,
   type ImageEditExportOptions,
 } from './export.js';
+
+// Animated-image inspection (GIF / APNG / animated WebP)
+export {
+  inspectAnimatedImage,
+  mayBeAnimatedImage,
+  type AnimatedImageInfo,
+  type AnimatedImageFormat,
+} from './animatedImage.js';

@@ -38,24 +38,25 @@ state rather than crashing.
 
 ## Components
 
-| Component              | Description                                                         |
-| ---------------------- | ------------------------------------------------------------------- |
-| `DocPlayer`            | Main document player with timed playback, audio sync, and controls  |
-| `LinearDocView`        | Scroll-based linear rendering of all blocks                         |
-| `BlockRenderer`        | SVG-based renderer for a single block                               |
-| `MarkdownRenderer`     | Renders Squisq markdown as a visual document                        |
-| `DocPlayerWithSidebar` | DocPlayer with a sidebar navigation panel                           |
-| `CaptionOverlay`       | Timed caption/subtitle overlay                                      |
-| `DocProgressBar`       | Playback progress indicator                                         |
-| `DocControlsOverlay`   | Floating playback controls                                          |
-| `DocControlsBottom`    | Bottom-bar playback controls                                        |
-| `DocControlsSidebar`   | Sidebar navigation controls                                         |
-| `DocControlsSlideshow` | Slideshow-style navigation controls                                 |
-| `SocialCaptionOverlay` | Large centered word-by-word (TikTok/Reels-style) captions           |
-| `InlineVideoPlayer`    | Native `<video>` wrapper resolving `src`/`poster` via MediaContext  |
-| `InlineAudioPlayer`    | Native `<audio>` wrapper resolving `src` via MediaContext           |
-| `MediaClipLayer`       | Hidden `<audio>`/`<video>` elements for timed media clips           |
-| `JsonView`             | Read-only viewer for JSON values bound to a Squisq-annotated schema |
+| Component               | Description                                                         |
+| ----------------------- | ------------------------------------------------------------------- |
+| `DocPlayer`             | Main document player with timed playback, audio sync, and controls  |
+| `LinearDocView`         | Scroll-based linear rendering of all blocks                         |
+| `BlockRenderer`         | SVG-based renderer for a single block                               |
+| `MarkdownRenderer`      | Renders Squisq markdown as a visual document                        |
+| `DocPlayerWithSidebar`  | DocPlayer with a sidebar navigation panel                           |
+| `CaptionOverlay`        | Timed caption/subtitle overlay                                      |
+| `DocProgressBar`        | Playback progress indicator                                         |
+| `DocControlsOverlay`    | Floating playback controls                                          |
+| `DocControlsBottom`     | Bottom-bar playback controls                                        |
+| `DocControlsSidebar`    | Sidebar navigation controls                                         |
+| `DocControlsSlideshow`  | Slideshow-style navigation controls                                 |
+| `SocialCaptionOverlay`  | Large centered word-by-word (TikTok/Reels-style) captions           |
+| `InlineVideoPlayer`     | Native `<video>` wrapper resolving `src`/`poster` via MediaContext  |
+| `InlineAudioPlayer`     | Native `<audio>` wrapper resolving `src` via MediaContext           |
+| `AnimatedImageControls` | Play/pause controls over an animated GIF/WebP/APNG image            |
+| `MediaClipLayer`        | Hidden `<audio>`/`<video>` elements for timed media clips           |
+| `JsonView`              | Read-only viewer for JSON values bound to a Squisq-annotated schema |
 
 ### Fenced-code copy control
 

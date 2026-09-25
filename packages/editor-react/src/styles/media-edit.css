@@ -1,4 +1,4 @@
-/* Media-edit modal — audio cleanup for one clip. Palette via the chrome tokens. */
+/* Media-edit modal — audio cleanup, timing and frame for one clip. Palette via the chrome tokens. */
 
 .squisq-media-edit-modal {
   position: fixed;
@@ -39,7 +39,6 @@
 }
 
 .squisq-media-edit-modal__footer {
-  justify-content: flex-end;
   border-top: 1px solid var(--squisq-editor-control-border);
 }
 
@@ -74,9 +73,58 @@
   background: var(--squisq-editor-control-bg-hover);
 }
 
+/* A tabbed dialog keeps one height across tabs: a centered dialog that
+   resized per tab would move its own tab strip out from under the pointer. */
+.squisq-media-edit-modal__surface--tabbed {
+  height: min(640px, 100%);
+}
+
 .squisq-media-edit-modal__body {
+  flex: 1;
   overflow: auto;
   padding: 12px 16px 16px;
+}
+
+/* Tabs — one per section; the strip stays put while the panel scrolls. */
+.squisq-media-edit-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--squisq-border-subtle);
+}
+
+.squisq-media-edit-modal button.squisq-media-edit-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0;
+  margin-bottom: -1px;
+  padding: 10px 8px 8px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--squisq-text-muted);
+  font-weight: 500;
+}
+
+.squisq-media-edit-modal button.squisq-media-edit-tab:hover:not(:disabled) {
+  background: transparent;
+  color: var(--squisq-text);
+}
+
+.squisq-media-edit-modal button.squisq-media-edit-tab[aria-selected='true'] {
+  color: var(--squisq-text);
+  border-bottom-color: var(--squisq-accent);
+}
+
+/* The tab's settings would write something — hidden panels otherwise hide it. */
+.squisq-media-edit-tab[data-edited='true']::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--squisq-accent);
 }
 
 .squisq-media-edit-modal__empty {
@@ -200,13 +248,89 @@
   accent-color: var(--squisq-accent);
 }
 
-.squisq-media-edit-note,
-.squisq-media-edit-status {
+.squisq-media-edit-preview__actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.squisq-media-edit-icon {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  fill: currentColor;
+}
+
+/* Playback position within the rendered preview window; follows the playhead. */
+.squisq-media-edit-playback {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  column-gap: 8px;
+}
+
+.squisq-media-edit-playback input {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--squisq-accent);
+}
+
+/* Wide enough for "Processed from 1200 s", so the bar holds still as it changes. */
+.squisq-media-edit-playback__label {
+  min-width: 10.5em;
+  color: var(--squisq-text-muted);
+  white-space: nowrap;
+}
+
+.squisq-media-edit-playback[data-playing] .squisq-media-edit-playback__label {
+  color: var(--squisq-text);
+}
+
+.squisq-media-edit-playback__time {
+  color: var(--squisq-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.squisq-media-edit-note {
   margin: 4px 0;
 }
 
 .squisq-media-edit-note--error,
 .squisq-media-edit-status[data-state='failed'] {
+  color: var(--squisq-danger-text);
+}
+
+/* Background-render status: full line in the footer (left of the actions),
+   compact badge in the title bar. */
+.squisq-media-edit-status {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.squisq-media-edit-badge {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--squisq-accent-border);
+  border-radius: 999px;
+  background: var(--squisq-accent-soft);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.squisq-media-edit-badge[data-state='ready'] {
+  border-color: var(--squisq-success-border);
+  background: transparent;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-media-edit-badge[data-state='failed'] {
+  border-color: var(--squisq-danger-border);
+  background: var(--squisq-danger-soft);
   color: var(--squisq-danger-text);
 }
 
@@ -223,6 +347,44 @@
   height: 6px;
   border-radius: 50%;
   background: var(--squisq-accent);
+}
+
+/* Rendering: the spinner and progress stand in for the edited dot. */
+.squisq-media-edit-button[data-processing='true']::after {
+  display: none;
+}
+
+.squisq-media-edit-button__spinner {
+  flex: none;
+  box-sizing: border-box;
+  width: 11px;
+  height: 11px;
+  margin-left: 2px;
+  border: 2px solid var(--squisq-accent);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: squisq-media-edit-spin 0.8s linear infinite;
+}
+
+.squisq-media-edit-button__progress {
+  /* Fixed width + tabular digits: the toolbar does not shift as it counts. */
+  min-width: 3ch;
+  color: var(--squisq-text-muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@keyframes squisq-media-edit-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The percentage already says it is working. */
+  .squisq-media-edit-button__spinner {
+    animation: none;
+  }
 }
 
 .squisq-audio-node-toolbar {
@@ -262,20 +424,9 @@
   pointer-events: none;
 }
 
-/* Sections and simple slider rows. */
+/* Section (tab panel) content and simple slider rows. */
 .squisq-media-edit-section {
-  padding: 4px 0 12px;
-  border-bottom: 1px solid var(--squisq-border-subtle);
-}
-
-.squisq-media-edit-section:last-of-type {
-  border-bottom: none;
-}
-
-.squisq-media-edit-section__title {
-  margin: 8px 0;
-  font-size: 13px;
-  font-weight: 600;
+  padding-bottom: 12px;
 }
 
 .squisq-media-edit-row {

@@ -75,14 +75,20 @@ import {
   processMediaFiles,
   processTextFile,
   processTextFiles,
+  resolveDocBasename,
 } from './utils/dropUtils';
 import { dataSidecarPrefix } from '@bendyline/squisq/doc';
-import { needsQuoting, quoteAttrValue } from '@bendyline/squisq/markdown';
 import {
   collectMediaReferencesFromMarkdown,
   removeMediaReferencesFromMarkdown,
 } from './mediaReferences';
 import { filterVisibleMediaEntries } from './mediaEntries';
+import { fileReference } from './mediaDragMime';
+import {
+  insertDataReference,
+  insertMediaReference,
+  type MediaInsertionTarget,
+} from './mediaInsertion';
 import type { MediaProvider, Theme, ViewportPreset } from '@bendyline/squisq/schemas';
 import {
   DARK_SURFACE,
@@ -1007,7 +1013,6 @@ function EditorShellInner({
     replaceAll,
     tiptapEditor,
     monacoEditor,
-    setMarkdownSource,
     inlinePreviewVisible,
     statusBarVisible,
     outlineVisible,
@@ -1176,16 +1181,20 @@ function EditorShellInner({
 
   // ── Drag-and-drop file handling ──
 
+  // Where drops and Files-panel uploads land: the active editor's caret, or —
+  // with no interactive editor (the Use tab) — appended to the source so the
+  // reference is still in the buffer. `insertAtCursor` appends with a
+  // functional update, so a multi-file drop keeps every reference.
+  const insertionTarget = useMemo<MediaInsertionTarget>(
+    () => ({ activeView, tiptapEditor, monacoEditor, appendMarkdown: insertAtCursor }),
+    [activeView, tiptapEditor, monacoEditor, insertAtCursor],
+  );
+
   /**
-   * Insert an uploaded media file at the editor's current cursor.
-   *
-   * - In **WYSIWYG** mode, insert an actual tiptap image node via
-   *   `setImage({src, alt})` (images) or a link mark (non-images).
-   *   Going through `setImage` directly mirrors the Toolbar's image
-   *   button and avoids the round-trip through `markdownToTiptap`
-   *   that historically lost `<img>` tags to tag-strip passes.
-   * - In **raw (Monaco)** or **preview** mode, fall back to
-   *   `insertAtCursor` which emits the markdown snippet.
+   * Insert an uploaded file at the editor's current cursor: an image as an
+   * image, video/audio as an inline player, anything else as a link to the
+   * file (`insertMediaReference`, shared with the toolbar's Image/Media and
+   * File items).
    *
    * Without this, upload-via-MediaBin and upload-via-drop both
    * added the file to the bin and nowhere else — the composer sent
@@ -1194,37 +1203,11 @@ function EditorShellInner({
    */
   const insertMediaRef = useCallback(
     (relativePath: string, name: string, mimeType: string) => {
-      const alt = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-      const isImage = mimeType.startsWith('image/');
-      const snippet = isImage ? `![${alt}](${relativePath})` : `[${alt}](${relativePath})`;
-
-      if (activeView === 'wysiwyg' && tiptapEditor) {
-        if (isImage) {
-          tiptapEditor.chain().focus().setImage({ src: relativePath, alt }).run();
-        } else {
-          tiptapEditor
-            .chain()
-            .focus()
-            .insertContent([
-              {
-                type: 'text',
-                marks: [{ type: 'link', attrs: { href: relativePath } }],
-                text: alt,
-              },
-            ])
-            .run();
-        }
-        return;
-      }
-      if (activeView === 'raw' && monacoEditor) {
-        insertAtCursor(snippet);
-        return;
-      }
-      // Preview mode — no interactive editor to insert into. Append
-      // to markdown source so the ref is still in the buffer.
-      setMarkdownSource(markdownSource ? `${markdownSource}\n\n${snippet}` : snippet);
+      // A drop of a file the OS could not type arrives as
+      // application/octet-stream; its extension still says what it is.
+      insertMediaReference(insertionTarget, fileReference(relativePath, name, mimeType));
     },
-    [activeView, tiptapEditor, monacoEditor, insertAtCursor, markdownSource, setMarkdownSource],
+    [insertionTarget],
   );
 
   // Doc basename for the data-sidecar convention (`<basename>_files/data/`),
@@ -1234,65 +1217,24 @@ function EditorShellInner({
   useEffect(() => {
     let cancelled = false;
     docBasenameRef.current = 'document';
-    if (!workspaceContainer) return;
-    void (async () => {
-      try {
-        const path = await workspaceContainer.getDocumentPath();
-        if (cancelled || !path) return;
-        const base = (path.split('/').pop() ?? '').replace(/\.[^.]+$/, '');
-        if (base) docBasenameRef.current = base;
-      } catch {
-        // keep the fallback
-      }
-    })();
+    void resolveDocBasename(workspaceContainer).then((base) => {
+      if (!cancelled) docBasenameRef.current = base;
+    });
     return () => {
       cancelled = true;
     };
   }, [workspaceContainer]);
 
   /**
-   * Insert a data-sidecar reference block: an annotated heading
-   * (`## <title> {[dataTable src=…]}`) plus the graceful-degradation body
-   * link. The sibling of `insertMediaRef` for csv/tsv/xlsx/parquet files.
+   * Insert a data-sidecar reference block (`## <title> {[dataTable src=…]}`
+   * plus the body link) — the sibling of `insertMediaRef` for
+   * csv/tsv/xlsx/parquet files.
    */
   const insertDataRef = useCallback(
     (relativePath: string, name: string) => {
-      const title = name.replace(/\.[^.]+$/, '');
-      const srcValue = needsQuoting(relativePath) ? quoteAttrValue(relativePath) : relativePath;
-      const params = `src=${srcValue}`;
-      const snippet = `## ${title} {[dataTable ${params}]}\n\n[${name}](${relativePath})`;
-
-      if (activeView === 'wysiwyg' && tiptapEditor) {
-        tiptapEditor
-          .chain()
-          .focus()
-          .insertContent([
-            {
-              type: 'heading',
-              attrs: { level: 2, dataTemplate: 'dataTable', dataTemplateParams: params },
-              content: [{ type: 'text', text: title }],
-            },
-            {
-              type: 'paragraph',
-              content: [
-                {
-                  type: 'text',
-                  marks: [{ type: 'link', attrs: { href: relativePath } }],
-                  text: name,
-                },
-              ],
-            },
-          ])
-          .run();
-        return;
-      }
-      if (activeView === 'raw' && monacoEditor) {
-        insertAtCursor(snippet);
-        return;
-      }
-      setMarkdownSource(markdownSource ? `${markdownSource}\n\n${snippet}` : snippet);
+      insertDataReference(insertionTarget, relativePath, name);
     },
-    [activeView, tiptapEditor, monacoEditor, insertAtCursor, markdownSource, setMarkdownSource],
+    [insertionTarget],
   );
 
   const handleMediaUploaded = useCallback(
@@ -1322,7 +1264,7 @@ function EditorShellInner({
   const handleFileDrop = useCallback(
     async (files: File[], target: DropTarget) => {
       try {
-        const { media, text, data } = partitionFiles(files);
+        const { media, text, data, other } = partitionFiles(files);
 
         // Process data files (csv/tsv/xlsx/parquet): store under the doc's
         // `_files/data/` sidecar and insert a reference block. Data ignores
@@ -1340,9 +1282,12 @@ function EditorShellInner({
           }
         }
 
-        // Process media files
-        if (media.length > 0 && mediaProvider) {
-          const paths = await processMediaFiles(media, mediaProvider);
+        // Process media files — and any other file (a .zip, a .dat), which
+        // is stored the same way and inserted as a link to it. Like data,
+        // these ignore the 'replace' target.
+        const attachments = [...media, ...other];
+        if (attachments.length > 0 && mediaProvider) {
+          const paths = await processMediaFiles(attachments, mediaProvider);
           setMediaRefreshKey((k) => k + 1);
           // Auto-open the media bin so the user sees the new files
           if (!showFiles) setShowFiles(true);
@@ -1351,11 +1296,11 @@ function EditorShellInner({
           // bin holds the file but the serialized markdown stays empty,
           // and anything downstream (chat send, document save) sees no
           // reference to the upload.
-          for (let i = 0; i < media.length; i++) {
-            const file = media[i];
+          for (let i = 0; i < attachments.length; i++) {
+            const file = attachments[i];
             const path = paths[i];
             if (!file || !path) continue;
-            insertMediaRef(path, file.name, file.type || 'application/octet-stream');
+            insertMediaRef(path, file.name, file.type);
           }
         }
 

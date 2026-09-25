@@ -62,11 +62,7 @@ export function MediaEditTimingSection({
 
   const saved = cutSeconds(draft.cuts);
   return (
-    <section className="squisq-media-edit-section" aria-labelledby={`${idPrefix}-timing`}>
-      <h3 id={`${idPrefix}-timing`} className="squisq-media-edit-section__title">
-        Timing
-      </h3>
-
+    <div className="squisq-media-edit-section">
       <div className="squisq-media-edit-row">
         <label className="squisq-media-edit-row__label" htmlFor={`${idPrefix}-pause`}>
           Shorten pauses longer than
@@ -142,6 +138,6 @@ export function MediaEditTimingSection({
           </output>
         </div>
       ))}
-    </section>
+    </div>
   );
 }

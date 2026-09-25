@@ -13,23 +13,31 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const MEDIA_EXTENSIONS = new Set([
   'png',
+  'apng',
   'jpg',
   'jpeg',
   'gif',
   'webp',
   'svg',
   'avif',
+  'bmp',
   'ico',
   'mp4',
+  'm4v',
   'webm',
   'mov',
+  'ogv',
+  'mkv',
   'avi',
   'mp3',
   'wav',
   'ogg',
+  'oga',
+  'opus',
   'aac',
   'm4a',
   'flac',
+  'weba',
 ]);
 
 const TEXT_EXTENSIONS = new Set(['md', 'txt', 'docx']);

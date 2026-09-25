@@ -51,7 +51,10 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // Includes the three Font Awesome OpenType faces embedded for portable
   // DOCX/PDF/PPTX/EPUB inline-icon export.
   '@bendyline/squisq-formats': 700_000,
-  '@bendyline/squisq-react': 2_800_000,
+  // Ships the ESM entries plus the light and full standalone players, and the
+  // light player again as an embeddable string — so anything the player
+  // renders is paid roughly four times over.
+  '@bendyline/squisq-react': 2_900_000,
   // Columnar store + kernel + TanStack-Virtual renderer; tiny by design.
   '@bendyline/squisq-grid-react': 60_000,
   '@bendyline/squisq-calc': 110_000,

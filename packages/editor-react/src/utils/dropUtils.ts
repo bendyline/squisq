@@ -7,29 +7,57 @@
  */
 
 import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 import { stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { classifyFile, type FileCategory } from '../hooks/useFileDrop';
+import { mediaMimeType } from '../mediaDragMime';
 
 export type { FileCategory };
 export { classifyFile };
 
 /**
- * Partition an array of files into media, text, and data categories.
- * Files with unknown type are skipped.
+ * Partition an array of files into media, text, and data categories, plus
+ * `other` for everything else (a .zip, a .dat) — which a drop attaches as a
+ * link rather than discarding.
  */
-export function partitionFiles(files: File[]): { media: File[]; text: File[]; data: File[] } {
+export function partitionFiles(files: File[]): {
+  media: File[];
+  text: File[];
+  data: File[];
+  other: File[];
+} {
   const media: File[] = [];
   const text: File[] = [];
   const data: File[] = [];
+  const other: File[] = [];
 
   for (const file of files) {
     const cat = classifyFile(file);
     if (cat === 'media') media.push(file);
     else if (cat === 'text') text.push(file);
     else if (cat === 'data') data.push(file);
+    else other.push(file);
   }
 
-  return { media, text, data };
+  return { media, text, data, other };
+}
+
+/**
+ * The document's base name — the `<basename>` of the `<basename>_files/`
+ * sidecar convention — from its container's document path. `'document'`
+ * when there is no container, no path, or it cannot be read.
+ */
+export async function resolveDocBasename(
+  container: ContentContainer | null | undefined,
+): Promise<string> {
+  if (!container) return 'document';
+  try {
+    const path = await container.getDocumentPath();
+    const base = (path?.split('/').pop() ?? '').replace(/\.[^.]+$/, '');
+    return base || 'document';
+  } catch {
+    return 'document';
+  }
 }
 
 /**
@@ -84,7 +112,7 @@ export async function processMediaFiles(
       continue;
     }
 
-    const mimeType = file.type || 'application/octet-stream';
+    const mimeType = mediaMimeType(file);
     try {
       const path = await mediaProvider.addMedia(file.name, buffer, mimeType);
       paths.push(path);

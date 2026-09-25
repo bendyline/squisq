@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
+import { buildSquisqMediaReference, fileReference } from '../mediaDragMime';
 
 /**
  * Attachment-flow regression: earlier versions of MediaBin dropped
@@ -46,15 +47,11 @@ function fakeMediaProvider(records: string[]): MediaProvider {
 }
 
 /**
- * Re-implements the exact snippet EditorShell's `insertMediaRef`
- * builds. Keeping this aligned with the real impl would ordinarily
- * rely on directly importing the helper; since it's currently inline
- * in EditorShell, mirror the logic here and lean on the test to
- * alert us if we drift apart.
+ * The source snippet EditorShell's `insertMediaRef` writes in the Source
+ * view — built from the same shared helpers it uses.
  */
 function buildAttachmentSnippet(relativePath: string, name: string, mimeType: string): string {
-  const alt = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-  return mimeType.startsWith('image/') ? `![${alt}](${relativePath})` : `[${alt}](${relativePath})`;
+  return buildSquisqMediaReference(fileReference(relativePath, name, mimeType));
 }
 
 describe('media attachment flow', () => {
@@ -101,10 +98,28 @@ describe('media attachment flow', () => {
     const provider = fakeMediaProvider(records);
     const relative = await provider.addMedia('design.pdf', new Uint8Array([0]), 'application/pdf');
     const snippet = buildAttachmentSnippet(relative, 'design.pdf', 'application/pdf');
-    expect(snippet).toBe(`[design](${relative})`);
+    // Linked by its full name, so a reader sees what the link downloads.
+    expect(snippet).toBe(`[design.pdf](${relative})`);
     // Non-images don't go through the `<img>` regex — they stay as
     // plain markdown links, which the service-side extractor ignores
     // but the UI renders as normal hyperlinks.
     expect(snippet).not.toContain('!');
+  });
+
+  it('video and audio become players that survive the round-trip', async () => {
+    const records: string[] = [];
+    const provider = fakeMediaProvider(records);
+    const clip = await provider.addMedia('demo_clip.mp4', new Uint8Array([0]), 'video/mp4');
+    // An upload the OS could not type still becomes a player via its extension.
+    const take = await provider.addMedia('take.flac', new Uint8Array([0]), '');
+
+    const videoSnippet = buildAttachmentSnippet(clip, 'demo_clip.mp4', 'video/mp4');
+    const audioSnippet = buildAttachmentSnippet(take, 'take.flac', 'application/octet-stream');
+    expect(videoSnippet).toBe(`<video src="${clip}" controls width="480"></video>`);
+    expect(audioSnippet).toBe(`<audio src="${take}" controls></audio>`);
+
+    for (const snippet of [videoSnippet, audioSnippet]) {
+      expect(tiptapToMarkdown(markdownToTiptap(snippet))).toContain(snippet);
+    }
   });
 });

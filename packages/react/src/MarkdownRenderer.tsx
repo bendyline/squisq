@@ -19,6 +19,7 @@ import { Component, Fragment, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Theme } from '@bendyline/squisq/schemas';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
+import { mayBeAnimatedImage } from '@bendyline/squisq/imageEdit';
 import {
   sanitizeHtmlNodes,
   sanitizeUrl,
@@ -35,6 +36,8 @@ import { useMediaProvider, useMediaUrl } from './hooks/MediaContext';
 import { useFenceRenderers } from './hooks/FenceRendererContext';
 import { InlineVideoPlayer } from './InlineVideoPlayer.js';
 import { InlineAudioPlayer } from './InlineAudioPlayer.js';
+import { AnimatedImageControls } from './animatedImage/AnimatedImageControls.js';
+import { useAnimatedImage } from './animatedImage/useAnimatedImage.js';
 import { MermaidDiagram } from './mermaid/MermaidDiagram.js';
 
 // ── Props ──────────────────────────────────────────────────────────
@@ -659,12 +662,39 @@ function renderBlocks(
 
 // ── Image with MediaProvider resolution ───────────────────────────
 
-/** Renders an <img> that resolves its src through the MediaProvider when available. */
+/**
+ * Renders an <img> that resolves its src through the MediaProvider when
+ * available. A format that can animate (GIF, WebP, APNG) gets a positioned
+ * wrapper so an animated one can carry play/pause controls; everything else
+ * is a bare <img> as before.
+ */
 function MdImage({ src, alt, title }: { src: string; alt: string; title?: string }) {
   const safeSrc = sanitizeUrl(src, 'media');
   const resolved = useMediaUrl(safeSrc ?? '', '.');
+  const imageRef = useRef<HTMLImageElement>(null);
+  const playback = useAnimatedImage(safeSrc ?? '', resolved);
   if (!safeSrc) return null;
-  return <img className="squisq-md-image" src={resolved} alt={alt} title={title} />;
+  if (!mayBeAnimatedImage(safeSrc)) {
+    return <img className="squisq-md-image" src={resolved} alt={alt} title={title} />;
+  }
+  return (
+    <span
+      className="squisq-animated-image"
+      data-animated={playback.animated ? 'true' : undefined}
+      style={{ position: 'relative', display: 'inline-block', maxWidth: '100%' }}
+    >
+      <img
+        ref={imageRef}
+        className="squisq-md-image"
+        src={playback.displaySrc}
+        alt={alt}
+        title={title}
+        // Block inside the wrapper so no baseline gap stretches the paused still.
+        style={{ display: 'block', maxWidth: '100%' }}
+      />
+      <AnimatedImageControls playback={playback} imageRef={imageRef} />
+    </span>
+  );
 }
 
 // ── Raw-HTML walker (intercepts <video>/<audio>) ─────────────────

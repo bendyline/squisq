@@ -46,15 +46,9 @@ export interface MediaEditFrameSectionProps {
   item: EditableMedia;
   draft: RecipeDraft;
   onChange: (next: RecipeDraft) => void;
-  idPrefix: string;
 }
 
-export function MediaEditFrameSection({
-  item,
-  draft,
-  onChange,
-  idPrefix,
-}: MediaEditFrameSectionProps) {
+export function MediaEditFrameSection({ item, draft, onChange }: MediaEditFrameSectionProps) {
   const src = useResolvedMediaSrc(item.src);
   const [frame, setFrame] = useState<{ w: number; h: number } | null>(null);
   const [aspect, setAspect] = useState<number | null>(null);
@@ -122,10 +116,7 @@ export function MediaEditFrameSection({
 
   const pct = (n: number) => `${(n * 100).toFixed(2)}%`;
   return (
-    <section className="squisq-media-edit-section" aria-labelledby={`${idPrefix}-frame`}>
-      <h3 id={`${idPrefix}-frame`} className="squisq-media-edit-section__title">
-        Frame
-      </h3>
+    <div className="squisq-media-edit-section">
       <div className="squisq-media-edit-chips" role="group" aria-label="Crop aspect">
         {ASPECTS.map((option) => (
           <button
@@ -198,6 +189,6 @@ export function MediaEditFrameSection({
           ? 'Only the framed area is shown and exported.'
           : 'Drag the corners or pick an aspect to crop.'}
       </p>
-    </section>
+    </div>
   );
 }

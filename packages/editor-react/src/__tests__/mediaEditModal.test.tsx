@@ -1,11 +1,15 @@
 /** @vitest-environment jsdom */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
-import type { MediaEditRenderManager } from '@bendyline/squisq-video-react/media-edit';
+import type {
+  MediaEditRenderManager,
+  MediaEditRenderStatus,
+} from '@bendyline/squisq-video-react/media-edit';
 import { EditorProvider, useEditorContext } from '../EditorContext';
+import { MediaEditButton } from '../mediaEdit/MediaEditButton';
 import { MediaEditModal } from '../mediaEdit/MediaEditModal';
 import {
   findEditableMedia,
@@ -127,7 +131,7 @@ describe('MediaEditModal', () => {
     await openModal('{[audio src=audio/take.webm anchor=document]}\n\n# One\n', manager);
     fireEvent.click(screen.getByRole('button', { name: 'Levels only' }));
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Create preview' }));
     });
     expect(manager.loadSource).toHaveBeenCalledWith('audio/take.webm');
     expect(manager.renderer.preview).toHaveBeenCalledWith(
@@ -137,6 +141,90 @@ describe('MediaEditModal', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Processed' })).toHaveProperty('disabled', false),
     );
+  });
+
+  it('follows and seeks the playhead across the preview window', async () => {
+    /** Just enough Web Audio for the A/B player; `currentTime` is the test's clock. */
+    class FakeAudioContext {
+      static latest: FakeAudioContext;
+      currentTime = 0;
+      destination = {};
+      starts: number[] = [];
+      constructor() {
+        FakeAudioContext.latest = this;
+      }
+      createBuffer(channels: number, length: number) {
+        const data = Array.from({ length: channels }, () => new Float32Array(length));
+        return { getChannelData: (c: number) => data[c] };
+      }
+      createBufferSource() {
+        return {
+          connect: vi.fn(),
+          disconnect: vi.fn(),
+          stop: vi.fn(),
+          start: (_when: number, offset: number) => this.starts.push(offset),
+        };
+      }
+      close() {
+        return Promise.resolve();
+      }
+    }
+    vi.stubGlobal('AudioContext', FakeAudioContext);
+    try {
+      // A 10 s window at 12 s into the clip (10 Hz keeps the buffers tiny).
+      const manager = fakeManager();
+      vi.mocked(manager.renderer.preview).mockResolvedValue({
+        sampleRate: 10,
+        startSec: 12,
+        original: [new Float32Array(100)],
+        processed: [new Float32Array(100)],
+      });
+      await openModal('{[audio src=audio/take.webm anchor=document]}\n\n# One\n', manager);
+      fireEvent.click(screen.getByRole('button', { name: 'Levels only' }));
+      // No transport until there is something to play.
+      expect(screen.queryByRole('slider', { name: 'Playback position' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Original' })).toBeNull();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Create preview' }));
+      });
+      const bar = await screen.findByRole('slider', { name: 'Playback position' });
+      expect(screen.getByText('Stopped')).toBeTruthy();
+      expect(screen.getByText('0:00 / 0:10')).toBeTruthy();
+      // The transport sits beneath the bar.
+      const original = screen.getByRole('button', { name: 'Original' });
+      expect(bar.compareDocumentPosition(original) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Original' }));
+      const ctx = FakeAudioContext.latest;
+      const last = () => ctx.starts[ctx.starts.length - 1];
+      expect(screen.getByText('Original from 12 s')).toBeTruthy();
+      ctx.currentTime = 3.2;
+      await waitFor(() => expect(Number((bar as HTMLInputElement).value)).toBeCloseTo(3.2));
+      expect(bar.getAttribute('aria-valuetext')).toBe('0:03 of 0:10');
+
+      // Switching sides restarts at the cue point (the window start)…
+      fireEvent.click(screen.getByRole('button', { name: 'Processed' }));
+      expect(ctx.starts).toEqual([0, 0]);
+      expect(screen.getByText('Processed from 12 s')).toBeTruthy();
+      expect(Number((bar as HTMLInputElement).value)).toBe(0);
+
+      // …and dropping the playhead moves the cue: playback resumes there, and
+      // the other side starts there too.
+      fireEvent.change(bar, { target: { value: '6' } });
+      expect(last()).toBe(6);
+      ctx.currentTime = 5.2;
+      fireEvent.click(screen.getByRole('button', { name: 'Original' }));
+      expect(last()).toBe(6);
+
+      // Stop returns to the window start.
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+      expect(Number((bar as HTMLInputElement).value)).toBe(0);
+      expect(screen.getByText('Stopped')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: 'Processed' }));
+      expect(last()).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('shows a failed render with a retry', async () => {
@@ -150,6 +238,31 @@ describe('MediaEditModal', () => {
     expect(screen.getByText(/Processing failed: no audio track/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(manager.retry).toHaveBeenCalled();
+  });
+
+  it('shows the render status in the title bar and beside the footer actions', async () => {
+    const manager = fakeManager({
+      status: () => ({ key: 'k', state: 'rendering', progress: 0.39 }),
+    });
+    await openModal(
+      '{[audio src=audio/take.webm anchor=document fx=loudness]}\n\n# One\n',
+      manager,
+    );
+    const dialog = screen.getByRole('dialog');
+    const header = dialog.querySelector('header')!;
+    const footer = dialog.querySelector('footer')!;
+    expect(within(header).getByText('Processing 39%')).toBeTruthy();
+    const status = within(footer).getByRole('status');
+    expect(status.textContent).toBe('Processing… 39%');
+    expect(status.nextElementSibling).toBe(within(footer).getByRole('button', { name: 'Cancel' }));
+  });
+
+  it('shows no render status without a saved cleanup recipe', async () => {
+    const manager = fakeManager({
+      status: () => ({ key: 'k', state: 'rendering', progress: 0.5 }),
+    });
+    await openModal('{[audio src=audio/take.webm anchor=document gain=-2]}\n\n# One\n', manager);
+    expect(screen.queryByText(/Processing/)).toBeNull();
   });
 });
 
@@ -203,6 +316,7 @@ describe('MediaEditModal — timing', () => {
       '{[audio src=audio/take.webm anchor=document]}\n\n# One\n',
       manager,
     );
+    fireEvent.click(screen.getByRole('tab', { name: 'Timing' }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Find pauses' }));
     });
@@ -228,6 +342,7 @@ describe('MediaEditModal — timing', () => {
       '<video src="video/camera.webm" data-squisq-video-placement="picture-in-picture" data-squisq-video-lock-to-block="false" data-squisq-video-clip-start="0.5" data-squisq-video-gain="-6" data-squisq-video-group="rec-a"></video>\n';
     const { source } = await openModal(markdown, fakeManager(), 'video/screen.webm');
     expect(screen.getByText('Edit clip')).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Timing' }));
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Find pauses' }));
     });
@@ -248,6 +363,7 @@ describe('MediaEditModal — frame', () => {
     const markdown =
       '# One\n\n<video src="video/screen.webm" data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false"></video>\n';
     const { source } = await openModal(markdown, fakeManager(), 'video/screen.webm');
+    fireEvent.click(screen.getByRole('tab', { name: 'Frame' }));
     const rect = screen.getByRole('slider', { name: 'Crop area' });
     // Shrink by 10% each way, then move 5% right.
     for (let i = 0; i < 10; i++) fireEvent.keyDown(rect, { key: 'ArrowLeft', shiftKey: true });
@@ -259,8 +375,158 @@ describe('MediaEditModal — frame', () => {
     );
   });
 
-  it('offers no frame controls for audio', async () => {
+  it('offers no frame tab or controls for audio', async () => {
     await openModal('{[audio src=audio/take.webm anchor=document]}\n\n# One\n', fakeManager());
-    expect(screen.queryByRole('slider', { name: 'Crop area' })).toBeNull();
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Audio cleanup',
+      'Timing',
+    ]);
+    expect(screen.queryByRole('slider', { name: 'Crop area', hidden: true })).toBeNull();
+  });
+});
+
+describe('MediaEditModal — tabs', () => {
+  const video =
+    '# One\n\n<video src="video/screen.webm" data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false"></video>\n';
+
+  it('opens on audio cleanup and shows one panel at a time', async () => {
+    await openModal(video, fakeManager(), 'video/screen.webm');
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Audio cleanup', 'Timing', 'Frame']);
+    expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual([
+      'true',
+      'false',
+      'false',
+    ]);
+    expect(screen.getByRole('tabpanel', { name: 'Audio cleanup' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Find pauses' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Timing' }));
+    expect(screen.getByRole('tabpanel', { name: 'Timing' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Find pauses' })).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: 'Loudness' })).toBeNull();
+  });
+
+  it('moves between tabs with the arrow, Home and End keys', async () => {
+    await openModal(video, fakeManager(), 'video/screen.webm');
+    const audio = screen.getByRole('tab', { name: 'Audio cleanup' });
+    expect(audio.tabIndex).toBe(0);
+    fireEvent.keyDown(audio, { key: 'ArrowRight' });
+    const timing = screen.getByRole('tab', { name: 'Timing' });
+    expect(timing.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(timing);
+    expect(audio.tabIndex).toBe(-1);
+    fireEvent.keyDown(timing, { key: 'End' });
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Frame' }));
+    fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(audio);
+    fireEvent.keyDown(audio, { key: 'ArrowLeft' });
+    expect(screen.getByRole('tab', { name: 'Frame' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('flags the tabs whose settings would be written', async () => {
+    await openModal(
+      '# One\n\n<video src="video/screen.webm" data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false" data-squisq-video-gain="-3"></video>\n',
+      fakeManager(),
+      'video/screen.webm',
+    );
+    const edited = () =>
+      screen
+        .getAllByRole('tab')
+        .filter((tab) => tab.dataset.edited === 'true')
+        .map((tab) => tab.firstChild?.textContent);
+    expect(edited()).toEqual(['Timing']);
+    expect(screen.getByRole('tab', { name: 'Timing (edited)' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Levels only' }));
+    expect(edited()).toEqual(['Audio cleanup', 'Timing']);
+  });
+
+  it('keeps each tab’s settings when switching away and back', async () => {
+    const { source } = await openModal(video, fakeManager(), 'video/screen.webm');
+    fireEvent.click(screen.getByRole('button', { name: 'Levels only' }));
+    fireEvent.click(screen.getByRole('tab', { name: /Timing/ }));
+    fireEvent.change(screen.getByLabelText('Volume'), { target: { value: '-3' } });
+    fireEvent.click(screen.getByRole('tab', { name: /Audio cleanup/ }));
+    expect(screen.getByRole('checkbox', { name: 'Loudness' })).toHaveProperty('checked', true);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => {
+      const line = source().split('\n')[2];
+      expect(line).toContain('data-squisq-video-fx="loudness:-16"');
+      expect(line).toContain('data-squisq-video-gain="-3"');
+    });
+  });
+});
+
+describe('MediaEditButton', () => {
+  /** A manager whose status can change after mount, notifying subscribers. */
+  function liveManager(initial: MediaEditRenderStatus | null) {
+    let current = initial;
+    let version = 0;
+    const listeners = new Set<() => void>();
+    const manager = fakeManager({
+      status: vi.fn(() => current),
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      getVersion: () => version,
+    });
+    const setStatus = (next: MediaEditRenderStatus | null) =>
+      act(() => {
+        current = next;
+        version++;
+        listeners.forEach((listener) => listener());
+      });
+    return { manager, setStatus };
+  }
+
+  function renderButton(manager: MediaEditRenderManager, fx: string | null = 'loudness:-16') {
+    render(
+      <EditorProvider initialMarkdown="# One\n" mediaEditRenders={manager}>
+        <MediaEditButton src="video/a.webm" kind="video" fx={fx} />
+      </EditorProvider>,
+    );
+    return screen.getByRole('button', { name: /^Edit clip/ });
+  }
+
+  it('shows a spinner and the progress while the recipe renders', () => {
+    const { manager, setStatus } = liveManager({ key: 'k', state: 'rendering', progress: 0.39 });
+    const button = renderButton(manager);
+    expect(manager.status).toHaveBeenCalledWith(
+      expect.objectContaining({
+        src: 'video/a.webm',
+        edits: { fx: { ops: [{ id: 'loudness', value: -16 }], unknown: [] } },
+      }),
+    );
+    expect(button.dataset.processing).toBe('true');
+    expect(button.querySelector('.squisq-media-edit-button__spinner')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^Edit clip ?, processing 39%$/ })).toBe(button);
+
+    setStatus({ key: 'k', state: 'rendering', progress: 0.72 });
+    expect(button.querySelector('.squisq-media-edit-button__progress')?.textContent).toContain(
+      '72%',
+    );
+
+    setStatus({ key: 'k', state: 'ready' });
+    expect(button.dataset.processing).toBeUndefined();
+    expect(button.querySelector('.squisq-media-edit-button__spinner')).toBeNull();
+    expect(button.textContent).toBe('Edit clip');
+    expect(button.dataset.edited).toBe('true');
+  });
+
+  it('shows no progress while queued, failed, or without a recipe', () => {
+    const { manager, setStatus } = liveManager({ key: 'k', state: 'queued' });
+    const button = renderButton(manager);
+    expect(button.dataset.processing).toBeUndefined();
+    setStatus({ key: 'k', state: 'failed', error: 'no audio track' });
+    expect(button.dataset.processing).toBeUndefined();
+    cleanup();
+
+    const bare = liveManager({ key: 'k', state: 'rendering', progress: 0.5 });
+    const plain = renderButton(bare.manager, null);
+    expect(plain.dataset.processing).toBeUndefined();
+    expect(bare.manager.status).not.toHaveBeenCalled();
   });
 });
