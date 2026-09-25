@@ -9,7 +9,10 @@ import type { ScheduledClip } from '@bendyline/squisq/schemas';
  * Linear level of a clip at a doc-timeline instant: recipe gain times the fade
  * envelope at either end. 1 for an unedited clip.
  */
-export function clipLevelAt(clip: ScheduledClip, time: number): number {
+export function clipLevelAt(
+  clip: Pick<ScheduledClip, 'absoluteStart' | 'absoluteEnd' | 'gain' | 'fadeIn' | 'fadeOut'>,
+  time: number,
+): number {
   let level = clip.gain ? Math.pow(10, clip.gain / 20) : 1;
   if (clip.fadeIn && time < clip.absoluteStart + clip.fadeIn) {
     level *= Math.max(0, (time - clip.absoluteStart) / clip.fadeIn);

@@ -67,6 +67,8 @@ export interface FrameCaptureHandle {
 interface CaptureMediaResolutionTracker {
   provider: MediaProvider;
   waitForSettled: () => Promise<boolean>;
+  /** Every path resolved so far, mapped to the URL the provider returned. */
+  resolvedUrls: () => ReadonlyMap<string, string>;
 }
 
 /** Extension → MIME type map (hoisted to avoid per-image allocation). */
@@ -87,7 +89,18 @@ const MIME_MAP: Record<string, string> = {
 };
 
 const VISUAL_UPDATE_FALLBACK_MS = 100;
+/** Visual updates to wait for React to commit a resolved media URL. */
+const CAPTURE_URL_COMMIT_MAX_WAITS = 10;
 const CAPTURE_ASSET_TIMEOUT_MS = 15_000;
+/** How long the hidden player may take to publish its render API. */
+const RENDER_API_TIMEOUT_MS = 15_000;
+/**
+ * Backstop for init's asset stage. Each asset wait carries its own 15 s
+ * timeout that names the asset (a video can spend three in sequence), so this
+ * only reports a stage with none, such as a provider or decoder that never
+ * answers.
+ */
+const CAPTURE_SETUP_TIMEOUT_MS = 60_000;
 const RENDER_TIME_EPSILON_SECONDS = 0.000_001;
 const POTENTIALLY_ANIMATED_IMAGE_URL =
   /(?:^data:image\/(?:gif|webp|avif)[;,]|\.(?:gif|webp|avif)(?:[?#]|$))/i;
@@ -328,11 +341,15 @@ export async function primeIndeterminateCaptureVideos(
         primedVideos.add(video);
         return;
       }
+      // Flag before indexing: from here capture owns the element's position.
+      // A clip layer that re-renders mid-probe (its schedule is re-derived when
+      // a duration probe lands) would otherwise seek it back to its in-point,
+      // cancelling the end probe and leaving the duration unknown for good.
+      // Sequential capture matters for indexed sources too: an uploaded screen
+      // recording with sparse keyframes degrades progressively under per-frame
+      // currentTime seeks.
+      video.dataset.captureSequential = 'true';
       if (Number.isFinite(video.duration)) {
-        // Already indexed — no probe needed, but sequential capture matters
-        // just as much here: an uploaded screen recording with sparse
-        // keyframes degrades progressively under per-frame currentTime seeks.
-        video.dataset.captureSequential = 'true';
         primedVideos.add(video);
         return;
       }
@@ -364,7 +381,6 @@ export async function primeIndeterminateCaptureVideos(
           video.currentTime = reachableRestoreTime;
         },
       );
-      video.dataset.captureSequential = 'true';
       primedVideos.add(video);
       primedCount += 1;
     }),
@@ -424,6 +440,7 @@ export function createCaptureMediaResolutionTracker(
   provider: MediaProvider,
 ): CaptureMediaResolutionTracker {
   const pending = new Set<Promise<void>>();
+  const resolvedUrls = new Map<string, string>();
   let resolutionGeneration = 0;
   let observedGeneration = 0;
   const trackedProvider: MediaProvider = {
@@ -431,7 +448,8 @@ export function createCaptureMediaResolutionTracker(
       resolutionGeneration += 1;
       const resolution = provider.resolveUrl(relativePath);
       const completion = resolution.then(
-        () => {
+        (url) => {
+          resolvedUrls.set(relativePath, url);
           pending.delete(completion);
         },
         () => {
@@ -460,15 +478,68 @@ export function createCaptureMediaResolutionTracker(
       observedGeneration = resolutionGeneration;
       return changed;
     },
+    resolvedUrls: () => resolvedUrls,
   };
 }
 
-/** Wait for provider URLs to reach the DOM before asking Chromium to decode images. */
+/** `./a/b.png` and `a/b.png` name the same document-relative media. */
+function stripRelativePrefix(path: string): string {
+  return path.replace(/^(?:\.\/)+/, '');
+}
+
+/**
+ * Whether a media element under `root` still shows the relative fallback of a
+ * path the provider has already mapped to another URL, i.e. React has not yet
+ * committed that resolution.
+ */
+function showsUncommittedMediaUrl(
+  root: HTMLElement,
+  resolved: ReadonlyMap<string, string>,
+): boolean {
+  const mapped = new Set<string>();
+  for (const [path, url] of resolved) {
+    if (url !== path) mapped.add(stripRelativePrefix(path));
+  }
+  if (mapped.size === 0) return false;
+  return Array.from(root.querySelectorAll('img[src], video[src], audio[src], source[src]')).some(
+    (element) => mapped.has(stripRelativePrefix(element.getAttribute('src') ?? '')),
+  );
+}
+
+/**
+ * Wait for provider URLs to reach the DOM before asking Chromium to decode
+ * images or binding video decoders.
+ *
+ * A settled provider promise is not a committed DOM: the consuming component
+ * stores the URL in state, and React commits that update in a scheduler task
+ * that can run after the next animation frame. Until then the element shows
+ * its relative fallback, so decoding or binding it would read the wrong
+ * resource (a recorder WebM missed this way falls back to slow element
+ * capture). When `captureRoot` is given and new URLs resolved, wait a few
+ * frames for them to appear; a fallback that never commits is left to the
+ * caller rather than stalling every capture.
+ */
 export async function waitForCaptureMediaResolutions(
   tracker: CaptureMediaResolutionTracker | null,
+  captureRoot?: HTMLElement | null,
 ): Promise<void> {
-  while (await tracker?.waitForSettled()) {
+  if (!tracker) return;
+  let changed = false;
+  while (await tracker.waitForSettled()) {
+    changed = true;
     await waitForVisualUpdate();
+  }
+  if (!changed || !captureRoot) return;
+  for (
+    let attempt = 0;
+    attempt < CAPTURE_URL_COMMIT_MAX_WAITS &&
+    showsUncommittedMediaUrl(captureRoot, tracker.resolvedUrls());
+    attempt++
+  ) {
+    await waitForVisualUpdate();
+    while (await tracker.waitForSettled()) {
+      await waitForVisualUpdate();
+    }
   }
 }
 
@@ -1734,9 +1805,11 @@ export function useFrameCapture(): FrameCaptureHandle {
         root.render(playerElement);
       }
 
-      // Wait for this exact player's instance API.
+      // Wait for this exact player's instance API, then for its assets. The
+      // two phases time out separately so a stalled asset is never reported
+      // as a player that failed to initialize.
       return new Promise<number>((resolve, reject) => {
-        const timeout = setTimeout(() => {
+        const apiTimeout = setTimeout(() => {
           const api = renderAPIRef.current;
           const hasSeek = typeof api?.seekTo === 'function';
           const hasDur = typeof api?.getDuration === 'function';
@@ -1744,27 +1817,40 @@ export function useFrameCapture(): FrameCaptureHandle {
           const hasPlayer = rootEl ? rootEl.querySelector('.doc-player') !== null : false;
           reject(
             new Error(
-              `Render API did not initialize within 15s. ` +
+              `Render API did not initialize within ${RENDER_API_TIMEOUT_MS / 1000}s. ` +
                 `seekTo=${hasSeek}, getDuration=${hasDur}, player=${hasPlayer}, root=${!!rootEl}`,
             ),
           );
-        }, 15000);
+        }, RENDER_API_TIMEOUT_MS);
 
         void renderAPIReady.then(async (api) => {
+          clearTimeout(apiTimeout);
+          let stage = 'resolving media URLs';
+          const setupTimeout = setTimeout(() => {
+            reject(
+              new Error(
+                `Frame capture setup did not finish within ${CAPTURE_SETUP_TIMEOUT_MS / 1000}s ` +
+                  `while ${stage}.`,
+              ),
+            );
+          }, CAPTURE_SETUP_TIMEOUT_MS);
           try {
             const captureRoot = container.querySelector('#squisq-capture-root');
             if (!(captureRoot instanceof HTMLElement)) {
               throw new Error('Capture root element not found after player initialization.');
             }
-            await waitForCaptureMediaResolutions(mediaResolutionTrackerRef.current);
+            await waitForCaptureMediaResolutions(mediaResolutionTrackerRef.current, captureRoot);
+            stage = 'loading fonts and images';
             await waitForCaptureAssets(captureRoot, decodedImagesRef.current);
             // Bind decoders first: a decoded element needs no indexing probe.
+            stage = 'opening video decoders';
             await videoFrames.attach(captureRoot);
+            stage = 'indexing video sources';
             await primeIndeterminateCaptureVideos(captureRoot, primedCaptureVideosRef.current);
-            clearTimeout(timeout);
+            clearTimeout(setupTimeout);
             resolve(api.getDuration());
           } catch (assetError) {
-            clearTimeout(timeout);
+            clearTimeout(setupTimeout);
             reject(assetError);
           }
         });
@@ -1838,7 +1924,7 @@ export function useFrameCapture(): FrameCaptureHandle {
           `Player committed ${renderedTime.toFixed(6)}s while capture requested ${time.toFixed(6)}s.`,
         );
       }
-      await waitForCaptureMediaResolutions(mediaResolutionTrackerRef.current);
+      await waitForCaptureMediaResolutions(mediaResolutionTrackerRef.current, root);
       await waitForCaptureAssets(root, decodedImagesRef.current);
 
       // Full-frame clips are always composited: captions are lifted into
