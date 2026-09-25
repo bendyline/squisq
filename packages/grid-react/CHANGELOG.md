@@ -1,3 +1,10 @@
+## @bendyline/squisq-grid-react [2.11.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-grid-react@2.11.8...@bendyline/squisq-grid-react@2.11.9) (2026-09-25)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.8
+
 ## @bendyline/squisq-grid-react [2.11.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq-grid-react@2.11.7...@bendyline/squisq-grid-react@2.11.8) (2026-09-23)
 
 

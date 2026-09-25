@@ -1,3 +1,14 @@
+## @bendyline/squisq-video [2.3.11](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video@2.3.10...@bendyline/squisq-video@2.3.11) (2026-09-25)
+
+### Bug Fixes
+
+* Audio processing ([#64](https://github.com/bendyline/squisq/issues/64)) ([b729759](https://github.com/bendyline/squisq/commit/b729759255318e0b69ba842f06f16201ee20f9d6))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.8
+
 ## @bendyline/squisq-video [2.3.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video@2.3.9...@bendyline/squisq-video@2.3.10) (2026-09-23)
 
 

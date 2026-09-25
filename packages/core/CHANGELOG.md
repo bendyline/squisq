@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.11.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.7...@bendyline/squisq@2.11.8) (2026-09-25)
+
+### Bug Fixes
+
+* Audio processing ([#64](https://github.com/bendyline/squisq/issues/64)) ([b729759](https://github.com/bendyline/squisq/commit/b729759255318e0b69ba842f06f16201ee20f9d6))
+
 ## @bendyline/squisq [2.11.7](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.6...@bendyline/squisq@2.11.7) (2026-09-23)
 
 ### Bug Fixes
