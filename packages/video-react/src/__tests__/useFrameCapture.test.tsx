@@ -221,6 +221,85 @@ describe('capture media resolution', () => {
     tracker.provider.dispose();
     expect(dispose).not.toHaveBeenCalled();
   });
+
+  /** Tracker over a provider that maps `video/recorder.webm` to a blob URL. */
+  function recorderTracker() {
+    return createCaptureMediaResolutionTracker({
+      resolveUrl: vi.fn(async (path: string) =>
+        path === 'video/recorder.webm' ? 'blob:recorder' : path,
+      ),
+      listMedia: async () => [],
+      addMedia: async () => {
+        throw new Error('Read-only');
+      },
+      removeMedia: async () => undefined,
+      dispose: vi.fn(),
+    });
+  }
+
+  /** Count animation frames, running `onFrame` before each callback. */
+  function stubAnimationFrames(onFrame: (frame: number) => void = () => undefined) {
+    vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+    let frames = 0;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      frames += 1;
+      onFrame(frames);
+      queueMicrotask(() => callback(0));
+      return frames;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    return () => frames;
+  }
+
+  it('waits for React to commit a resolved URL before capture binds the element', async () => {
+    const tracker = recorderTracker();
+    const root = document.createElement('div');
+    root.innerHTML = '<video src="./video/recorder.webm"></video>';
+    const video = root.querySelector('video')!;
+    // The provider promise settles at once, but React commits the URL a few
+    // frames later. Returning earlier hands the relative fallback to the
+    // decoder binding, which skips it, and the recorder WebM is indexed instead.
+    stubAnimationFrames((frame) => {
+      if (frame === 3) video.setAttribute('src', 'blob:recorder');
+    });
+
+    await tracker.provider.resolveUrl('video/recorder.webm');
+    await waitForCaptureMediaResolutions(tracker, root);
+
+    expect(video.getAttribute('src')).toBe('blob:recorder');
+  });
+
+  it('does not wait on a path the provider left unresolved', async () => {
+    const tracker = recorderTracker();
+    const root = document.createElement('div');
+    root.innerHTML = '<img src="./missing.png">';
+    const frames = stubAnimationFrames();
+
+    await tracker.provider.resolveUrl('missing.png');
+    await waitForCaptureMediaResolutions(tracker, root);
+
+    // One frame for the settled resolution; none waiting on the fallback.
+    expect(frames()).toBe(1);
+  });
+
+  it('stops waiting on a fallback that never commits', async () => {
+    const tracker = recorderTracker();
+    const root = document.createElement('div');
+    root.innerHTML = '<video src="./video/recorder.webm"></video>';
+    const frames = stubAnimationFrames();
+
+    await tracker.provider.resolveUrl('video/recorder.webm');
+    await waitForCaptureMediaResolutions(tracker, root);
+
+    expect(root.querySelector('video')!.getAttribute('src')).toBe('./video/recorder.webm');
+    expect(frames()).toBeGreaterThan(1);
+    expect(frames()).toBeLessThanOrEqual(11);
+
+    // Nothing new resolved: later captures take the fast path.
+    const framesBefore = frames();
+    await waitForCaptureMediaResolutions(tracker, root);
+    expect(frames()).toBe(framesBefore);
+  });
 });
 
 describe('waitForCaptureAssets', () => {
@@ -365,6 +444,51 @@ describe('primeIndeterminateCaptureVideos', () => {
     expect(assignments).toEqual([1e101, 0]);
     expect(video.dataset.captureSequential).toBe('true');
     expect(await primeIndeterminateCaptureVideos(root, primed)).toBe(0);
+  });
+
+  it('claims an element for capture before its indexing probe', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<video src="camera.webm"></video>';
+    const video = root.querySelector('video')!;
+    let duration = Number.POSITIVE_INFINITY;
+    let currentTime = 0;
+    let seeking = false;
+    const flagAtSeek: Array<string | undefined> = [];
+    Object.defineProperties(video, {
+      currentSrc: { configurable: true, get: () => 'blob:camera-webm' },
+      duration: { configurable: true, get: () => duration },
+      currentTime: {
+        configurable: true,
+        get: () => currentTime,
+        set: (value: number) => {
+          // A clip layer that re-renders now (DocPlayer re-derives its schedule
+          // when a duration probe lands) seeks every element it still owns back
+          // to its in-point, which cancels this probe. The capture flag is what
+          // tells the layer to keep its hands off.
+          flagAtSeek.push(video.dataset.captureSequential);
+          seeking = true;
+          queueMicrotask(() => {
+            if (value > 1e100) {
+              duration = 1556.743;
+              currentTime = duration;
+              video.dispatchEvent(new Event('durationchange'));
+            } else {
+              currentTime = value;
+            }
+            seeking = false;
+            video.dispatchEvent(new Event('seeked'));
+          });
+        },
+      },
+      readyState: { configurable: true, get: () => HTMLMediaElement.HAVE_ENOUGH_DATA },
+      seeking: { configurable: true, get: () => seeking },
+      pause: { configurable: true, value: vi.fn() },
+      videoWidth: { configurable: true, value: 640 },
+      videoHeight: { configurable: true, value: 480 },
+    });
+
+    expect(await primeIndeterminateCaptureVideos(root)).toBe(1);
+    expect(flagAtSeek).toEqual(['true', 'true']);
   });
 
   it('skips an Opus-only source authored with a video element', async () => {
@@ -1661,6 +1785,92 @@ describe('useFrameCapture', () => {
     await expect(selector(document.createElement('video'), 0)).resolves.toBe(false);
 
     result.current.destroy();
+  });
+
+  describe('init timeouts', () => {
+    const doc = {
+      articleId: 'init-timeout-test',
+      duration: 4.5,
+      blocks: [],
+      audio: { segments: [] },
+    } as Doc;
+    const api = {
+      getDuration: vi.fn(() => 4.5),
+      getRenderedTime: vi.fn(() => 0),
+      seekTo: vi.fn(async () => {}),
+      showCover: vi.fn(async () => {}),
+      hideCover: vi.fn(async () => {}),
+    };
+
+    /** Mount a recorder video that never loads, then publish the render API. */
+    function renderStalledVideo(source: string) {
+      frameCaptureMocks.render.mockImplementation((node: unknown) => {
+        const video = document.createElement('video');
+        Object.defineProperties(video, {
+          currentSrc: { configurable: true, get: () => source },
+          readyState: { configurable: true, get: () => HTMLMediaElement.HAVE_NOTHING },
+        });
+        document.querySelector('#squisq-capture-root')!.appendChild(video);
+        const element = node as { props: Record<string, unknown> };
+        (element.props.onRenderAPIReady as (value: typeof api) => void)(api);
+      });
+    }
+
+    it('reports a player that never publishes its render API', async () => {
+      vi.useFakeTimers();
+      frameCaptureMocks.render.mockImplementation(() => undefined);
+      const { result } = renderHook(() => useFrameCapture());
+
+      const outcome = expect(result.current.init(doc, { width: 640, height: 360 })).rejects.toThrow(
+        'Render API did not initialize within 15s.',
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      await outcome;
+
+      result.current.destroy();
+    });
+
+    it('names a stalled video instead of blaming the render API', async () => {
+      vi.useFakeTimers();
+      // The decoder cannot read the source, so it stays on the element path.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          throw new TypeError('Failed to fetch');
+        }),
+      );
+      renderStalledVideo('blob:stalled-recorder');
+      const { result } = renderHook(() => useFrameCapture());
+
+      // The render API is up; the recorder's metadata never arrives. Its own
+      // 15 s wait must win over any player-initialization timer.
+      const outcome = expect(result.current.init(doc, { width: 640, height: 360 })).rejects.toThrow(
+        'Video did not become ready while loading capture metadata within 15s: blob:stalled-recorder',
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      await outcome;
+
+      result.current.destroy();
+    });
+
+    it('names the setup stage when a stage without its own timeout stalls', async () => {
+      vi.useFakeTimers();
+      // A decoder source that never answers has no timeout of its own.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => new Promise<Response>(() => undefined)),
+      );
+      renderStalledVideo('blob:unanswered-recorder');
+      const { result } = renderHook(() => useFrameCapture());
+
+      const outcome = expect(result.current.init(doc, { width: 640, height: 360 })).rejects.toThrow(
+        'Frame capture setup did not finish within 60s while opening video decoders.',
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      await outcome;
+
+      result.current.destroy();
+    });
   });
 });
 

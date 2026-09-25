@@ -157,6 +157,46 @@ describe('MediaClipLayer', () => {
     },
   );
 
+  it('does not re-seek a render-mode clip when the schedule re-derives an equal clip', () => {
+    vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    const clip: ScheduledClip = {
+      id: 'camera',
+      kind: 'video',
+      src: 'camera.webm',
+      placement: 'picture-in-picture',
+      absoluteStart: 0,
+      absoluteEnd: 1556.8,
+      sourceIn: 0,
+      anchor: 'block',
+      blockId: 'intro',
+    };
+    const layer = (schedule: ScheduledClip[]) => (
+      <MediaClipLayer
+        schedule={schedule}
+        currentTime={0}
+        isPlaying={false}
+        renderMode
+        basePath="."
+        muted
+      />
+    );
+    const { container, rerender } = render(layer([clip]));
+    const video = container.querySelector('video')!;
+    expect(video.currentTime).toBe(0);
+
+    // Frame capture indexes a MediaRecorder WebM by seeking it to the end.
+    // Meanwhile DocPlayer's duration probe lands and re-derives the schedule:
+    // equal values, new objects. Seeking back to the in-point here cancels the
+    // indexing seek and export setup never finishes.
+    video.currentTime = 1500;
+    rerender(layer([{ ...clip }]));
+    expect(video.currentTime).toBe(1500);
+
+    // A clip whose timing really changed is still followed.
+    rerender(layer([{ ...clip, sourceIn: 3 }]));
+    expect(video.currentTime).toBe(3);
+  });
+
   it('groups authored PIP and overlay clips independently of the player default', () => {
     vi.spyOn(window.HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     const base: ScheduledClip = {

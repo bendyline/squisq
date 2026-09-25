@@ -300,6 +300,11 @@ function MediaClipElement({
 }: MediaClipElementProps) {
   const ref = useRef<HTMLMediaElement | null>(null);
   const src = useMediaUrl(clip.src, basePath);
+  // The effect keys on these values, not on the clip object: the schedule is
+  // re-derived whenever a media duration probe lands, and a fresh-but-equal
+  // clip must not re-seek the element (in render mode that cancels frame
+  // capture's indexing seek on a MediaRecorder WebM).
+  const { sourceIn, absoluteStart, absoluteEnd, gain, fadeIn, fadeOut } = clip;
 
   useEffect(() => {
     const el = ref.current;
@@ -307,24 +312,29 @@ function MediaClipElement({
     if (!active) {
       if (!el.paused) el.pause();
       // Park an upcoming clip on its in-point so it starts without a seek.
-      const startsIn = clip.absoluteStart - currentTime;
+      const startsIn = absoluteStart - currentTime;
       if (
         !renderMode &&
         startsIn > 0 &&
         startsIn <= PRESEEK &&
         !isCaptureDrivenVideo(el) &&
-        Math.abs(el.currentTime - clip.sourceIn) > DRIFT / 5
+        Math.abs(el.currentTime - sourceIn) > DRIFT / 5
       ) {
         try {
-          el.currentTime = clip.sourceIn;
+          el.currentTime = sourceIn;
         } catch {
           // Metadata not loaded yet; activation seeks as usual.
         }
       }
       return;
     }
-    if (!renderMode) applyLevel(el, clipLevelAt(clip, currentTime));
-    const target = Math.max(0, clip.sourceIn + (currentTime - clip.absoluteStart));
+    if (!renderMode) {
+      applyLevel(
+        el,
+        clipLevelAt({ absoluteStart, absoluteEnd, gain, fadeIn, fadeOut }, currentTime),
+      );
+    }
+    const target = Math.max(0, sourceIn + (currentTime - absoluteStart));
     // While paused, currentTime is being driven by a seek/scrub rather than
     // natural playback. Always select the exact requested frame in that case;
     // the drift tolerance remains useful while playing to avoid fighting the
@@ -345,7 +355,19 @@ function MediaClipElement({
     } else if (!isCaptureDrivenVideo(el)) {
       el.pause();
     }
-  }, [active, currentTime, isPlaying, renderMode, clip, src]);
+  }, [
+    active,
+    currentTime,
+    isPlaying,
+    renderMode,
+    sourceIn,
+    absoluteStart,
+    absoluteEnd,
+    gain,
+    fadeIn,
+    fadeOut,
+    src,
+  ]);
 
   const isVideo = clip.kind === 'video';
   const common = {
