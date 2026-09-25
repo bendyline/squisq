@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-video-react",
-  "version": "2.4.12",
+  "version": "2.4.13",
   "description": "React components for browser-based MP4 and animated-GIF export of Squisq documents",
   "license": "MIT",
   "author": "Bendyline",
@@ -79,7 +79,7 @@
   "dependencies": {
     "@bendyline/squisq": "2.11.8",
     "@bendyline/squisq-video": "2.3.11",
-    "@bendyline/squisq-react": "2.11.8",
+    "@bendyline/squisq-react": "2.11.9",
     "@ffmpeg/core": "0.12.9",
     "@ffmpeg/ffmpeg": "0.12.15",
     "@ffmpeg/util": "0.12.2",

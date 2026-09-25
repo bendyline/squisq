@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.11.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.8...@bendyline/squisq-react@2.11.9) (2026-09-25)
+
+### Bug Fixes
+
+* Export update ([#65](https://github.com/bendyline/squisq/issues/65)) ([c7604f5](https://github.com/bendyline/squisq/commit/c7604f59baa2970cf16627950a9277510a58d2ee))
+
 ## @bendyline/squisq-react [2.11.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.7...@bendyline/squisq-react@2.11.8) (2026-09-25)
 
 ### Bug Fixes
