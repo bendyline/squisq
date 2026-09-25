@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
-import { computeAudioTimeline } from '../audioTimeline.js';
+import { CUT_EDGE_FADE_SEC, computeAudioTimeline } from '../audioTimeline.js';
 
 function block(over: Partial<Block> & Pick<Block, 'id' | 'startTime' | 'duration'>): Block {
   return { audioSegment: 0, layers: [], ...over };
@@ -304,5 +304,45 @@ describe('computeAudioTimeline', () => {
       // `NaN <= 0` is false, so an unguarded positivity check would emit this.
       expect(computeAudioTimeline(doc)).toEqual([]);
     });
+  });
+});
+
+describe('computeAudioTimeline — media edits', () => {
+  const md = `{[audio src=audio/take.webm anchor=document clipEnd=20 cuts="5-8" gain=-6 fadeIn=1 fx=loudness]}
+
+# One {[duration=30]}
+
+Body.
+`;
+
+  it('splits a cut clip, carries gain, and puts de-click fades on inner edges only', () => {
+    const doc = markdownToDoc(parseMarkdown(md));
+    const clips = computeAudioTimeline(doc);
+    expect(clips.map((c) => [c.src, c.startSec, c.sourceInSec, c.durationSec])).toEqual([
+      ['audio/take.webm', 0, 0, 5],
+      ['audio/take.webm', 5, 8, 12],
+    ]);
+    expect(clips.map((c) => [c.gainDb, c.fadeInSec, c.fadeOutSec])).toEqual([
+      [-6, 1, CUT_EDGE_FADE_SEC],
+      [-6, CUT_EDGE_FADE_SEC, undefined],
+    ]);
+  });
+
+  it('mixes the processed render when the lookup has one', () => {
+    const doc = markdownToDoc(parseMarkdown(md));
+    const clips = computeAudioTimeline(doc, 0, { processedAudio: () => 'render.webm' });
+    expect(clips.map((c) => c.src)).toEqual(['render.webm', 'render.webm']);
+  });
+
+  it('drops an edited video’s own audio in favor of its processed companion', () => {
+    const videoMd = `<video src="video/take.webm" data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false" data-squisq-video-clip-end="10" data-squisq-video-fx="denoise"></video>
+
+# One {[duration=10]}
+`;
+    const doc = markdownToDoc(parseMarkdown(videoMd));
+    const plain = computeAudioTimeline(doc);
+    expect(plain.map((c) => [c.src, c.sourceKind])).toEqual([['video/take.webm', 'video']]);
+    const processed = computeAudioTimeline(doc, 0, { processedAudio: () => 'render.webm' });
+    expect(processed.map((c) => [c.src, c.sourceKind])).toEqual([['render.webm', undefined]]);
   });
 });

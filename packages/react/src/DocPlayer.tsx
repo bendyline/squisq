@@ -198,6 +198,8 @@ function DocPlayerContent({
   onPlaybackStateChange,
   onControlsReady,
   onRenderAPIReady,
+  renderVideoFrameSelector,
+  processedAudio,
   isFullscreen = false,
   onFullscreenToggle,
   onBlockMarkers,
@@ -324,9 +326,14 @@ function DocPlayerContent({
   // durations arrive; without it the historical fill-to-end schedule is used.
   const rawSchedule = useMemo(() => resolveMediaSchedule(doc), [doc]);
   const clipDurations = useMediaClipDurations(rawSchedule, basePath);
+  // Edited clips play their processed render when one exists (see processedAudio).
   const mediaSchedule = useMemo(
-    () => resolveMediaSchedule(doc, { intrinsicDuration: (clip) => clipDurations.get(clip.src) }),
-    [doc, clipDurations],
+    () =>
+      resolveMediaSchedule(doc, {
+        intrinsicDuration: (clip) => clipDurations.get(clip.src),
+        ...(processedAudio ? { processedAudio } : {}),
+      }),
+    [doc, clipDurations, processedAudio],
   );
 
   /**
@@ -369,6 +376,10 @@ function DocPlayerContent({
   currentTimeRef.current = currentTime;
   const committedRenderTimeRef = useRef(currentTime);
   const renderCommitWaitersRef = useRef<RenderCommitWaiter[]>([]);
+  const renderVideoFrameSelectorRef = useRef(renderVideoFrameSelector);
+  renderVideoFrameSelectorRef.current = renderVideoFrameSelector;
+  /** Block elements (and their role classes) as of the last render seek. */
+  const presentedBlocksRef = useRef<Array<{ element: Element; className: string }> | null>(null);
   const totalDurationRef = useRef(totalDuration);
   totalDurationRef.current = totalDuration;
   const expandedBlocksLenRef = useRef(0);
@@ -733,6 +744,13 @@ function DocPlayerContent({
         }
       }
       const elapsedMs = (time - blockStartTime) * 1000;
+      // A capture host may supply decoded frames for some videos; anything it
+      // declines is seeked on the element itself.
+      const selectVideoFrame = async (video: HTMLVideoElement, targetTime: number) => {
+        const selector = renderMode ? renderVideoFrameSelectorRef.current : undefined;
+        if (selector && (await selector(video, targetTime))) return;
+        await seekVideoToFrame(video, targetTime);
+      };
 
       // Set all CSS animations to the correct timeline position
       (root.getAnimations?.() ?? []).forEach((anim) => {
@@ -769,7 +787,7 @@ function DocPlayerContent({
           const startAt = parseFloat(video.dataset.startAt || '0');
           const targetTime = Math.min(clipStart + Math.max(0, blockElapsed - startAt), clipEnd);
 
-          videoSeekPromises.push(seekVideoToFrame(video, targetTime));
+          videoSeekPromises.push(selectVideoFrame(video, targetTime));
         });
       }
 
@@ -784,14 +802,33 @@ function DocPlayerContent({
         video.pause();
         if (time < absStart || time >= absEnd) return;
         const targetTime = sourceIn + (time - absStart);
-        videoSeekPromises.push(seekVideoToFrame(video, targetTime));
+        videoSeekPromises.push(selectVideoFrame(video, targetTime));
       });
 
-      // Media readiness is explicit. One final presentation opportunity is
-      // retained for computed animation styles; its task fallback remains
-      // load-bearing when Chromium suspends animation frames.
+      // Media readiness is explicit. A seek that mounts blocks or changes
+      // their roles keeps one presentation opportunity for work that lands
+      // after the commit (computed animation styles, follow-up renders); its
+      // task fallback remains load-bearing when Chromium suspends animation
+      // frames. A render seek within an unchanged block set only moves
+      // synchronous state — animation clocks, layer props, video frames — so
+      // waiting on the display there would cap offline capture at the
+      // monitor's refresh rate.
       await Promise.all(videoSeekPromises);
-      await waitForVisualUpdate();
+      const presentedBlocks = Array.from(
+        root.querySelectorAll('.doc-player__block'),
+        (element) => ({ element, className: element.className }),
+      );
+      const previousBlocks = presentedBlocksRef.current;
+      presentedBlocksRef.current = presentedBlocks;
+      const blocksUnchanged =
+        previousBlocks !== null &&
+        previousBlocks.length === presentedBlocks.length &&
+        presentedBlocks.every(
+          (block, index) =>
+            block.element === previousBlocks[index].element &&
+            block.className === previousBlocks[index].className,
+        );
+      if (!renderMode || !blocksUnchanged) await waitForVisualUpdate();
     };
     const getDuration = () => {
       // The larger of the audio/block timeline and any media that spills

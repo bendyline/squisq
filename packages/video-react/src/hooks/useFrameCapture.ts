@@ -13,12 +13,18 @@
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useRef, useCallback, useMemo } from 'react';
-import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
+import type { Doc, MediaCrop, MediaProvider } from '@bendyline/squisq/schemas';
+import { parseMediaCrop } from '@bendyline/squisq/mediaEdit';
 import { resolveDashboardStyleId } from '@bendyline/squisq/doc';
 import type { RenderHtmlOptions } from '@bendyline/squisq-video';
 import { DocPlayer, MediaContext } from '@bendyline/squisq-react';
 import type { SquisqRenderAPI, CaptionMode, CaptionStyle } from '@bendyline/squisq-react';
 import html2canvas from 'html2canvas';
+import {
+  CaptureVideoFrameRegistry,
+  getDecodedCaptureFrame,
+  resolveCaptureVideoImage,
+} from './captureVideoFrames.js';
 
 export interface FrameCaptureOptions {
   /**
@@ -249,6 +255,9 @@ function captureVideoNeedsPriming(
   video: HTMLVideoElement,
   primedVideos: WeakSet<HTMLVideoElement>,
 ): boolean {
+  // Decoded sources are drawn from their own demuxer; the element is never
+  // seeked, so it needs neither an index nor sequential stepping.
+  if (video.dataset.captureDecoded === 'true') return false;
   // An Opus-only WebM authored as <video> keeps duration=Infinity for its whole
   // lifetime and has no frame to index, seek, or capture. Loading another src
   // resets readyState, so this stays accurate across replacements.
@@ -569,6 +578,46 @@ function videoFrameRect(
 }
 
 /**
+ * Like {@link videoFrameRect}, honoring a media-edit crop: the crop region of
+ * the source frame (normalized `data-crop="x y w h"` on the element) takes the
+ * place of the whole frame before object-fit applies. Mirrors the live
+ * player's `object-view-box`, so exports crop in every browser.
+ */
+export function croppedVideoFrameRect(
+  sourceWidth: number,
+  sourceHeight: number,
+  crop: MediaCrop | null,
+  destinationWidth: number,
+  destinationHeight: number,
+  objectFit: string,
+): VideoFrameRect {
+  if (!crop) {
+    return videoFrameRect(
+      sourceWidth,
+      sourceHeight,
+      destinationWidth,
+      destinationHeight,
+      objectFit,
+    );
+  }
+  const cx = crop.x * sourceWidth;
+  const cy = crop.y * sourceHeight;
+  const rect = videoFrameRect(
+    crop.w * sourceWidth,
+    crop.h * sourceHeight,
+    destinationWidth,
+    destinationHeight,
+    objectFit,
+  );
+  return { ...rect, sx: rect.sx + cx, sy: rect.sy + cy };
+}
+
+/** The crop a scheduled video element carries, if any. */
+function videoCrop(video: HTMLVideoElement): MediaCrop | null {
+  return parseMediaCrop(video.getAttribute('data-crop') ?? undefined);
+}
+
+/**
  * html2canvas replaces `<video>` with a bare `<canvas>` before rendering. Its
  * replacement does not retain the video's class or inline/computed styles and
  * draws the source stretched to the element box. Re-associate scheduled and
@@ -613,21 +662,18 @@ export function prepareScheduledVideoClones(
 
     const destinationWidth = Math.round(video.clientWidth || video.offsetWidth);
     const destinationHeight = Math.round(video.clientHeight || video.offsetHeight);
-    if (
-      video.videoWidth <= 0 ||
-      video.videoHeight <= 0 ||
-      destinationWidth <= 0 ||
-      destinationHeight <= 0
-    ) {
+    const image = resolveCaptureVideoImage(video);
+    if (image.width <= 0 || image.height <= 0 || destinationWidth <= 0 || destinationHeight <= 0) {
       return;
     }
 
     try {
       const view = video.ownerDocument.defaultView;
       const objectFit = video.style.objectFit || view?.getComputedStyle(video).objectFit || 'fill';
-      const frame = videoFrameRect(
-        video.videoWidth,
-        video.videoHeight,
+      const frame = croppedVideoFrameRect(
+        image.width,
+        image.height,
+        videoCrop(video),
         destinationWidth,
         destinationHeight,
         objectFit,
@@ -637,7 +683,7 @@ export function prepareScheduledVideoClones(
       canvas.width = destinationWidth;
       canvas.height = destinationHeight;
       context.drawImage(
-        video,
+        image.source,
         frame.sx,
         frame.sy,
         frame.sw,
@@ -1023,7 +1069,8 @@ export function releaseCaptureCloneCanvases(canvases: HTMLCanvasElement[]): void
 }
 
 function scheduledVideoIsVisual(video: HTMLVideoElement): boolean {
-  return video.videoWidth > 0 && video.videoHeight > 0 && video.dataset.active === 'true';
+  const { width, height } = resolveCaptureVideoImage(video);
+  return width > 0 && height > 0 && video.dataset.active === 'true';
 }
 
 function scheduledVideoPresentation(video: HTMLVideoElement): string | undefined {
@@ -1335,9 +1382,11 @@ export function drawScheduledVideosOnto(
       0,
       outerRadius - Math.max(borderLeft * scaleX, borderTop * scaleY),
     );
-    const source = videoFrameRect(
-      video.videoWidth,
-      video.videoHeight,
+    const image = resolveCaptureVideoImage(video);
+    const source = croppedVideoFrameRect(
+      image.width,
+      image.height,
+      videoCrop(video),
       contentWidth,
       contentHeight,
       style.objectFit || 'fill',
@@ -1359,7 +1408,7 @@ export function drawScheduledVideosOnto(
     addRoundedRect(context, innerX, innerY, innerWidth, innerHeight, innerRadius);
     context.clip();
     context.drawImage(
-      video,
+      image.source,
       source.sx,
       source.sy,
       source.sw,
@@ -1426,16 +1475,23 @@ export function getFrameVisualStateKey(
 
   const videoStates = Array.from(captureRoot.querySelectorAll('video'))
     .filter(
-      (video) =>
-        video.videoWidth > 0 &&
-        video.videoHeight > 0 &&
-        (!options.ignoreScheduledVideoFrames || !video.closest(SCHEDULED_MEDIA_SELECTOR)),
+      (video) => !options.ignoreScheduledVideoFrames || !video.closest(SCHEDULED_MEDIA_SELECTOR),
     )
-    .map(
-      (video) =>
-        `${video.currentSrc || video.src}:${finiteMediaTime(video.currentTime)}:${video.readyState}:` +
-        `${video.videoWidth}x${video.videoHeight}`,
-    );
+    .flatMap((video) => {
+      const src = video.currentSrc || video.src;
+      // A decoded element never moves; its drawn source frame is the state.
+      const decoded = getDecodedCaptureFrame(video);
+      if (decoded) {
+        return [
+          `${src}:decoded:${finiteMediaTime(decoded.timestamp)}:${decoded.width}x${decoded.height}`,
+        ];
+      }
+      if (video.videoWidth <= 0 || video.videoHeight <= 0) return [];
+      return [
+        `${src}:${finiteMediaTime(video.currentTime)}:${video.readyState}:` +
+          `${video.videoWidth}x${video.videoHeight}`,
+      ];
+    });
 
   if (
     captureRoot.querySelector(
@@ -1474,6 +1530,8 @@ export function useFrameCapture(): FrameCaptureHandle {
   const captureImageDataUrlsRef = useRef<CaptureImageDataUrlCache>(new Map());
   const captureSvgRasterCacheRef = useRef<CaptureSvgRasterCache>(createCaptureSvgRasterCache());
   const primedCaptureVideosRef = useRef(new WeakSet<HTMLVideoElement>());
+  /** Demuxed sources that supply video pixels without moving their elements. */
+  const videoFramesRef = useRef<CaptureVideoFrameRegistry | null>(null);
   const dimensionsRef = useRef<{ width: number; height: number }>({ width: 1920, height: 1080 });
   /**
    * Cached caption layer for the composite fast path. Captions sit above
@@ -1499,8 +1557,11 @@ export function useFrameCapture(): FrameCaptureHandle {
         containerRef.current ||
         mediaProviderRef.current ||
         captureCanvasRef.current ||
-        captureBaseCanvasRef.current
+        captureBaseCanvasRef.current ||
+        videoFramesRef.current
       ) {
+        const oldVideoFrames = videoFramesRef.current;
+        videoFramesRef.current = null;
         const oldRoot = rootRef.current;
         const oldContainer = containerRef.current;
         const oldMediaProvider = mediaProviderRef.current;
@@ -1530,6 +1591,7 @@ export function useFrameCapture(): FrameCaptureHandle {
           setTimeout(() => {
             if (oldRoot) oldRoot.unmount();
             if (oldContainer) oldContainer.remove();
+            oldVideoFrames?.dispose();
             if (oldOwnsMediaProvider) oldMediaProvider?.dispose();
             if (oldCaptureCanvas) {
               oldCaptureCanvas.width = 0;
@@ -1608,6 +1670,8 @@ export function useFrameCapture(): FrameCaptureHandle {
       // Mount DocPlayer in renderMode via React
       const root = createRoot(renderRoot);
       rootRef.current = root;
+      const videoFrames = new CaptureVideoFrameRegistry();
+      videoFramesRef.current = videoFrames;
 
       // Derive caption props from captionMode
       const captionsEnabled = captionMode !== undefined && captionMode !== 'off';
@@ -1645,6 +1709,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         coverSlideTemplate: renderOptions.coverSlideTemplate,
         captionsEnabled,
         captionStyle,
+        renderVideoFrameSelector: videoFrames.selectFrame,
         onRenderAPIReady: (api: SquisqRenderAPI | null) => {
           if (containerRef.current !== container) return;
           renderAPIRef.current = api;
@@ -1693,6 +1758,8 @@ export function useFrameCapture(): FrameCaptureHandle {
             }
             await waitForCaptureMediaResolutions(mediaResolutionTrackerRef.current);
             await waitForCaptureAssets(captureRoot, decodedImagesRef.current);
+            // Bind decoders first: a decoded element needs no indexing probe.
+            await videoFrames.attach(captureRoot);
             await primeIndeterminateCaptureVideos(captureRoot, primedCaptureVideosRef.current);
             clearTimeout(timeout);
             resolve(api.getDuration());
@@ -1733,27 +1800,35 @@ export function useFrameCapture(): FrameCaptureHandle {
         throw new Error('Capture root element not found');
       }
 
-      // Prime before seeking. Media URL resolution and cover transitions can
+      // Bind decoders to newly mounted or re-sourced videos, then index any
+      // the decoder cannot serve. Returns how many changed frame source.
+      const videoFrames = videoFramesRef.current;
+      const prepareCaptureVideos = async (): Promise<number> =>
+        ((await videoFrames?.attach(root)) ?? 0) +
+        (await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current));
+
+      // Prepare before seeking. Media URL resolution and cover transitions can
       // mount or reload a recorder WebM after init(); seeking that unindexed
       // duration=Infinity source first fails before the old post-seek repair
       // ever gets a chance to run.
-      await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current);
+      await prepareCaptureVideos();
       try {
         await api.seekTo(time);
       } catch (seekError) {
         // A clip whose source resolved during this seek is still unindexed:
         // Chromium clamps every seek on a duration=Infinity WebM back to zero,
-        // so the frame barrier times out. Index whatever arrived late and retry
-        // once rather than failing the whole export on a mount race.
-        if (!(await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current))) {
+        // so the frame barrier times out. Decode or index whatever arrived
+        // late and retry once rather than failing the whole export on a mount race.
+        if (!(await prepareCaptureVideos())) {
           throw seekError;
         }
         await api.seekTo(time);
       }
 
-      if (await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current)) {
-        // A video mounted during the seek was restored to its prior frame.
-        // Run the barrier again so it reaches the requested document time.
+      if (await prepareCaptureVideos()) {
+        // A video mounted during the seek was restored to its prior frame, or
+        // now draws from a decoder that has not selected one yet. Run the
+        // barrier again so it reaches the requested document time.
         await api.seekTo(time);
       }
 
@@ -1984,6 +2059,8 @@ export function useFrameCapture(): FrameCaptureHandle {
     releaseCaptureSvgRasterCache(captureSvgRasterCacheRef.current);
     captureSvgRasterCacheRef.current = createCaptureSvgRasterCache();
     primedCaptureVideosRef.current = new WeakSet<HTMLVideoElement>();
+    videoFramesRef.current?.dispose();
+    videoFramesRef.current = null;
     renderAPIRef.current = null;
   }, []);
 

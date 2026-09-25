@@ -4,6 +4,17 @@ const VIDEO_TIME_TOLERANCE_SECONDS = 0.01;
 const MAX_SEQUENTIAL_CAPTURE_STEP_SECONDS = 0.5;
 const SEQUENTIAL_CAPTURE_PLAYBACK_RATE = 1;
 
+/**
+ * Whether frame capture, not the layer's own sync effect, positions this
+ * element. `captureSequential` elements advance by capture-driven playback
+ * steps; `captureDecoded` elements are never moved at all because capture
+ * draws decoded source frames in their place. Either way a layer seek would
+ * only cost a pipeline seek and fight the capture clock.
+ */
+export function isCaptureDrivenVideo(video: HTMLMediaElement): boolean {
+  return video.dataset.captureSequential === 'true' || video.dataset.captureDecoded === 'true';
+}
+
 function formatMediaTime(time: number): string {
   return Number.isFinite(time) ? `${time.toFixed(3)}s` : String(time);
 }

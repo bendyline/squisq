@@ -24,6 +24,7 @@
 
 import type { Doc, Block, PromotedBodyAnnotation } from '../schemas/Doc.js';
 import type { MediaClip } from '../schemas/Media.js';
+import { serializeMediaEdits } from '../mediaEdit/recipe.js';
 import type {
   HeadingTemplateAnnotation,
   MarkdownDocument,
@@ -287,6 +288,9 @@ function synthesizeMediaParagraph(clip: MediaClip): MarkdownBlockNode {
   if (clip.clipStart != null) params.clipStart = String(clip.clipStart);
   if (clip.clipEnd != null) params.clipEnd = String(clip.clipEnd);
   if (clip.spillover) params.spillover = 'true';
+  for (const [key, value] of Object.entries(serializeMediaEdits(clip.edits))) {
+    if (value != null) params[key] = value;
+  }
   return {
     type: 'paragraph',
     children: [{ type: 'text', value: serializeAnnotation(clip.kind, params) }],

@@ -39,6 +39,8 @@ import { markdownToTiptap } from './tiptapBridge';
 import { getBlockSlices, sliceIndexAtOffset, type BlockSlice } from './blockRange';
 import { resolveFileKind } from './fileKind';
 import { useBlockNavigator } from './useBlockNavigator';
+import { embeddedMediaClips } from './mediaEdit/mediaEditTargets';
+import type { MediaEditRenderManager } from '@bendyline/squisq-video-react/media-edit';
 import {
   createSceneTextChannel,
   type SceneTextChannel,
@@ -214,6 +216,11 @@ export interface EditorState {
    */
   imageEditTarget: string | null;
   /**
+   * The media clip the edit panel is open on (by its authoring line), or
+   * `null` when the panel is closed. Consumed by `<EditorShell>`.
+   */
+  mediaEditTarget: MediaEditTarget | null;
+  /**
    * Monotonic counter bumped whenever a managed media asset is rewritten
    * (e.g. after the image-editor modal saves back). Image render paths
    * that cache resolved blob URLs should include this in their effect
@@ -353,6 +360,10 @@ export interface EditorActions {
   openImageEdit: (relativePath: string) => void;
   /** Close the image editor modal without saving. */
   closeImageEdit: () => void;
+  /** Open the media-edit panel on a clip. */
+  openMediaEdit: (target: MediaEditTarget) => void;
+  /** Close the media-edit panel. */
+  closeMediaEdit: () => void;
   /**
    * Bump `mediaRevision`. Called after the image editor writes back to
    * the original media path so dependent `<img>` nodes re-resolve their
@@ -375,6 +386,14 @@ export type CoverImageSaveOutput = (
  * as {@link CoverImageSaveOutput} (`false` keeps the export dialog open).
  */
 export type DashboardImageSaveOutput = CoverImageSaveOutput;
+
+/** Identifies the clip the media-edit panel is open on. */
+export interface MediaEditTarget {
+  /** 1-based source line of the clip's annotation or standalone media tag, when known. */
+  sourceLine?: number;
+  src: string;
+  kind: 'audio' | 'video';
+}
 
 export interface EditorContextValue extends EditorState, EditorActions {
   /** The live Tiptap editor instance (null when WYSIWYG is not mounted) */
@@ -414,6 +433,11 @@ export interface EditorContextValue extends EditorState, EditorActions {
   saveVersion: (options?: SaveVersionOptions) => Promise<SaveVersionResult>;
   /** MediaProvider for resolving image URLs in the WYSIWYG editor */
   mediaProvider: MediaProvider | null;
+  /**
+   * Processed-audio renders for media-edit recipes (`fx`), or null when the
+   * host disabled media edits or no media provider is wired.
+   */
+  mediaEditRenders: MediaEditRenderManager | null;
   /**
    * How pasted/inserted images should be displayed in the WYSIWYG view.
    * `'inline'` (default) lets them flow at natural size up to the editor
@@ -513,6 +537,18 @@ export function useEditorContext(): EditorContextValue {
   return ctx;
 }
 
+/**
+ * The editor context when inside an EditorProvider, else null — for
+ * components (Tiptap node views) that also render in bare editors.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useEditorContextOptional(): EditorContextValue | null {
+  return useContext(EditorContext);
+}
+
+/** Delay before the post-open media-render cleanup, so it never competes with loading. */
+const MEDIA_EDIT_GC_DELAY_MS = 5000;
+
 // ─── Provider ────────────────────────────────────────────
 
 export interface EditorProviderProps {
@@ -561,6 +597,8 @@ export interface EditorProviderProps {
   onSaveVersion?: (result: SaveVersionResult) => void;
   /** MediaProvider for resolving image URLs */
   mediaProvider?: MediaProvider | null;
+  /** Processed-audio render manager for media-edit recipes; null disables. */
+  mediaEditRenders?: MediaEditRenderManager | null;
   /** Display mode for images in the WYSIWYG view. Defaults to `'inline'`. */
   imageDisplayMode?: ImageDisplayMode;
   /**
@@ -747,6 +785,7 @@ export function EditorProvider({
   versioningAutoSaveIdleMs = DEFAULT_AUTOSAVE_IDLE_MS,
   onSaveVersion,
   mediaProvider = null,
+  mediaEditRenders = null,
   imageDisplayMode = 'inline',
   mentionProvider = null,
   proofing = null,
@@ -903,6 +942,13 @@ export function EditorProvider({
   }, []);
   const closeImageEdit = useCallback(() => {
     setImageEditTarget(null);
+  }, []);
+  const [mediaEditTarget, setMediaEditTarget] = useState<MediaEditTarget | null>(null);
+  const openMediaEdit = useCallback((target: MediaEditTarget) => {
+    setMediaEditTarget(target);
+  }, []);
+  const closeMediaEdit = useCallback(() => {
+    setMediaEditTarget(null);
   }, []);
   const bumpMediaRevision = useCallback(() => {
     setMediaRevision((n) => n + 1);
@@ -1428,6 +1474,25 @@ export function EditorProvider({
     }
   }, []);
 
+  // Keep processed-audio renders in step with the document's media-edit
+  // recipes. Readers subscribe to the manager themselves (useMediaEditRenders),
+  // so render progress never re-renders every context consumer.
+  useEffect(() => {
+    if (mediaEditRenders && doc) mediaEditRenders.sync(doc, embeddedMediaClips(doc));
+  }, [mediaEditRenders, doc]);
+  // Once per manager, shortly after the document opens, drop renders of its
+  // media that no current recipe uses (older than a week — undo stays cheap).
+  const latestDocRef = useRef(doc);
+  latestDocRef.current = doc;
+  useEffect(() => {
+    if (!mediaEditRenders) return;
+    const timer = setTimeout(() => {
+      const current = latestDocRef.current;
+      if (current) void mediaEditRenders.collectGarbage(current).catch(() => {});
+    }, MEDIA_EDIT_GC_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [mediaEditRenders]);
+
   const value = useMemo<EditorContextValue>(
     () => ({
       markdownSource,
@@ -1453,6 +1518,7 @@ export function EditorProvider({
       activeBlockStartLine,
       selectionVersion,
       imageEditTarget,
+      mediaEditTarget,
       mediaRevision,
       allowRecording,
       allowNarrate,
@@ -1465,6 +1531,7 @@ export function EditorProvider({
       versioning,
       saveVersion,
       mediaProvider,
+      mediaEditRenders,
       imageDisplayMode,
       mentionProvider,
       proofing,
@@ -1507,6 +1574,8 @@ export function EditorProvider({
       replaceAll,
       openImageEdit,
       closeImageEdit,
+      openMediaEdit,
+      closeMediaEdit,
       bumpMediaRevision,
     }),
     [
@@ -1540,6 +1609,7 @@ export function EditorProvider({
       versioning,
       saveVersion,
       mediaProvider,
+      mediaEditRenders,
       imageDisplayMode,
       mentionProvider,
       proofing,
@@ -1581,12 +1651,15 @@ export function EditorProvider({
       insertAtCursor,
       replaceAll,
       imageEditTarget,
+      mediaEditTarget,
       mediaRevision,
       allowRecording,
       allowNarrate,
       preserveSourceWrapping,
       openImageEdit,
       closeImageEdit,
+      openMediaEdit,
+      closeMediaEdit,
       bumpMediaRevision,
     ],
   );

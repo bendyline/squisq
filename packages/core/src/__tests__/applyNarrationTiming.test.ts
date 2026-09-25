@@ -244,3 +244,34 @@ describe('resolveAudioMapping with a narration take', () => {
     expect(resolved.duration).toBe(7);
   });
 });
+
+describe('applyNarrationTiming with a trimmed or cut take', () => {
+  // Sidecar block ranges (take seconds): Intro 0–10, Middle 10–22, Ending 22–30.
+  it('shifts ranges by the trim head and ends the doc at the trim tail', async () => {
+    const doc = makeDoc(
+      MD.replace('anchor=document]}', 'anchor=document clipStart=4 clipEnd=26]}'),
+    );
+    const container = await containerWith(makeSidecar(doc));
+    const result = await applyNarrationTiming(doc, container);
+    const flat = flattenRenderableBlocks(result.doc.blocks);
+    expect(flat.map((b) => [b.startTime, b.duration])).toEqual([
+      [0, 6],
+      [6, 12],
+      [18, 4],
+    ]);
+    expect(result.doc.duration).toBe(22);
+  });
+
+  it('closes up each cut and collapses a block whose narration was cut entirely', async () => {
+    const doc = makeDoc(MD.replace('anchor=document]}', 'anchor=document cuts="3-5 10-22"]}'));
+    const container = await containerWith(makeSidecar(doc));
+    const result = await applyNarrationTiming(doc, container);
+    const flat = flattenRenderableBlocks(result.doc.blocks);
+    expect(flat.map((b) => [b.startTime, b.duration])).toEqual([
+      [0, 8],
+      [8, 0],
+      [8, 8],
+    ]);
+    expect(result.doc.duration).toBe(16);
+  });
+});

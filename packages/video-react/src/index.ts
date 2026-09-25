@@ -62,3 +62,29 @@ export type { FfmpegWasmLoadConfig } from '@bendyline/squisq-video';
 
 // ── Audio (capability probe) ───────────────────────────────────────
 export { supportsWebCodecsAac } from './audioTrack.js';
+
+// ── Media edits (processed-audio renders) ──────────────────────────
+export { createMediaEditRenderer } from './mediaEdit/mediaEditRenderer.js';
+export type { MediaEditRenderer, MediaEditRendererOptions } from './mediaEdit/mediaEditRenderer.js';
+export type {
+  MediaEditJobOptions,
+  MediaEditPausesRequest,
+  MediaEditPausesResult,
+  MediaEditPreviewRequest,
+  MediaEditPreviewResult,
+  MediaEditRenderRequest,
+  MediaEditRenderResult,
+} from './mediaEdit/mediaEditEngine.js';
+export { createMediaEditRenderManager } from './mediaEdit/mediaEditRenderManager.js';
+export type {
+  MediaEditRenderManager,
+  MediaEditRenderManagerOptions,
+  MediaEditRenderState,
+  MediaEditRenderStatus,
+} from './mediaEdit/mediaEditRenderManager.js';
+export {
+  useMediaEditRenders,
+  useMediaEditStatus,
+  useProcessedAudio,
+} from './mediaEdit/useMediaEditRenders.js';
+export type { MediaEditRendersView } from './mediaEdit/useMediaEditRenders.js';

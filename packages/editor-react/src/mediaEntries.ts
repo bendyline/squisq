@@ -14,6 +14,8 @@ export function isVisibleMediaEntry(entry: MediaEntry): boolean {
 
   if (basename === '.gitignore') return false;
   if (lowerSegments.includes('.versions')) return false;
+  // Processed-audio renders are a cache of media edits, not user media.
+  if (lowerSegments.includes('.mediaedits')) return false;
 
   const parent = lowerSegments[lowerSegments.length - 2] ?? '';
   const isImageEditState =

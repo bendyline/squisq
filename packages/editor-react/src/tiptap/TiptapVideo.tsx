@@ -12,6 +12,8 @@
  * instead of an empty black stage.
  */
 import { Node, mergeAttributes } from '@tiptap/core';
+import { mediaEditNodeAttributes } from './mediaEditAttributes.js';
+import { MediaEditButton } from '../mediaEdit/MediaEditButton';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import { useEffect, useState, type SyntheticEvent } from 'react';
@@ -74,6 +76,7 @@ function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
     controls,
     placement: rawPlacement,
     lockToBlock: rawLockToBlock,
+    editFx,
   } = node.attrs as {
     src: string;
     width: string | number | null;
@@ -82,6 +85,7 @@ function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
     controls: boolean;
     placement: VideoPlacement;
     lockToBlock: boolean;
+    editFx: string | null;
   };
   const placement = normalizeVideoPlacement(rawPlacement);
   const lockToBlock = normalizeLockToBlock(rawLockToBlock);
@@ -105,6 +109,8 @@ function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
       as="div"
       className={`${audioOnly ? 'squisq-inline-audio-player squisq-video-node--audio-only' : 'squisq-inline-video-player'} squisq-video-node${selected ? ' squisq-video-node--selected' : ''}`}
       data-video-placement={placement}
+      data-squisq-media-src={src}
+      data-squisq-media-kind="video"
     >
       {!audioOnly && (
         <div
@@ -144,6 +150,17 @@ function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
               Lock to block
             </button>
           )}
+          <MediaEditButton
+            src={src}
+            kind="video"
+            fx={editFx}
+            className="squisq-video-placement-button"
+          />
+        </div>
+      )}
+      {audioOnly && (
+        <div className="squisq-audio-node-toolbar" contentEditable={false}>
+          <MediaEditButton src={src} kind="video" fx={editFx} />
         </div>
       )}
       {audioOnly ? (
@@ -278,6 +295,8 @@ export const TiptapVideo = Node.create<TiptapVideoOptions>({
         parseHTML: (el) => el.hasAttribute('controls'),
         renderHTML: (attrs) => (attrs.controls ? { controls: '' } : {}),
       },
+      // Edit recipe (fx, cuts, gain, fades, crop, group) — round-tripped verbatim.
+      ...mediaEditNodeAttributes('video'),
     };
   },
 

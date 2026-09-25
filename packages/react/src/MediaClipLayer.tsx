@@ -12,16 +12,61 @@
  * frames are captured without sound and audio is muxed offline). Scheduled
  * video follows the same live-player mute contract, so an independent overlay
  * may carry its audio across block boundaries.
+ *
+ * Media-edit recipes play live too: clip gain and fades drive each element's
+ * level, and a clip with cuts (scheduled as contiguous segments of one source)
+ * plays on two alternating elements — while one plays a segment, the other is
+ * parked on the next segment's in-point, so a cut never waits on a seek.
  */
 
 import { useEffect, useRef, type CSSProperties } from 'react';
-import type { ScheduledClip } from '@bendyline/squisq/schemas';
+import type { MediaCrop, ScheduledClip } from '@bendyline/squisq/schemas';
+import { serializeMediaCrop } from '@bendyline/squisq/mediaEdit';
+import { isCaptureDrivenVideo } from './docPlayer/renderReadiness';
 import { useMediaUrl } from './hooks/MediaContext';
 import { useMediaSchedule } from './hooks/useMediaSchedule';
+import { clipLevelAt, mountedClips } from './mediaClipPlayback';
 import type { PipPosition, PipShape, PipSize, VideoPresentation } from './types';
 
 /** Re-seek an element only when it drifts this far from its target (seconds). */
 const DRIFT = 0.25;
+/** Park an upcoming clip on its in-point this long before it starts (seconds). */
+const PRESEEK = 0.75;
+
+/**
+ * Boosts above unity need Web Audio (an element's `volume` stops at 1). One
+ * lazily created context serves the page; each boosted element is routed
+ * through its own GainNode, once — an element can only be captured once.
+ */
+let boostContext: AudioContext | null = null;
+const boostNodes = new WeakMap<HTMLMediaElement, GainNode>();
+
+function boostNodeFor(el: HTMLMediaElement): GainNode | null {
+  const existing = boostNodes.get(el);
+  if (existing) return existing;
+  if (typeof AudioContext === 'undefined') return null;
+  try {
+    boostContext ??= new AudioContext();
+    const gain = boostContext.createGain();
+    boostContext.createMediaElementSource(el).connect(gain).connect(boostContext.destination);
+    boostNodes.set(el, gain);
+    return gain;
+  } catch {
+    return null;
+  }
+}
+
+/** Apply a linear level to an element: `volume` for attenuation, a GainNode for boosts. */
+function applyLevel(el: HTMLMediaElement, level: number): void {
+  const boost = level > 1 ? boostNodeFor(el) : boostNodes.get(el);
+  if (boost) {
+    el.volume = 1;
+    boost.gain.value = level;
+    if (boostContext?.state === 'suspended') void boostContext.resume().catch(() => {});
+    return;
+  }
+  el.volume = Math.min(1, Math.max(0, level));
+}
 
 export interface MediaClipLayerProps {
   schedule: ScheduledClip[];
@@ -119,6 +164,18 @@ function mediaVideoStyle({
   };
 }
 
+/**
+ * Crop via CSS `object-view-box` (Chromium): the crop region replaces the
+ * frame before object-fit applies, so framing matches the export exactly.
+ * Browsers without it show the uncropped frame.
+ */
+function cropStyle(crop: MediaCrop | undefined): CSSProperties {
+  if (!crop) return {};
+  const pct = (n: number) => `${(n * 100).toFixed(3)}%`;
+  const inset = `inset(${pct(crop.y)} ${pct(1 - crop.x - crop.w)} ${pct(1 - crop.y - crop.h)} ${pct(crop.x)})`;
+  return { objectViewBox: inset } as CSSProperties;
+}
+
 export function MediaClipLayer({
   schedule,
   currentTime,
@@ -136,6 +193,7 @@ export function MediaClipLayer({
 }: MediaClipLayerProps) {
   const { renderClips, activeIds } = useMediaSchedule(schedule, currentTime);
   if (renderClips.length === 0) return null;
+  const mounted = mountedClips(renderClips, currentTime);
 
   const groups = new Map<
     string,
@@ -144,10 +202,11 @@ export function MediaClipLayer({
       pipSize: PipSize;
       pipShape: PipShape;
       pipPosition: PipPosition;
-      clips: ScheduledClip[];
+      clips: Array<{ key: string; clip: ScheduledClip }>;
     }
   >();
-  for (const clip of renderClips) {
+  for (const entry of mounted) {
+    const { clip } = entry;
     const clipPresentation =
       honorClipPresentation && clip.kind === 'video'
         ? clip.placement === 'picture-in-picture'
@@ -167,7 +226,7 @@ export function MediaClipLayer({
       pipPosition: clipPipPosition,
       clips: [],
     };
-    group.clips.push(clip);
+    group.clips.push(entry);
     groups.set(key, group);
   }
 
@@ -184,9 +243,9 @@ export function MediaClipLayer({
           aria-hidden
           style={mediaGroupStyle(group.presentation)}
         >
-          {group.clips.map((clip) => (
+          {group.clips.map(({ key: elementKey, clip }) => (
             <MediaClipElement
-              key={clip.id}
+              key={elementKey}
               clip={clip}
               active={activeIds.has(clip.id)}
               currentTime={currentTime}
@@ -247,15 +306,31 @@ function MediaClipElement({
     if (!el) return;
     if (!active) {
       if (!el.paused) el.pause();
+      // Park an upcoming clip on its in-point so it starts without a seek.
+      const startsIn = clip.absoluteStart - currentTime;
+      if (
+        !renderMode &&
+        startsIn > 0 &&
+        startsIn <= PRESEEK &&
+        !isCaptureDrivenVideo(el) &&
+        Math.abs(el.currentTime - clip.sourceIn) > DRIFT / 5
+      ) {
+        try {
+          el.currentTime = clip.sourceIn;
+        } catch {
+          // Metadata not loaded yet; activation seeks as usual.
+        }
+      }
       return;
     }
+    if (!renderMode) applyLevel(el, clipLevelAt(clip, currentTime));
     const target = Math.max(0, clip.sourceIn + (currentTime - clip.absoluteStart));
     // While paused, currentTime is being driven by a seek/scrub rather than
     // natural playback. Always select the exact requested frame in that case;
     // the drift tolerance remains useful while playing to avoid fighting the
     // media element's own clock on every animation frame.
     if (
-      el.dataset.captureSequential !== 'true' &&
+      !isCaptureDrivenVideo(el) &&
       (renderMode || !isPlaying || Math.abs(el.currentTime - target) > DRIFT)
     ) {
       try {
@@ -267,10 +342,10 @@ function MediaClipElement({
     if (isPlaying && !renderMode) {
       const p = el.play();
       if (p) p.catch(() => {});
-    } else if (el.dataset.captureSequential !== 'true') {
+    } else if (!isCaptureDrivenVideo(el)) {
       el.pause();
     }
-  }, [active, currentTime, isPlaying, renderMode, clip.sourceIn, clip.absoluteStart, src]);
+  }, [active, currentTime, isPlaying, renderMode, clip, src]);
 
   const isVideo = clip.kind === 'video';
   const common = {
@@ -291,17 +366,23 @@ function MediaClipElement({
         {...common}
         className={`doc-player__media-video${active ? ' doc-player__media-video--active' : ''}`}
         data-video-placement={clip.placement ?? 'default'}
-        muted={renderMode || muted}
+        // A processed companion audio entry plays this clip's sound instead.
+        muted={renderMode || muted || clip.audioMuted === true}
         playsInline
-        style={mediaVideoStyle({
-          presentation,
-          pipSize,
-          pipShape,
-          pipPosition,
-          pipOrientation,
-          pipFrameStyle,
-          active,
-        })}
+        // Export reads the crop from here; the live view crops via object-view-box.
+        {...(clip.crop ? { 'data-crop': serializeMediaCrop(clip.crop) } : {})}
+        style={{
+          ...mediaVideoStyle({
+            presentation,
+            pipSize,
+            pipShape,
+            pipPosition,
+            pipOrientation,
+            pipFrameStyle,
+            active,
+          }),
+          ...cropStyle(clip.crop),
+        }}
       />
     );
   }

@@ -16,6 +16,7 @@
 @import '../jsonEditor/json-editor.css';
 @import '../imageEditor/image-editor.css';
 @import './image-edit-affordance.css';
+@import './media-edit.css';
 @import './diagram.css';
 @import './ascii-diagram.css';
 @import './mermaid-diagram.css';

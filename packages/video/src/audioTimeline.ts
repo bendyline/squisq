@@ -18,7 +18,7 @@
  *    (silent leading frames) keeps audio in sync.
  */
 
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, MediaScheduleOptions, ScheduledClip } from '@bendyline/squisq/schemas';
 import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import { flattenRenderableBlocks, materializeBlockLayers } from '@bendyline/squisq/doc';
 
@@ -38,7 +38,20 @@ export interface AudioTimelineClip {
    * authored audio/narration source, whose decode failure remains an error.
    */
   sourceKind?: 'video';
+  /** Clip gain in dB (media-edit recipe). Omitted means unity. */
+  gainDb?: number;
+  /**
+   * Linear fade-in over the first seconds of this clip. Also set to a few
+   * milliseconds on the inner edges of a cut clip's segments, so a cut never
+   * clicks.
+   */
+  fadeInSec?: number;
+  /** Linear fade-out over the last seconds of this clip (see {@link fadeInSec}). */
+  fadeOutSec?: number;
 }
+
+/** De-click fade applied at the inner edges of a cut clip's segments. */
+export const CUT_EDGE_FADE_SEC = 0.01;
 
 export interface ComputeAudioTimelineOptions {
   /**
@@ -47,6 +60,27 @@ export interface ComputeAudioTimelineOptions {
    * explicitly retain the legacy audio-only behavior.
    */
   includeVideoAudio?: boolean;
+  /**
+   * Processed-audio lookup forwarded to `resolveMediaSchedule`. With a render
+   * available, an edited clip's audio comes from its render (and a video's own
+   * audio track is left out). Omitted → original audio everywhere.
+   */
+  processedAudio?: MediaScheduleOptions['processedAudio'];
+}
+
+/** Recipe-driven gain and fades of one scheduled entry, as timeline fields. */
+function clipDynamics(clip: ScheduledClip): Partial<AudioTimelineClip> {
+  const out: Partial<AudioTimelineClip> = {};
+  if (clip.gain != null && clip.gain !== 0) out.gainDb = clip.gain;
+  let fadeIn = clip.fadeIn ?? 0;
+  let fadeOut = clip.fadeOut ?? 0;
+  if (clip.segment) {
+    if (clip.segment.index > 0) fadeIn = Math.max(fadeIn, CUT_EDGE_FADE_SEC);
+    if (clip.segment.index < clip.segment.count - 1) fadeOut = Math.max(fadeOut, CUT_EDGE_FADE_SEC);
+  }
+  if (fadeIn > 0) out.fadeInSec = fadeIn;
+  if (fadeOut > 0) out.fadeOutSec = fadeOut;
+  return out;
 }
 
 /**
@@ -84,8 +118,14 @@ export function computeAudioTimeline(
   }
 
   // ── Timed media clips: absolute positions from the shared schedule. ──
-  for (const clip of resolveMediaSchedule(doc)) {
+  const schedule = resolveMediaSchedule(
+    doc,
+    options.processedAudio ? { processedAudio: options.processedAudio } : undefined,
+  );
+  for (const clip of schedule) {
     if (clip.kind !== 'audio' && !includeVideoAudio) continue;
+    // A processed companion entry carries this video's audio instead.
+    if (clip.kind === 'video' && clip.audioMuted) continue;
     // Guard the endpoints before subtracting: `NaN <= 0` is false, so a NaN
     // duration would otherwise sail past the positivity check and be emitted.
     if (!Number.isFinite(clip.absoluteStart) || !Number.isFinite(clip.absoluteEnd)) continue;
@@ -97,6 +137,7 @@ export function computeAudioTimeline(
       sourceInSec: safeSeconds(clip.sourceIn),
       durationSec,
       ...(clip.kind === 'video' ? { sourceKind: 'video' as const } : {}),
+      ...clipDynamics(clip),
     });
   }
 

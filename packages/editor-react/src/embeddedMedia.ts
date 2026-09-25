@@ -9,7 +9,20 @@
  */
 
 import { parseTimeSeconds } from '@bendyline/squisq/markdown';
-import type { Block, Doc, ScheduledClip } from '@bendyline/squisq/schemas';
+import {
+  createMediaTimeMap,
+  mediaEditValuesFromAttributes,
+  parseMediaEdits,
+} from '@bendyline/squisq/mediaEdit';
+import {
+  scheduleMediaClip,
+  type Block,
+  type Doc,
+  type MediaClip,
+  type MediaEdits,
+  type MediaScheduleOptions,
+  type ScheduledClip,
+} from '@bendyline/squisq/schemas';
 
 const VIDEO_EXT = new Set(['webm', 'mp4', 'mov', 'm4v', 'ogv']);
 const AUDIO_EXT = new Set(['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus']);
@@ -26,6 +39,11 @@ export function mediaKindFromUrl(url: string): 'audio' | 'video' | null {
 export interface EmbeddedMedia {
   src: string;
   kind: 'audio' | 'video';
+  /**
+   * How the media is written: a standalone `<audio>`/`<video>` tag (which can
+   * carry timing and edit-recipe attributes) or a markdown link/image.
+   */
+  form: 'html' | 'link';
   /** 1-based source line of the embed, for re-timing / relocation. */
   sourceLine?: number;
   /** Block-relative delay authored on an inline media element. */
@@ -33,6 +51,8 @@ export interface EmbeddedMedia {
   /** Source-media in/out points authored on an inline media element. */
   clipStart?: number;
   clipEnd?: number;
+  /** Edit recipe authored on an inline media element. */
+  edits?: MediaEdits;
 }
 
 function mediaTimeAttribute(
@@ -65,7 +85,7 @@ export function collectEmbeddedMedia(block: Block): EmbeddedMedia[] {
     // Markdown image/link to a media file.
     if ((n.type === 'image' || n.type === 'link') && typeof n.url === 'string') {
       const kind = mediaKindFromUrl(n.url);
-      if (kind) out.push({ src: n.url, kind, sourceLine: here });
+      if (kind) out.push({ src: n.url, kind, form: 'link', sourceLine: here });
     }
 
     // Raw HTML `<video>` / `<audio>` element (recorder output). The src can be
@@ -86,13 +106,16 @@ export function collectEmbeddedMedia(block: Block): EmbeddedMedia[] {
         const startAt = mediaTimeAttribute(n.attributes, kind, 'start-at');
         const clipStart = mediaTimeAttribute(n.attributes, kind, 'clip-start');
         const clipEnd = mediaTimeAttribute(n.attributes, kind, 'clip-end');
+        const edits = parseMediaEdits(mediaEditValuesFromAttributes(kind, n.attributes ?? {}));
         out.push({
           src,
           kind,
+          form: 'html',
           sourceLine: here,
           ...(startAt != null ? { startAt } : {}),
           ...(clipStart != null ? { clipStart } : {}),
           ...(clipEnd != null ? { clipEnd } : {}),
+          ...(edits ? { edits } : {}),
         });
       }
     }
@@ -114,7 +137,11 @@ export function resolveEmbeddedMediaTiming(
   const sourceIn = Math.max(0, media.clipStart ?? 0);
   const absoluteStart = block.startTime + startAt;
   const blockEnd = block.startTime + block.duration;
-  const authoredLength = media.clipEnd == null ? null : Math.max(0, media.clipEnd - sourceIn);
+  const authoredLength =
+    media.clipEnd == null
+      ? null
+      : createMediaTimeMap({ clipStart: sourceIn, clipEnd: media.clipEnd, cuts: media.edits?.cuts })
+          .playedDuration;
   const absoluteEnd =
     authoredLength == null ? blockEnd : Math.min(blockEnd, absoluteStart + authoredLength);
   return {
@@ -129,22 +156,37 @@ export function resolveEmbeddedMediaTiming(
  * timeline playback. Embedded media is block-scoped; timing data attributes
  * can delay/trim a clip while keeping its HTML element in the document.
  */
-export function collectEmbeddedMediaSchedule(doc: Doc): ScheduledClip[] {
+export function collectEmbeddedMediaSchedule(
+  doc: Doc,
+  opts?: MediaScheduleOptions,
+): ScheduledClip[] {
   const schedule: ScheduledClip[] = [];
 
   const visit = (blocks: Block[]): void => {
     for (const block of blocks) {
       collectEmbeddedMedia(block).forEach((media, index) => {
         const timing = resolveEmbeddedMediaTiming(block, media);
-        schedule.push({
+        const clip: MediaClip = {
           id: `embedded:${block.id}:${index}`,
-          kind: media.kind,
           src: media.src,
-          ...timing,
+          kind: media.kind,
+          startAt: media.startAt ?? 0,
           anchor: 'block',
-          blockId: block.id,
+          ...(media.clipStart != null ? { clipStart: timing.sourceIn } : {}),
+          ...(media.clipEnd != null ? { clipEnd: media.clipEnd } : {}),
+          ...(media.edits ? { edits: media.edits } : {}),
           ...(media.sourceLine != null ? { sourceLine: media.sourceLine } : {}),
-        });
+        };
+        schedule.push(
+          ...scheduleMediaClip(
+            clip,
+            timing.absoluteStart,
+            timing.absoluteEnd,
+            'block',
+            block.id,
+            opts,
+          ),
+        );
       });
       if (block.children?.length) visit(block.children);
     }
@@ -176,6 +218,7 @@ export function collectEmbeddedVideoSchedule(doc: Doc): ScheduledClip[] {
 export function collectTimelinePlaybackSchedule(
   doc: Doc,
   scheduled: ScheduledClip[],
+  opts?: MediaScheduleOptions,
 ): ScheduledClip[] {
   const scheduledSources = new Set(scheduled.map((clip) => clip.src));
   const narration = doc.audio.segments
@@ -195,5 +238,5 @@ export function collectTimelinePlaybackSchedule(
       (clip): clip is ScheduledClip => clip !== null && clip.absoluteEnd > clip.absoluteStart,
     );
 
-  return [...scheduled, ...collectEmbeddedMediaSchedule(doc), ...narration];
+  return [...scheduled, ...collectEmbeddedMediaSchedule(doc, opts), ...narration];
 }

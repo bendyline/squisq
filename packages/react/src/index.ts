@@ -100,6 +100,7 @@ export type {
   VideoPresentation,
   SlideNavActions,
   SquisqRenderAPI,
+  RenderVideoFrameSelector,
   RenderBlockInfo,
   RenderAudioSegmentInfo,
   RenderCaptionInfo,

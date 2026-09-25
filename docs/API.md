@@ -21,6 +21,7 @@ cçç# Squisq API Reference
   - [Versions](#subpath-versions)
   - [JSON Form](#subpath-jsonform)
   - [Image Edit](#subpath-imageedit)
+  - [Media Edit](#subpath-media-edit)
   - [Icons](#subpath-icons)
   - [Recommend](#subpath-recommend)
   - [Narration](#subpath-narration)
@@ -1352,6 +1353,61 @@ class ImageEditVersionManager {
 
 ---
 
+### Subpath: Media Edit
+
+**Import:** `@bendyline/squisq/mediaEdit` — non-destructive audio/video edits:
+the recipe grammar carried on `{[audio|video …]}` annotations and
+`data-squisq-{audio|video}-*` attributes, the trim + cuts time map, and the
+`.mediaEdits/` render-store layout. Host contract: [`docs/media-edits.md`](media-edits.md).
+
+```ts
+type MediaFxOpId = 'highpass' | 'denoise' | 'debreath' | 'loudness'; // fixed chain order
+interface MediaFxChain {
+  ops: { id: MediaFxOpId; value: number }[];
+  unknown: string[];
+}
+interface MediaEdits {
+  fx?: MediaFxChain;
+  cuts?: { start: number; end: number }[]; // removed SOURCE ranges, normalized
+  gain?: number; // dB
+  fadeIn?: number;
+  fadeOut?: number;
+  crop?: { x: number; y: number; w: number; h: number }; // normalized, video only
+  group?: string;
+}
+
+function parseMediaEdits(values: MediaEditParamValues): MediaEdits | undefined;
+function serializeMediaEdits(edits?: MediaEdits): Record<MediaEditParamKey, string | null>;
+function mediaEditValuesFromParams(params: Record<string, string>): MediaEditParamValues;
+function mediaEditValuesFromAttributes(
+  kind: 'audio' | 'video',
+  attrs: Record<string, string>,
+): MediaEditParamValues;
+function mediaEditHtmlAttribute(kind: 'audio' | 'video', key: MediaEditParamKey): string;
+
+// trim + cuts → played time (one definition, used by schedule, narration, timeline)
+function createMediaTimeMap(input: { clipStart?; clipEnd?; cuts?; sourceDuration? }): MediaTimeMap;
+
+// render store: .mediaEdits/<stem>.<key>.<ext> + .json manifest
+function mediaRenderKey(src: string, fx: MediaFxChain): string; // 12 hex
+function buildMediaRenderIndex(
+  entries: { name: string; size: number }[],
+): Map<string, MediaRenderEntry>;
+function mediaClipRenderKey(clip: MediaClip): string | null;
+function mediaRenderStaleness(manifest, current): 'source-changed' | 'engine-upgraded' | null;
+function selectMediaRendersForGc(index, referencedKeys, manifests, now?, olderThanDays?): string[];
+```
+
+`MediaClip.edits` carries a parsed recipe. `resolveMediaSchedule(doc, { processedAudio })`
+(in `/schemas`) expands cuts into contiguous `ScheduledClip` segments
+(`segment: { groupId, index, count }`), carries `gain` / `fadeIn` / `fadeOut` / `crop`,
+and — when `processedAudio(clip)` returns a render path — substitutes it for an
+audio clip, or marks a video `audioMuted` and emits a companion audio entry
+(`derivedFrom`). `scheduleMediaClip` schedules one clip the same way for hosts
+with their own media sources.
+
+---
+
 ### Subpath: Icons
 
 **Import:** `@bendyline/squisq/icons` — FontAwesome Free catalog + resolution.
@@ -1685,6 +1741,7 @@ interface DocPlayerProps {
   renderMode?: boolean; // default false — headless capture mode
   animationsEnabled?: boolean; // default true — false removes layer animations + block transitions
   onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
+  renderVideoFrameSelector?: RenderVideoFrameSelector; // render mode: host-supplied video frames (declined videos are seeked)
   autoPlay?: boolean; // default false
   loop?: boolean; // default false — restart automatically in Video mode
   onEnded?: () => void;
@@ -1956,6 +2013,9 @@ interface SquisqRenderAPI {
   hideCover(): Promise<void>;
   hasCoverBlock(): boolean;
 }
+// Resolve true once `video`'s pixels for `targetTime` are ready to draw (the
+// host draws them in place of the element), or false to let the player seek it.
+type RenderVideoFrameSelector = (video: HTMLVideoElement, targetTime: number) => Promise<boolean>;
 function formatTime(seconds: number): string; // "M:SS"
 function getAnimationStyle(
   animation: Animation | undefined,

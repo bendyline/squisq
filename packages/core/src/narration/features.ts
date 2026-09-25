@@ -14,55 +14,18 @@
 
 import type { FeatureConfig, FrameFeatures } from './types.js';
 import { DEFAULT_FEATURE_CONFIG } from './types.js';
-
-interface BiquadCoeffs {
-  b0: number;
-  b1: number;
-  b2: number;
-  a1: number;
-  a2: number;
-}
-
-interface BiquadState {
-  x1: number;
-  x2: number;
-  y1: number;
-  y2: number;
-}
+import {
+  biquadRun,
+  highpassCoeffs,
+  lowpassCoeffs,
+  type BiquadCoeffs,
+  type BiquadState,
+} from '../mediaEdit/dsp/biquad.js';
 
 export interface BandpassState {
   coeffs: { hp: BiquadCoeffs; lp: BiquadCoeffs };
   hp: BiquadState;
   lp: BiquadState;
-}
-
-function highpassCoeffs(sampleRate: number, freqHz: number): BiquadCoeffs {
-  const w0 = (2 * Math.PI * freqHz) / sampleRate;
-  const cosW0 = Math.cos(w0);
-  // alpha = sin(w0) / (2Q) with Butterworth Q = 1/√2.
-  const alpha = Math.sin(w0) / (2 * Math.SQRT1_2);
-  const a0 = 1 + alpha;
-  return {
-    b0: (1 + cosW0) / 2 / a0,
-    b1: -(1 + cosW0) / a0,
-    b2: (1 + cosW0) / 2 / a0,
-    a1: (-2 * cosW0) / a0,
-    a2: (1 - alpha) / a0,
-  };
-}
-
-function lowpassCoeffs(sampleRate: number, freqHz: number): BiquadCoeffs {
-  const w0 = (2 * Math.PI * freqHz) / sampleRate;
-  const cosW0 = Math.cos(w0);
-  const alpha = Math.sin(w0) / (2 * Math.SQRT1_2);
-  const a0 = 1 + alpha;
-  return {
-    b0: (1 - cosW0) / 2 / a0,
-    b1: (1 - cosW0) / a0,
-    b2: (1 - cosW0) / 2 / a0,
-    a1: (-2 * cosW0) / a0,
-    a2: (1 - alpha) / a0,
-  };
 }
 
 /** Create bandpass state for a sample rate (corners derived at init). */
@@ -76,26 +39,6 @@ export function createBandpass(
     hp: { x1: 0, x2: 0, y1: 0, y2: 0 },
     lp: { x1: 0, x2: 0, y1: 0, y2: 0 },
   };
-}
-
-function biquadRun(
-  coeffs: BiquadCoeffs,
-  state: BiquadState,
-  input: Float32Array,
-  output: Float32Array,
-): BiquadState {
-  let { x1, x2, y1, y2 } = state;
-  const { b0, b1, b2, a1, a2 } = coeffs;
-  for (let i = 0; i < input.length; i++) {
-    const x0 = input[i];
-    const y0 = b0 * x0 + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
-    output[i] = y0;
-    x2 = x1;
-    x1 = x0;
-    y2 = y1;
-    y1 = y0;
-  }
-  return { x1, x2, y1, y2 };
 }
 
 /**

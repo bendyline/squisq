@@ -37,6 +37,7 @@ const repositoryOverrides = {
   html2canvas: 'https://github.com/niklasvh/html2canvas',
   jszip: 'https://github.com/Stuk/jszip',
   localforage: 'https://github.com/localForage/localForage',
+  mediabunny: 'https://github.com/Vanilagy/mediabunny',
   mermaid: 'https://github.com/mermaid-js/mermaid',
   'monaco-editor': 'https://github.com/microsoft/monaco-editor',
   'mp4-muxer': 'https://github.com/Vanilagy/mp4-muxer',
@@ -116,7 +117,16 @@ that package version:
 
 mp4-muxer is bundled as a private runtime implementation detail so its legacy
 global WebCodecs declaration dependencies are not installed for consumers. Its
-exact license text is shipped in THIRD_PARTY_LICENSES.txt.`,
+exact license text is shipped in THIRD_PARTY_LICENSES.txt.
+
+## mediabunny
+
+mediabunny demuxes and decodes video sources during export. It is bundled for
+the same reason as mp4-muxer. mediabunny is distributed under the Mozilla
+Public License 2.0; this package ships its files unmodified, and their Source
+Code Form is available from the mediabunny npm package (which includes \`src/\`)
+at the version listed above and from https://github.com/Vanilagy/mediabunny.
+The complete MPL-2.0 text is shipped in THIRD_PARTY_LICENSES.txt.`,
   cli: `Copyright and complete license texts for these dependencies are included in
 their respective npm distributions and source repositories.`,
 };
@@ -142,7 +152,7 @@ const configs = {
   video: { heading: 'Runtime dependencies' },
   'video-react': {
     heading: 'Runtime, peer, and bundled dependencies',
-    bundled: ['mp4-muxer'],
+    bundled: ['mediabunny', 'mp4-muxer'],
     peers: true,
   },
   cli: { heading: 'Runtime dependencies' },

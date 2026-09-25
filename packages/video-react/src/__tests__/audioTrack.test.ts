@@ -16,6 +16,7 @@ import {
   audioBufferToWav,
   renderAudioTimeline,
   encodeAacTrack,
+  clipGainEnvelope,
 } from '../audioTrack.js';
 
 afterEach(() => {
@@ -265,5 +266,69 @@ describe('audioBufferToWav', () => {
     expect(ascii(36, 4)).toBe('data');
     // 44-byte header + 2 channels * 2 bytes * 4 frames = 60 bytes.
     expect(wav.byteLength).toBe(44 + frames * 2 * 2);
+  });
+});
+
+describe('clipGainEnvelope', () => {
+  it('is null for a unity clip without fades', () => {
+    expect(clipGainEnvelope({}, 2, 5)).toBeNull();
+    expect(clipGainEnvelope({ gainDb: 0 }, 2, 5)).toBeNull();
+  });
+
+  it('converts dB to linear gain and ramps the fades', () => {
+    const envelope = clipGainEnvelope({ gainDb: -6, fadeInSec: 1, fadeOutSec: 2 }, 10, 5)!;
+    const level = Math.pow(10, -6 / 20);
+    expect(envelope).toEqual([
+      { time: 10, value: 0 },
+      { time: 11, value: level },
+      { time: 13, value: level },
+      { time: 15, value: 0 },
+    ]);
+  });
+
+  it('scales fades that are longer than the clip', () => {
+    const envelope = clipGainEnvelope({ fadeInSec: 3, fadeOutSec: 3 }, 0, 2)!;
+    expect(envelope.map((p) => p.time)).toEqual([0, 1, 1, 2]);
+  });
+});
+
+describe('renderAudioTimeline — gain automation', () => {
+  it('routes an edited clip through a GainNode with its envelope', async () => {
+    const calls: string[] = [];
+    class GainOfflineAudioContext {
+      destination = { id: 'dest' };
+      async decodeAudioData(): Promise<AudioBuffer> {
+        return { id: 'buf' } as unknown as AudioBuffer;
+      }
+      createBufferSource(): AudioBufferSourceNode {
+        return {
+          buffer: null,
+          connect: (target: { id?: string }) => calls.push(`source→${target.id ?? '?'}`),
+          disconnect: vi.fn(),
+          start: (...args: number[]) => calls.push(`start ${args.join(',')}`),
+        } as unknown as AudioBufferSourceNode;
+      }
+      createGain(): GainNode {
+        return {
+          id: 'gain',
+          gain: {
+            setValueAtTime: (v: number, t: number) => calls.push(`set ${v}@${t}`),
+            linearRampToValueAtTime: (v: number, t: number) => calls.push(`ramp ${v}@${t}`),
+          },
+          connect: (target: { id?: string }) => calls.push(`gain→${target.id ?? '?'}`),
+        } as unknown as GainNode;
+      }
+      async startRendering(): Promise<AudioBuffer> {
+        return { id: 'out' } as unknown as AudioBuffer;
+      }
+    }
+    vi.stubGlobal('OfflineAudioContext', GainOfflineAudioContext);
+
+    await renderAudioTimeline(
+      [{ src: 'a.webm', startSec: 1, sourceInSec: 0, durationSec: 4, fadeInSec: 0.5 }],
+      new Map([['a.webm', new Uint8Array([1]).buffer]]),
+      5,
+    );
+    expect(calls).toEqual(['set 0@1', 'ramp 1@1.5', 'source→gain', 'gain→dest', 'start 1,0,4']);
   });
 });

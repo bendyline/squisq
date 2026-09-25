@@ -8,6 +8,9 @@
  * `audio/foo.webm` returns a blob URL.
  */
 import { Node, mergeAttributes } from '@tiptap/core';
+import { mediaEditNodeAttributes } from './mediaEditAttributes.js';
+import { MediaEditButton } from '../mediaEdit/MediaEditButton';
+import { usePlaybackSrc } from '../mediaEdit/usePlaybackSrc';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import { useResolvedMediaSrc } from './useResolvedMediaSrc.js';
@@ -31,12 +34,28 @@ declare module '@tiptap/core' {
 }
 
 function AudioNodeView({ node }: NodeViewProps) {
-  const { src, controls } = node.attrs as { src: string; controls: boolean };
-  const resolvedSrc = useResolvedMediaSrc(src ?? '');
+  const { src, controls, editFx } = node.attrs as {
+    src: string;
+    controls: boolean;
+    editFx: string | null;
+  };
+  // With a cleanup recipe rendered, play the processed audio in place.
+  const playbackSrc = usePlaybackSrc(src ?? '', 'audio', editFx);
+  const resolvedSrc = useResolvedMediaSrc(playbackSrc);
 
   return (
-    <NodeViewWrapper as="span" className="squisq-inline-audio-player" data-drag-handle draggable>
+    <NodeViewWrapper
+      as="span"
+      className="squisq-inline-audio-player"
+      data-drag-handle
+      draggable
+      data-squisq-media-src={src}
+      data-squisq-media-kind="audio"
+    >
       <audio src={resolvedSrc || undefined} controls={controls} preload="metadata" />
+      <span className="squisq-audio-node-toolbar" contentEditable={false}>
+        <MediaEditButton src={src} kind="audio" fx={editFx} />
+      </span>
     </NodeViewWrapper>
   );
 }
@@ -84,6 +103,8 @@ export const TiptapAudio = Node.create<TiptapAudioOptions>({
         renderHTML: (attrs) =>
           attrs.clipEnd != null ? { 'data-squisq-audio-clip-end': String(attrs.clipEnd) } : {},
       },
+      // Edit recipe (fx, cuts, gain, fades, group) — round-tripped verbatim.
+      ...mediaEditNodeAttributes('audio'),
     };
   },
 

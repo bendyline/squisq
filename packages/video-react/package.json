@@ -53,6 +53,10 @@
     "./encoder": {
       "types": "./dist/encoder/index.d.ts",
       "import": "./dist/encoder/index.js"
+    },
+    "./media-edit": {
+      "types": "./dist/media-edit/index.d.ts",
+      "import": "./dist/media-edit/index.js"
     }
   },
   "files": [
@@ -79,14 +83,16 @@
     "@ffmpeg/core": "0.12.9",
     "@ffmpeg/ffmpeg": "0.12.15",
     "@ffmpeg/util": "0.12.2",
+    "@shiguredo/rnnoise-wasm": "2025.1.5",
     "html2canvas": "1.4.1"
   },
   "devDependencies": {
     "@types/react": "18.3.28",
     "@types/react-dom": "18.3.7",
+    "mediabunny": "1.57.0",
+    "mp4-muxer": "5.2.2",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "mp4-muxer": "5.2.2",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
   },

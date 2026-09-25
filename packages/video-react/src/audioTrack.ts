@@ -125,6 +125,42 @@ function resolveOfflineAudioContext(): OfflineCtor {
   return ctor;
 }
 
+/** One point of a clip's gain automation: absolute context time → linear gain. */
+export interface GainPoint {
+  time: number;
+  value: number;
+}
+
+/**
+ * Gain automation for a clip placed at `when` for `duration` seconds: its
+ * recipe gain (dB → linear) with linear fade ramps at either end. Returns null
+ * for a clip at unity with no fades, so plain clips skip the GainNode. Fades
+ * longer than the clip are scaled down proportionally.
+ */
+export function clipGainEnvelope(
+  clip: Pick<AudioTimelineClip, 'gainDb' | 'fadeInSec' | 'fadeOutSec'>,
+  when: number,
+  duration: number,
+): GainPoint[] | null {
+  const level = clip.gainDb ? Math.pow(10, clip.gainDb / 20) : 1;
+  let fadeIn = Math.max(0, clip.fadeInSec ?? 0);
+  let fadeOut = Math.max(0, clip.fadeOutSec ?? 0);
+  if (level === 1 && fadeIn === 0 && fadeOut === 0) return null;
+  if (duration <= 0) return [{ time: when, value: level }];
+  if (fadeIn + fadeOut > duration) {
+    const scale = duration / (fadeIn + fadeOut);
+    fadeIn *= scale;
+    fadeOut *= scale;
+  }
+  const points: GainPoint[] = [{ time: when, value: fadeIn > 0 ? 0 : level }];
+  if (fadeIn > 0) points.push({ time: when + fadeIn, value: level });
+  if (fadeOut > 0) {
+    points.push({ time: when + duration - fadeOut, value: level });
+    points.push({ time: when + duration, value: 0 });
+  }
+  return points;
+}
+
 /**
  * Mix a list of timeline clips into one `AudioBuffer`.
  *
@@ -176,10 +212,21 @@ export async function renderAudioTimeline(
       }
       const node = ctx.createBufferSource();
       node.buffer = buffer;
-      node.connect(ctx.destination);
       const when = Math.max(0, clip.startSec);
       const offset = Math.max(0, clip.sourceInSec);
       const duration = Math.max(0, clip.durationSec);
+      const envelope = clipGainEnvelope(clip, when, duration);
+      if (envelope) {
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(envelope[0].value, envelope[0].time);
+        for (const point of envelope.slice(1)) {
+          gain.gain.linearRampToValueAtTime(point.value, point.time);
+        }
+        node.connect(gain);
+        gain.connect(ctx.destination);
+      } else {
+        node.connect(ctx.destination);
+      }
       node.start(when, offset, duration);
       scheduledNodes.push(node);
     }

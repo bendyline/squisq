@@ -65,6 +65,8 @@ import { RecorderEntry } from './RecorderEntry';
 import { DropZoneOverlay } from './DropZoneOverlay';
 import { TooltipLayer } from './Tooltip';
 import { EditorContextMenuProvider } from './EditorContextMenu';
+import { MediaEditContextMenuItems } from './mediaEdit/MediaEditContextMenuItems';
+import { MediaEditModal } from './mediaEdit/MediaEditModal';
 import { useFileDrop, type DropTarget } from './hooks/useFileDrop';
 import {
   classifyFile,
@@ -103,6 +105,11 @@ import type {
   RefObject,
 } from 'react';
 import { MediaContext, useMediaClipDurations } from '@bendyline/squisq-react';
+import {
+  createMediaEditRenderManager,
+  useProcessedAudio,
+  type MediaEditRenderManager,
+} from '@bendyline/squisq-video-react/media-edit';
 import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { useModalDialog } from './modal/useModalDialog';
@@ -173,6 +180,13 @@ export interface EditorShellProps {
   maxHeight?: string;
   /** Optional MediaProvider for the Files panel. When set (even to null), a Files toggle appears in the toolbar. */
   mediaProvider?: MediaProvider | null;
+  /**
+   * Processed-audio render manager for media-edit recipes (denoise,
+   * de-breath, loudness — see docs/media-edits.md). Omitted: the shell creates
+   * one for its media provider. Pass a host-owned manager to share renders
+   * with the host's export flow; pass `null` to disable media edits.
+   */
+  mediaEditRenders?: MediaEditRenderManager | null;
   /**
    * The workspace-scoped `ContentContainer` for this document — the
    * folder that contains the doc, its `_files/` sidecar, sibling
@@ -644,6 +658,7 @@ export function EditorShell({
   minHeight,
   maxHeight,
   mediaProvider,
+  mediaEditRenders,
   workspaceContainer,
   allowVersioning = false,
   versionBasename,
@@ -722,6 +737,18 @@ export function EditorShell({
     return undefined;
   }, [mediaProvider, effectiveContainer]);
 
+  // Media edits: a host-owned manager, or one this shell owns for its provider.
+  const ownedMediaEditRenders = useMemo(
+    () =>
+      mediaEditRenders === undefined && effectiveMediaProvider
+        ? createMediaEditRenderManager({ mediaProvider: effectiveMediaProvider })
+        : null,
+    [mediaEditRenders, effectiveMediaProvider],
+  );
+  useEffect(() => () => ownedMediaEditRenders?.dispose(), [ownedMediaEditRenders]);
+  const effectiveMediaEditRenders =
+    mediaEditRenders === undefined ? ownedMediaEditRenders : mediaEditRenders;
+
   // Show the toggle when explicitly opted in, or when mediaProvider prop was passed at all
   const filesToggleEnabled = showFilesToggle ?? effectiveMediaProvider !== undefined;
 
@@ -745,6 +772,7 @@ export function EditorShell({
         versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
         onSaveVersion={onSaveVersion}
         mediaProvider={effectiveMediaProvider}
+        mediaEditRenders={effectiveMediaEditRenders}
         imageDisplayMode={imageDisplayMode}
         mentionProvider={mentionProvider}
         proofing={proofing}
@@ -994,7 +1022,11 @@ function EditorShellInner({
     bumpMediaRevision,
     mediaRevision,
     allowRecording,
+    mediaEditRenders,
+    mediaEditTarget,
+    closeMediaEdit,
   } = useEditorContext();
+  const processedAudio = useProcessedAudio(mediaEditRenders);
   // Dual-catalog custom themes (doc + browser library), mirroring how
   // CustomTemplateProvider is fed. Wraps the preview subtree so the theme
   // picker + designer can read/write both pools.
@@ -1052,9 +1084,10 @@ function EditorShellInner({
       timelineDoc
         ? resolveMediaSchedule(timelineDoc, {
             intrinsicDuration: (clip) => timelineClipDurations.get(clip.src),
+            processedAudio,
           })
         : [],
-    [timelineDoc, timelineClipDurations],
+    [timelineDoc, timelineClipDurations, processedAudio],
   );
   const timelineVideoSchedule = useMemo(
     () =>
@@ -1758,10 +1791,14 @@ function EditorShellInner({
           shellTheme={colorScheme}
         />
       )}
+      {mediaEditTarget !== null && (
+        <MediaEditModal target={mediaEditTarget} onClose={closeMediaEdit} />
+      )}
     </div>
   );
   return (
     <EditorContextMenuProvider rootRef={shellRef} readOnly={readOnly}>
+      <MediaEditContextMenuItems />
       {shell}
     </EditorContextMenuProvider>
   );

@@ -5,14 +5,15 @@
  * when no provider is available, the path is absolute, or resolution
  * fails). Used by the Tiptap video / audio NodeViews so a relative
  * `audio/foo.webm` plays from the workspace container instead of
- * 404-ing against the dev server.
+ * 404-ing against the dev server. While a relative path is still
+ * resolving it returns '' — the raw path would be requested from the
+ * page origin (and 404) before the provider's URL arrives.
  */
 import { useEffect, useState } from 'react';
 import { useEditorContext } from '../EditorContext.js';
 
 export function useResolvedMediaSrc(src: string): string {
   const { mediaProvider, mediaRevision } = useEditorContext();
-  const [resolved, setResolved] = useState(src);
 
   const isRelative =
     !!src &&
@@ -21,6 +22,7 @@ export function useResolvedMediaSrc(src: string): string {
     !src.startsWith('https:') &&
     !src.startsWith('data:') &&
     !src.startsWith('/');
+  const [resolved, setResolved] = useState(isRelative && mediaProvider ? '' : src);
 
   useEffect(() => {
     if (!mediaProvider || !isRelative) {

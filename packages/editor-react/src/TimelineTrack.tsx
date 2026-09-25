@@ -22,6 +22,8 @@ import {
   type ScheduledClip,
 } from '@bendyline/squisq/schemas';
 import { flattenBlocks, DEFAULT_THEME, getPinnedBlockMeta } from '@bendyline/squisq/doc';
+import { createMediaTimeMap } from '@bendyline/squisq/mediaEdit';
+import { useProcessedAudio } from '@bendyline/squisq-video-react/media-edit';
 import { MediaClipLayer, MediaContext } from '@bendyline/squisq-react';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettingsOptional } from './PreviewControls';
@@ -43,6 +45,7 @@ import { BlockThumbnail } from './TimelineBlockPreview';
 import { resolveBlockVisual } from './resolveBlockVisual';
 import { useTimelineClock, type TimelineClock } from './useTimelineClock';
 import { timelineMediaLabel } from './timelineMediaLabel';
+import { timelineBars } from './timelineBars';
 import { readHeadingLineTransition } from './headingTransition';
 import { useResolvedMediaSrc } from './tiptap/useResolvedMediaSrc';
 import {
@@ -226,7 +229,10 @@ export function TimelineTrack({
     activeBlockStartLine,
     mediaProvider,
     colorScheme,
+    mediaEditRenders,
+    openMediaEdit,
   } = useEditorContext();
+  const processedAudio = useProcessedAudio(mediaEditRenders);
   // Prefer the caller's (narration-timed) doc for geometry; fall back to the raw
   // parse. Source edits still resolve because both carry `sourceHeading` lines.
   const doc = docProp ?? contextDoc;
@@ -258,8 +264,8 @@ export function TimelineTrack({
   );
   const clips = schedule ?? derivedClips;
   const playbackClips = useMemo(
-    () => (doc ? collectTimelinePlaybackSchedule(doc, clips) : clips),
-    [clips, doc],
+    () => (doc ? collectTimelinePlaybackSchedule(doc, clips, { processedAudio }) : clips),
+    [clips, doc, processedAudio],
   );
   const total = useMemo(() => (doc ? getDocPlaybackDuration(doc) : 0), [doc]);
   const width = Math.max(total * pxPerSecond, 200);
@@ -532,8 +538,13 @@ export function TimelineTrack({
   } else if (itemMenu?.kind === 'video') {
     const clip = itemMenu.embedded
       ? null
-      : clips.find((candidate) => candidate.id === itemMenu.id && candidate.kind === 'video');
-    const raw = clip ? rawClipById.get(clip.id) : undefined;
+      : clips.find(
+          (candidate) =>
+            (candidate.segment?.groupId ?? candidate.id) === itemMenu.id &&
+            candidate.kind === 'video' &&
+            !candidate.derivedFrom,
+        );
+    const raw = clip ? rawClipById.get(clip.segment?.groupId ?? clip.id) : undefined;
     itemMenuTarget = {
       kind: 'video',
       key: itemMenu.id,
@@ -713,7 +724,10 @@ export function TimelineTrack({
           </div>
 
           <div className="squisq-timeline-media-tracks" aria-label="Media tracks">
-            {clips.map((c) => {
+            {/* One bar per authored clip: processed-audio companions play but are
+                not bars, and the segments of a cut clip draw as one bar with
+                a marker at each cut. */}
+            {timelineBars(clips).map(({ clip: c, cutMarks }) => {
               const length = c.absoluteEnd - c.absoluteStart;
               // Live geometry while dragging: follow a block-edge drag's shift,
               // or the clip's own move/resize (drag.preview is an absolute time).
@@ -726,7 +740,7 @@ export function TimelineTrack({
               }
               const editable = c.sourceLine != null && c.lockToBlock !== true;
               const specOf = (): ClipSpec => {
-                const raw = rawClipById.get(c.id);
+                const raw = rawClipById.get(c.segment?.groupId ?? c.id);
                 return raw
                   ? {
                       kind: raw.kind,
@@ -739,6 +753,7 @@ export function TimelineTrack({
                       clipStart: raw.clipStart,
                       clipEnd: raw.clipEnd,
                       spillover: raw.spillover,
+                      ...(raw.edits ? { edits: raw.edits } : {}),
                     }
                   : { kind: c.kind, src: c.src, clipStart: c.sourceIn };
               };
@@ -801,6 +816,14 @@ export function TimelineTrack({
                     <span className="squisq-timeline-clip-label">
                       {timelineMediaLabel(c.src, c.kind)}
                     </span>
+                    {cutMarks.map((at) => (
+                      <span
+                        key={at}
+                        className="squisq-timeline-cut-mark"
+                        style={{ left: (at - c.absoluteStart) * pxPerSecond }}
+                        aria-hidden
+                      />
+                    ))}
                     {c.kind === 'video' && c.sourceLine != null && (
                       <button
                         type="button"
@@ -832,8 +855,17 @@ export function TimelineTrack({
                         className="squisq-timeline-edge squisq-timeline-edge--right"
                         onPointerDown={(e) =>
                           beginDrag(e, 'clip-right', c.id, length, (len) => {
+                            // The bar shows played length; with cuts, map it back to a
+                            // source out-point through the clip's time map.
+                            const raw = rawClipById.get(c.id);
+                            const clipEnd = raw?.edits?.cuts?.length
+                              ? createMediaTimeMap({
+                                  clipStart: raw.clipStart,
+                                  cuts: raw.edits.cuts,
+                                }).playedToSource(len)
+                              : (c.sourceIn ?? 0) + len;
                             const next = setMediaClipInSource(markdownSource, c.sourceLine!, {
-                              clipEnd: (c.sourceIn ?? 0) + len,
+                              clipEnd,
                             });
                             if (next) setMarkdownSource(next);
                           })
@@ -1039,6 +1071,16 @@ export function TimelineTrack({
             const next = setMediaClipInSource(markdownSource, itemMenu.sourceLine, patch);
             if (next) setMarkdownSource(next);
           }}
+          {...(itemMenu.kind === 'video' && mediaEditRenders
+            ? {
+                onEditMedia: () =>
+                  openMediaEdit({
+                    src: itemMenu.src,
+                    kind: 'video',
+                    sourceLine: itemMenu.sourceLine,
+                  }),
+              }
+            : {})}
           onClose={() => setItemMenu(null)}
         />
       )}

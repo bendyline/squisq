@@ -16,6 +16,10 @@
  */
 
 import type { Block, Doc } from './Doc.js';
+import type { MediaCrop, MediaEdits } from '../mediaEdit/recipe.js';
+import { createMediaTimeMap, type MediaTimeMap } from '../mediaEdit/timeMap.js';
+
+export type { MediaCrop, MediaCut, MediaEdits } from '../mediaEdit/recipe.js';
 
 /**
  * How an authored video participates in the composed document frame.
@@ -82,6 +86,11 @@ export interface MediaClip {
    */
   anchor: 'block' | 'document';
   /**
+   * Non-destructive edit recipe (`fx`, `cuts`, `gain`, fades, `crop`,
+   * `group`). Absent for an unedited reference. See `@bendyline/squisq/mediaEdit`.
+   */
+  edits?: MediaEdits;
+  /**
    * 1-based source line of the authoring annotation, when derived from
    * markdown. Enables round-tripping edits (e.g. the timeline editor rewriting
    * `startAt`) back to the exact line. Absent for programmatically built clips.
@@ -134,6 +143,32 @@ export interface ScheduledClip {
   blockId?: string;
   /** 1-based source line of the authoring annotation, when known. */
   sourceLine?: number;
+  /** Clip gain in dB (from the recipe). */
+  gain?: number;
+  /** Fade-in seconds at this entry's start (first segment of a cut clip only). */
+  fadeIn?: number;
+  /** Fade-out seconds at this entry's end (last segment of a cut clip only). */
+  fadeOut?: number;
+  /** Normalized crop rectangle for a video clip. */
+  crop?: MediaCrop;
+  /**
+   * True when a video's own audio track must stay silent because a processed
+   * companion audio entry (see {@link ScheduledClip.derivedFrom}) plays in its place.
+   */
+  audioMuted?: boolean;
+  /**
+   * Set on the processed companion audio entry emitted for an edited video:
+   * the id of the clip whose audio it replaces. Timeline UIs hide these.
+   */
+  derivedFrom?: string;
+  /** The source reference before processed-audio substitution. */
+  originalSrc?: string;
+  /**
+   * Present when a clip with cuts was expanded into contiguous entries, one
+   * per kept source range. `groupId` is the authored clip's id; entries of
+   * one group play the same source back to back.
+   */
+  segment?: { groupId: string; index: number; count: number };
 }
 
 /** Depth-first flatten of the block tree (local copy to avoid a doc-layer dep). */
@@ -162,12 +197,34 @@ export interface MediaScheduleOptions {
    * block by design.
    */
   intrinsicDuration?: (clip: MediaClip) => number | undefined;
+  /**
+   * Optional lookup of a clip's processed (rendered `fx`) audio. When it
+   * returns a path, an audio clip plays that path instead of its source, and a
+   * video clip keeps its picture but mutes its own audio while a companion
+   * audio entry plays the processed track with identical timing. Renders are
+   * sample-aligned with the source, so no timing changes.
+   *
+   * Return undefined when no current render exists (the default when no
+   * lookup is wired): the clip then plays its original audio.
+   */
+  processedAudio?: (clip: MediaClip) => string | undefined;
 }
 
-/** Played length of a clip when known from its in/out points, else null. */
+/** Trim window + cuts of a clip, as a time map. */
+function clipTimeMap(clip: MediaClip, sourceDuration?: number): MediaTimeMap {
+  return createMediaTimeMap({
+    clipStart: clip.clipStart,
+    clipEnd: clip.clipEnd,
+    cuts: clip.edits?.cuts,
+    sourceDuration,
+  });
+}
+
+/** Played length of a clip when known from its in/out points (minus cuts), else null. */
 function clipLength(clip: MediaClip): number | null {
   if (clip.clipEnd == null) return null;
-  return Math.max(0, clip.clipEnd - (clip.clipStart ?? 0));
+  if (!clip.edits?.cuts?.length) return Math.max(0, clip.clipEnd - (clip.clipStart ?? 0));
+  return clipTimeMap(clip).playedDuration;
 }
 
 /**
@@ -185,8 +242,122 @@ function intrinsicPlayedLength(
   if (clip.clipEnd != null || clip.lockToBlock === true) return null;
   const intrinsic = opts?.intrinsicDuration?.(clip);
   if (intrinsic == null || !Number.isFinite(intrinsic) || intrinsic <= 0) return null;
-  const played = intrinsic - (clip.clipStart ?? 0);
+  const played = clip.edits?.cuts?.length
+    ? clipTimeMap(clip, intrinsic).playedDuration
+    : intrinsic - (clip.clipStart ?? 0);
   return played > 0 ? played : null;
+}
+
+/**
+ * Emit the scheduled entries for one clip occupying `[start, end)` on the doc
+ * timeline: one entry normally, one per kept source range when the recipe
+ * has cuts, plus a processed companion audio entry per video entry when
+ * {@link MediaScheduleOptions.processedAudio} has a render.
+ */
+function emitClip(
+  out: ScheduledClip[],
+  clip: MediaClip,
+  start: number,
+  end: number,
+  anchor: 'block' | 'document',
+  blockId: string | undefined,
+  opts: MediaScheduleOptions | undefined,
+): void {
+  const edits = clip.edits;
+  const processed = edits?.fx ? opts?.processedAudio?.(clip) : undefined;
+  const base: Omit<ScheduledClip, 'id' | 'absoluteStart' | 'absoluteEnd' | 'sourceIn'> = {
+    src: clip.src,
+    kind: clip.kind,
+    ...(clip.placement ? { placement: clip.placement } : {}),
+    ...(clip.pipSize ? { pipSize: clip.pipSize } : {}),
+    ...(clip.pipShape ? { pipShape: clip.pipShape } : {}),
+    ...(clip.pipPosition ? { pipPosition: clip.pipPosition } : {}),
+    ...(clip.lockToBlock != null ? { lockToBlock: clip.lockToBlock } : {}),
+    anchor,
+    ...(blockId !== undefined ? { blockId } : {}),
+    ...(clip.sourceLine != null ? { sourceLine: clip.sourceLine } : {}),
+    ...(edits?.gain != null ? { gain: edits.gain } : {}),
+    ...(clip.kind === 'video' && edits?.crop ? { crop: edits.crop } : {}),
+  };
+  if (processed && clip.kind === 'audio') {
+    base.src = processed;
+    base.originalSrc = clip.src;
+  }
+  if (processed && clip.kind === 'video') base.audioMuted = true;
+
+  const safeEnd = Math.max(start, end);
+  const pieces: Array<{ absoluteStart: number; absoluteEnd: number; sourceIn: number }> = [];
+  if (!edits?.cuts?.length) {
+    pieces.push({ absoluteStart: start, absoluteEnd: safeEnd, sourceIn: clip.clipStart ?? 0 });
+  } else {
+    let offset = 0;
+    for (const range of clipTimeMap(clip).keptRanges()) {
+      const segStart = start + offset;
+      if (segStart >= safeEnd) break;
+      const segEnd = Math.min(safeEnd, segStart + (range.end - range.start));
+      pieces.push({ absoluteStart: segStart, absoluteEnd: segEnd, sourceIn: range.start });
+      offset += range.end - range.start;
+    }
+    if (pieces.length === 0) {
+      pieces.push({ absoluteStart: start, absoluteEnd: start, sourceIn: clip.clipStart ?? 0 });
+    }
+  }
+
+  const count = pieces.length;
+  pieces.forEach((piece, index) => {
+    const entry: ScheduledClip = {
+      ...base,
+      id: count > 1 ? `${clip.id}#${index}` : clip.id,
+      ...piece,
+      ...(index === 0 && edits?.fadeIn ? { fadeIn: edits.fadeIn } : {}),
+      ...(index === count - 1 && edits?.fadeOut ? { fadeOut: edits.fadeOut } : {}),
+      ...(count > 1 ? { segment: { groupId: clip.id, index, count } } : {}),
+    };
+    out.push(entry);
+    if (processed && clip.kind === 'video') out.push(companionAudio(entry, clip, processed));
+  });
+}
+
+/**
+ * Schedule one clip that occupies `[start, end)` on the doc timeline, honoring
+ * its recipe (cuts → contiguous segment entries, gain/fades/crop, processed
+ * audio). {@link resolveMediaSchedule} uses this for every annotated clip;
+ * hosts that schedule media from other sources (body-embedded `<audio>` /
+ * `<video>` tags) call it so edits behave identically there.
+ */
+export function scheduleMediaClip(
+  clip: MediaClip,
+  start: number,
+  end: number,
+  anchor: 'block' | 'document',
+  blockId?: string,
+  opts?: MediaScheduleOptions,
+): ScheduledClip[] {
+  const out: ScheduledClip[] = [];
+  emitClip(out, clip, start, end, anchor, blockId, opts);
+  return out;
+}
+
+/** The processed-audio entry that plays in place of a video entry's own audio. */
+function companionAudio(entry: ScheduledClip, clip: MediaClip, processed: string): ScheduledClip {
+  const companion: ScheduledClip = {
+    ...entry,
+    id: `${entry.id}~audio`,
+    kind: 'audio',
+    src: processed,
+    originalSrc: clip.src,
+    derivedFrom: clip.id,
+  };
+  delete companion.crop;
+  delete companion.audioMuted;
+  delete companion.placement;
+  delete companion.pipSize;
+  delete companion.pipShape;
+  delete companion.pipPosition;
+  if (entry.segment) {
+    companion.segment = { ...entry.segment, groupId: `${clip.id}~audio` };
+  }
+  return companion;
 }
 
 /**
@@ -230,22 +401,7 @@ export function resolveMediaSchedule(doc: Doc, opts?: MediaScheduleOptions): Sch
       // out-points are untouched, so the timeline length is unchanged.
       const natLen = intrinsicPlayedLength(clip, opts);
       if (natLen != null) end = Math.min(end, start + natLen);
-      out.push({
-        id: clip.id,
-        src: clip.src,
-        kind: clip.kind,
-        ...(clip.placement ? { placement: clip.placement } : {}),
-        ...(clip.pipSize ? { pipSize: clip.pipSize } : {}),
-        ...(clip.pipShape ? { pipShape: clip.pipShape } : {}),
-        ...(clip.pipPosition ? { pipPosition: clip.pipPosition } : {}),
-        ...(clip.lockToBlock != null ? { lockToBlock: clip.lockToBlock } : {}),
-        absoluteStart: start,
-        absoluteEnd: Math.max(start, end),
-        sourceIn: clip.clipStart ?? 0,
-        anchor: 'block',
-        blockId: block.id,
-        ...(clip.sourceLine != null ? { sourceLine: clip.sourceLine } : {}),
-      });
+      emitClip(out, clip, start, end, 'block', block.id, opts);
     }
   }
 
@@ -257,21 +413,7 @@ export function resolveMediaSchedule(doc: Doc, opts?: MediaScheduleOptions): Sch
     // stops at its natural end rather than spanning the whole timeline.
     const natLen = intrinsicPlayedLength(clip, opts);
     if (natLen != null) end = Math.min(end, start + natLen);
-    out.push({
-      id: clip.id,
-      src: clip.src,
-      kind: clip.kind,
-      ...(clip.placement ? { placement: clip.placement } : {}),
-      ...(clip.pipSize ? { pipSize: clip.pipSize } : {}),
-      ...(clip.pipShape ? { pipShape: clip.pipShape } : {}),
-      ...(clip.pipPosition ? { pipPosition: clip.pipPosition } : {}),
-      ...(clip.lockToBlock != null ? { lockToBlock: clip.lockToBlock } : {}),
-      absoluteStart: start,
-      absoluteEnd: Math.max(start, end),
-      sourceIn: clip.clipStart ?? 0,
-      anchor: 'document',
-      ...(clip.sourceLine != null ? { sourceLine: clip.sourceLine } : {}),
-    });
+    emitClip(out, clip, start, end, 'document', undefined, opts);
   }
 
   return out;

@@ -17,6 +17,8 @@ import {
   matchTrailingPandocAttr,
   tokenizeAttrTokens,
 } from '@bendyline/squisq/markdown';
+import { mediaEditHtmlAttribute } from '@bendyline/squisq/mediaEdit';
+import { mediaEditKeysFor } from './tiptap/mediaEditAttributes';
 
 // Hoisted regex patterns for inline markdown ↔ HTML conversion
 //
@@ -1351,6 +1353,12 @@ function serializeMediaTag(tag: 'video' | 'audio', attrs: string): string {
   if (startAt != null) parts.push(` ${timingPrefix}-start-at="${startAt}"`);
   if (clipStart != null) parts.push(` ${timingPrefix}-clip-start="${clipStart}"`);
   if (clipEnd != null) parts.push(` ${timingPrefix}-clip-end="${clipEnd}"`);
+  // Edit recipe attributes, in canonical recipe order, verbatim.
+  for (const key of mediaEditKeysFor(tag)) {
+    const name = mediaEditHtmlAttribute(tag, key);
+    const value = new RegExp(`\\b${name}="([^"]*)"`, 'i').exec(attrs)?.[1];
+    if (value != null && value !== '') parts.push(` ${name}="${value}"`);
+  }
   parts.push(`></${tag}>`);
   return parts.join('');
 }
