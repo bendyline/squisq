@@ -58,8 +58,11 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   '@bendyline/squisq-video': 35_000,
   // Ships the MP4/GIF export graph plus the single-frame cover-image and
   // dashboard-image entries, with mediabunny's MP4/Matroska demuxers bundled
-  // so exports decode clip frames directly (~90 KB packed).
-  '@bendyline/squisq-video-react': 230_000,
+  // so exports decode clip frames directly (~90 KB packed), plus the
+  // media-edit render engine: mediabunny's audio demuxers for imported
+  // formats and its WebM/WAV writers (~60 KB packed; RNNoise stays an
+  // external dependency).
+  '@bendyline/squisq-video-react': 300_000,
   '@bendyline/squisq-editor-react': 1_000_000,
   // Includes compressed light and full standalone players plus one shared
   // Font Awesome webfont payload so CLI video export remains self-contained

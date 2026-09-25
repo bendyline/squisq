@@ -10,7 +10,20 @@
  * decoded whole. More than two channels are reduced to the first two.
  */
 
-import { ALL_FORMATS, AudioSampleSink, BlobSource, Input } from 'mediabunny';
+import {
+  ADTS,
+  AudioSampleSink,
+  BlobSource,
+  FLAC,
+  Input,
+  MATROSKA,
+  MP3,
+  MP4,
+  OGG,
+  QTFF,
+  WAVE,
+  WEBM,
+} from 'mediabunny';
 import {
   MEDIA_FX_SAMPLE_RATE,
   createResampler,
@@ -35,12 +48,18 @@ export interface OpenMediaAudioOptions {
   endSec?: number;
 }
 
+// The containers a doc's media file can be: recordings (WebM, MP4/MOV) and
+// imported audio. Not `ALL_FORMATS` — its HLS and MPEG-TS demuxers are
+// streaming formats no media reference points at, and would ship ~30 KB
+// (gzipped) of dead code in every consumer bundle.
+const INPUT_FORMATS = [MP4, QTFF, WEBM, MATROSKA, WAVE, MP3, OGG, FLAC, ADTS];
+
 /** Open a media Blob's primary audio track; null when it has none. */
 export async function openMediaAudio(
   blob: Blob,
   options: OpenMediaAudioOptions = {},
 ): Promise<DecodedAudioSource | null> {
-  const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
+  const input = new Input({ source: new BlobSource(blob), formats: INPUT_FORMATS });
   const track = await input.getPrimaryAudioTrack();
   if (!track) {
     input.dispose();
