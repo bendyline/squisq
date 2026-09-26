@@ -17,6 +17,10 @@
  * - A string-HTML exporter can call `buildPageCss(theme)` for the same
  *   bytes plus a `.squisq-page { … }` var block.
  *
+ * The `document` variant (see `PageVariant`) is the `squisq-page--document`
+ * class on the same wrapper, with its data attributes taken from
+ * `resolvePageStyle(theme, hints, 'document')`.
+ *
  * Responsive behavior uses container queries against the scroll container
  * (named `squisq-page`), with a media-query fallback for engines without
  * container support.
@@ -110,6 +114,7 @@ const NARROW_RULES = `
 .squisq-page-feature { grid-template-columns: 1fr; }
 .squisq-page-feature--media-right .squisq-page-feature-media { order: 0; }
 .squisq-page-stats { flex-direction: column; gap: 1.75rem; }
+.squisq-page-stats > .squisq-page-stat { flex: 0 0 auto; max-width: none; }
 .squisq-page-cards { grid-template-columns: 1fr; }
 .squisq-page-gallery { grid-template-columns: repeat(2, 1fr); }
 .squisq-page-milestone { grid-template-columns: 1fr; gap: 0.5rem; }
@@ -482,10 +487,14 @@ export const PAGE_BASE_CSS = `
   font-size: 1.15em;
 }
 /* Item bodies are rendered markdown: neutralize UA paragraph margins (which
-   would otherwise push the first line below the marker) and space blocks. */
+   would otherwise push the first line below the marker) and space blocks.
+   MarkdownRenderer wraps its blocks in a .squisq-md div, so the paragraphs
+   are grandchildren. */
 .squisq-page-item-body { min-width: 0; }
-.squisq-page-item-body > * { margin: 0; }
-.squisq-page-item-body > * + * { margin-top: 0.6em; }
+.squisq-page-item-body > *,
+.squisq-page-item-body > .squisq-md > * { margin: 0; }
+.squisq-page-item-body > * + *,
+.squisq-page-item-body > .squisq-md > * + * { margin-top: 0.6em; }
 .squisq-page[data-numerals='mono'] .squisq-page-items li::before { font-family: var(--squisq-page-mono-font); }
 .squisq-page-items-title { font-size: 1.9rem; }
 
@@ -632,6 +641,127 @@ export const PAGE_BASE_CSS = `
 /* Thumbnail image mode */
 .squisq-page--thumbnail-images .squisq-page-prose img,
 .squisq-page--thumbnail-images .squisq-page-figure img { max-width: 100px; max-height: 100px; object-fit: cover; }
+
+/* ── Document variant ─────────────────────────────────────────────── */
+/* The working-document register (reports, notes, previews). Sizes are in em
+ * so one host font-size scales the whole page, and a section's title is
+ * sized by its markdown heading level (data-heading-level), never by which
+ * section kind happens to carry it. Rules that must beat a page rule keyed
+ * on a token attribute repeat .squisq-page for specificity. */
+.squisq-page--document { --squisq-page-divider-color: color-mix(in srgb, var(--squisq-page-text) 14%, transparent); }
+.squisq-page--document .squisq-page-section { padding-block: 0.4em; }
+.squisq-page--document .squisq-page-section .squisq-page-section-inner { max-width: var(--squisq-page-content-max); }
+.squisq-page--document > .squisq-page-section:is([data-heading-level='3'], [data-heading-level='4'], [data-heading-level='5'], [data-heading-level='6']) { padding-top: 1em; }
+/* A top-level heading opens with a hairline set in the text column, like the
+ * masthead's, rather than a full-bleed section border. */
+.squisq-page.squisq-page--document > .squisq-page-section:is([data-heading-level='1'], [data-heading-level='2']) { margin-top: 0.8em; }
+.squisq-page.squisq-page--document > .squisq-page-section:is([data-heading-level='1'], [data-heading-level='2']) > .squisq-page-section-inner::before {
+  content: '';
+  display: block;
+  margin-bottom: 1.1em;
+  border-top: 1px solid var(--squisq-page-divider-color);
+}
+.squisq-page.squisq-page--document > .squisq-page-section:first-of-type,
+.squisq-page.squisq-page--document > .squisq-page-section--hero + .squisq-page-section { margin-top: 0; }
+.squisq-page.squisq-page--document > .squisq-page-section:first-of-type > .squisq-page-section-inner::before,
+.squisq-page.squisq-page--document > .squisq-page-section--hero + .squisq-page-section > .squisq-page-section-inner::before { display: none; }
+.squisq-page--document > .squisq-page-section:first-of-type { padding-top: 1em; }
+.squisq-page--document > .squisq-page-section:last-of-type { padding-bottom: 1.25em; }
+/* Thin margins hug the host's container, which supplies the outer inset. */
+.squisq-page--document.squisq-page--thin > .squisq-page-section:first-of-type { padding-top: 0; }
+.squisq-page--document.squisq-page--thin > .squisq-page-section:last-of-type { padding-bottom: 0; }
+
+/* Masthead: the cover as a left-aligned document title over a hairline. */
+.squisq-page.squisq-page--document .squisq-page-section--hero { padding-block: 1em 0.6em; }
+.squisq-page.squisq-page--document .squisq-page-hero-body {
+  text-align: left;
+  padding-bottom: 0.55em;
+  border-bottom: 1px solid var(--squisq-page-divider-color);
+}
+.squisq-page.squisq-page--document .squisq-page-hero-title { font-size: 1.6em; line-height: 1.2; letter-spacing: normal; text-transform: none; }
+.squisq-page.squisq-page--document .squisq-page-hero-subtitle { margin: 0.35em 0 0; font-size: 1em; max-width: none; }
+.squisq-page.squisq-page--document .squisq-page-section--hero-media { min-height: 12em; }
+.squisq-page.squisq-page--document .squisq-page-section--hero-media .squisq-page-section-inner { padding-block: 1.25em; }
+.squisq-page.squisq-page--document .squisq-page-section--hero-media .squisq-page-hero-body { border-bottom: none; }
+
+/* One heading scale for prose headings and typed-section titles alike. */
+.squisq-page--document .squisq-page-section-title { font-size: 1.3em; line-height: 1.25; margin: 0 0 0.45em; text-align: left; }
+.squisq-page--document [data-heading-level='1'] .squisq-page-section-title { font-size: 1.6em; }
+.squisq-page--document [data-heading-level='3'] .squisq-page-section-title { font-size: 1.1em; }
+.squisq-page--document :is([data-heading-level='4'], [data-heading-level='5'], [data-heading-level='6']) .squisq-page-section-title { font-size: 1em; }
+.squisq-page--document .squisq-page-prose :is(h1, h2, h3, h4, h5, h6) { line-height: 1.25; margin: 0; }
+.squisq-page--document .squisq-page-prose h1 { font-size: 1.6em; }
+.squisq-page--document .squisq-page-prose h2 { font-size: 1.3em; }
+.squisq-page--document .squisq-page-prose h3 { font-size: 1.1em; }
+.squisq-page--document .squisq-page-prose :is(h4, h5, h6) { font-size: 1em; }
+.squisq-page--document .squisq-page-eyebrow { font-size: 0.72em; letter-spacing: 0.1em; margin-bottom: 0.5em; }
+
+/* Prose */
+.squisq-page--document .squisq-page-prose { font-size: 1em; }
+/* A prose section is a heading wrapper then a body wrapper (.squisq-md each). */
+.squisq-page--document .squisq-page-prose > .squisq-md + .squisq-md { margin-top: 0.4em; }
+.squisq-page--document .squisq-page-prose > .squisq-md > * + * { margin-top: 0.75em; }
+.squisq-page--document .squisq-page-prose > .squisq-md > :last-child { margin-bottom: 0; }
+.squisq-page--document .squisq-page-prose p + p { margin-top: 0.75em; }
+.squisq-page--document .squisq-page-prose li + li { margin-top: 0.25em; }
+.squisq-page--document .squisq-page-prose :is(ul, ol) :is(ul, ol) { margin-top: 0.25em; }
+.squisq-page--document .squisq-page-prose code { font-size: 0.88em; }
+.squisq-page--document .squisq-page-prose pre { padding: 0.7em 0.9em; }
+.squisq-page--document .squisq-md-code-frame { margin: 0.75em 0; }
+.squisq-page--document .squisq-page-prose blockquote { border-left-width: 3px; padding-left: 1em; }
+.squisq-page--document .squisq-page-prose hr { margin-block: 1.25em; }
+.squisq-page--document :is(.squisq-page-prose, .squisq-page-table-section) table { font-size: 0.93em; }
+.squisq-page--document .squisq-page-prose th,
+.squisq-page--document .squisq-page-table th {
+  font-family: var(--squisq-page-body-font);
+  font-weight: 600;
+  padding: 0.45em 0.7em;
+}
+.squisq-page--document .squisq-page-prose td,
+.squisq-page--document .squisq-page-table td { padding: 0.4em 0.7em; }
+.squisq-page--document .squisq-page-rich-content { margin-top: 1em; padding-top: 0.75em; }
+
+/* Typed sections an author asked for, at document scale. */
+.squisq-page--document .squisq-page-section-inner > :first-child { margin-top: 0; }
+.squisq-page--document .squisq-page-stats { justify-content: flex-start; text-align: left; gap: 1.5em; }
+.squisq-page--document .squisq-page-stat { flex: 1 1 10em; }
+.squisq-page.squisq-page--document .squisq-page-stat-value { font-size: 1.9em; }
+.squisq-page--document .squisq-page-stat-title { margin-top: 0.35em; font-size: 1em; }
+.squisq-page--document .squisq-page-stat-body { margin-top: 0.2em; font-size: 0.9em; }
+.squisq-page--document .squisq-page-stat-meta { margin-top: 0.75em; text-align: left; font-size: 0.85em; }
+.squisq-page.squisq-page--document .squisq-page-quote { font-size: 1.15em; line-height: 1.45; }
+.squisq-page.squisq-page--document .squisq-page-quote-figure {
+  border: none;
+  border-left: 3px solid var(--squisq-page-accent);
+  padding: 0 0 0 1em;
+  text-align: left;
+}
+.squisq-page--document .squisq-page-quote-attribution { margin-top: 0.6em; font-size: 0.9em; }
+.squisq-page.squisq-page--document .squisq-page-section--quote-band.squisq-page-section--bg-media { min-height: 10em; }
+.squisq-page.squisq-page--document .squisq-page-section--banner.squisq-page-section--bg-media { min-height: 9em; }
+.squisq-page--document .squisq-page-feature { gap: 1.5em; }
+.squisq-page--document .squisq-page-feature-body { font-size: 1em; }
+.squisq-page--document .squisq-page-figure figcaption,
+.squisq-page--document .squisq-page-gallery-caption { margin-top: 0.6em; font-size: 0.85em; }
+.squisq-page--document .squisq-page-gallery { gap: 0.75em; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.squisq-page--document .squisq-page-callout { padding: 0.85em 1.1em; gap: 1em; border-left-width: 3px; }
+.squisq-page--document .squisq-page-callout-title { font-size: 1.05em; margin-bottom: 0.35em; }
+.squisq-page--document .squisq-page-callout-meta { margin-top: 0.6em; font-size: 0.82em; }
+.squisq-page--document .squisq-page-callout .squisq-page-media-frame { flex-basis: 5.5em; }
+.squisq-page--document .squisq-page-callout .squisq-page-media-frame img { width: 5.5em; height: 5.5em; }
+.squisq-page--document .squisq-page-cards { gap: 0.9em; grid-template-columns: repeat(auto-fit, minmax(12em, 1fr)); }
+.squisq-page--document .squisq-page-card { padding: 0.9em 1em 1em; border-top-width: 3px; }
+.squisq-page--document .squisq-page-card-title { font-size: 1.05em; }
+.squisq-page--document .squisq-page-cards-title { margin-bottom: 0.6em; }
+.squisq-page--document .squisq-page-items { max-width: none; }
+.squisq-page--document .squisq-page-items li { grid-template-columns: 2.2em 1fr; padding: 0.45em 0; font-size: 1em; }
+.squisq-page--document .squisq-page-items li::before { font-size: 1em; }
+.squisq-page--document .squisq-page-section--timeline-rail { padding-block: 0.5em; }
+.squisq-page--document .squisq-page-milestone { grid-template-columns: 7em 1fr; gap: 1.25em; }
+.squisq-page--document .squisq-page-milestone-date { font-size: 1em; }
+.squisq-page--document .squisq-page-milestone-rail { left: calc(7em + 0.62em); top: -0.5em; bottom: -0.5em; }
+.squisq-page--document .squisq-page-milestone-body { padding-left: 1.25em; }
+.squisq-page--document .squisq-page-milestone-footer { font-size: 0.85em; }
 
 /* ── Reveal animation (progressive enhancement) ───────────────────── */
 @media (prefers-reduced-motion: no-preference) {
