@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-editor-react",
-  "version": "2.11.9",
+  "version": "2.11.10",
   "description": "React editor shell with raw/WYSIWYG/preview modes for Squisq documents",
   "license": "MIT",
   "author": "Bendyline",

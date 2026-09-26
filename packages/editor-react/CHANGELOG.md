@@ -1,3 +1,9 @@
+## @bendyline/squisq-editor-react [2.11.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.11.9...@bendyline/squisq-editor-react@2.11.10) (2026-09-26)
+
+### Bug Fixes
+
+* Preview control clickability ([#66](https://github.com/bendyline/squisq/issues/66)) ([acf7d67](https://github.com/bendyline/squisq/commit/acf7d67c5ad5fdba63789c85b933013e30c8a000))
+
 ## @bendyline/squisq-editor-react [2.11.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.11.8...@bendyline/squisq-editor-react@2.11.9) (2026-09-25)
 
 
