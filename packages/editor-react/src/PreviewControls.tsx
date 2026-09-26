@@ -1704,6 +1704,11 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
   const popoverRef = useRef<HTMLDivElement>(null);
   const popoverTriggerRef = useRef<HTMLButtonElement>(null);
   const popoverPanelRef = useRef<HTMLDivElement>(null);
+  // Controls in the overflow portal their own menus and modals (cover slide
+  // settings, image export) to document.body, outside this subtree's DOM.
+  // React still bubbles their events through it, so the last mousedown seen
+  // here marks a press inside the popover that DOM containment would miss.
+  const popoverPointerEventRef = useRef<Event | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<{ top: number; left: number } | null>(null);
 
   const updatePopoverPosition = useCallback(() => {
@@ -1765,6 +1770,7 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
   useEffect(() => {
     if (!popoverOpen) return;
     const handler = (e: MouseEvent) => {
+      if (e === popoverPointerEventRef.current) return;
       const target = e.target as Node;
       if (popoverRef.current?.contains(target)) return;
       if (popoverPanelRef.current?.contains(target)) return;
@@ -2091,7 +2097,13 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
       )}
 
       {hasOverflow && (
-        <div className="squisq-preview-controls-compact" ref={popoverRef}>
+        <div
+          className="squisq-preview-controls-compact"
+          ref={popoverRef}
+          onMouseDown={(event) => {
+            popoverPointerEventRef.current = event.nativeEvent;
+          }}
+        >
           <button
             ref={popoverTriggerRef}
             className={`squisq-toolbar-button${popoverOpen ? ' squisq-toolbar-button--active' : ''}`}

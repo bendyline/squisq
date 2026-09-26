@@ -927,6 +927,104 @@ describe('PreviewToolbarControls', () => {
       }
     }
   });
+
+  it('keeps the overflow popover open while its portaled cover menu and export modal are used', async () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    const originalClientWidth = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'clientWidth',
+    );
+
+    class ResizeObserverStub implements ResizeObserver {
+      readonly callback: ResizeObserverCallback;
+
+      constructor(callback: ResizeObserverCallback) {
+        this.callback = callback;
+      }
+
+      observe() {
+        this.callback([], this);
+      }
+
+      unobserve() {}
+
+      disconnect() {}
+    }
+
+    // A 40px toolbar pushes every control, including Cover slide, into the
+    // overflow popover.
+    globalThis.ResizeObserver = ResizeObserverStub;
+    HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      if (this.classList.contains('squisq-preview-control')) {
+        return new DOMRect(0, 0, 100, 24);
+      }
+      return new DOMRect(0, 0, 0, 0);
+    };
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+      configurable: true,
+      get() {
+        return this.classList.contains('squisq-preview-controls') ? 40 : 0;
+      },
+    });
+
+    // Presses must go through mousedown, which is what the outside-click
+    // handlers listen for, before the click/change that acts on the control.
+    const press = (element: HTMLElement) => {
+      fireEvent.mouseDown(element);
+      fireEvent.click(element);
+    };
+
+    try {
+      renderPreviewToolbar('# Hello');
+
+      press(await screen.findByRole('button', { name: 'More preview settings' }));
+      const overflow = await waitFor(() => {
+        const popover = document.querySelector<HTMLElement>('.squisq-preview-controls-popover');
+        expect(popover).not.toBeNull();
+        return popover!;
+      });
+
+      press(within(overflow).getByRole('button', { name: 'Cover slide settings' }));
+      const coverMenu = await screen.findByRole('dialog', { name: 'Cover slide settings' });
+      expect(overflow.contains(coverMenu)).toBe(false);
+
+      press(within(coverMenu).getByRole('radio', { name: /Play underneath/ }));
+      expect(document.querySelector('.squisq-preview-controls-popover')).not.toBeNull();
+      expect(
+        within(
+          screen.getByRole('dialog', { name: 'Cover slide settings' }),
+        ).getByRole<HTMLInputElement>('radio', { name: /Play underneath/ }).checked,
+      ).toBe(true);
+
+      press(screen.getByRole('button', { name: 'Export cover as image…' }));
+      const exportModal = await screen.findByRole('dialog', { name: 'Export cover slide' });
+      fireEvent.mouseDown(within(exportModal).getByRole('spinbutton', { name: 'Image width' }));
+      expect(exportModal.isConnected).toBe(true);
+      expect(document.querySelector('.squisq-preview-controls-popover')).not.toBeNull();
+
+      press(within(exportModal).getByRole('button', { name: 'Close cover image export' }));
+      await waitFor(() => expect(exportModal.isConnected).toBe(false));
+
+      // A genuine outside press still dismisses the overflow.
+      fireEvent.mouseDown(document.body);
+      await waitFor(() =>
+        expect(document.querySelector('.squisq-preview-controls-popover')).toBeNull(),
+      );
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      }
+      HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
+      if (originalClientWidth) {
+        Object.defineProperty(HTMLElement.prototype, 'clientWidth', originalClientWidth);
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
+      }
+    }
+  });
 });
 
 describe('Use tab mode menu', () => {
