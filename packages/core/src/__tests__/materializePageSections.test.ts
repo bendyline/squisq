@@ -451,6 +451,112 @@ describe('doc-level art direction', () => {
   });
 });
 
+describe('document variant', () => {
+  it('renders auto-picked templates as the prose they came from', () => {
+    const doc = markdownToDoc(parseMarkdown('# Report\n\n## Steps\n\n- one\n- two\n'));
+    const steps = doc.blocks[0].children![0];
+    expect(steps.autoTemplate).toBe(true);
+
+    const page = materializePageSections(doc).find((entry) => entry.block === steps)!;
+    expect(page.section.kind).not.toBe('prose');
+
+    const document = materializePageSections(doc, { variant: 'document' }).find(
+      (entry) => entry.block === steps,
+    )!;
+    expect(document.section.kind).toBe('prose');
+    expect(document.section.slots.title).toBe('Steps');
+    expect(document.section.slots.headingLevel).toBe(2);
+    expect(document.section.slots.body?.markdown).toEqual([
+      expect.objectContaining({ type: 'list' }),
+    ]);
+  });
+
+  it('keeps authored template annotations as typed sections', () => {
+    const doc = markdownToDoc(parseMarkdown('# Report\n\n## Words {[quote]}\n\n> Keep it.\n'));
+    const quote = materializePageSections(doc, { variant: 'document' }).find(
+      (entry) => entry.section.template === 'quote',
+    );
+    expect(quote?.section.kind).toBe('quote-band');
+  });
+
+  it('makes the cover a title-only masthead and leaves the lead paragraph in the body', () => {
+    const doc = markdownToDoc(
+      parseMarkdown('# My Doc\n\n![Chart](chart.png)\n\nIntro with `code`.\n\nMore.'),
+    );
+    expect(doc.startBlock?.heroSrc).toBe('chart.png');
+    const sections = materializePageSections(doc, { cover: doc.startBlock, variant: 'document' });
+    const [masthead, body] = sections;
+    expect(masthead.section.kind).toBe('hero');
+    expect(masthead.section.slots.title).toBe('My Doc');
+    expect(masthead.section.slots.media).toBeUndefined();
+    expect(masthead.section.background).toBe('base');
+    expect(body.section.slots.title).toBeUndefined();
+    expect(body.section.slots.body?.markdown?.length).toBe(3);
+  });
+
+  it('drops the mirrored subtitle and keeps a frontmatter one', () => {
+    const mirrored = markdownToDoc(parseMarkdown('# Title\n\nIntro with `code`.'));
+    const [masthead, body] = materializePageSections(mirrored, {
+      cover: mirrored.startBlock,
+      variant: 'document',
+    });
+    expect(masthead.section.slots.subtitle).toBeUndefined();
+    expect(body.section.slots.body?.text).toContain('Intro with');
+
+    const authored = markdownToDoc(
+      parseMarkdown('---\nsubtitle: Quarterly\n---\n# Title\n\nIntro paragraph.'),
+    );
+    const [authoredMasthead] = materializePageSections(authored, {
+      cover: authored.startBlock,
+      variant: 'document',
+    });
+    expect(authoredMasthead.section.slots.subtitle).toBe('Quarterly');
+  });
+
+  it('leaves a title lifted from an H2 where it was written', () => {
+    const doc = markdownToDoc(parseMarkdown('## Summary\n\nAll green.\n\n## Detail\n\nMore.'));
+    expect(doc.startBlock?.title).toBe('Summary');
+    const sections = materializePageSections(doc, { cover: doc.startBlock, variant: 'document' });
+    expect(sections.some((entry) => entry.section.kind === 'hero')).toBe(false);
+    expect(sections[0].section.slots.title).toBe('Summary');
+    expect(sections[0].section.slots.headingLevel).toBe(2);
+  });
+
+  it('flattens backgrounds, accents, and ornament while keeping the theme identity', () => {
+    const style = resolvePageStyle(THEMES.gezellig, undefined, 'document');
+    expect(style.family).toBe(THEMES.gezellig.pageStyle!.family);
+    expect(style.tokens).toMatchObject({
+      backgroundRhythm: 'flat',
+      divider: 'none',
+      shadow: 'none',
+      pattern: 'none',
+      headingTreatment: { eyebrow: 'kicker', scale: 'regular', case: 'none' },
+    });
+    expect(style.tokens.cornerRadius).toBeLessThanOrEqual(6);
+    expect(style.accentRotation.strategy).toBe('primary-only');
+    expect(style.sections?.['quote-band']?.background).toBeUndefined();
+
+    const doc = docOf([
+      templateBlock('quote', { quote: 'a' }),
+      templateBlock('factCard', { title: 'b' }),
+      templateBlock('quote', { quote: 'c' }),
+    ]);
+    const sections = materializePageSections(doc, { theme: THEMES.gezellig, variant: 'document' });
+    expect(sections.map((entry) => entry.section.background)).toEqual(['base', 'base', 'base']);
+    expect(sections.every((entry) => entry.section.accent.role === 'primary')).toBe(true);
+  });
+
+  it('ships its rules in the shared page stylesheet', () => {
+    expect(PAGE_BASE_CSS).toContain('.squisq-page--document .squisq-page-section-title');
+    expect(PAGE_BASE_CSS).toContain("[data-heading-level='3'] .squisq-page-section-title");
+    expect(PAGE_BASE_CSS).toContain('.squisq-page.squisq-page--document .squisq-page-hero-body');
+    // Under thin margins the host supplies the outer inset.
+    expect(PAGE_BASE_CSS).toContain(
+      '.squisq-page--document.squisq-page--thin > .squisq-page-section:first-of-type { padding-top: 0; }',
+    );
+  });
+});
+
 describe('page CSS', () => {
   it('builds theme vars covering colors, fonts, and token dimensions', () => {
     const vars = buildPageCssVars(THEMES.magazine);
@@ -485,6 +591,17 @@ describe('page CSS', () => {
     expect(linkRule).toContain(
       'text-decoration-color: color-mix(in srgb, var(--squisq-page-primary) 40%, transparent)',
     );
+  });
+
+  it('keeps stacked stats and item bodies to their content height', () => {
+    // A column-direction flex item takes its flex-basis as its height, so the
+    // row's basis must not carry into the narrow stacked layout.
+    expect(PAGE_BASE_CSS).toContain(
+      '.squisq-page-stats > .squisq-page-stat { flex: 0 0 auto; max-width: none; }',
+    );
+    // MarkdownRenderer wraps item bodies in .squisq-md; its paragraphs are
+    // grandchildren of the body and still must not carry UA margins.
+    expect(PAGE_BASE_CSS).toContain('.squisq-page-item-body > .squisq-md > * { margin: 0; }');
   });
 
   it('resolvePageStyle derives a style for themes without pageStyle', () => {
