@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.11.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.9...@bendyline/squisq-react@2.11.10) (2026-09-27)
+
+### Bug Fixes
+
+* Page style work ([#67](https://github.com/bendyline/squisq/issues/67)) ([83e726b](https://github.com/bendyline/squisq/commit/83e726b2f72ec7366963be43002d748e286ad114))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.9
+
 ## @bendyline/squisq-react [2.11.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.8...@bendyline/squisq-react@2.11.9) (2026-09-25)
 
 ### Bug Fixes

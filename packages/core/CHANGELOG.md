@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.11.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.8...@bendyline/squisq@2.11.9) (2026-09-27)
+
+### Bug Fixes
+
+* Page style work ([#67](https://github.com/bendyline/squisq/issues/67)) ([83e726b](https://github.com/bendyline/squisq/commit/83e726b2f72ec7366963be43002d748e286ad114))
+
 ## @bendyline/squisq [2.11.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.7...@bendyline/squisq@2.11.8) (2026-09-25)
 
 ### Bug Fixes
