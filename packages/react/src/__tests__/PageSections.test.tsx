@@ -4,6 +4,7 @@ import { LinearDocView } from '../LinearDocView';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
 import { THEMES } from '@bendyline/squisq/schemas';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { markdownToDoc } from '@bendyline/squisq/doc';
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -204,5 +205,46 @@ describe('page section rendering', () => {
     expect(section.querySelector('.squisq-page-quote-backdrop img')).toBeTruthy();
     expect(section.textContent).toContain('To the stars');
     expect(section.textContent).toContain('A. Author');
+  });
+});
+
+describe('document variant', () => {
+  const report = markdownToDoc(
+    parseMarkdown(
+      '# Review\n\nStep: `review`. Reviewer: ayza.\n\n## Results\n\n### Parity\n\n- one\n- two\n',
+    ),
+  );
+
+  it('marks the page and uses a 15px base so em sizes scale from one value', () => {
+    const { container } = render(<LinearDocView doc={report} variant="document" />);
+    const page = container.querySelector('.squisq-page') as HTMLElement;
+    expect(page.classList.contains('squisq-page--document')).toBe(true);
+    expect(page.style.fontSize).toBe('15px');
+    expect(page.getAttribute('data-rhythm')).toBe('flat');
+
+    const plain = render(<LinearDocView doc={report} />).container;
+    const pagePlain = plain.querySelector('.squisq-page') as HTMLElement;
+    expect(pagePlain.classList.contains('squisq-page--document')).toBe(false);
+    expect(pagePlain.style.fontSize).toBe('16px');
+  });
+
+  it('renders a title-only masthead and keeps the lead paragraph formatted in the body', () => {
+    const { container } = render(<LinearDocView doc={report} variant="document" />);
+    const hero = container.querySelector('[data-section-kind="hero"]')!;
+    expect(hero.querySelector('h1')?.textContent).toBe('Review');
+    expect(hero.querySelector('.squisq-page-hero-subtitle')).toBeNull();
+    const lead = container.querySelector('[data-block-index="1"]')!;
+    expect(lead.querySelector('code')?.textContent).toBe('review');
+  });
+
+  it('stamps each titled section with its markdown heading level', () => {
+    const { container } = render(<LinearDocView doc={report} variant="document" />);
+    const levels = Array.from(container.querySelectorAll('section[data-heading-level]')).map(
+      (section) => section.getAttribute('data-heading-level'),
+    );
+    expect(levels).toEqual(['2', '3']);
+    // The list under "Parity" stays a list rather than a numbered item band.
+    expect(container.querySelector('[data-section-kind="item-list"]')).toBeNull();
+    expect(container.querySelectorAll('li')).toHaveLength(2);
   });
 });

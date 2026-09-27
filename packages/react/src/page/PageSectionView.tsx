@@ -126,6 +126,14 @@ export function PageSectionView({ entry, featureFlip, isLeadProse }: PageSection
   const hintAttrs: Record<string, string> = {};
   if (section.hints?.vignette) hintAttrs['data-hint-vignette'] = '';
   if (section.hints?.dropCap && isLeadProse) hintAttrs['data-hint-drop-cap'] = '';
+  // The markdown level of the heading this section shows, whichever kind
+  // renders it — the document variant sizes every title from this. A title
+  // the cover took over is no longer this section's heading.
+  const headingLevel =
+    section.kind !== 'hero' && section.slots.title !== undefined
+      ? (section.slots.headingLevel ?? entry.block?.sourceHeading?.depth)
+      : undefined;
+  if (headingLevel !== undefined) hintAttrs['data-heading-level'] = String(headingLevel);
 
   return (
     <section

@@ -20,7 +20,7 @@
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useAutoSurface } from './hooks/useAutoSurface';
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, PageVariant } from '@bendyline/squisq/schemas';
 import type { ViewportConfig } from '@bendyline/squisq/schemas';
 import {
   applySurface,
@@ -103,9 +103,18 @@ export interface LinearDocViewProps {
   globalKeyboardShortcuts?: boolean;
   /**
    * Synthesize a hero section from `doc.startBlock` at the top of the
-   * page (default: true). The editor's Cover toggle maps here.
+   * page (default: true). The editor's Cover toggle maps here. Under the
+   * `document` variant the cover is a left-aligned, title-only masthead.
    */
   showCover?: boolean;
+  /**
+   * Rendition register (default `'page'`, the art-directed scrolling site).
+   * `'document'` reads as a report: a masthead instead of a hero, one em-based
+   * heading scale that follows the markdown hierarchy, a 15px base, flat
+   * backgrounds, and auto-picked templates rendered as the prose they came
+   * from. Authored `{[template]}` annotations still render as typed sections.
+   */
+  variant?: PageVariant;
   /**
    * Page hints from the active transform (Summarize) style — spacing and
    * emphasis-curve adjustments defined by `TransformStyleConfig.page`.
@@ -154,6 +163,7 @@ export function LinearDocView({
   imageDisplayMode = 'inline',
   globalKeyboardShortcuts = false,
   showCover = true,
+  variant = 'page',
   transformPage,
   showCodeCopyButton = false,
   onCopyCode,
@@ -180,8 +190,8 @@ export function LinearDocView({
   }, [theme, resolvedSurface]);
 
   const pageStyle = useMemo(
-    () => resolvePageStyle(activeTheme, transformPage),
-    [activeTheme, transformPage],
+    () => resolvePageStyle(activeTheme, transformPage, variant),
+    [activeTheme, transformPage, variant],
   );
 
   // Claimed fence languages must survive typed-template slot extraction —
@@ -197,9 +207,18 @@ export function LinearDocView({
       customTemplates: resolvedDoc.customTemplates,
       cover: showCover !== false ? resolvedDoc.startBlock : false,
       transformPage,
+      variant,
       ...(widgetFenceLangs.length > 0 ? { widgetFenceLangs } : {}),
     });
-  }, [resolvedDoc, activeTheme, activeViewport, showCover, transformPage, widgetFenceLangs]);
+  }, [
+    resolvedDoc,
+    activeTheme,
+    activeViewport,
+    showCover,
+    transformPage,
+    variant,
+    widgetFenceLangs,
+  ]);
 
   // Canvas embeds materialize SVG layers with the same options the player
   // uses, so diagrams/trees/maps keep the theme atmosphere.
@@ -255,12 +274,13 @@ export function LinearDocView({
       if (entry.section.kind === 'feature-split') {
         ordinals.set(entry.section.index, featureCount++);
       }
-      if (firstProse < 0 && entry.section.kind === 'prose') {
+      // A drop cap is an editorial flourish a working document doesn't want.
+      if (variant !== 'document' && firstProse < 0 && entry.section.kind === 'prose') {
         firstProse = entry.section.index;
       }
     }
     return { featureOrdinals: ordinals, leadProseIndex: firstProse };
-  }, [sections]);
+  }, [sections, variant]);
 
   useEffect(() => {
     if (!globalKeyboardShortcuts) return;
@@ -317,6 +337,7 @@ export function LinearDocView({
     'squisq-md',
     'squisq-page',
     thinMargins ? 'squisq-linear-content--thin squisq-page--thin' : '',
+    variant === 'document' ? 'squisq-linear-content--document squisq-page--document' : '',
     imageDisplayMode === 'thumbnail'
       ? 'squisq-linear-content--thumbnail-images squisq-page--thumbnail-images'
       : '',
@@ -355,7 +376,7 @@ export function LinearDocView({
         style={
           {
             lineHeight: lineHt,
-            fontSize: '16px',
+            fontSize: variant === 'document' ? '15px' : '16px',
             fontFamily: bodyFont,
             color: textColor,
             ...buildPageCssVars(activeTheme, pageStyle),

@@ -23,6 +23,7 @@ import type {
   PageEmphasis,
   PageSectionKind,
   PageSectionOverride,
+  PageVariant,
   ThemePageStyle,
 } from '../../schemas/PageStyle.js';
 import { DEFAULT_THEME } from '../../schemas/themeLibrary.js';
@@ -76,6 +77,8 @@ export interface MaterializePageSectionOptions {
    * kept regardless.
    */
   widgetFenceLangs?: readonly string[];
+  /** Page rendition register (default `'page'`). See `PageVariant`. */
+  variant?: PageVariant;
 }
 
 /** Doc-level options. */
@@ -92,13 +95,72 @@ export interface MaterializePageSectionsOptions extends MaterializePageSectionOp
 
 /**
  * Resolve the effective page style for a theme: explicit `theme.pageStyle`
- * wins, else a derived default. Transform hints overlay spacing.
+ * wins, else a derived default. Transform hints overlay spacing; the
+ * `document` variant overlays its flat, unornamented art direction.
  * Never returns undefined.
  */
-export function resolvePageStyle(theme?: Theme, hints?: PageTransformHints): ThemePageStyle {
+export function resolvePageStyle(
+  theme?: Theme,
+  hints?: PageTransformHints,
+  variant: PageVariant = 'page',
+): ThemePageStyle {
   const base = theme?.pageStyle ?? defaultPageStyle(theme ?? DEFAULT_THEME);
-  if (!hints?.spacing || hints.spacing === base.tokens.sectionSpacing) return base;
-  return { ...base, tokens: { ...base.tokens, sectionSpacing: hints.spacing } };
+  const spaced =
+    !hints?.spacing || hints.spacing === base.tokens.sectionSpacing
+      ? base
+      : { ...base, tokens: { ...base.tokens, sectionSpacing: hints.spacing } };
+  return variant === 'document' ? documentPageStyle(spaced) : spaced;
+}
+
+function withoutBackgrounds<T extends Partial<Record<string, PageSectionOverride>>>(
+  overrides: T,
+): T {
+  const out: Partial<Record<string, PageSectionOverride>> = {};
+  for (const [key, override] of Object.entries(overrides)) {
+    if (!override) continue;
+    const { background: _background, ...rest } = override;
+    out[key] = rest;
+  }
+  return out as T;
+}
+
+/**
+ * The document register keeps the theme's palette and typefaces — a report
+ * still reads as the theme — but drops every device that makes a page hard
+ * to scan: section bands, rotating accents, dividers between every section,
+ * numbered eyebrows, shadows, display-scale headings, and pillowy corners.
+ */
+function documentPageStyle(style: ThemePageStyle): ThemePageStyle {
+  return {
+    family: style.family,
+    tokens: {
+      ...style.tokens,
+      cornerRadius: Math.min(style.tokens.cornerRadius, 6),
+      sectionSpacing: 'compact',
+      divider: 'none',
+      backgroundRhythm: 'flat',
+      headingTreatment: { eyebrow: 'kicker', scale: 'regular', case: 'none', underline: 'none' },
+      shadow: 'none',
+      quoteMark: 'accent-bar',
+      numeralStyle: 'plain',
+      pattern: 'none',
+    },
+    ...(style.sections ? { sections: withoutBackgrounds(style.sections) } : {}),
+    ...(style.templates ? { templates: withoutBackgrounds(style.templates) } : {}),
+    accentRotation: { strategy: 'primary-only' },
+  };
+}
+
+/**
+ * True when the block is templated only because content-aware auto-picking
+ * chose a template for it — the author wrote a plain heading and body.
+ */
+function isAutoPickedOnly(block: Block): boolean {
+  return (
+    block.autoTemplate === true &&
+    !block.sourceHeading?.templateAnnotation?.template &&
+    !block.promotedBodyAnnotation
+  );
 }
 
 /** Section kinds that carry a rotating accent scheme. */
@@ -221,8 +283,12 @@ function draftForBlock(
   viewport: ViewportConfig,
   customTemplates?: readonly CustomTemplateDefinition[],
   widgetFenceLangs?: readonly string[],
+  variant: PageVariant = 'page',
 ): DraftResult {
-  if (isTemplatedPageBlock(block)) {
+  // A document keeps the structure the author wrote: a heading over a list
+  // is a heading over a list, not a numbered band or a giant statistic.
+  const autoPickedInDocument = variant === 'document' && isAutoPickedOnly(block);
+  if (isTemplatedPageBlock(block) && !autoPickedInDocument) {
     const resolved = resolvePageBlock(block);
     const templateName = resolved.templateName!;
     const extractor = sectionExtractors[templateName];
@@ -405,8 +471,14 @@ export function materializePageSection(
 ): PageSectionMaterialization {
   const theme = options.theme ?? DEFAULT_THEME;
   const viewport = options.viewport ?? VIEWPORT_PRESETS.landscape;
-  const pageStyle = resolvePageStyle(theme);
-  const result = draftForBlock(block, viewport, options.customTemplates, options.widgetFenceLangs);
+  const pageStyle = resolvePageStyle(theme, undefined, options.variant);
+  const result = draftForBlock(
+    block,
+    viewport,
+    options.customTemplates,
+    options.widgetFenceLangs,
+    options.variant,
+  );
   const override = overrideFor(pageStyle, result.draft.kind, result.templateName);
 
   const background: PageBackground =
@@ -437,6 +509,42 @@ export function materializePageSection(
 }
 
 /**
+ * Cover dedupe for the `document` variant, where the cover (`seeds[0]`)
+ * mirrors the title of the leading prose section (`seeds[1]`).
+ *
+ * A title lifted from an H2 or deeper is a section heading, not the
+ * document's name, so the masthead goes and the heading stays where it was
+ * written. Otherwise the masthead carries the title and the section keeps
+ * its whole body: the first paragraph stays in place with its inline code
+ * and links, instead of being flattened into a plain-text subtitle.
+ */
+function dedupeDocumentMasthead(seeds: SectionSeed[]): void {
+  const cover = seeds[0];
+  const first = seeds[1];
+  const slots = { ...first.draft.slots };
+  if ((slots.headingLevel ?? 1) > 1) {
+    seeds.splice(0, 1);
+    return;
+  }
+
+  const markdown = slots.body?.markdown;
+  const lead = markdown?.[0];
+  const subtitle = cover.draft.slots.subtitle;
+  if (subtitle && lead?.type === 'paragraph' && extractPlainText(lead) === subtitle) {
+    const { subtitle: _mirrored, ...coverSlots } = cover.draft.slots;
+    cover.draft = { ...cover.draft, slots: coverSlots };
+  }
+
+  delete slots.title;
+  delete slots.headingLevel;
+  if (markdown && markdown.length > 0) {
+    first.draft = { ...first.draft, slots };
+  } else {
+    seeds.splice(1, 1);
+  }
+}
+
+/**
  * Materialize a whole document into its ordered page sections, applying
  * the theme's art direction across the sequence. The primary entry point
  * for Page (linear) mode renderers and exporters.
@@ -447,7 +555,8 @@ export function materializePageSections(
 ): PageSectionMaterialization[] {
   const theme = options.theme ?? DEFAULT_THEME;
   const viewport = options.viewport ?? VIEWPORT_PRESETS.landscape;
-  const pageStyle = resolvePageStyle(theme, options.transformPage);
+  const variant = options.variant ?? 'page';
+  const pageStyle = resolvePageStyle(theme, options.transformPage, variant);
   const customTemplates = options.customTemplates ?? doc.customTemplates;
 
   // ── Collect seeds pre-order ──────────────────────────────────────
@@ -455,6 +564,9 @@ export function materializePageSections(
 
   if (options.cover) {
     const cover = options.cover;
+    // A document's masthead is its title, not a poster: the first image in
+    // the body is content, and it stays where the author placed it.
+    const heroSrc = variant === 'document' ? undefined : cover.heroSrc;
     seeds.push({
       draft: {
         kind: 'hero',
@@ -462,10 +574,10 @@ export function materializePageSections(
         slots: {
           title: cover.title,
           subtitle: cover.subtitle,
-          media: cover.heroSrc
+          media: heroSrc
             ? {
                 type: 'image',
-                src: cover.heroSrc,
+                src: heroSrc,
                 alt: cover.heroAlt ?? '',
                 credit: cover.heroCredit,
                 license: cover.heroLicense,
@@ -473,7 +585,7 @@ export function materializePageSections(
             : undefined,
         },
         emphasis: 'lead',
-        mediaBackground: !!cover.heroSrc,
+        mediaBackground: !!heroSrc,
       },
       source: 'cover',
       depth: 0,
@@ -482,7 +594,13 @@ export function materializePageSections(
 
   const walk = (blocks: readonly Block[], depth: number): void => {
     for (const block of blocks) {
-      const result = draftForBlock(block, viewport, customTemplates, options.widgetFenceLangs);
+      const result = draftForBlock(
+        block,
+        viewport,
+        customTemplates,
+        options.widgetFenceLangs,
+        variant,
+      );
       seeds.push({ ...result, block, depth });
       // Container templates (diagram/drawing/layout) consume their children
       // inside the canvas; everything else recurses.
@@ -516,6 +634,12 @@ export function materializePageSections(
         };
       }
       seeds.splice(0, 1);
+    } else if (
+      variant === 'document' &&
+      first.draft.kind === 'prose' &&
+      first.draft.slots.title === cover.title
+    ) {
+      dedupeDocumentMasthead(seeds);
     } else if (first.draft.kind === 'prose' && first.draft.slots.title === cover.title) {
       const slots = { ...first.draft.slots };
       delete slots.title;

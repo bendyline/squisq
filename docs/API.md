@@ -1843,12 +1843,29 @@ interface LinearDocViewProps {
   imageDisplayMode?: ImageDisplayMode; // 'inline' (default) | 'thumbnail'
   globalKeyboardShortcuts?: boolean; // default false
   showCover?: boolean; // default true — hero from doc.startBlock (deduped vs an authored title)
+  variant?: PageVariant; // 'page' (default, art-directed site) | 'document' (report register, below)
   transformPage?: PageTransformHints; // page hints from the active Summarize style
   showCodeCopyButton?: boolean; // default false
   onCopyCode?: CodeBlockCopyHandler;
   className?: string;
 }
+```
 
+`variant: 'document'` renders the Page rendition as a working document —
+reports, notes, previews in a side panel. The cover becomes a left-aligned,
+title-only masthead (no hero image; the lead paragraph stays in the body
+with its inline formatting; a title lifted from an H2 stays where it was
+written). Blocks that were only _auto-picked_ into a template render as the
+prose they came from, while authored `{[template]}` annotations still render
+as typed sections. Backgrounds, dividers, accent rotation, shadows, and
+eyebrow numbering are flattened (`resolvePageStyle(theme, hints, 'document')`),
+the base size is 15px, and every size is in `em`, so a host scales the whole
+page with one font size. Each titled section carries `data-heading-level`,
+and titles size by that level, whichever section kind renders them. The
+wrapper class is `squisq-page--document`; `materializePageSections` takes the
+same `variant` option.
+
+```ts
 interface DashboardViewProps {
   doc: Doc;
   theme?: Theme; // default: the doc's own theme resolution (resolveThemeForDoc)

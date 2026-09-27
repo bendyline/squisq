@@ -48,6 +48,19 @@ export const PAGE_SECTION_KINDS = [
 
 export type PageSectionKind = (typeof PAGE_SECTION_KINDS)[number];
 
+/**
+ * How a page rendition reads. `page` (the default) is the art-directed
+ * scrolling site: a centered cover hero, display type, section bands, and
+ * content-aware templates. `document` is the working-document register for
+ * reports, notes, and previews: a left-aligned masthead, one heading scale
+ * that follows the markdown hierarchy whatever section carries it, one flat
+ * surface, and markdown structure kept as written — auto-picked templates
+ * render as prose, while authored `{[template]}` annotations still apply.
+ */
+export const PAGE_VARIANTS = ['page', 'document'] as const;
+
+export type PageVariant = (typeof PAGE_VARIANTS)[number];
+
 /** Relative visual weight of a section within the page. */
 export type PageEmphasis = 'lead' | 'strong' | 'standard' | 'quiet';
 
