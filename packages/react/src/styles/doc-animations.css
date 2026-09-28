@@ -2531,75 +2531,82 @@
 }
 
 .anim-fadeIn {
-  animation: fadeIn var(--anim-duration, 1s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    forwards;
+  animation: fadeIn var(--anim-duration, 1s) var(--anim-easing, ease-out) var(--anim-delay, 0s) both;
 }
 
 .anim-fadeOut {
   animation: fadeOut var(--anim-duration, 1s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    forwards;
+    both;
 }
 
 .anim-fadeInUp {
   animation: fadeInUp var(--anim-duration, 0.6s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    forwards;
+    both;
 }
 
 .anim-slowZoom-in {
   animation: slowZoomIn var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s)
-    forwards;
+    both;
 }
 
 .anim-slowZoom-out {
   animation: slowZoomOut var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s)
-    forwards;
+    both;
 }
 
 .anim-slowZoom-panLeft {
   animation: slowZoomCombinedPanLeft var(--anim-duration, 8s) var(--anim-easing, linear)
-    var(--anim-delay, 0s) forwards;
+    var(--anim-delay, 0s) both;
 }
 
 .anim-slowZoom-panRight {
   animation: slowZoomCombinedPanRight var(--anim-duration, 8s) var(--anim-easing, linear)
-    var(--anim-delay, 0s) forwards;
+    var(--anim-delay, 0s) both;
 }
 
 .anim-zoomIn {
   animation: zoomIn var(--anim-duration, 0.5s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    forwards;
+    both;
 }
 
 .anim-zoomOut {
   animation: zoomOut var(--anim-duration, 0.5s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    forwards;
+    both;
 }
 
 .anim-panLeft {
-  animation: panLeft var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s)
-    forwards;
+  animation: panLeft var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) both;
 }
 
 .anim-panRight {
-  animation: panRight var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s)
-    forwards;
+  animation: panRight var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) both;
 }
 
 .squisq-image--portrait-pan-right {
   animation: portraitCoverPanRight var(--portrait-pan-duration, 12s)
-    var(--portrait-pan-easing, ease-in-out) var(--portrait-pan-delay, 0s) forwards;
+    var(--portrait-pan-easing, ease-in-out) var(--portrait-pan-delay, 0s) both;
   will-change: object-position;
 }
 
 .squisq-image--portrait-pan-left {
   animation: portraitCoverPanLeft var(--portrait-pan-duration, 12s)
-    var(--portrait-pan-easing, ease-in-out) var(--portrait-pan-delay, 0s) forwards;
+    var(--portrait-pan-easing, ease-in-out) var(--portrait-pan-delay, 0s) both;
   will-change: object-position;
 }
 
 .anim-typewriter {
   animation: typewriter var(--anim-duration, 2s) var(--anim-easing, steps(40, end))
-    var(--anim-delay, 0s) forwards;
+    var(--anim-delay, 0s) both;
+}
+
+/* Offline capture repositions animations by seeking their timeline; CSS
+   transitions have no seekable clock and would otherwise tween on wall time
+   between two captured frames (caption highlight colour, control fades). */
+.doc-player--render-mode,
+.doc-player--render-mode *,
+.doc-player--render-mode *::before,
+.doc-player--render-mode *::after {
+  transition: none !important;
 }
 
 /* ============================================

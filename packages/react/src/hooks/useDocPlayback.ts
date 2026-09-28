@@ -79,6 +79,14 @@ export interface UseDocPlaybackOptions {
    * pacing rules.
    */
   useAudioSegmentTiming?: boolean;
+  /**
+   * Derive the outgoing (exiting) block from block order instead of from the
+   * block rendered last. Offline capture seeks frames out of order (resume,
+   * dedupe, sampling), so the crossfade partner must be a pure function of
+   * time. Live playback keeps the render-history path so swipes and manual
+   * jumps crossfade from what the viewer actually saw.
+   */
+  deterministicTransitions?: boolean;
 }
 
 export function useDocPlayback(
@@ -91,6 +99,7 @@ export function useDocPlayback(
     theme,
     onSeek,
     useAudioSegmentTiming = true,
+    deterministicTransitions = false,
   } = options;
   // Expand any template blocks into full blocks
   const blocks = useMemo(() => {
@@ -229,7 +238,11 @@ export function useDocPlayback(
     ? resolveTransitionDuration(currentBlock.transition)
     : 0;
   const isEntering = !!currentBlock && transitionDuration > 0 && blockTime < transitionDuration;
-  const outgoingBlock = outgoingBlockRef.current;
+  const outgoingBlock = deterministicTransitions
+    ? currentBlockIndex > 0
+      ? (blocks[currentBlockIndex - 1] ?? null)
+      : null
+    : outgoingBlockRef.current;
   // Only crossfade a genuinely different outgoing block (guards restarts/seeks
   // where the "previous" resolves to the same block).
   const isExiting = isEntering && outgoingBlock != null && outgoingBlock.id !== currentBlock?.id;

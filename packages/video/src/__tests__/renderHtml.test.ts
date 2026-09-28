@@ -151,3 +151,16 @@ describe('generateRenderHtml', () => {
     expect(html).toContain('pipPosition: "bottom-right"');
   });
 });
+
+describe('generateRenderHtml viewport', () => {
+  it('always pins the mount viewport to the export dimensions', () => {
+    const portrait = generateRenderHtml(minimalDoc(), {
+      playerScript: PLAYER_STUB,
+      width: 1080,
+      height: 1920,
+    });
+    expect(portrait).toContain('viewport: {"width":1080,"height":1920}');
+    const defaults = generateRenderHtml(minimalDoc(), { playerScript: PLAYER_STUB });
+    expect(defaults).toContain('viewport: {"width":1920,"height":1080}');
+  });
+});

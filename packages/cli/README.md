@@ -89,12 +89,18 @@ squisq video doc.json -o out.mp4
 | `--width` / `--height`             | Dimension overrides in pixels — **must be even**                     | MP4 1080p; GIF 960×540    |
 | `--overwrite`                      | Replace an existing output file (otherwise refuse and exit non-zero) | off                       |
 | `--no-auto-templates`              | Disable content-aware template auto-picking for unannotated headings | (auto on)                 |
+| `--frame-transport`                | MP4 frame delivery: `pipe` (stream stills to ffmpeg) or `memory`     | `pipe`                    |
+| `--capture-format`                 | MP4 still captured per frame: `png` or `jpeg` (pipe only)            | high `png`, else `jpeg`   |
+| `--frames-dir`                     | MP4 only: spool every captured still here and keep it after the run  | none                      |
+| `--resume`                         | MP4 only: reuse stills an identical render spooled in `--frames-dir` | off                       |
 
 Notes:
 
 - **Dimensions must be even.** `--width 851` is rejected immediately — before the document is read or a browser launches — with `Video width must be an even number of pixels (got 851) … Use 850 or 852.` Odd values are rejected rather than rounded, so a render never silently ships at a size you did not ask for. The rule is the same for MP4 and GIF, and matches browser export.
 - **An existing output file is never overwritten by default.** The check runs before rendering, so a colliding path costs you a second rather than a full capture. Pass `--overwrite` to replace.
 - FFmpeg failures report the one relevant line (e.g. `[libx264] width not divisible by 2 (851x480) (exit code 1)`) rather than dumping the whole command line and stderr buffer.
+- **MP4 frames stream to ffmpeg as they are captured.** Memory stays flat for a story of any length; `--frame-transport memory` restores the old retain-then-encode path, which is bounded to a few seconds of 1080p photo slides. `--frames-dir` keeps every still (plus a `manifest.json` naming the doc, size, rate, captions and animation settings), and `--resume` skips re-capturing stills that an identical render already spooled there.
+- **Portrait and custom sizes are composed natively.** The render page pins the player's viewport to the export size; a player bundle that ignores it fails the run before capture instead of producing a letterboxed landscape layout.
 
 ### `squisq image <input> [output]`
 
@@ -230,8 +236,13 @@ const result = await renderDocToMp4(doc, container, {
   captionStyle: 'social', // 'off' | 'standard' | 'social' (default 'off')
   animationsEnabled: false, // static slide changes; media/timing remain active
   coverPreRoll: 2, // seconds of cover-slide pre-roll (default 0)
+  frameTransport: 'pipe', // 'pipe' (default; streams stills to ffmpeg) | 'memory'
+  captureFormat: 'png', // 'png' | 'jpeg' (default: png for high quality, jpeg otherwise)
+  framesDir: './frames', // optional: keep every still + manifest; with resume: true, reuse them
+  onFrame: ({ index, totalFrames, captureMs, reused }) => {}, // per-frame throughput hook
   onProgress: (phase, pct) => console.log(`${phase}: ${pct}%`),
 });
+// result: { duration, frameCount, outputPath, reusedFrameCount?, framesDir? }
 
 console.log(`Rendered ${result.frameCount} frames (${result.duration}s) → ${result.outputPath}`);
 ```

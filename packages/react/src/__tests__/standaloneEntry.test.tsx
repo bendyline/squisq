@@ -158,3 +158,71 @@ describe('standalone player instance handles', () => {
     expect(root.querySelector('[class*="anim-"]')).toBeNull();
   });
 });
+
+describe('standalone render viewport', () => {
+  it('composes render mounts for an explicit viewport instead of the landscape preset', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountedElements.push(root);
+
+    const handle = mount(root, doc('portrait'), {
+      renderMode: true,
+      viewport: { width: 1080, height: 1920 },
+    });
+    const api = await handle.renderAPI;
+    expect(api?.getViewport()).toEqual({ width: 1080, height: 1920 });
+    await waitFor(() =>
+      expect(root.querySelector('.doc-player')?.getAttribute('data-orientation')).toBe('portrait'),
+    );
+  });
+
+  it('falls back to the landscape preset when no viewport or host box is available', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountedElements.push(root);
+
+    const handle = mount(root, doc('landscape'), { renderMode: true });
+    const api = await handle.renderAPI;
+    expect(api?.getViewport()).toEqual({ width: 1920, height: 1080 });
+  });
+});
+
+describe('standalone render audio', () => {
+  it('never paints the audio-unavailable notice into a render-mode frame', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountedElements.push(root);
+    const narrated: Doc = {
+      ...doc('narrated'),
+      audio: { segments: [{ src: 'missing.mp3', name: 'intro', duration: 2, startTime: 0 }] },
+    };
+    const handle = mount(root, narrated, { renderMode: true });
+    const api = await handle.renderAPI;
+    await api?.seekTo(0.5);
+    expect(root.textContent).not.toContain('Audio could not be loaded');
+    expect(api?.getDuration()).toBe(2);
+  });
+});
+
+describe('standalone render cover', () => {
+  it('shows the managed cover when a slideshow render mount forces it', async () => {
+    const root = document.createElement('div');
+    document.body.append(root);
+    mountedElements.push(root);
+    const withCover: Doc = {
+      ...doc('covered'),
+      startBlock: { heroSrc: 'hero.jpg', heroAlt: 'Hero', title: 'qualla.com/covered' },
+    };
+    const handle = mount(root, withCover, { renderMode: true, mode: 'slideshow' });
+    const api = await handle.renderAPI;
+    expect(api?.hasCoverBlock()).toBe(true);
+    expect(root.querySelector('.doc-player__block--cover')).toBeNull();
+    await api?.showCover();
+    await waitFor(() => expect(root.querySelector('.doc-player__block--cover')).not.toBeNull());
+    expect(root.querySelector('.doc-player__block--cover')?.textContent).toContain(
+      'qualla.com/covered',
+    );
+    await api?.hideCover();
+    await waitFor(() => expect(root.querySelector('.doc-player__block--cover')).toBeNull());
+  });
+});
