@@ -7,6 +7,7 @@
  * Usage:
  *   squisq video <input> [-o output.mp4|output.gif] [--format mp4|gif]
  *     [--theme <id>] [--transform <style>] [--cover-preroll <seconds>]
+ *     [--frames-dir <dir> [--resume]] [--capture-format png|jpeg]
  */
 
 import { mkdir } from 'node:fs/promises';
@@ -44,6 +45,10 @@ interface VideoCommandOptions {
   transform?: string;
   coverPreroll?: string;
   animations?: boolean;
+  frameTransport?: string;
+  captureFormat?: string;
+  framesDir?: string;
+  resume?: boolean;
   loop?: string;
   maxColors?: string;
   dither?: string;
@@ -55,6 +60,8 @@ const VALID_ORIENTATIONS = ['landscape', 'portrait'] as const;
 const VALID_CAPTIONS = ['off', 'standard', 'social'] as const;
 const VALID_FORMATS = ['mp4', 'gif'] as const;
 const VALID_GIF_DITHERS = ['bayer', 'sierra2_4a', 'none'] as const;
+const VALID_FRAME_TRANSPORTS = ['pipe', 'memory'] as const;
+const VALID_CAPTURE_FORMATS = ['png', 'jpeg'] as const;
 
 export function registerVideoCommand(program: Command): void {
   program
@@ -95,6 +102,16 @@ export function registerVideoCommand(program: Command): void {
     .option('--width <pixels>', 'Override video width (must be even for MP4)')
     .option('--height <pixels>', 'Override video height (must be even for MP4)')
     .option('--overwrite', 'Replace an existing output file (default: refuse and exit non-zero)')
+    .option(
+      '--frame-transport <mode>',
+      `MP4 frame delivery: ${VALID_FRAME_TRANSPORTS.join(', ')} (default: pipe, streams frames to ffmpeg)`,
+    )
+    .option(
+      '--capture-format <format>',
+      `MP4 still format captured per frame: ${VALID_CAPTURE_FORMATS.join(', ')} (default: png for high quality, jpeg otherwise)`,
+    )
+    .option('--frames-dir <dir>', 'MP4 only: spool every captured frame here and keep it after the render')
+    .option('--resume', 'MP4 only: reuse frames an identical earlier render spooled into --frames-dir')
     .option('--animations', 'Enable slide animations/transitions (GIF default: disabled)')
     .option('--no-animations', 'Disable slide animations/transitions')
     .option('--loop <count>', 'GIF repeat count: 0 forever, -1 no loop (default: 0)')
@@ -185,6 +202,33 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   const coverPreRoll = Number(opts.coverPreroll ?? '2');
   if (!Number.isFinite(coverPreRoll) || coverPreRoll < 0) {
     throw new Error('Cover pre-roll must be a number of seconds >= 0');
+  }
+
+  if (
+    outputFormat === 'gif' &&
+    (opts.frameTransport || opts.captureFormat || opts.framesDir || opts.resume)
+  ) {
+    throw new Error(
+      '--frame-transport, --capture-format, --frames-dir, and --resume only apply to MP4 output',
+    );
+  }
+  const frameTransport = (opts.frameTransport ?? 'pipe') as (typeof VALID_FRAME_TRANSPORTS)[number];
+  if (!VALID_FRAME_TRANSPORTS.includes(frameTransport)) {
+    throw new Error(
+      `Invalid frame transport "${frameTransport}". Valid: ${VALID_FRAME_TRANSPORTS.join(', ')}`,
+    );
+  }
+  const captureFormat = opts.captureFormat as (typeof VALID_CAPTURE_FORMATS)[number] | undefined;
+  if (captureFormat !== undefined && !VALID_CAPTURE_FORMATS.includes(captureFormat)) {
+    throw new Error(
+      `Invalid capture format "${captureFormat}". Valid: ${VALID_CAPTURE_FORMATS.join(', ')}`,
+    );
+  }
+  if (opts.resume && !opts.framesDir) {
+    throw new Error('--resume requires --frames-dir');
+  }
+  if ((opts.framesDir || captureFormat) && frameTransport !== 'pipe') {
+    throw new Error('--frames-dir and --capture-format require --frame-transport pipe');
   }
 
   const animationsEnabled = opts.animations ?? outputFormat === 'mp4';
@@ -278,7 +322,8 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   }
 
   const motionLabel = animationsEnabled ? 'animations on' : 'animations off';
-  const qualityLabel = outputFormat === 'mp4' ? `, quality: ${quality}` : '';
+  const qualityLabel =
+    outputFormat === 'mp4' ? `, quality: ${quality}, transport: ${frameTransport}` : '';
   console.error(
     `Rendering ${outputFormat.toUpperCase()}: ${fps} fps${qualityLabel}, orientation: ${orientation}, captions: ${captions}, ${motionLabel}`,
   );
@@ -307,6 +352,10 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
       : await renderDocToMp4(doc, container, {
           ...sharedRenderOptions,
           quality: quality as VideoQuality,
+          frameTransport,
+          captureFormat,
+          framesDir: opts.framesDir ? resolve(opts.framesDir) : undefined,
+          resume: opts.resume,
         });
 
   clearProgress();
@@ -314,8 +363,12 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   for (const warning of warnings) {
     console.error(`  ⚠ ${warning}`);
   }
+  const reused =
+    'reusedFrameCount' in result2 && result2.reusedFrameCount
+      ? `, ${result2.reusedFrameCount} reused from ${opts.framesDir}`
+      : '';
   console.error(
-    `  ✓ ${outputPath} (${result2.duration.toFixed(1)}s, ${result2.frameCount} frames)`,
+    `  ✓ ${outputPath} (${result2.duration.toFixed(1)}s, ${result2.frameCount} frames${reused})`,
   );
   console.error('Done.');
 }

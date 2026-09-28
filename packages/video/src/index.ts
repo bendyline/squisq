@@ -74,3 +74,6 @@ export {
 
 // ── WASM Encoder ───────────────────────────────────────────────────
 export { framesToMp4Wasm, fetchFile } from './wasmEncoder.js';
+
+// ── Frame clock ─────────────────────────────────────────────────────
+export { frameCountFor, frameTimeSeconds } from './frameClock.js';

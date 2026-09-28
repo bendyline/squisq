@@ -106,6 +106,14 @@ export interface MountOptions {
    */
   renderMode?: boolean;
   /**
+   * Viewport the player composes for, in CSS pixels. Render pages pass their
+   * export dimensions so portrait and custom sizes are laid out natively
+   * instead of letterboxed inside the landscape preset. Omit for live hosts
+   * (the player sizes to its element) and for dashboard mounts, which always
+   * fill the host box.
+   */
+  viewport?: { width: number; height: number; name?: string };
+  /**
    * Whether to render slide transitions and per-layer animations (default: true).
    * Timed media continues to play when disabled.
    */
@@ -312,6 +320,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     pipShape,
     pipPosition,
     renderMode = false,
+    viewport,
     animationsEnabled = true,
     captionStyle,
     captionPosition,
@@ -349,10 +358,13 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
   } else {
     // Dashboard canvases fill the host element's box: the render page pins
     // `#squisq-root` to the export dimensions, and a live host sizes it with
-    // CSS. Without this, DocPlayer's render-mode fallback (landscape) would
-    // letterbox a square/portrait dashboard inside the page.
-    const hostRect = mode === 'dashboard' ? element.getBoundingClientRect() : undefined;
-    const dashboardViewport =
+    // CSS. Render mounts of the other modes use the same box as a fallback
+    // when the page passed no explicit viewport. Without this, DocPlayer's
+    // render-mode fallback (landscape) would letterbox a square/portrait
+    // render inside the page.
+    const hostRect =
+      mode === 'dashboard' || renderMode ? element.getBoundingClientRect() : undefined;
+    const hostViewport =
       hostRect && hostRect.width > 0 && hostRect.height > 0
         ? {
             width: Math.round(hostRect.width),
@@ -360,6 +372,16 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
             name: 'Host viewport',
           }
         : undefined;
+    const explicitViewport =
+      viewport && viewport.width > 0 && viewport.height > 0
+        ? {
+            width: Math.round(viewport.width),
+            height: Math.round(viewport.height),
+            name: viewport.name ?? 'Render viewport',
+          }
+        : undefined;
+    const forcedViewport =
+      mode === 'dashboard' ? (hostViewport ?? explicitViewport) : (explicitViewport ?? hostViewport);
     content = createElement(DocPlayer, {
       doc: finalDoc,
       basePath,
@@ -367,7 +389,11 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       // the default media-driven clock has nothing to play, so video
       // mode reports 0:00 and never advances (and the empty media src
       // resolves to the page URL, which file:// hosts hard-block).
-      audioMode: finalDoc.audio?.segments?.length ? 'media' : 'synthetic',
+      // Render mounts always use it: offline capture drives the
+      // deterministic render clock and exporters mux the audio themselves,
+      // so loading segments into a media element here only risks painting
+      // the "audio unavailable" notice into every captured frame.
+      audioMode: !renderMode && finalDoc.audio?.segments?.length ? 'media' : 'synthetic',
       displayMode:
         mode === 'dashboard'
           ? 'dashboard'
@@ -381,7 +407,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       dashboardShowTitle: dashboard?.title,
       dashboardStyle: dashboard?.style,
       dashboardDocumentTitle: dashboard?.documentTitle,
-      forceViewport: dashboardViewport,
+      forceViewport: forcedViewport,
       autoPlay: renderMode ? false : autoPlay,
       showControls: !renderMode,
       renderMode,

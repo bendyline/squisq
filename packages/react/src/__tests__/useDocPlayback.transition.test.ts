@@ -111,3 +111,30 @@ describe('useDocPlayback — synchronous block transitions', () => {
     expect(seek).toHaveBeenLastCalledWith(0);
   });
 });
+
+describe('useDocPlayback — deterministic transitions (render mode)', () => {
+  const options = { viewport: VIEWPORT_PRESETS.landscape, deterministicTransitions: true };
+
+  it('derives the outgoing block from block order, independent of render history', () => {
+    // A fresh hook that starts inside B's entrance window never rendered A,
+    // yet must still crossfade from it: offline capture can begin anywhere.
+    const entering = renderHook(() => useDocPlayback(doc, 5.1, options)).result.current;
+    expect(entering.currentBlockIndex).toBe(1);
+    expect(entering.isExiting).toBe(true);
+    expect(entering.previousBlock?.id).toBe('a');
+  });
+
+  it('gives the same answer for out-of-order seeks', () => {
+    const { result, rerender } = renderHook(
+      ({ t }: { t: number }) => useDocPlayback(doc, t, options),
+      { initialProps: { t: 7 } },
+    );
+    expect(result.current.previousBlock).toBeNull();
+    rerender({ t: 5.2 });
+    expect(result.current.previousBlock?.id).toBe('a');
+    rerender({ t: 0.1 });
+    expect(result.current.previousBlock).toBeNull();
+    rerender({ t: 5.3 });
+    expect(result.current.previousBlock?.id).toBe('a');
+  });
+});

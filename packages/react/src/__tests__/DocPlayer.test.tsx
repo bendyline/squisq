@@ -1069,10 +1069,16 @@ describe('DocPlayer smoke test', () => {
         },
       },
       currentTime: null as number | null,
+      playState: 'running',
+      pause: vi.fn(),
     };
+    const getAnimationsCalls: Array<{ subtree?: boolean } | undefined> = [];
     Object.defineProperty(container.querySelector('.doc-player')!, 'getAnimations', {
       configurable: true,
-      value: () => [animation],
+      value: (options?: { subtree?: boolean }) => {
+        getAnimationsCalls.push(options);
+        return [animation];
+      },
     });
 
     await act(async () => api.seekTo(5.1));
@@ -1086,6 +1092,11 @@ describe('DocPlayer smoke test', () => {
     ).toBeTruthy();
     expect(audioController.seekTo).toHaveBeenCalledWith(5.1);
     expect(animation.currentTime).toBeCloseTo(100);
+    // Layer animations live below the root: only a subtree query finds them,
+    // and render mode pauses them so they cannot drift between captures.
+    expect(getAnimationsCalls.length).toBeGreaterThan(0);
+    expect(getAnimationsCalls.every((call) => call?.subtree === true)).toBe(true);
+    expect(animation.pause).toHaveBeenCalled();
     expect(requestFrame).toHaveBeenCalledOnce();
     requestFrame.mockRestore();
   });

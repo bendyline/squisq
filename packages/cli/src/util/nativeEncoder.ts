@@ -175,8 +175,10 @@ export async function framesToMp4Native(
 
     // Run ffmpeg. execFile buffers stdout/stderr internally for the callback,
     // so the child's pipes are already drained — no manual stderr listener needed.
+    // Long documents encode for more than ten minutes at the `high` preset;
+    // scale the bound with the work instead of failing a healthy encode.
     await runFfmpeg(ffmpegPath, args, {
-      timeoutMs: 600_000,
+      timeoutMs: Math.max(600_000, frames.length * 250),
       failureMessage: 'ffmpeg failed',
       signal: options.signal,
     });

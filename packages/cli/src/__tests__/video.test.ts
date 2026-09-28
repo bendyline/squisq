@@ -199,3 +199,44 @@ describe('video command flag validation', () => {
     expect(stderr).to.not.include('Reading:');
   });
 });
+
+describe('video command frame-transport flag validation', () => {
+  it('rejects an unknown frame transport', async () => {
+    const stderr = await runCliExpectingError('video', FIXTURE_MD, '--frame-transport', 'carrier-pigeon');
+    expect(stderr).to.include('Invalid frame transport "carrier-pigeon"');
+  });
+
+  it('rejects an unknown capture format', async () => {
+    const stderr = await runCliExpectingError('video', FIXTURE_MD, '--capture-format', 'bmp');
+    expect(stderr).to.include('Invalid capture format "bmp"');
+  });
+
+  it('rejects --resume without --frames-dir', async () => {
+    const stderr = await runCliExpectingError('video', FIXTURE_MD, '--resume');
+    expect(stderr).to.include('--resume requires --frames-dir');
+  });
+
+  it('rejects spooling on the memory transport', async () => {
+    const stderr = await runCliExpectingError(
+      'video',
+      FIXTURE_MD,
+      '--frame-transport',
+      'memory',
+      '--frames-dir',
+      '/tmp/frames',
+    );
+    expect(stderr).to.include('require --frame-transport pipe');
+  });
+
+  it('rejects the MP4-only spool flags for GIF output', async () => {
+    const stderr = await runCliExpectingError(
+      'video',
+      FIXTURE_MD,
+      '--format',
+      'gif',
+      '--frames-dir',
+      '/tmp/frames',
+    );
+    expect(stderr).to.include('only apply to MP4 output');
+  });
+});

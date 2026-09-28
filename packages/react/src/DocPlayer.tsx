@@ -513,6 +513,9 @@ function DocPlayerContent({
     viewport: activeViewport,
     theme: effectiveTheme,
     onSeek: seekTo,
+    // Offline capture may visit frames out of order; derive the crossfade
+    // partner from block order rather than from what was rendered last.
+    deterministicTransitions: renderMode,
     // A synthetic track is only the timer used by an unnarrated preview.
     // Narration pacing may compact short visual beats, but it must never
     // remove authored slides from the default loss-averse projection.
@@ -622,13 +625,16 @@ function DocPlayerContent({
   // Determine if we should show the cover block
   // Show cover when: has cover block, not playing, at time 0, not in render mode
   // OR during the grace period after first play, OR when coverForced (render mode)
+  // A forced cover (render API `showCover`, used for the video pre-roll and the
+  // poster frame) wins in every player-backed mode; the slideshow-mode check
+  // below only governs the live, at-rest cover.
   const showVideoCoverBlock =
-    !isSlideshowMode &&
     !isLinearMode &&
     !!coverBlock &&
     (coverForced ||
-      coverGraceActive ||
-      (!isPlaying && currentTime === 0 && !hasPlayedOnce.current && !renderMode && !autoPlay));
+      (!isSlideshowMode &&
+        (coverGraceActive ||
+          (!isPlaying && currentTime === 0 && !hasPlayedOnce.current && !renderMode && !autoPlay))));
   const effectiveSlideshowCoverVisible = coverVisible ?? slideshowCoverVisible;
   const showSlideshowCover = !!(
     isSlideshowMode &&
@@ -696,6 +702,7 @@ function DocPlayerContent({
       seekTo: (time) => current().seekTo(time),
       getRenderedTime: () => current().getRenderedTime(),
       getDuration: () => current().getDuration(),
+      getViewport: () => current().getViewport(),
       getBlocks: () => current().getBlocks(),
       getAudioSegments: () => current().getAudioSegments(),
       getCaptions: () => current().getCaptions(),
@@ -735,15 +742,20 @@ function DocPlayerContent({
       // React has committed the requested block/captions. Advance CSS
       // animations (Ken Burns, transitions) to the same timeline position.
       // Without this, animations restart from zero on each seek.
-      // Find the current block's start time
-      let blockStartTime = 0;
+      // Find the active block (and the block before it, the only one that can
+      // be exiting underneath it during a crossfade) by start time.
+      let activeIndex = -1;
       for (let i = expandedBlocks.length - 1; i >= 0; i--) {
         if (time >= expandedBlocks[i].startTime) {
-          blockStartTime = expandedBlocks[i].startTime;
+          activeIndex = i;
           break;
         }
       }
+      const blockStartTime = activeIndex >= 0 ? expandedBlocks[activeIndex].startTime : 0;
+      const previousStartTime =
+        activeIndex > 0 ? expandedBlocks[activeIndex - 1].startTime : blockStartTime;
       const elapsedMs = (time - blockStartTime) * 1000;
+      const previousElapsedMs = (time - previousStartTime) * 1000;
       // A capture host may supply decoded frames for some videos; anything it
       // declines is seeked on the element itself.
       const selectVideoFrame = async (video: HTMLVideoElement, targetTime: number) => {
@@ -752,22 +764,34 @@ function DocPlayerContent({
         await seekVideoToFrame(video, targetTime);
       };
 
-      // Set all CSS animations to the correct timeline position
-      (root.getAnimations?.() ?? []).forEach((anim) => {
-        const target = (anim.effect as KeyframeEffect)?.target as Element | null;
+      // Set every CSS animation to its timeline position. `subtree: true` is
+      // load-bearing: Element.getAnimations() alone lists only animations that
+      // target the root element itself, so layer animations (Ken Burns,
+      // entrances, staggered reveals) were never repositioned and ran on the
+      // wall clock between captures. Render mode also pauses each animation so
+      // it cannot advance between the seek and the screenshot.
+      (root.getAnimations?.({ subtree: true }) ?? []).forEach((anim) => {
+        const target = (anim.effect as KeyframeEffect | null)?.target as Element | null;
         if (!target) return;
-
-        // Animations on the active block: use current block elapsed time
-        if (target.closest('.doc-player__block--active')) {
-          anim.currentTime = Math.max(0, elapsedMs);
+        let position: number;
+        if (target.closest('.doc-player__block--previous')) {
+          // The outgoing block's exit transition lives on its block svg and
+          // runs on the incoming block's clock; everything inside keeps the
+          // clock it started with, so Ken Burns and entrances do not restart
+          // during the crossfade.
+          position = target.classList.contains('block-svg') ? elapsedMs : previousElapsedMs;
+        } else if (target.closest('.doc-player__block--active')) {
+          position = elapsedMs;
+        } else if (target.closest('.doc-player__block--cover')) {
+          position = 0;
+        } else {
+          // Player-level layers (scheduled media, overlays) run on doc time.
+          position = time * 1000;
         }
-        // Animations on the exiting block (during crossfade): use current
-        // block elapsed for transition animations, keep Ken Burns at their
-        // natural position based on when that block started
-        // eslint-disable-next-line sonarjs/no-duplicated-branches
-        else if (target.closest('.doc-player__block--previous')) {
-          anim.currentTime = Math.max(0, elapsedMs);
+        if (renderMode && typeof anim.pause === 'function' && anim.playState !== 'paused') {
+          anim.pause();
         }
+        anim.currentTime = Math.max(0, position);
       });
 
       // Seek <video> elements in the active block to the correct clip position.
@@ -880,11 +904,15 @@ function DocPlayerContent({
       return waitForVisualUpdate();
     };
     const hasCoverBlock = () => !!coverBlock;
+    // The viewport the blocks were composed for. Capture hosts compare it with
+    // their export size so a mismatch fails fast instead of letterboxing.
+    const getViewport = () => ({ width: activeViewport.width, height: activeViewport.height });
 
     const api: SquisqRenderAPI = {
       seekTo: renderSeekTo,
       getRenderedTime: () => committedRenderTimeRef.current,
       getDuration,
+      getViewport,
       getBlocks,
       getAudioSegments,
       getCaptions,
@@ -909,6 +937,7 @@ function DocPlayerContent({
     externalAudioController,
     waitForRenderCommit,
     isDashboardMode,
+    activeViewport,
   ]);
 
   // Publish/clean up only when the host callback or API availability changes;
@@ -1409,7 +1438,9 @@ function DocPlayerContent({
       role="region"
       aria-label="Document player"
       onKeyDown={renderMode ? undefined : handleKeyDown}
-      className={`doc-player${swipeEnabled ? ' doc-player--swipe' : ''}${
+      className={`doc-player${renderMode ? ' doc-player--render-mode' : ''}${
+        swipeEnabled ? ' doc-player--swipe' : ''
+      }${
         swipe.phase === 'dragging' ? ' doc-player--grabbing' : ''
       }`}
       onClick={handleContainerClick}
@@ -1656,7 +1687,7 @@ function DocPlayerContent({
       </div>
 
       {/* Audio unavailable overlay */}
-      {!isAvailable && unavailableMessage && (
+      {!renderMode && !isAvailable && unavailableMessage && (
         <div
           className="doc-player__unavailable"
           style={{

@@ -210,6 +210,10 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
   const imageMapJson = escapeForScript(JSON.stringify(imageMap));
   const audioMapJson = hasAudio ? escapeForScript(JSON.stringify(audioMap)) : 'null';
   const playerOptionLines = [
+    // Always pin the composed viewport to the export size. The page also
+    // pins #squisq-root to it, but an explicit viewport is what stops
+    // portrait/custom renders from falling back to the landscape preset.
+    `    viewport: ${JSON.stringify({ width, height })}`,
     `    animationsEnabled: ${JSON.stringify(animationsEnabled)}`,
     captionStyle ? `    captionStyle: ${JSON.stringify(captionStyle)}` : null,
     theme ? `    theme: ${escapeForScript(JSON.stringify(theme))}` : null,

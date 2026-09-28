@@ -212,6 +212,8 @@ export interface SquisqRenderAPI {
   /** Timeline time most recently committed to the player DOM. */
   getRenderedTime: () => number;
   getDuration: () => number;
+  /** Viewport (CSS px) the blocks were composed for; capture hosts verify it matches their export size. */
+  getViewport: () => { width: number; height: number };
   getBlocks: () => RenderBlockInfo[];
   getAudioSegments: () => RenderAudioSegmentInfo[];
   getCaptions: () => RenderCaptionInfo[];

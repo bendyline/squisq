@@ -2,9 +2,12 @@
  * SocialCaptionOverlay Component
  *
  * Social media-style captions (Instagram/TikTok): large centered words
- * showing 3-5 words at a time with the currently-spoken word highlighted
- * in the theme's primary color. Font and colors are pulled from the
- * active theme.
+ * showing 3-5 words at a time, wrapped onto as many rows as the frame needs,
+ * with the currently-spoken word highlighted as a filled pill in the theme's
+ * primary color over a soft dark backdrop. Font and colors come from the
+ * active theme; type is scaled to the frame's narrower axis so portrait
+ * frames get two or three short rows instead of one overflowing line, and
+ * the band sits above the region short-form players cover with their UI.
  *
  * Words are gathered across all caption phrases into a continuous stream,
  * then chunked into uniform groups for smooth, consistent pacing.
@@ -20,16 +23,33 @@ import type { Theme } from '@bendyline/squisq/schemas';
 import { resolveFontFamily } from '@bendyline/squisq/schemas';
 import type { CaptionPosition } from './types';
 
-/** Frame placement for the overlay band. */
-function positionStyle(position: CaptionPosition): React.CSSProperties {
+/**
+ * Frame placement for the overlay band. Portrait frames keep a larger bottom
+ * inset: short-form players (Shorts, Reels, TikTok) cover roughly the lowest
+ * fifth of the frame with their own UI, and image-credit strips sit at the
+ * very bottom of many slides.
+ */
+function positionStyle(position: CaptionPosition, portrait: boolean): React.CSSProperties {
   switch (position) {
     case 'top':
-      return { top: '8%' };
+      return { top: portrait ? '12%' : '8%' };
     case 'center':
       return { top: '50%', transform: 'translateY(-50%)' };
     default:
-      return { bottom: '18%' };
+      return { bottom: portrait ? '24%' : '16%' };
   }
+}
+
+/** Highlight/primary colour needs readable text on top of it. */
+function contrastText(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return '#ffffff';
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luma > 150 ? '#111111' : '#ffffff';
 }
 
 /** Target words per visible chunk. */
@@ -147,7 +167,7 @@ export function SocialCaptionOverlay({
         className="social-caption-overlay"
         style={{
           position: 'absolute',
-          ...positionStyle(position),
+          ...positionStyle(position, (viewport?.height ?? 0) > (viewport?.width ?? 1)),
           left: 0,
           right: 0,
           zIndex: 50,
@@ -217,32 +237,54 @@ export function SocialCaptionOverlay({
     ? resolveFontFamily(theme.typography.titleFont, '"PT Serif", Georgia, serif')
     : '"PT Serif", Georgia, serif';
 
-  // Scale font to viewport — aim for ~5.5% of viewport height
+  // Scale the type to the frame's narrower axis so a chunk wraps onto two or
+  // three short rows in portrait instead of overflowing the width: ~5.5% of
+  // the height on a landscape frame, ~8.2% of the width on a portrait one.
+  const viewportWidth = viewport?.width ?? 1280;
   const viewportHeight = viewport?.height ?? 720;
-  const baseFontSize = Math.round(viewportHeight * 0.055);
-  const fontSize = Math.max(24, Math.min(72, baseFontSize));
+  const portrait = viewportHeight > viewportWidth;
+  const baseFontSize = Math.min(viewportHeight * 0.055, viewportWidth * 0.082);
+  const fontSize = Math.max(22, Math.min(96, Math.round(baseFontSize)));
 
   return (
     <div
       className="social-caption-overlay"
       style={{
         position: 'absolute',
-        ...positionStyle(position),
+        ...positionStyle(position, portrait),
         left: 0,
         right: 0,
         zIndex: 50,
         pointerEvents: 'none',
-        textAlign: 'center',
-        padding: '0 8%',
+        display: 'flex',
+        justifyContent: 'center',
+        padding: portrait ? '0 7%' : '0 10%',
         boxSizing: 'border-box',
         opacity: 1,
         transition: 'opacity 0.15s ease-in-out',
       }}
     >
       <div
+        className="social-caption-overlay__chunk"
         style={{
-          display: 'inline-block',
-          lineHeight: 1.3,
+          display: 'inline-flex',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          alignItems: 'baseline',
+          maxWidth: '100%',
+          rowGap: '0.12em',
+          columnGap: '0.28em',
+          padding: '0.22em 0.55em',
+          borderRadius: '0.4em',
+          background: 'rgba(10, 10, 12, 0.42)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          fontFamily,
+          fontSize: `${fontSize}px`,
+          lineHeight: 1.18,
+          textTransform: 'uppercase',
+          letterSpacing: '0.01em',
+          whiteSpace: 'normal',
         }}
       >
         {activeChunk.words.map((word, i) => {
@@ -250,15 +292,18 @@ export function SocialCaptionOverlay({
           return (
             <span
               key={`${word.startTime}-${i}`}
+              className={isActive ? 'social-caption-overlay__word is-active' : 'social-caption-overlay__word'}
               style={{
-                fontFamily,
-                fontSize: `${fontSize}px`,
-                fontWeight: isActive ? 800 : 600,
-                color: isActive ? primaryColor : 'rgba(255, 255, 255, 0.9)',
-                textShadow: '0 2px 8px rgba(0,0,0,0.7), 0 0 20px rgba(0,0,0,0.4)',
-                marginRight: i < activeChunk!.words.length - 1 ? '0.3em' : undefined,
-                transition: 'color 0.1s ease, font-weight 0.1s ease',
-                textTransform: 'uppercase',
+                display: 'inline-block',
+                whiteSpace: 'nowrap',
+                padding: '0 0.16em',
+                borderRadius: '0.18em',
+                fontWeight: 800,
+                color: isActive ? contrastText(primaryColor) : 'rgba(255, 255, 255, 0.95)',
+                background: isActive ? primaryColor : 'transparent',
+                textShadow: isActive ? 'none' : '0 2px 6px rgba(0,0,0,0.75), 0 0 18px rgba(0,0,0,0.45)',
+                transform: isActive ? 'scale(1.05)' : 'none',
+                transition: 'color 0.1s ease, background-color 0.1s ease, transform 0.1s ease',
               }}
             >
               {word.text}

@@ -158,6 +158,7 @@ export function DashboardView({
       },
       getRenderedTime: () => 0,
       getDuration: () => 0,
+      getViewport: () => ({ width: activeViewport.width, height: activeViewport.height }),
       getBlocks: () =>
         materialization.cells.map((cell) => ({
           id: String(cell.block.id),
@@ -174,7 +175,7 @@ export function DashboardView({
     };
     onRenderAPIReady(api);
     return () => onRenderAPIReady(null);
-  }, [renderMode, onRenderAPIReady, materialization]);
+  }, [activeViewport, renderMode, onRenderAPIReady, materialization]);
 
   const canvasDimensions = { width: activeViewport.width, height: activeViewport.height };
   const coverStyle: CSSProperties = { position: 'absolute', inset: 0 };
