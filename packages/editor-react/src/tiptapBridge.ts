@@ -21,6 +21,9 @@ import { mediaEditHtmlAttribute } from '@bendyline/squisq/mediaEdit';
 import { mediaEditKeysFor } from './tiptap/mediaEditAttributes';
 import { needsAngleDestination, unwrapLinkDestination } from './markdownDestination';
 
+/** Marks a backslash-escaped character; see `MarkdownEscape.ts`. */
+export const MARKDOWN_ESCAPE_ATTR = 'data-md-escape';
+
 // Hoisted regex patterns for inline markdown ↔ HTML conversion
 //
 // Emphasis carries CommonMark-ish flanking guards. Two rules matter:
@@ -67,12 +70,24 @@ const RE_LEGACY_ITALIC_STAR = /(?<!\*)\*(?![\s*])([^*]+?)(?<![\s*])([ \t]+)\*(?=
 
 // The delimiters whose backslash escapes this pass understands. `\\` is
 // included so an even backslash run collapses correctly instead of
-// leaking a literal backslash in front of live emphasis. `#` is here because
-// remark writes `\#` in front of any paragraph that starts with one (a
-// hashtag line), and the editor showed that backslash; the paragraph
-// serializer re-escapes the one position where `#` means a heading.
-const ESCAPABLE_MD_CHARS: readonly string[] = ['*', '_', '~', '\\', '#'];
-const RE_MD_ESCAPE = /\\([*_~\\#])/g;
+// leaking a literal backslash in front of live emphasis.
+const ESCAPABLE_MD_CHARS: readonly string[] = ['*', '_', '~', '\\'];
+const RE_MD_ESCAPE = /\\([*_~\\])/g;
+
+/** Every backslash pair in order, so `\\$` reads as `\\` then a bare `$`. */
+const RE_BACKSLASH_PAIR = /\\([\s\S])/g;
+/**
+ * ASCII punctuation a backslash escapes in CommonMark, less the four above:
+ * these become a `MarkdownEscape` mark rather than being dropped, because
+ * nothing downstream can tell when their backslash was load-bearing.
+ */
+const RE_MARK_ESCAPABLE = /[!"#$%&'()+,\-./:;<=>?@[\]^`{|}]/;
+/** Any ASCII punctuation: a literal backslash in front of one must be doubled. */
+const RE_ASCII_PUNCTUATION = /[!-/:-@[-`{-~]/;
+const RE_ESCAPE_SPAN = new RegExp(
+  `<span\\b[^>]*\\b${MARKDOWN_ESCAPE_ATTR}\\b[^>]*>([\\s\\S]*?)<\\/span>`,
+  'gi',
+);
 
 const RE_INLINE_CODE = /`(.+?)`/g;
 const BACKTICK = '`';
@@ -1554,6 +1569,18 @@ function inlineToHtml(text: string): string {
     return stash(`<a href="${escapeHtml(url)}"${titleAttr}>${inlineToHtml(linkText)}</a>`);
   });
 
+  // Escaped punctuation the emphasis pass below does not own (`\$`, `\#`,
+  // `\[` …) becomes a `MarkdownEscape` mark: the Write view shows the bare
+  // character and `tiptapToMarkdown` writes the backslash back. Runs after
+  // code, links and images are stashed — an escape inside a code span is
+  // literal text, and one in a link destination belongs to the URL.
+  const escapes: string[] = [];
+  staged = staged.replace(RE_BACKSLASH_PAIR, (pair: string, ch: string) => {
+    if (!RE_MARK_ESCAPABLE.test(ch)) return pair;
+    escapes.push(`<span ${MARKDOWN_ESCAPE_ATTR}="">${escapeHtml(ch)}</span>`);
+    return `\u0000ME${escapes.length - 1}\u0000`;
+  });
+
   let result = escapeHtml(staged);
 
   // Neutralize backslash-escaped emphasis delimiters BEFORE the emphasis
@@ -1598,6 +1625,9 @@ function inlineToHtml(text: string): string {
   // would leave that nested token unresolved.
   for (let index = placeholders.length - 1; index >= 0; index--) {
     result = result.split(`\u0000PH${index}\u0000`).join(placeholders[index] ?? '');
+  }
+  for (let index = escapes.length - 1; index >= 0; index--) {
+    result = result.split(`\u0000ME${index}\u0000`).join(escapes[index] ?? '');
   }
 
   return preserveLeadingSpaces(result);
@@ -1794,9 +1824,12 @@ function escapeMarkdownRun(text: string): string {
     const next = text[i + 1];
 
     if (ch === '\\') {
-      // Only double a backslash that would otherwise escape a delimiter we
-      // handle; `C:\path` must stay `C:\path`.
-      out += ESCAPABLE_MD_CHARS.includes(next ?? '') ? '\\\\' : '\\';
+      // A backslash before any ASCII punctuation is an escape, so a literal
+      // one there is doubled — as is one at the end of the run or before a
+      // vaulted token, where the character that follows is not known here.
+      // `\\` always reads back as one backslash; `C:\path` stays as written.
+      out +=
+        next === undefined || next === '\u0000' || RE_ASCII_PUNCTUATION.test(next) ? '\\\\' : '\\';
       continue;
     }
     if (ch === '~') {
@@ -1905,6 +1938,22 @@ class RawHtmlVault {
 function htmlToInline(html: string): string {
   let result = html;
   const vault = new RawHtmlVault();
+
+  // Characters the source escaped (see `MarkdownEscape`) get their backslash
+  // back. Vaulted so no later pass escapes or strips it again, and kept
+  // HTML-escaped because the closing `unescapeHtml` decodes the string once.
+  // Only punctuation is re-escaped: text typed inside the mark stays plain.
+  result = result.replace(RE_ESCAPE_SPAN, (_span, inner: string) =>
+    inner.replace(/(<[^>]+>)|([^<]+)/g, (_segment, tag?: string, text?: string) =>
+      tag !== undefined
+        ? tag
+        : [...unescapeHtml(text ?? '')]
+            .map((ch) =>
+              RE_ASCII_PUNCTUATION.test(ch) ? vault.protect(escapeHtml(`\\${ch}`)) : escapeHtml(ch),
+            )
+            .join(''),
+    ),
+  );
 
   // Soft line breaks — convert <br> to GFM hard-break syntax (two trailing
   // spaces + newline) before stripping tags so the newline survives.

@@ -16,6 +16,7 @@
 import type { Extensions } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
+import { MarkdownEscape } from '../../MarkdownEscape';
 import type { SceneTextLevel } from './sceneTextConfig';
 
 export function buildSceneTextExtensions(level: SceneTextLevel): Extensions {
@@ -32,5 +33,5 @@ export function buildSceneTextExtensions(level: SceneTextLevel): Extensions {
       : level === 'block'
         ? StarterKit.configure({ heading: false, horizontalRule: false })
         : StarterKit.configure({ horizontalRule: false });
-  return [starter, Link.configure({ openOnClick: false })];
+  return [starter, Link.configure({ openOnClick: false }), MarkdownEscape];
 }
