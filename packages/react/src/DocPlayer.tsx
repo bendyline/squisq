@@ -501,7 +501,10 @@ function DocPlayerContent({
   // Narrated docs carry blocks anchored to their audio segments; an unnarrated
   // preview's template slides do not, and must keep their loss-averse stacking.
   const hasAnchoredBlocks = useMemo(
-    () => doc.blocks.some((block) => typeof (block as { sourceStartTime?: unknown }).sourceStartTime === 'number'),
+    () =>
+      doc.blocks.some(
+        (block) => typeof (block as { sourceStartTime?: unknown }).sourceStartTime === 'number',
+      ),
     [doc.blocks],
   );
 

@@ -812,8 +812,22 @@ describe('DocPlayer smoke test', () => {
         ],
       },
       blocks: [
-        { template: 'bigText', id: 'first', text: 'One', audioSegment: 0, sourceStartTime: 0, duration: 10 },
-        { template: 'bigText', id: 'second', text: 'Two', audioSegment: 1, sourceStartTime: 3, duration: 7 },
+        {
+          template: 'bigText',
+          id: 'first',
+          text: 'One',
+          audioSegment: 0,
+          sourceStartTime: 0,
+          duration: 10,
+        },
+        {
+          template: 'bigText',
+          id: 'second',
+          text: 'Two',
+          audioSegment: 1,
+          sourceStartTime: 3,
+          duration: 7,
+        },
       ] as unknown as Doc['blocks'],
     };
     const onRenderAPIReady = vi.fn();
@@ -829,9 +843,13 @@ describe('DocPlayer smoke test', () => {
     );
     const api = onRenderAPIReady.mock.calls[0][0] as SquisqRenderAPI;
     await act(async () => api.seekTo(11.5));
-    expect(container.querySelector('.doc-player__block--active [data-block-id="first"]')).toBeTruthy();
+    expect(
+      container.querySelector('.doc-player__block--active [data-block-id="first"]'),
+    ).toBeTruthy();
     await act(async () => api.seekTo(13.5));
-    expect(container.querySelector('.doc-player__block--active [data-block-id="second"]')).toBeTruthy();
+    expect(
+      container.querySelector('.doc-player__block--active [data-block-id="second"]'),
+    ).toBeTruthy();
   });
 
   it('keeps the exiting slide on its own clock during the crossfade', () => {
