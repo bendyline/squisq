@@ -634,7 +634,11 @@ function DocPlayerContent({
     (coverForced ||
       (!isSlideshowMode &&
         (coverGraceActive ||
-          (!isPlaying && currentTime === 0 && !hasPlayedOnce.current && !renderMode && !autoPlay))));
+          (!isPlaying &&
+            currentTime === 0 &&
+            !hasPlayedOnce.current &&
+            !renderMode &&
+            !autoPlay))));
   const effectiveSlideshowCoverVisible = coverVisible ?? slideshowCoverVisible;
   const showSlideshowCover = !!(
     isSlideshowMode &&
@@ -1440,9 +1444,7 @@ function DocPlayerContent({
       onKeyDown={renderMode ? undefined : handleKeyDown}
       className={`doc-player${renderMode ? ' doc-player--render-mode' : ''}${
         swipeEnabled ? ' doc-player--swipe' : ''
-      }${
-        swipe.phase === 'dragging' ? ' doc-player--grabbing' : ''
-      }`}
+      }${swipe.phase === 'dragging' ? ' doc-player--grabbing' : ''}`}
       onClick={handleContainerClick}
       onPointerDown={swipe.onPointerDown}
       style={{

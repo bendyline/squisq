@@ -219,7 +219,9 @@ describe('standalone render cover', () => {
     expect(root.querySelector('.doc-player__block--cover')).toBeNull();
     await api?.showCover();
     await waitFor(() => expect(root.querySelector('.doc-player__block--cover')).not.toBeNull());
-    expect(root.querySelector('.doc-player__block--cover')?.textContent).toContain('qualla.com/covered');
+    expect(root.querySelector('.doc-player__block--cover')?.textContent).toContain(
+      'qualla.com/covered',
+    );
     await api?.hideCover();
     await waitFor(() => expect(root.querySelector('.doc-player__block--cover')).toBeNull());
   });

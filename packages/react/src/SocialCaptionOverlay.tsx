@@ -292,7 +292,9 @@ export function SocialCaptionOverlay({
           return (
             <span
               key={`${word.startTime}-${i}`}
-              className={isActive ? 'social-caption-overlay__word is-active' : 'social-caption-overlay__word'}
+              className={
+                isActive ? 'social-caption-overlay__word is-active' : 'social-caption-overlay__word'
+              }
               style={{
                 display: 'inline-block',
                 whiteSpace: 'nowrap',
@@ -301,7 +303,9 @@ export function SocialCaptionOverlay({
                 fontWeight: 800,
                 color: isActive ? contrastText(primaryColor) : 'rgba(255, 255, 255, 0.95)',
                 background: isActive ? primaryColor : 'transparent',
-                textShadow: isActive ? 'none' : '0 2px 6px rgba(0,0,0,0.75), 0 0 18px rgba(0,0,0,0.45)',
+                textShadow: isActive
+                  ? 'none'
+                  : '0 2px 6px rgba(0,0,0,0.75), 0 0 18px rgba(0,0,0,0.45)',
                 transform: isActive ? 'scale(1.05)' : 'none',
                 transition: 'color 0.1s ease, background-color 0.1s ease, transform 0.1s ease',
               }}

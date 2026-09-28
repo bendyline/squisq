@@ -47,7 +47,12 @@ describe('Social caption layout', () => {
   const longCaptions: CaptionTrack = {
     version: 1,
     phrases: [
-      { text: 'Strange songs the massive whales sing under the reef', startTime: 0, endTime: 5, audioSegment: 0 },
+      {
+        text: 'Strange songs the massive whales sing under the reef',
+        startTime: 0,
+        endTime: 5,
+        audioSegment: 0,
+      },
     ],
   };
 

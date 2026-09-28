@@ -381,7 +381,9 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
           }
         : undefined;
     const forcedViewport =
-      mode === 'dashboard' ? (hostViewport ?? explicitViewport) : (explicitViewport ?? hostViewport);
+      mode === 'dashboard'
+        ? (hostViewport ?? explicitViewport)
+        : (explicitViewport ?? hostViewport);
     content = createElement(DocPlayer, {
       doc: finalDoc,
       basePath,

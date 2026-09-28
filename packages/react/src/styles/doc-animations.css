@@ -2531,8 +2531,7 @@
 }
 
 .anim-fadeIn {
-  animation: fadeIn var(--anim-duration, 1s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    both;
+  animation: fadeIn var(--anim-duration, 1s) var(--anim-easing, ease-out) var(--anim-delay, 0s) both;
 }
 
 .anim-fadeOut {
@@ -2576,13 +2575,11 @@
 }
 
 .anim-panLeft {
-  animation: panLeft var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s)
-    both;
+  animation: panLeft var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) both;
 }
 
 .anim-panRight {
-  animation: panRight var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s)
-    both;
+  animation: panRight var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) both;
 }
 
 .squisq-image--portrait-pan-right {

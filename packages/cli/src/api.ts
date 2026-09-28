@@ -819,7 +819,11 @@ async function renderDocToMp4Piped(
     captureFormat,
   };
   const store = options.framesDir
-    ? await openDirectoryFrameStore(resolvePath(options.framesDir), manifest, options.resume === true)
+    ? await openDirectoryFrameStore(
+        resolvePath(options.framesDir),
+        manifest,
+        options.resume === true,
+      )
     : null;
 
   const audioPath = join(tmpdir(), `squisq-audio-${randomBytes(8).toString('hex')}.mp3`);

@@ -202,7 +202,12 @@ describe('video command flag validation', () => {
 
 describe('video command frame-transport flag validation', () => {
   it('rejects an unknown frame transport', async () => {
-    const stderr = await runCliExpectingError('video', FIXTURE_MD, '--frame-transport', 'carrier-pigeon');
+    const stderr = await runCliExpectingError(
+      'video',
+      FIXTURE_MD,
+      '--frame-transport',
+      'carrier-pigeon',
+    );
     expect(stderr).to.include('Invalid frame transport "carrier-pigeon"');
   });
 

@@ -147,9 +147,7 @@ export function createFfmpegPipeSink(options: FfmpegPipeSinkOptions): FrameSink 
 
   const idleTimer = setInterval(() => {
     if (Date.now() - lastActivity > idleTimeoutMs) {
-      failure ??= new Error(
-        `ffmpeg produced no output for ${Math.round(idleTimeoutMs / 1000)}s`,
-      );
+      failure ??= new Error(`ffmpeg produced no output for ${Math.round(idleTimeoutMs / 1000)}s`);
       child.kill('SIGKILL');
     }
   }, IDLE_POLL_MS);

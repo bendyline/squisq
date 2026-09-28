@@ -110,8 +110,14 @@ export function registerVideoCommand(program: Command): void {
       '--capture-format <format>',
       `MP4 still format captured per frame: ${VALID_CAPTURE_FORMATS.join(', ')} (default: png for high quality, jpeg otherwise)`,
     )
-    .option('--frames-dir <dir>', 'MP4 only: spool every captured frame here and keep it after the render')
-    .option('--resume', 'MP4 only: reuse frames an identical earlier render spooled into --frames-dir')
+    .option(
+      '--frames-dir <dir>',
+      'MP4 only: spool every captured frame here and keep it after the render',
+    )
+    .option(
+      '--resume',
+      'MP4 only: reuse frames an identical earlier render spooled into --frames-dir',
+    )
     .option('--animations', 'Enable slide animations/transitions (GIF default: disabled)')
     .option('--no-animations', 'Disable slide animations/transitions')
     .option('--loop <count>', 'GIF repeat count: 0 forever, -1 no loop (default: 0)')
