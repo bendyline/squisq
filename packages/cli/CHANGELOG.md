@@ -1,3 +1,14 @@
+## @bendyline/squisq-cli [2.8.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.8.9...@bendyline/squisq-cli@2.8.10) (2026-09-28)
+
+### Bug Fixes
+
+* VIdeo creation fixes ([#68](https://github.com/bendyline/squisq/issues/68)) ([b8167a4](https://github.com/bendyline/squisq/commit/b8167a49b2129252af4b9851a2ba62e49d421270))
+
+
+### Dependencies
+
+* **@bendyline/squisq-video:** upgraded to 2.3.13
+
 ## @bendyline/squisq-cli [2.8.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.8.8...@bendyline/squisq-cli@2.8.9) (2026-09-27)
 
 

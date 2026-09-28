@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-video",
-  "version": "2.3.12",
+  "version": "2.3.13",
   "description": "Cross-runtime video and animated-GIF helpers with browser-based ffmpeg.wasm encoding for Squisq documents",
   "license": "MIT",
   "author": "Bendyline",

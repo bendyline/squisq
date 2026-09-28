@@ -1,3 +1,9 @@
+## @bendyline/squisq-video [2.3.13](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video@2.3.12...@bendyline/squisq-video@2.3.13) (2026-09-28)
+
+### Bug Fixes
+
+* VIdeo creation fixes ([#68](https://github.com/bendyline/squisq/issues/68)) ([b8167a4](https://github.com/bendyline/squisq/commit/b8167a49b2129252af4b9851a2ba62e49d421270))
+
 ## @bendyline/squisq-video [2.3.12](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video@2.3.11...@bendyline/squisq-video@2.3.12) (2026-09-27)
 
 

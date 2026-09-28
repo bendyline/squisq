@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.11.11](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.10...@bendyline/squisq-react@2.11.11) (2026-09-28)
+
+### Bug Fixes
+
+* VIdeo creation fixes ([#68](https://github.com/bendyline/squisq/issues/68)) ([b8167a4](https://github.com/bendyline/squisq/commit/b8167a49b2129252af4b9851a2ba62e49d421270))
+
 ## @bendyline/squisq-react [2.11.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.9...@bendyline/squisq-react@2.11.10) (2026-09-27)
 
 ### Bug Fixes
