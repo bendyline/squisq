@@ -11,6 +11,7 @@
  */
 
 import type { Theme, ThemeColorPalette } from './Theme.js';
+import { isMotionProfileName } from './Motion.js';
 import { THEME_SCHEMA_VERSION } from './themeConstants.js';
 import { isHex } from './colorUtils.js';
 import { isTransitionType } from './Transitions.js';
@@ -276,6 +277,9 @@ class V {
     }
     if (v.ambientMotion !== undefined && !this.isBoolean(v.ambientMotion)) {
       this.err(`${path}.ambientMotion`, 'expected boolean');
+    }
+    if (v.motionProfile !== undefined && !isMotionProfileName(v.motionProfile)) {
+      this.err(`${path}.motionProfile`, 'expected calm | documentary | vibrant');
     }
     for (const k of ['defaultTextAnimation', 'defaultImageAnimation']) {
       if (v[k] !== undefined && !this.isString(v[k])) {

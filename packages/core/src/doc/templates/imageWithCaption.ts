@@ -15,6 +15,7 @@ import {
   shouldUseShadow,
   themedFontSize,
   themedImageTreatment,
+  motionEntrance,
 } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { cleanCaption } from './captionUtils.js';
@@ -107,7 +108,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
         anchor: 'center',
         width: layout.maxTextWidth,
       },
-      animation: { type: 'fadeIn', duration: 0.8 },
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 0.8 }),
     });
 
     // Optional subtitle
@@ -131,7 +132,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
           anchor: 'center',
           width: layout.maxTextWidth,
         },
-        animation: { type: 'fadeIn', duration: 0.8, delay: 0.2 },
+        animation: motionEntrance(context, { type: 'fadeIn', duration: 0.8, delay: 0.2 }),
       });
     }
 
@@ -177,6 +178,9 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
           shadow: shouldUseShadow(context),
           lineHeight: 1.18,
           maxLines: 2,
+          // A two-line caption centres on the band instead of hanging its
+          // second line below it (the block centres on the anchor).
+          shrinkToFit: true,
         },
       },
       position: {
@@ -185,7 +189,7 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
         anchor: 'center',
         width: '78%',
       },
-      animation: { type: 'fadeIn', duration: 1.5, delay: 0.5 },
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 1.5, delay: 0.5 }),
     });
   }
 

@@ -23,6 +23,7 @@
 import type { LayoutHints } from './LayoutStrategy.js';
 import type { AnimationType, ImageTreatment, TransitionType } from './Doc.js';
 import type { PersistentLayerConfig } from './BlockTemplates.js';
+import type { MotionProfileName } from './Motion.js';
 import type { ThemePageStyle } from './PageStyle.js';
 import { THEME_SCHEMA_VERSION } from './themeConstants.js';
 import { validateTheme } from './themeValidator.js';
@@ -218,6 +219,13 @@ export interface RenderStyle {
   defaultImageAnimation?: AnimationType;
   /** Whether to apply Ken Burns ambient motion to images by default */
   ambientMotion?: boolean;
+  /**
+   * Motion profile documents inherit from this theme (`calm` when unset).
+   * Decides whether charts grow, statistics count up, diagrams build in and
+   * how text enters. Documents override it with `squisq-motion` / `Doc.motion`;
+   * see `schemas/Motion.ts`.
+   */
+  motionProfile?: MotionProfileName;
   /** Default block-to-block transition */
   defaultTransition?: { type: TransitionType; duration?: number };
   /**

@@ -526,6 +526,179 @@
 }
 
 /* ============================================
+   Motion-profile keyframes (see the class block below)
+   ============================================ */
+
+@keyframes layerSlideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes layerSlideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes layerSlideInTop {
+  from {
+    opacity: 0;
+    transform: translateY(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes layerSlideInBottom {
+  from {
+    opacity: 0;
+    transform: translateY(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes growIn {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes growX {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes growY {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes drawOn {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes drawOnMarkers {
+  0%,
+  82% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes revealFromLeft {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes revealFromRight {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes revealFromTop {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes revealFromBottom {
+  from {
+    clip-path: inset(100% 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes revealIris {
+  from {
+    clip-path: circle(0% at 50% 50%);
+  }
+  to {
+    clip-path: circle(75% at 50% 50%);
+  }
+}
+
+@keyframes wordIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(var(--drift-x, 12px), var(--drift-y, -10px));
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+@keyframes tween {
+  from {
+    opacity: var(--tween-from-opacity, 1);
+    transform: var(--tween-from-transform, none);
+  }
+  to {
+    opacity: var(--tween-to-opacity, 1);
+    transform: var(--tween-to-transform, none);
+  }
+}
+
+/* ============================================
    Zoom Animations
    ============================================ */
 
@@ -2597,6 +2770,117 @@
 .anim-typewriter {
   animation: typewriter var(--anim-duration, 2s) var(--anim-easing, steps(40, end))
     var(--anim-delay, 0s) both;
+}
+
+/* ============================================
+   Motion-profile vocabulary (core schemas/Motion.ts)
+   Every class below is a plain CSS keyframe animation so the offline
+   renderer can seek it through the Web Animations API. Layer groups that
+   scale or rotate use `transform-box: fill-box` so the motion pivots on the
+   layer itself (a bar grows from its own edge), not on the SVG origin.
+   ============================================ */
+
+.block-layer.anim-zoomIn,
+.block-layer.anim-zoomOut,
+.block-layer.anim-grow,
+.block-layer.anim-grow-x,
+.block-layer.anim-grow-y,
+.block-layer.anim-tween,
+.block-layer.anim-drift {
+  transform-box: fill-box;
+  transform-origin: var(--anim-origin, center center);
+}
+
+.anim-slideIn-left {
+  animation: layerSlideInLeft var(--anim-duration, 0.7s)
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+}
+
+.anim-slideIn-right {
+  animation: layerSlideInRight var(--anim-duration, 0.7s)
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+}
+
+.anim-slideIn-top {
+  animation: layerSlideInTop var(--anim-duration, 0.7s)
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+}
+
+.anim-slideIn-bottom {
+  animation: layerSlideInBottom var(--anim-duration, 0.7s)
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+}
+
+.anim-grow {
+  animation: growIn var(--anim-duration, 1s) var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    var(--anim-delay, 0s) both;
+}
+
+.anim-grow-x {
+  animation: growX var(--anim-duration, 1s) var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    var(--anim-delay, 0s) both;
+}
+
+.anim-grow-y {
+  animation: growY var(--anim-duration, 1s) var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    var(--anim-delay, 0s) both;
+}
+
+/* The path itself draws (pathLength="1" makes one dash unit the whole path);
+   endpoint markers sit on a stroke-less twin that appears as the line lands. */
+.anim-drawOn [data-squisq-draw='stroke'] {
+  stroke-dasharray: 1;
+  animation: drawOn var(--anim-duration, 1s) var(--anim-easing, ease-in-out) var(--anim-delay, 0s)
+    both;
+}
+
+.anim-drawOn [data-squisq-draw='markers'] {
+  animation: drawOnMarkers var(--anim-duration, 1s) linear var(--anim-delay, 0s) both;
+}
+
+.anim-reveal-left {
+  animation: revealFromLeft var(--anim-duration, 0.7s)
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+}
+
+.anim-reveal-right {
+  animation: revealFromRight var(--anim-duration, 0.7s)
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+}
+
+.anim-reveal-top {
+  animation: revealFromTop var(--anim-duration, 0.7s)
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+}
+
+.anim-reveal-bottom {
+  animation: revealFromBottom var(--anim-duration, 0.7s)
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+}
+
+.anim-reveal-iris {
+  animation: revealIris var(--anim-duration, 0.9s)
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+}
+
+/* Words carry their own --anim-delay (see TextLayer); the group only hosts vars. */
+.anim-wordReveal .anim-word {
+  animation: wordIn var(--anim-duration, 0.4s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
+    both;
+}
+
+/* Digits come from the block clock; the class only softens the arrival. */
+.anim-countUp {
+  animation: fadeIn 0.3s ease-out var(--anim-delay, 0s) both;
+}
+
+.anim-drift {
+  animation: drift var(--anim-duration, 12s) ease-in-out var(--anim-delay, 0s) infinite;
+}
+
+.anim-tween {
+  animation: tween var(--anim-duration, 1s) var(--anim-easing, ease-in-out) var(--anim-delay, 0s)
+    both;
 }
 
 /* Offline capture repositions animations by seeking their timeline; CSS

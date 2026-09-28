@@ -198,6 +198,12 @@ describe('video command flag validation', () => {
     expect(stderr).to.include('Invalid captions "karaoke". Valid: off, standard, social');
     expect(stderr).to.not.include('Reading:');
   });
+
+  it('rejects an unknown motion profile before rendering', async () => {
+    const stderr = await runCliExpectingError('video', FIXTURE_MD, '--motion', 'frantic');
+    expect(stderr).to.include('Invalid motion "frantic". Valid: calm, documentary, vibrant');
+    expect(stderr).to.not.include('Reading:');
+  });
 });
 
 describe('video command frame-transport flag validation', () => {

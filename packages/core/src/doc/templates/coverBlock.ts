@@ -17,7 +17,13 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { StartBlockConfig } from '../../schemas/Doc.js';
-import { getThemeFont, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
+import {
+  getThemeFont,
+  themedFontSize,
+  themedImageTreatment,
+  getMotionProfile,
+  motionEntrance,
+} from '../utils/themeUtils.js';
 import { relativeLuminance, withAlpha } from '../../schemas/colorUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 import { estimateTextHeight } from './captionUtils.js';
@@ -283,8 +289,11 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
       anchor: 'center',
       width: layout.maxTextWidth,
     },
-    // No animation delay - shown immediately at rest
-    animation: { type: 'fadeIn', duration: 0.8 },
+    // No animation delay - shown immediately at rest. Word-by-word reveal is
+    // a profile opt-in (off by default: the cover doubles as the poster).
+    animation: getMotionProfile(context).coverWordReveal
+      ? { type: 'wordReveal', duration: 0.5, delay: 0.1, stagger: 0.12 }
+      : { type: 'fadeIn', duration: 0.8 },
   });
 
   // Add subtitle if provided
@@ -309,7 +318,7 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
         anchor: 'center',
         width: layout.maxTextWidth,
       },
-      animation: { type: 'fadeIn', duration: 0.8, delay: 0.2 },
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 0.8, delay: 0.2 }),
     });
   }
 

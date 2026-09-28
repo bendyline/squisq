@@ -8,13 +8,17 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Layer } from '../../schemas/Doc.js';
+import type { Animation, Layer } from '../../schemas/Doc.js';
+import { countUpSpecFor } from '../utils/countUp.js';
 import type { ComparisonBarInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import {
   resolveColorScheme,
   getThemeFont,
   themedFontSize,
   themedSurfaceGradient,
+  getMotionProfile,
+  motionDelay,
+  motionEntrance,
 } from '../utils/themeUtils.js';
 
 export function comparisonBar(input: ComparisonBarInput, context: TemplateContext): Layer[] {
@@ -28,8 +32,8 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
   const leftValue = Number.isFinite(input.leftValue) ? input.leftValue : 0;
   const rightValue = Number.isFinite(input.rightValue) ? input.rightValue : 0;
 
-  const labelFontSize = themedFontSize(28, context, false);
-  const valueFontSize = themedFontSize(48, context, true);
+  const labelFontSize = themedFontSize(34, context, false);
+  const valueFontSize = themedFontSize(58, context, true);
 
   // Format values for display
   const formatValue = (v: number): string => {
@@ -42,11 +46,38 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
   const leftDisplay = unit ? `${formatValue(leftValue)} ${unit}` : formatValue(leftValue);
   const rightDisplay = unit ? `${formatValue(rightValue)} ${unit}` : formatValue(rightValue);
 
-  // Bar positioning
-  const barStartX = 15;
+  // Motion profile: bars grow from the left and the numbers count up once the
+  // profile asks for it; `calm` keeps the plain staggered fades.
+  const motion = getMotionProfile(context);
+  const growEasing = motion.textEntrance.easing;
+  const barAnimation = (fallback: Animation): Animation => {
+    if (!motion.chartGrowth) return fallback;
+    return {
+      type: 'grow',
+      origin: 'left',
+      duration: motion.chartGrowthDuration,
+      delay: motionDelay(context, fallback.delay ?? 0),
+      ...(growEasing ? { easing: growEasing } : {}),
+    };
+  };
+  const valueAnimation = (display: string, fallback: Animation): Animation => {
+    const count = motion.countUp ? countUpSpecFor(display) : null;
+    if (!count) return motionEntrance(context, fallback);
+    return {
+      type: 'countUp',
+      duration: motion.countUpDuration,
+      delay: motionDelay(context, fallback.delay ?? 0),
+      count,
+    };
+  };
+  const labelAnimation =
+    motion.name === 'calm' ? undefined : motionEntrance(context, { type: 'fadeIn', duration: 0.6 });
+
+  // Bar positioning: the label-to-bar lockup sits a little below the optical
+  // centre (labels above the bars carry the group's visual weight upward).
   const barHeight = 6; // % of viewport height
-  const topBarY = 36;
-  const bottomBarY = 58;
+  const topBarY = 39;
+  const bottomBarY = 61;
 
   // Bar GEOMETRY is driven by the non-negative part of each value. A bar has
   // no negative extent to draw: `width: '-32%'` is an invalid SVG rect that
@@ -61,9 +92,13 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
   // for its trailing value label inside a 96% safe area — otherwise a
   // long label ("84 clarity score") runs off the right edge of the block.
   const maxValue = Math.max(leftExtent, rightExtent, 1);
-  const longestLabelPx = Math.max(leftDisplay.length, rightDisplay.length) * valueFontSize * 0.58;
+  // Bold display digits in a themed serif run ~0.7 em per character.
+  const longestLabelPx = Math.max(leftDisplay.length, rightDisplay.length) * valueFontSize * 0.7;
   const labelWidthPct = (longestLabelPx / viewport.width) * 100;
-  const maxBarWidth = Math.max(20, Math.min(65, 96 - barStartX - labelWidthPct - 2));
+  const marginX = 8;
+  const maxBarWidth = Math.max(20, Math.min(65, 100 - marginX * 2 - labelWidthPct - 2));
+  // Centre the widest bar plus its label horizontally.
+  const barStartX = Math.max(marginX, (100 - (maxBarWidth + 2 + labelWidthPct)) / 2);
   const leftBarWidth = (leftExtent / maxValue) * maxBarWidth;
   const rightBarWidth = (rightExtent / maxValue) * maxBarWidth;
 
@@ -92,6 +127,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
         },
       },
       position: { x: `${barStartX}%`, y: `${topBarY - 8}%` },
+      ...(labelAnimation ? { animation: labelAnimation } : {}),
     },
 
     // Top bar value
@@ -108,7 +144,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
         },
       },
       position: { x: `${barStartX + leftBarWidth + 2}%`, y: `${topBarY - 1}%` },
-      animation: { type: 'fadeIn', duration: 0.8, delay: 0.3 },
+      animation: valueAnimation(leftDisplay, { type: 'fadeIn', duration: 0.8, delay: 0.3 }),
     },
 
     // Top bar
@@ -126,7 +162,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
         width: `${leftBarWidth}%`,
         height: `${barHeight}%`,
       },
-      animation: { type: 'fadeIn', duration: 1 },
+      animation: barAnimation({ type: 'fadeIn', duration: 1 }),
     },
 
     // Bottom bar label
@@ -142,6 +178,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
         },
       },
       position: { x: `${barStartX}%`, y: `${bottomBarY - 8}%` },
+      ...(labelAnimation ? { animation: labelAnimation } : {}),
     },
 
     // Bottom bar value
@@ -158,7 +195,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
         },
       },
       position: { x: `${barStartX + rightBarWidth + 2}%`, y: `${bottomBarY - 1}%` },
-      animation: { type: 'fadeIn', duration: 0.8, delay: 0.6 },
+      animation: valueAnimation(rightDisplay, { type: 'fadeIn', duration: 0.8, delay: 0.6 }),
     },
 
     // Bottom bar
@@ -176,7 +213,7 @@ export function comparisonBar(input: ComparisonBarInput, context: TemplateContex
         width: `${rightBarWidth}%`,
         height: `${barHeight}%`,
       },
-      animation: { type: 'fadeIn', duration: 1, delay: 0.3 },
+      animation: barAnimation({ type: 'fadeIn', duration: 1, delay: 0.3 }),
     },
   ];
 }

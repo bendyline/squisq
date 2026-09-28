@@ -23,6 +23,9 @@ import {
   shouldUseShadow,
   themedFontSize,
   themedSurfaceGradient,
+  getMotionProfile,
+  motionDelay,
+  motionEntrance,
 } from '../../utils/themeUtils.js';
 import { pickContrastingText, withAlpha } from '../../../schemas/colorUtils.js';
 import { createBackgroundLayer } from '../captionUtils.js';
@@ -39,6 +42,7 @@ import {
   stackSeries,
   type ChartFrame,
   type PxRect,
+  CHART_CHAR_WIDTH_EM,
 } from './layout.js';
 
 const TEMPLATE_ID: Record<ChartKind, string> = {
@@ -71,7 +75,26 @@ interface Paint {
   gridColor: string;
   axisTextColor: string;
   entrance: (index: number) => Animation;
+  /**
+   * Motion-profile mark animation: the calm fade, or a growth effect that
+   * fits the mark (`bar` grows from its base, `line` draws on, `point`
+   * pops when the line reaches it — `along` is its 0..1 position).
+   */
+  mark: (index: number, kind: MarkKind, along?: number) => Animation;
+  /** Value-label entrance once its mark has finished growing (`fallback` under calm). */
+  labelAnimation: (index: number, fallback?: Animation, along?: number) => Animation | undefined;
 }
+
+type MarkKind =
+  | 'bar'
+  | 'bar-negative'
+  | 'column'
+  | 'column-negative'
+  | 'line'
+  | 'area'
+  | 'point'
+  | 'wedge'
+  | 'dot';
 
 export function renderChart(
   kind: ChartKind,
@@ -86,10 +109,12 @@ export function renderChart(
   const templateId = TEMPLATE_ID[kind];
   const title = (input.title ?? '').trim();
 
-  const titleFontSize = themedFontSize(44, context, true);
-  const axisFontSize = themedFontSize(20, context, false);
-  const labelFontSize = themedFontSize(22, context, false);
-  const legendFontSize = themedFontSize(22, context, false);
+  // Sized for a 1080p frame viewed at a distance; these labels never grow
+  // to fit (see GEOMETRY_BOUND_TEMPLATES), so they must read at rest.
+  const titleFontSize = themedFontSize(52, context, true);
+  const axisFontSize = themedFontSize(24, context, false);
+  const labelFontSize = themedFontSize(26, context, false);
+  const legendFontSize = themedFontSize(26, context, false);
   const tableFontSize = themedFontSize(20, context, false);
   const bodyFont = getThemeFont(context, 'body');
 
@@ -125,11 +150,67 @@ export function renderChart(
   });
 
   const entranceHint = getTemplateHint<string>(context, templateId, 'entrance', 'staggered');
+  const markDelay = (index: number): number =>
+    entranceHint === 'subtle' ? 0.1 : Math.min(1.2, 0.2 + index * 0.08);
   const entrance = (index: number): Animation => ({
     type: 'fadeIn',
     duration: 0.6,
-    delay: entranceHint === 'subtle' ? 0.1 : Math.min(1.2, 0.2 + index * 0.08),
+    delay: markDelay(index),
   });
+
+  // Motion profile: charts either fade in (calm — the pre-profile output) or
+  // build: bars grow from their base, lines draw on with their area wiping in
+  // behind them, points pop as the line reaches them, wedges and dots pop in
+  // sequence, and value labels wait for their mark to land.
+  const motion = getMotionProfile(context);
+  const growDuration = motion.chartGrowthDuration;
+  const growEasing = motion.textEntrance.easing;
+  const eased = (animation: Animation): Animation =>
+    growEasing ? { ...animation, easing: growEasing } : animation;
+  const mark = (index: number, kind: MarkKind, along = 0): Animation => {
+    if (!motion.chartGrowth) return entrance(index);
+    const delay = motionDelay(context, markDelay(index));
+    switch (kind) {
+      case 'bar':
+        return eased({ type: 'grow', origin: 'left', duration: growDuration, delay });
+      case 'bar-negative':
+        return eased({ type: 'grow', origin: 'right', duration: growDuration, delay });
+      case 'column':
+        return eased({ type: 'grow', origin: 'bottom', duration: growDuration, delay });
+      case 'column-negative':
+        return eased({ type: 'grow', origin: 'top', duration: growDuration, delay });
+      case 'line':
+        return { type: 'drawOn', duration: growDuration * 1.4, delay };
+      case 'area':
+        return { type: 'reveal', origin: 'left', duration: growDuration * 1.4, delay };
+      case 'point':
+        return {
+          type: 'grow',
+          origin: 'center',
+          duration: 0.35,
+          delay: Number((delay + growDuration * 1.4 * along).toFixed(3)),
+        };
+      case 'wedge':
+        return eased({
+          type: 'grow',
+          origin: 'center',
+          duration: Math.max(0.4, growDuration * 0.6),
+          delay,
+        });
+      case 'dot':
+        return eased({ type: 'grow', origin: 'center', duration: 0.4, delay });
+    }
+  };
+  const labelAnimation = (
+    index: number,
+    fallback?: Animation,
+    along = 0,
+  ): Animation | undefined => {
+    if (!motion.chartGrowth) return fallback;
+    const settled =
+      motionDelay(context, markDelay(index)) + growDuration * (along > 0 ? 1.4 * along : 1);
+    return { type: 'fadeIn', duration: 0.4, delay: Number(settled.toFixed(3)) };
+  };
 
   const paint: Paint = {
     kind,
@@ -144,6 +225,8 @@ export function renderChart(
     gridColor: withAlpha(theme.colors.text, 0.12),
     axisTextColor: theme.colors.textMuted,
     entrance,
+    mark,
+    labelAnimation,
   };
 
   const layers: Layer[] = [createBackgroundLayer('bg', themedSurfaceGradient(context, 170))];
@@ -169,7 +252,7 @@ export function renderChart(
         width: frame.titleBand.width,
         anchor: 'center',
       },
-      animation: { type: 'fadeIn', duration: 0.8 },
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 0.8 }),
     });
   }
 
@@ -399,7 +482,7 @@ function paintCategoryAxisX(paint: Paint, xForCenter: (index: number) => number)
 // ============================================
 
 function paintColumns(paint: Paint): Layer[] {
-  const { frame, data, colors, input, entrance } = paint;
+  const { frame, data, colors, input, mark, labelAnimation } = paint;
   const scale = valueTicks('column', data, input);
   const yFor = (v: number): number =>
     frame.plot.y + frame.plot.height * (1 - (v - scale.niceMin) / (scale.niceMax - scale.niceMin));
@@ -436,7 +519,7 @@ function paintColumns(paint: Paint): Layer[] {
         id: `mark-${s}-${i}`,
         content: { shape: 'rect', fill: colors[s], borderRadius: stacked ? 0 : 3 },
         position: { x, y: top, width: barWidth, height },
-        animation: entrance(i + s),
+        animation: mark(i + s, extent.y1 <= 0 ? 'column-negative' : 'column'),
       });
       if (input.showValues === true && value !== null && !stacked) {
         layers.push(
@@ -446,6 +529,7 @@ function paintColumns(paint: Paint): Layer[] {
             value,
             x + barWidth / 2,
             value >= 0 ? top - paint.axisFontSize * 0.9 : top + height + paint.axisFontSize * 0.9,
+            labelAnimation(i + s),
           ),
         );
       }
@@ -460,7 +544,8 @@ function paintBars(paint: Paint): Layer[] {
     data,
     colors,
     input,
-    entrance,
+    mark,
+    labelAnimation,
     labelFontSize,
     axisFontSize,
     bodyFont,
@@ -475,7 +560,7 @@ function paintBars(paint: Paint): Layer[] {
   // gridlines, and bars on one consistent scale.
   const labelGap = axisFontSize * 0.6;
   const labelWidthPx = (value: number): number =>
-    formatChartValue(value, input.unit).length * axisFontSize * 0.58;
+    formatChartValue(value, input.unit).length * axisFontSize * CHART_CHAR_WIDTH_EM;
   const showValueLabels = input.showValues === true && !(input.stacked === true);
   const reservedForLabels = showValueLabels
     ? data.series
@@ -573,14 +658,23 @@ function paintBars(paint: Paint): Layer[] {
         id: `mark-${s}-${i}`,
         content: { shape: 'rect', fill: colors[s], borderRadius: stacked ? 0 : 3 },
         position: { x: left, y, width, height: barHeight },
-        animation: entrance(i + s),
+        animation: mark(i + s, extent.y1 <= 0 ? 'bar-negative' : 'bar'),
       });
       if (showValueLabels && value !== null) {
         // Anchor-centered text: offset by half the label's width plus a gap
         // so its near edge clears the bar end instead of overlapping it.
         const half = labelWidthPx(value) / 2;
         const labelX = value >= 0 ? left + width + labelGap + half : left - labelGap - half;
-        layers.push(valueLabel(paint, `val-${s}-${i}`, value, labelX, y + barHeight / 2));
+        layers.push(
+          valueLabel(
+            paint,
+            `val-${s}-${i}`,
+            value,
+            labelX,
+            y + barHeight / 2,
+            labelAnimation(i + s),
+          ),
+        );
       }
     });
   });
@@ -588,7 +682,7 @@ function paintBars(paint: Paint): Layer[] {
 }
 
 function paintRadial(paint: Paint): Layer[] {
-  const { kind, frame, data, colors, input, entrance, context } = paint;
+  const { kind, frame, data, colors, input, entrance, mark, labelAnimation, context } = paint;
   const slices = data.labels
     .map((label, index) => ({ label, value: data.series[0].values[index], index }))
     .filter(
@@ -616,7 +710,7 @@ function paintRadial(paint: Paint): Layer[] {
         strokeWidth: 2,
       },
       position: { x: cx - rOuter, y: cy - rOuter, width: rOuter * 2, height: rOuter * 2 },
-      animation: entrance(order),
+      animation: mark(order, 'wedge'),
     });
     if (input.showValues === true && sweep >= 14) {
       const mid = startDeg + sweep / 2;
@@ -641,7 +735,7 @@ function paintRadial(paint: Paint): Layer[] {
           y: cy + rLabel * Math.sin(rad),
           anchor: 'center',
         },
-        animation: entrance(order),
+        animation: labelAnimation(order, entrance(order)),
       });
     }
     startDeg += sweep;
@@ -650,7 +744,7 @@ function paintRadial(paint: Paint): Layer[] {
 }
 
 function paintLines(paint: Paint): Layer[] {
-  const { kind, frame, data, colors, input, entrance } = paint;
+  const { kind, frame, data, colors, input, mark, labelAnimation } = paint;
   const scale = valueTicks(kind, data, input);
   const yFor = (v: number): number =>
     frame.plot.y + frame.plot.height * (1 - (v - scale.niceMin) / (scale.niceMax - scale.niceMin));
@@ -698,7 +792,7 @@ function paintLines(paint: Paint): Layer[] {
             width: frame.plot.width,
             height: frame.plot.height,
           },
-          animation: entrance(s),
+          animation: mark(s, 'area'),
         });
       }
       if (segment.length > 1) {
@@ -712,7 +806,7 @@ function paintLines(paint: Paint): Layer[] {
             width: frame.plot.width,
             height: frame.plot.height,
           },
-          animation: entrance(s),
+          animation: mark(s, 'line'),
         });
       }
     });
@@ -726,7 +820,7 @@ function paintLines(paint: Paint): Layer[] {
           id: `pt-${s}-${i}`,
           content: { shape: 'circle', fill: colors[s] },
           position: { x: xForCenter(i) - r, y: yFor(value) - r, width: r * 2, height: r * 2 },
-          animation: entrance(s),
+          animation: mark(s, 'point', i / Math.max(1, n - 1)),
         });
         if (input.showValues === true) {
           layers.push(
@@ -736,6 +830,7 @@ function paintLines(paint: Paint): Layer[] {
               value,
               xForCenter(i),
               yFor(value) - paint.axisFontSize,
+              labelAnimation(s, undefined, i / Math.max(1, n - 1)),
             ),
           );
         }
@@ -746,7 +841,7 @@ function paintLines(paint: Paint): Layer[] {
 }
 
 function paintScatter(paint: Paint): Layer[] {
-  const { frame, data, colors, input, entrance } = paint;
+  const { frame, data, colors, input, mark } = paint;
   const scale = valueTicks('scatter', data, input);
   const yFor = (v: number): number =>
     frame.plot.y + frame.plot.height * (1 - (v - scale.niceMin) / (scale.niceMax - scale.niceMin));
@@ -811,7 +906,7 @@ function paintScatter(paint: Paint): Layer[] {
         id: `mark-${s}-${i}`,
         content: { shape: 'circle', fill: colors[s], fillOpacity: 0.85 },
         position: { x: x - r, y: yFor(value) - r, width: r * 2, height: r * 2 },
-        animation: entrance(Math.floor(i / 3) + s),
+        animation: mark(Math.floor(i / 3) + s, 'dot'),
       });
     });
   });
@@ -859,7 +954,14 @@ function paintLegend(
   return layers;
 }
 
-function valueLabel(paint: Paint, id: string, value: number, x: number, y: number): Layer {
+function valueLabel(
+  paint: Paint,
+  id: string,
+  value: number,
+  x: number,
+  y: number,
+  animation?: Animation,
+): Layer {
   return {
     type: 'text',
     id,
@@ -874,6 +976,7 @@ function valueLabel(paint: Paint, id: string, value: number, x: number, y: numbe
       },
     },
     position: { x, y, anchor: 'center' },
+    ...(animation ? { animation } : {}),
   };
 }
 

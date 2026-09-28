@@ -366,10 +366,12 @@ function companionAudio(entry: ScheduledClip, clip: MediaClip, processed: string
  * this point.
  */
 function baseTimelineEnd(doc: Doc): number {
-  const blockEnd = flatten(doc.blocks).reduce(
-    (max, b) => Math.max(max, b.startTime + b.duration),
-    0,
-  );
+  // Unscheduled template blocks carry no startTime yet; a NaN here would
+  // poison the whole duration (and with it the renderer's frame count).
+  const blockEnd = flatten(doc.blocks).reduce((max, b) => {
+    const end = b.startTime + b.duration;
+    return Number.isFinite(end) ? Math.max(max, end) : max;
+  }, 0);
   return Math.max(doc.duration ?? 0, blockEnd);
 }
 

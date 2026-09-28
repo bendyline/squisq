@@ -38,6 +38,7 @@
     "defaultTextAnimation": "fadeIn",
     "defaultImageAnimation": "slowZoom",
     "ambientMotion": true,
+    "motionProfile": "documentary",
     "defaultTransition": {
       "type": "dissolve",
       "duration": 1.2

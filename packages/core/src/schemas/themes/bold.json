@@ -31,6 +31,7 @@
     "defaultTextAnimation": "zoomIn",
     "defaultImageAnimation": "slowZoom",
     "ambientMotion": true,
+    "motionProfile": "vibrant",
     "defaultTransition": { "type": "dissolve", "duration": 0.5 },
     "templateHints": {
       "statHighlight": { "entrance": "dramatic" },

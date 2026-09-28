@@ -164,3 +164,21 @@ describe('generateRenderHtml viewport', () => {
     expect(defaults).toContain('viewport: {"width":1920,"height":1080}');
   });
 });
+
+describe('generateRenderHtml motion', () => {
+  it('forwards a motion profile to the mount and omits the line when unset', () => {
+    const vibrant = generateRenderHtml(minimalDoc(), {
+      playerScript: PLAYER_STUB,
+      motion: 'vibrant',
+    });
+    expect(vibrant).toContain('motion: "vibrant"');
+    const spec = generateRenderHtml(minimalDoc(), {
+      playerScript: PLAYER_STUB,
+      motion: { profile: 'documentary', countUp: false },
+    });
+    expect(spec).toContain('motion: {"profile":"documentary","countUp":false}');
+    expect(generateRenderHtml(minimalDoc(), { playerScript: PLAYER_STUB })).not.toContain(
+      'motion:',
+    );
+  });
+});

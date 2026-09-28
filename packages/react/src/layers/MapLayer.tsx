@@ -33,8 +33,14 @@ interface MapLayerProps {
 export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps) {
   const { content, position, animation } = layer;
   const clipId = `map-clip-${useId().replace(/:/g, '')}-${layer.id}`;
-  const [mapImageUrl, setMapImageUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  // A pre-rendered static map is known on first paint, so it is shown on
+  // first paint: offline capture and the first live frame never show the
+  // "Loading map…" placeholder for a map that needs no tiles.
+  const staticSrc = useMediaUrl(content.staticSrc ?? '', basePath);
+  const [mapImageUrl, setMapImageUrl] = useState<string | null>(() =>
+    content.staticSrc ? staticSrc || null : null,
+  );
+  const [isLoading, setIsLoading] = useState(!content.staticSrc);
   const [error, setError] = useState<string | null>(null);
   const [blockedByPolicy, setBlockedByPolicy] = useState(false);
 
@@ -54,8 +60,6 @@ export function MapLayer({ layer, basePath, viewport, blockTime }: MapLayerProps
   // untrusted docs with LOCAL_ONLY blocks remote fetches) and the
   // MediaProvider resolves container-backed paths (`images/map.png`) to blob
   // URLs so single-file HTML exports keep working. Blocked URLs resolve to ''.
-  const staticSrc = useMediaUrl(content.staticSrc ?? '', basePath);
-
   // Tile composition contacts the provider, so it answers to the same policy
   // as every other document-controlled URL rather than being the one media
   // path that quietly reaches the network regardless.

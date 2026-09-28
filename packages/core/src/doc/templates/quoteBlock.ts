@@ -23,7 +23,7 @@ import type { QuoteBlockInput, TemplateContext } from '../../schemas/BlockTempla
 import {
   getThemeFont,
   shouldUseShadow,
-  themedEntrance,
+  motionEntrance,
   themedFontSize,
   themedSurfaceGradient,
   themedImageTreatment,
@@ -231,7 +231,7 @@ export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): La
       height: pct(quoteFit.heightPx),
       anchor: 'top-left',
     },
-    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 }),
+    animation: motionEntrance(context, { type: 'fadeIn', duration: 2 }),
   };
   layers.push(quoteLayer);
 

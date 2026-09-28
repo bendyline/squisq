@@ -11,6 +11,7 @@
  */
 
 import { mkdir } from 'node:fs/promises';
+import type { MotionProfileName } from '@bendyline/squisq/schemas';
 import { dirname, basename, extname, resolve } from 'node:path';
 import type { Command } from 'commander';
 import type { Doc } from '@bendyline/squisq/schemas';
@@ -42,6 +43,7 @@ interface VideoCommandOptions {
   /** Replace an existing output file instead of refusing to clobber it. */
   overwrite?: boolean;
   theme?: string;
+  motion?: string;
   transform?: string;
   coverPreroll?: string;
   animations?: boolean;
@@ -58,6 +60,7 @@ interface VideoCommandOptions {
 const VALID_QUALITIES = ['draft', 'normal', 'high'] as const;
 const VALID_ORIENTATIONS = ['landscape', 'portrait'] as const;
 const VALID_CAPTIONS = ['off', 'standard', 'social'] as const;
+const VALID_MOTION = ['calm', 'documentary', 'vibrant'] as const;
 const VALID_FORMATS = ['mp4', 'gif'] as const;
 const VALID_GIF_DITHERS = ['bayer', 'sierra2_4a', 'none'] as const;
 const VALID_FRAME_TRANSPORTS = ['pipe', 'memory'] as const;
@@ -90,6 +93,10 @@ export function registerVideoCommand(program: Command): void {
       'Disable content-aware template auto-picking for unannotated headings',
     )
     .option('-t, --theme <id>', 'Squisq theme ID to apply (e.g., documentary, cinematic, bold)')
+    .option(
+      '--motion <profile>',
+      `Motion profile: ${VALID_MOTION.join(', ')} (default: the doc's, then the theme's)`,
+    )
     .option(
       '--transform <style>',
       'Transform style to apply before rendering (e.g., documentary, magazine, minimal)',
@@ -203,6 +210,10 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   const captions = opts.captions ?? (outputFormat === 'gif' ? 'standard' : 'off');
   if (!VALID_CAPTIONS.includes(captions as (typeof VALID_CAPTIONS)[number])) {
     throw new Error(`Invalid captions "${captions}". Valid: ${VALID_CAPTIONS.join(', ')}`);
+  }
+  const motion = opts.motion as MotionProfileName | undefined;
+  if (motion !== undefined && !VALID_MOTION.includes(motion)) {
+    throw new Error(`Invalid motion "${motion}". Valid: ${VALID_MOTION.join(', ')}`);
   }
 
   const coverPreRoll = Number(opts.coverPreroll ?? '2');
@@ -327,7 +338,9 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     doc = { ...doc, themeId: opts.theme };
   }
 
-  const motionLabel = animationsEnabled ? 'animations on' : 'animations off';
+  const motionLabel = animationsEnabled
+    ? `animations on${motion ? ` (${motion})` : ''}`
+    : 'animations off';
   const qualityLabel =
     outputFormat === 'mp4' ? `, quality: ${quality}, transport: ${frameTransport}` : '';
   console.error(
@@ -342,6 +355,7 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     width,
     height,
     captionStyle: captions,
+    motion,
     coverPreRoll,
     animationsEnabled,
     onProgress: (phase: string, percent: number) => writeProgress(phase, percent, 100),

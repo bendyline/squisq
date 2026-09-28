@@ -18,7 +18,7 @@
 import type { Layer } from '../../schemas/Doc.js';
 import type { BigTextInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { ViewportConfig } from '../../schemas/Viewport.js';
-import { getThemeFont, themedEntrance, themedImageTreatment } from '../utils/themeUtils.js';
+import { getThemeFont, motionEntrance, themedImageTreatment } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 
@@ -194,7 +194,7 @@ export function bigText(input: BigTextInput, context: TemplateContext): Layer[] 
       width: `${BIG_TEXT_WIDTH_FRACTION * 100}%`,
       height: `${BIG_TEXT_HEIGHT_FRACTION * 100}%`,
     },
-    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1 }),
+    animation: motionEntrance(context, { type: 'fadeIn', duration: 1 }),
   });
 
   return layers;

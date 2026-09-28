@@ -1,6 +1,7 @@
 export * from './templates/index.js';
 export * from './utils/animationUtils.js';
 export * from './utils/themeUtils.js';
+export * from './utils/countUp.js';
 export * from './utils/applyRenderStyle.js';
 export * from './utils/imageTreatment.js';
 export * from './utils/diagramText.js';

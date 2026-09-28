@@ -797,6 +797,43 @@ describe('DocPlayer smoke test', () => {
     ).toBeTruthy();
   });
 
+  it('keeps the exiting slide on its own clock during the crossfade', () => {
+    // A count-up on the slide being left must hold its final value while the
+    // next slide fades in, not restart from zero on the incoming clock.
+    const doc = docWithThreeSlides();
+    doc.blocks[1] = {
+      ...doc.blocks[1],
+      layers: [
+        {
+          id: 'stat',
+          type: 'text',
+          position: { x: 100, y: 100, width: 600, height: 100 },
+          content: { text: '73%', style: { fontSize: 40, color: '#fff' } },
+          animation: { type: 'countUp', duration: 1 },
+        },
+      ],
+    };
+    const { container, rerender } = render(
+      <DocPlayer
+        doc={doc}
+        audioController={controller({ currentTime: 5, totalDuration: 15 })}
+        displayMode="slideshow"
+      />,
+    );
+    fireEvent.click(screen.getByTestId('slide-next'));
+    rerender(
+      <DocPlayer
+        doc={doc}
+        audioController={controller({ currentTime: 10.2, totalDuration: 15 })}
+        displayMode="slideshow"
+      />,
+    );
+    const exiting = container.querySelector(
+      '.doc-player__block--previous [data-block-id="second"] text',
+    );
+    expect(exiting?.textContent?.trim()).toBe('73%');
+  });
+
   it('advances from slideshow cover to slide 1', async () => {
     const { container } = render(
       <DocPlayer doc={docWithCover()} basePath="/test" displayMode="slideshow" />,

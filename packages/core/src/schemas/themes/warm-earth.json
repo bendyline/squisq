@@ -29,6 +29,7 @@
     "defaultTextAnimation": "fadeIn",
     "defaultImageAnimation": "panLeft",
     "ambientMotion": true,
+    "motionProfile": "documentary",
     "defaultTransition": { "type": "fade", "duration": 0.9 }
   },
   "colorSchemes": {

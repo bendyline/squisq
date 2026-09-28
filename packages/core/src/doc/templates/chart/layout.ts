@@ -149,12 +149,20 @@ export interface LegendLayout {
  * Wrap legend entries into centered rows. Width estimation uses the same
  * character-width heuristic as comparisonBar (~0.58 × fontSize per char).
  */
+/**
+ * Average advance width per character, in em, used wherever a chart has to
+ * reserve room for text it cannot measure. Themed body faces run wide
+ * (Merriweather-class serifs average ~0.62 em), so this errs generous: an
+ * over-estimate costs a little bar length, an under-estimate overlaps labels.
+ */
+export const CHART_CHAR_WIDTH_EM = 0.62;
+
 export function layoutLegend(labels: string[], fontSize: number, maxWidth: number): LegendLayout {
   const swatchSize = fontSize * 0.9;
-  const gap = fontSize * 1.6;
+  const gap = fontSize * 2.2;
   const rowHeight = fontSize * 2;
   const widths = labels.map(
-    (label) => swatchSize + fontSize * 0.5 + label.length * fontSize * 0.58,
+    (label) => swatchSize + fontSize * 0.5 + label.length * fontSize * CHART_CHAR_WIDTH_EM,
   );
 
   const rows: number[][] = [];

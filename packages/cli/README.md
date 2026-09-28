@@ -84,6 +84,7 @@ squisq video doc.json -o out.mp4
 | `--dither`                         | GIF dithering: `bayer`, `sierra2_4a`, or `none`                      | `sierra2_4a`              |
 | `--bayer-scale`                    | Ordered Bayer strength, 0–5                                          | 3                         |
 | `-t, --theme`                      | Squisq theme id to apply                                             | none                      |
+| `--motion`                         | Motion profile: `calm`, `documentary` or `vibrant`                   | doc's, then theme's       |
 | `--transform`                      | Transform style to apply before rendering                            | none                      |
 | `--cover-preroll`                  | Seconds of cover-slide pre-roll before the story starts              | 2                         |
 | `--width` / `--height`             | Dimension overrides in pixels — **must be even**                     | MP4 1080p; GIF 960×540    |

@@ -82,3 +82,51 @@ describe('PathLayer', () => {
     expect(renderPath(legacyLayer).getAttribute('marker-end')).toMatch(/^url\(#marker-end-/);
   });
 });
+
+describe('PathLayer drawOn', () => {
+  it('normalises the path length and moves markers onto a stroke-less twin', () => {
+    const { container } = render(
+      <svg>
+        <PathLayer
+          layer={{
+            id: 'edge',
+            type: 'path',
+            position: { x: 0, y: 0, width: 100, height: 100 },
+            content: { d: 'M 10 10 L 90 90', endMarker: 'arrow', dasharray: '4 2' },
+            animation: { type: 'drawOn', duration: 0.6, delay: 0.3 },
+          }}
+          viewport={viewport}
+          blockTime={0}
+        />
+      </svg>,
+    );
+    const group = container.querySelector<SVGGElement>('.block-layer--path')!;
+    expect(group.classList.contains('anim-drawOn')).toBe(true);
+    expect(group.style.getPropertyValue('--anim-delay')).toBe('0.3s');
+    const paths = Array.from(
+      container.querySelectorAll<SVGPathElement>('.block-layer--path > path'),
+    );
+    expect(paths).toHaveLength(2);
+    const [stroke, markers] = paths;
+    expect(stroke.getAttribute('pathLength')).toBe('1');
+    expect(stroke.getAttribute('data-squisq-draw')).toBe('stroke');
+    expect(stroke.getAttribute('stroke-dasharray')).toBeNull();
+    expect(stroke.getAttribute('marker-end')).toBeNull();
+    expect(markers.getAttribute('data-squisq-draw')).toBe('markers');
+    expect(markers.getAttribute('marker-end')).toMatch(/^url\(#marker-end-/);
+    expect(markers.getAttribute('stroke-opacity')).toBe('0');
+  });
+
+  it('leaves plain paths untouched', () => {
+    const path = renderPath({
+      id: 'plain',
+      type: 'path',
+      position: { x: 0, y: 0, width: 100, height: 100 },
+      content: { d: 'M 10 10 L 90 90', endMarker: 'arrow', dasharray: '4 2' },
+      animation: { type: 'fadeIn' },
+    });
+    expect(path.getAttribute('pathLength')).toBeNull();
+    expect(path.getAttribute('stroke-dasharray')).toBe('4 2');
+    expect(path.getAttribute('marker-end')).toMatch(/^url\(#marker-end-/);
+  });
+});

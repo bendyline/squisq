@@ -19,7 +19,7 @@ import { extractRichListItems } from '../templateInputs.js';
 import {
   getThemeFont,
   shouldUseShadow,
-  themedEntrance,
+  motionEntrance,
   themedFontSize,
   themedImageTreatment,
 } from '../utils/themeUtils.js';
@@ -242,7 +242,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
         y: adjustY(`${titleTopPct}%`, accentLayout),
         width: accentLayout.textWidth,
       },
-      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1 }),
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 1 }),
     });
   }
 
@@ -271,7 +271,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
     const itemText = items[i]!;
     const itemHtml = richItems[i]?.text === itemText ? richItems[i]?.html : undefined;
     const lineCount = estimateProseLineCount(itemText, itemFontSize, bodyWidthPx);
-    const animation = themedEntrance(context, 'text', {
+    const animation = motionEntrance(context, {
       type: 'fadeIn',
       duration: 0.8,
       delay: 0.3 + 0.3 * i,

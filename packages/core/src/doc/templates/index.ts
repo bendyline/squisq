@@ -18,6 +18,7 @@ import type {
   PersistentLayerConfig,
 } from '../../schemas/BlockTemplates.js';
 import type { Theme } from '../../schemas/Theme.js';
+import type { MotionSpec } from '../../schemas/Motion.js';
 import type { CustomTemplateDefinition } from '../../schemas/CustomTemplates.js';
 import { isTemplateBlock } from '../../schemas/BlockTemplates.js';
 import { DEFAULT_THEME as defaultTheme } from '../../schemas/themeLibrary.js';
@@ -69,7 +70,12 @@ export type {
  * Note: coverBlock is not in the registry as it's used directly for
  * start blocks, not as a regular template in the block sequence.
  */
-export { buildRegistry, templateRegistry } from './registry.js';
+export {
+  buildRegistry,
+  templateRegistry,
+  GEOMETRY_BOUND_TEMPLATES,
+  isGeometryBoundTemplate,
+} from './registry.js';
 export type { RuntimeTemplateRegistry } from './registry.js';
 
 export { materializeBlockLayers } from '../materializeBlockLayers.js';
@@ -167,6 +173,13 @@ export interface ExpandDocBlocksOptions {
     block: DocBlock,
     blockIndex: number,
   ) => void;
+  /**
+   * Motion profile for template output (`calm` | `documentary` | `vibrant`
+   * or a spec with overrides). Omitted → the theme's `renderStyle.motionProfile`,
+   * else `calm`. Callers that render a `Doc` resolve it first with
+   * `resolveMotionForDoc()` so `Doc.motion` and frontmatter take part.
+   */
+  motion?: MotionSpec | null;
 }
 
 /**
@@ -195,6 +208,7 @@ function materializeScheduledBlock(
   registry: RuntimeTemplateRegistry,
   failureMode: LayerMaterializationFailureMode,
   onDiagnostic?: ExpandDocBlocksOptions['onDiagnostic'],
+  motion?: MotionSpec | null,
 ): Block {
   const materialized = materializeBlockLayersWithRuntime(
     sourceBlock,
@@ -205,6 +219,7 @@ function materializeScheduledBlock(
       blockIndex,
       totalBlocks,
       failureMode,
+      motion,
     },
     { registry, expandedPersistentLayers },
   );
@@ -247,6 +262,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
     onDiagnostic,
     splitLongBlocks = true,
     mergeShortBlocks = true,
+    motion,
   } = opts;
   const totalBlocks = blocks.length;
   // Merge user-defined templates once, then share the immutable runtime view.
@@ -280,6 +296,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
         registry,
         failureMode,
         onDiagnostic,
+        motion,
       );
       expandedBlock.startTime = currentTime;
       currentTime += expandedBlock.duration;
@@ -319,6 +336,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
           registry,
           failureMode,
           onDiagnostic,
+          motion,
         );
 
         expandedBlock.startTime = offsetTime;
@@ -382,6 +400,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
         registry,
         failureMode,
         onDiagnostic,
+        motion,
       );
 
       const templateBlock = block as TemplateBlock;

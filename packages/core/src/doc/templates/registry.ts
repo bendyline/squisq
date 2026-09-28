@@ -46,6 +46,36 @@ import { drawingBlock } from './drawingBlock.js';
 import { layoutBlock } from './layoutBlock.js';
 import { transcriptBlock } from './transcriptBlock.js';
 
+/**
+ * Templates whose text is bound to drawn geometry — axis ticks, legend
+ * entries, timeline callouts, diagram labels, comparison-bar values. Their
+ * layers are positioned in pixels against marks that do not scale, so the
+ * slideshow's grow-text-to-fit pass (which enlarges every text layer in a
+ * block until the tightest one meets its box) would detach the labels from
+ * what they label. Renderers skip that pass for these templates.
+ */
+export const GEOMETRY_BOUND_TEMPLATES: ReadonlySet<string> = new Set([
+  'barChart',
+  'columnChart',
+  'lineChart',
+  'areaChart',
+  'pieChart',
+  'donutChart',
+  'scatterChart',
+  'comparisonBar',
+  'timeline',
+  'diagram',
+  'drawing',
+  'tree',
+  'map',
+  'dataTable',
+]);
+
+/** Whether a template's text must keep its authored size (see {@link GEOMETRY_BOUND_TEMPLATES}). */
+export function isGeometryBoundTemplate(template: string | undefined): boolean {
+  return template !== undefined && GEOMETRY_BOUND_TEMPLATES.has(template);
+}
+
 /** Built-in templates keyed by the ids used in document annotations. */
 export const templateRegistry: TemplateRegistry = {
   title: titleBlock,

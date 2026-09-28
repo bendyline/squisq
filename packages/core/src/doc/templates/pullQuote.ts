@@ -25,7 +25,7 @@ import type { PullQuoteInput, TemplateContext } from '../../schemas/BlockTemplat
 import {
   getThemeFont,
   shouldUseShadow,
-  themedEntrance,
+  motionEntrance,
   themedFontSize,
   themedImageTreatment,
   themedSurfaceGradient,
@@ -156,7 +156,7 @@ export function pullQuoteLockup(
       anchor: 'top-left',
       width: `${COLUMN_WIDTH_PCT}%`,
     },
-    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 }),
+    animation: motionEntrance(context, { type: 'fadeIn', duration: 2 }),
   };
 
   const layers: Layer[] = [];
@@ -208,7 +208,7 @@ export function pullQuoteLockup(
         anchor: 'top-left',
         width: `${COLUMN_WIDTH_PCT}%`,
       },
-      animation: { type: 'fadeIn', duration: 1, delay: 1.5 },
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 1, delay: 1.5 }),
     });
   }
 

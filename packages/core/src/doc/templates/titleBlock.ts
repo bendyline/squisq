@@ -20,7 +20,7 @@ import {
   getTemplateHint,
   getThemeFont,
   shouldUseShadow,
-  themedEntrance,
+  motionEntrance,
   themedFontSize,
 } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
@@ -190,7 +190,7 @@ export function titleBlock(input: TitleBlockInput, context: TemplateContext): La
         width: layout.maxTextWidth,
         height: `${px(titleH)}%`,
       },
-      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 2 }),
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 2 }),
     },
   );
 
