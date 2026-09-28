@@ -26,6 +26,7 @@ import {
   motionEntrance,
 } from '../utils/themeUtils.js';
 import { createBackgroundLayer, estimateTextHeight } from './captionUtils.js';
+import { BOLD_CHAR_WIDTH_EM, estimateTextWidth } from '../utils/textMetrics.js';
 
 type EventPoint = {
   event: TimelineTemplateEvent;
@@ -241,7 +242,21 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
 
   const hasTrackLabels = tracks.some((track) => !!track.label);
   const outerMargin = Math.max(48, viewport.width * 0.065);
-  const labelWidth = hasTrackLabels ? Math.min(280, viewport.width * 0.18) : 0;
+  // The label column hugs the longest track label (plus the gap to the
+  // axis) instead of reserving a fixed 18% of the width: a short label in a
+  // wide column left the axis starting hundreds of pixels further from the
+  // left edge than the arrow ended from the right, so the lockup read as
+  // shifted right even though its bounding box was centred.
+  const labelGap = 32;
+  const longestLabel = Math.max(
+    0,
+    ...tracks.map((track) =>
+      track.label ? estimateTextWidth(track.label, trackFontSize, BOLD_CHAR_WIDTH_EM) : 0,
+    ),
+  );
+  const labelWidth = hasTrackLabels
+    ? Math.min(Math.min(280, viewport.width * 0.18), Math.ceil(longestLabel) + labelGap)
+    : 0;
   const axisStartX = outerMargin + labelWidth;
   const axisEndX = viewport.width - outerMargin;
   const axisWidth = Math.max(1, axisEndX - axisStartX);
@@ -317,9 +332,9 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
           },
         },
         position: {
-          x: outerMargin + labelWidth / 2 - 16,
+          x: outerMargin + (labelWidth - labelGap) / 2,
           y,
-          width: Math.max(1, labelWidth - 32),
+          width: Math.max(1, labelWidth - labelGap),
           anchor: 'center',
         },
         animation: motionEntrance(context, { type: 'fadeIn', duration: 0.5, delay: trackDelay }),
