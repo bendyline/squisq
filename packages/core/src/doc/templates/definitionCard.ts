@@ -33,7 +33,7 @@ import {
   resolveColorScheme,
   getThemeFont,
   shouldUseShadow,
-  themedEntrance,
+  motionEntrance,
   themedFontSize,
   themedSurfaceGradient,
   themedImageTreatment,
@@ -196,7 +196,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
       },
     },
     position: box(termTop, termH + termFit.fontSize * BOX_SLACK_EM),
-    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1.5 }),
+    animation: motionEntrance(context, { type: 'fadeIn', duration: 1.5 }),
   });
 
   // Horizontal separator line — hangs from the term's measured bottom
@@ -237,7 +237,7 @@ export function definitionCard(input: DefinitionCardInput, context: TemplateCont
         },
       },
       position: box(defTop, defH + defFit.fontSize * BOX_SLACK_EM),
-      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1, delay: 0.8 }),
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 1, delay: 0.8 }),
     });
   }
 

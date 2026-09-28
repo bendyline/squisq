@@ -7,7 +7,7 @@
  * display timelines without a timeline-specific React layer.
  */
 
-import type { Layer, PathLayer, ShapeLayer, TextLayer } from '../../schemas/Doc.js';
+import type { Animation, Layer, PathLayer, ShapeLayer, TextLayer } from '../../schemas/Doc.js';
 import type {
   TemplateContext,
   TimelineBlockInput,
@@ -22,6 +22,8 @@ import {
   shouldUseShadow,
   themedFontSize,
   themedSurfaceGradient,
+  getMotionProfile,
+  motionEntrance,
 } from '../utils/themeUtils.js';
 import { createBackgroundLayer, estimateTextHeight } from './captionUtils.js';
 
@@ -131,6 +133,7 @@ function diamondLayer(
   radius: number,
   color: string,
   delay: number,
+  build: boolean,
 ): PathLayer {
   return {
     type: 'path',
@@ -142,7 +145,9 @@ function diamondLayer(
       strokeWidth: 2,
     },
     position: { x: x - radius, y: y - radius, width: radius * 2, height: radius * 2 },
-    animation: { type: 'zoomIn', duration: 0.35, delay },
+    animation: build
+      ? { type: 'grow', origin: 'center', duration: 0.35, delay }
+      : { type: 'zoomIn', duration: 0.35, delay },
   };
 }
 
@@ -165,10 +170,36 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
   const tracks = coerceTracks(input.tracks);
   const layers: Layer[] = [createBackgroundLayer('bg', themedSurfaceGradient(context, 165))];
 
-  const titleFontSize = themedFontSize(44, context, true);
-  const trackFontSize = themedFontSize(22, context, false);
-  const baseEventFontSize = themedFontSize(24, context, false);
-  const baseDescriptionFontSize = themedFontSize(17, context, false);
+  // Motion profile: with `diagramBuild` the axis and stems draw on and the
+  // markers pop; `calm` keeps the staggered fades.
+  const build = getMotionProfile(context).diagramBuild;
+  const strokeIn = (duration: number, delay: number, fallbackDuration: number): Animation =>
+    build
+      ? { type: 'drawOn', duration, delay }
+      : { type: 'fadeIn', duration: fallbackDuration, delay };
+
+  const titleFontSize = themedFontSize(52, context, true);
+  const trackFontSize = themedFontSize(26, context, false);
+  const baseEventFontSize = themedFontSize(28, context, false);
+  const baseDescriptionFontSize = themedFontSize(20, context, false);
+
+  // Vertical rhythm: centre the title + tracks lockup as one group. Pinning
+  // the title to the top and spreading the tracks over everything below it
+  // left a single track floating in the lower half of the frame.
+  const trackCount = Math.max(1, tracks.length);
+  const viewportScale = Math.min(viewport.width, viewport.height) / 1080;
+  const calloutExtent =
+    78 +
+    Math.min(baseEventFontSize, 28 * viewportScale) * 1.4 +
+    Math.min(baseDescriptionFontSize, 20 * viewportScale) * 1.4 * 2 +
+    28;
+  const naturalBand = calloutExtent * 2 + 24;
+  const titleBlock = input.title ? titleFontSize * 1.3 + 40 : 0;
+  const maxTracksHeight = viewport.height * 0.82 - titleBlock;
+  const trackBand = Math.max(120, Math.min(naturalBand, maxTracksHeight / trackCount));
+  const groupHeight = titleBlock + trackBand * trackCount;
+  const groupTop = Math.max(viewport.height * 0.06, (viewport.height - groupHeight) / 2);
+  const contentTop = groupTop + titleBlock;
 
   if (input.title) {
     layers.push({
@@ -185,8 +216,8 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
           shadow: shouldUseShadow(context),
         },
       },
-      position: { x: '50%', y: Math.max(50, titleFontSize * 1.2), width: '82%', anchor: 'center' },
-      animation: { type: 'fadeIn', duration: 0.7 },
+      position: { x: '50%', y: groupTop + titleFontSize * 0.65, width: '82%', anchor: 'center' },
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 0.7 }),
     });
   }
 
@@ -214,12 +245,6 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
   const axisStartX = outerMargin + labelWidth;
   const axisEndX = viewport.width - outerMargin;
   const axisWidth = Math.max(1, axisEndX - axisStartX);
-  const contentTop = input.title
-    ? Math.max(titleFontSize * 2.2, viewport.height * 0.2)
-    : viewport.height * 0.09;
-  const contentBottom = viewport.height * 0.91;
-  const availableHeight = Math.max(1, contentBottom - contentTop);
-  const trackBand = availableHeight / tracks.length;
   const markerRadius = Math.max(6, Math.min(11, Math.min(viewport.width, viewport.height) / 105));
   const trackColor = withAlpha(colors.text ?? theme.colors.primary, 0.72);
   const accentColor = colors.accent ?? theme.colors.primary;
@@ -239,8 +264,8 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
   // get narrower there. Cap callout typography against the physical viewport
   // so labels wrap instead of degenerating to a few characters per line.
   const minViewportScale = Math.min(viewport.width, viewport.height) / 1080;
-  const eventFontSize = Math.min(baseEventFontSize, 24 * minViewportScale);
-  const descriptionFontSize = Math.min(baseDescriptionFontSize, 17 * minViewportScale);
+  const eventFontSize = Math.min(baseEventFontSize, 28 * minViewportScale);
+  const descriptionFontSize = Math.min(baseDescriptionFontSize, 20 * minViewportScale);
   const trackMarkerRadii = tracks.map((track) => {
     const positions = track.events.map((event) => clamp01(event.position)).sort((a, b) => a - b);
     let minGapPx = Number.POSITIVE_INFINITY;
@@ -273,7 +298,7 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
         endMarker: 'arrow',
       },
       position: { x: axisStartX, y: y - markerRadius, width: axisWidth, height: markerRadius * 2 },
-      animation: { type: 'fadeIn', duration: 0.65, delay: trackDelay },
+      animation: strokeIn(0.9, trackDelay, 0.65),
     };
     layers.push(line);
 
@@ -297,7 +322,7 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
           width: Math.max(1, labelWidth - 32),
           anchor: 'center',
         },
-        animation: { type: 'fadeIn', duration: 0.5, delay: trackDelay },
+        animation: motionEntrance(context, { type: 'fadeIn', duration: 0.5, delay: trackDelay }),
       };
       layers.push(label);
     }
@@ -322,7 +347,7 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
           width: Math.max(48, outerMargin - markerRadius * 2),
           anchor: 'top-left',
         },
-        animation: { type: 'fadeIn', duration: 0.5, delay: trackDelay },
+        animation: motionEntrance(context, { type: 'fadeIn', duration: 0.5, delay: trackDelay }),
       });
     }
 
@@ -358,7 +383,7 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
         endMarker: 'arrow',
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
-      animation: { type: 'fadeIn', duration: 0.6, delay: 0.45 + linkIndex * 0.08 },
+      animation: strokeIn(0.6, 0.45 + linkIndex * 0.08, 0.6),
     });
 
     if (link.label) {
@@ -426,7 +451,11 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
           height: linkLabelHeight,
           anchor: 'center',
         },
-        animation: { type: 'fadeIn', duration: 0.5, delay: 0.55 + linkIndex * 0.08 },
+        animation: motionEntrance(context, {
+          type: 'fadeIn',
+          duration: 0.5,
+          delay: 0.55 + linkIndex * 0.08,
+        }),
       });
     }
   });
@@ -459,7 +488,7 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
           width: Math.max(2, Math.abs(calloutX - x)),
           height: Math.max(2, Math.abs(endY - y)),
         },
-        animation: { type: 'fadeIn', duration: 0.4, delay: stemDelay },
+        animation: strokeIn(0.35, stemDelay, 0.4),
       });
     };
 
@@ -486,6 +515,7 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
           pointMarkerRadius,
           accentColor,
           delay,
+          build,
         ),
       );
     } else {
@@ -504,7 +534,9 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
           width: pointMarkerRadius * 2,
           height: pointMarkerRadius * 2,
         },
-        animation: { type: 'zoomIn', duration: 0.35, delay },
+        animation: build
+          ? { type: 'grow', origin: 'center', duration: 0.35, delay }
+          : { type: 'zoomIn', duration: 0.35, delay },
       };
       layers.push(dot);
     }
@@ -542,7 +574,7 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
           },
         },
         position: { x: calloutX, y: labelY, width: calloutWidth, anchor: 'center' },
-        animation: { type: 'fadeIn', duration: 0.5, delay: delay + 0.08 },
+        animation: motionEntrance(context, { type: 'fadeIn', duration: 0.5, delay: delay + 0.08 }),
       });
 
       if (event.description) {
@@ -603,7 +635,11 @@ export function timelineBlock(input: TimelineBlockInput, context: TemplateContex
             },
           },
           position: { x: calloutX, y: descriptionY, width: calloutWidth, anchor: 'center' },
-          animation: { type: 'fadeIn', duration: 0.5, delay: delay + 0.14 },
+          animation: motionEntrance(context, {
+            type: 'fadeIn',
+            duration: 0.5,
+            delay: delay + 0.14,
+          }),
         });
       }
     }

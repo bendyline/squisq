@@ -24,6 +24,7 @@ import type {
   TimelineBlockInput,
   TreeBlockInput,
 } from '../schemas/BlockTemplates.js';
+import type { MotionSpec } from '../schemas/Motion.js';
 import type { CustomTemplateDefinition } from '../schemas/CustomTemplates.js';
 import type { Theme } from '../schemas/Theme.js';
 import type { ViewportConfig } from '../schemas/Viewport.js';
@@ -137,6 +138,8 @@ export interface MaterializeBlockLayersOptions {
   customTemplates?: readonly CustomTemplateDefinition[];
   /** Failed templates render a visible fallback by default. */
   failureMode?: LayerMaterializationFailureMode;
+  /** Motion profile for template output; omitted → theme default, else `calm`. */
+  motion?: MotionSpec | null;
 }
 
 /** Pre-expanded scheduling cache; not part of the public materialization API. */
@@ -220,7 +223,7 @@ export function materializeBlockLayersWithRuntime(
 
   const context = runtime.templateContext
     ? cloneData(runtime.templateContext)
-    : createTemplateContext(theme, blockIndex, totalBlocks, viewport);
+    : createTemplateContext(theme, blockIndex, totalBlocks, viewport, { motion: options.motion });
   context.block = cloneData(block as Block);
 
   const execution = executeTemplateMaterialization(block, context, runtime.registry);

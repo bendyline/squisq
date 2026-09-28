@@ -20,6 +20,7 @@ import {
   getThemeFont,
   shouldUseShadow,
   themedFontSize,
+  motionEntrance,
 } from '../utils/themeUtils.js';
 import { oklchDarken } from '../../schemas/colorUtils.js';
 import { fitProse } from './captionUtils.js';
@@ -131,10 +132,12 @@ export function fullBleedQuote(input: FullBleedQuoteInput, context: TemplateCont
         height: pct(fit.heightPx),
         anchor: 'top-left',
       },
-      animation:
+      animation: motionEntrance(
+        context,
         getTemplateHint<string>(context, 'fullBleedQuote', 'entrance', 'subtle') === 'dramatic'
           ? { type: 'zoomIn', duration: 0.8 }
           : { type: 'fadeIn', duration: 1.5 },
+      ),
     },
   ];
 }

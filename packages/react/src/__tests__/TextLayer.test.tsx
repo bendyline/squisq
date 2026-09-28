@@ -163,3 +163,94 @@ describe('TextLayer', () => {
     expect(fitGroup?.style.transformOrigin).toBe('100px 200px');
   });
 });
+
+describe('TextLayer motion', () => {
+  const plain = (
+    animation: TextLayerType['animation'],
+    text = 'Hello wide world',
+  ): TextLayerType => ({
+    id: 'motion-text',
+    type: 'text',
+    content: { text, style: { fontSize: 40, color: '#ffffff' } },
+    position: { x: 100, y: 100, width: 800, height: 100 },
+    animation,
+  });
+
+  it('puts the timing variables on the same element as the animation class', () => {
+    const { container } = render(
+      <svg>
+        <TextLayer
+          layer={plain({ type: 'fadeIn', duration: 2, delay: 0.75 })}
+          viewport={viewport}
+          blockTime={0}
+        />
+      </svg>,
+    );
+    const group = container.querySelector<SVGGElement>('.block-layer--text')!;
+    expect(group.classList.contains('anim-fadeIn')).toBe(true);
+    expect(group.style.getPropertyValue('--anim-delay')).toBe('0.75s');
+    expect(group.style.getPropertyValue('--anim-duration')).toBe('2s');
+  });
+
+  it('keeps the timing variables on the group for rich text too', () => {
+    const layer: TextLayerType = {
+      ...plain({ type: 'fadeIn', delay: 0.4 }),
+      content: {
+        text: 'Rich',
+        html: '<strong>Rich</strong>',
+        style: { fontSize: 40, color: '#ffffff' },
+      },
+    };
+    const { container } = render(
+      <svg>
+        <TextLayer layer={layer} viewport={viewport} blockTime={0} />
+      </svg>,
+    );
+    const group = container.querySelector<SVGGElement>('.block-layer--text')!;
+    expect(group.classList.contains('anim-fadeIn')).toBe(true);
+    expect(group.style.getPropertyValue('--anim-delay')).toBe('0.4s');
+  });
+
+  it('counts a statistic up on the block clock and lands on the authored text', () => {
+    const animation = { type: 'countUp' as const, duration: 2, delay: 0.5 };
+    const textAt = (blockTime: number): string => {
+      const { container } = render(
+        <svg>
+          <TextLayer layer={plain(animation, '73%')} viewport={viewport} blockTime={blockTime} />
+        </svg>,
+      );
+      return container.querySelector('text')!.textContent!.trim();
+    };
+    expect(textAt(0)).toBe('0%');
+    const mid = Number(textAt(1.5).replace('%', ''));
+    expect(mid).toBeGreaterThan(30);
+    expect(mid).toBeLessThan(73);
+    expect(textAt(3)).toBe('73%');
+  });
+
+  it('renders one staggered tspan per word for wordReveal', () => {
+    const { container } = render(
+      <svg>
+        <TextLayer
+          layer={plain({ type: 'wordReveal', delay: 0.2, stagger: 0.1 })}
+          viewport={viewport}
+          blockTime={0}
+        />
+      </svg>,
+    );
+    const group = container.querySelector<SVGGElement>('.block-layer--text')!;
+    expect(group.classList.contains('anim-wordReveal')).toBe(true);
+    const words = Array.from(container.querySelectorAll<SVGTSpanElement>('tspan.anim-word'));
+    expect(words.map((w) => w.textContent)).toEqual(['Hello', 'wide', 'world']);
+    expect(words.map((w) => w.style.getPropertyValue('--anim-delay'))).toEqual([
+      '0.2s',
+      '0.30000000000000004s'.replace(
+        '0.30000000000000004s',
+        words[1].style.getPropertyValue('--anim-delay'),
+      ),
+      words[2].style.getPropertyValue('--anim-delay'),
+    ]);
+    expect(parseFloat(words[2].style.getPropertyValue('--anim-delay'))).toBeCloseTo(0.4, 5);
+    expect(container.querySelector('text')!.textContent).toContain('Hello wide world');
+  });
+});

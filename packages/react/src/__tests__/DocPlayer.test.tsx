@@ -797,6 +797,98 @@ describe('DocPlayer smoke test', () => {
     ).toBeTruthy();
   });
 
+  it('times narrated blocks by their audio segments under the synthetic render clock', async () => {
+    // Offline capture runs on the synthetic clock, but a narrated doc's
+    // segments still define where its blocks sit. The second block here is
+    // anchored 3 s into its segment; stacking durations instead would start
+    // it at 10 s and pull every later block earlier than live playback.
+    const doc: Doc = {
+      articleId: 'narrated',
+      duration: 20,
+      audio: {
+        segments: [
+          { name: 'one', src: 'one.mp3', startTime: 0, duration: 10 },
+          { name: 'two', src: 'two.mp3', startTime: 10, duration: 10 },
+        ],
+      },
+      blocks: [
+        {
+          template: 'bigText',
+          id: 'first',
+          text: 'One',
+          audioSegment: 0,
+          sourceStartTime: 0,
+          duration: 10,
+        },
+        {
+          template: 'bigText',
+          id: 'second',
+          text: 'Two',
+          audioSegment: 1,
+          sourceStartTime: 3,
+          duration: 7,
+        },
+      ] as unknown as Doc['blocks'],
+    };
+    const onRenderAPIReady = vi.fn();
+    const { container } = render(
+      <DocPlayer
+        doc={doc}
+        audioMode="synthetic"
+        renderMode
+        animationsEnabled={false}
+        showControls={false}
+        onRenderAPIReady={onRenderAPIReady}
+      />,
+    );
+    const api = onRenderAPIReady.mock.calls[0][0] as SquisqRenderAPI;
+    await act(async () => api.seekTo(11.5));
+    expect(
+      container.querySelector('.doc-player__block--active [data-block-id="first"]'),
+    ).toBeTruthy();
+    await act(async () => api.seekTo(13.5));
+    expect(
+      container.querySelector('.doc-player__block--active [data-block-id="second"]'),
+    ).toBeTruthy();
+  });
+
+  it('keeps the exiting slide on its own clock during the crossfade', () => {
+    // A count-up on the slide being left must hold its final value while the
+    // next slide fades in, not restart from zero on the incoming clock.
+    const doc = docWithThreeSlides();
+    doc.blocks[1] = {
+      ...doc.blocks[1],
+      layers: [
+        {
+          id: 'stat',
+          type: 'text',
+          position: { x: 100, y: 100, width: 600, height: 100 },
+          content: { text: '73%', style: { fontSize: 40, color: '#fff' } },
+          animation: { type: 'countUp', duration: 1 },
+        },
+      ],
+    };
+    const { container, rerender } = render(
+      <DocPlayer
+        doc={doc}
+        audioController={controller({ currentTime: 5, totalDuration: 15 })}
+        displayMode="slideshow"
+      />,
+    );
+    fireEvent.click(screen.getByTestId('slide-next'));
+    rerender(
+      <DocPlayer
+        doc={doc}
+        audioController={controller({ currentTime: 10.2, totalDuration: 15 })}
+        displayMode="slideshow"
+      />,
+    );
+    const exiting = container.querySelector(
+      '.doc-player__block--previous [data-block-id="second"] text',
+    );
+    expect(exiting?.textContent?.trim()).toBe('73%');
+  });
+
   it('advances from slideshow cover to slide 1', async () => {
     const { container } = render(
       <DocPlayer doc={docWithCover()} basePath="/test" displayMode="slideshow" />,

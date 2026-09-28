@@ -227,6 +227,8 @@ export interface FrameManifest {
   width: number;
   height: number;
   captionStyle: string | null;
+  /** JSON of the motion spec the frames were captured with (`null` = doc/theme default). */
+  motion?: string | null;
   animationsEnabled: boolean;
   coverPreRoll: number;
   captureFormat: CaptureFormat;

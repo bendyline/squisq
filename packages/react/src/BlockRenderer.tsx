@@ -9,6 +9,7 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { Block, Layer, Theme, Transition } from '@bendyline/squisq/schemas';
 import { resolveTransitionDuration } from '@bendyline/squisq/schemas';
+import { isGeometryBoundTemplate } from '@bendyline/squisq/doc';
 import { ImageLayer } from './layers/ImageLayer';
 import { TextLayer } from './layers/TextLayer';
 import { ShapeLayer } from './layers/ShapeLayer';
@@ -207,6 +208,10 @@ export function BlockRenderer({
   const clipId = `vb-clip-${instanceId}-${block.id}`;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [textScale, setTextScale] = useState(1);
+  // Charts, timelines and diagrams position their labels against drawn
+  // geometry; growing that text would detach it from the marks it labels.
+  const growText =
+    growTextToFit && !isGeometryBoundTemplate((block as { template?: string }).template);
 
   useLayoutEffect(() => {
     const svg = svgRef.current;
@@ -216,7 +221,7 @@ export function BlockRenderer({
     const measure = (): void => {
       if (cancelled) return;
       const targets = Array.from(svg.querySelectorAll<TextFitTarget>('[data-squisq-text-fit]'));
-      if (!growTextToFit || targets.length === 0) {
+      if (!growText || targets.length === 0) {
         applyTextScale(targets, 1);
         setTextScale(1);
         return;
@@ -259,7 +264,7 @@ export function BlockRenderer({
     return () => {
       cancelled = true;
     };
-  }, [block.layers, growTextToFit, viewport.height, viewport.width]);
+  }, [block.layers, growText, viewport.height, viewport.width]);
 
   return (
     <svg
@@ -270,7 +275,7 @@ export function BlockRenderer({
       preserveAspectRatio="xMidYMid meet"
       overflow="hidden"
       data-block-id={block.id}
-      data-squisq-text-scale={growTextToFit ? textScale : undefined}
+      data-squisq-text-scale={growText ? textScale : undefined}
     >
       {/* Clip path matching the viewBox -- prevents Ken Burns animations from
           bleeding outside the block area (foreignObject + transform: scale

@@ -17,7 +17,13 @@
 
 import type { Layer } from '../../schemas/Doc.js';
 import type { PhotoGridInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import { getThemeFont, themedFontSize, themedImageTreatment } from '../utils/themeUtils.js';
+import {
+  getThemeFont,
+  themedFontSize,
+  themedImageTreatment,
+  getMotionProfile,
+  motionEntrance,
+} from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { cleanCaption } from './captionUtils.js';
 
@@ -34,6 +40,10 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
   const { theme, layout } = context;
 
   const treatment = themedImageTreatment(context, input.imageTreatment);
+
+  // Motion profile: tiles wipe in one after another from their outer edge;
+  // `calm` (stagger 0) keeps the plain staggered fade.
+  const stagger = getMotionProfile(context).photoGridStagger;
 
   const layers: Layer[] = [
     // Theme surface background (visible in gaps between images)
@@ -84,7 +94,14 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
       animation:
         i === 0 && ambientMotion
           ? { type: ambientMotion, duration: 15 }
-          : { type: 'fadeIn', duration: 1, delay: 0.2 * i },
+          : stagger > 0
+            ? {
+                type: 'reveal',
+                origin: pos.x < 50 ? 'left' : 'right',
+                duration: 0.7,
+                delay: Number((0.15 + stagger * i).toFixed(3)),
+              }
+            : { type: 'fadeIn', duration: 1, delay: 0.2 * i },
     });
   }
 
@@ -120,6 +137,7 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
           shadow: true,
           lineHeight: 1.18,
           maxLines: layout.stackColumns ? 2 : 1,
+          shrinkToFit: true,
         },
       },
       position: {
@@ -128,7 +146,7 @@ export function photoGrid(input: PhotoGridInput, context: TemplateContext): Laye
         anchor: 'center',
         width: '78%',
       },
-      animation: { type: 'fadeIn', duration: 1, delay: 0.5 },
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 1, delay: 0.5 }),
     });
   }
 

@@ -29,6 +29,22 @@ const CORPUS: Record<string, string> = {
   link: 'A [link](https://example.com) inline.',
   thematicBreak: 'before\n\n---\n\nafter',
   mixed: '# Heading\n\nA paragraph.\n\n- a\n- b\n\n> quote\n\n```\ncode\n```',
+  multiParagraphQuote: '> first\n>\n> second\n\nafter',
+  hardBreak: '**Date:** May 20  \n**Event:** Friday\n\nafter',
+  backslashHardBreak: 'line one\\\nline two\n\nafter',
+  escapedHashtag: '\\#RiseAndCrumb #BakeryLife\n\n\\# Not a heading',
+  escapedPrices: 'Croissants are \\$3.50 and muffins \\$4.00.',
+};
+
+/** Every inline node type core's parser sees, depth first. */
+const inlineTypes = (md: string): string[] => {
+  const out: string[] = [];
+  const walk = (node: { type: string; children?: unknown[] }) => {
+    out.push(node.type);
+    for (const child of node.children ?? []) walk(child as { type: string; children?: unknown[] });
+  };
+  for (const block of parseMarkdown(md).children) walk(block as never);
+  return out;
 };
 
 describe('tiptapBridge ↔ core markdown parser conformance', () => {
@@ -37,6 +53,13 @@ describe('tiptapBridge ↔ core markdown parser conformance', () => {
       expect(blockSeq(bridgeRoundTrip(md))).toEqual(blockSeq(md));
     });
   }
+
+  // Unescaped, `$3.50 and muffins $` is inline math to core's parser.
+  it('never turns escaped prices into math', () => {
+    const md = CORPUS.escapedPrices!;
+    expect(inlineTypes(md)).not.toContain('inlineMath');
+    expect(inlineTypes(bridgeRoundTrip(md))).toEqual(inlineTypes(md));
+  });
 
   it('round-trip is idempotent (a second pass changes nothing)', () => {
     for (const md of Object.values(CORPUS)) {

@@ -64,6 +64,7 @@ interface Doc {
   startBlock?: StartBlockConfig; // resting/cover block shown before playback
   persistentLayers?: PersistentLayerConfig;
   themeId?: string; // resolved at render time via resolveTheme()
+  motion?: MotionSpec; // motion profile (see Motion profiles); from frontmatter `squisq-motion`
   meta?: { generatedAt?: string; generatedBy?: string; version?: number };
   frontmatter?: Record<string, unknown>; // YAML frontmatter from source markdown
   customTemplates?: CustomTemplateDefinition[]; // from `squisq-custom-templates`
@@ -285,8 +286,70 @@ type AnimationType =
   | 'zoomOut'
   | 'panLeft'
   | 'panRight'
-  | 'typewriter';
+  | 'typewriter'
+  // Motion-profile vocabulary (all CSS keyframes, seekable by the offline renderer)
+  | 'fadeInUp' // fade in while rising into place
+  | 'slideIn' // enter from an edge (`origin`)
+  | 'wordReveal' // words appear one by one (`stagger` / `wordTimes`)
+  | 'countUp' // number counts from `count.from` to `count.to` on the block clock
+  | 'drawOn' // path stroke draws itself start → end
+  | 'grow' // scale out from `origin` (bars from an edge, nodes from the centre)
+  | 'reveal' // uncover with a wipe or iris (`shape`, `origin`)
+  | 'drift' // slow looping float for overlays
+  | 'tween'; // interpolate `fromState` → `toState`
 
+// Extra Animation fields used by the motion vocabulary:
+//   origin?: 'center' | 'left' | 'right' | 'top' | 'bottom'   (grow / slideIn / reveal)
+//   shape?: 'wipe' | 'iris'                                   (reveal)
+//   stagger?: number; wordTimes?: number[]                    (wordReveal)
+//   count?: { from?, to, decimals?, grouping?, prefix?, suffix? }  (countUp; parsed from the text when omitted)
+//   fromState?/toState?: { scale?, x?, y?, opacity?, rotate? } (tween)
+```
+
+##### Motion profiles (`schemas/Motion.ts`)
+
+A **motion profile** is the single knob that decides how much a document moves. Templates never branch on a profile name; they call `motionEntrance(context, fallback)` / `getMotionProfile(context)` and read the resolved profile off `TemplateContext.motion`.
+
+```ts
+type MotionProfileName = 'calm' | 'documentary' | 'vibrant';
+
+interface MotionProfile {
+  name: MotionProfileName;
+  textEntrance: {
+    type: 'fadeIn' | 'fadeInUp' | 'zoomIn' | 'grow';
+    duration: number;
+    easing?: string;
+    delayScale: number;
+  };
+  chartGrowth: boolean; // bars/columns grow, lines draw on, pies sweep out
+  chartGrowthDuration: number;
+  countUp: boolean; // statHighlight / comparisonBar numbers count up
+  countUpDuration: number;
+  diagramBuild: boolean; // diagram nodes pop in, edges + timeline stems draw on
+  photoGridStagger: number; // seconds between tiles revealing; 0 = plain fade
+  coverWordReveal: boolean; // off by default: covers double as posters
+}
+
+// A name, a named profile with overrides, or a resolved profile.
+type MotionSpec =
+  | MotionProfileName
+  | (Partial<MotionProfile> & { profile?: MotionProfileName })
+  | MotionProfile;
+
+const MOTION_PROFILES: Record<MotionProfileName, MotionProfile>;
+function resolveMotionProfile(
+  spec?: MotionSpec | null,
+  fallback?: MotionProfileName,
+): MotionProfile;
+function resolveMotionForDoc(doc, theme?, explicit?): MotionProfile; // explicit → Doc.motion → frontmatter `squisq-motion` → theme.renderStyle.motionProfile → 'calm'
+function readFrontmatterMotion(frontmatter?): MotionSpec | undefined;
+function isMotionProfileName(value: unknown): value is MotionProfileName;
+const FRONTMATTER_MOTION_KEY = 'squisq-motion';
+```
+
+`calm` reproduces the output squisq produced before motion profiles existed, byte for byte. Built-in themes declare a profile in `renderStyle.motionProfile` (`warm-earth`, `documentary`, `cinematic` → `documentary`; `bold`, `tech-dark` → `vibrant`; the rest → `calm`). Select one per document with the frontmatter key `squisq-motion: vibrant` (or `Doc.motion`), per player with the `motion` prop / `mount({ motion })`, and per export with `renderDocToMp4({ motion })` / `squisq video --motion`.
+
+```ts
 interface LinearGradient {
   from: string;
   to: string;
@@ -1772,6 +1835,7 @@ interface DocPlayerProps {
   onBlockMarkers?: (markers: BlockMarker[]) => void;
   forceViewport?: ViewportConfig;
   theme?: Theme; // default DEFAULT_THEME
+  motion?: MotionSpec | null; // motion profile override; default: doc `motion` → frontmatter → theme.renderStyle.motionProfile → 'calm'
   surface?: SurfaceScheme | 'auto';
   displayMode?: DisplayMode; // default 'video'
   dashboardLayout?: string; // dashboard mode: layout id or 'auto' (overrides doc frontmatter)

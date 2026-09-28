@@ -9,6 +9,7 @@ import { useId } from 'react';
 import type { ShapeLayer as ShapeLayerType } from '@bendyline/squisq/schemas';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
+import { defsIdFor } from '../utils/defsId';
 import { resolveFill, resolveShapeFilter, borderDashArray } from '../utils/fillStyle';
 
 interface ShapeLayerProps {
@@ -29,7 +30,7 @@ const FULL_BLEED_OVERSCAN = 1;
 
 export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
   const { content, position, animation } = layer;
-  const defsId = `${useId().replace(/:/g, '')}-${layer.id}`;
+  const defsId = defsIdFor(useId(), layer.id);
 
   // Resolve position values to pixels
   const rawX = resolveValue(position.x, viewport.width);

@@ -15,7 +15,7 @@ import {
   resolveColorScheme,
   getThemeFont,
   shouldUseShadow,
-  themedEntrance,
+  motionEntrance,
   themedFontSize,
   themedScrim,
   themedImageTreatment,
@@ -166,7 +166,7 @@ export function sectionHeader(input: SectionHeaderInput, context: TemplateContex
       width: layout.maxTextWidth,
       height: `${px(titleH)}%`,
     },
-    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1.5 }),
+    animation: motionEntrance(context, { type: 'fadeIn', duration: 1.5 }),
   });
 
   return layers;

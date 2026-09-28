@@ -42,6 +42,7 @@
     "defaultTextAnimation": "typewriter",
     "defaultImageAnimation": "slowZoom",
     "ambientMotion": true,
+    "motionProfile": "vibrant",
     "defaultTransition": {
       "type": "dissolve",
       "duration": 0.4

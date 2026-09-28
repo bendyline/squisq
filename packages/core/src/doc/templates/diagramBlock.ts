@@ -16,6 +16,7 @@
  */
 
 import type {
+  Animation,
   Block,
   Layer,
   ShapeLayer,
@@ -34,7 +35,12 @@ import type { MarkdownCodeBlock } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
 import { resolveSupplementalMediaLayout } from '../richMediaLayout.js';
 import { extractEmbeddedVideos, extractImages } from '../templateInputs.js';
-import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
+import {
+  resolveColorScheme,
+  getThemeFont,
+  themedFontSize,
+  getMotionProfile,
+} from '../utils/themeUtils.js';
 import { DIAGRAM_LABEL_LINE_HEIGHT, fitDiagramLabel } from '../utils/diagramText.js';
 import { fitProse, type ProseFit } from './captionUtils.js';
 import {
@@ -68,7 +74,7 @@ export const CANVAS_PADDING = PADDING;
 const CANVAS_TITLE_LINE_HEIGHT = 1.15;
 const CANVAS_TITLE_MAX_LINES = 2;
 /** Space between the title's last line and the top of the canvas. */
-const CANVAS_TITLE_GAP_PX = 36;
+const CANVAS_TITLE_GAP_PX = 60;
 const CANVAS_DESCRIPTION_LINE_HEIGHT = 1.35;
 const CANVAS_DESCRIPTION_MAX_LINES = 3;
 /** Space between the canvas bottom and the description's first line. */
@@ -573,6 +579,24 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
     .sort((a, b) => a.depth - b.depth || a.y - b.y || a.x - b.x);
   const leaves = resolved.nodes.filter((n) => !n.isContainer);
 
+  // Motion profile: with `diagramBuild` the diagram assembles itself —
+  // containers fade in by depth, leaf nodes pop in reading order, each edge
+  // draws on once both of its endpoints have landed, labels follow their
+  // node. `calm` emits no animations, exactly as before.
+  const build = getMotionProfile(context).diagramBuild;
+  const leafOrder = new Map<string, number>();
+  [...leaves]
+    .sort((a, b) => a.y - b.y || a.x - b.x)
+    .forEach((node, index) => leafOrder.set(node.id, index));
+  const containerDepth = new Map(containers.map((node) => [node.id, node.depth]));
+  const nodeDelay = (id: string): number => {
+    const order = leafOrder.get(id);
+    if (order !== undefined) return Number(Math.min(2, 0.2 + order * 0.12).toFixed(3));
+    return Number((0.05 + (containerDepth.get(id) ?? 0) * 0.08).toFixed(3));
+  };
+  const at = (animation: Animation): { animation: Animation } | Record<string, never> =>
+    build ? { animation } : {};
+
   // Container cards first — translucent grouping surfaces behind everything.
   for (const node of containers) {
     const t = transform(node);
@@ -588,6 +612,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
         borderRadius: 10,
       },
       position: { x: t.x, y: t.y, width: t.w, height: t.h },
+      ...at({ type: 'fadeIn', duration: 0.5, delay: nodeDelay(node.id) }),
     };
     layers.push(card);
   }
@@ -611,6 +636,9 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
     const b = positions.get(edge.target);
     if (!a || !b) continue;
     const endMarker: MarkerStyle = edge.directed ? configuredEnd : 'none';
+    const edgeDelay = Number(
+      (Math.max(nodeDelay(edge.source), nodeDelay(edge.target)) + 0.3).toFixed(3),
+    );
     const snapped = snapEndpoints(a, b);
     const start = edge.sourceAnchor ? anchorPoint(a, edge.sourceAnchor) : snapped.start;
     const end = edge.targetAnchor ? anchorPoint(b, edge.targetAnchor) : snapped.end;
@@ -627,6 +655,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
         ...(endMarker !== 'none' ? { endMarker } : {}),
       },
       position: { x: 0, y: 0, width: '100%', height: '100%' },
+      ...at({ type: 'drawOn', duration: 0.6, delay: edgeDelay }),
     };
     layers.push(pathLayer);
 
@@ -649,6 +678,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
           },
         },
         position: { x: mx, y: my - labelFontSize * 0.9, anchor: 'center' },
+        ...at({ type: 'fadeIn', duration: 0.4, delay: Number((edgeDelay + 0.5).toFixed(3)) }),
       };
       layers.push(labelLayer);
     }
@@ -668,6 +698,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
         borderRadius: input.nodeShape === 'pill' ? t.h / 2 : 10,
       },
       position: { x: t.x, y: t.y, width: t.w, height: t.h },
+      ...at({ type: 'grow', origin: 'center', duration: 0.45, delay: nodeDelay(node.id) }),
     };
     layers.push(card);
 
@@ -693,6 +724,11 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
         anchor: 'center',
         width: fit.textWidth,
       },
+      ...at({
+        type: 'fadeIn',
+        duration: 0.3,
+        delay: Number((nodeDelay(node.id) + 0.15).toFixed(3)),
+      }),
     };
     layers.push(label);
   }
@@ -716,6 +752,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
         },
       },
       position: { x: t.x + t.w / 2, y: t.y + fontSize, anchor: 'center', width: t.w },
+      ...at({ type: 'fadeIn', duration: 0.4, delay: nodeDelay(node.id) }),
     };
     layers.push(label);
   }

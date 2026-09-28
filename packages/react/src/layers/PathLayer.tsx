@@ -26,6 +26,7 @@ import type { PathLayer as PathLayerType, MarkerStyle } from '@bendyline/squisq/
 import { markerPath, shapePath } from '@bendyline/squisq/doc';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
+import { defsIdFor } from '../utils/defsId';
 import { resolveFill, borderDashArray } from '../utils/fillStyle';
 
 interface PathLayerProps {
@@ -74,7 +75,7 @@ function effectiveMarker(
 
 export function PathLayer({ layer, viewport, blockTime }: PathLayerProps) {
   const { content, animation, id } = layer;
-  const defsId = `${useId().replace(/:/g, '')}-${id}`;
+  const defsId = defsIdFor(useId(), id);
   const d = effectivePath(layer, viewport);
   const stroke = content.stroke ?? '#1e293b';
   const strokeWidth = content.strokeWidth ?? 2;
@@ -90,6 +91,15 @@ export function PathLayer({ layer, viewport, blockTime }: PathLayerProps) {
   const legacyArrow = readLegacyArrow(content);
   const start = markerPath(effectiveMarker(content.startMarker, legacyArrow, 'start'), 'start');
   const end = markerPath(effectiveMarker(content.endMarker, legacyArrow, 'end'), 'end');
+  const markerStart = start ? `url(#${startId})` : undefined;
+  const markerEnd = end ? `url(#${endId})` : undefined;
+
+  // `drawOn` strokes the path from start to end. `pathLength="1"` normalises
+  // the dash space so the CSS keyframes (`stroke-dasharray: 1`, dashoffset
+  // 1 → 0) work for any geometry; the authored dash pattern is set aside
+  // while the line draws. Markers ride on a stroke-less twin that fades in as
+  // the stroke arrives, so an arrowhead never floats ahead of its line.
+  const drawOn = animation?.type === 'drawOn';
 
   return (
     <g
@@ -110,10 +120,24 @@ export function PathLayer({ layer, viewport, blockTime }: PathLayerProps) {
         strokeWidth={strokeWidth}
         fill={fill}
         fillOpacity={content.fillOpacity}
-        strokeDasharray={dash}
-        markerStart={start ? `url(#${startId})` : undefined}
-        markerEnd={end ? `url(#${endId})` : undefined}
+        strokeDasharray={drawOn ? undefined : dash}
+        pathLength={drawOn ? 1 : undefined}
+        data-squisq-draw={drawOn ? 'stroke' : undefined}
+        markerStart={drawOn ? undefined : markerStart}
+        markerEnd={drawOn ? undefined : markerEnd}
       />
+      {drawOn && (markerStart || markerEnd) && (
+        <path
+          d={d}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          strokeOpacity={0}
+          fill="none"
+          data-squisq-draw="markers"
+          markerStart={markerStart}
+          markerEnd={markerEnd}
+        />
+      )}
     </g>
   );
 }

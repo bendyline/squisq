@@ -13,6 +13,7 @@
  */
 
 import { useMemo, useCallback, useRef } from 'react';
+import { resolveMotionForDoc, type MotionSpec } from '@bendyline/squisq/schemas';
 import type { Doc, Block, DocBlock } from '@bendyline/squisq/schemas';
 import type { Theme } from '@bendyline/squisq/schemas';
 import {
@@ -87,6 +88,11 @@ export interface UseDocPlaybackOptions {
    * jumps crossfade from what the viewer actually saw.
    */
   deterministicTransitions?: boolean;
+  /**
+   * Motion profile override. Omitted → the doc's own `motion` / frontmatter
+   * `squisq-motion`, then the theme's `renderStyle.motionProfile`, then `calm`.
+   */
+  motion?: MotionSpec | null;
 }
 
 export function useDocPlayback(
@@ -100,6 +106,7 @@ export function useDocPlayback(
     onSeek,
     useAudioSegmentTiming = true,
     deterministicTransitions = false,
+    motion: motionOverride,
   } = options;
   // Expand any template blocks into full blocks
   const blocks = useMemo(() => {
@@ -141,6 +148,11 @@ export function useDocPlayback(
         viewport,
         persistentLayers,
         theme,
+        motion: resolveMotionForDoc(
+          { motion: script.motion, frontmatter: script.frontmatter },
+          resolvedTheme,
+          motionOverride,
+        ),
         // Custom (user-defined) templates inlined into the doc's
         // frontmatter — see CustomTemplates.ts. Merged onto the
         // built-in registry so blocks annotated with `{[myhero]}`
@@ -161,6 +173,9 @@ export function useDocPlayback(
     script?.audio?.segments,
     script?.persistentLayers,
     script?.customTemplates,
+    script?.motion,
+    script?.frontmatter,
+    motionOverride,
     viewport,
     theme,
     useAudioSegmentTiming,

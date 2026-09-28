@@ -40,6 +40,7 @@ import {
   getCaptionAtTime,
   resolveMediaSchedule,
   getDocPlaybackDuration,
+  resolveMotionForDoc,
 } from '@bendyline/squisq/schemas';
 import { MediaClipLayer } from './MediaClipLayer';
 import { useMediaClipDurations } from './hooks/useMediaClipDurations';
@@ -215,6 +216,7 @@ function DocPlayerContent({
   coverSlidePlayback,
   coverVisible,
   theme,
+  motion: motionProp,
   surface,
   captionStyle = 'standard',
   captionPosition,
@@ -496,6 +498,16 @@ function DocPlayerContent({
   );
 
   // Doc playback hook - pass viewport for responsive template expansion
+  // Narrated docs carry blocks anchored to their audio segments; an unnarrated
+  // preview's template slides do not, and must keep their loss-averse stacking.
+  const hasAnchoredBlocks = useMemo(
+    () =>
+      doc.blocks.some(
+        (block) => typeof (block as { sourceStartTime?: unknown }).sourceStartTime === 'number',
+      ),
+    [doc.blocks],
+  );
+
   const {
     currentBlock,
     currentBlockIndex,
@@ -512,6 +524,7 @@ function DocPlayerContent({
   } = useDocPlayback(doc, currentTime, {
     viewport: activeViewport,
     theme: effectiveTheme,
+    motion: motionProp,
     onSeek: seekTo,
     // Offline capture may visit frames out of order; derive the crossfade
     // partner from block order rather than from what was rendered last.
@@ -519,7 +532,13 @@ function DocPlayerContent({
     // A synthetic track is only the timer used by an unnarrated preview.
     // Narration pacing may compact short visual beats, but it must never
     // remove authored slides from the default loss-averse projection.
-    useAudioSegmentTiming: audioMode !== 'synthetic',
+    // Offline capture also runs on the synthetic clock, yet a narrated doc
+    // (blocks anchored to its segments by `sourceStartTime`) still takes its
+    // timeline from those segments there — the exporter muxes the audio
+    // afterwards. Without them, block durations would simply stack and every
+    // gap between anchored blocks would pull the rest earlier, so the render
+    // would no longer match live playback.
+    useAudioSegmentTiming: audioMode !== 'synthetic' || (renderMode && hasAnchoredBlocks),
   });
 
   // Expand cover block (startBlock) if present - uses active viewport
@@ -528,7 +547,9 @@ function DocPlayerContent({
     if (!appearance.showCoverSlide) return null;
     if (!startBlockConfig) return null;
 
-    const context = createTemplateContext(effectiveTheme, 0, 1, activeViewport);
+    const context = createTemplateContext(effectiveTheme, 0, 1, activeViewport, {
+      motion: resolveMotionForDoc(doc, effectiveTheme, motionProp),
+    });
     const layers = expandCoverBlock(startBlockConfig, context, appearance.coverSlideTemplate);
 
     return {
@@ -539,7 +560,8 @@ function DocPlayerContent({
       layers,
     };
   }, [
-    doc.startBlock,
+    doc,
+    motionProp,
     activeViewport,
     effectiveTheme,
     appearance.showCoverSlide,
@@ -774,6 +796,7 @@ function DocPlayerContent({
       // entrances, staggered reveals) were never repositioned and ran on the
       // wall clock between captures. Render mode also pauses each animation so
       // it cannot advance between the seek and the screenshot.
+      let seekedActiveAnimations = 0;
       (root.getAnimations?.({ subtree: true }) ?? []).forEach((anim) => {
         const target = (anim.effect as KeyframeEffect | null)?.target as Element | null;
         if (!target) return;
@@ -796,6 +819,10 @@ function DocPlayerContent({
           anim.pause();
         }
         anim.currentTime = Math.max(0, position);
+        // An animation still inside its active interval changes what the
+        // compositor draws; the capture below must wait for that commit.
+        const end = anim.effect?.getComputedTiming?.().endTime;
+        if (typeof end !== 'number' || position < end) seekedActiveAnimations += 1;
       });
 
       // Seek <video> elements in the active block to the correct clip position.
@@ -839,8 +866,10 @@ function DocPlayerContent({
       // task fallback remains load-bearing when Chromium suspends animation
       // frames. A render seek within an unchanged block set only moves
       // synchronous state — animation clocks, layer props, video frames — so
-      // waiting on the display there would cap offline capture at the
-      // monitor's refresh rate.
+      // it skips the display wait unless it re-timed an animation that is
+      // still running: transform/opacity keyframes run on the compositor
+      // thread, and a capture taken before the next commit would show the
+      // previous position (frames differed run to run under load).
       await Promise.all(videoSeekPromises);
       const presentedBlocks = Array.from(
         root.querySelectorAll('.doc-player__block'),
@@ -856,7 +885,9 @@ function DocPlayerContent({
             block.element === previousBlocks[index].element &&
             block.className === previousBlocks[index].className,
         );
-      if (!renderMode || !blocksUnchanged) await waitForVisualUpdate();
+      if (!renderMode || !blocksUnchanged || seekedActiveAnimations > 0) {
+        await waitForVisualUpdate();
+      }
     };
     const getDuration = () => {
       // The larger of the audio/block timeline and any media that spills
@@ -1508,7 +1539,10 @@ function DocPlayerContent({
           <div key={previousBlock.id} className="doc-player__block doc-player__block--previous">
             <BlockRenderer
               block={previousBlock}
-              blockTime={blockTime}
+              // The exiting block keeps its own clock: its count-ups and
+              // keyframes must hold their final state through the crossfade
+              // instead of restarting on the incoming block's time.
+              blockTime={Math.max(0, currentTime - previousBlock.startTime)}
               basePath={basePath}
               isExiting={true}
               transition={currentBlock?.transition}

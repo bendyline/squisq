@@ -23,6 +23,7 @@
  */
 
 import { createElement } from 'react';
+import type { MotionSpec } from '@bendyline/squisq/schemas';
 import { createRoot, type Root } from 'react-dom/client';
 import type {
   Doc,
@@ -113,6 +114,11 @@ export interface MountOptions {
    * fill the host box.
    */
   viewport?: { width: number; height: number; name?: string };
+  /**
+   * Motion profile override (`calm` | `documentary` | `vibrant`, or a spec
+   * with overrides). Omitted → the doc's own setting, then the theme's.
+   */
+  motion?: MotionSpec | null;
   /**
    * Whether to render slide transitions and per-layer animations (default: true).
    * Timed media continues to play when disabled.
@@ -321,6 +327,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     pipPosition,
     renderMode = false,
     viewport,
+    motion,
     animationsEnabled = true,
     captionStyle,
     captionPosition,
@@ -415,6 +422,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       renderMode,
       animationsEnabled,
       theme,
+      motion,
       videoPresentation,
       pipSize,
       pipShape,

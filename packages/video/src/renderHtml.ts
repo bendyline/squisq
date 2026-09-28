@@ -13,6 +13,7 @@
 
 import type {
   Doc,
+  MotionSpec,
   Theme,
   VideoPipPosition,
   VideoPipShape,
@@ -49,6 +50,9 @@ export interface RenderHtmlOptions {
 
   /** Theme override for the capture player. Omitted values resolve from the Doc. */
   theme?: Theme;
+
+  /** Motion profile override. Omitted values resolve from the Doc, then the theme. */
+  motion?: MotionSpec | null;
 
   /** Player-level video placement override. Omitted values resolve from Doc frontmatter. */
   videoPresentation?: VideoPresentation;
@@ -179,6 +183,7 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
     height = 1080,
     captionStyle,
     theme,
+    motion,
     videoPresentation,
     pipSize,
     pipShape,
@@ -217,6 +222,7 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
     `    animationsEnabled: ${JSON.stringify(animationsEnabled)}`,
     captionStyle ? `    captionStyle: ${JSON.stringify(captionStyle)}` : null,
     theme ? `    theme: ${escapeForScript(JSON.stringify(theme))}` : null,
+    motion != null ? `    motion: ${escapeForScript(JSON.stringify(motion))}` : null,
     videoPresentation ? `    videoPresentation: ${JSON.stringify(videoPresentation)}` : null,
     pipSize ? `    pipSize: ${JSON.stringify(pipSize)}` : null,
     pipShape ? `    pipShape: ${JSON.stringify(pipShape)}` : null,

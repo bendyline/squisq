@@ -119,6 +119,16 @@ export interface Doc {
    */
   themeId?: string;
 
+  /**
+   * Motion profile for this document — a built-in name (`calm`,
+   * `documentary`, `vibrant`) or a named profile with overrides. Decides how
+   * much templates move (chart growth, count-ups, diagram build-ins, …).
+   * Populated from the frontmatter key `squisq-motion`; resolved at render
+   * time by `resolveMotionForDoc()`, which falls back to the theme's
+   * `renderStyle.motionProfile` and finally to `calm`.
+   */
+  motion?: import('./Motion.js').MotionSpec;
+
   /** Optional metadata */
   meta?: {
     generatedAt?: string;
@@ -930,10 +940,74 @@ export interface Animation {
   direction?: 'in' | 'out';
   /** For pan animations: pan direction */
   panDirection?: 'left' | 'right' | 'up' | 'down';
+  /**
+   * For `grow`: the edge (or centre) the layer scales out from — a bar grows
+   * from its `left`, a column from its `bottom`, a node from its `center`.
+   * For `slideIn` / `reveal`: the edge the layer enters from or is uncovered
+   * from. Defaults to `center` for grow and `left` otherwise.
+   */
+  origin?: MotionOrigin;
+  /** For `reveal`: a directional wipe (default) or an iris opening from the centre. */
+  shape?: 'wipe' | 'iris';
+  /** For `wordReveal`: seconds between successive words (default 0.08). */
+  stagger?: number;
+  /**
+   * For `wordReveal`: explicit per-word start offsets (seconds from block
+   * start), e.g. aligned to narration. Overrides `stagger`; words past the
+   * end of the list continue at the last interval.
+   */
+  wordTimes?: number[];
+  /**
+   * For `countUp`: the number to count and how to print it. When omitted the
+   * renderer parses the layer's text (`"73%"` → count to 73 with a `%` suffix).
+   */
+  count?: CountUpSpec;
+  /** For `tween`: the state the layer starts in. Unset fields keep the rest state. */
+  fromState?: MotionState;
+  /** For `tween`: the state the layer ends in (default: rest). */
+  toState?: MotionState;
+}
+
+/** Edge or centre a motion originates from. */
+export type MotionOrigin = 'center' | 'left' | 'right' | 'top' | 'bottom';
+
+/** A transform/opacity state for `tween` animations. */
+export interface MotionState {
+  /** Uniform scale (1 = rest). */
+  scale?: number;
+  /** Horizontal offset in pixels. */
+  x?: number;
+  /** Vertical offset in pixels. */
+  y?: number;
+  /** Opacity 0–1. */
+  opacity?: number;
+  /** Rotation in degrees. */
+  rotate?: number;
+}
+
+/** How a `countUp` layer counts and formats its number. */
+export interface CountUpSpec {
+  /** Starting value (default 0). */
+  from?: number;
+  /** Final value. */
+  to: number;
+  /** Decimal places to print (default 0). */
+  decimals?: number;
+  /** Print thousands separators (default false). */
+  grouping?: boolean;
+  /** Text before the number, e.g. `$`. */
+  prefix?: string;
+  /** Text after the number, e.g. `%` or ` km`. */
+  suffix?: string;
 }
 
 /**
  * Available animation types.
+ *
+ * The first group is the original vocabulary. The second group arrived with
+ * motion profiles (`schemas/Motion.ts`); every one of them is a CSS keyframe
+ * animation the offline renderer can seek, except `countUp`, which the text
+ * layer derives from the block clock.
  */
 export type AnimationType =
   | 'none'
@@ -944,7 +1018,16 @@ export type AnimationType =
   | 'zoomOut'
   | 'panLeft'
   | 'panRight'
-  | 'typewriter'; // Text appears letter by letter
+  | 'typewriter' // Text appears letter by letter
+  | 'fadeInUp' // Fade in while rising into place
+  | 'slideIn' // Enter from an edge (`origin`)
+  | 'wordReveal' // Text appears word by word (`stagger` / `wordTimes`)
+  | 'countUp' // Number counts from `count.from` to `count.to`
+  | 'drawOn' // Path stroke draws itself from start to end
+  | 'grow' // Scale out from `origin` (bars, nodes, pie wedges)
+  | 'reveal' // Uncover with a wipe or iris (`shape`, `origin`)
+  | 'drift' // Slow, looping ambient float for overlays
+  | 'tween'; // Interpolate `fromState` → `toState`
 
 // ============================================
 // Audio Configuration

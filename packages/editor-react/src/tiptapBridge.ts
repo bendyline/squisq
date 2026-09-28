@@ -21,6 +21,9 @@ import { mediaEditHtmlAttribute } from '@bendyline/squisq/mediaEdit';
 import { mediaEditKeysFor } from './tiptap/mediaEditAttributes';
 import { needsAngleDestination, unwrapLinkDestination } from './markdownDestination';
 
+/** Marks a backslash-escaped character; see `MarkdownEscape.ts`. */
+export const MARKDOWN_ESCAPE_ATTR = 'data-md-escape';
+
 // Hoisted regex patterns for inline markdown ↔ HTML conversion
 //
 // Emphasis carries CommonMark-ish flanking guards. Two rules matter:
@@ -70,6 +73,21 @@ const RE_LEGACY_ITALIC_STAR = /(?<!\*)\*(?![\s*])([^*]+?)(?<![\s*])([ \t]+)\*(?=
 // leaking a literal backslash in front of live emphasis.
 const ESCAPABLE_MD_CHARS: readonly string[] = ['*', '_', '~', '\\'];
 const RE_MD_ESCAPE = /\\([*_~\\])/g;
+
+/** Every backslash pair in order, so `\\$` reads as `\\` then a bare `$`. */
+const RE_BACKSLASH_PAIR = /\\([\s\S])/g;
+/**
+ * ASCII punctuation a backslash escapes in CommonMark, less the four above:
+ * these become a `MarkdownEscape` mark rather than being dropped, because
+ * nothing downstream can tell when their backslash was load-bearing.
+ */
+const RE_MARK_ESCAPABLE = /[!"#$%&'()+,\-./:;<=>?@[\]^`{|}]/;
+/** Any ASCII punctuation: a literal backslash in front of one must be doubled. */
+const RE_ASCII_PUNCTUATION = /[!-/:-@[-`{-~]/;
+const RE_ESCAPE_SPAN = new RegExp(
+  `<span\\b[^>]*\\b${MARKDOWN_ESCAPE_ATTR}\\b[^>]*>([\\s\\S]*?)<\\/span>`,
+  'gi',
+);
 
 const RE_INLINE_CODE = /`(.+?)`/g;
 const BACKTICK = '`';
@@ -543,16 +561,22 @@ export function markdownToTiptap(markdown: string): string {
       continue;
     }
 
-    // Blockquote
-    if (line.startsWith('> ')) {
+    // Blockquote. A bare `>` line separates the paragraphs of ONE quote
+    // (`> a\n>\n> b`, the form remark and most models write). It is kept as an
+    // empty paragraph inside the quote; stopping the quote there instead
+    // leaked every separator out as a literal `>` paragraph between two
+    // quotes, and the Write view saved that shape back over the file.
+    if (isQuoteLine(line)) {
       flushList();
-      const quoteLines = [line.slice(2)];
-      while (i + 1 < lines.length && lines[i + 1].startsWith('> ')) {
+      const quoteLines = [quoteLineContent(line)];
+      while (i + 1 < lines.length && isQuoteLine(lines[i + 1])) {
         i++;
-        quoteLines.push(lines[i].slice(2));
+        quoteLines.push(quoteLineContent(lines[i]));
       }
       pushBlock(
-        `<blockquote>${quoteLines.map((quoteLine) => `<p>${inlineToHtml(quoteLine)}</p>`).join('')}</blockquote>`,
+        `<blockquote>${quoteLines
+          .map((quoteLine) => (quoteLine ? `<p>${inlineToHtml(quoteLine)}</p>` : '<p></p>'))
+          .join('')}</blockquote>`,
       );
       continue;
     }
@@ -661,9 +685,31 @@ export function markdownToTiptap(markdown: string): string {
       continue;
     }
 
-    // Regular paragraph
+    // Regular paragraph. A line ending in a hard break (two trailing spaces,
+    // or a backslash) runs on into the next line of the SAME paragraph, and
+    // `tiptapToMarkdown` writes `<br>` back as exactly that. One paragraph per
+    // line split `**Date:** …  \n**Event:** …` into two paragraphs the moment
+    // the document was opened, which the Write view then saved.
     flushList();
-    pushBlock(`<p>${inlineToHtml(line)}</p>`);
+    const paragraphLines = [line];
+    while (
+      i + 1 < lines.length &&
+      stripHardBreak(paragraphLines[paragraphLines.length - 1]) !== null &&
+      continuesParagraph(lines[i + 1])
+    ) {
+      i++;
+      paragraphLines.push(lines[i]);
+    }
+    const paragraphHtml = paragraphLines
+      .map((paragraphLine, index) =>
+        inlineToHtml(
+          index < paragraphLines.length - 1
+            ? (stripHardBreak(paragraphLine) ?? paragraphLine)
+            : paragraphLine,
+        ),
+      )
+      .join('<br>');
+    pushBlock(`<p>${paragraphHtml}</p>`);
   }
 
   // Close any remaining open blocks
@@ -758,7 +804,14 @@ export function tiptapToMarkdown(html: string): string {
         .split(/<\/p>\s*<p[^>]*>/i)
         .map((paragraph) => paragraph.replace(/^<p[^>]*>/i, '').replace(/<\/p>\s*$/i, ''));
       for (const paragraph of paragraphs) {
-        for (const quoteLine of htmlToInline(paragraph).split('\n')) {
+        const inline = htmlToInline(paragraph);
+        // An empty quote paragraph is the separator `markdownToTiptap` read
+        // from a bare `>`; write it back the same way.
+        if (!inline.trim()) {
+          lines.push('>');
+          continue;
+        }
+        for (const quoteLine of inline.split('\n')) {
           lines.push('> ' + quoteLine);
         }
       }
@@ -870,10 +923,12 @@ export function tiptapToMarkdown(html: string): string {
       }
     }
 
-    // Paragraph
+    // Paragraph. A line of it that starts like an ATX heading is literal
+    // text here (the editor would have made it a heading node otherwise), so
+    // escape the marker or the next parse promotes it.
     const pMatch = remaining.match(/^<p>(.*?)<\/p>/s);
     if (pMatch) {
-      const text = htmlToInline(pMatch[1]);
+      const text = htmlToInline(pMatch[1]).replace(/^(#{1,6})(?=\s|$)/gm, '\\$1');
       if (text.trim()) {
         lines.push(text);
         lines.push('');
@@ -1208,6 +1263,36 @@ function stripCodeIndent(line: string): string {
  * markdown spellings produce the SAME heading node, so annotation handling
  * must not depend on which one the author used.
  */
+/** A blockquote line: `> text`, or a bare `>` separating quote paragraphs. */
+function isQuoteLine(line: string): boolean {
+  return line.startsWith('> ') || line.trimEnd() === '>';
+}
+
+function quoteLineContent(line: string): string {
+  return line.trimEnd() === '>' ? '' : line.slice(2);
+}
+
+/**
+ * The line without its trailing hard-break marker (two or more spaces, or an
+ * unescaped backslash), or null when it ends in neither. `\\` at the end is
+ * an escaped backslash, not a break.
+ */
+function stripHardBreak(line: string): string | null {
+  if (/\S {2,}$/.test(line)) return line.replace(/ {2,}$/, '');
+  if (line.endsWith('\\') && isEscapedMarkdownCharacter(`${line}x`, line.length)) {
+    return line.slice(0, -1);
+  }
+  return null;
+}
+
+/** Lines that open a block of their own rather than continuing a paragraph. */
+const RE_BLOCK_START =
+  /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|```|~~~|\||<(?:img|video|audio)\b|(?:-{3,}|\*{3,}|_{3,}|={3,})\s*$)/;
+
+function continuesParagraph(line: string): boolean {
+  return line.trim() !== '' && !RE_BLOCK_START.test(line);
+}
+
 function headingToHtml(level: number, rawText: string): string {
   let text = rawText;
   let attrs = '';
@@ -1484,6 +1569,18 @@ function inlineToHtml(text: string): string {
     return stash(`<a href="${escapeHtml(url)}"${titleAttr}>${inlineToHtml(linkText)}</a>`);
   });
 
+  // Escaped punctuation the emphasis pass below does not own (`\$`, `\#`,
+  // `\[` …) becomes a `MarkdownEscape` mark: the Write view shows the bare
+  // character and `tiptapToMarkdown` writes the backslash back. Runs after
+  // code, links and images are stashed — an escape inside a code span is
+  // literal text, and one in a link destination belongs to the URL.
+  const escapes: string[] = [];
+  staged = staged.replace(RE_BACKSLASH_PAIR, (pair: string, ch: string) => {
+    if (!RE_MARK_ESCAPABLE.test(ch)) return pair;
+    escapes.push(`<span ${MARKDOWN_ESCAPE_ATTR}="">${escapeHtml(ch)}</span>`);
+    return `\u0000ME${escapes.length - 1}\u0000`;
+  });
+
   let result = escapeHtml(staged);
 
   // Neutralize backslash-escaped emphasis delimiters BEFORE the emphasis
@@ -1528,6 +1625,9 @@ function inlineToHtml(text: string): string {
   // would leave that nested token unresolved.
   for (let index = placeholders.length - 1; index >= 0; index--) {
     result = result.split(`\u0000PH${index}\u0000`).join(placeholders[index] ?? '');
+  }
+  for (let index = escapes.length - 1; index >= 0; index--) {
+    result = result.split(`\u0000ME${index}\u0000`).join(escapes[index] ?? '');
   }
 
   return preserveLeadingSpaces(result);
@@ -1724,9 +1824,12 @@ function escapeMarkdownRun(text: string): string {
     const next = text[i + 1];
 
     if (ch === '\\') {
-      // Only double a backslash that would otherwise escape a delimiter we
-      // handle; `C:\path` must stay `C:\path`.
-      out += ESCAPABLE_MD_CHARS.includes(next ?? '') ? '\\\\' : '\\';
+      // A backslash before any ASCII punctuation is an escape, so a literal
+      // one there is doubled — as is one at the end of the run or before a
+      // vaulted token, where the character that follows is not known here.
+      // `\\` always reads back as one backslash; `C:\path` stays as written.
+      out +=
+        next === undefined || next === '\u0000' || RE_ASCII_PUNCTUATION.test(next) ? '\\\\' : '\\';
       continue;
     }
     if (ch === '~') {
@@ -1835,6 +1938,22 @@ class RawHtmlVault {
 function htmlToInline(html: string): string {
   let result = html;
   const vault = new RawHtmlVault();
+
+  // Characters the source escaped (see `MarkdownEscape`) get their backslash
+  // back. Vaulted so no later pass escapes or strips it again, and kept
+  // HTML-escaped because the closing `unescapeHtml` decodes the string once.
+  // Only punctuation is re-escaped: text typed inside the mark stays plain.
+  result = result.replace(RE_ESCAPE_SPAN, (_span, inner: string) =>
+    inner.replace(/(<[^>]+>)|([^<]+)/g, (_segment, tag?: string, text?: string) =>
+      tag !== undefined
+        ? tag
+        : [...unescapeHtml(text ?? '')]
+            .map((ch) =>
+              RE_ASCII_PUNCTUATION.test(ch) ? vault.protect(escapeHtml(`\\${ch}`)) : escapeHtml(ch),
+            )
+            .join(''),
+    ),
+  );
 
   // Soft line breaks — convert <br> to GFM hard-break syntax (two trailing
   // spaces + newline) before stripping tags so the newline survives.

@@ -20,7 +20,7 @@ import type {
 } from '../../schemas/BlockTemplates.js';
 import {
   getThemeFont,
-  themedEntrance,
+  motionEntrance,
   themedFontSize,
   themedImageTreatment,
 } from '../utils/themeUtils.js';
@@ -326,7 +326,7 @@ function buildFeatureLayers(
         anchor: textAnchor,
         width: pctW(titleWrapWidth),
       },
-      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 0.8 }),
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 0.8 }),
     });
   }
 
@@ -351,7 +351,7 @@ function buildFeatureLayers(
         anchor: textAnchor,
         width: pctW(bodyWrapWidth),
       },
-      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 0.8, delay: 0.2 }),
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 0.8, delay: 0.2 }),
     });
   }
 

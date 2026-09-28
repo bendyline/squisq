@@ -6,6 +6,7 @@ import Table from '@tiptap/extension-table';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import TableRow from '@tiptap/extension-table-row';
+import { MarkdownEscape } from '../MarkdownEscape';
 import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 
 // ---------------------------------------------------------------------------
@@ -752,6 +753,129 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
     expect(normalizedHtml.match(/<blockquote>/g)).toHaveLength(1);
     expect(tiptapToMarkdown(normalizedHtml)).toBe(md + '\n');
     editor.destroy();
+  });
+
+  // Tiptap's own normalization is part of the round trip the Write view
+  // performs on open, so these go through a real editor.
+  const throughEditor = (md: string): string => {
+    const editor = new Editor({
+      extensions: [StarterKit, MarkdownEscape],
+      content: markdownToTiptap(md),
+    });
+    const out = tiptapToMarkdown(editor.getHTML());
+    editor.destroy();
+    return out;
+  };
+
+  it('keeps a multi-paragraph quote as one quote', () => {
+    const md = [
+      "> We're closed Mondays.",
+      '>',
+      '> Come back Tuesday.',
+      '>',
+      '> #RiseAndCrumb #BakeryLife',
+    ].join('\n');
+    const html = markdownToTiptap(md);
+    expect(html.match(/<blockquote>/g)).toHaveLength(1);
+    expect(html).not.toContain('<p>&gt;</p>');
+    expect(throughEditor(md)).toBe(md + '\n');
+  });
+
+  it('keeps a two-space hard break inside its paragraph', () => {
+    const md = '**Date:** May 20, 2026  \n**Event Date:** Friday, October 10';
+    expect(markdownToTiptap(md).match(/<p>/g)).toHaveLength(1);
+    expect(markdownToTiptap(md)).toContain('<br>');
+    expect(throughEditor(md)).toBe(md + '\n');
+  });
+
+  it('reads a backslash hard break, but not an escaped backslash', () => {
+    expect(throughEditor('line one\\\nline two')).toBe('line one  \nline two\n');
+    expect(markdownToTiptap('ends in a backslash \\\\\nnext').match(/<p>/g)).toHaveLength(2);
+  });
+
+  it('does not run a hard break into a following block', () => {
+    const html = markdownToTiptap('intro  \n- item');
+    expect(html).toContain('<ul>');
+  });
+
+  // Escapes are source syntax: the Write view shows the bare character, and
+  // the file gets its backslash back exactly where it was.
+  describe('backslash escapes', () => {
+    const visibleText = (md: string): string => {
+      const editor = new Editor({
+        extensions: [StarterKit, MarkdownEscape],
+        content: markdownToTiptap(md),
+      });
+      const text = editor.state.doc.textContent;
+      editor.destroy();
+      return text;
+    };
+
+    it('shows escaped prices bare and writes the escapes back', () => {
+      // Unescaped, this line is inline math ("3.50 and ").
+      const md = 'Croissants are \\$3.50 and muffins \\$4.00.';
+      expect(markdownToTiptap(md)).toContain('<span data-md-escape="">$</span>3.50');
+      expect(visibleText(md)).toBe('Croissants are $3.50 and muffins $4.00.');
+      expect(throughEditor(md)).toBe(`${md}\n`);
+    });
+
+    it('leaves an unescaped dollar exactly as written', () => {
+      expect(throughEditor('Total: $175.00')).toBe('Total: $175.00\n');
+    });
+
+    it('keeps a hashtag line and a heading marker literal', () => {
+      expect(visibleText('\\#RiseAndCrumb #BakeryLife')).toBe('#RiseAndCrumb #BakeryLife');
+      expect(throughEditor('\\#RiseAndCrumb #BakeryLife')).toBe('\\#RiseAndCrumb #BakeryLife\n');
+      expect(markdownToTiptap('\\# Not a heading')).not.toContain('<h1');
+      expect(throughEditor('\\# Not a heading')).toBe('\\# Not a heading\n');
+    });
+
+    it('keeps escaped brackets from becoming a link', () => {
+      const md = 'See \\[not a link\\](https://example.com) here.';
+      expect(markdownToTiptap(md)).not.toContain('<a ');
+      expect(throughEditor(md)).toBe(`${md}\n`);
+    });
+
+    it('round-trips escapes in table cells, headings, list items and link labels', () => {
+      const md = [
+        '## Prices from \\$3',
+        '',
+        '| Item | Price |',
+        '| --- | --- |',
+        '| Croissant | \\$3.50 |',
+        '',
+        '- one \\$5 item',
+        '',
+        'A [\\$5 deal](https://example.com/deal) today.',
+      ].join('\n');
+      const editor = new Editor({
+        extensions: [StarterKit, MarkdownEscape, Table, TableRow, TableCell, TableHeader, Link],
+        content: markdownToTiptap(md),
+      });
+      const out = tiptapToMarkdown(editor.getHTML());
+      editor.destroy();
+      expect(out).toContain('## Prices from \\$3');
+      expect(out).toContain('| Croissant | \\$3.50 |');
+      expect(out).toContain('- one \\$5 item');
+      expect(out).toContain('[\\$5 deal](https://example.com/deal)');
+    });
+
+    it('leaves escapes inside code spans and link destinations alone', () => {
+      expect(throughEditor('Run `echo \\$HOME` now.')).toBe('Run `echo \\$HOME` now.\n');
+      const linked = 'A [deal](https://example.com/a\\$b) today.';
+      expect(markdownToTiptap(linked)).toContain('href="https://example.com/a\\$b"');
+    });
+
+    it('keeps a literal backslash in front of punctuation', () => {
+      // `\\$5`: an escaped backslash, then a bare dollar.
+      expect(visibleText('A path \\\\$5')).toBe('A path \\$5');
+      expect(throughEditor('A path \\\\$5')).toBe('A path \\\\$5\n');
+      expect(throughEditor('Saved in C:\\temp now')).toBe('Saved in C:\\temp now\n');
+    });
+
+    it('re-escapes only punctuation typed inside the mark', () => {
+      expect(tiptapToMarkdown('<p><span data-md-escape="">$5</span></p>')).toBe('\\$5\n');
+    });
   });
 
   it('preserves unordered lists', () => {

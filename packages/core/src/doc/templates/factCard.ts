@@ -31,7 +31,7 @@ import type { FactCardInput, TemplateContext } from '../../schemas/BlockTemplate
 import {
   getThemeFont,
   shouldUseShadow,
-  themedEntrance,
+  motionEntrance,
   themedFontSize,
   themedSurfaceGradient,
   themedImageTreatment,
@@ -174,7 +174,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
       },
     },
     position: box(factTop, factBoxH),
-    animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1.5 }),
+    animation: motionEntrance(context, { type: 'fadeIn', duration: 1.5 }),
   });
 
   // Explanation (skipped when the block has no body — the fact centres alone)
@@ -196,7 +196,7 @@ export function factCard(input: FactCardInput, context: TemplateContext): Layer[
         },
       },
       position: box(explainTop, explainBoxH),
-      animation: themedEntrance(context, 'text', { type: 'fadeIn', duration: 1, delay: 0.8 }),
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 1, delay: 0.8 }),
     });
   }
 

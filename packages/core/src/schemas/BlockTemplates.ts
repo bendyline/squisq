@@ -25,6 +25,7 @@ import type { Layer, Block, Transition, MapTileStyle, MapMarker, MarkerStyle } f
 import type { ViewportConfig, ViewportOrientation } from './Viewport.js';
 import type { LayoutHints } from './LayoutStrategy.js';
 import type { Theme } from './Theme.js';
+import { resolveMotionForDoc, type MotionProfile, type MotionSpec } from './Motion.js';
 import { VIEWPORT_PRESETS, getViewportOrientation, calculateFontScale } from './Viewport.js';
 import { getLayoutHints, scaledFontSize as scaleFontSize } from './LayoutStrategy.js';
 
@@ -965,6 +966,22 @@ export interface TemplateContext {
    * their typed `input` parameters instead.
    */
   block?: Block;
+  /**
+   * Resolved motion profile (chart growth, count-ups, diagram build-ins,
+   * text entrances). Templates read it through `getMotionProfile()` /
+   * `motionEntrance()`; absent means `calm`.
+   */
+  motion?: MotionProfile;
+}
+
+/** Extra inputs to {@link createTemplateContext}. */
+export interface CreateTemplateContextOptions {
+  /**
+   * Motion spec for the document. Resolved against the theme's
+   * `renderStyle.motionProfile`; when omitted the theme's profile (or
+   * `calm`) applies.
+   */
+  motion?: MotionSpec | null;
 }
 
 /**
@@ -975,6 +992,7 @@ export function createTemplateContext(
   blockIndex: number,
   totalBlocks: number,
   viewport: ViewportConfig = VIEWPORT_PRESETS.landscape,
+  options: CreateTemplateContextOptions = {},
 ): TemplateContext {
   const orientation = getViewportOrientation(viewport);
   // Theme renderStyle may override individual layout hints (e.g. a theme
@@ -989,6 +1007,7 @@ export function createTemplateContext(
     fontScale: calculateFontScale(viewport),
     orientation,
     layout: overrides ? { ...baseLayout, ...overrides } : baseLayout,
+    motion: resolveMotionForDoc(null, theme, options.motion),
   };
 }
 

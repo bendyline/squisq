@@ -270,6 +270,9 @@ export {
 // Tiptap extension: Heading with template annotation support
 export { HeadingWithTemplate } from './TemplateAnnotation.js';
 export { Superscript, Subscript } from './VerticalAlign.js';
+// Hosts building their own editor on the bridge register this, or escaped
+// characters (`\$`, `\#`) lose their backslash on the way back out.
+export { MarkdownEscape } from './MarkdownEscape.js';
 
 // Diagram editor — ASCII fences are the authored diagram format. The
 // AsciiDiagramExtension turns code fences containing box-and-line art

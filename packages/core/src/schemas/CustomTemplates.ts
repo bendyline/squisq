@@ -156,7 +156,17 @@ const ANIMATION_TYPES = new Set([
   'panLeft',
   'panRight',
   'typewriter',
+  'fadeInUp',
+  'slideIn',
+  'wordReveal',
+  'countUp',
+  'drawOn',
+  'grow',
+  'reveal',
+  'drift',
+  'tween',
 ]);
+const MOTION_ORIGINS = ['center', 'left', 'right', 'top', 'bottom'];
 
 class TemplateValidator {
   readonly errors: CustomTemplateValidationError[] = [];
@@ -272,6 +282,30 @@ function validateAnimation(v: TemplateValidator, value: unknown, path: string): 
   optionalString(v, value, 'easing', path);
   optionalEnum(v, value, 'direction', path, ['in', 'out']);
   optionalEnum(v, value, 'panDirection', path, ['left', 'right', 'up', 'down']);
+  optionalEnum(v, value, 'origin', path, MOTION_ORIGINS);
+  optionalEnum(v, value, 'shape', path, ['wipe', 'iris']);
+  optionalNumber(v, value, 'stagger', path);
+  if (value.wordTimes !== undefined) {
+    if (!Array.isArray(value.wordTimes) || value.wordTimes.some((t) => typeof t !== 'number')) {
+      v.error(`${path}.wordTimes`, 'expected array of numbers');
+    }
+  }
+  const count = value.count;
+  if (count !== undefined && v.object(count, `${path}.count`)) {
+    if (typeof count.to !== 'number') v.error(`${path}.count.to`, 'expected number');
+    optionalNumber(v, count, 'from', `${path}.count`);
+    optionalNumber(v, count, 'decimals', `${path}.count`);
+    optionalString(v, count, 'prefix', `${path}.count`);
+    optionalString(v, count, 'suffix', `${path}.count`);
+  }
+  for (const key of ['fromState', 'toState']) {
+    const state = value[key];
+    if (state !== undefined && v.object(state, `${path}.${key}`)) {
+      for (const field of ['scale', 'x', 'y', 'opacity', 'rotate']) {
+        optionalNumber(v, state, field, `${path}.${key}`);
+      }
+    }
+  }
 }
 
 function validateRepeat(v: TemplateValidator, value: unknown, path: string): void {

@@ -9,6 +9,7 @@
 import type { TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { ThemeColorScheme, RenderStyle } from '../../schemas/Theme.js';
 import type { Animation, AnimationType, ImageTreatment } from '../../schemas/Doc.js';
+import { MOTION_PROFILES, type MotionProfile } from '../../schemas/Motion.js';
 import { resolveFontFamily } from '../../schemas/fontStacks.js';
 import { oklchDarken, withAlpha } from '../../schemas/colorUtils.js';
 
@@ -146,6 +147,57 @@ export function themedEntrance(
   const type = getDefaultAnimation(context, layerType);
   if (!type || type === 'slowZoom' || type === fallback.type) return fallback;
   return { ...fallback, type };
+}
+
+// ============================================
+// Motion Profile Helpers
+// ============================================
+
+/**
+ * The motion profile in force for this block. Contexts built without one
+ * (older callers, tests) behave as `calm`, which is the pre-profile output.
+ */
+export function getMotionProfile(context: TemplateContext): MotionProfile {
+  return context.motion ?? MOTION_PROFILES.calm;
+}
+
+/**
+ * Profile-aware entrance for a text or caption layer.
+ *
+ * Under `calm` the template's fallback is returned untouched (same object),
+ * so calm output is byte-identical to pre-profile output. Other profiles
+ * swap in their entrance type, duration and easing while keeping the
+ * template's authored delay (scaled by the profile's `delayScale`), so
+ * staggers survive. The theme's `defaultTextAnimation` still applies first
+ * through `themedEntrance`, and a `typewriter` theme keeps its typewriter.
+ *
+ * ```ts
+ * animation: motionEntrance(context, { type: 'fadeIn', duration: 1, delay: 0.3 })
+ * ```
+ */
+export function motionEntrance(
+  context: TemplateContext,
+  fallback: Animation,
+  layerType: 'text' | 'image' = 'text',
+): Animation {
+  const themed = themedEntrance(context, layerType, fallback);
+  const profile = getMotionProfile(context);
+  if (profile.name === 'calm') return themed;
+  if (themed.type === 'typewriter' || themed.type === 'none') return themed;
+  const { textEntrance } = profile;
+  return {
+    ...themed,
+    type: textEntrance.type,
+    duration: textEntrance.duration,
+    ...(themed.delay != null ? { delay: motionDelay(context, themed.delay) } : {}),
+    ...(textEntrance.easing ? { easing: textEntrance.easing } : {}),
+  };
+}
+
+/** A template-authored delay scaled by the profile (identity under `calm`). */
+export function motionDelay(context: TemplateContext, delay: number): number {
+  const scale = getMotionProfile(context).textEntrance.delayScale;
+  return scale === 1 ? delay : Number((delay * scale).toFixed(3));
 }
 
 // ============================================

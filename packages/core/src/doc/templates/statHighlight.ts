@@ -27,7 +27,8 @@
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Layer } from '../../schemas/Doc.js';
+import type { Animation, Layer } from '../../schemas/Doc.js';
+import { countUpSpecFor } from '../utils/countUp.js';
 import type { StatHighlightInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import {
   resolveColorScheme,
@@ -37,6 +38,8 @@ import {
   themedFontSize,
   themedSurfaceGradient,
   themedImageTreatment,
+  getMotionProfile,
+  motionEntrance,
 } from '../utils/themeUtils.js';
 import { createAccentLayers, getAccentLayout, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer, fitProse } from './captionUtils.js';
@@ -86,6 +89,19 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
   const detailFontSize = themedFontSize(26, context, false);
 
   const layers: Layer[] = [createBackgroundLayer('bg', themedSurfaceGradient(context, 180))];
+
+  // Motion profile: the headline number counts up from zero when the profile
+  // asks for it and the stat actually contains a number ("73%", "$1.2M");
+  // years and prose keep the pop-in. Layout always uses the final text.
+  const motion = getMotionProfile(context);
+  const countSpec = motion.countUp ? countUpSpecFor(stat) : null;
+  const statEntrance: Animation =
+    getTemplateHint<string>(context, 'statHighlight', 'entrance', 'subtle') === 'dramatic'
+      ? { type: 'zoomIn', duration: 0.4 }
+      : { type: 'zoomIn', duration: 0.6 };
+  const statAnimation: Animation = countSpec
+    ? { type: 'countUp', duration: motion.countUpDuration, delay: 0.15, count: countSpec }
+    : statEntrance;
 
   // Add accent image layers (behind text, after background)
   if (accentImage) {
@@ -194,10 +210,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
       },
     },
     position: box(statTop, statBoxH),
-    animation:
-      getTemplateHint<string>(context, 'statHighlight', 'entrance', 'subtle') === 'dramatic'
-        ? { type: 'zoomIn', duration: 0.4 }
-        : { type: 'zoomIn', duration: 0.6 },
+    animation: statAnimation,
   });
 
   // Description — smaller and understated beneath the stat (skipped when
@@ -220,7 +233,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
         },
       },
       position: box(descTop, descBoxH),
-      animation: { type: 'fadeIn', duration: 1, delay: 0.3 },
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 1, delay: 0.3 }),
     });
   }
 
@@ -246,7 +259,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
         },
       },
       position: box(detailTop, detailBoxH),
-      animation: { type: 'fadeIn', duration: 1, delay: 1 },
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 1, delay: 1 }),
     });
   }
 

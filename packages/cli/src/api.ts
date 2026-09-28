@@ -28,7 +28,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve as resolvePath } from 'node:path';
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, MotionSpec } from '@bendyline/squisq/schemas';
 import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import { flattenBlocks } from '@bendyline/squisq/doc';
 import type { DashboardStyleId } from '@bendyline/squisq/doc';
@@ -228,6 +228,13 @@ export interface RenderDocToMp4Options {
   /** Caption mode to bake into the video (default: off). */
   captionStyle?: 'off' | 'standard' | 'social';
 
+  /**
+   * Motion profile override: `calm` (pre-profile output), `documentary` or
+   * `vibrant`, or a spec with overrides. Omitted → the doc's `motion` /
+   * frontmatter `squisq-motion`, then the theme's `renderStyle.motionProfile`.
+   */
+  motion?: MotionSpec | null;
+
   /** Render layer animations and block transitions (default: true). */
   animationsEnabled?: boolean;
 
@@ -297,6 +304,8 @@ export interface RenderDocToGifOptions {
   height?: number;
   /** Caption mode to bake into the GIF (default: standard). */
   captionStyle?: 'off' | 'standard' | 'social';
+  /** Motion profile override (see {@link RenderDocToMp4Options.motion}). */
+  motion?: MotionSpec | null;
   /** Seconds of cover-slide pre-roll (default: 0). */
   coverPreRoll?: number;
   /** Render layer animations and block transitions (default: false). */
@@ -381,6 +390,7 @@ interface CaptureDocFramesOptions {
   width: number;
   height: number;
   captionStyle?: 'standard' | 'social';
+  motion?: MotionSpec | null;
   coverPreRoll: number;
   animationsEnabled: boolean;
   onProgress?: (phase: string, percent: number) => void;
@@ -410,6 +420,8 @@ interface RenderPageOptions {
    */
   includeAudio: boolean;
   captionStyle?: 'standard' | 'social';
+  /** Motion profile override forwarded to the capture player. */
+  motion?: MotionSpec | null;
   animationsEnabled: boolean;
   /** Player rendition mounted in the capture page (default 'slideshow'). */
   displayMode?: 'slideshow' | 'dashboard';
@@ -442,6 +454,7 @@ async function withRenderPage<T>(
     height,
     includeAudio,
     captionStyle,
+    motion,
     animationsEnabled,
     displayMode,
     dashboard,
@@ -510,6 +523,7 @@ async function withRenderPage<T>(
     width,
     height,
     captionStyle,
+    motion,
     animationsEnabled,
     displayMode,
     dashboard,
@@ -521,7 +535,14 @@ async function withRenderPage<T>(
   signal?.throwIfAborted();
   let browser: import('playwright-core').Browser;
   try {
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({
+      headless: true,
+      // Keyframe animations must be sampled by the main thread: the
+      // compositor rasterises a transforming layer differently depending on
+      // whether it caught the animation running, which made mid-motion stills
+      // differ between otherwise identical renders.
+      args: ['--disable-threaded-animation'],
+    });
   } catch (err: unknown) {
     signal?.throwIfAborted();
     const detail = err instanceof Error ? err.message.split('\n')[0] : String(err);
@@ -577,6 +598,18 @@ async function withRenderPage<T>(
           `Render API did not initialize within ${RENDER_BOOT_TIMEOUT_MS / 1000} seconds.${errorDetail}`,
       );
     }
+
+    // Webfont metrics settle text fitting (the block renderer re-measures on
+    // `document.fonts.ready`), so wait for them before the first capture:
+    // otherwise an early frame can be taken with fallback glyphs under load
+    // and differ from an otherwise identical render.
+    signal?.throwIfAborted();
+    await page.evaluate(() =>
+      Promise.race([
+        document.fonts?.ready ?? Promise.resolve(undefined),
+        new Promise<void>((resolve) => setTimeout(resolve, 10_000)),
+      ]).then(() => undefined),
+    );
 
     renderAPI = await page.evaluateHandle(() => {
       const root = document.getElementById('squisq-root');
@@ -733,8 +766,17 @@ async function captureDocFrames(
   container: ContentContainer,
   options: CaptureDocFramesOptions,
 ): Promise<CapturedDocFrames> {
-  const { fps, width, height, captionStyle, coverPreRoll, animationsEnabled, onProgress, signal } =
-    options;
+  const {
+    fps,
+    width,
+    height,
+    captionStyle,
+    motion,
+    coverPreRoll,
+    animationsEnabled,
+    onProgress,
+    signal,
+  } = options;
 
   signal?.throwIfAborted();
   resolveAppliedCoverPreRoll(coverPreRoll, true);
@@ -748,7 +790,16 @@ async function captureDocFrames(
     return await withRenderPage(
       doc,
       container,
-      { signal, width, height, includeAudio: true, captionStyle, animationsEnabled, onProgress },
+      {
+        signal,
+        width,
+        height,
+        includeAudio: true,
+        captionStyle,
+        motion,
+        animationsEnabled,
+        onProgress,
+      },
       async (session) => {
         const loop = await iterateDocFrames(
           session,
@@ -802,6 +853,7 @@ async function renderDocToMp4Piped(
     throw new Error('resume requires framesDir so there is a spool to resume from');
   }
   const captionStyle = options.captionStyle === 'off' ? undefined : options.captionStyle;
+  const motion = options.motion ?? null;
   const animationsEnabled = options.animationsEnabled ?? true;
   const ffmpegPath = await requireFfmpeg(signal);
   const outputPath = resolvePath(options.outputPath);
@@ -814,6 +866,7 @@ async function renderDocToMp4Piped(
     width,
     height,
     captionStyle: captionStyle ?? null,
+    motion: motion === null ? null : JSON.stringify(motion),
     animationsEnabled,
     coverPreRoll,
     captureFormat,
@@ -834,7 +887,16 @@ async function renderDocToMp4Piped(
     const { loop, activeSink } = await withRenderPage(
       doc,
       container,
-      { signal, width, height, includeAudio: true, captionStyle, animationsEnabled, onProgress },
+      {
+        signal,
+        width,
+        height,
+        includeAudio: true,
+        captionStyle,
+        motion,
+        animationsEnabled,
+        onProgress,
+      },
       async (session) => {
         const hasCover =
           coverPreRoll > 0 ? await session.renderAPI.evaluate((api) => api.hasCoverBlock()) : false;
@@ -1120,6 +1182,7 @@ export async function renderDocToMp4(
     width: dimensions.width,
     height: dimensions.height,
     captionStyle: options.captionStyle === 'off' ? undefined : options.captionStyle,
+    motion: options.motion ?? null,
     coverPreRoll: options.coverPreRoll ?? 0,
     animationsEnabled: options.animationsEnabled ?? true,
     onProgress: options.onProgress,
@@ -1195,6 +1258,7 @@ export async function renderDocToGif(
     width,
     height,
     captionStyle: options.captionStyle === 'off' ? undefined : (options.captionStyle ?? 'standard'),
+    motion: options.motion ?? null,
     coverPreRoll: options.coverPreRoll ?? 0,
     animationsEnabled: options.animationsEnabled ?? false,
     onProgress: options.onProgress,

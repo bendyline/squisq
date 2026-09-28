@@ -16,9 +16,19 @@
  *    PDF bypasses SVG) and already used by Video/Table layers.
  */
 
-import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  Fragment,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import type { TextLayer as TextLayerType } from '@bendyline/squisq/schemas';
 import { DEFAULT_DOC_FONT } from '@bendyline/squisq/schemas';
+import { formatCountUp, wordRevealDelay } from '@bendyline/squisq/doc';
 import {
   parseHtmlToNodes,
   sanitizeHtmlNodes,
@@ -34,6 +44,7 @@ import {
 } from '@bendyline/squisq/icon-marker';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue } from '../utils/layerUtils';
+import { defsIdFor } from '../utils/defsId';
 import { resolveFill, borderDashArray } from '../utils/fillStyle';
 
 interface TextLayerProps {
@@ -140,7 +151,11 @@ function IconTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
   };
 
   return (
-    <g className={`block-layer block-layer--text ${animStyle.className}`} data-layer-id={layer.id}>
+    <g
+      className={`block-layer block-layer--text ${animStyle.className}`}
+      style={animStyle.style}
+      data-layer-id={layer.id}
+    >
       <foreignObject
         x={boxX}
         y={boxY}
@@ -170,7 +185,7 @@ function IconTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
 }
 
 function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerProps) {
-  const defsId = `${useId().replace(/:/g, '')}-${layer.id}`;
+  const defsId = defsIdFor(useId(), layer.id);
   const { content, position, animation } = layer;
   const { text, style } = content;
 
@@ -215,8 +230,16 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
   // Get animation styles
   const animStyle = getAnimationStyle(animation, blockTime);
 
+  // `countUp` derives its digits from the block clock — a pure function of
+  // time, so live playback and offline capture print the same number for the
+  // same instant. Layout uses the final text so the box never reflows.
+  const isCountUp = animation?.type === 'countUp';
+  const isWordReveal = animation?.type === 'wordReveal';
+  const displayText =
+    isCountUp && animation ? formatCountUp(text ?? '', animation, blockTime) : text;
+
   // Split text into lines, and wrap if maxWidth is specified
-  const rawLines = (text ?? '').split('\n');
+  const rawLines = (displayText ?? '').split('\n');
   let lines = maxWidth
     ? rawLines.reduce<string[]>(
         (acc, line) => acc.concat(wrapText(line, style.fontSize, maxWidth)),
@@ -313,8 +336,32 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
   // Add shadow filter if requested
   const filterId = style.shadow ? `shadow-${defsId}` : undefined;
 
+  // Word reveal: every word is its own <tspan> with its own start offset
+  // (`--anim-delay`), so narration-aligned `wordTimes` and plain staggers are
+  // both a single CSS animation per word — seekable like everything else.
+  let wordIndex = 0;
+  const renderLine = (line: string): ReactNode => {
+    if (!isWordReveal || !animation || !line) return line || '\u00A0';
+    const words = line.split(' ');
+    return words.map((word, w) => {
+      const delay = wordRevealDelay(animation, wordIndex++);
+      return (
+        <Fragment key={w}>
+          {w > 0 ? ' ' : null}
+          <tspan className="anim-word" style={{ '--anim-delay': `${delay}s` } as CSSProperties}>
+            {word}
+          </tspan>
+        </Fragment>
+      );
+    });
+  };
+
   return (
-    <g className={`block-layer block-layer--text ${animStyle.className}`} data-layer-id={layer.id}>
+    <g
+      className={`block-layer block-layer--text ${animStyle.className}`}
+      style={animStyle.style}
+      data-layer-id={layer.id}
+    >
       {/* Shadow filter definition */}
       {style.shadow && (
         <defs>
@@ -375,7 +422,7 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
         >
           {lines.map((line, i) => (
             <tspan key={i} x={x} dy={i === 0 ? firstLineDy : lineHeightPx}>
-              {line || '\u00A0'} {/* Non-breaking space for empty lines */}
+              {renderLine(line)} {/* Non-breaking space for empty lines */}
             </tspan>
           ))}
         </text>
@@ -490,7 +537,11 @@ function RichTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
     `.${cls} a{color:inherit;text-decoration:underline}`;
 
   return (
-    <g className={`block-layer block-layer--text ${animStyle.className}`} data-layer-id={layer.id}>
+    <g
+      className={`block-layer block-layer--text ${animStyle.className}`}
+      style={animStyle.style}
+      data-layer-id={layer.id}
+    >
       <foreignObject
         x={boxX}
         y={boxY}

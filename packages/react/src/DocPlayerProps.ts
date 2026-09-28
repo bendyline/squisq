@@ -1,4 +1,5 @@
 import type { Doc, MediaScheduleOptions, SurfaceScheme, Theme } from '@bendyline/squisq/schemas';
+import type { MotionSpec } from '@bendyline/squisq/schemas';
 import type { DashboardStyleId, ViewportConfig } from '@bendyline/squisq/doc';
 import type { CoverSlidePlayback, CoverSlideTemplate } from '@bendyline/squisq/doc';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
@@ -66,6 +67,12 @@ export interface DocPlayerProps {
   onBlockMarkers?: (markers: BlockMarker[]) => void;
   forceViewport?: ViewportConfig;
   theme?: Theme;
+  /**
+   * Motion profile override (`calm` | `documentary` | `vibrant`, or a spec
+   * with overrides). Omitted → the doc's `motion` / frontmatter
+   * `squisq-motion`, then the theme's `renderStyle.motionProfile`, then `calm`.
+   */
+  motion?: MotionSpec | null;
   surface?: SurfaceScheme | 'auto';
   /** Video, slideshow, page, dashboard, or flashcards rendition. */
   displayMode?: DisplayMode;

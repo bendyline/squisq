@@ -295,3 +295,47 @@ describe('BlockRenderer', () => {
     expect(animatedBlock.layers?.map((layer) => layer.animation)).toEqual(originalAnimations);
   });
 });
+
+describe('BlockRenderer grow-text-to-fit', () => {
+  const textLayer = {
+    id: 'label',
+    type: 'text' as const,
+    position: { x: 100, y: 100 },
+    content: { text: 'Label', style: { fontSize: 20, color: '#fff' } },
+  };
+
+  it('publishes a text scale for prose blocks but never for geometry-bound templates', () => {
+    const prose = render(
+      <BlockRenderer
+        block={{ id: 'p', startTime: 0, duration: 5, audioSegment: 0, layers: [textLayer] }}
+        blockTime={0}
+        basePath="."
+        growTextToFit
+      />,
+    );
+    expect(
+      prose.container.querySelector('.block-svg')?.getAttribute('data-squisq-text-scale'),
+    ).toBe('1');
+
+    const chart = render(
+      <BlockRenderer
+        block={
+          {
+            id: 'c',
+            startTime: 0,
+            duration: 5,
+            audioSegment: 0,
+            template: 'pieChart',
+            layers: [textLayer],
+          } as never
+        }
+        blockTime={0}
+        basePath="."
+        growTextToFit
+      />,
+    );
+    expect(
+      chart.container.querySelector('.block-svg')?.hasAttribute('data-squisq-text-scale'),
+    ).toBe(false);
+  });
+});

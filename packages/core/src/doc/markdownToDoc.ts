@@ -30,6 +30,7 @@ import type {
   StartBlockConfig,
   DocDiagnostic,
 } from '../schemas/Doc.js';
+import { readFrontmatterMotion } from '../schemas/Motion.js';
 import { readCustomTemplatesFromFrontmatter } from './customTemplatesFrontmatter.js';
 import { readCustomThemesFromFrontmatter } from './customThemesFrontmatter.js';
 import type {
@@ -709,6 +710,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   const customTemplates = readCustomTemplatesFromFrontmatter(markdownDoc.frontmatter);
   const customThemes = readCustomThemesFromFrontmatter(markdownDoc.frontmatter);
   const themeId = readFrontmatterThemeId(markdownDoc.frontmatter);
+  const motion = readFrontmatterMotion(markdownDoc.frontmatter);
   const doc: Doc = {
     articleId,
     duration: currentTime,
@@ -719,6 +721,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     ...(captions ? { captions } : {}),
     ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
     ...(themeId ? { themeId } : {}),
+    ...(motion ? { motion } : {}),
     ...(customTemplates ? { customTemplates } : {}),
     ...(customThemes ? { customThemes } : {}),
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
