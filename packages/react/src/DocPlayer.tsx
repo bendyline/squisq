@@ -498,6 +498,13 @@ function DocPlayerContent({
   );
 
   // Doc playback hook - pass viewport for responsive template expansion
+  // Narrated docs carry blocks anchored to their audio segments; an unnarrated
+  // preview's template slides do not, and must keep their loss-averse stacking.
+  const hasAnchoredBlocks = useMemo(
+    () => doc.blocks.some((block) => typeof (block as { sourceStartTime?: unknown }).sourceStartTime === 'number'),
+    [doc.blocks],
+  );
+
   const {
     currentBlock,
     currentBlockIndex,
@@ -522,7 +529,13 @@ function DocPlayerContent({
     // A synthetic track is only the timer used by an unnarrated preview.
     // Narration pacing may compact short visual beats, but it must never
     // remove authored slides from the default loss-averse projection.
-    useAudioSegmentTiming: audioMode !== 'synthetic',
+    // Offline capture also runs on the synthetic clock, yet a narrated doc
+    // (blocks anchored to its segments by `sourceStartTime`) still takes its
+    // timeline from those segments there — the exporter muxes the audio
+    // afterwards. Without them, block durations would simply stack and every
+    // gap between anchored blocks would pull the rest earlier, so the render
+    // would no longer match live playback.
+    useAudioSegmentTiming: audioMode !== 'synthetic' || (renderMode && hasAnchoredBlocks),
   });
 
   // Expand cover block (startBlock) if present - uses active viewport

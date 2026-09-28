@@ -797,6 +797,43 @@ describe('DocPlayer smoke test', () => {
     ).toBeTruthy();
   });
 
+  it('times narrated blocks by their audio segments under the synthetic render clock', async () => {
+    // Offline capture runs on the synthetic clock, but a narrated doc's
+    // segments still define where its blocks sit. The second block here is
+    // anchored 3 s into its segment; stacking durations instead would start
+    // it at 10 s and pull every later block earlier than live playback.
+    const doc: Doc = {
+      articleId: 'narrated',
+      duration: 20,
+      audio: {
+        segments: [
+          { name: 'one', src: 'one.mp3', startTime: 0, duration: 10 },
+          { name: 'two', src: 'two.mp3', startTime: 10, duration: 10 },
+        ],
+      },
+      blocks: [
+        { template: 'bigText', id: 'first', text: 'One', audioSegment: 0, sourceStartTime: 0, duration: 10 },
+        { template: 'bigText', id: 'second', text: 'Two', audioSegment: 1, sourceStartTime: 3, duration: 7 },
+      ] as unknown as Doc['blocks'],
+    };
+    const onRenderAPIReady = vi.fn();
+    const { container } = render(
+      <DocPlayer
+        doc={doc}
+        audioMode="synthetic"
+        renderMode
+        animationsEnabled={false}
+        showControls={false}
+        onRenderAPIReady={onRenderAPIReady}
+      />,
+    );
+    const api = onRenderAPIReady.mock.calls[0][0] as SquisqRenderAPI;
+    await act(async () => api.seekTo(11.5));
+    expect(container.querySelector('.doc-player__block--active [data-block-id="first"]')).toBeTruthy();
+    await act(async () => api.seekTo(13.5));
+    expect(container.querySelector('.doc-player__block--active [data-block-id="second"]')).toBeTruthy();
+  });
+
   it('keeps the exiting slide on its own clock during the crossfade', () => {
     // A count-up on the slide being left must hold its final value while the
     // next slide fades in, not restart from zero on the incoming clock.
