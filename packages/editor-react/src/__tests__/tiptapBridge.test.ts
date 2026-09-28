@@ -754,6 +754,58 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
     editor.destroy();
   });
 
+  // Tiptap's own normalization is part of the round trip the Write view
+  // performs on open, so these go through a real editor.
+  const throughEditor = (md: string): string => {
+    const editor = new Editor({ extensions: [StarterKit], content: markdownToTiptap(md) });
+    const out = tiptapToMarkdown(editor.getHTML());
+    editor.destroy();
+    return out;
+  };
+
+  it('keeps a multi-paragraph quote as one quote', () => {
+    const md = [
+      "> We're closed Mondays.",
+      '>',
+      '> Come back Tuesday.',
+      '>',
+      '> #RiseAndCrumb #BakeryLife',
+    ].join('\n');
+    const html = markdownToTiptap(md);
+    expect(html.match(/<blockquote>/g)).toHaveLength(1);
+    expect(html).not.toContain('<p>&gt;</p>');
+    expect(throughEditor(md)).toBe(md + '\n');
+  });
+
+  it('keeps a two-space hard break inside its paragraph', () => {
+    const md = '**Date:** May 20, 2026  \n**Event Date:** Friday, October 10';
+    expect(markdownToTiptap(md).match(/<p>/g)).toHaveLength(1);
+    expect(markdownToTiptap(md)).toContain('<br>');
+    expect(throughEditor(md)).toBe(md + '\n');
+  });
+
+  it('reads a backslash hard break, but not an escaped backslash', () => {
+    expect(throughEditor('line one\\\nline two')).toBe('line one  \nline two\n');
+    expect(markdownToTiptap('ends in a backslash \\\\\nnext').match(/<p>/g)).toHaveLength(2);
+  });
+
+  it('does not run a hard break into a following block', () => {
+    const html = markdownToTiptap('intro  \n- item');
+    expect(html).toContain('<ul>');
+  });
+
+  it('shows an escaped hashtag without its backslash', () => {
+    const html = markdownToTiptap('\\#RiseAndCrumb #BakeryLife');
+    expect(html).toContain('<p>#RiseAndCrumb #BakeryLife</p>');
+    expect(throughEditor('\\#RiseAndCrumb #BakeryLife')).toBe('#RiseAndCrumb #BakeryLife\n');
+  });
+
+  it('keeps an escaped heading marker literal', () => {
+    const html = markdownToTiptap('\\# Not a heading');
+    expect(html).toContain('<p># Not a heading</p>');
+    expect(throughEditor('\\# Not a heading')).toBe('\\# Not a heading\n');
+  });
+
   it('preserves unordered lists', () => {
     const result = roundTrip('- Alpha\n- Beta');
     expect(result).toContain('- Alpha');

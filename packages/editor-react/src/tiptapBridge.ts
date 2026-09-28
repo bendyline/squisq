@@ -67,9 +67,12 @@ const RE_LEGACY_ITALIC_STAR = /(?<!\*)\*(?![\s*])([^*]+?)(?<![\s*])([ \t]+)\*(?=
 
 // The delimiters whose backslash escapes this pass understands. `\\` is
 // included so an even backslash run collapses correctly instead of
-// leaking a literal backslash in front of live emphasis.
-const ESCAPABLE_MD_CHARS: readonly string[] = ['*', '_', '~', '\\'];
-const RE_MD_ESCAPE = /\\([*_~\\])/g;
+// leaking a literal backslash in front of live emphasis. `#` is here because
+// remark writes `\#` in front of any paragraph that starts with one (a
+// hashtag line), and the editor showed that backslash; the paragraph
+// serializer re-escapes the one position where `#` means a heading.
+const ESCAPABLE_MD_CHARS: readonly string[] = ['*', '_', '~', '\\', '#'];
+const RE_MD_ESCAPE = /\\([*_~\\#])/g;
 
 const RE_INLINE_CODE = /`(.+?)`/g;
 const BACKTICK = '`';
@@ -543,16 +546,22 @@ export function markdownToTiptap(markdown: string): string {
       continue;
     }
 
-    // Blockquote
-    if (line.startsWith('> ')) {
+    // Blockquote. A bare `>` line separates the paragraphs of ONE quote
+    // (`> a\n>\n> b`, the form remark and most models write). It is kept as an
+    // empty paragraph inside the quote; stopping the quote there instead
+    // leaked every separator out as a literal `>` paragraph between two
+    // quotes, and the Write view saved that shape back over the file.
+    if (isQuoteLine(line)) {
       flushList();
-      const quoteLines = [line.slice(2)];
-      while (i + 1 < lines.length && lines[i + 1].startsWith('> ')) {
+      const quoteLines = [quoteLineContent(line)];
+      while (i + 1 < lines.length && isQuoteLine(lines[i + 1])) {
         i++;
-        quoteLines.push(lines[i].slice(2));
+        quoteLines.push(quoteLineContent(lines[i]));
       }
       pushBlock(
-        `<blockquote>${quoteLines.map((quoteLine) => `<p>${inlineToHtml(quoteLine)}</p>`).join('')}</blockquote>`,
+        `<blockquote>${quoteLines
+          .map((quoteLine) => (quoteLine ? `<p>${inlineToHtml(quoteLine)}</p>` : '<p></p>'))
+          .join('')}</blockquote>`,
       );
       continue;
     }
@@ -661,9 +670,31 @@ export function markdownToTiptap(markdown: string): string {
       continue;
     }
 
-    // Regular paragraph
+    // Regular paragraph. A line ending in a hard break (two trailing spaces,
+    // or a backslash) runs on into the next line of the SAME paragraph, and
+    // `tiptapToMarkdown` writes `<br>` back as exactly that. One paragraph per
+    // line split `**Date:** …  \n**Event:** …` into two paragraphs the moment
+    // the document was opened, which the Write view then saved.
     flushList();
-    pushBlock(`<p>${inlineToHtml(line)}</p>`);
+    const paragraphLines = [line];
+    while (
+      i + 1 < lines.length &&
+      stripHardBreak(paragraphLines[paragraphLines.length - 1]) !== null &&
+      continuesParagraph(lines[i + 1])
+    ) {
+      i++;
+      paragraphLines.push(lines[i]);
+    }
+    const paragraphHtml = paragraphLines
+      .map((paragraphLine, index) =>
+        inlineToHtml(
+          index < paragraphLines.length - 1
+            ? (stripHardBreak(paragraphLine) ?? paragraphLine)
+            : paragraphLine,
+        ),
+      )
+      .join('<br>');
+    pushBlock(`<p>${paragraphHtml}</p>`);
   }
 
   // Close any remaining open blocks
@@ -758,7 +789,14 @@ export function tiptapToMarkdown(html: string): string {
         .split(/<\/p>\s*<p[^>]*>/i)
         .map((paragraph) => paragraph.replace(/^<p[^>]*>/i, '').replace(/<\/p>\s*$/i, ''));
       for (const paragraph of paragraphs) {
-        for (const quoteLine of htmlToInline(paragraph).split('\n')) {
+        const inline = htmlToInline(paragraph);
+        // An empty quote paragraph is the separator `markdownToTiptap` read
+        // from a bare `>`; write it back the same way.
+        if (!inline.trim()) {
+          lines.push('>');
+          continue;
+        }
+        for (const quoteLine of inline.split('\n')) {
           lines.push('> ' + quoteLine);
         }
       }
@@ -870,10 +908,12 @@ export function tiptapToMarkdown(html: string): string {
       }
     }
 
-    // Paragraph
+    // Paragraph. A line of it that starts like an ATX heading is literal
+    // text here (the editor would have made it a heading node otherwise), so
+    // escape the marker or the next parse promotes it.
     const pMatch = remaining.match(/^<p>(.*?)<\/p>/s);
     if (pMatch) {
-      const text = htmlToInline(pMatch[1]);
+      const text = htmlToInline(pMatch[1]).replace(/^(#{1,6})(?=\s|$)/gm, '\\$1');
       if (text.trim()) {
         lines.push(text);
         lines.push('');
@@ -1208,6 +1248,36 @@ function stripCodeIndent(line: string): string {
  * markdown spellings produce the SAME heading node, so annotation handling
  * must not depend on which one the author used.
  */
+/** A blockquote line: `> text`, or a bare `>` separating quote paragraphs. */
+function isQuoteLine(line: string): boolean {
+  return line.startsWith('> ') || line.trimEnd() === '>';
+}
+
+function quoteLineContent(line: string): string {
+  return line.trimEnd() === '>' ? '' : line.slice(2);
+}
+
+/**
+ * The line without its trailing hard-break marker (two or more spaces, or an
+ * unescaped backslash), or null when it ends in neither. `\\` at the end is
+ * an escaped backslash, not a break.
+ */
+function stripHardBreak(line: string): string | null {
+  if (/\S {2,}$/.test(line)) return line.replace(/ {2,}$/, '');
+  if (line.endsWith('\\') && isEscapedMarkdownCharacter(`${line}x`, line.length)) {
+    return line.slice(0, -1);
+  }
+  return null;
+}
+
+/** Lines that open a block of their own rather than continuing a paragraph. */
+const RE_BLOCK_START =
+  /^ {0,3}(?:#{1,6}(?:\s|$)|>|[-*+]\s|\d+[.)]\s|```|~~~|\||<(?:img|video|audio)\b|(?:-{3,}|\*{3,}|_{3,}|={3,})\s*$)/;
+
+function continuesParagraph(line: string): boolean {
+  return line.trim() !== '' && !RE_BLOCK_START.test(line);
+}
+
 function headingToHtml(level: number, rawText: string): string {
   let text = rawText;
   let attrs = '';

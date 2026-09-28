@@ -29,6 +29,10 @@ const CORPUS: Record<string, string> = {
   link: 'A [link](https://example.com) inline.',
   thematicBreak: 'before\n\n---\n\nafter',
   mixed: '# Heading\n\nA paragraph.\n\n- a\n- b\n\n> quote\n\n```\ncode\n```',
+  multiParagraphQuote: '> first\n>\n> second\n\nafter',
+  hardBreak: '**Date:** May 20  \n**Event:** Friday\n\nafter',
+  backslashHardBreak: 'line one\\\nline two\n\nafter',
+  escapedHashtag: '\\#RiseAndCrumb #BakeryLife\n\n\\# Not a heading',
 };
 
 describe('tiptapBridge ↔ core markdown parser conformance', () => {
