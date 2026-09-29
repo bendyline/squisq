@@ -363,6 +363,12 @@ export function WysiwygEditor({
     submitOnEnterRef.current = submitOnEnter;
   }, [submitOnEnter]);
   const editor = useEditor({
+    // Nothing this component renders reads editor state; the toolbar, outline
+    // and context subscribe to editor events themselves. Re-rendering on every
+    // transaction also re-applied the freshly built options (setOptions +
+    // updateState) after each one, and a host that sent a message hit React's
+    // maximum update depth inside that per-transaction subscriber.
+    shouldRerenderOnTransaction: false,
     editable: !readOnly,
     extensions: [
       StarterKit.configure({
