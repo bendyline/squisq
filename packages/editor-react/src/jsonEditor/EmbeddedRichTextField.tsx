@@ -32,6 +32,8 @@ export function EmbeddedRichTextField(props: EmbeddedRichTextFieldProps) {
   const lastValueRef = useRef(value);
 
   const editor = useEditor({
+    // The render reads no editor state; see WysiwygEditor.
+    shouldRerenderOnTransaction: false,
     editable: !readOnly,
     extensions: [
       StarterKit.configure({
