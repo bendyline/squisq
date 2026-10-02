@@ -20,7 +20,7 @@ npm install @bendyline/squisq
 | **schemas**  | Type definitions — `Doc`, `BlockTemplate`, `Viewport`, `Theme`, `LayoutStrategy` |
 | **doc**      | Template registry, 26 block templates, animation/theme utilities                 |
 | **markdown** | Markdown parsing, stringifying, AST types (`MarkdownDocument`), tree utilities   |
-| **spatial**  | Haversine distance, Geohash encode/decode                                        |
+| **spatial**  | Haversine distance and bearing, great-circle paths, Geohash encode/decode        |
 | **storage**  | `StorageAdapter` interface, Memory + LocalStorage + LocalForage adapters         |
 
 ## New in this release
@@ -92,10 +92,19 @@ the original fence byte-for-byte for markdown round-trips.
 ### Spatial Utilities
 
 ```ts
-import { encodeGeohash, haversineDistance } from '@bendyline/squisq/spatial';
+import {
+  destinationPoint,
+  encodeGeohash,
+  haversineDistance,
+  sampleGreatCircle,
+} from '@bendyline/squisq/spatial';
 
 const distanceKm = haversineDistance({ lat: 47.6, lng: -122.3 }, { lat: 37.7, lng: -122.4 });
 const hash = encodeGeohash(47.6, -122.3, 7);
+
+// Points along the shortest route, and a position projected 5 km due east.
+const route = sampleGreatCircle({ lat: 47.6, lng: -122.3 }, { lat: 51.5, lng: -0.1 }, 20);
+const ahead = destinationPoint({ lat: 47.6, lng: -122.3 }, 90, 5_000);
 ```
 
 ### Materialize a Block
