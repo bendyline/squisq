@@ -1587,6 +1587,7 @@ export function getFrameVisualStateKey(
  * Hook that manages a hidden div for frame capture.
  */
 export function useFrameCapture(): FrameCaptureHandle {
+  const generationRef = useRef(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<Root | null>(null);
   const renderAPIRef = useRef<SquisqRenderAPI | null>(null);
@@ -1620,6 +1621,11 @@ export function useFrameCapture(): FrameCaptureHandle {
       renderOptions: FrameCaptureRenderOptions,
       captionMode?: CaptionMode,
     ): Promise<number> => {
+      const generation = ++generationRef.current;
+      const assertActive = () => {
+        if (generationRef.current !== generation)
+          throw new Error('Frame capture initialization cancelled');
+      };
       // Clean up any existing container.
       // Defer unmount to avoid "synchronously unmount a root while React
       // was already rendering" when init() is called from a React handler.
@@ -1679,6 +1685,7 @@ export function useFrameCapture(): FrameCaptureHandle {
             resolve();
           }, 0);
         });
+        assertActive();
       }
 
       const width = renderOptions.width ?? 1920;
@@ -1792,6 +1799,7 @@ export function useFrameCapture(): FrameCaptureHandle {
       // a root while React was already rendering" when init() is called during
       // a React render cycle (e.g., from startExport in VideoExportModal).
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      assertActive();
 
       if (mediaProvider) {
         root.render(
@@ -1835,18 +1843,23 @@ export function useFrameCapture(): FrameCaptureHandle {
             );
           }, CAPTURE_SETUP_TIMEOUT_MS);
           try {
+            assertActive();
             const captureRoot = container.querySelector('#squisq-capture-root');
             if (!(captureRoot instanceof HTMLElement)) {
               throw new Error('Capture root element not found after player initialization.');
             }
             await waitForCaptureMediaResolutions(mediaResolutionTrackerRef.current, captureRoot);
+            assertActive();
             stage = 'loading fonts and images';
             await waitForCaptureAssets(captureRoot, decodedImagesRef.current);
+            assertActive();
             // Bind decoders first: a decoded element needs no indexing probe.
             stage = 'opening video decoders';
             await videoFrames.attach(captureRoot);
+            assertActive();
             stage = 'indexing video sources';
             await primeIndeterminateCaptureVideos(captureRoot, primedCaptureVideosRef.current);
+            assertActive();
             clearTimeout(setupTimeout);
             resolve(api.getDuration());
           } catch (assetError) {
@@ -1860,10 +1873,12 @@ export function useFrameCapture(): FrameCaptureHandle {
   );
 
   const setCoverVisible = useCallback(async (visible: boolean): Promise<void> => {
+    const generation = generationRef.current;
     const api = renderAPIRef.current;
     if (!api) throw new Error('Frame capture not initialized â€” call init() first');
     if (visible) await api.showCover();
     else await api.hideCover();
+    if (generationRef.current !== generation) return;
     // Cover visibility is outside the document clock, so invalidate the
     // repeated-frame cache even when the next capture seeks to the same time.
     lastVisualStateKeyRef.current = null;
@@ -1871,6 +1886,10 @@ export function useFrameCapture(): FrameCaptureHandle {
 
   const captureCanvasFrame = useCallback(
     async (time: number, options: FrameCaptureOptions = {}): Promise<HTMLCanvasElement> => {
+      const generation = generationRef.current;
+      const assertActive = () => {
+        if (generationRef.current !== generation) throw new Error('Frame capture cancelled');
+      };
       const container = containerRef.current;
       const api = renderAPIRef.current;
       const captureCanvas = captureCanvasRef.current;
@@ -1889,9 +1908,13 @@ export function useFrameCapture(): FrameCaptureHandle {
       // Bind decoders to newly mounted or re-sourced videos, then index any
       // the decoder cannot serve. Returns how many changed frame source.
       const videoFrames = videoFramesRef.current;
-      const prepareCaptureVideos = async (): Promise<number> =>
-        ((await videoFrames?.attach(root)) ?? 0) +
-        (await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current));
+      const prepareCaptureVideos = async (): Promise<number> => {
+        const attached = (await videoFrames?.attach(root)) ?? 0;
+        assertActive();
+        const primed = await primeIndeterminateCaptureVideos(root, primedCaptureVideosRef.current);
+        assertActive();
+        return attached + primed;
+      };
 
       // Prepare before seeking. Media URL resolution and cover transitions can
       // mount or reload a recorder WebM after init(); seeking that unindexed
@@ -1901,6 +1924,7 @@ export function useFrameCapture(): FrameCaptureHandle {
       try {
         await api.seekTo(time);
       } catch (seekError) {
+        assertActive();
         // A clip whose source resolved during this seek is still unindexed:
         // Chromium clamps every seek on a duration=Infinity WebM back to zero,
         // so the frame barrier times out. Decode or index whatever arrived
@@ -1925,7 +1949,9 @@ export function useFrameCapture(): FrameCaptureHandle {
         );
       }
       await waitForCaptureMediaResolutions(mediaResolutionTrackerRef.current, root);
+      assertActive();
       await waitForCaptureAssets(root, decodedImagesRef.current);
+      assertActive();
 
       // Full-frame clips are always composited: captions are lifted into
       // their own cached top layer below, and a mounted cover suppresses
@@ -1978,6 +2004,7 @@ export function useFrameCapture(): FrameCaptureHandle {
             backgroundColor: hasUnderlays ? null : '#000000',
             logging: false,
             onclone: async (_clonedDocument, clonedRoot) => {
+              assertActive();
               if (compositePlan) {
                 if (hasUnderlays) clearScheduledUnderlayBackdrops(clonedRoot);
                 clonedRoot
@@ -2006,6 +2033,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         } finally {
           releaseCaptureCloneCanvases(transientCloneCanvases);
         }
+        assertActive();
 
         hasCapturedFrameRef.current = true;
         lastVisualStateKeyRef.current = visualStateKey;
@@ -2074,6 +2102,7 @@ export function useFrameCapture(): FrameCaptureHandle {
                 ignoreElements: (element) =>
                   shouldIgnoreCaptureCaptionSibling(element, root, captionOverlays),
               });
+              assertActive();
             }
             captionLayerKeyRef.current = captionKey;
             captionLayerHasContentRef.current = hasCaptionText;
@@ -2109,6 +2138,7 @@ export function useFrameCapture(): FrameCaptureHandle {
   );
 
   const destroy = useCallback(() => {
+    generationRef.current++;
     if (rootRef.current) {
       rootRef.current.unmount();
       rootRef.current = null;

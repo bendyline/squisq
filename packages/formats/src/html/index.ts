@@ -201,11 +201,20 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
     const usedAudioNames = new Set<string>();
     for (const [segmentKey, buffer] of audio.entries()) {
       if ((audioIndex++ & 63) === 0) options.signal?.throwIfAborted();
+      // Container media keeps its authored path, including scheduled clips.
+      // Reuse that member instead of writing an alias over another asset.
+      if (imagePathMap[segmentKey] && images?.get(segmentKey) === buffer) {
+        audioPathMap[segmentKey] = imagePathMap[segmentKey]!;
+        continue;
+      }
       const filename = extractFilename(segmentKey);
       // Ensure .mp3 extension
       const named = filename.includes('.') ? filename : `${filename}.mp3`;
       // Flattening to audio/<basename> can collide across source folders —
       // disambiguate rather than let the later segment win.
+      for (const existing of Object.keys(zip.files)) {
+        if (existing.startsWith('audio/')) usedAudioNames.add(existing.slice(6));
+      }
       const finalName = uniqueFilename(named, usedAudioNames);
       usedAudioNames.add(finalName);
       const zipPath = `audio/${finalName}`;
