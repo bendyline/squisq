@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeAll, expect, it, vi } from 'vitest';
 import type { TableCellEdit } from '@bendyline/squisq/table';
 import { DataGrid } from '../DataGrid';
@@ -62,6 +62,37 @@ it('recalculates dependents when undo restores an input value', async () => {
     const page = await store.rows(0, 1);
     expect(page.cells[0]?.[0]).toBe(100);
     expect(page.cells[0]?.[1]).toBe(200);
+  } finally {
+    ui.unmount();
+    store.dispose();
+  }
+});
+
+it('opens no editor on a row whose values have not loaded yet', async () => {
+  const store = new TableStoreClient({ headers: ['Value'], cells: [[100]] }, { forceLocal: true });
+  const journal = new EditJournal();
+  let releaseRows!: () => void;
+  const rowsGate = new Promise<void>((resolve) => (releaseRows = resolve));
+  const rows = store.rows.bind(store);
+  store.rows = async (start, count) => {
+    await rowsGate;
+    return rows(start, count);
+  };
+  const ui = render(
+    <DataGrid provider={store} journal={journal} view={{ sort: [], filter: [] }} />,
+  );
+  const cell = () => ui.container.querySelector<HTMLElement>('[role="gridcell"]');
+  try {
+    // The row renders, blank, while its page is still in flight. An editor
+    // opened now would have no row to commit against and drop the value.
+    await waitFor(() => expect(cell()).not.toBeNull());
+    fireEvent.doubleClick(cell()!);
+    expect(ui.container.querySelector('.squisq-grid-editor')).toBeNull();
+
+    await act(async () => releaseRows());
+    await waitFor(() => expect(cell()?.textContent).toBe('100'));
+    fireEvent.doubleClick(cell()!);
+    expect(ui.container.querySelector<HTMLInputElement>('.squisq-grid-editor')?.value).toBe('100');
   } finally {
     ui.unmount();
     store.dispose();

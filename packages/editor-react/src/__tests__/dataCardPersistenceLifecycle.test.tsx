@@ -94,10 +94,15 @@ function valueCell(host: HTMLElement, row: number): HTMLElement | null {
 }
 
 async function editValue(host: HTMLElement, row: number, value: string) {
-  await waitFor(() => expect(valueCell(host, row)).not.toBeNull());
-  fireEvent.doubleClick(valueCell(host, row)!);
+  // Rows render before their values load, and the grid opens no editor on a
+  // cell it has no value for yet — keep double-clicking until one opens.
+  await waitFor(() => {
+    const cell = valueCell(host, row);
+    expect(cell).not.toBeNull();
+    fireEvent.doubleClick(cell!);
+    expect(host.querySelector('.squisq-grid-editor')).not.toBeNull();
+  });
   const input = host.querySelector<HTMLInputElement>('.squisq-grid-editor')!;
-  expect(input).not.toBeNull();
   fireEvent.change(input, { target: { value } });
   fireEvent.keyDown(input, { key: 'Enter' });
   await waitFor(() => expect(host.querySelector('.squisq-grid-editor')).toBeNull());

@@ -501,17 +501,21 @@ export function DataGrid({
     (pos: CellPos, seed?: string) => {
       if (!editable || !schema) return;
       const current = cellAt(pos.row);
-      if (current && isCellLocked?.(current.rowId, pos.col)) {
+      // A row renders (blank) before its page of values arrives. An editor
+      // opened there would seed an empty draft, and commitEdit — which needs
+      // the row's id — would close it without recording the typed value.
+      if (!current) return;
+      if (isCellLocked?.(current.rowId, pos.col)) {
         setAnnounce(lockedReason ?? 'This cell is locked');
         return;
       }
       // A formula cell edits as its SOURCE, not its display value.
-      const formula = current ? formulaSupport?.getFormula(current.rowId, pos.col) : undefined;
+      const formula = formulaSupport?.getFormula(current.rowId, pos.col);
       setEditing({
         ...pos,
         draft:
           seed ??
-          (formula !== undefined ? `=${formula}` : cellDisplay(current?.cells[pos.col] ?? null)),
+          (formula !== undefined ? `=${formula}` : cellDisplay(current.cells[pos.col] ?? null)),
       });
     },
     [cellAt, editable, schema, isCellLocked, lockedReason, formulaSupport],
