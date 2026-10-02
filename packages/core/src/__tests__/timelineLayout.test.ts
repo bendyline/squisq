@@ -6,34 +6,35 @@ import { describe, expect, it } from 'vitest';
 import { VIEWPORT_PRESETS, createTemplateContext, resolveTheme } from '../schemas/index.js';
 import { timelineBlock } from '../doc/templates/timelineBlock.js';
 import type { Layer } from '../schemas/Doc.js';
+import type { TimelineBlockInput, TimelineTemplateTrack } from '../schemas/BlockTemplates.js';
 
-const tonga = {
-  template: 'timeline' as const,
+const tongaTrack: TimelineTemplateTrack = {
+  id: 'tonga',
+  label: 'Tonga',
+  events: [
+    {
+      id: 'bounty',
+      label: '1789',
+      position: 0.06,
+      description: "Bounty mutineers rebel off Ha'apai",
+    },
+    {
+      id: 'constitution',
+      label: '1875',
+      position: 0.38,
+      description: 'Constitutional monarchy',
+    },
+    { id: 'eruption', label: '2022', position: 0.94, description: 'Hunga Tonga eruption' },
+  ],
+};
+
+const tonga: TimelineBlockInput = {
   id: 'tonga-timeline',
-  duration: 10,
+  template: 'timeline',
+  duration: 5,
   audioSegment: 0,
   title: 'A kingdom that bent rather than broke',
-  tracks: [
-    {
-      id: 'tonga',
-      label: 'Tonga',
-      events: [
-        {
-          id: 'bounty',
-          label: '1789',
-          position: 0.06,
-          description: "Bounty mutineers rebel off Ha'apai",
-        },
-        {
-          id: 'constitution',
-          label: '1875',
-          position: 0.38,
-          description: 'Constitutional monarchy',
-        },
-        { id: 'eruption', label: '2022', position: 0.94, description: 'Hunga Tonga eruption' },
-      ],
-    },
-  ],
+  tracks: [tongaTrack],
 };
 
 const box = (layer: Layer | undefined): { x: number; width: number } => {
@@ -72,7 +73,10 @@ describe('timeline horizontal lockup', () => {
   it('runs the axis margin to margin when no track has a label', () => {
     const viewport = VIEWPORT_PRESETS.landscape;
     const context = createTemplateContext(resolveTheme('warm-earth'), 0, 1, viewport);
-    const unlabeled = { ...tonga, tracks: [{ ...tonga.tracks[0], label: undefined }] };
+    const unlabeled: TimelineBlockInput = {
+      ...tonga,
+      tracks: [{ ...tongaTrack, label: undefined }],
+    };
     const track = box(
       timelineBlock(unlabeled, context).find((l) => l.id === 'timeline-track-tonga-0'),
     );
