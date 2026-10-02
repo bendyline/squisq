@@ -99,4 +99,45 @@ describe('DocProgressBar fill', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Seek to Chapter two' }));
     expect(seekTo).toHaveBeenLastCalledWith(8);
   });
+
+  it('draws chapter starts larger than slide transitions and keeps only chapters in the tab order', () => {
+    const block = (id: string, startTime: number, audioSegment: number) => ({
+      id,
+      startTime,
+      duration: 5,
+      audioSegment,
+      layers: [],
+    });
+    const { container } = render(
+      <DocProgressBar
+        state={makeState({ currentTime: 12, totalDuration: 30, currentBlockIndex: 2 })}
+        actions={actions}
+        blockMarkers={[
+          { block: block('a', 0, 0), index: 0, position: 0, title: 'One', isSectionStart: true },
+          { block: block('b', 5, 0), index: 1, position: 16, title: 'One b', isSectionStart: false },
+          { block: block('c', 10, 1), index: 2, position: 33, title: 'Two', isSectionStart: true },
+          { block: block('d', 15, 1), index: 3, position: 50, title: 'Two b', isSectionStart: false },
+        ]}
+        expandedBlocks={[]}
+      />,
+    );
+    const chapters = container.querySelectorAll<HTMLElement>('[data-marker="chapter"]');
+    const slides = container.querySelectorAll<HTMLElement>('[data-marker="slide"]');
+    expect(chapters).toHaveLength(2);
+    expect(slides).toHaveLength(2);
+
+    // Chapter dots: 14px with a ring. Slide beads: a 6px dot inside a 12px hit area.
+    expect(chapters[0].style.width).toBe('14px');
+    expect(chapters[0].style.border).toContain('2px');
+    expect(slides[0].style.width).toBe('12px');
+    expect(slides[0].style.padding).toBe('3px');
+    expect(slides[0].style.backgroundClip).toBe('content-box');
+
+    expect(chapters[0].tabIndex).toBe(0);
+    expect(slides[0].tabIndex).toBe(-1);
+
+    // The playhead (12s) is in chapter "Two", so that chapter dot is lit.
+    expect(chapters[1].style.backgroundColor).toBe('rgb(255, 255, 255)');
+    expect(chapters[0].style.backgroundColor).not.toBe('rgb(255, 255, 255)');
+  });
 });
