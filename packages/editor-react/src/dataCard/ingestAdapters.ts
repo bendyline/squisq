@@ -117,18 +117,16 @@ export async function ingestSidecarBytes(
   }
 
   if (ext === 'xlsx') {
-    const { xlsxToCellGrids, gridToTables, parseCellRef } =
+    const { xlsxToCellGrids, gridToTables, parseCellRef, formatCellRef } =
       await import('@bendyline/squisq-formats/xlsx');
     // Read the RAW grid once and derive both views from it: the region table
     // the grid displays, and the per-cell formula/date facts the save path's
     // lock predicate needs (xlsxToTables discards them).
-    const grids = await xlsxToCellGrids(bytes, {
-      ...(params.sheet !== undefined ? { sheet: params.sheet } : {}),
-    });
+    const grids = await xlsxToCellGrids(bytes);
     const bySheet = new Map(grids.sheets.map((sheet) => [sheet.name, sheet]));
-    const tables = grids.sheets.flatMap((sheet) =>
-      gridToTables(sheet.name, sheet.cells, sheet.merges),
-    );
+    const tables = grids.sheets
+      .filter((sheet) => params.sheet === undefined || sheet.name === params.sheet)
+      .flatMap((sheet) => gridToTables(sheet.name, sheet.cells, sheet.merges));
     const table =
       (params.anchor &&
         tables.find((t) => t.anchor.toUpperCase() === params.anchor!.toUpperCase())) ||
@@ -143,6 +141,15 @@ export async function ingestSidecarBytes(
     if (!table) throw new Error('no tabular data found in workbook');
 
     const anchor = parseCellRef(table.anchor);
+    if (params.headerRow === false && table.hasHeader) {
+      table.rows.unshift(table.columns.map((column) => column.name));
+      table.columns = table.columns.map((column, col) => ({
+        ...column,
+        name: formatCellRef(0, (anchor?.col ?? 0) + col).slice(0, -1),
+        kind: 'mixed',
+      }));
+      table.hasHeader = false;
+    }
     const sheetGrid = bySheet.get(table.sheet);
     const locked = new Set<string>();
     const dateLocked = new Set<string>();

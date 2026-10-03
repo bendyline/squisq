@@ -7,10 +7,9 @@
  * identity was never derived from values.
  *
  * Batches are the undo unit (one commit = one batch). The journal is
- * additionally cached module-level by `(cacheKey)` — conventionally
- * `${path}@${mediaRevision}` — so a widget unmount/remount (ProseMirror
- * re-decoration) does not lose unsaved edits; a revision bump (save or
- * re-upload) naturally misses the cache and starts clean.
+ * additionally cached by storage owner, path, and region so a widget
+ * unmount/remount does not lose unsaved edits. Scoped journals survive
+ * revision bumps; saving acknowledges only the persisted snapshot.
  */
 
 import type { TableCellEdit, TableCellValue } from '@bendyline/squisq/table';
@@ -77,7 +76,23 @@ export class EditJournal {
 
   /** Net outstanding edits (what a Save must persist). */
   entries(): JournalEntry[] {
-    return [...this.latest.values()];
+    return [...this.latest.values()].map((entry) => ({ ...entry }));
+  }
+
+  /** Advance the save baseline without losing edits (or undo) made during I/O. */
+  acknowledge(saved: readonly JournalEntry[]): void {
+    const remaining = new Map(
+      this.entries().map((entry) => [`${entry.rowId}:${entry.col}`, entry]),
+    );
+    for (const entry of saved) {
+      const key = `${entry.rowId}:${entry.col}`;
+      const current = remaining.get(key);
+      const next = current ? current.next : entry.prev;
+      if (next === entry.next) remaining.delete(key);
+      else remaining.set(key, { ...entry, prev: entry.next, next });
+    }
+    this.clear();
+    this.commit([...remaining.values()]);
   }
 
   clear(): void {
@@ -105,27 +120,54 @@ export class EditJournal {
 // ── Module-level survival cache ──────────────────────────────────────
 
 const journalCache = new Map<string, EditJournal>();
+const scopedCaches = new WeakMap<object, Map<string, EditJournal>>();
+
+export interface JournalScope {
+  /** Container or provider that owns the bytes; never a relative file path. */
+  owner: object;
+  /** Worksheet, region anchor, and header interpretation. */
+  region: string;
+}
+
+function cacheFor(scope?: JournalScope): Map<string, EditJournal> {
+  if (!scope) return journalCache;
+  let cache = scopedCaches.get(scope.owner);
+  if (!cache) {
+    cache = new Map();
+    scopedCaches.set(scope.owner, cache);
+  }
+  return cache;
+}
 
 /**
- * Get (or create) the journal for a cache key. Any entry for the same path
- * at a DIFFERENT revision is discarded — a revision bump means the bytes
- * changed underneath the edits.
+ * Get the journal for an owner/path/region. Scoped edits survive a revision
+ * change elsewhere in the container. Legacy unscoped callers start clean
+ * at each revision, preserving the original two-argument API.
  */
-export function journalFor(path: string, revision: number): EditJournal {
-  const key = `${revision} ${path}`;
-  let journal = journalCache.get(key);
+export function journalFor(path: string, revision: number, scope?: JournalScope): EditJournal {
+  const cache = cacheFor(scope);
+  const identity = JSON.stringify([path, scope?.region ?? '']);
+  const key = `${revision} ${identity}`;
+  let journal = cache.get(key);
   if (!journal) {
-    for (const existing of journalCache.keys()) {
-      if (existing.endsWith(` ${path}`) && existing !== key) journalCache.delete(existing);
+    for (const [existing, previous] of cache) {
+      if (existing.endsWith(` ${identity}`) && existing !== key) {
+        // A save elsewhere in the container bumps its revision too. Pending
+        // scoped edits must survive; they will be replayed onto the new store.
+        if (scope) journal = previous;
+        cache.delete(existing);
+      }
     }
-    journal = new EditJournal();
-    journalCache.set(key, journal);
+    journal ??= new EditJournal();
+    cache.set(key, journal);
   }
   return journal;
 }
 
-export function discardJournal(path: string): void {
-  for (const existing of [...journalCache.keys()]) {
-    if (existing.endsWith(` ${path}`)) journalCache.delete(existing);
+export function discardJournal(path: string, scope?: JournalScope): void {
+  const cache = cacheFor(scope);
+  const identity = JSON.stringify([path, scope?.region ?? '']);
+  for (const existing of [...cache.keys()]) {
+    if (existing.endsWith(` ${identity}`)) cache.delete(existing);
   }
 }

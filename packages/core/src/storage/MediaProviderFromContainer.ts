@@ -21,24 +21,47 @@ import type { ContentContainer } from './ContentContainer.js';
  */
 export function createMediaProviderFromContainer(container: ContentContainer): MediaProvider {
   const blobUrlCache = new Map<string, string>();
+  const pending = new Map<string, Promise<string>>();
+  const generations = new Map<string, number>();
+  let disposed = false;
 
-  return {
-    async resolveUrl(relativePath: string): Promise<string> {
-      const cached = blobUrlCache.get(relativePath);
-      if (cached) return cached;
+  function invalidate(path: string): void {
+    generations.set(path, (generations.get(path) ?? 0) + 1);
+    pending.delete(path);
+    const cached = blobUrlCache.get(path);
+    if (cached) URL.revokeObjectURL(cached);
+    blobUrlCache.delete(path);
+  }
 
+  function resolveUrl(relativePath: string): Promise<string> {
+    if (disposed) return Promise.resolve(relativePath);
+    const cached = blobUrlCache.get(relativePath);
+    if (cached) return Promise.resolve(cached);
+    const existing = pending.get(relativePath);
+    if (existing) return existing;
+    const generation = generations.get(relativePath) ?? 0;
+    const work = (async () => {
       const data = await container.readFile(relativePath);
+      const entries = data ? await container.listFiles() : [];
+      if (disposed) return relativePath;
+      // A read begun before a write must never refill the new cache.
+      if ((generations.get(relativePath) ?? 0) !== generation) return resolveUrl(relativePath);
       if (!data) return relativePath;
-
-      const entries = await container.listFiles();
-      const entry = entries.find((e) => e.path === relativePath);
-      const mimeType = entry?.mimeType ?? 'application/octet-stream';
-
-      const blob = new Blob([data], { type: mimeType });
-      const url = URL.createObjectURL(blob);
+      const mimeType = entries.find((e) => e.path === relativePath)?.mimeType;
+      const url = URL.createObjectURL(
+        new Blob([data], { type: mimeType ?? 'application/octet-stream' }),
+      );
       blobUrlCache.set(relativePath, url);
       return url;
-    },
+    })().finally(() => {
+      if (pending.get(relativePath) === work) pending.delete(relativePath);
+    });
+    pending.set(relativePath, work);
+    return work;
+  }
+
+  return {
+    resolveUrl,
 
     async listMedia(): Promise<MediaEntry[]> {
       const entries = await container.listFiles();
@@ -57,11 +80,7 @@ export function createMediaProviderFromContainer(container: ContentContainer): M
       mimeType: string,
     ): Promise<string> {
       // Invalidate any cached blob URL for this path before overwriting
-      const cached = blobUrlCache.get(name);
-      if (cached) {
-        URL.revokeObjectURL(cached);
-        blobUrlCache.delete(name);
-      }
+      invalidate(name);
 
       let buffer: ArrayBuffer | Uint8Array;
       if (data instanceof Blob) {
@@ -70,19 +89,19 @@ export function createMediaProviderFromContainer(container: ContentContainer): M
         buffer = data;
       }
       await container.writeFile(name, buffer, mimeType);
+      invalidate(name);
       return name;
     },
 
     async removeMedia(relativePath: string): Promise<void> {
-      const cached = blobUrlCache.get(relativePath);
-      if (cached) {
-        URL.revokeObjectURL(cached);
-        blobUrlCache.delete(relativePath);
-      }
+      invalidate(relativePath);
       await container.removeFile(relativePath);
+      invalidate(relativePath);
     },
 
     dispose(): void {
+      disposed = true;
+      pending.clear();
       for (const url of blobUrlCache.values()) {
         URL.revokeObjectURL(url);
       }

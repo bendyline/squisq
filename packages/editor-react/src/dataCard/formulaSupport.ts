@@ -40,6 +40,8 @@ export type CalcEngineFactory = (config: CalcEngineConfig) => Promise<CalcEngine
 
 export interface FormulaSessionOptions {
   engineFactory?: CalcEngineFactory;
+  /** Caller-owned edits survive view remounts; scoped to the same journal. */
+  edits?: Map<string, FormulaEditRecord>;
 }
 
 /**
@@ -52,7 +54,9 @@ export interface FormulaSessionOptions {
 const SESSION_BUDGETS = { maxWorkUnits: 100_000_000, maxEvalTimeMs: 15_000 };
 
 export interface FormulaEditRecord {
-  formula: string;
+  /** null explicitly removes a formula. */
+  formula: string | null;
+  value?: TableCellValue;
   /** Engine result, when scalar — persisted as the cached `<v>`. */
   cachedValue?: number | boolean | string;
 }
@@ -78,7 +82,9 @@ export interface XlsxFormulaSession {
   /** Revert to the loaded workbook; returns the display updates to re-apply. */
   discard(): Promise<TableCellEdit[]>;
   /** Forget the edits after a successful save (values stay current). */
-  markSaved(): void;
+  markSaved(snapshot?: ReadonlyMap<string, FormulaEditRecord>, baseline?: XlsxSourceMeta): void;
+  /** Wait for mutations already submitted to this session. */
+  flush(): Promise<void>;
   dispose(): void;
 }
 
@@ -150,8 +156,15 @@ export async function createXlsxFormulaSession(
       engine = calc.createInHouseEngine(engineConfig);
     }
   }
-  await engine.loadWorkbook(buildSeed(calc, meta));
-  const initial = await engine.evaluateAll();
+  const initial = await (async () => {
+    try {
+      await engine.loadWorkbook(buildSeed(calc, meta));
+      return await engine.evaluateAll();
+    } catch (error: unknown) {
+      engine.dispose();
+      throw error;
+    }
+  })();
   if (initial.status === 'budget-exceeded') {
     engine.dispose();
     return null;
@@ -166,7 +179,7 @@ export async function createXlsxFormulaSession(
 
   /** Live formula map (starts from the file's, tracks edits). */
   const formulas = new Map(meta.formulas);
-  const edits = new Map<string, FormulaEditRecord>();
+  const edits = options.edits ?? new Map<string, FormulaEditRecord>();
   let disposed = false;
 
   /** Batch-read engine values for a set of body-cell keys — ONE round-trip
@@ -192,6 +205,16 @@ export async function createXlsxFormulaSession(
     const updates: TableCellEdit[] = [];
     keyList.forEach((key, index) => {
       const raw = states[index]!.value;
+      const formula = formulas.get(key);
+      if (
+        formula !== undefined &&
+        (edits.has(key) || before.get(key) !== displayValue(calc, raw))
+      ) {
+        edits.set(key, {
+          formula,
+          ...(!calc.isCalcError(raw) && raw !== null ? { cachedValue: raw } : {}),
+        });
+      }
       // Unsupported-function results never overwrite the cached display.
       if (calc.isCalcError(raw) && raw.code === '#NAME?') return;
       const value = displayValue(calc, raw);
@@ -203,7 +226,13 @@ export async function createXlsxFormulaSession(
     return updates;
   };
 
-  return {
+  let mutationTail: Promise<unknown> = Promise.resolve();
+  const serial = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = mutationTail.catch(() => undefined).then(operation);
+    mutationTail = result;
+    return result;
+  };
+  const session = {
     getFormula: (bodyRow, col) => formulas.get(`${bodyRow}:${col}`),
 
     isCellLocked: (bodyRow, col) => {
@@ -273,7 +302,8 @@ export async function createXlsxFormulaSession(
       if (disposed) return [];
       const key = `${bodyRow}:${col}`;
       formulas.delete(key);
-      edits.delete(key);
+      if (meta.formulas.has(key)) edits.set(key, { formula: null, value });
+      else edits.delete(key);
       const before = await snapshotRegion();
       engine.setCellValue(toAddress(bodyRow, col), value);
       const result = await engine.evaluateAll();
@@ -287,7 +317,7 @@ export async function createXlsxFormulaSession(
       return edits.size;
     },
 
-    formulaEdits: () => edits,
+    formulaEdits: () => new Map(edits),
 
     async discard() {
       const before = await snapshotRegion();
@@ -300,16 +330,33 @@ export async function createXlsxFormulaSession(
       // Union: cells that HELD an edited formula (now plain values again)
       // still need their display reverted.
       for (const key of formulas.keys()) staleKeys.add(key);
-      return diffAgainst(before, staleKeys);
+      const updates = await diffAgainst(before, staleKeys);
+      edits.clear();
+      return updates;
     },
 
-    markSaved() {
-      edits.clear();
+    markSaved(snapshot = new Map(edits), baseline) {
+      if (baseline) meta = baseline;
+      for (const [key, record] of snapshot) {
+        if (edits.get(key) === record) edits.delete(key);
+      }
     },
 
     dispose() {
       disposed = true;
       engine.dispose();
     },
+    flush: async () => {
+      await mutationTail;
+    },
+  } satisfies XlsxFormulaSession;
+  return {
+    ...session,
+    get dirtyCount() {
+      return session.dirtyCount;
+    },
+    commitFormula: (...args) => serial(() => session.commitFormula(...args)),
+    noteValueEdit: (...args) => serial(() => session.noteValueEdit(...args)),
+    discard: () => serial(() => session.discard()),
   };
 }

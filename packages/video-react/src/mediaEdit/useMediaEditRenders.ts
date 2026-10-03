@@ -32,7 +32,13 @@ export function useProcessedAudio(
     zero,
   );
   // The version is the change signal: a new identity means "renders changed".
-  return useCallback((clip: MediaClip) => manager?.processedAudio(clip), [manager, indexVersion]);
+  return useCallback(
+    (clip: MediaClip) => {
+      void indexVersion; // Snapshot version is part of this lookup's identity.
+      return manager?.processedAudio(clip);
+    },
+    [manager, indexVersion],
+  );
 }
 
 /** Render status per clip; updates with progress. */
@@ -44,7 +50,13 @@ export function useMediaEditStatus(
     manager ? manager.getVersion : zero,
     zero,
   );
-  return useCallback((clip: MediaClip) => manager?.status(clip) ?? null, [manager, version]);
+  return useCallback(
+    (clip: MediaClip) => {
+      void version;
+      return manager?.status(clip) ?? null;
+    },
+    [manager, version],
+  );
 }
 
 /** Both views; with `doc`, also keeps the manager synced to it. */

@@ -329,8 +329,12 @@ export function DataGrid({
   const selectionCells = useRef(new Map<number, TableCellValue[]>());
   const viewRef = useRef(view);
   viewRef.current = view;
+  const editCallbacksRef = useRef({ formulaSupport, onCellEdited });
+  editCallbacksRef.current = { formulaSupport, onCellEdited };
+  const restoreRef = useRef<Promise<unknown>>(Promise.resolve());
 
-  const editable = Boolean(journal && provider.applyEdits && !readOnlyReason);
+  const writable = Boolean(journal && provider.applyEdits && !readOnlyReason);
+  const editable = writable && !saving;
   const dirtyCount = journal?.dirtyCount ?? 0;
   void dirtyTick;
   void fetchTick;
@@ -339,19 +343,39 @@ export function DataGrid({
 
   useEffect(() => {
     let cancelled = false;
-    provider.describe().then(
+    const restore = async () => {
+      const edits =
+        journal
+          ?.entries()
+          .filter(
+            ({ rowId, col }) => !editCallbacksRef.current.formulaSupport?.getFormula(rowId, col),
+          )
+          .map(({ rowId, col, next }) => ({ rowId, col, value: next })) ?? [];
+      if (edits.length && provider.applyEdits) {
+        await provider.applyEdits(edits);
+        for (const edit of edits) {
+          if (cancelled) break;
+          const updates = await editCallbacksRef.current.onCellEdited?.(edit);
+          if (updates?.length) await provider.applyEdits(updates);
+        }
+      }
+      return provider.describe();
+    };
+    restoreRef.current = restore();
+    restoreRef.current.then(
       (described) => {
-        if (!cancelled) setSchema(described);
+        if (!cancelled) setSchema(described as TableSchema);
       },
       () => undefined,
     );
     return () => {
       cancelled = true;
     };
-  }, [provider]);
+  }, [provider, journal]);
 
   const applyView = useCallback(
     async (next: TableViewState) => {
+      await restoreRef.current;
       const result = await provider.setView(next);
       cache.current = { version: cache.current.version + 1, pages: new Map() };
       inFlight.current.clear();
@@ -366,7 +390,7 @@ export function DataGrid({
   );
 
   useEffect(() => {
-    void applyView(view);
+    void applyView(view).catch(() => undefined);
     // Serialized form is the stable identity of a view.
   }, [applyView, JSON.stringify(serializeTableViewState(view))]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -477,17 +501,21 @@ export function DataGrid({
     (pos: CellPos, seed?: string) => {
       if (!editable || !schema) return;
       const current = cellAt(pos.row);
-      if (current && isCellLocked?.(current.rowId, pos.col)) {
+      // A row renders (blank) before its page of values arrives. An editor
+      // opened there would seed an empty draft, and commitEdit — which needs
+      // the row's id — would close it without recording the typed value.
+      if (!current) return;
+      if (isCellLocked?.(current.rowId, pos.col)) {
         setAnnounce(lockedReason ?? 'This cell is locked');
         return;
       }
       // A formula cell edits as its SOURCE, not its display value.
-      const formula = current ? formulaSupport?.getFormula(current.rowId, pos.col) : undefined;
+      const formula = formulaSupport?.getFormula(current.rowId, pos.col);
       setEditing({
         ...pos,
         draft:
           seed ??
-          (formula !== undefined ? `=${formula}` : cellDisplay(current?.cells[pos.col] ?? null)),
+          (formula !== undefined ? `=${formula}` : cellDisplay(current.cells[pos.col] ?? null)),
       });
     },
     [cellAt, editable, schema, isCellLocked, lockedReason, formulaSupport],
@@ -515,6 +543,7 @@ export function DataGrid({
   }, []);
 
   const commitEdit = useCallback(async (): Promise<boolean> => {
+    if (!editable) return false;
     if (!editing || !schema || !journal || !provider.applyEdits) return true;
 
     // Formula path: `=…` drafts route through the host's engine, which
@@ -579,7 +608,17 @@ export function DataGrid({
     }
     setDirtyTick((t) => t + 1);
     return true;
-  }, [applyCacheUpdates, cellAt, editing, formulaSupport, journal, onCellEdited, provider, schema]);
+  }, [
+    applyCacheUpdates,
+    cellAt,
+    editable,
+    editing,
+    formulaSupport,
+    journal,
+    onCellEdited,
+    provider,
+    schema,
+  ]);
 
   /**
    * Paste a rectangular block (Excel/Sheets ship TSV on text/plain) with the
@@ -589,7 +628,7 @@ export function DataGrid({
    */
   const handlePaste = useCallback(
     (event: React.ClipboardEvent) => {
-      if (!selection || !schema || !journal || !provider.applyEdits || editing) return;
+      if (!editable || !selection || !schema || !journal || !provider.applyEdits || editing) return;
       const target = event.target as HTMLElement | null;
       // Text fields (filter inputs, the cell editor) keep their own paste.
       if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
@@ -669,6 +708,7 @@ export function DataGrid({
     [
       applyCacheUpdates,
       cellAt,
+      editable,
       editing,
       isCellLocked,
       journal,
@@ -682,16 +722,23 @@ export function DataGrid({
 
   const runJournal = useCallback(
     async (direction: 'undo' | 'redo') => {
-      if (!journal || !provider.applyEdits) return;
+      if (!editable || !journal || !provider.applyEdits) return;
       const edits = direction === 'undo' ? journal.undo() : journal.redo();
       if (edits.length === 0) return;
       const result = await provider.applyEdits(edits);
       if (result.staleView) setStaleView(true);
+      for (const edit of edits) {
+        const dependents = await onCellEdited?.(edit);
+        if (dependents?.length) {
+          const applied = await provider.applyEdits(dependents);
+          if (applied.staleView) setStaleView(true);
+        }
+      }
       cache.current.pages.clear();
       setDirtyTick((t) => t + 1);
       setFetchTick((t) => t + 1);
     },
-    [journal, provider],
+    [editable, journal, provider, onCellEdited],
   );
 
   // ── Sort/filter interactions ───────────────────────────────────────
@@ -1457,7 +1504,7 @@ export function DataGrid({
           </button>
         )}
         {readOnlyReason && <span className="squisq-grid-readonly">{readOnlyReason}</span>}
-        {editable && dirtyCount + extraDirtyCount > 0 && (
+        {writable && dirtyCount + extraDirtyCount > 0 && (
           <span className="squisq-grid-dirtybar">
             {(dirtyCount + extraDirtyCount).toLocaleString()} unsaved edit
             {dirtyCount + extraDirtyCount === 1 ? '' : 's'}

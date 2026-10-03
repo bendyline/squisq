@@ -16,6 +16,8 @@ export default mergeConfig(
         provider: 'v8',
         include: [
           'packages/core/src/**/*.{ts,tsx}',
+          'packages/calc/src/**/*.{ts,tsx}',
+          'packages/grid-react/src/**/*.{ts,tsx}',
           'packages/formats/src/**/*.{ts,tsx}',
           'packages/react/src/**/*.{ts,tsx}',
           'packages/video/src/**/*.{ts,tsx}',
@@ -46,6 +48,18 @@ export default mergeConfig(
             functions: 89,
             statements: 86,
             branches: 75,
+          },
+          'packages/calc/src/**': {
+            lines: 92,
+            functions: 89,
+            statements: 84,
+            branches: 74,
+          },
+          'packages/grid-react/src/**': {
+            lines: 88,
+            functions: 88,
+            statements: 84,
+            branches: 74,
           },
           'packages/formats/src/**': {
             lines: 84,

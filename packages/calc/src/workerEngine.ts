@@ -77,6 +77,13 @@ function spawnWorkerTransport(workerFactory?: () => Worker): CalcWorkerTransport
     onMessage: (fn) => {
       worker.onmessage = (event: MessageEvent<CalcWorkerResponse>) => fn(event.data);
     },
+    onError: (fn) => {
+      worker.onerror = (event) => {
+        event.preventDefault();
+        fn(new Error(event.message || 'Calc worker failed'));
+      };
+      worker.onmessageerror = () => fn(new Error('Calc worker response could not be decoded'));
+    },
     terminate: () => worker.terminate(),
   };
 }
@@ -92,6 +99,8 @@ export interface WorkerCalcEngineOptions extends SerializableEngineConfig {
    * relative-URL spawn under aggressive bundling.
    */
   workerFactory?: () => Worker;
+  /** Response deadline, default 30 seconds or the evaluation budget plus 5 seconds. */
+  requestTimeoutMs?: number;
 }
 
 class WorkerCalcEngine implements CalcEngine {
@@ -100,12 +109,20 @@ class WorkerCalcEngine implements CalcEngine {
   private readonly transport: CalcWorkerTransport;
   private readonly pending = new Map<
     number,
-    { resolve: (message: CalcWorkerResponse) => void; reject: (err: Error) => void }
+    {
+      resolve: (message: CalcWorkerResponse) => void;
+      reject: (err: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
   >();
   private seq = 0;
   private disposed = false;
+  private failure: Error | null = null;
 
-  constructor(transport: CalcWorkerTransport) {
+  constructor(
+    transport: CalcWorkerTransport,
+    private readonly requestTimeoutMs: number,
+  ) {
     this.transport = transport;
     // Same tier, same capabilities — declared from a local instance so the
     // list can never drift from the engine the worker actually runs.
@@ -117,9 +134,23 @@ class WorkerCalcEngine implements CalcEngine {
       const waiter = this.pending.get(message.id);
       if (!waiter) return;
       this.pending.delete(message.id);
+      clearTimeout(waiter.timer);
       if (message.type === 'error') waiter.reject(new Error(message.message));
       else waiter.resolve(message);
     });
+    transport.onError?.((error) => this.fail(error));
+  }
+
+  private fail(error: Error): void {
+    if (this.disposed) return;
+    this.failure = error;
+    this.disposed = true;
+    for (const waiter of this.pending.values()) {
+      clearTimeout(waiter.timer);
+      waiter.reject(error);
+    }
+    this.pending.clear();
+    this.transport.terminate();
   }
 
   /** Post a request that answers, and await its response. */
@@ -127,8 +158,20 @@ class WorkerCalcEngine implements CalcEngine {
     this.assertLive();
     const id = ++this.seq;
     return new Promise<CalcWorkerResponse>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.transport.post({ ...message, id } as CalcWorkerRequest);
+      const timeout =
+        message.type === 'evaluateAll' && message.budgets?.maxEvalTimeMs !== undefined
+          ? Math.max(this.requestTimeoutMs, message.budgets.maxEvalTimeMs + 5_000)
+          : this.requestTimeoutMs;
+      this.pending.set(id, {
+        resolve,
+        reject,
+        timer: setTimeout(() => this.fail(new Error('Calc worker request timed out')), timeout),
+      });
+      try {
+        this.transport.post({ ...message, id } as CalcWorkerRequest);
+      } catch (error: unknown) {
+        this.fail(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 
@@ -183,16 +226,15 @@ class WorkerCalcEngine implements CalcEngine {
 
   dispose(): void {
     if (this.disposed) return;
-    this.disposed = true;
-    this.transport.post({ type: 'dispose' });
-    for (const waiter of this.pending.values()) {
-      waiter.reject(new Error('CalcEngine disposed'));
+    try {
+      this.transport.post({ type: 'dispose' });
+    } finally {
+      this.fail(new Error('CalcEngine disposed'));
     }
-    this.pending.clear();
-    this.transport.terminate();
   }
 
   private assertLive(): void {
+    if (this.failure) throw this.failure;
     if (this.disposed) throw new Error('CalcEngine used after dispose()');
   }
 }
@@ -205,21 +247,27 @@ class WorkerCalcEngine implements CalcEngine {
 export async function createWorkerCalcEngine(
   options: WorkerCalcEngineOptions = {},
 ): Promise<CalcEngine> {
-  const { transport: transportOverride, workerFactory, ...config } = options;
+  const { transport: transportOverride, workerFactory, requestTimeoutMs, ...config } = options;
   const transport = transportOverride ?? spawnWorkerTransport(workerFactory);
-  const engine = new WorkerCalcEngine(transport);
+  const engine = new WorkerCalcEngine(
+    transport,
+    requestTimeoutMs ?? Math.max(30_000, (config.budgets?.maxEvalTimeMs ?? 0) + 5_000),
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     // The create handshake doubles as the liveness probe: a worker whose
     // script failed to load never answers, and the timeout rejects.
     await Promise.race([
       engine.request({ type: 'create', config }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('calc worker did not start')), CREATE_TIMEOUT_MS),
-      ),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('calc worker did not start')), CREATE_TIMEOUT_MS);
+      }),
     ]);
   } catch (err: unknown) {
     engine.dispose();
     throw err;
+  } finally {
+    clearTimeout(timer);
   }
   return engine;
 }
