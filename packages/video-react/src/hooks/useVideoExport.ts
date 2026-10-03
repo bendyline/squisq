@@ -592,7 +592,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
 
   const encoderRef = useRef<MainThreadEncoder | null>(null);
   const gifAbortRef = useRef<AbortController | null>(null);
-  const cancelledRef = useRef(false);
+  const runRef = useRef<AbortController | null>(null);
   const downloadUrlRef = useRef<string | null>(null);
   const startTimeRef = useRef<number>(0);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -604,6 +604,8 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
   // Clean up on unmount
   useEffect(() => {
     return () => {
+      runRef.current?.abort();
+      runRef.current = null;
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
       if (downloadUrlRef.current) {
         URL.revokeObjectURL(downloadUrlRef.current);
@@ -617,6 +619,8 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
   }, [frameCapture]);
 
   const reset = useCallback(() => {
+    runRef.current?.abort();
+    runRef.current = null;
     if (downloadUrlRef.current) {
       URL.revokeObjectURL(downloadUrlRef.current);
       downloadUrlRef.current = null;
@@ -645,11 +649,11 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
     setElapsed(0);
     setEstimatedRemaining(0);
     if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
-    cancelledRef.current = false;
   }, [frameCapture]);
 
   const cancel = useCallback(() => {
-    cancelledRef.current = true;
+    runRef.current?.abort();
+    runRef.current = null;
     if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     if (encoderRef.current) {
       encoderRef.current.close();
@@ -666,7 +670,10 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
   const startExport = useCallback(
     async (doc: Doc, config: VideoExportConfig) => {
       // Clear previous state
-      cancelledRef.current = false;
+      cancel();
+      const run = new AbortController();
+      runRef.current = run;
+      const cancelled = () => run.signal.aborted || runRef.current !== run;
       if (downloadUrlRef.current) {
         URL.revokeObjectURL(downloadUrlRef.current);
         downloadUrlRef.current = null;
@@ -755,6 +762,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
           images = new Map<string, ArrayBuffer>();
           ownsLoadedImages = true;
           const entries = await config.mediaProvider.listMedia();
+          if (cancelled()) return;
           const references = collectDocumentMediaReferences(doc);
           const neededEntries = entries.filter(
             (entry) => references.has(entry.name) || references.has(`./${entry.name}`),
@@ -765,11 +773,14 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             );
           }
           for (const entry of neededEntries) {
-            if (cancelledRef.current) return;
+            if (cancelled()) return;
             const url = await config.mediaProvider.resolveUrl(entry.name);
+            if (cancelled()) return;
             const resource = await fetchResourceBytes(url, {
               policy: resolveExportMediaResourcePolicy(entry.size, config.resourcePolicy),
+              signal: run.signal,
             });
+            if (cancelled()) return;
             const data = toArrayBuffer(resource.bytes);
             images.set(entry.name, data);
           }
@@ -793,7 +804,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
           captionMode,
         );
 
-        if (cancelledRef.current) return;
+        if (cancelled()) return;
 
         if (docDuration <= 0) {
           throw new Error('Document has zero duration — nothing to export');
@@ -823,6 +834,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             undefined,
             document,
           ).catch(() => false));
+        if (cancelled()) return;
 
         // ── Audio: tier selection + render ───────────────────────
         // The audio timeline uses the exact rendered cover-frame duration, so
@@ -844,6 +856,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
           timeline.length > 0
             ? await supportsWebCodecsAac(EXPORT_AUDIO_SAMPLE_RATE, EXPORT_AUDIO_CHANNELS)
             : false;
+        if (cancelled()) return;
         const tierDecision = selectAudioTier({
           hasClips: timeline.length > 0,
           aacSupported,
@@ -869,6 +882,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
               resourcePolicy: config.resourcePolicy,
             });
             try {
+              if (cancelled()) return;
               const missingSources = [...new Set(timeline.map((clip) => clip.src))].filter(
                 (src) => !buffers.has(src),
               );
@@ -889,6 +903,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
                   totalAudioDur,
                   EXPORT_AUDIO_SAMPLE_RATE,
                 );
+                if (cancelled()) return;
                 if (!renderedAudio) {
                   audioReasonLocal = 'No included video source contained a decodable audio track.';
                 }
@@ -908,7 +923,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         const useInlineAudio = renderedAudio !== null && tierDecision.tier === 1;
         const useFfmpegAudio = renderedAudio !== null && tierDecision.tier === 2;
 
-        if (cancelledRef.current) return;
+        if (cancelled()) return;
 
         let encoder: MainThreadEncoder;
         if (canUseWebCodecs) {
@@ -954,6 +969,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             undefined,
             document,
           );
+          if (cancelled()) return;
           setBackend(selectedBackend);
         } else {
           throw new Error(
@@ -991,7 +1007,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         if (ownsLoadedImages) images?.clear();
         images = undefined;
 
-        if (cancelledRef.current) return;
+        if (cancelled()) return;
 
         setProgress(CAPTURE_PROGRESS_START);
         setPhase(`Capturing frame 1/${totalFrames}`);
@@ -1005,10 +1021,11 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         if (coverFrameCount > 0) await frameCapture.setCoverVisible(true);
 
         for (let i = 0; i < totalFrames; i++) {
-          if (cancelledRef.current) return;
+          if (cancelled()) return;
 
           if (coverFrameCount > 0 && i === coverFrameCount) {
             await frameCapture.setCoverVisible(false);
+            if (cancelled()) return;
           }
           const time = i / fps;
           const captureTime = coverPlan.captureTimeForFrame(i);
@@ -1022,11 +1039,13 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             totalFrames,
             onLateResult: releaseEncoderFrame,
             activityDocument: document,
-            onRecoveryWait: () =>
-              setPhase(`Frame ${i + 1}/${totalFrames} is taking unusually long — still waiting…`),
+            onRecoveryWait: () => {
+              if (!cancelled())
+                setPhase(`Frame ${i + 1}/${totalFrames} is taking unusually long — still waiting…`);
+            },
           });
 
-          if (cancelledRef.current) {
+          if (cancelled()) {
             releaseEncoderFrame(frame);
             return;
           }
@@ -1056,6 +1075,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
             undefined,
             document,
           );
+          if (cancelled()) return;
 
           // Progress represents completed work, not the frame we are about to
           // start. Tenths keep long exports visibly moving without inventing
@@ -1084,7 +1104,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
           setElapsed(Math.floor((performance.now() - startTimeRef.current) / 1000));
         }
 
-        if (cancelledRef.current) return;
+        if (cancelled()) return;
 
         // ── Step 4: Finalize MP4 (or GIF's MP4 intermediate) ─────
         setState('encoding');
@@ -1097,9 +1117,8 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
           effectiveOutputFormat === 'mp4' && !useFfmpegAudio && encoder.finalizeBlob
             ? await encoder.finalizeBlob()
             : await encoder.finalize();
-        encoderRef.current = null;
-
-        if (cancelledRef.current) return;
+        if (cancelled()) return;
+        if (encoderRef.current === encoder) encoderRef.current = null;
 
         // ── Step 4b: GIF palette transcode or audio mux ───────────
         if (effectiveOutputFormat === 'gif') {
@@ -1110,6 +1129,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
               : outputBytes instanceof Uint8Array
                 ? outputBytes
                 : new Uint8Array(outputBytes);
+          if (cancelled()) return;
           const gifAbort = new AbortController();
           gifAbortRef.current = gifAbort;
           try {
@@ -1133,6 +1153,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
                 : outputBytes instanceof Uint8Array
                   ? outputBytes
                   : new Uint8Array(outputBytes);
+            if (cancelled()) return;
             outputBytes = await muxAudioWithFfmpegWasm(
               videoOnly,
               wav,
@@ -1149,7 +1170,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
           }
         }
 
-        if (cancelledRef.current) return;
+        if (cancelled()) return;
 
         // ── Step 5: Create download URL ───────────────────────────
         const mimeType = effectiveOutputFormat === 'gif' ? 'image/gif' : 'video/mp4';
@@ -1186,8 +1207,8 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         // Clean up
         frameCapture.destroy();
       } catch (err: unknown) {
+        if (cancelled()) return;
         if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
-        if (cancelledRef.current) return;
         const message = err instanceof Error ? err.message : String(err);
         setState('error');
         setError(message);
@@ -1203,7 +1224,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         frameCapture.destroy();
       }
     },
-    [frameCapture],
+    [frameCapture, cancel],
   );
 
   return {

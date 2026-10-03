@@ -44,8 +44,8 @@ export interface HtmlExportOptions {
 
   /**
    * Map of audio segment identifiers to binary audio data.
-   * Keys should match the audio segment `name` or `url` fields in the Doc.
-   * Only used in ZIP exports — single HTML uses timer-based playback.
+   * Keys should match an audio segment's `name` or `src` field in the Doc.
+   * Embedded as data URIs in single HTML, or separate files in ZIP exports.
    */
   audio?: Map<string, ArrayBuffer>;
 
@@ -340,10 +340,14 @@ export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string
   doc = applyThemeSelection(doc, themeId, themeRegistry);
 
   const { imageMap, imageAliases } = buildInlineImageMaps(images);
+  const { imageMap: audioMap, imageAliases: audioAliases } = buildInlineImageMaps(options.audio);
+  for (const [alias, original] of Object.entries(audioAliases))
+    audioMap[alias] = audioMap[original]!;
 
   const docJson = escapeForScript(JSON.stringify(doc));
   const imageMapJson = escapeForScript(JSON.stringify(imageMap));
   const imageAliasJson = escapeForScript(JSON.stringify(imageAliases));
+  const audioMapJson = escapeForScript(JSON.stringify(audioMap));
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -377,6 +381,7 @@ ${mode === 'static' ? '#squisq-root{display:block}' : ''}
   SquisqPlayer.mount(document.getElementById("squisq-root"), doc, {
     mode: ${JSON.stringify(mode)},
     images: images,
+    audio: JSON.parse(${JSON.stringify(audioMapJson)}),
     autoPlay: ${JSON.stringify(autoPlay)},${captionStyle ? `\n    captionStyle: ${JSON.stringify(captionStyle)},` : ''}${captionPosition ? `\n    captionPosition: ${JSON.stringify(captionPosition)},` : ''}
     showCodeCopyButton: ${JSON.stringify(showCodeCopyButton)},
     basePath: ${JSON.stringify(basePath)}

@@ -80,6 +80,7 @@ async function markdownOf(input: NormalizedInput): Promise<MarkdownDocument> {
 }
 
 const IMAGE_ASSET_RE = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)$/i;
+const MEDIA_ASSET_RE = /\.(mp3|wav|ogg|oga|opus|m4a|aac|flac|mp4|webm|ogv|mov)$/i;
 
 /** Data sidecar files referenced via `{[dataTable src=…]}` + body links. */
 const DATA_ASSET_RE = /\.(csv|tsv|xlsx|parquet)$/i;
@@ -413,10 +414,16 @@ export function defaultFormats(): FormatDefinition[] {
     },
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToCsv } = await import('../csv/index.js');
-      const markdownDoc = await markdownOf(input);
+      const { materializeDataReferences } = await import('../data/materialize.js');
+      const warnings: string[] = [];
+      const markdownDoc = await materializeDataReferences(
+        await markdownOf(input),
+        input.container,
+        (message) => warnings.push(message),
+      );
       const raw = optionsFor(options, 'csv');
       const tableCount = markdownDoc.children.filter((n) => n.type === 'table').length;
-      const warnings: string[] = [];
+      if (tableCount === 0) warnings.push('CSV export found no table to export.');
       if (tableCount > 1 && raw.tableIndex === undefined) {
         warnings.push(
           `Document has ${tableCount} tables; CSV export emitted only the first. Use the csv converter's tableIndex option to select another.`,
@@ -457,11 +464,18 @@ export function defaultFormats(): FormatDefinition[] {
       const playerScript = await requirePlayerScript(options, 'html');
       const { docToHtml } = await import('../html/index.js');
       const containerImages = await collectContainerImages(input.container, options.signal);
-      const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
+      const media = await collectContainerAssets(
+        input.container,
+        MEDIA_ASSET_RE,
+        options.signal,
+        false,
+      );
+      const images = new Map([...containerImages, ...media, ...(raw.images ?? new Map())]);
       const htmlText = docToHtml(input.doc, {
         ...raw,
         playerScript,
         images,
+        audio: new Map([...media, ...(raw.audio ?? new Map())]),
         title: options.title ?? input.baseName,
         mode: raw.mode ?? 'static',
         themeId: resolveThemeId(input, options),
@@ -486,6 +500,12 @@ export function defaultFormats(): FormatDefinition[] {
       const { docToHtmlZip } = await import('../html/index.js');
       const raw = optionsFor(options, 'htmlzip');
       const containerImages = await collectContainerImages(input.container, options.signal);
+      const media = await collectContainerAssets(
+        input.container,
+        MEDIA_ASSET_RE,
+        options.signal,
+        false,
+      );
       // Data sidecars ride into the archive at their exact container paths
       // (no basename flattening) so `{[dataTable src=…]}` body links resolve
       // after unzip.
@@ -495,11 +515,17 @@ export function defaultFormats(): FormatDefinition[] {
         options.signal,
         false,
       );
-      const images = new Map([...containerImages, ...containerData, ...(raw.images ?? new Map())]);
+      const images = new Map([
+        ...containerImages,
+        ...containerData,
+        ...media,
+        ...(raw.images ?? new Map()),
+      ]);
       const blob = await docToHtmlZip(input.doc, {
         ...raw,
         playerScript,
         images,
+        audio: new Map([...media, ...(raw.audio ?? new Map())]),
         title: options.title ?? input.baseName,
         mode: raw.mode ?? 'static',
         themeId: resolveThemeId(input, options),

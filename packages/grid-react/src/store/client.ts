@@ -36,11 +36,13 @@ import {
 interface KernelHost {
   post(message: KernelRequest, transfer?: Transferable[]): void;
   onResponse: (message: KernelResponse) => void;
+  onFailure: (error: Error) => void;
   terminate(): void;
 }
 
 /** In-process host: drives `tableKernel` directly (SSR/tests/parity). */
 export class LocalKernelHost implements KernelHost {
+  onFailure: (error: Error) => void = () => {};
   onResponse: (message: KernelResponse) => void = () => {};
   private readonly scope: KernelScope;
 
@@ -63,6 +65,7 @@ export class LocalKernelHost implements KernelHost {
 }
 
 class BlobWorkerHost implements KernelHost {
+  onFailure: (error: Error) => void = () => {};
   onResponse: (message: KernelResponse) => void = () => {};
   private readonly worker: Worker;
 
@@ -76,6 +79,12 @@ class BlobWorkerHost implements KernelHost {
     this.worker.onmessage = (event: MessageEvent<KernelResponse>) => {
       this.onResponse(event.data);
     };
+    this.worker.onerror = (event) => {
+      event.preventDefault();
+      this.onFailure(new Error(event.message || 'Table worker failed'));
+    };
+    this.worker.onmessageerror = () =>
+      this.onFailure(new Error('Table worker response could not be decoded'));
   }
 
   post(message: KernelRequest, transfer?: Transferable[]): void {
@@ -106,6 +115,8 @@ function toPayload(column: StoreColumn): {
 export interface TableStoreClientOptions {
   /** Force the in-process host (tests, SSR probes). */
   forceLocal?: boolean;
+  /** Maximum wait for a worker response; default 30 seconds. */
+  requestTimeoutMs?: number;
 }
 
 export class TableStoreClient implements TableQueryProvider {
@@ -113,10 +124,20 @@ export class TableStoreClient implements TableQueryProvider {
   private readonly schema: TableSchema;
   private seq = 0;
   private viewRowCount: number;
-  private readonly pending = new Map<number, (message: KernelResponse) => void>();
+  private readonly pending = new Map<
+    number,
+    {
+      respond: (message: KernelResponse) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+  private failure: Error | null = null;
+  private readonly requestTimeoutMs: number;
   private ready: Promise<void>;
 
   constructor(table: IngestTable, options: TableStoreClientOptions = {}) {
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 30_000;
     const columnar = buildColumnarTable(table);
     this.schema = {
       columns: columnar.columns.map((column) => ({ name: column.name, kind: column.kind })),
@@ -129,12 +150,14 @@ export class TableStoreClient implements TableQueryProvider {
         ? new LocalKernelHost()
         : new BlobWorkerHost();
     this.host.onResponse = (message) => {
-      const resolve = this.pending.get(message.seq);
-      if (resolve) {
+      const waiter = this.pending.get(message.seq);
+      if (waiter) {
         this.pending.delete(message.seq);
-        resolve(message);
+        clearTimeout(waiter.timer);
+        waiter.respond(message);
       }
     };
+    this.host.onFailure = (error) => this.fail(error);
 
     const payloads = columnar.columns.map(toPayload);
     this.ready = this.request(
@@ -146,24 +169,50 @@ export class TableStoreClient implements TableQueryProvider {
       }),
       payloads.flatMap((entry) => entry.transfer),
     ).then(() => undefined);
+    // Construction may fail before a consumer starts awaiting describe().
+    void this.ready.catch(() => undefined);
+  }
+
+  private fail(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    for (const waiter of this.pending.values()) {
+      clearTimeout(waiter.timer);
+      waiter.reject(error);
+    }
+    this.pending.clear();
+    this.host.terminate();
   }
 
   private request(
     build: (seq: number) => KernelRequest,
     transfer?: Transferable[],
   ): Promise<KernelResponse> {
+    if (this.failure) return Promise.reject(this.failure);
     const seq = ++this.seq;
     return new Promise<KernelResponse>((resolve, reject) => {
-      this.pending.set(seq, (message) => {
-        if (message.type === 'error') reject(new Error(message.message));
-        else resolve(message);
+      this.pending.set(seq, {
+        respond: (message) => {
+          if (message.type === 'error') reject(new Error(message.message));
+          else resolve(message);
+        },
+        reject,
+        timer: setTimeout(
+          () => this.fail(new Error('Table worker request timed out')),
+          this.requestTimeoutMs,
+        ),
       });
-      this.host.post(build(seq), transfer);
+      try {
+        this.host.post(build(seq), transfer);
+      } catch (error: unknown) {
+        this.fail(error instanceof Error ? error : new Error(String(error)));
+      }
     });
   }
 
   async describe(): Promise<TableSchema> {
     await this.ready;
+    if (this.failure) throw this.failure;
     return this.schema;
   }
 
@@ -231,8 +280,11 @@ export class TableStoreClient implements TableQueryProvider {
   }
 
   dispose(): void {
-    this.host.post({ type: 'dispose' });
-    this.host.terminate();
-    this.pending.clear();
+    if (this.failure) return;
+    try {
+      this.host.post({ type: 'dispose' });
+    } finally {
+      this.fail(new Error('Table store disposed'));
+    }
   }
 }

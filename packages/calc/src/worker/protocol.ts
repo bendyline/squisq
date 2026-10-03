@@ -47,5 +47,6 @@ export type SerializableEngineConfig = Omit<CalcEngineConfig, 'now'>;
 export interface CalcWorkerTransport {
   post(message: CalcWorkerRequest): void;
   onMessage(handler: (message: CalcWorkerResponse) => void): void;
+  onError?(handler: (error: Error) => void): void;
   terminate(): void;
 }

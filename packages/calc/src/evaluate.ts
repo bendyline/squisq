@@ -167,6 +167,7 @@ export interface EvalContext {
   readCell(sheet: SheetData, row: number, col: number): CalcValue;
   /** Defined-name expression source, or undefined. */
   definedName(name: string): string | undefined;
+  activeDefinedNames?: Set<string>;
   /** Parse cache for defined names / INDIRECT (engine-owned). */
   parseSubFormula(source: string): Expr | null;
   /** Nested-context evaluation used by names and INDIRECT. */
@@ -230,11 +231,19 @@ export function evaluateExpr(expr: Expr, ctx: EvalContext): EvalResult {
     }
 
     case 'name': {
+      const active = (ctx.activeDefinedNames ??= new Set());
+      const key = expr.name.toLowerCase();
+      if (active.has(key) || active.size >= 256) return CALC_ERROR;
       const source = ctx.definedName(expr.name);
       if (source === undefined) return NAME_ERROR;
       const parsed = ctx.parseSubFormula(source);
       if (!parsed) return NAME_ERROR;
-      return ctx.evaluate(parsed);
+      active.add(key);
+      try {
+        return ctx.evaluate(parsed);
+      } finally {
+        active.delete(key);
+      }
     }
 
     case 'unary': {

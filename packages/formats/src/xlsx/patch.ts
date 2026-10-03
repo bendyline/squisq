@@ -56,6 +56,8 @@ export interface XlsxCellPatch {
    * Mutually exclusive with `formula`.
    */
   value?: number | boolean | string | null;
+  /** Explicitly replace a formula with `value`; shared masters remain protected. */
+  removeFormula?: boolean;
   /**
    * New formula source WITHOUT the leading `=` — the grid's formula-editing
    * save path. The cell's `<f>` is replaced (a shared-formula FOLLOWER's
@@ -435,7 +437,12 @@ export async function patchXlsxCellValues(
       refuseSharedMaster(cell, patch.sheet, normalizedRef);
       writeCellFormula(part.doc, cell, patch.formula, patch.cachedValue);
     } else {
-      refuseFormulaCell(cell, patch.sheet, normalizedRef);
+      if (patch.removeFormula) {
+        refuseSharedMaster(cell, patch.sheet, normalizedRef);
+        clearCellFormula(cell);
+      } else {
+        refuseFormulaCell(cell, patch.sheet, normalizedRef);
+      }
       refuseDateStyled(cell, styles, patch.sheet, normalizedRef, patch.value ?? null);
       writeCellValue(part.doc, cell, patch.value ?? null);
     }

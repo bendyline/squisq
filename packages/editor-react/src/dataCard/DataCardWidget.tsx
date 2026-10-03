@@ -48,22 +48,11 @@ import {
   createXlsxFormulaSession,
   type CalcEngineFactory,
   type XlsxFormulaSession,
+  type FormulaEditRecord,
 } from './formulaSupport';
 
-type GridModule = typeof import('@bendyline/squisq-grid-react');
-
-let gridModulePromise: Promise<GridModule | null> | null = null;
-function loadGridModule(): Promise<GridModule | null> {
-  // A FAILED load is not cached: a dev server mid-reoptimize (or any
-  // transient fetch failure) rejects one dynamic import, and pinning that
-  // null forever would lock every data card onto the fallback preview until
-  // a hard reload. Success is cached; failure retries on the next mount.
-  gridModulePromise ??= import('@bendyline/squisq-grid-react').catch(() => {
-    gridModulePromise = null;
-    return null;
-  });
-  return gridModulePromise;
-}
+import { loadGridModule, type GridModule } from './loadGridModule';
+const pendingFormulas = new WeakMap<object, Map<string, FormulaEditRecord>>();
 
 export interface DataCardWidgetProps {
   editor: Editor;
@@ -134,6 +123,9 @@ interface GridState {
   headers: string[];
   /** Calc-engine session for XLSX formula editing (null = values only). */
   formulaSession: XlsxFormulaSession | null;
+  mediaProvider: MediaProvider;
+  container: ContentContainer | null;
+  path: string;
 }
 
 type CardState =
@@ -160,16 +152,26 @@ export function DataCardWidget({
   const [view, setView] = useState<TableViewState>(EMPTY_TABLE_VIEW_STATE);
   const [viewPersisted, setViewPersisted] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [formulaDirty, setFormulaDirty] = useState(0);
   const gridRef = useRef<GridState | null>(null);
 
   const href = link?.href ?? null;
   const cardPos = link?.pos ?? null;
+  const activeProvider = getMediaProvider();
+  const activeContainer = getContainer?.() ?? null;
+  const regionParams =
+    href && cardPos !== null ? readHeadingViewBinding(editor, cardPos, href).params : {};
+  const regionIdentity = JSON.stringify([
+    regionParams.sheet,
+    regionParams.anchor,
+    regionParams.headerRow,
+  ]);
 
   useEffect(() => {
     if (!href || cardPos === null) return;
-    const provider = getMediaProvider();
+    const provider = activeProvider;
     if (!provider) {
       setState({ kind: 'meta', size: null, preview: null });
       return;
@@ -179,6 +181,9 @@ export function DataCardWidget({
     setState({ kind: 'loading' });
     void (async () => {
       let size: number | null = null;
+      let loadingStore: GridState['provider'] | null = null;
+      let loadingSession: XlsxFormulaSession | null = null;
+      let retained = false;
       try {
         const entries = await provider.listMedia();
         const entry = entries.find((e) => e.name === href);
@@ -226,28 +231,70 @@ export function DataCardWidget({
               : {}),
           });
           if (cancelled) return;
+          const container = activeContainer;
+          const region = JSON.stringify(
+            ingested.xlsx
+              ? [
+                  ingested.xlsx.sheet,
+                  ingested.xlsx.anchorRow,
+                  ingested.xlsx.anchorCol,
+                  ingested.xlsx.hasHeader,
+                ]
+              : [ingested.csv?.hasHeader ?? true],
+          );
+          const journal = module.journalFor(href, revision, {
+            owner: container ?? provider,
+            region,
+          });
+          let formulaEdits = pendingFormulas.get(journal);
+          if (!formulaEdits) {
+            formulaEdits = new Map();
+            pendingFormulas.set(journal, formulaEdits);
+          }
+          const restoredFormulas = new Map(formulaEdits);
           // Formula editing rides a calc-engine session; a load failure or
           // an over-budget workbook degrades to value-only editing.
           let formulaSession: XlsxFormulaSession | null = null;
           if (ingested.xlsx) {
             try {
               const engineFactory = getCalcEngineFactory?.();
-              formulaSession = await createXlsxFormulaSession(
-                ingested.xlsx,
-                engineFactory ? { engineFactory } : {},
-              );
+              formulaSession = await createXlsxFormulaSession(ingested.xlsx, {
+                ...(engineFactory ? { engineFactory } : {}),
+                edits: formulaEdits,
+              });
+              loadingSession = formulaSession;
             } catch {
               formulaSession = null;
             }
           }
           if (cancelled) {
-            formulaSession?.dispose();
             return;
           }
-          gridRef.current?.formulaSession?.dispose();
-          gridRef.current?.provider.dispose();
           const storeProvider = new module.TableStoreClient(ingested.ingest);
-          const journal = module.journalFor(href, revision);
+          loadingStore = storeProvider;
+          await storeProvider.describe();
+          const restoredValues = journal
+            .entries()
+            .map(({ rowId, col, next }) => ({ rowId, col, value: next }));
+          if (restoredValues.length) await storeProvider.applyEdits(restoredValues);
+          if (formulaSession) {
+            for (const edit of restoredValues) {
+              if (restoredFormulas.has(`${edit.rowId}:${edit.col}`)) continue;
+              const updates = await formulaSession.noteValueEdit(edit.rowId, edit.col, edit.value);
+              if (updates.length) await storeProvider.applyEdits(updates);
+            }
+            for (const [key, record] of restoredFormulas) {
+              const [row, col] = key.split(':').map(Number) as [number, number];
+              const updates =
+                record.formula === null
+                  ? await formulaSession.noteValueEdit(row, col, record.value ?? null)
+                  : ((await formulaSession.commitFormula(row, col, record.formula)).updates ?? []);
+              if (updates.length) await storeProvider.applyEdits(updates);
+            }
+          }
+          if (cancelled) {
+            return;
+          }
           const grid: GridState = {
             module,
             provider: storeProvider,
@@ -256,12 +303,18 @@ export function DataCardWidget({
             bytes,
             headers: ingested.ingest.headers,
             formulaSession,
+            mediaProvider: provider,
+            container,
+            path: href,
           };
+          gridRef.current?.formulaSession?.dispose();
+          gridRef.current?.provider.dispose();
           gridRef.current = grid;
+          retained = true;
           setView(viewStateFromBinding(binding, ingested.ingest.headers));
           setViewPersisted(binding.persisted);
           setSaveNotice(null);
-          setFormulaDirty(0);
+          setFormulaDirty(formulaSession?.dirtyCount ?? 0);
           setState({ kind: 'grid', size, grid });
           return;
         }
@@ -281,6 +334,11 @@ export function DataCardWidget({
             reason: err instanceof Error ? err.message : String(err),
           });
         }
+      } finally {
+        if (!retained) {
+          loadingStore?.dispose();
+          loadingSession?.dispose();
+        }
       }
     })();
     return () => {
@@ -288,7 +346,7 @@ export function DataCardWidget({
     };
     // cardPos intentionally excluded: position churn must not re-ingest.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [href, revision, getMediaProvider, editor]);
+  }, [href, revision, activeProvider, activeContainer, regionIdentity, editor]);
 
   useEffect(
     () => () => {
@@ -311,40 +369,69 @@ export function DataCardWidget({
 
   const handleSave = useCallback(async () => {
     const grid = gridRef.current;
-    const provider = getMediaProvider();
+    const provider = grid?.mediaProvider;
     if (!grid || !provider || !href || (!grid.ingested.csv && !grid.ingested.xlsx)) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
+      await grid.formulaSession?.flush();
       const shared = {
-        path: href,
+        path: grid.path,
         originalBytes: grid.bytes,
         journal: grid.journal,
         mediaProvider: provider,
-        container: getContainer?.() ?? null,
+        container: grid.container,
       };
+      const formulaSnapshot = grid.formulaSession?.formulaEdits();
       const result = grid.ingested.csv
         ? await saveCsvEdits({ ...shared, csv: grid.ingested.csv })
         : await saveXlsxEdits({
             ...shared,
             xlsx: grid.ingested.xlsx!,
-            ...(grid.formulaSession ? { formulaEdits: grid.formulaSession.formulaEdits() } : {}),
+            ...(formulaSnapshot ? { formulaEdits: formulaSnapshot } : {}),
           });
-      setSaveNotice(
-        result.ok
-          ? result.notices.length > 0
-            ? `saved (${result.notices.join('; ')})`
-            : null
-          : (result.error ?? 'save failed'),
-      );
+      if (gridRef.current === grid)
+        setSaveNotice(
+          result.ok
+            ? result.notices.length > 0
+              ? `saved (${result.notices.join('; ')})`
+              : null
+            : (result.error ?? 'save failed'),
+        );
       if (result.ok) {
-        gridRef.current?.formulaSession?.markSaved();
-        setFormulaDirty(0);
-        onMediaSaved?.();
+        if (result.bytes) {
+          grid.bytes = result.bytes;
+          const baseline = await ingestSidecarBytes(
+            result.bytes,
+            dataExtensionOf(grid.path),
+            grid.ingested.xlsx
+              ? {
+                  sheet: grid.ingested.xlsx.sheet,
+                  anchor: (await import('@bendyline/squisq-formats/xlsx')).formatCellRef(
+                    grid.ingested.xlsx.anchorRow,
+                    grid.ingested.xlsx.anchorCol,
+                  ),
+                  headerRow: grid.ingested.xlsx.hasHeader,
+                }
+              : { headerRow: grid.ingested.csv?.hasHeader },
+          );
+          grid.ingested = baseline;
+        }
+        grid.formulaSession?.markSaved(formulaSnapshot, grid.ingested.xlsx);
+        if (gridRef.current === grid) {
+          setFormulaDirty(grid.formulaSession?.dirtyCount ?? 0);
+          onMediaSaved?.();
+        }
       }
+    } catch (error: unknown) {
+      if (gridRef.current === grid)
+        setSaveNotice(error instanceof Error ? error.message : String(error));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
-  }, [getContainer, getMediaProvider, href, onMediaSaved]);
+  }, [href, onMediaSaved]);
 
   if (!link || !href) return null;
   const fileName = href.split('/').pop() ?? href;

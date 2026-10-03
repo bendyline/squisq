@@ -85,13 +85,19 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
     persistDebounceMs = 500,
   } = options;
 
-  const [state, dispatch] = useReducer(
+  const target = useMemo(
+    () => ({ container, stateFilename, initialSrc, resourcePolicy }),
+    [container, stateFilename, initialSrc, resourcePolicy],
+  );
+  const [loadedTarget, setLoadedTarget] = useState<typeof target | null>(null);
+  const [loadedState, dispatch] = useReducer(
     (s: ImageEditorState | null, a: ImageEditorAction): ImageEditorState | null => {
       if (s === null) return a.type === 'load' ? initialImageEditorState(a.doc) : null;
       return imageEditorReducer(s, a);
     },
     null,
   );
+  const state = loadedTarget === target ? loadedState : null;
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   // Set to true inside the initial-load effect when we just seeded the
@@ -105,13 +111,16 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
     const controller = new AbortController();
     setReady(false);
     setError(null);
+    seededOnLoadRef.current = false;
 
     (async () => {
       try {
+        await writeQueueRef.current;
         const existing = await readImageEditDoc(container, stateFilename);
         if (cancelled) return;
         if (existing) {
           dispatch({ type: 'load', doc: existing });
+          setLoadedTarget(target);
           setReady(true);
           return;
         }
@@ -126,6 +135,7 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
         await writeImageEditDoc(container, seeded, stateFilename);
         if (cancelled) return;
         dispatch({ type: 'load', doc: seeded });
+        setLoadedTarget(target);
         setReady(true);
         // Capture an initial snapshot of the freshly-seeded state so the
         // version history always has an "original" entry the user can
@@ -142,7 +152,7 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
       cancelled = true;
       controller.abort();
     };
-  }, [container, stateFilename, initialSrc, resourcePolicy]);
+  }, [container, stateFilename, initialSrc, resourcePolicy, target]);
 
   // ── Debounced persistence of state.json ────────────────────────────────
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -150,16 +160,18 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
   const dirtyRef = useRef(false);
   const revisionRef = useRef(0);
   const previousDocRef = useRef<ImageEditDoc | null>(null);
-  const nextDoc = state?.doc ?? null;
+  const nextDoc = loadedState?.doc ?? null;
   if (nextDoc !== previousDocRef.current) {
     previousDocRef.current = nextDoc;
     revisionRef.current += 1;
   }
-  docRef.current = nextDoc;
-  dirtyRef.current = state?.dirty ?? false;
+  if (loadedTarget === target) {
+    docRef.current = nextDoc;
+    dirtyRef.current = state?.dirty ?? false;
+  }
   const writeQueueRef = useRef<Promise<void>>(Promise.resolve());
   const persistTargetRef = useRef({ container, stateFilename });
-  persistTargetRef.current = { container, stateFilename };
+  if (loadedTarget === target) persistTargetRef.current = target;
 
   const enqueueWrite = useCallback(
     (doc: ImageEditDoc, revision: number, markClean: boolean): Promise<void> => {
@@ -168,12 +180,17 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
         .then(() => writeImageEditDoc(container, doc, stateFilename));
       writeQueueRef.current = write.catch(() => undefined);
       return write.then(() => {
-        if (markClean && revision === revisionRef.current && docRef.current === doc) {
+        if (
+          markClean &&
+          persistTargetRef.current === target &&
+          revision === revisionRef.current &&
+          docRef.current === doc
+        ) {
           dispatch({ type: 'mark-clean' });
         }
       });
     },
-    [container, stateFilename],
+    [container, stateFilename, target],
   );
 
   useEffect(() => {
@@ -196,6 +213,7 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
   }, [state?.dirty, state?.doc, persistDebounceMs, enqueueWrite]);
 
   const flush = useCallback(async () => {
+    if (loadedTarget !== target) return;
     const doc = docRef.current;
     if (!doc) return;
     if (persistTimerRef.current) {
@@ -203,7 +221,7 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
       persistTimerRef.current = null;
     }
     await enqueueWrite(doc, revisionRef.current, true);
-  }, [enqueueWrite]);
+  }, [enqueueWrite, loadedTarget, target]);
 
   // A quick modal close must not discard the final edit that is still inside
   // the debounce window. Queue it behind any in-flight write on unmount.
@@ -223,7 +241,7 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
         );
       });
     },
-    [],
+    [target],
   );
 
   // ── Versioning ─────────────────────────────────────────────────────────
@@ -316,12 +334,14 @@ export function useImageEditor(options: UseImageEditorOptions): UseImageEditorRe
 
   return {
     state,
-    dispatch,
+    dispatch: (action) => {
+      if (loadedTarget === target) dispatch(action);
+    },
     flush,
     resolveAssetUrl,
     uploadAsset,
     versioning,
-    ready,
+    ready: loadedTarget === target && ready,
     error,
   };
 }

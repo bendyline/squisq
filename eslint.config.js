@@ -55,6 +55,12 @@ export default tseslint.config(
 
   // Project-wide rule overrides
   {
+    files: ['packages/video-react/**/*.{ts,tsx}'],
+    plugins: { 'react-hooks': reactHooks },
+    rules: { ...reactHooks.configs.recommended.rules },
+  },
+
+  {
     plugins: {
       sonarjs,
     },

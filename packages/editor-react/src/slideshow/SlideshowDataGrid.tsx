@@ -22,7 +22,8 @@ import {
 import type { Block, Doc } from '@bendyline/squisq/schemas';
 import { parseTableViewState, type TableViewState } from '@bendyline/squisq/table';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import { DataGrid, TableStoreClient, type IngestTable } from '@bendyline/squisq-grid-react';
+import type { TableStoreClient, IngestTable } from '@bendyline/squisq-grid-react';
+import { loadGridModule, type GridModule } from '../dataCard/loadGridModule';
 import type { TableLayerContentRendererProps } from '@bendyline/squisq-react';
 import { ingestSidecarBytes } from '../dataCard/ingestAdapters';
 import { collectSlideshowDataSources, type SlideshowDataSource } from './slideshowDataSources';
@@ -127,9 +128,19 @@ export function SlideshowDataGridRenderer({
   const source = sourceForBlock(sources, block);
   const activeSourceKey = sourceKey(source);
   const [remote, setRemote] = useState<RemoteGridState>({ key: '', status: 'idle' });
+  const [gridModule, setGridModule] = useState<GridModule | null>(null);
+  useEffect(() => {
+    let active = true;
+    void loadGridModule().then((module) => {
+      if (active) setGridModule(module);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
-    if (!container || !source) {
+    if (!container || !source || !gridModule) {
       setRemote({ key: activeSourceKey, status: 'idle' });
       return;
     }
@@ -147,7 +158,8 @@ export function SlideshowDataGridRenderer({
           ...(source.anchor ? { anchor: source.anchor } : {}),
           ...(source.headerRow !== undefined ? { headerRow: source.headerRow } : {}),
         });
-        const provider = new TableStoreClient(ingest);
+        if (cancelled) return;
+        const provider = new gridModule.TableStoreClient(ingest);
         ownedProvider = provider;
         await provider.describe();
         if (cancelled) {
@@ -168,7 +180,7 @@ export function SlideshowDataGridRenderer({
     };
     // The serialized key is the stable identity of the source descriptor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeSourceKey, container, mediaRevision]);
+  }, [activeSourceKey, container, mediaRevision, gridModule]);
 
   const currentRemote = remote.key === activeSourceKey ? remote : undefined;
   const previewRows = useMemo(
@@ -184,8 +196,10 @@ export function SlideshowDataGridRenderer({
     previewRows.length > (layer.content.maxVisibleRows ?? 10);
   const localProvider = useMemo(
     () =>
-      useLocalGrid ? new TableStoreClient({ headers: previewHeaders, cells: previewRows }) : null,
-    [previewHeaders, previewRows, useLocalGrid],
+      useLocalGrid && gridModule
+        ? new gridModule.TableStoreClient({ headers: previewHeaders, cells: previewRows })
+        : null,
+    [previewHeaders, previewRows, useLocalGrid, gridModule],
   );
   useEffect(() => () => localProvider?.dispose(), [localProvider]);
 
@@ -197,7 +211,7 @@ export function SlideshowDataGridRenderer({
   const [view, setView] = useState<TableViewState>(initialView);
   useEffect(() => setView(initialView), [initialView, provider]);
 
-  if (!provider || !ingest) return <>{fallback}</>;
+  if (!provider || !ingest || !gridModule) return <>{fallback}</>;
 
   const { style } = layer.content;
   const rowHeight = Math.max(32, style.fontSize * 2.1);
@@ -231,7 +245,7 @@ export function SlideshowDataGridRenderer({
 
   return (
     <div className="squisq-slideshow-data-grid" style={gridStyle}>
-      <DataGrid
+      <gridModule.DataGrid
         provider={provider}
         view={view}
         onViewChange={setView}

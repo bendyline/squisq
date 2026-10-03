@@ -6,17 +6,16 @@
  *  1. BACKUP the original bytes first (`buildDataBackupPath`, pruned to the
  *     newest 3 per sidecar) — the only cross-save undo the grid offers.
  *     No container = no backup; the result says so rather than hiding it.
- *  2. Serialize from the ORIGINAL parsed rows with journal edits splatted
- *     in — unedited cells reproduce the parse product byte-for-byte (values,
- *     not necessarily quoting style), sidestepping float-rendering drift.
+ *  2. Serialize from the latest persisted bytes with a snapshot of this
+ *     region's journal, preserving saves made by other regions of the file.
  *     Formula neutralization applies ONLY to journal-edited, non-numeric
  *     cells (`serializeCsvRows` defaults `preserve`; blanket escaping would
  *     corrupt every negative number in a re-saved file).
  *  3. `addMedia(samePath)` with FORK DETECTION: `addMedia` returns the path
  *     the host actually used, and a collision-renaming provider would
  *     silently fork the document's reference — surface it instead.
- *  4. The caller bumps mediaRevision (previews re-resolve, journal cache
- *     rotates) only on success.
+ *  4. Acknowledge only the saved snapshot. The caller refreshes the formula
+ *     baseline and bumps mediaRevision so previews re-resolve on success.
  */
 
 import type { MediaProvider } from '@bendyline/squisq/schemas';
@@ -25,6 +24,7 @@ import { DATA_BACKUP_PREFIX, buildDataBackupPath } from '@bendyline/squisq/versi
 import type { EditJournal } from '@bendyline/squisq-grid-react';
 import type { CsvSourceMeta, XlsxSourceMeta } from './ingestAdapters';
 import type { FormulaEditRecord } from './formulaSupport';
+import { withDataSave } from './saveSession';
 
 const BACKUPS_KEPT_PER_SIDECAR = 3;
 const FORMULA_PREFIX = /^[\t\r\n \uFEFF]*[=+\-@]/;
@@ -36,6 +36,8 @@ export interface GridSaveResult {
   /** Human-readable caveats: fork detected, backup skipped, … */
   notices: string[];
   error?: string;
+  /** Persisted baseline for subsequent saves, including other regions' edits. */
+  bytes?: ArrayBuffer;
 }
 
 function renderCell(value: string | number | boolean | null): string {
@@ -81,57 +83,65 @@ export interface SaveCsvEditsOptions {
 }
 
 export async function saveCsvEdits(options: SaveCsvEditsOptions): Promise<GridSaveResult> {
-  const { path, originalBytes, csv, journal, mediaProvider, container } = options;
-  const notices: string[] = [];
-  const mime = path.toLowerCase().endsWith('.tsv') ? 'text/tab-separated-values' : 'text/csv';
+  const { path, csv, journal, mediaProvider, container } = options;
+  const snapshot = journal.entries();
+  return withDataSave(options, async (originalBytes): Promise<GridSaveResult> => {
+    const notices: string[] = [];
+    const mime = path.toLowerCase().endsWith('.tsv') ? 'text/tab-separated-values' : 'text/csv';
 
-  try {
-    if (container) {
-      await backupOriginal(container, path, originalBytes, mime);
-    } else {
-      notices.push('no workspace container — saved without a backup copy');
-    }
+    try {
+      if (container) {
+        await backupOriginal(container, path, originalBytes, mime);
+      } else {
+        notices.push('no workspace container — saved without a backup copy');
+      }
 
-    // Copy the parse baseline; splat journal edits (journal rowIds are BODY
-    // row indices — offset past the header row when present).
-    const rows = csv.rows.map((row) => [...row]);
-    const offset = csv.hasHeader ? 1 : 0;
-    for (const entry of journal.entries()) {
-      const targetRow = entry.rowId + offset;
-      while (rows.length <= targetRow) rows.push([]);
-      const row = rows[targetRow]!;
-      while (row.length <= entry.col) row.push('');
-      row[entry.col] = neutralizeEdited(renderCell(entry.next));
-    }
+      // Copy the parse baseline; splat journal edits (journal rowIds are BODY
+      // row indices — offset past the header row when present).
+      const { parseCsv, serializeCsvRows } = await import('@bendyline/squisq-formats/csv');
+      const rows = parseCsv(new TextDecoder().decode(originalBytes), csv.delimiter);
+      const offset = csv.hasHeader ? 1 : 0;
+      for (const entry of snapshot) {
+        const targetRow = entry.rowId + offset;
+        while (rows.length <= targetRow) rows.push([]);
+        const row = rows[targetRow]!;
+        while (row.length <= entry.col) row.push('');
+        row[entry.col] = neutralizeEdited(renderCell(entry.next));
+      }
 
-    const { serializeCsvRows } = await import('@bendyline/squisq-formats/csv');
-    const text = serializeCsvRows(rows, {
-      delimiter: csv.delimiter,
-      newline: csv.newline,
-      trailingNewline: csv.trailingNewline,
-      formulaHandling: 'preserve',
-    });
-    const bytes = new TextEncoder().encode(csv.bom ? `\uFEFF${text}` : text).buffer as ArrayBuffer;
+      const text = serializeCsvRows(rows, {
+        delimiter: csv.delimiter,
+        newline: csv.newline,
+        trailingNewline: csv.trailingNewline,
+        formulaHandling: 'preserve',
+      });
+      const bytes = new TextEncoder().encode(csv.bom ? `\uFEFF${text}` : text)
+        .buffer as ArrayBuffer;
 
-    const savedPath = await mediaProvider.addMedia(path, bytes, mime);
-    if (savedPath !== path) {
+      const savedPath = await mediaProvider.addMedia(path, bytes, mime);
+      if (savedPath !== path) {
+        return {
+          ok: false,
+          savedPath,
+          notices,
+          error: `the host saved a copy at "${savedPath}" instead of overwriting "${path}" — the document still references the original`,
+        };
+      }
+
+      journal.acknowledge(snapshot);
+      return { ok: true, savedPath, notices, bytes };
+    } catch (err: unknown) {
       return {
         ok: false,
-        savedPath,
         notices,
-        error: `the host saved a copy at "${savedPath}" instead of overwriting "${path}" — the document still references the original`,
+        error: err instanceof Error ? err.message : String(err),
       };
     }
-
-    journal.clear();
-    return { ok: true, savedPath, notices };
-  } catch (err: unknown) {
-    return {
-      ok: false,
-      notices,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
+  }).catch((error: unknown) => ({
+    ok: false,
+    notices: [],
+    error: error instanceof Error ? error.message : String(error),
+  }));
 }
 
 export interface SaveXlsxEditsOptions {
@@ -156,53 +166,63 @@ const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
  * predicate should have prevented) fails the whole save with its reason.
  */
 export async function saveXlsxEdits(options: SaveXlsxEditsOptions): Promise<GridSaveResult> {
-  const { path, originalBytes, xlsx, journal, formulaEdits, mediaProvider, container } = options;
-  const notices: string[] = [];
+  const { path, xlsx, journal, mediaProvider, container } = options;
+  const snapshot = journal.entries();
+  const formulaEdits = new Map(options.formulaEdits);
+  return withDataSave(options, async (originalBytes): Promise<GridSaveResult> => {
+    const notices: string[] = [];
 
-  try {
-    if (container) {
-      await backupOriginal(container, path, originalBytes, XLSX_MIME);
-    } else {
-      notices.push('no workspace container — saved without a backup copy');
-    }
+    try {
+      if (container) {
+        await backupOriginal(container, path, originalBytes, XLSX_MIME);
+      } else {
+        notices.push('no workspace container — saved without a backup copy');
+      }
 
-    const { patchXlsxCellValues, formatCellRef } = await import('@bendyline/squisq-formats/xlsx');
-    const bodyTop = xlsx.anchorRow + (xlsx.hasHeader ? 1 : 0);
-    const patches: import('@bendyline/squisq-formats/xlsx').XlsxCellPatch[] = journal
-      .entries()
-      .map((entry) => ({
-        sheet: xlsx.sheet,
-        ref: formatCellRef(bodyTop + entry.rowId, xlsx.anchorCol + entry.col),
-        value: entry.next,
-      }));
-    for (const [key, record] of formulaEdits ?? []) {
-      const [row, col] = key.split(':').map(Number) as [number, number];
-      patches.push({
-        sheet: xlsx.sheet,
-        ref: formatCellRef(bodyTop + row, xlsx.anchorCol + col),
-        formula: record.formula,
-        ...(record.cachedValue !== undefined ? { cachedValue: record.cachedValue } : {}),
-      });
-    }
-    const bytes = await patchXlsxCellValues(originalBytes, patches);
+      const { patchXlsxCellValues, formatCellRef } = await import('@bendyline/squisq-formats/xlsx');
+      const bodyTop = xlsx.anchorRow + (xlsx.hasHeader ? 1 : 0);
+      const patches: import('@bendyline/squisq-formats/xlsx').XlsxCellPatch[] = snapshot
+        .filter((entry) => !formulaEdits.has(`${entry.rowId}:${entry.col}`))
+        .map((entry) => ({
+          sheet: xlsx.sheet,
+          ref: formatCellRef(bodyTop + entry.rowId, xlsx.anchorCol + entry.col),
+          value: entry.next,
+        }));
+      for (const [key, record] of formulaEdits ?? []) {
+        const [row, col] = key.split(':').map(Number) as [number, number];
+        patches.push({
+          sheet: xlsx.sheet,
+          ref: formatCellRef(bodyTop + row, xlsx.anchorCol + col),
+          ...(record.formula === null
+            ? { value: record.value ?? null, removeFormula: true }
+            : { formula: record.formula }),
+          ...(record.cachedValue !== undefined ? { cachedValue: record.cachedValue } : {}),
+        });
+      }
+      const bytes = await patchXlsxCellValues(originalBytes, patches);
 
-    const savedPath = await mediaProvider.addMedia(path, bytes, XLSX_MIME);
-    if (savedPath !== path) {
+      const savedPath = await mediaProvider.addMedia(path, bytes, XLSX_MIME);
+      if (savedPath !== path) {
+        return {
+          ok: false,
+          savedPath,
+          notices,
+          error: `the host saved a copy at "${savedPath}" instead of overwriting "${path}" — the document still references the original`,
+        };
+      }
+
+      journal.acknowledge(snapshot);
+      return { ok: true, savedPath, notices, bytes };
+    } catch (err: unknown) {
       return {
         ok: false,
-        savedPath,
         notices,
-        error: `the host saved a copy at "${savedPath}" instead of overwriting "${path}" — the document still references the original`,
+        error: err instanceof Error ? err.message : String(err),
       };
     }
-
-    journal.clear();
-    return { ok: true, savedPath, notices };
-  } catch (err: unknown) {
-    return {
-      ok: false,
-      notices,
-      error: err instanceof Error ? err.message : String(err),
-    };
-  }
+  }).catch((error: unknown) => ({
+    ok: false,
+    notices: [],
+    error: error instanceof Error ? error.message : String(error),
+  }));
 }
