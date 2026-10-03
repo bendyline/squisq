@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.11.14](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.13...@bendyline/squisq-react@2.11.14) (2026-10-03)
+
+### Bug Fixes
+
+* Spatial utilities ([#71](https://github.com/bendyline/squisq/issues/71)) ([1cae58a](https://github.com/bendyline/squisq/commit/1cae58a7e612c78b8f477bf3de4fa0d5e6be0064))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.12
+
 ## @bendyline/squisq-react [2.11.13](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.12...@bendyline/squisq-react@2.11.13) (2026-09-29)
 
 
