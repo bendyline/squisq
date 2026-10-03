@@ -5,6 +5,12 @@
  * progress fill, block markers as clickable dots, hover tooltip with time
  * and block title, and a hover line indicator.
  *
+ * Markers come in two sizes. A chapter start (`BlockMarker.isSectionStart`,
+ * the first block of each audio segment) is a large ringed dot that stays in
+ * the tab order and lights up while its chapter plays. Every other slide
+ * transition is a small bead inside the track, clickable but skipped by Tab.
+ * Each carries `data-marker="chapter" | "slide"` for host styling and tests.
+ *
  * Extracted from DocPlayer to enable reuse across different control layouts
  * (overlay, sidebar, bottom). When used in sidebar/bottom layouts, this
  * component renders at the bottom of the video while other controls are
@@ -102,6 +108,14 @@ export function DocProgressBar({
     [expandedBlocks],
   );
 
+  // The chapter being played: the last chapter start at or before the playhead.
+  let currentChapterIndex = -1;
+  for (const marker of blockMarkers) {
+    if (marker.isSectionStart && marker.block.startTime <= state.currentTime) {
+      currentChapterIndex = marker.index;
+    }
+  }
+
   return (
     <div
       ref={progressBarRef}
@@ -166,40 +180,64 @@ export function DocProgressBar({
         }}
       />
 
-      {/* Block markers (dots) */}
-      {blockMarkers.map((marker, i) => (
-        <button
-          type="button"
-          key={`${marker.block.id}-${i}`}
-          style={{
-            position: 'absolute',
-            left: `${marker.position}%`,
-            transform: 'translateX(-50%)',
-            width: '10px',
-            height: '10px',
-            borderRadius: '50%',
-            background:
-              marker.index === state.currentBlockIndex ? '#ffffff' : 'rgba(255,255,255,0.5)',
-            border: '2px solid #5b9bd5',
-            padding: 0,
-            cursor: 'pointer',
-            zIndex: 2,
-            transition: 'transform 0.15s, background 0.15s',
-          }}
-          title={marker.title}
-          aria-label={`Seek to ${marker.title}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            actions.seekTo(marker.block.startTime);
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = 'translateX(-50%) scale(1.3)';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.transform = 'translateX(-50%)';
-          }}
-        />
-      ))}
+      {/* Block markers (dots). Chapter starts are large ringed dots and stay in
+          the tab order; slide transitions are small beads inside the track,
+          clickable through a 12px hit area but skipped by Tab (the slider
+          already seeks by keyboard, and a long story has dozens of slides). */}
+      {blockMarkers.map((marker, i) => {
+        const chapter = marker.isSectionStart;
+        const active = chapter
+          ? marker.index === currentChapterIndex
+          : marker.index === state.currentBlockIndex;
+        return (
+          <button
+            type="button"
+            key={`${marker.block.id}-${i}`}
+            data-marker={chapter ? 'chapter' : 'slide'}
+            tabIndex={chapter ? 0 : -1}
+            style={{
+              position: 'absolute',
+              left: `${marker.position}%`,
+              transform: 'translateX(-50%)',
+              boxSizing: 'border-box',
+              borderRadius: '50%',
+              cursor: 'pointer',
+              transition: 'transform 0.15s, background-color 0.15s',
+              ...(chapter
+                ? {
+                    width: '14px',
+                    height: '14px',
+                    padding: 0,
+                    backgroundColor: active ? '#ffffff' : 'rgba(255,255,255,0.75)',
+                    border: '2px solid #5b9bd5',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                    zIndex: 3,
+                  }
+                : {
+                    width: '12px',
+                    height: '12px',
+                    padding: '3px',
+                    backgroundClip: 'content-box',
+                    backgroundColor: active ? '#ffffff' : 'rgba(255,255,255,0.55)',
+                    border: 'none',
+                    zIndex: 2,
+                  }),
+            }}
+            title={marker.title}
+            aria-label={`Seek to ${marker.title}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              actions.seekTo(marker.block.startTime);
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.transform = 'translateX(-50%) scale(1.3)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.transform = 'translateX(-50%)';
+            }}
+          />
+        );
+      })}
 
       {/* Hover tooltip */}
       {hoverPosition !== null && (

@@ -969,6 +969,15 @@ function getTransitionClass(
 function haversineDistance(from: Coordinates, to: Coordinates): number; // kilometres
 function calculateBearing(from: Coordinates, to: Coordinates): number; // degrees (0=north, 90=east)
 
+// Great circles on the same sphere (mean radius 6,371 km)
+function interpolateGreatCircle(from: Coordinates, to: Coordinates, fraction: number): Coordinates;
+function sampleGreatCircle(from: Coordinates, to: Coordinates, samples: number): Coordinates[]; // endpoints included, ≥ 2
+function destinationPoint(
+  from: Coordinates,
+  bearingDeg: number,
+  distanceMeters: number,
+): Coordinates; // lng in [-180, 180)
+
 function encodeGeohash(lat: number, lng: number, precision?: number): string; // default precision 9
 function decodeGeohash(hash: string): { lat: number; lng: number; latErr: number; lngErr: number };
 function getNeighbors(hash: string): string[]; // 8 surrounding cells
