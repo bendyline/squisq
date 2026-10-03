@@ -114,9 +114,21 @@ describe('DocProgressBar fill', () => {
         actions={actions}
         blockMarkers={[
           { block: block('a', 0, 0), index: 0, position: 0, title: 'One', isSectionStart: true },
-          { block: block('b', 5, 0), index: 1, position: 16, title: 'One b', isSectionStart: false },
+          {
+            block: block('b', 5, 0),
+            index: 1,
+            position: 16,
+            title: 'One b',
+            isSectionStart: false,
+          },
           { block: block('c', 10, 1), index: 2, position: 33, title: 'Two', isSectionStart: true },
-          { block: block('d', 15, 1), index: 3, position: 50, title: 'Two b', isSectionStart: false },
+          {
+            block: block('d', 15, 1),
+            index: 3,
+            position: 50,
+            title: 'Two b',
+            isSectionStart: false,
+          },
         ]}
         expandedBlocks={[]}
       />,
