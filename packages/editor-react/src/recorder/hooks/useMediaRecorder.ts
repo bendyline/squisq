@@ -29,6 +29,7 @@ import {
 import { requestMicStream } from '../sources/micStream.js';
 import { requestCameraStream } from '../sources/cameraStream.js';
 import { requestScreenStream, type ScreenStreamHandle } from '../sources/screenStream.js';
+import type { ScreenCaptureRegion } from '../sources/screenRegion.js';
 import { requestSystemAudioStream, mixSystemAudio } from '../sources/systemAudioStream.js';
 
 /**
@@ -75,6 +76,8 @@ export interface RecorderCameraLane {
 }
 
 export interface UseMediaRecorderOptions {
+  /** Optional crop applied to the screen lane before preview and encoding. */
+  screenRegion?: ScreenCaptureRegion;
   /**
    * Combined byte threshold for automatically stopping every capture lane.
    * Defaults to 90 MiB. Browser chunk delivery can be delayed, so the final
@@ -283,6 +286,7 @@ async function acquireStream(
     case 'screen+mic': {
       const handle: ScreenStreamHandle = await requestScreenStream({
         video: opts.screenVideoConstraints ?? opts.videoConstraints ?? true,
+        crop: opts.screenRegion,
         systemAudio: opts.systemAudio ?? false,
         systemAudioConstraints: opts.screenAudioConstraints,
         includeMicrophone: source === 'screen+mic',
@@ -312,6 +316,7 @@ async function acquireDualStreams(
   isStale: () => boolean,
 ): Promise<DualStreams | null> {
   const screen = await requestScreenStream({
+    crop: opts.screenRegion,
     video: opts.screenVideoConstraints ?? opts.videoConstraints ?? true,
     systemAudio: opts.systemAudio ?? false,
     systemAudioConstraints: opts.screenAudioConstraints,
@@ -771,6 +776,15 @@ export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMedi
 
         recorderRef.current = recorder;
         disposeStreamRef.current = dispose;
+        if (source === 'screen' || source === 'screen+mic') {
+          const [screenTrack] = nextStream.getVideoTracks();
+          if (screenTrack)
+            screenTrack.onended = () => {
+              if (lifecycle !== lifecycleRef.current) return;
+              if (stateRef.current === 'recording') void stopFnRef.current?.();
+              else if (stateRef.current === 'ready') cancelFnRef.current?.();
+            };
+        }
         setStream(nextStream);
         setFormat(resolved);
         setBlob(null);

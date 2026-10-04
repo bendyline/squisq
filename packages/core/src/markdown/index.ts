@@ -198,3 +198,10 @@ export type {
   MarkdownSourceEdit,
   MarkdownWrapState,
 } from './sourceTransforms.js';
+
+// Content ingestion: source-preserving reference and image policies.
+export { rewriteMarkdownReferences } from './contentReferences.js';
+export type { MarkdownReferenceOptions } from './contentReferences.js';
+
+export { normalizeDocfxMarkdown } from './docfxMarkdown.js';
+export type { DocfxMarkdownOptions } from './docfxMarkdown.js';

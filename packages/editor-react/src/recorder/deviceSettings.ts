@@ -9,6 +9,8 @@
  * constraints during its user picker, so those values always remain ideal.
  */
 
+import type { ScreenCaptureRegion } from './sources/screenRegion.js';
+
 export type RecorderConstraintMode = 'ideal' | 'exact';
 
 export interface RecorderAudioDeviceSettings {
@@ -36,6 +38,8 @@ export interface RecorderCameraDeviceSettings {
 }
 
 export interface RecorderScreenDeviceSettings {
+  /** Crop in captured pixels, relative to the chosen surface (not the desktop). */
+  crop?: ScreenCaptureRegion;
   aspectRatio?: number;
   cursor?: string;
   displaySurface?: string;
