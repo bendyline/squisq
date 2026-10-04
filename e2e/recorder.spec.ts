@@ -27,9 +27,9 @@ async function openRecorder(page: Page) {
 test('recorder source selector uses three toggles, not tabs', async ({ page }) => {
   const dialog = await openRecorder(page);
 
-  const mic = dialog.getByRole('button', { name: 'Microphone' });
-  const camera = dialog.getByRole('button', { name: 'Camera' });
-  const screen = dialog.getByRole('button', { name: 'Screen' });
+  const mic = dialog.getByRole('button', { name: 'Microphone', exact: true });
+  const camera = dialog.getByRole('button', { name: 'Camera', exact: true });
+  const screen = dialog.getByRole('button', { name: 'Screen', exact: true });
   await expect(mic).toBeVisible();
   await expect(camera).toBeVisible();
   await expect(screen).toBeVisible();
@@ -48,10 +48,10 @@ test('Microphone toggles independently; Camera and Screen compose for dual captu
   page,
 }) => {
   const dialog = await openRecorder(page);
-  const mic = dialog.getByRole('button', { name: 'Microphone' });
-  const camera = dialog.getByRole('button', { name: 'Camera' });
-  const screen = dialog.getByRole('button', { name: 'Screen' });
-  const systemAudio = dialog.getByRole('button', { name: 'System audio' });
+  const mic = dialog.getByRole('button', { name: 'Microphone', exact: true });
+  const camera = dialog.getByRole('button', { name: 'Camera', exact: true });
+  const screen = dialog.getByRole('button', { name: 'Screen', exact: true });
+  const systemAudio = dialog.getByRole('button', { name: 'System audio', exact: true });
 
   // Microphone is independent.
   await mic.click();
