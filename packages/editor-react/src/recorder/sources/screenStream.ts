@@ -11,8 +11,14 @@
  */
 
 import { supportsDisplayMedia, supportsUserMedia } from '../formats.js';
+import {
+  cropScreenStream,
+  validateScreenCaptureRegion,
+  type ScreenCaptureRegion,
+} from './screenRegion.js';
 
 export interface ScreenStreamOptions {
+  crop?: ScreenCaptureRegion;
   /** Video constraints for the screen surface. Pass `true` for browser default. */
   video?: boolean | MediaTrackConstraints;
   /**
@@ -94,6 +100,26 @@ export interface ScreenStreamHandle {
 export async function requestScreenStream(
   options?: ScreenStreamOptions,
 ): Promise<ScreenStreamHandle> {
+  if (options?.crop) validateScreenCaptureRegion(options.crop);
+  const handle = await requestFullScreenStream(options);
+  if (!options?.crop) return handle;
+  try {
+    const cropped = await cropScreenStream(handle.stream, options.crop);
+    return {
+      stream: cropped.stream,
+      dispose: () => {
+        cropped.dispose();
+        handle.dispose();
+      },
+    };
+  } catch (error) {
+    handle.stream.getTracks().forEach((track) => track.stop());
+    handle.dispose();
+    throw error;
+  }
+}
+
+async function requestFullScreenStream(options?: ScreenStreamOptions): Promise<ScreenStreamHandle> {
   if (!supportsDisplayMedia()) {
     throw new Error('navigator.mediaDevices.getDisplayMedia is not available in this environment.');
   }

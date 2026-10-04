@@ -110,7 +110,7 @@ const quickPickMic = () => screen.queryByTestId('recorder-quick-pick-microphone'
 const quickPickCamera = () => screen.queryByTestId('recorder-quick-pick-camera');
 
 /** Render and let the initial `enumerateDevices()` promise settle. */
-async function renderModal(initialMode: 'mic' | 'camera' = 'mic') {
+async function renderModal(initialMode: 'mic' | 'camera' | 'screen' = 'mic') {
   render(
     <RecorderModal initialMode={initialMode} mediaProvider={mediaProvider} onClose={vi.fn()} />,
   );
@@ -118,6 +118,33 @@ async function renderModal(initialMode: 'mic' | 'camera' = 'mic') {
 }
 
 describe('RecorderModal — promoted device pickers', () => {
+  it('exposes screen selection and region coordinates outside Advanced settings', async () => {
+    mockDevices([]);
+    await renderModal('screen');
+    const advanced = screen.getByTestId('recorder-device-settings');
+    expect(advanced.contains(screen.getByLabelText('Preferred surface'))).toBe(false);
+    expect(advanced.contains(screen.getByLabelText('Capture area'))).toBe(false);
+    fireEvent.change(screen.getByLabelText('Capture area'), { target: { value: 'region' } });
+    expect((screen.getByLabelText('Region width (px)') as HTMLInputElement).value).toBe('1280');
+    expect(advanced.contains(screen.getByLabelText('Left (px)'))).toBe(false);
+    fireEvent.change(screen.getByLabelText('Capture area'), { target: { value: 'full' } });
+    expect(screen.queryByLabelText('Left (px)')).toBeNull();
+    fireEvent.change(screen.getByLabelText('Preferred surface'), { target: { value: 'window' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Choose screen or window' }));
+    });
+    expect(navigator.mediaDevices.getDisplayMedia).toHaveBeenCalledWith(
+      expect.objectContaining({
+        video: expect.objectContaining({ displaySurface: { ideal: 'window' } }),
+      }),
+    );
+    expect(screen.getByRole('button', { name: 'Change screen or window' })).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Change screen or window' }));
+    });
+    expect(navigator.mediaDevices.getDisplayMedia).toHaveBeenCalledTimes(2);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('MediaStream', FakeStream);

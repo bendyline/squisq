@@ -47,6 +47,7 @@ import { useStreamPreview } from './hooks/useStreamPreview.js';
 import { requestCameraStream } from './sources/cameraStream.js';
 import { RecorderDeviceSettingsPanel } from './RecorderDeviceSettingsPanel.js';
 import { RecorderDeviceQuickPicks } from './RecorderDeviceQuickPicks.js';
+import { RecorderScreenSettings } from './RecorderScreenSettings.js';
 import { useMediaDevices } from './hooks/useMediaDevices.js';
 import {
   DEFAULT_RECORDER_DEVICE_SETTINGS,
@@ -790,6 +791,7 @@ export function RecorderModal({
     audioConstraints,
     videoConstraints: cameraConstraints,
     screenVideoConstraints: screenConstraints,
+    screenRegion: deviceSettings.screen.crop,
     screenAudioConstraints,
     mimeType:
       (source === 'mic' ? encoding.audioMimeType : encoding.videoMimeType).trim() || undefined,
@@ -1730,6 +1732,19 @@ export function RecorderModal({
               disabled={deviceSettingsLocked}
             />
 
+            {!narrationOn && screenOn && (
+              <RecorderScreenSettings
+                value={deviceSettings.screen}
+                onChange={(screen) => handleDeviceSettingsChange({ ...deviceSettings, screen })}
+                disabled={deviceSettingsLocked}
+                hasPreview={recorder.state === 'ready'}
+                onChoose={() => {
+                  recorder.cancel();
+                  void handleRequest();
+                }}
+              />
+            )}
+
             <RecorderDeviceSettingsPanel
               value={deviceSettings}
               onChange={handleDeviceSettingsChange}
@@ -1847,7 +1862,11 @@ export function RecorderModal({
           */}
             {!narrationOn && !showPreview && (
               <div style={previewBoxStyle}>
-                <span>Click Start Preview to start a recording.</span>
+                <span>
+                  {screenOn
+                    ? 'Choose a screen or window to preview what will be recorded.'
+                    : 'Click Start preview to prepare a recording.'}
+                </span>
               </div>
             )}
             {!narrationOn && showPreview && recorder.state !== 'stopped' && !isAudioOnly && (

@@ -69,7 +69,15 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   (`versioningPrunePolicy`, default keep-last-50); a Version History panel
   appears in the toolbar.
 - **Recording** — with a `mediaProvider` wired, a record button appears in the
-  toolbar (`allowRecording`, default `true`). The recorder's Advanced device
+  toolbar (`allowRecording`, default `true`). Screen capture exposes **What to
+  record** above Advanced settings: a surface preference, a screen/window picker
+  action, and whole-surface or coordinate-region capture. Coordinates are pixels
+  relative to the chosen surface's top-left; the live preview and encoded video
+  use the same crop, leaving audio unchanged. Invalid or out-of-bounds regions
+  fail visibly and release capture. Region recording uses a canvas at 30 fps;
+  shrinking a window past the region or stopping screen sharing ends the take.
+  The browser or host still owns the source picker and available surface types.
+  The recorder's Advanced device
   settings expando discovers microphones/cameras, shows only capture
   constraints advertised by the browser, separates camera and screen
   constraints for dual recordings, and exposes MediaRecorder codec, bitrate,

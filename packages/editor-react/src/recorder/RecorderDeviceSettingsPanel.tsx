@@ -515,24 +515,6 @@ export function RecorderDeviceSettingsPanel({
             <div style={gridStyle}>
               {screenEnabled && (
                 <>
-                  {supports('displaySurface') && (
-                    <label style={{ ...fieldStyle, gridColumn: '1 / -1' }}>
-                      Preferred surface
-                      <select
-                        value={value.screen.displaySurface ?? ''}
-                        disabled={disabled}
-                        style={inputStyle}
-                        onChange={(event) =>
-                          patchScreen({ displaySurface: event.target.value || undefined })
-                        }
-                      >
-                        <option value="">Browser picker default</option>
-                        <option value="monitor">Entire monitor</option>
-                        <option value="window">Application window</option>
-                        <option value="browser">Browser tab</option>
-                      </select>
-                    </label>
-                  )}
                   {supports('cursor') && (
                     <label style={fieldStyle}>
                       Mouse cursor
