@@ -356,12 +356,48 @@ describe('<EditorShell> instance boundaries', () => {
       </>,
     );
     const shells = container.querySelectorAll<HTMLElement>('.squisq-editor-shell');
-    fireEvent.keyDown(within(shells[1]).getByTestId('raw-editor-stub'), {
-      key: '1',
+    const source = within(shells[1]).getByTestId('raw-editor-stub');
+    const onSurfaceKeyDown = vi.fn();
+    source.addEventListener('keydown', onSurfaceKeyDown);
+    fireEvent.keyDown(source, {
+      key: '!',
+      code: 'Digit1',
       ctrlKey: true,
+      shiftKey: true,
     });
     await waitFor(() => expect(within(shells[1]).getByTestId('wysiwyg-editor-stub')).toBeTruthy());
     expect(within(shells[0]).getByTestId('raw-editor-stub')).toBeTruthy();
+    expect(onSurfaceKeyDown).not.toHaveBeenCalled();
+  });
+
+  it('leaves unshifted heading shortcuts and Alt chords to the editing surface', () => {
+    render(<EditorShell initialMarkdown="# original" initialView="raw" />);
+    const source = screen.getByTestId('raw-editor-stub');
+    for (const key of ['1', '2', '3', '4', '5', '6']) {
+      fireEvent.keyDown(source, { key, ctrlKey: true });
+    }
+    fireEvent.keyDown(source, { key: '1', ctrlKey: true, shiftKey: true, altKey: true });
+    expect(screen.getByTestId('raw-editor-stub')).toBeTruthy();
+    expect(screen.queryByTestId('wysiwyg-editor-stub')).toBeNull();
+  });
+
+  it('keeps handled heading shortcuts from bubbling to the host', () => {
+    const onHostKeyDown = vi.fn();
+    render(
+      <div onKeyDown={onHostKeyDown}>
+        <EditorShell initialMarkdown="# original" initialView="wysiwyg" />
+      </div>,
+    );
+    const event = new KeyboardEvent('keydown', {
+      key: '2',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    // The real Tiptap keymap prevents the default when it handles a heading.
+    event.preventDefault();
+    fireEvent(screen.getByTestId('wysiwyg-editor-stub'), event);
+    expect(onHostKeyDown).not.toHaveBeenCalled();
   });
 
   it('ignores file drops in readOnly mode', async () => {

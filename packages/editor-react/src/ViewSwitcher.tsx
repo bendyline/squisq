@@ -42,7 +42,7 @@ export function ViewSwitcher({ className }: ViewSwitcherProps) {
           aria-selected={activeView === view.id}
           className={`squisq-view-tab ${activeView === view.id ? 'squisq-view-tab--active' : ''}`}
           onClick={() => setActiveView(view.id)}
-          title={`${view.label} (${platformShortcut(view.shortcutKey)})`}
+          title={`${view.label} (${platformShortcut(`Shift+${view.shortcutKey}`)})`}
         >
           <span className="squisq-view-tab-label squisq-view-tab-label--long">{view.label}</span>
           {view.shortLabel && view.shortLabel !== view.label && (

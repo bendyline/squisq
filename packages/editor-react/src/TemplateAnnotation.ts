@@ -23,6 +23,18 @@ import { summarizeBlockProps } from './blockProperties';
  * persists template annotation attributes.
  */
 export const HeadingWithTemplate = Heading.extend({
+  addKeyboardShortcuts() {
+    return {
+      ...this.parent?.(),
+      ...Object.fromEntries(
+        this.options.levels.map((level) => [
+          `Mod-${level}`,
+          () => this.editor.isEditable && this.editor.commands.toggleHeading({ level }),
+        ]),
+      ),
+    };
+  },
+
   addAttributes() {
     return {
       ...this.parent?.(),

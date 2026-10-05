@@ -1333,12 +1333,30 @@ function EditorShellInner({
     onChange?.(markdownSource);
   }, [markdownSource, onChange]);
 
-  // View shortcuts bubble only through the editor that currently owns focus.
-  const handleShellKeyDown = useCallback(
+  // Tiptap prevents the default for a handled heading chord. Keep that
+  // event inside the editor so hosts such as VS Code cannot also use it
+  // to switch editor groups after applying the heading.
+  const handleShellKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (
+      (e.ctrlKey || e.metaKey) &&
+      !e.shiftKey &&
+      !e.altKey &&
+      /^[1-6]$/.test(e.key) &&
+      e.defaultPrevented
+    ) {
+      e.stopPropagation();
+    }
+  }, []);
+
+  // Capture view shortcuts before the editing surface sees them: Tiptap's
+  // keymap can fall back from a shifted digit to its unshifted heading key.
+  const handleShellViewKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (!e.ctrlKey && !e.metaKey) return;
-      const view =
-        e.key === '1' ? 'wysiwyg' : e.key === '2' ? 'raw' : e.key === '3' ? 'preview' : null;
+      if ((!e.ctrlKey && !e.metaKey) || !e.shiftKey || e.altKey) return;
+      // Shift changes event.key to !/@/# on common layouts; the digit's
+      // physical code keeps Ctrl/Cmd+Shift+1/2/3 usable across layouts.
+      const key = /^Digit[1-3]$/.test(e.code) ? e.code.slice(-1) : e.key;
+      const view = key === '1' ? 'wysiwyg' : key === '2' ? 'raw' : key === '3' ? 'preview' : null;
       if (!view || (view === 'preview' && !showPlayTab)) return;
       const button = shellRef.current?.querySelector<HTMLButtonElement>(`[data-view="${view}"]`);
       if (!button) return;
@@ -1393,6 +1411,7 @@ function EditorShellInner({
   const shell = (
     <div
       ref={shellRef}
+      onKeyDownCapture={handleShellViewKeyDown}
       onKeyDown={handleShellKeyDown}
       onClickCapture={handleShellLinkClick}
       onMouseOverCapture={handleShellLinkMouseOver}

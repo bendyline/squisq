@@ -44,6 +44,7 @@ function pointer(clientX: number, clientY: number) {
       releasePointerCapture: vi.fn(),
     },
     stopPropagation: vi.fn(),
+    preventDefault: vi.fn(),
   } as unknown as React.PointerEvent;
 }
 

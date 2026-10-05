@@ -4,7 +4,9 @@ function resolvePlatform(explicitPlatform?: string): string {
   return navigator.platform;
 }
 
-/** Format a single-key editor shortcut for the user's operating system. */
+/** Format an editor shortcut for the user's operating system. */
 export function platformShortcut(key: string, platform?: string): string {
-  return /Mac|iPhone|iPad|iPod/i.test(resolvePlatform(platform)) ? `⌘${key}` : `Ctrl+${key}`;
+  return /Mac|iPhone|iPad|iPod/i.test(resolvePlatform(platform))
+    ? `⌘${key.replace('Shift+', '⇧')}`
+    : `Ctrl+${key}`;
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
+  MARKDOWN_SOURCE_TRANSFORMS,
   applyMarkdownSourceTransform,
   unwrapMarkdownSource,
   wrapMarkdownSource,
@@ -102,12 +103,13 @@ describe('TransformMenu', () => {
     expect(screen.getByText('Unwrap paragraphs')).toBeTruthy();
     expect(screen.getByText('Wrap at width')).toBeTruthy();
     expect(screen.getByText('Clean up formatting')).toBeTruthy();
+    expect(screen.getByText('Condense formatting')).toBeTruthy();
     expect(screen.getByText('Detected mode: wrapped at ~80 characters wide')).toBeTruthy();
     expect(
       screen
         .getByRole('dialog', { name: 'Transform document' })
         .querySelectorAll('.squisq-transform-menu-action-icon'),
-    ).toHaveLength(3);
+    ).toHaveLength(MARKDOWN_SOURCE_TRANSFORMS.length);
     expect(
       screen
         .getByRole('dialog', { name: 'Transform document' })
