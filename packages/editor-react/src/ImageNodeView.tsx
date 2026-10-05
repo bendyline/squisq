@@ -21,6 +21,9 @@ import { useEffect, useRef, useState } from 'react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import Image from '@tiptap/extension-image';
+import { mergeAttributes, type Attributes } from '@tiptap/core';
+import { DOMSerializer } from '@tiptap/pm/model';
+import { Plugin } from '@tiptap/pm/state';
 import { AnimatedImageControls, useAnimatedImage } from '@bendyline/squisq-react';
 import { useEditorContext } from './EditorContext';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
@@ -29,12 +32,19 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
   const { src, alt, title, width } = node.attrs as {
     src: string;
     alt: string;
-    title: string;
+    title: string | null;
     width: number | null;
     height: number | null;
   };
   const { mediaProvider, imageDisplayMode, openImageEdit, mediaRevision } = useEditorContext();
-  const [resolvedSrc, setResolvedSrc] = useState(src);
+  const [resolution, setResolution] = useState<{
+    src: string;
+    provider: typeof mediaProvider;
+    revision: number;
+    url: string | null;
+  } | null>(null);
+  const [imageLoad, setImageLoad] = useState<{ url: string; failed: boolean } | null>(null);
+  const isUploading = title?.startsWith('squisq-upload:') ?? false;
   const [hovered, setHovered] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
   // Live preview width while a resize gesture is in flight. Null means
@@ -58,34 +68,41 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
     !src.startsWith('/');
   const resolveAs = normalizedRelativePath ?? (isRelative ? src : null);
 
+  const needsResolution = !!mediaProvider && !!resolveAs;
+  const currentResolution =
+    resolution?.src === src &&
+    resolution.provider === mediaProvider &&
+    resolution.revision === mediaRevision
+      ? resolution
+      : null;
+  const resolvedSrc = isUploading ? '' : needsResolution ? (currentResolution?.url ?? '') : src;
+  const resolutionFailed = needsResolution && currentResolution?.url === null;
+
   useEffect(() => {
-    if (!mediaProvider || !resolveAs) {
-      setResolvedSrc(src);
-      return;
-    }
-
+    if (isUploading || !mediaProvider || !resolveAs) return;
+    setImageLoad(null);
     let cancelled = false;
-    mediaProvider.resolveUrl(resolveAs).then(
-      (resolved) => {
-        if (!cancelled) setResolvedSrc(resolved);
-      },
-      () => {
-        if (!cancelled) setResolvedSrc(src);
-      },
+    const complete = (url: string | null) => {
+      if (!cancelled) setResolution({ src, provider: mediaProvider, revision: mediaRevision, url });
+    };
+    void mediaProvider.resolveUrl(resolveAs).then(
+      (resolved) =>
+        complete(resolved && resolved !== src && resolved !== resolveAs ? resolved : null),
+      () => complete(null),
     );
-
     return () => {
       cancelled = true;
     };
-    // `mediaRevision` is bumped after the image editor writes back to the
-    // same path — re-resolve so we pick up the fresh blob URL.
-  }, [src, resolveAs, mediaProvider, mediaRevision]);
+    // Re-resolve when the image editor writes back to the same path.
+  }, [src, resolveAs, mediaProvider, mediaRevision, isUploading]);
 
-  // An animated GIF/WebP/APNG gets play/pause controls. Until the provider
-  // has resolved a workspace path, `resolvedSrc` is still that raw path, so
-  // hold inspection back rather than fetch a URL that cannot load.
-  const awaitingResolution = mediaProvider !== null && resolveAs !== null && resolvedSrc === src;
-  const playback = useAnimatedImage(resolveAs ?? src ?? '', awaitingResolution ? '' : resolvedSrc);
+  const playback = useAnimatedImage(resolveAs ?? src ?? '', resolvedSrc);
+  const displaySrc = resolvedSrc ? playback.displaySrc || resolvedSrc : '';
+  const loadFailed = imageLoad?.url === displaySrc && imageLoad.failed;
+  const imageReady = !!displaySrc && imageLoad?.url === displaySrc && !imageLoad.failed;
+  const failed = resolutionFailed || loadFailed;
+  const state = isUploading ? 'uploading' : failed ? 'error' : imageReady ? 'ready' : 'loading';
+  const label = alt || resolveAs?.split('/').pop() || 'Image';
 
   // The Edit affordance is only meaningful when:
   //  - the editor is editable (read-only previews skip it),
@@ -94,12 +111,18 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
   //  - a media provider is wired (the modal resolves the URL through it), and
   //  - the image is not animated: the editor saves one still frame back over
   //    the original path, which would silently destroy the animation.
-  const canEdit = isEditable && isRelative && mediaProvider !== null && !playback.animated;
+  const canEdit =
+    isEditable &&
+    isRelative &&
+    mediaProvider !== null &&
+    !playback.animated &&
+    !isUploading &&
+    !failed;
   const showAffordance = canEdit && (selected || hovered);
   // Resize handle is shown for any selected image in an editable view —
   // even non-relative ones (external URLs, data URIs) — so authors can
   // size remote pictures the same way as local ones.
-  const canResize = isEditable && !isThumbnail;
+  const canResize = isEditable && !isThumbnail && imageReady;
   const showResize = canResize && (selected || hovered);
 
   // Effective render width: live preview while dragging, otherwise the
@@ -179,26 +202,77 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
       // preserves the `width`/`height` attrs and deletes the original.
       draggable
       data-drag-handle
+      data-image-state={state}
+      aria-busy={state === 'uploading' || state === 'loading'}
       style={{ margin: '0.5em 0', position: 'relative', display: 'inline-block', maxWidth: '100%' }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <img
-        ref={imgRef}
-        src={playback.displaySrc || resolvedSrc}
-        alt={alt || ''}
-        title={title || undefined}
-        className={isThumbnail ? 'squisq-image squisq-image--thumbnail' : 'squisq-image'}
-        style={baseStyle}
-        // Disable the inner `<img>`'s native HTML5 drag so the gesture is
-        // captured by the wrapper's `data-drag-handle` instead. (Without
-        // this the browser still emits its own dragstart on the image
-        // and ProseMirror sees an external file drop.)
-        draggable={false}
-        onDragStart={(e) => e.preventDefault()}
-        data-selected={selected ? 'true' : undefined}
-      />
-      <AnimatedImageControls playback={playback} imageRef={imgRef} />
+      {!imageReady && (
+        <span
+          className={
+            isThumbnail
+              ? 'squisq-image-placeholder squisq-image-placeholder--thumbnail'
+              : 'squisq-image-placeholder'
+          }
+          data-error={failed ? 'true' : undefined}
+          role={failed ? 'img' : 'status'}
+          aria-label={failed ? 'Image unavailable: ' + label : undefined}
+          contentEditable={false}
+        >
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            {failed ? (
+              <>
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="8" cy="8" r="1.5" />
+                <path d="m4 17 5-5 4 4 3-3 4 4M3 3l18 18" />
+              </>
+            ) : (
+              <>
+                <path d="M6 3h12M6 21h12M7 3v4c0 2 3 3 5 5-2 2-5 3-5 5v4M17 3v4c0 2-3 3-5 5 2 2 5 3 5 5v4" />
+                <path d="M9 6h6M9 18h6" />
+              </>
+            )}
+          </svg>
+          <span className="squisq-image-placeholder__text">
+            <span>
+              {failed ? 'Image unavailable' : isUploading ? 'Adding image…' : 'Loading image…'}
+            </span>
+            <span className="squisq-image-placeholder__label">{label}</span>
+          </span>
+        </span>
+      )}
+      {displaySrc && !failed && (
+        <img
+          ref={imgRef}
+          src={displaySrc}
+          alt={alt || ''}
+          title={title || undefined}
+          className={isThumbnail ? 'squisq-image squisq-image--thumbnail' : 'squisq-image'}
+          style={{ ...baseStyle, display: imageReady ? 'block' : 'none' }}
+          aria-hidden={!imageReady}
+          onLoad={() => setImageLoad({ url: displaySrc, failed: false })}
+          onError={() => setImageLoad({ url: displaySrc, failed: true })}
+          // Disable the inner `<img>`'s native HTML5 drag so the gesture is
+          // captured by the wrapper's `data-drag-handle` instead. (Without
+          // this the browser still emits its own dragstart on the image
+          // and ProseMirror sees an external file drop.)
+          draggable={false}
+          onDragStart={(e) => e.preventDefault()}
+          data-selected={selected ? 'true' : undefined}
+        />
+      )}
+      {imageReady && <AnimatedImageControls playback={playback} imageRef={imgRef} />}
       {showAffordance && (
         <button
           type="button"
@@ -264,9 +338,14 @@ export const ImageWithMediaProvider = Image.extend({
   // doesn't fire on a drag-reorder.
   draggable: true,
   addAttributes() {
-    const parent = this.parent?.() ?? {};
+    const parent: Attributes = this.parent?.() ?? {};
     return {
       ...parent,
+      src: {
+        ...parent.src,
+        parseHTML: (element) =>
+          element.getAttribute('data-squisq-image-src') ?? element.getAttribute('src'),
+      },
       width: {
         default: null,
         parseHTML: (element) => {
@@ -290,6 +369,54 @@ export const ImageWithMediaProvider = Image.extend({
           attrs.height ? { height: String(attrs.height) } : {},
       },
     };
+  },
+  parseHTML() {
+    return [
+      {
+        tag: this.options.allowBase64
+          ? 'img[data-squisq-image-src]'
+          : 'img[data-squisq-image-src]:not([data-squisq-image-src^="data:"])',
+      },
+      ...(this.parent?.() ?? []),
+    ];
+  },
+  renderHTML({ HTMLAttributes }) {
+    // Tiptap mounts its default DOM before React node views are attached, and
+    // again during teardown. Keep workspace paths inert in that fallback and
+    // in getHTML(); only the node view should load the provider-resolved URL.
+    const { src, ...attributes } = mergeAttributes(this.options.HTMLAttributes, HTMLAttributes);
+    return ['img', { ...attributes, 'data-squisq-image-src': src }];
+  },
+  addProseMirrorPlugins() {
+    const serializer = DOMSerializer.fromSchema(this.editor.schema);
+    return [
+      ...(this.parent?.() ?? []),
+      new Plugin({
+        props: {
+          // Clipboard HTML is consumed outside this editor. Keep ordinary
+          // image attributes there so copying into other applications works.
+          clipboardSerializer: new DOMSerializer(
+            {
+              ...serializer.nodes,
+              image: (node) => {
+                const { src, alt, title, width, height } = node.attrs;
+                return [
+                  'img',
+                  mergeAttributes(this.options.HTMLAttributes, {
+                    src,
+                    alt,
+                    title,
+                    ...(width ? { width } : {}),
+                    ...(height ? { height } : {}),
+                  }),
+                ];
+              },
+            },
+            serializer.marks,
+          ),
+        },
+      }),
+    ];
   },
   addNodeView() {
     return ReactNodeViewRenderer(ImageComponent);

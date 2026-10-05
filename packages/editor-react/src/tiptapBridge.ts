@@ -949,7 +949,7 @@ export function tiptapToMarkdown(html: string): string {
     const imgMatch = remaining.match(/^<img\b([^>]*)>/);
     if (imgMatch) {
       const attrs = imgMatch[1] ?? '';
-      const src = /\bsrc="([^"]*)"/i.exec(attrs)?.[1];
+      const src = /(?:^|\s)(?:data-squisq-image-)?src="([^"]*)"/i.exec(attrs)?.[1];
       if (src) {
         const alt = /\balt="([^"]*)"/i.exec(attrs)?.[1] ?? '';
         const serialized = serializeImage(src, alt, attrs);
@@ -1457,6 +1457,8 @@ function serializeImage(src: string, alt: string, attrs: string): string {
   const width = /\bwidth="([^"]*)"/i.exec(attrs)?.[1];
   const height = /\bheight="([^"]*)"/i.exec(attrs)?.[1];
   const title = /\btitle="([^"]*)"/i.exec(attrs)?.[1];
+  // Upload placeholders are editor state, never durable image references.
+  if (title?.startsWith('squisq-upload:')) return '';
   if (!width && !height) {
     return `![${alt}](${escapedDestination(src)})`;
   }
@@ -2009,7 +2011,7 @@ function htmlToInline(html: string): string {
   // the dimensions survive the round-trip; otherwise the markdown
   // shorthand `![alt](src)` is used.
   result = result.replace(RE_IMG_TAG, (match, attrs: string) => {
-    const src = /\bsrc="([^"]*)"/i.exec(attrs)?.[1];
+    const src = /(?:^|\s)(?:data-squisq-image-)?src="([^"]*)"/i.exec(attrs)?.[1];
     if (!src) return match;
     const alt = /\balt="([^"]*)"/i.exec(attrs)?.[1] ?? '';
     const serialized = serializeImage(src, alt, attrs);

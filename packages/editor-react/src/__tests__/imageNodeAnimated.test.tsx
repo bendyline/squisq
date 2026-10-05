@@ -6,7 +6,7 @@
  * back over the animation); a still image keeps Edit and gets no controls.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import { EditorContent } from '@tiptap/react';
@@ -63,6 +63,8 @@ describe('ImageNodeView with animated images', () => {
       'media/party.gif',
       providerFor({ 'media/party.gif': gifDataUrl(3) }),
     );
+    await waitFor(() => expect(container.querySelector('img')?.src).toMatch(/^data:/));
+    fireEvent.load(container.querySelector('img')!);
     await screen.findByRole('button', { name: 'Pause animation' });
     const figure = container.querySelector('figure') as HTMLElement;
     fireEvent.mouseEnter(figure);
@@ -75,6 +77,7 @@ describe('ImageNodeView with animated images', () => {
       providerFor({ 'media/logo.gif': gifDataUrl(1) }),
     );
     await act(() => new Promise((resolve) => setTimeout(resolve, 30)));
+    fireEvent.load(container.querySelector('img')!);
     fireEvent.mouseEnter(container.querySelector('figure') as HTMLElement);
     expect(screen.getByTestId('image-edit-affordance')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /animation/ })).toBeNull();

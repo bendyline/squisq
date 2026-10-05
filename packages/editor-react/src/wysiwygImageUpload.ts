@@ -19,36 +19,43 @@ export async function uploadAndInsertImages(
   if (!imageType) return;
 
   let placeholderTr = view.state.tr;
-  for (const token of placeholders) {
+  for (const [index, token] of placeholders.entries()) {
     placeholderTr = placeholderTr.replaceSelectionWith(
       imageType.create({
         src: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
-        alt: 'Uploading image',
+        alt: files[index].name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ') || 'Image',
         title: token,
       }),
     );
   }
   view.dispatch(placeholderTr);
 
-  for (let index = 0; index < files.length; index++) {
-    const file = files[index];
-    const token = placeholders[index];
-    try {
-      const buffer = await file.arrayBuffer();
-      const mimeType = file.type || 'image/png';
-      const name =
-        file.name && file.name !== 'image.png'
-          ? file.name
-          : `pasted-${uniquePasteToken()}.${extFromMime(mimeType)}`;
-      const relativePath = await mediaProvider.addMedia(name, buffer, mimeType);
-      const altText = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-      replaceUploadPlaceholder(view, token, relativePath, altText);
-      onMediaUploaded?.();
-    } catch (err) {
-      removeUploadPlaceholder(view, token);
-      console.error('Failed to upload dropped image:', err);
+  // Stable placeholders preserve document order even when a later image
+  // finishes first. Bound concurrency so a large drop does not flood storage.
+  let nextIndex = 0;
+  const uploadNext = async () => {
+    while (nextIndex < files.length) {
+      const index = nextIndex++;
+      const file = files[index];
+      const token = placeholders[index];
+      try {
+        const buffer = await file.arrayBuffer();
+        const mimeType = file.type || 'image/png';
+        const name =
+          file.name && file.name !== 'image.png'
+            ? file.name
+            : `pasted-${uniquePasteToken()}.${extFromMime(mimeType)}`;
+        const relativePath = await mediaProvider.addMedia(name, buffer, mimeType);
+        const altText = name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+        replaceUploadPlaceholder(view, token, relativePath, altText);
+        onMediaUploaded?.();
+      } catch (err) {
+        removeUploadPlaceholder(view, token);
+        console.error('Failed to upload dropped image:', err);
+      }
     }
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(3, files.length) }, uploadNext));
 }
 
 function findUploadPlaceholder(
