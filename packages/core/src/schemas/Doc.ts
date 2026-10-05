@@ -257,6 +257,9 @@ export interface Block {
   /** Char offset of the extraction inside the source block's plain text. */
   sourceCharOffset?: number;
 
+  /** Projection-only summary policy; keeps visual features on their owning slide. */
+  summaryMode?: 'brief' | 'headings-and-features';
+
   /**
    * Pre-computed visual layers, rendered back-to-front.
    *

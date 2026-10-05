@@ -19,6 +19,7 @@ import { coerceTemplateParams } from './templates/inputDescriptors.js';
 import { deriveTemplateInputs } from './templateInputs.js';
 import { flattenRenderableBlocks } from './markdownToDoc.js';
 import { hasTemplate } from './templates/index.js';
+import { isContainerTemplate } from './templates/templateNames.js';
 import { KNOWN_BLOCK_META_KEYS } from '../markdown/annotationCoercion.js';
 import { extractPlainText, getChildren } from '../markdown/utils.js';
 import { iconMarker } from '../icons/inlineIconMarker.js';
@@ -286,8 +287,12 @@ function blockToSlide(
     // authored rich elements (Mermaid fences today; other media can follow)
     // independently of the selected visual template.
     ...(block.contents ? { contents: block.contents } : {}),
-    // Custom templates additionally consume child blocks through tokens.
-    ...(isCustomTemplate && block.children ? { children: block.children } : {}),
+    // Custom templates consume child blocks through tokens. Compact summaries
+    // also retain the children owned by a diagram/drawing feature.
+    ...(block.children && (isCustomTemplate || (block.summaryMode && isContainerTemplate(template)))
+      ? { children: block.children }
+      : {}),
+    ...(block.summaryMode && block.layers ? { layers: block.layers } : {}),
     ...defaults,
     ...extraFields,
     // Structured body data (```json data fences, GFM tables for dataTable)
@@ -424,7 +429,12 @@ export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc
     const blockImages = extractBlockImages(block.contents);
     const slide = blockToSlide(block, i, knownTemplates, documentTitle);
 
-    if (blockImages.length > 0 && slide.template === 'sectionHeader') {
+    if (block.summaryMode) {
+      // Summary slides already retain all scoped features. The canonical
+      // materializer lays them out together; accent/interleave decoration
+      // would duplicate them or move them away from their heading.
+      for (const img of blockImages) usedImageSrcs.add(img.src);
+    } else if (blockImages.length > 0 && slide.template === 'sectionHeader') {
       const img = blockImages[0];
       usedImageSrcs.add(img.src);
       slide.template = 'imageWithCaption';

@@ -11,6 +11,7 @@ import { magazineStyle } from './styles/magazine.js';
 import { dataDrivenStyle } from './styles/dataDriven.js';
 import { narrativeStyle } from './styles/narrative.js';
 import { minimalStyle } from './styles/minimal.js';
+import { headingsAndFeaturesStyle } from './styles/headingsAndFeatures.js';
 import { cloneAndFreezeData } from '../internal/immutable.js';
 
 /** All built-in transform styles, keyed by id. */
@@ -20,6 +21,7 @@ const TRANSFORM_STYLES: Readonly<Record<string, TransformStyleConfig>> = Object.
   [dataDrivenStyle.id]: cloneAndFreezeData(dataDrivenStyle),
   [narrativeStyle.id]: cloneAndFreezeData(narrativeStyle),
   [minimalStyle.id]: cloneAndFreezeData(minimalStyle),
+  [headingsAndFeaturesStyle.id]: cloneAndFreezeData(headingsAndFeaturesStyle),
 });
 
 /** Default style used when no id is provided. */
@@ -52,6 +54,13 @@ function validateTransformStyle(style: TransformStyleConfig): void {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
       fail(`${key} must be a finite number between 0 and 1`);
     }
+  }
+  if (
+    candidate.contentMode !== undefined &&
+    candidate.contentMode !== 'brief' &&
+    candidate.contentMode !== 'headings-and-features'
+  ) {
+    fail('contentMode must be brief or headings-and-features');
   }
   if (
     !Array.isArray(candidate.preferredTypes) ||

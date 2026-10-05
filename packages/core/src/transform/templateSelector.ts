@@ -23,6 +23,7 @@ import type { AnalyzedBlock } from './blockAnalyzer.js';
 import { mapElementToBlock } from '../generate/templateMapper.js';
 import { SeededRandom } from '../random/SeededRandom.js';
 import { estimateTimeFromText } from '../timing/narrationTiming.js';
+import { summarizeBlock, summarizeHighlight } from './contentSummary.js';
 
 /** Accent positions to rotate through. */
 const ACCENT_POSITIONS: AccentPosition[] = [
@@ -206,8 +207,9 @@ function buildBlockSequence(
     const extractions = blockExtractions.get(i);
 
     if (!extractions || extractions.length === 0) {
-      // Keep the original block unchanged
-      blocks.push(ab.block);
+      // Compact styles bound every fallback instead of retaining walls of text.
+      blocks.push(config.contentMode === 'brief' ? summarizeBlock(ab.block, 'brief') : ab.block);
+      if (config.contentMode === 'brief') transformedCount++;
       continue;
     }
 
@@ -278,6 +280,9 @@ function buildBlockSequence(
       if (remapTarget && remapTarget !== templateBlock.template) {
         const translated = translateTemplateBlock(templateBlock, remapTarget);
         if (translated) templateBlock = translated;
+      }
+      if (config.contentMode === 'brief') {
+        templateBlock = summarizeHighlight(templateBlock, ab.block);
       }
 
       // Apply transition based on style

@@ -1257,7 +1257,14 @@ interface TransformResult {
 ```
 
 Built-in style ids: `documentary` (default), `magazine`, `data-driven`,
-`narrative`, `minimal`. Custom definitions are either passed directly to
+`narrative`, `minimal`, `headings-and-features`. Headings and features produces
+one slide per heading, retains images, videos, diagrams and data visuals in
+that heading's own scope, and omits body prose and cover subtitles. Minimal
+keeps short highlights and bounds remaining prose to one sentence (at most
+24 words / 180 characters) per section. Both operate on a projection and leave
+the source Doc unchanged. Custom styles can opt into these policies with
+`TransformStyleConfig.contentMode: 'brief' | 'headings-and-features'`.
+Custom definitions are either passed directly to
 `applyTransform()` or resolved through an explicit caller-owned registry; no
 transform call mutates process-global state. The historical persisted value
 `dataDriven` remains readable and resolves to `data-driven`; APIs and editor

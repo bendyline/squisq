@@ -5,6 +5,7 @@ describe('resolvePersistedTransformStyleId', () => {
   it('accepts canonical ids and canonicalizes the legacy wire value', () => {
     expect(resolvePersistedTransformStyleId('data-driven')).toBe('data-driven');
     expect(resolvePersistedTransformStyleId('dataDriven')).toBe('data-driven');
+    expect(resolvePersistedTransformStyleId('headings-and-features')).toBe('headings-and-features');
   });
 
   it('does not turn an unknown id into the default transform', () => {

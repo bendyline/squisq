@@ -1,17 +1,18 @@
 import type { TransformStyleConfig } from '../types.js';
 
-/** Light touch — only the highest-confidence items get transformed. */
+/** Short highlights with a bounded fallback for every remaining section. */
 export const minimalStyle: TransformStyleConfig = {
   id: 'minimal',
   name: 'Minimal',
-  description: 'Light touch — only the strongest highlights, mostly text',
+  description: 'Short highlights and a single brief line per section',
+  contentMode: 'brief',
   minConfidence: 0.6,
   transformRatio: 0.2,
   preferredTypes: ['stat', 'quote'],
   colorSchemes: ['blue', 'green'],
   insertSectionHeaders: false,
   interleaveImages: false,
-  blocksPerSection: { max: 2 },
+  blocksPerSection: { max: 1 },
   transitionStyle: 'fade',
   suggestedThemeId: 'minimalist',
   page: { spacing: 'generous', emphasisCurve: 'even' },
