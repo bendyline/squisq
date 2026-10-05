@@ -14,7 +14,12 @@ const STRICT = { strict: true };
 
 describe('markdown source transforms — registry', () => {
   it('registers exactly unwrap, wrap, cleanup with labels and descriptions', () => {
-    expect(MARKDOWN_SOURCE_TRANSFORMS.map((t) => t.id)).toEqual(['unwrap', 'wrap', 'cleanup']);
+    expect(MARKDOWN_SOURCE_TRANSFORMS.map((t) => t.id)).toEqual([
+      'unwrap',
+      'wrap',
+      'cleanup',
+      'condense',
+    ]);
     for (const t of MARKDOWN_SOURCE_TRANSFORMS) {
       expect(t.label.length).toBeGreaterThan(0);
       expect(t.description.length).toBeGreaterThan(0);
@@ -368,7 +373,7 @@ describe('safety net', () => {
 
   it('never degrades across the corpus (transform result stays equivalent)', () => {
     for (const src of CORPUS) {
-      for (const id of ['unwrap', 'wrap', 'cleanup'] as const) {
+      for (const id of ['unwrap', 'wrap', 'cleanup', 'condense'] as const) {
         const result = applyMarkdownSourceTransform(id, src, { width: 30, strict: true });
         expect(result.degraded).toBe(false);
       }

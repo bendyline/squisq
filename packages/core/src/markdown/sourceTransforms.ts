@@ -20,6 +20,7 @@
  */
 
 import { parseMarkdown } from './parse.js';
+import { condenseMarkdownSource } from './condenseMarkdown.js';
 import { stringifyMarkdown } from './stringify.js';
 import { getChildren, splitFrontmatterBlock } from './utils.js';
 import type { MarkdownDocument, MarkdownNode, MarkdownParagraph } from './types.js';
@@ -28,7 +29,7 @@ import type { MarkdownDocument, MarkdownNode, MarkdownParagraph } from './types.
 // Public types
 // ============================================
 
-export type MarkdownSourceTransformId = 'unwrap' | 'wrap' | 'cleanup';
+export type MarkdownSourceTransformId = 'unwrap' | 'wrap' | 'cleanup' | 'condense';
 
 export interface MarkdownSourceTransformOptions {
   /** Target column for `wrap` (clamped to 20–500). Default {@link DEFAULT_WRAP_WIDTH}. */
@@ -64,7 +65,7 @@ export interface MarkdownSourceTransformResult {
    * The minimal edits that turn the input into `output`, in DESCENDING
    * `start` order so they can be applied top-of-stack first (offsets stay
    * valid). Present for `unwrap`/`wrap` (one edit per touched paragraph) and
-   * `cleanup` (one whole-document edit); empty when nothing changed.
+   * `cleanup`/`condense` (one whole-document edit); empty when nothing changed.
    */
   edits: MarkdownSourceEdit[];
 }
@@ -767,6 +768,29 @@ function cleanupTransform(
 // Public API
 // ============================================
 
+function condenseTransform(
+  source: string,
+  options?: MarkdownSourceTransformOptions,
+): MarkdownSourceTransformResult {
+  try {
+    const output = condenseMarkdownSource(source);
+    if (output === source) return noopResult(source, false);
+    return {
+      output,
+      changed: true,
+      degraded: false,
+      edits: [{ start: 0, end: source.length, text: output }],
+    };
+  } catch (err: unknown) {
+    return degrade(
+      'condense',
+      source,
+      options?.strict,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
 export const MARKDOWN_SOURCE_TRANSFORMS: readonly MarkdownSourceTransform[] = Object.freeze([
   {
     id: 'unwrap' as const,
@@ -788,6 +812,13 @@ export const MARKDOWN_SOURCE_TRANSFORMS: readonly MarkdownSourceTransform[] = Ob
     description:
       'Re-serialize through the canonical house style: bullets, emphasis, headings, table padding, spacing.',
     apply: (source, options) => cleanupTransform(source, options),
+  },
+  {
+    id: 'condense' as const,
+    label: 'Condense formatting',
+    description:
+      'Compact table padding and decorative dividers while preserving all document content.',
+    apply: (source, options) => condenseTransform(source, options),
   },
 ]);
 

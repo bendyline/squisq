@@ -67,6 +67,18 @@ describe('transform command', () => {
     expect(result.stderr).to.contain('✓ unwrap');
   });
 
+  it('condenses imported tables through the CLI without changing their data', async () => {
+    const mdPath = await writeDoc(
+      '| Header             |\n| ------------------ |\n| A fact[^n]         |\n\n[^n]: Source attribution.\n',
+    );
+    const result = await runCli('transform', mdPath, '--ops', 'cleanup,condense');
+    expect(result.exitCode).to.equal(0);
+    expect(result.stdout).to.equal(
+      '| Header |\n| --- |\n| A fact[^n] |\n\n[^n]: Source attribution.\n',
+    );
+    expect(result.stderr).to.contain('condense');
+  });
+
   it('applies ops in order and reports per-op status', async () => {
     const mdPath = await writeDoc('* item one\n* item two\n');
     const result = await runCli('transform', mdPath, '--ops', 'unwrap,cleanup');
