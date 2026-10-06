@@ -620,6 +620,12 @@ function appendRichContentLayers(
           viewport,
           items.length,
           aspects,
+          {
+            summaryFeature:
+              block.summaryMode === 'headings-and-features' &&
+              !timedLayers.some((layer) => layer.id === 'feature-body'),
+            stackColumns: createTemplateContext(theme, 0, 1, viewport).layout.stackColumns,
+          },
         );
   const cells = gridCells(layout.mediaRect, items.length, viewport, layout.framed);
   const counters: Record<RichMediaItem['kind'], number> = {

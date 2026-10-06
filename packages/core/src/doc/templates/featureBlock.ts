@@ -25,6 +25,7 @@ import {
   themedImageTreatment,
 } from '../utils/themeUtils.js';
 import { estimateProseLineCount, fitProse } from './captionUtils.js';
+import { featureMediaSlot } from './featureMediaSlot.js';
 
 type FeatureInput = LeftFeatureInput | RightFeatureInput;
 
@@ -158,55 +159,7 @@ function buildFeatureLayers(
   const bodyBaseSize = themedFontSize(24, context, false);
   const bodyMinSize = themedFontSize(18, context, false);
 
-  // Image takes the full left or right half. The text column gets the
-  // opposite half, with a comfortable inset so the text doesn't kiss
-  // the image edge or the card border. All values are percentages of
-  // the block viewport so they scale with the card size.
-  //
-  // When the image is "sized" we shrink it inside its half: the half
-  // still claims the space (so the text column stays the same width
-  // and the layout doesn't shift around when dimensions are toggled)
-  // but the image itself sits centered with padding around it. The
-  // sized box uses a square envelope sized to the smaller dimension of
-  // its half so the image breathes regardless of viewport aspect.
-  let imgX: string;
-  let imgY: string;
-  let imgW: string;
-  let imgH: string;
-  let imageFit: 'cover' | 'contain';
-  if (summaryFeature) {
-    // A title-only feature gives the visual the body column's unused space,
-    // and contains the entire image (screenshots and diagrams must not crop).
-    imgX = stack ? '5%' : side === 'left' ? '5%' : '35%';
-    imgY = '5%';
-    imgW = stack ? '90%' : '60%';
-    imgH = stack ? '70%' : '90%';
-    imageFit = 'contain';
-  } else if (stack) {
-    imgX = '0';
-    imgY = '0';
-    imgW = '100%';
-    imgH = '50%';
-    imageFit = sized ? 'contain' : 'cover';
-  } else if (sized) {
-    // 90% of the half (with explicit aspect via fit='contain') so the
-    // image keeps its natural proportions and never touches the card
-    // edges. We don't try to honor the literal pixel value — block
-    // viewports are designed in their own coordinate space — but the
-    // *intent* (smaller image, padded, centered) is what comes through.
-    const halfStart = side === 'left' ? 5 : 55; // %
-    imgX = `${halfStart}%`;
-    imgY = '5%';
-    imgW = '40%';
-    imgH = '90%';
-    imageFit = 'contain';
-  } else {
-    imgX = side === 'left' ? '0' : '50%';
-    imgY = '0';
-    imgW = '50%';
-    imgH = '100%';
-    imageFit = 'cover';
-  }
+  const mediaSlot = featureMediaSlot(side, { stack, summaryFeature, sized });
 
   // Text-column geometry. `textX` is the LEFT edge of the column when
   // the side is "left" (image left, text right); when the side is
@@ -311,10 +264,10 @@ function buildFeatureLayers(
       content: {
         src: imageSrc,
         alt: imageAlt ?? title,
-        fit: imageFit,
+        fit: mediaSlot.fit,
         ...(treatment ? { treatment } : {}),
       },
-      position: { x: imgX, y: imgY, width: imgW, height: imgH },
+      position: mediaSlot.position,
     });
   }
 

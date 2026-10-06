@@ -14,6 +14,7 @@ import type { Layer, Position } from '../schemas/Doc.js';
 import type { ViewportConfig, ViewportOrientation } from '../schemas/Viewport.js';
 import { getViewportOrientation } from '../schemas/Viewport.js';
 import { estimateTextHeight, fitProse } from './templates/captionUtils.js';
+import { featureMediaSlot } from './templates/featureMediaSlot.js';
 import {
   getBlockMediaLayoutPolicy,
   type SupplementalMediaLayoutVariant,
@@ -672,6 +673,7 @@ export function resolveSupplementalMediaLayout(
   viewport: ViewportConfig,
   mediaCount: number,
   aspectRatios: readonly (number | undefined)[],
+  featureOptions: { summaryFeature?: boolean; stackColumns?: boolean } = {},
 ): SupplementalMediaLayout {
   const policy = getBlockMediaLayoutPolicy(template);
   const shape = mediaShape(mediaCount, aspectRatios);
@@ -682,6 +684,30 @@ export function resolveSupplementalMediaLayout(
       layer.type === 'map' ||
       layer.type === 'mermaid',
   );
+  // A feature template without a primary image still owns its feature cell.
+  // Embedded videos and diagrams fill that cell instead of an extra-media inset.
+  if (
+    !alreadyOwnsMedia &&
+    (policy?.nativeLayout === 'feature-left' || policy?.nativeLayout === 'feature-right')
+  ) {
+    const { position } = featureMediaSlot(
+      policy.nativeLayout === 'feature-left' ? 'left' : 'right',
+      {
+        stack: featureOptions.stackColumns ?? getViewportOrientation(viewport) === 'portrait',
+        summaryFeature: featureOptions.summaryFeature ?? false,
+      },
+    );
+    return {
+      layers,
+      mediaRect: {
+        x: resolvePositionValue(position.x, viewport.width),
+        y: resolvePositionValue(position.y, viewport.height),
+        width: resolvePositionValue(position.width, viewport.width),
+        height: resolvePositionValue(position.height, viewport.height),
+      },
+      framed: false,
+    };
+  }
   const retainNativeLayout =
     policy?.unconsumedMedia === 'retain-native-layout' ||
     (policy?.unconsumedMedia === 'reserve-when-no-native-media' && alreadyOwnsMedia);

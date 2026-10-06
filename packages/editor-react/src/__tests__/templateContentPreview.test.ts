@@ -152,6 +152,23 @@ Supporting context.
     }
   });
 
+  it('previews Mermaid diagrams in the primary left and right feature cells', () => {
+    const source = previewSource(
+      '## RAG: Giving the Model a Notebook {[rightFeature]}\n\n```mermaid\nstateDiagram-v2\n[*] --> Chunk\nChunk --> Store\n```',
+    );
+    for (const templateName of ['rightFeature', 'leftFeature']) {
+      const result = resolveTemplateContentPreviewResult(templateName, source);
+      expect(result.warning, templateName).toBeUndefined();
+      const diagram = result.visual?.layers?.find((layer) => layer.type === 'mermaid');
+      expect(diagram?.position).toEqual({
+        x: templateName === 'leftFeature' ? 0 : 960,
+        y: 0,
+        width: 960,
+        height: 1080,
+      });
+    }
+  });
+
   it('recognizes authored image params when previewing the current or another feature template', () => {
     const source = previewSource('## Architecture {[rightFeature imageSrc="media/authored.png"]}');
     const original = JSON.stringify(source.block);

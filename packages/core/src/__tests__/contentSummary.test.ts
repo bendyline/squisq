@@ -213,6 +213,76 @@ describe('Headings and features summaries', () => {
     },
   );
 
+  it.each(['leftFeature', 'rightFeature'])(
+    'gives an authored %s Mermaid diagram the primary feature area',
+    (template) => {
+      const doc = source(`# RAG: Giving the Model a Notebook {[${template}]}
+
+Prose should disappear from the summary.
+
+\`\`\`mermaid
+stateDiagram-v2
+  state "Re-rank and stuff" as node4
+  state "Retrieve" as node3
+  state "Vectorify Question" as node2
+  state "Store" as node
+  state "Vectorify Chunks" as Working
+  state "Chunk" as Idle
+  [*] --> Idle
+  Idle --> Working
+  Working --> node
+  node --> node2
+  node2 --> node3
+  node3 --> node4
+\`\`\``);
+      const before = JSON.stringify(doc);
+      const slide = buildPreviewDoc(applyTransform(doc, 'headings-and-features').doc).blocks[0];
+      const rendered = layers(slide);
+      const diagram = rendered.find((layer) => layer.type === 'mermaid')!;
+      expect(slide.template).toBe(template);
+      expect(slide.summaryLayout).toBeUndefined();
+      expect(visibleText(slide)).toBe('RAG: Giving the Model a Notebook');
+      expect(diagram.position).toEqual({
+        x: 1920 * (template === 'leftFeature' ? 0.05 : 0.35),
+        y: 1080 * 0.05,
+        width: 1920 * 0.6,
+        height: 1080 * 0.9,
+      });
+      expect(rendered.some((layer) => layer.id.endsWith('-rich-media-frame'))).toBe(false);
+      expect(JSON.stringify(doc)).toBe(before);
+
+      const portrait = materializeBlockLayers(slide, {
+        persistentLayers: false,
+        viewport: { width: 1080, height: 1920, name: 'Portrait' },
+      }).layers;
+      expect(portrait.find((layer) => layer.type === 'mermaid')?.position).toEqual({
+        x: 1080 * 0.05,
+        y: 1920 * 0.05,
+        width: 1080 * 0.9,
+        height: 1920 * 0.7,
+      });
+    },
+  );
+
+  it('keeps additional diagrams in an inset when a feature already has a primary image', () => {
+    const slide = buildPreviewDoc(
+      applyTransform(
+        source(
+          '# Feature {[rightFeature imageSrc=primary.png]}\n\n```mermaid\nflowchart TD\nA --> B\n```',
+        ),
+        'headings-and-features',
+      ).doc,
+    ).blocks[0];
+    const rendered = layers(slide);
+    expect(rendered.find((layer) => layer.type === 'image')).toMatchObject({
+      content: { src: 'primary.png', fit: 'contain' },
+      position: { x: '35%', y: '5%', width: '60%', height: '90%' },
+    });
+    expect(
+      Number(rendered.find((layer) => layer.type === 'mermaid')?.position.height),
+    ).toBeLessThan(1080 * 0.5);
+  });
+
   it('respects explicit list/content templates without reintroducing prose or placeholder items', () => {
     const doc = source(
       '# List {[list items="Hidden,Items"]}\n\n- Hidden list prose\n\n## Content {[content]}\n\nHidden prose.\n\n![Feature alt](feature.png)',

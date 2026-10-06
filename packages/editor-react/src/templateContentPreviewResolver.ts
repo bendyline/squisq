@@ -10,6 +10,7 @@ import {
   coerceTemplateParams,
   deriveTemplateInputs,
   extractBodyPlainText,
+  extractEmbeddedVideos,
   extractBlockquoteText,
   extractImages,
   extractListItems,
@@ -216,9 +217,33 @@ function buildTemplatePreviewInputs(
         ...(comparisonInputs ? {} : { warning: 'No stat found in this block' }),
       };
     }
-    case 'imageWithCaption':
     case 'leftFeature':
-    case 'rightFeature':
+    case 'rightFeature': {
+      const hasFeature =
+        hasText(provided.imageSrc) ||
+        extractImages(contents, 1).length > 0 ||
+        extractEmbeddedVideos(contents, 1).length > 0 ||
+        (contents ?? []).some(
+          (node) =>
+            node.type === 'code' &&
+            node.lang?.trim().toLowerCase() === 'mermaid' &&
+            !!node.value.trim(),
+        ) ||
+        ['diagram', 'tree', 'timeline'].some(
+          (template) =>
+            !!deriveTemplateInputs(template, headingText, contents, { placeholders: false }),
+        );
+      return {
+        inputs: hasFeature
+          ? (deriveTemplateInputs(templateName, headingText, contents, { placeholders: false }) ?? {
+              title: headingText,
+              body: bodyText,
+            })
+          : null,
+        ...(hasFeature ? {} : { warning: 'No visual feature found in this block' }),
+      };
+    }
+    case 'imageWithCaption':
     case 'photoGrid': {
       const imageCount = extractImages(contents, templateName === 'photoGrid' ? 2 : 1).length;
       const hasProvidedImages =

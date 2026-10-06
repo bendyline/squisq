@@ -97,16 +97,16 @@ Learn more about the model.
 
   it('removes the missing-image tooltip when authored params supply the active feature', () => {
     const view = render(gallery(source('## Architecture')));
-    expect(card('Right Feature').title).toContain('No image found');
+    expect(card('Right Feature').title).toContain('No visual feature found');
 
     view.rerender(
       gallery(source('## Architecture {[rightFeature imageSrc="media/authored.png"]}')),
     );
-    expect(card('Right Feature').title).not.toContain('No image found');
+    expect(card('Right Feature').title).not.toContain('No visual feature found');
     expect(
       card('Right Feature').querySelector('svg.block-svg image, svg.block-svg img'),
     ).not.toBeNull();
-    expect(card('Left Feature').title).not.toContain('No image found');
+    expect(card('Left Feature').title).not.toContain('No visual feature found');
     expect(
       card('Left Feature').querySelector('svg.block-svg image, svg.block-svg img'),
     ).not.toBeNull();
