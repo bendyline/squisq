@@ -282,7 +282,14 @@ describe('DictationButton', () => {
     expect(micButton().getAttribute('aria-pressed')).toBe('true');
     expect(micButton().getAttribute('aria-label')).toBe('Stop dictation');
     expect(screen.getByTestId('squisq-dictation-meter')).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toBe('Dictation on. Listening.');
+    // The announcement and the interim widget are set by effects after the
+    // status commits, so they can trail `data-state` by a render.
+    await waitFor(() => {
+      expect(screen.getByRole('status').textContent).toBe('Dictation on. Listening.');
+      expect(tiptap?.view.dom.querySelector('.squisq-dictation-interim')?.textContent).toBe(
+        'Listening…',
+      );
+    });
     expect(provider.prepareCalls).toHaveLength(1);
     expect(getUserMedia).toHaveBeenCalledWith({
       audio: expect.objectContaining({
@@ -292,9 +299,6 @@ describe('DictationButton', () => {
       }),
       video: false,
     });
-    expect(tiptap?.view.dom.querySelector('.squisq-dictation-interim')?.textContent).toBe(
-      'Listening…',
-    );
     expect(ctx?.dictation?.active).toBe(true);
 
     // Stop: the captured take is transcribed and inserted, then idle.
@@ -307,7 +311,9 @@ describe('DictationButton', () => {
     expect(provider.transcribeCalls[0].options.signal).toBeInstanceOf(AbortSignal);
     expect(tiptap?.state.doc.textContent).toBe('Some text hello *world*');
     expect(tiptap?.state.doc.child(0).firstChild?.marks).toEqual([]);
-    expect(tiptap?.view.dom.querySelector('.squisq-dictation-interim')).toBeNull();
+    await waitFor(() =>
+      expect(tiptap?.view.dom.querySelector('.squisq-dictation-interim')).toBeNull(),
+    );
     expect(streams[0].tracks[0].readyState).toBe('ended');
     expect(provider.prepareCalls[0].aborted).toBe(true);
     expect(ctx?.dictation?.active).toBe(false);
