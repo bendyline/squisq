@@ -219,6 +219,16 @@ function findInDocument(doc: MarkdownDocument): FoundDiagram[] {
   return found;
 }
 
+/** Every image URL a document already references. */
+function imageUrls(nodes: readonly MarkdownNode[], into: Set<string>): Set<string> {
+  for (const node of nodes) {
+    if (node.type === 'image') into.add((node as MarkdownImage).url);
+    const nested = (node as { children?: unknown }).children;
+    if (Array.isArray(nested)) imageUrls(nested as MarkdownNode[], into);
+  }
+  return into;
+}
+
 /** Every diagram in `doc`, in document order. */
 export function findDiagrams(doc: MarkdownDocument): ExportDiagram[] {
   return findInDocument(doc).map((entry) => entry.diagram);
@@ -266,6 +276,16 @@ export async function rasterizeDiagrams(
 ): Promise<RasterizedDiagrams> {
   const kinds = options.kinds ? new Set(options.kinds) : null;
   const prefix = options.urlPrefix ?? 'diagram';
+  // Never reuse a name the document already gives one of its own images.
+  const taken = imageUrls(doc.children, new Set());
+  let counter = 0;
+  const nextUrl = (): string => {
+    let url: string;
+    do url = `${prefix}-${String(++counter)}.png`;
+    while (taken.has(url));
+    taken.add(url);
+    return url;
+  };
   const images: RasterizedDiagrams['images'] = new Map();
   const mermaid = new Map<string, DiagramPicture>();
   const fenceReplacements = new Map<MarkdownCodeBlock, MarkdownParagraph>();
@@ -286,7 +306,7 @@ export async function rasterizeDiagrams(
     }
     if (!picture || picture.width <= 0 || picture.height <= 0) continue;
     const data = picture.data instanceof Uint8Array ? picture.data : new Uint8Array(picture.data);
-    const url = `${prefix}-${String(images.size + 1)}.png`;
+    const url = nextUrl();
     images.set(url, {
       data,
       contentType: 'image/png',

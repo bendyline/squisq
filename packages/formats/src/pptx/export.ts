@@ -1710,7 +1710,9 @@ function buildImageShape(
   return (
     `<p:pic>` +
     `<p:nvPicPr>` +
-    `<p:cNvPr id="${shapeId}" name="${escapeXml(img.alt || 'Picture')}"/>` +
+    `<p:cNvPr id="${shapeId}" name="${escapeXml(img.alt || 'Picture')}"${
+      img.alt ? ` descr="${escapeXml(img.alt)}"` : ''
+    }/>` +
     `<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>` +
     `<p:nvPr/>` +
     `</p:nvPicPr>` +

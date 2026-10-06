@@ -112,8 +112,13 @@ export async function svgToPng(
   };
 }
 
-function parseViewBox(svg: SVGSVGElement): { x: number; y: number; width: number; height: number } | null {
-  const values = (svg.getAttribute('viewBox') ?? '').trim().split(/[\s,]+/u).map(Number);
+function parseViewBox(
+  svg: SVGSVGElement,
+): { x: number; y: number; width: number; height: number } | null {
+  const values = (svg.getAttribute('viewBox') ?? '')
+    .trim()
+    .split(/[\s,]+/u)
+    .map(Number);
   if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) return null;
   const [x = 0, y = 0, width = 0, height = 0] = values;
   return width > 0 && height > 0 ? { x, y, width, height } : null;
@@ -139,6 +144,12 @@ export async function renderMermaidPicture(
   if (!svg) throw new Error('Mermaid produced no SVG.');
   const box = parseViewBox(svg);
   if (!box) throw new Error('The Mermaid SVG has no size.');
+  // With SVG-text labels Mermaid styles edge labels like node labels, so on a
+  // themed node color (white text) they vanish against the page; give them
+  // the theme's body text color.
+  const style = document.createElementNS(SVG_NS, 'style');
+  style.textContent = `.edgeLabel text, .edgeLabel tspan { fill: ${theme.colors.text} !important; }`;
+  svg.append(style);
   const width = Math.min(maxWidth, box.width);
   return svgToPng(svg, width, (box.height * width) / box.width, options);
 }
@@ -182,7 +193,11 @@ function isChrome(layer: Layer): boolean {
   }
   if (id.endsWith('-empty')) return true;
   // A CSS gradient fill would be drawn through <foreignObject>.
-  return layer.type === 'shape' && typeof layer.content.fill === 'string' && layer.content.fill.includes('gradient(');
+  return (
+    layer.type === 'shape' &&
+    typeof layer.content.fill === 'string' &&
+    layer.content.fill.includes('gradient(')
+  );
 }
 
 function withExportFont(layer: Layer): Layer {

@@ -898,6 +898,8 @@ function convertImage(node: MarkdownImage, ctx: ExportContext): string {
   }
 
   const name = escapeXml(node.alt || filename);
+  // `descr` is the picture's alt text in Word; `name` is only an object name.
+  const description = node.alt ? ` descr="${escapeXml(node.alt)}"` : '';
   const NS_A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const NS_PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 
@@ -905,7 +907,7 @@ function convertImage(node: MarkdownImage, ctx: ExportContext): string {
     `<w:r><w:drawing>` +
     `<wp:inline distT="0" distB="0" distL="0" distR="0">` +
     `<wp:extent cx="${cx}" cy="${cy}"/>` +
-    `<wp:docPr id="${docPrId}" name="${name}"/>` +
+    `<wp:docPr id="${docPrId}" name="${name}"${description}/>` +
     `<wp:cNvGraphicFramePr>` +
     `<a:graphicFrameLocks xmlns:a="${NS_A}" noChangeAspect="1"/>` +
     `</wp:cNvGraphicFramePr>` +
