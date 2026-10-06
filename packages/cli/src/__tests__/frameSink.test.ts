@@ -20,8 +20,15 @@ import {
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
+/**
+ * A PNG signature followed by random payload. The payload is masked to 7-bit
+ * bytes so it can never contain 0x89 — otherwise the fake encoder's signature
+ * scan finds a spurious match in ~31 MB of random bytes about 1 run in 140.
+ */
 function fakePngFrame(bytes = 64 * 1024): Uint8Array {
-  return Buffer.concat([PNG_SIGNATURE, randomBytes(bytes)]);
+  const payload = randomBytes(bytes);
+  for (let i = 0; i < payload.length; i += 1) payload[i] &= 0x7f;
+  return Buffer.concat([PNG_SIGNATURE, payload]);
 }
 
 /**

@@ -84,6 +84,7 @@ import { ProofingExtension } from './proofing/ProofingExtension';
 import { ReviewExtension } from './review/ReviewExtension';
 import { DictationExtension } from './speech/DictationExtension';
 import { syncAccessoryFileLinkPlaceholders } from './accessoryFileLinks';
+import { replaceDocumentMinimal } from './wysiwygMinimalSync';
 
 type MediaMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
 
@@ -794,10 +795,18 @@ export function WysiwygEditor({
       wrapStateRef.current = null;
     }
     const content = markdownToTiptap(displayBody);
-    editor.commands.setContent(content);
+    if (layoutMode === 'document') {
+      // Replace only what changed: unchanged nodes keep their widgets, the
+      // caret and scroll survive, and the update is one undo step.
+      replaceDocumentMinimal(editor, content);
+    } else {
+      // Block/timeline layouts swap in a different block's slice here; a
+      // diff against the previous block gains nothing.
+      editor.commands.setContent(content);
+    }
     lastSourceRef.current = editorSource;
     isExternalUpdate.current = false;
-  }, [editorSource, editor, wrapPolicyEnabled]);
+  }, [editorSource, editor, wrapPolicyEnabled, layoutMode]);
 
   // Match the WYSIWYG editor's appearance to the active Squisq theme when one
   // is set in frontmatter or picked in the preview dropdown. The block-props

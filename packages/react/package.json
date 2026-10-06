@@ -77,6 +77,10 @@
     "./standalone-source": {
       "types": "./dist/standalone-source.d.ts",
       "import": "./dist/standalone-source.js"
+    },
+    "./standalone-source/full": {
+      "types": "./dist/standalone-player-full.d.ts",
+      "import": "./dist/standalone-player-full.js"
     }
   },
   "scripts": {

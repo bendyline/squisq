@@ -39,6 +39,9 @@ export type {
   EditorActions,
   EditorContextValue,
   EditorSelectionInfo,
+  ApplySourceEditsOptions,
+  BlockInsertionBuilder,
+  InsertBlockOptions,
   EditorProviderProps,
   ImageDisplayMode,
   MentionCandidate,
@@ -76,6 +79,27 @@ export {
   sliceIndexAtOffset,
 } from './blockRange.js';
 export type { BlockRange, BlockSlice } from './blockRange.js';
+
+// Undoable source edits and block placement — the pure helpers behind the
+// `applySourceEdits` / `insertBlockAfterCursor` editor actions, for hosts
+// that plan edits against the markdown source.
+export {
+  applySourceEditsToText,
+  blockInsertionPoint,
+  headingDepthForInsertion,
+  joinBlockAt,
+  minimalReplaceEdit,
+  normalizeSourceEdits,
+  resolveOutlineInsertion,
+  sourceOutline,
+} from './sourceEdits.js';
+export type {
+  BlockInsertionContext,
+  BlockPlacement,
+  MarkdownSourceEdit,
+  OutlineBlock,
+  OutlineInsertion,
+} from './sourceEdits.js';
 
 // Timeline view — the horizontal block + media track and the line-level
 // markdown write-back helpers it commits edits through.
@@ -133,6 +157,7 @@ export {
   PreviewModeSwitch,
   PreviewFormatSwitch,
   usePreviewSettings,
+  usePreviewSettingsOptional,
 } from './PreviewControls.js';
 export type { PreviewSettings, PreviewToolbarControlsProps } from './PreviewControls.js';
 
@@ -370,8 +395,9 @@ export {
   renderMermaidDiagram,
   inspectMermaidSource,
   mermaidErrorMessage,
+  validateMermaidSource,
 } from './mermaid/mermaidRenderer.js';
-export type { MermaidRenderResult } from './mermaid/mermaidRenderer.js';
+export type { MermaidRenderResult, MermaidValidationResult } from './mermaid/mermaidRenderer.js';
 export { MermaidShapePalette } from './mermaid/MermaidShapePalette.js';
 export type { MermaidShapePaletteProps } from './mermaid/MermaidShapePalette.js';
 export {

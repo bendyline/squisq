@@ -7,6 +7,11 @@
  *
  *   import { PLAYER_BUNDLE } from '@bendyline/squisq-react/standalone-source';
  *   const html = `<script>${PLAYER_BUNDLE}</script>`;
+ *
+ * The light bundle leaves Mermaid out. Documents with Mermaid diagrams need
+ * the full bundle, exported the same way from `standalone-source/full`:
+ *
+ *   import { PLAYER_BUNDLE_FULL } from '@bendyline/squisq-react/standalone-source/full';
  */
 
 import { readFileSync, writeFileSync } from 'fs';
@@ -17,8 +22,13 @@ import { build } from 'esbuild';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const distDir = resolve(__dirname, '..', 'dist');
 const iifeFile = resolve(distDir, 'squisq-player.global.js');
+const fullIifeFile = resolve(distDir, 'squisq-player.full.global.js');
 const outJs = resolve(distDir, 'standalone-source.js');
 const outDts = resolve(distDir, 'standalone-source.d.ts');
+// Named apart from `standalone-source` so a bundler's chunk for one is never
+// mistaken for the other by a prefix match.
+const outFullJs = resolve(distDir, 'standalone-player-full.js');
+const outFullDts = resolve(distDir, 'standalone-player-full.d.ts');
 const iconStylesJs = resolve(distDir, 'standalone-icon-styles.js');
 const iconStylesDts = resolve(distDir, 'standalone-icon-styles.d.ts');
 
@@ -40,6 +50,18 @@ writeFileSync(
   'utf-8',
 );
 writeFileSync(outDts, 'export declare const PLAYER_BUNDLE: string;\n', 'utf-8');
+// The full bundle, with Mermaid, for documents that contain diagrams. A
+// separate module so consumers that never need it never load its ~5 MB.
+const fullSource = readFileSync(fullIifeFile, 'utf-8');
+writeFileSync(
+  outFullJs,
+  `/** Auto-generated — do not edit. Contains the full squisq-player IIFE bundle (with Mermaid) as a string. */\n` +
+    `import { PLAYER_ICON_STYLES } from './standalone-icon-styles.js';\n` +
+    `const ICON_STYLE_BOOTSTRAP = 'globalThis.__SQUISQ_PLAYER_ICON_STYLES__=' + JSON.stringify(PLAYER_ICON_STYLES) + ';\\n';\n` +
+    `export const PLAYER_BUNDLE_FULL = ICON_STYLE_BOOTSTRAP + ${JSON.stringify(fullSource)};\n`,
+  'utf-8',
+);
+writeFileSync(outFullDts, 'export declare const PLAYER_BUNDLE_FULL: string;\n', 'utf-8');
 writeFileSync(
   iconStylesJs,
   `/** Auto-generated — do not edit. Shared Font Awesome CSS and WOFF2 data. */\n` +

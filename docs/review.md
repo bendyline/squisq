@@ -139,6 +139,33 @@ into Tiptap or Monaco to get it. `useEditorContext()` exposes:
   can gate on "is there a selection" without subscribing to editor internals or
   re-rendering on every keystroke inside one.
 
+## Applying edits to the source
+
+A host that plans changes against the markdown source — an applied review
+finding, an inserted diagram — applies them with:
+
+- `applySourceEdits(edits, { baseSource })` — `{ start, end, text }` edits
+  against `markdownSource`, applied as **one undo step** in both views. Source
+  view edits Monaco's model in place, so the cursor, scroll and undo history
+  survive; Write view loads the result as a minimal change, so untouched
+  diagrams and canvases do not remount and the caret stays put. It applies
+  nothing and returns false in Preview, outside the Document layout, for
+  overlapping or out-of-range edits, or when the source no longer equals
+  `baseSource`. `replaceAll` uses the same path when it can.
+- `insertBlockAfterCursor(markdown | builder, { placement })` — one undoable
+  insert next to the cursor that leaves the selection alone. `'afterBlock'`
+  (default) puts it after the top-level block holding the cursor;
+  `'sectionEnd'` puts it just before the next heading, which is where a
+  heading-based block (a chart, drawing or layout) belongs so it does not
+  capture the paragraphs after it. Neither lands among a drawing's or layout's
+  child headings. A builder receives `{ sectionDepth, nextHeadingDepth,
+maxHeadingDepth }` and returns the markdown, or null to cancel;
+  `headingDepthForInsertion(context, { childLevels })` picks a depth that fits.
+
+The pure helpers behind these — `blockInsertionPoint`, `joinBlockAt`,
+`minimalReplaceEdit`, `applySourceEditsToText` — are exported for planning
+edits outside a mounted editor.
+
 ## Wiring it up
 
 ```tsx

@@ -274,3 +274,37 @@ describe('validateMarkdownSource — possible-data-fence (S3)', () => {
     expect(info(md)).toHaveLength(0);
   });
 });
+
+describe('validateMarkdownSource — layout layers', () => {
+  const layout = (children: string) => `## Layout {[layout]}\n\n${children}`;
+
+  it('accepts text, image and shape layers without flagging them as stray shapes', () => {
+    const md = layout(
+      '### {#t1} {[text x=360 y=380 width=1200 height=320 fontSize=64 align=center]}\n\nHello\n\n' +
+        '### {#i1} {[image src=pic.png x=0 y=0 width=320 height=240]}\n\n' +
+        '### {#r1} {[rectangle x=10 y=10 width=100 height=50]}\n\n' +
+        '### {#l1} {[line x=0 y=540 width=1920 height=0]}\n',
+    );
+    expect(codes(md)).toEqual([]);
+  });
+
+  it('flags a child that is not a layer, with a did-you-mean', () => {
+    const result = validateMarkdownSource(layout('### {#x} {[txt x=0 y=0]}\n\nHi\n'));
+    expect(result.diagnostics.map((d) => d.code)).toEqual(['unknown-layer']);
+    expect(result.diagnostics[0]?.message).toContain('Did you mean "text"?');
+  });
+
+  it('flags an image layer with no src', () => {
+    expect(codes(layout('### {#i} {[image x=0 y=0]}\n'))).toEqual(['layout-image-missing-src']);
+  });
+
+  it('checks layer geometry and text metrics are numbers', () => {
+    expect(codes(layout('### {#t} {[text x=0 y=0 fontSize=big]}\n\nHi\n'))).toEqual([
+      'invalid-attribute',
+    ]);
+  });
+
+  it('still flags a shape outside any drawing or layout', () => {
+    expect(codes('## Box {[rectangle]}\n')).toEqual(['shape-outside-drawing']);
+  });
+});
