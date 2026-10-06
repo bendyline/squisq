@@ -64,7 +64,8 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // so exports decode clip frames directly (~90 KB packed), plus the
   // media-edit render engine: mediabunny's audio demuxers for imported
   // formats and its WebM/WAV writers (~60 KB packed; RNNoise stays an
-  // external dependency).
+  // external dependency), plus the audio-file encoder's audio-only MP4
+  // writer (loaded lazily, ~287 KB packed in total at release B).
   '@bendyline/squisq-video-react': 300_000,
   '@bendyline/squisq-editor-react': 1_000_000,
   // Includes compressed light and full standalone players plus one shared

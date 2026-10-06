@@ -37,18 +37,8 @@ import {
   resolveCoverSlideSettings,
   type CoverSlidePlayback,
 } from '@bendyline/squisq/doc';
-import type {
-  VideoQuality,
-  VideoOrientation,
-  AudioTimelineClip,
-  FfmpegWasmLoadConfig,
-} from '@bendyline/squisq-video';
-import {
-  resolveDimensions,
-  computeAudioTimeline,
-  resolveFfmpegWasmLoad,
-  QUALITY_PRESETS,
-} from '@bendyline/squisq-video';
+import type { VideoQuality, VideoOrientation, FfmpegWasmLoadConfig } from '@bendyline/squisq-video';
+import { resolveDimensions, resolveFfmpegWasmLoad, QUALITY_PRESETS } from '@bendyline/squisq-video';
 import type { CaptionMode } from '@bendyline/squisq-react';
 import {
   createEncoder,
@@ -61,13 +51,17 @@ import { createWorkerEncoder } from '../workerEncoder.js';
 import {
   supportsWebCodecsAac,
   selectAudioTier,
-  renderAudioTimeline,
   encodeAacTrack,
   audioBufferToWav,
   muxAudioWithFfmpegWasm,
   EXPORT_AUDIO_SAMPLE_RATE,
   EXPORT_AUDIO_CHANNELS,
 } from '../audioTrack.js';
+import {
+  documentAudioTimeline,
+  loadAudioTimelineSources,
+  mixAudioTimeline,
+} from '../documentAudio.js';
 import { transcodeMp4ToGifWithFfmpegWasm } from '../gifTranscode.js';
 import { useFrameCapture } from './useFrameCapture.js';
 
@@ -296,38 +290,29 @@ export function collectDocumentMediaReferences(doc: Doc): Set<string> {
 // ── Audio resolution ───────────────────────────────────────────────
 
 /**
- * Resolve the raw bytes for every unique source in the audio timeline from
- * (in order) the pre-collected audio map, the images map, then the
- * MediaProvider. Sources that can't be resolved are simply omitted — the
- * caller degrades gracefully rather than failing.
+ * Read one audio source for the export mix from (in order) the pre-collected
+ * audio map, the images map, then the MediaProvider. A source that can't be
+ * resolved reads as null — the caller decides whether that fails the export.
  */
-async function resolveAudioBuffers(
-  clips: AudioTimelineClip[],
-  sources: {
-    audio?: Map<string, ArrayBuffer>;
-    images?: Map<string, ArrayBuffer>;
-    mediaProvider?: MediaProvider;
-    resourcePolicy?: ResourcePolicy;
-  },
-): Promise<Map<string, ArrayBuffer>> {
-  const srcs = new Set(clips.map((c) => c.src));
-  const out = new Map<string, ArrayBuffer>();
-  for (const src of srcs) {
-    let data = sources.audio?.get(src) ?? sources.images?.get(src);
-    if (!data && sources.mediaProvider) {
-      try {
-        const url = await sources.mediaProvider.resolveUrl(src);
-        const resource = await fetchResourceBytes(url, {
-          policy: sources.resourcePolicy,
-        });
-        data = toArrayBuffer(resource.bytes);
-      } catch {
-        // Unresolvable source; skip it.
-      }
+function exportMediaReader(sources: {
+  audio?: Map<string, ArrayBuffer>;
+  images?: Map<string, ArrayBuffer>;
+  mediaProvider?: MediaProvider;
+  resourcePolicy?: ResourcePolicy;
+}): (src: string) => Promise<ArrayBuffer | null> {
+  return async (src) => {
+    const data = sources.audio?.get(src) ?? sources.images?.get(src);
+    if (data) return data;
+    if (!sources.mediaProvider) return null;
+    try {
+      const url = await sources.mediaProvider.resolveUrl(src);
+      const resource = await fetchResourceBytes(url, { policy: sources.resourcePolicy });
+      return toArrayBuffer(resource.bytes);
+    } catch {
+      // Unresolvable source; reported as missing.
+      return null;
     }
-    if (data) out.set(src, data);
-  }
-  return out;
+  };
 }
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -846,11 +831,10 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         // muxing without reporting the format limitation as an export error.
         const timeline =
           effectiveOutputFormat === 'mp4' && audioPolicy !== 'omit'
-            ? config.processedAudio
-              ? computeAudioTimeline(doc, coverPlan.audioOffset, {
-                  processedAudio: config.processedAudio,
-                })
-              : computeAudioTimeline(doc, coverPlan.audioOffset)
+            ? documentAudioTimeline(doc, {
+                offsetSec: coverPlan.audioOffset,
+                ...(config.processedAudio ? { processedAudio: config.processedAudio } : {}),
+              })
             : [];
         const aacSupported =
           timeline.length > 0
@@ -875,17 +859,17 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         if (tierDecision.tier === 1 || tierDecision.tier === 2) {
           setPhase('Preparing audio…');
           try {
-            const buffers = await resolveAudioBuffers(timeline, {
-              audio: config.audio,
-              images,
-              mediaProvider: config.mediaProvider,
-              resourcePolicy: config.resourcePolicy,
-            });
+            const { buffers, missing: missingSources } = await loadAudioTimelineSources(
+              timeline,
+              exportMediaReader({
+                audio: config.audio,
+                images,
+                mediaProvider: config.mediaProvider,
+                resourcePolicy: config.resourcePolicy,
+              }),
+            );
             try {
               if (cancelled()) return;
-              const missingSources = [...new Set(timeline.map((clip) => clip.src))].filter(
-                (src) => !buffers.has(src),
-              );
               if (missingSources.length > 0) {
                 audioReasonLocal = `Audio files could not be loaded: ${missingSources.join(', ')}`;
                 if (audioPolicy === 'require') throw new Error(audioReasonLocal);
@@ -893,14 +877,10 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
               if (buffers.size === 0) {
                 audioReasonLocal ??= 'Audio files for this document could not be loaded.';
               } else {
-                const totalAudioDur = timeline.reduce(
-                  (max, c) => Math.max(max, c.startSec + c.durationSec),
-                  exportDuration,
-                );
-                renderedAudio = await renderAudioTimeline(
+                renderedAudio = await mixAudioTimeline(
                   timeline,
                   buffers,
-                  totalAudioDur,
+                  exportDuration,
                   EXPORT_AUDIO_SAMPLE_RATE,
                 );
                 if (cancelled()) return;

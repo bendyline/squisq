@@ -27,6 +27,8 @@ import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
+import type { DictationControl, SpeechInputCapability } from './speech/types';
+import { DictationStateContext, useDictationController } from './speech/useDictationController';
 import {
   DocumentVersionManager,
   type PrunePolicy,
@@ -476,6 +478,13 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * for the session.
    */
   proofingIgnoreStore: ProofingIgnoreStore | null;
+  /**
+   * Imperative dictation control for the host-injected `speechInput`
+   * capability — e.g. to drive dictation from a native menu command in a
+   * component rendered inside the shell's slots. `null` when no capability
+   * was injected. See docs/speech-input.md.
+   */
+  dictation: DictationControl | null;
   /** The document's article id — part of the proofing document ref. */
   articleId: string;
   /**
@@ -619,6 +628,11 @@ export interface EditorProviderProps {
   proofingGrammarEnabled?: boolean;
   /** Host-owned per-document storage for dismissed proofing findings. */
   proofingIgnoreStore?: ProofingIgnoreStore | null;
+  /**
+   * Speech-input (dictation) capability. Omit for no dictation; see
+   * `EditorShellProps.speechInput`.
+   */
+  speechInput?: SpeechInputCapability | null;
   /**
    * Async provider for sibling-document suggestions in the link dialog.
    * Omit to fall back to URL-only link insertion.
@@ -793,6 +807,7 @@ export function EditorProvider({
   proofingSpellingEnabled = true,
   proofingGrammarEnabled = true,
   proofingIgnoreStore = null,
+  speechInput = null,
   documentLinkProvider = null,
   fenceRenderers = null,
   onCopyCode,
@@ -1493,6 +1508,15 @@ export function EditorProvider({
     return () => clearTimeout(timer);
   }, [mediaEditRenders]);
 
+  const dictationController = useDictationController({
+    capability: speechInput,
+    activeView,
+    editorMode,
+    tiptapEditor,
+    monacoEditor,
+  });
+  const dictation = dictationController.control;
+
   const value = useMemo<EditorContextValue>(
     () => ({
       markdownSource,
@@ -1539,6 +1563,7 @@ export function EditorProvider({
       proofingSpellingEnabled,
       proofingGrammarEnabled,
       proofingIgnoreStore,
+      dictation,
       articleId,
       documentLinkProvider,
       fenceRenderers,
@@ -1617,6 +1642,7 @@ export function EditorProvider({
       proofingSpellingEnabled,
       proofingGrammarEnabled,
       proofingIgnoreStore,
+      dictation,
       articleId,
       documentLinkProvider,
       fenceRenderers,
@@ -1664,5 +1690,11 @@ export function EditorProvider({
     ],
   );
 
-  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;
+  return (
+    <EditorContext.Provider value={value}>
+      <DictationStateContext.Provider value={dictationController.state}>
+        {children}
+      </DictationStateContext.Provider>
+    </EditorContext.Provider>
+  );
 }

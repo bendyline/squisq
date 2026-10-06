@@ -13,6 +13,7 @@ export default defineConfig({
     'teleprompter/index': 'src/entries/teleprompter.ts',
     'proofing/index': 'src/entries/proofing.ts',
     'review/index': 'src/entries/review.ts',
+    'speech/index': 'src/entries/speech.ts',
   },
   format: ['esm'],
   dts: true,

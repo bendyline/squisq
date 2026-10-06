@@ -82,6 +82,7 @@ import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanva
 import { FindHighlightExtension } from './find/FindHighlightExtension';
 import { ProofingExtension } from './proofing/ProofingExtension';
 import { ReviewExtension } from './review/ReviewExtension';
+import { DictationExtension } from './speech/DictationExtension';
 import { syncAccessoryFileLinkPlaceholders } from './accessoryFileLinks';
 
 type MediaMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
@@ -427,6 +428,7 @@ export function WysiwygEditor({
       FindHighlightExtension,
       ProofingExtension,
       ReviewExtension,
+      DictationExtension,
     ],
     content: markdownToTiptap(initialDisplayBodyRef.current),
     onUpdate: ({ editor: ed }) => {

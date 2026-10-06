@@ -17,8 +17,10 @@
 
 import {
   buildNarrationTimingJson,
+  resolveNarrationTimingGenerator,
   type NarrationAlignment,
   type NarrationScript,
+  type NarrationTimingGenerator,
   type NarrationTimingJsonV3,
 } from '@bendyline/squisq/narration';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
@@ -34,10 +36,18 @@ export interface NarrationSavePlanArgs {
   durationSec: number;
   audioExt: string;
   cameraExt: string | null;
-  baseWpm: number;
+  /** Speaking rate the take was paced at; recorded as `generator.baseWpm`. */
+  baseWpm?: number;
   cameraOffsetSec?: number;
   /** User-chosen filename base for the audio file; default timestamped `narration-…`. */
   audioBasename?: string;
+  /**
+   * Provenance written to the sidecar's `generator`. Defaults to the
+   * teleprompter aligner (`squisq-teleprompter` / `dsp-align`); a host that
+   * produced the timings itself names itself here — e.g.
+   * `{ name: 'my-tts', method: 'tts' }` for generated narration.
+   */
+  generator?: NarrationTimingGenerator;
 }
 
 export interface NarrationSavePlan {
@@ -55,9 +65,13 @@ export interface NarrationSavePlan {
 }
 
 export function buildNarrationSavePlan(args: NarrationSavePlanArgs): NarrationSavePlan {
+  const timingOptions = {
+    ...(args.baseWpm !== undefined ? { baseWpm: args.baseWpm } : {}),
+    ...(args.generator ? { generator: args.generator } : {}),
+  };
   const sidecarPayload: NarrationTimingJsonV3 = args.alignment
     ? buildNarrationTimingJson(args.script, args.alignment, args.durationSec, {
-        baseWpm: args.baseWpm,
+        ...timingOptions,
         ...(args.cameraOffsetSec !== undefined ? { cameraOffsetSec: args.cameraOffsetSec } : {}),
       })
     : {
@@ -66,7 +80,7 @@ export function buildNarrationSavePlan(args: NarrationSavePlanArgs): NarrationSa
         duration: args.durationSec,
         bookmarks: [],
         blocks: [],
-        generator: { name: 'squisq-teleprompter', method: 'dsp-align', baseWpm: args.baseWpm },
+        generator: resolveNarrationTimingGenerator(timingOptions),
       };
 
   return {

@@ -711,7 +711,10 @@ export type {
   NarrationRecorderState,
   NarrationTake,
   NarrationSavePlan,
+  NarrationSavePlanArgs,
+  NarrationSaveProgress,
   NarrationSaveResult,
+  ExecuteNarrationSaveDeps,
   MicAnalysisHandle,
   MicAnalysisStatus,
   FloatingWindowManager,
@@ -762,3 +765,23 @@ export type {
   ProofDialect,
   ProofRange,
 } from './proofing/index.js';
+
+// Speech input (dictation) — the host-injected recognizer contract. Capture,
+// the toolbar microphone and literal insertion are wired by `EditorShell`'s
+// `speechInput` prop; see `@bendyline/squisq-editor-react/speech` for the
+// narrow entry and docs/speech-input.md for the host guide.
+export {
+  SPEECH_INPUT_SAMPLE_RATE,
+  isSpeechInputProviderFactory,
+  resolveSpeechInputProvider,
+} from './speech/index.js';
+export type {
+  DictationControl,
+  SpeechInputCapability,
+  SpeechInputProvider,
+  SpeechInputProviderFactory,
+  SpeechInputReadiness,
+  SpeechInputReadinessState,
+  SpeechInputTranscribeOptions,
+  SpeechInputTranscript,
+} from './speech/index.js';

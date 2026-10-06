@@ -1665,6 +1665,38 @@ All tuning configs (`FeatureConfig`, `VadConfig`, `NucleiConfig`,
 `PacingConfig`, `AlignConfig`) are exported alongside frozen `DEFAULT_*`
 defaults.
 
+```ts
+// Timing sidecar v3 (`<audio>.timing.json`) — word bookmarks + per-block ranges.
+function buildNarrationTimingJson(
+  script: NarrationScript,
+  alignment: NarrationAlignment,
+  durationSec: number,
+  options?: BuildNarrationTimingOptions,
+): NarrationTimingJsonV3;
+function parseNarrationTimingJson(
+  data: ArrayBuffer | Uint8Array | string,
+): NarrationTimingJsonV3 | null;
+interface BuildNarrationTimingOptions {
+  cameraOffsetSec?: number;
+  baseWpm?: number;
+  // Provenance; default { name: 'squisq-teleprompter', method: 'dsp-align' }.
+  generator?: NarrationTimingGenerator;
+}
+interface NarrationTimingGenerator {
+  name: string;
+  method: NarrationTimingMethod;
+  baseWpm?: number;
+}
+// 'tts' = host-generated narration: block/sentence boundaries exact (each was
+// synthesized separately), word times interpolated.
+type NarrationTimingMethod = 'dsp-align' | 'presenter-advance' | 'tts';
+function resolveNarrationTimingGenerator(
+  options?: BuildNarrationTimingOptions,
+): NarrationTimingGenerator;
+```
+
+Host guide for generated narration: `docs/narration-and-audio-export.md`.
+
 ---
 
 ### Subpath: Proof
@@ -3141,6 +3173,41 @@ markdown mode with `{[…]}` spans blanked — because wrap policy makes
 Write-view text differ from the source. Suggestions apply as one undo step in
 either view, guarded against stale text.
 
+### Speech input (dictation)
+
+**Import:** `@bendyline/squisq-editor-react/speech` (also re-exported from the
+root). A toolbar microphone in the Write and Source views that inserts each
+recognized phrase at the caret as literal text, one undo step per phrase, with
+an interim caret marker that never touches the document. Squisq ships no
+recognizer: the host passes one through `EditorShell`'s `speechInput` prop
+(instance = host-owned, factory = shell-owned); absent, no button renders and
+no capture code loads. Full host guide: `docs/speech-input.md`.
+
+```ts
+interface SpeechInputProvider {
+  readonly id: string;
+  readonly label: string;
+  status(): Promise<{
+    state: 'ready' | 'download-required' | 'unavailable' | 'permission-required';
+    reason?: string;
+  }>;
+  onStatus?(listener: (readiness: SpeechInputReadiness) => void): () => void;
+  prepare?(signal: AbortSignal): Promise<void>; // warm-up, concurrent with the mic request
+  requestSetup?(): void; // clicked while 'download-required'
+  // One self-contained take: mono 16-bit PCM WAV at 16 kHz (SPEECH_INPUT_SAMPLE_RATE).
+  transcribe(
+    wav: ArrayBuffer,
+    o: { prompt?: string; language?: string; signal: AbortSignal },
+  ): Promise<{ text: string }>;
+  dispose?(): void;
+}
+type SpeechInputCapability = SpeechInputProvider | (() => SpeechInputProvider);
+function resolveSpeechInputProvider(capability: SpeechInputCapability): SpeechInputProvider;
+
+// On the editor context, for host menus rendered inside the shell's slots:
+useEditorContext().dictation; // { active: boolean; available: boolean; toggle(): void } | null
+```
+
 ### Context
 
 ```ts
@@ -3353,7 +3420,16 @@ function useFloatingWindow(styleCss: string): FloatingWindowHandle;
 // the `{[audio src=… anchor=document]}` preamble)
 function useNarrationRecorder(options: UseNarrationRecorderOptions): NarrationRecorderController;
 function buildNarrationSavePlan(args: NarrationSavePlanArgs): NarrationSavePlan;
-function executeNarrationSave(plan, take, deps): Promise<NarrationSaveResult>;
+// args: { script, alignment | null, durationSec, audioExt, cameraExt | null,
+//   baseWpm?, cameraOffsetSec?, audioBasename?,
+//   generator?: NarrationTimingGenerator } — generator defaults to the aligner;
+//   a TTS host passes { name: 'my-tts', method: 'tts' }
+function executeNarrationSave(
+  plan: NarrationSavePlan,
+  take: { audioBlob: Blob; audioMime: string; cameraBlob: Blob | null; cameraMime: string | null },
+  deps: ExecuteNarrationSaveDeps, // { mediaProvider, container, getMarkdownSource, setMarkdownSource, bumpMediaRevision }
+  progress?: NarrationSaveProgress, // pass back on retry to reuse written audio
+): Promise<NarrationSaveResult>;
 function insertNarrationPreamble(
   source: string,
   audioPath: string,
@@ -3722,6 +3798,53 @@ interface MainThreadEncoder {
   finalize(): Promise<ArrayBuffer>;
   close(): void;
 }
+```
+
+### Audio export
+
+Also exported from `@bendyline/squisq-video-react/encoder`. Host guide:
+`docs/narration-and-audio-export.md`.
+
+```ts
+type AudioFileFormat = 'm4a' | 'opus-webm' | 'wav';
+interface AudioFileEncoderOptions {
+  readonly format: AudioFileFormat;
+  readonly sampleRate: number; // input PCM rate; resampled in-stream when the codec needs it
+  readonly channels: 1 | 2;
+  readonly bitrate?: number; // lossy only
+}
+interface AudioFileEncoder {
+  readonly format: AudioFileFormat;
+  readonly mimeType: string; // 'audio/mp4' | 'audio/webm' | 'audio/wav'
+  readonly extension: string; // 'm4a' | 'webm' | 'wav'
+  append(channels: readonly Float32Array[]): Promise<void>; // planar, streams
+  finish(): Promise<Blob>;
+  cancel(): Promise<void>;
+}
+// WAV always; m4a = WebCodecs AAC (absent on Linux Chromium); opus-webm = WebCodecs Opus.
+function supportedAudioFileFormats(): Promise<readonly AudioFileFormat[]>;
+// Rejects for a format the runtime cannot encode (never switches format).
+function createAudioFileEncoder(options: AudioFileEncoderOptions): Promise<AudioFileEncoder>;
+
+interface RenderDocumentAudioOptions {
+  readMedia(src: string): Promise<ArrayBuffer | null>;
+  readonly sampleRate?: number; // default 48000
+  readonly signal?: AbortSignal;
+  readonly processedAudio?: (clip: MediaClip) => string | undefined; // media-edit renders
+  readonly missingMedia?: 'error' | 'skip'; // default 'error'
+}
+// Mix of every clip the doc schedules, spanning the doc's duration (stereo). Null when silent.
+function renderDocumentAudio(
+  doc: Doc,
+  options: RenderDocumentAudioOptions,
+): Promise<AudioBuffer | null>;
+// The underlying OfflineAudioContext mixer (shared with MP4 export).
+function renderAudioTimeline(
+  clips: AudioTimelineClip[],
+  buffers: Map<string, ArrayBuffer>,
+  totalDurationSec: number,
+  sampleRate?: number,
+): Promise<AudioBuffer | null>;
 ```
 
 ---

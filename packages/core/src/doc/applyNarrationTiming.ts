@@ -15,6 +15,11 @@
  * (a conflicting pin gets an `info` diagnostic); narration ranges win
  * over per-block audio-segment mapping and reading-time estimates.
  *
+ * Captions: when the sidecar carries word timings (v3 bookmarks), the doc's
+ * reading-time caption estimates are replaced by captions built from those
+ * words, mapped through the clip's trim/cuts — so captions follow the voice
+ * instead of drifting after re-timing. Without word timings they are kept.
+ *
  * Contiguity: the block strip never opens a gap (or an overlap) around a
  * pin. When a pin moves a block's end away from the take's range
  * boundary, every later narration anchor ripples by the same delta —
@@ -23,10 +28,11 @@
  * own absolute schedule; the diagnostic records that drift.
  */
 
-import type { Block, Doc, DocDiagnostic } from '../schemas/Doc.js';
+import type { AudioBookmark, Block, CaptionTrack, Doc, DocDiagnostic } from '../schemas/Doc.js';
 import type { MediaClip } from '../schemas/Media.js';
 import type { ContentContainer } from '../storage/ContentContainer.js';
 import { estimateTimeFromText } from '../timing/narrationTiming.js';
+import { buildCaptionTrack } from '../timing/captions.js';
 import { buildNarrationScript } from '../narration/script.js';
 import {
   parseNarrationTimingJson,
@@ -202,6 +208,55 @@ function mapRangesToPlayed(
   return mapped;
 }
 
+/**
+ * Captions rebuilt from the take's word bookmarks, on the doc timeline.
+ *
+ * `markdownToDoc` estimates captions from reading time, so once the blocks
+ * follow the voice those estimates drift. A sidecar with word timings knows
+ * exactly when each word is spoken: bookmarks move from take time to played
+ * time (a word trimmed away, inside a cut, or past the end of the take is
+ * dropped — nobody hears it) and
+ * are offset by the clip's start, so captions follow the recorded voice the
+ * same way the narration audio does. Null when the sidecar has no word
+ * timings (v1, presenter-advance) — the caller then leaves captions alone.
+ */
+function narrationCaptions(
+  doc: Doc,
+  clip: MediaClip,
+  timing: NarrationTimingJsonV3,
+  timeMap: MediaTimeMap | null,
+  playedDuration: number,
+): CaptionTrack | null {
+  if (timing.bookmarks.length === 0 || !(playedDuration > 0)) return null;
+  const bookmarks: AudioBookmark[] = [];
+  for (const bookmark of timing.bookmarks) {
+    if (!timeMap) {
+      // A word stamped past the end of the take is never heard.
+      if (bookmark.time <= playedDuration) bookmarks.push(bookmark);
+    } else if (timeMap.sourceToPlayed(bookmark.time) !== null) {
+      bookmarks.push({ ...bookmark, time: timeMap.snapSourceToPlayed(bookmark.time) });
+    }
+  }
+  if (bookmarks.length === 0) return null;
+  // Hand-edited sidecars are not guaranteed monotonic; phrasing assumes order.
+  bookmarks.sort((a, b) => a.time - b.time);
+  const track = buildCaptionTrack(
+    [
+      {
+        segment: {
+          src: clip.src,
+          name: 'narration',
+          startTime: clip.startAt,
+          duration: playedDuration,
+        },
+        timing: { sourceText: timing.sourceText, bookmarks, duration: playedDuration },
+      },
+    ],
+    doc.captions?.generatedAt ? { generatedAt: doc.captions.generatedAt } : {},
+  );
+  return track.phrases.length > 0 ? track : null;
+}
+
 /** Recursively clone blocks, re-timing matched blocks from their narration ranges. */
 function retimeBlocks(blocks: Block[], ctx: RetimeContext): Block[] {
   return blocks.map((block) => {
@@ -292,10 +347,12 @@ export async function applyNarrationTiming(
     };
     const blocks = retimeBlocks(doc.blocks, ctx);
     const duration = Math.max(clip.startAt + playedDuration, ctx.cursor);
+    const captions = narrationCaptions(doc, clip, timing, timeMap, playedDuration);
     const retimed: Doc = {
       ...doc,
       blocks,
       duration,
+      ...(captions ? { captions } : {}),
       ...(ctx.diagnostics.length > 0
         ? { diagnostics: [...(doc.diagnostics ?? []), ...ctx.diagnostics] }
         : {}),

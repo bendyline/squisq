@@ -22,7 +22,10 @@ export {
 export {
   buildNarrationSavePlan,
   executeNarrationSave,
+  type ExecuteNarrationSaveDeps,
   type NarrationSavePlan,
+  type NarrationSavePlanArgs,
+  type NarrationSaveProgress,
   type NarrationSaveResult,
 } from './recording/narrationSave';
 export {
