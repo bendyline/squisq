@@ -87,7 +87,34 @@ const imported = await pdfToMarkdownDoc(pdfBuffer);
 const container = await pdfToContainer(pdfBuffer);
 ```
 
-**Fidelity:** export uses pdf-lib's standard 14 fonts (`themeId` affects colors only). PDF has no semantic structure, so import is heuristic and best-effort: headings are detected by font size, and tables / code blocks / blockquotes / links via the `detectTables` / `detectCodeBlocks` / `detectBlockquotes` / `detectLinks` options (all default true). `pdfToMarkdownDoc` is text-only; `pdfToContainer` also extracts embedded XObject and inline raster images in browsers and Node, placed **by page** — each image is inserted after the last content block from its page (image-only pages fall back to the nearest preceding page with content, else the document end). Placement is page-level only; masks, vector artwork, and images that PDF.js cannot expose as decoded pixels are not emitted.
+**Fidelity:** export uses pdf-lib's standard 14 fonts (`themeId` affects colors only). Pass `images` (keyed by the markdown URL, as for DOCX) to draw PNG and JPEG images that stand alone in a paragraph; other images print as an `[Image: alt]` note. PDF has no semantic structure, so import is heuristic and best-effort: headings are detected by font size, and tables / code blocks / blockquotes / links via the `detectTables` / `detectCodeBlocks` / `detectBlockquotes` / `detectLinks` options (all default true). `pdfToMarkdownDoc` is text-only; `pdfToContainer` also extracts embedded XObject and inline raster images in browsers and Node, placed **by page** — each image is inserted after the last content block from its page (image-only pages fall back to the nearest preceding page with content, else the document end). Placement is page-level only; masks, vector artwork, and images that PDF.js cannot expose as decoded pixels are not emitted.
+
+### Diagrams as pictures
+
+DOCX, EPUB, PDF and PPTX cannot draw Mermaid or Squisq diagrams, so on their
+own they export diagram source as text. `rasterizeDiagrams` finds every
+diagram — Mermaid fences, ASCII `diagram`/`timeline`/`tree` fences, and
+`{[drawing]}`/`{[layout]}`/`{[diagram]}` heading blocks — asks a renderer for
+a PNG of each, and returns the document with each diagram replaced by an
+image plus the bytes for the exporters' `images` option. Drawing needs a
+browser; `@bendyline/squisq-react/diagram-pictures` provides the renderer.
+
+```ts
+import { rasterizeDiagrams } from '@bendyline/squisq-formats/diagrams';
+import { createDiagramPictureRenderer } from '@bendyline/squisq-react/diagram-pictures';
+
+const pictured = await rasterizeDiagrams(markdownDoc, createDiagramPictureRenderer());
+const docx = await markdownDocToDocx(pictured.markdownDoc, { images: pictured.images });
+const pdf = await markdownDocToPdf(pictured.markdownDoc, { images: pictured.images });
+
+// PPTX keeps drawings, timelines and ASCII diagrams as native shapes;
+// only Mermaid needs a picture.
+const pptx = await docToPptx(doc, { diagramImages: pictured.mermaid });
+```
+
+A diagram the renderer cannot draw stays as source; the export never fails on
+it. Image entries carry their display size (`width`/`height` in CSS pixels),
+so a picture rendered at 2× prints at 1×.
 
 ### HTML
 
@@ -289,18 +316,19 @@ Also exported: `createRegistry` / `defaultRegistry` / `defaultFormats`, `BUILTIN
 
 ## Subpath Exports
 
-| Subpath                               | Contents                                                                       |
-| ------------------------------------- | ------------------------------------------------------------------------------ |
-| `@bendyline/squisq-formats/docx`      | DOCX import/export (+ `docxToContainer`)                                       |
-| `@bendyline/squisq-formats/pdf`       | PDF import/export (+ `pdfToContainer`, `configurePdfWorker`)                   |
-| `@bendyline/squisq-formats/html`      | Player HTML export, static plain-HTML export + bundles, HTML import            |
-| `@bendyline/squisq-formats/epub`      | EPUB 3 e-book export (with optional Media Overlays)                            |
-| `@bendyline/squisq-formats/pptx`      | PPTX export + import (text/lists/tables + slide images)                        |
-| `@bendyline/squisq-formats/xlsx`      | XLSX import + tables-only export                                               |
-| `@bendyline/squisq-formats/csv`       | CSV import/export (RFC 4180)                                                   |
-| `@bendyline/squisq-formats/ooxml`     | Shared OOXML infrastructure (package reader/writer, XML utilities, namespaces) |
-| `@bendyline/squisq-formats/container` | `ContentContainer` ↔ ZIP serialization                                         |
-| `@bendyline/squisq-formats/registry`  | Format registry + programmatic `convert()` (also re-exported from the root)    |
+| Subpath                               | Contents                                                                        |
+| ------------------------------------- | ------------------------------------------------------------------------------- |
+| `@bendyline/squisq-formats/docx`      | DOCX import/export (+ `docxToContainer`)                                        |
+| `@bendyline/squisq-formats/pdf`       | PDF import/export (+ `pdfToContainer`, `configurePdfWorker`)                    |
+| `@bendyline/squisq-formats/html`      | Player HTML export, static plain-HTML export + bundles, HTML import             |
+| `@bendyline/squisq-formats/epub`      | EPUB 3 e-book export (with optional Media Overlays)                             |
+| `@bendyline/squisq-formats/pptx`      | PPTX export + import (text/lists/tables + slide images)                         |
+| `@bendyline/squisq-formats/xlsx`      | XLSX import + tables-only export                                                |
+| `@bendyline/squisq-formats/csv`       | CSV import/export (RFC 4180)                                                    |
+| `@bendyline/squisq-formats/ooxml`     | Shared OOXML infrastructure (package reader/writer, XML utilities, namespaces)  |
+| `@bendyline/squisq-formats/diagrams`  | `rasterizeDiagrams` / `findDiagrams`: diagrams as pictures for document exports |
+| `@bendyline/squisq-formats/container` | `ContentContainer` ↔ ZIP serialization                                          |
+| `@bendyline/squisq-formats/registry`  | Format registry + programmatic `convert()` (also re-exported from the root)     |
 
 The package root re-exports the common converters; `./container`, the plain-HTML/bundle functions, `docxToContainer`, `pdfToContainer`, `PdfPageSize`, and the image utilities are subpath-only.
 

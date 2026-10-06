@@ -26,14 +26,14 @@ const SOURCE = [
 async function loadDocument(page: Page) {
   await page.goto('/');
   await waitForAppReady(page);
-  await page.locator('select').first().selectOption('e2e-tiny');
-  await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
-  await switchView(page, 'Markdown');
-  const raw = page.locator('[data-testid="raw-editor"] .monaco-editor').first();
-  await raw.waitFor({ state: 'visible' });
-  await raw.click();
-  await page.keyboard.press('ControlOrMeta+A');
-  await page.keyboard.insertText(SOURCE);
+  // Uploaded rather than typed into Monaco: select-all is a platform-specific
+  // keystroke, and when it misses, the typed text merges into the sample and
+  // "## Plan" loses a level.
+  await page.getByTestId('site-upload-input').setInputFiles({
+    name: 'sections.md',
+    mimeType: 'text/markdown',
+    buffer: Buffer.from(SOURCE),
+  });
   await switchView(page, 'Editor');
   await expect(page.locator('.tiptap.ProseMirror')).toContainText('Closing paragraph.');
 }
@@ -57,15 +57,17 @@ test('Insert → Layout lands at the end of the section without capturing text',
   await expect(editor.locator('p', { hasText: 'Second paragraph of the plan.' })).toBeVisible();
 
   const source = await readMarkdown(page);
+  expect(source).toMatch(/^## Plan$/mu);
   const second = source.indexOf('Second paragraph of the plan.');
   const heading = /^(#{2,5}) Layout \{\[layout\]\}/mu.exec(source);
   const next = source.indexOf('## Next');
   expect(second).toBeGreaterThan(-1);
   expect(heading?.index ?? -1).toBeGreaterThan(second);
   expect(next).toBeGreaterThan(heading?.index ?? Infinity);
-  // Shallow enough that "## Next" closes it; its text layer one level deeper.
+  // One level under "## Plan", so it nests in the section and "## Next" still
+  // closes it; its text layer one level deeper.
   const depth = heading?.[1]?.length ?? 0;
-  expect(depth).toBe(2);
+  expect(depth).toBe(3);
   expect(source).toMatch(new RegExp(`^#{${String(depth + 1)}}\\s+\\{#text-1\\} \\{\\[text `, 'mu'));
 });
 
