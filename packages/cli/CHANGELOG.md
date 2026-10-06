@@ -1,3 +1,16 @@
+## @bendyline/squisq-cli [2.8.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.8.15...@bendyline/squisq-cli@2.8.16) (2026-10-06)
+
+### Bug Fixes
+
+* Dictation updates ([#75](https://github.com/bendyline/squisq/issues/75)) ([20b4fbb](https://github.com/bendyline/squisq/commit/20b4fbb3e5470c0a6158a4726ebf18dde0d552cb))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.15
+* **@bendyline/squisq-formats:** upgraded to 2.6.15
+* **@bendyline/squisq-video:** upgraded to 2.3.19
+
 ## @bendyline/squisq-cli [2.8.15](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.8.14...@bendyline/squisq-cli@2.8.15) (2026-10-06)
 
 ### Bug Fixes

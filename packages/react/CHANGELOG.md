@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.11.17](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.16...@bendyline/squisq-react@2.11.17) (2026-10-06)
+
+### Bug Fixes
+
+* Dictation updates ([#75](https://github.com/bendyline/squisq/issues/75)) ([20b4fbb](https://github.com/bendyline/squisq/commit/20b4fbb3e5470c0a6158a4726ebf18dde0d552cb))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.15
+
 ## @bendyline/squisq-react [2.11.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.15...@bendyline/squisq-react@2.11.16) (2026-10-06)
 
 ### Bug Fixes

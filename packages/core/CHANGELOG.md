@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.11.15](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.14...@bendyline/squisq@2.11.15) (2026-10-06)
+
+### Bug Fixes
+
+* Dictation updates ([#75](https://github.com/bendyline/squisq/issues/75)) ([20b4fbb](https://github.com/bendyline/squisq/commit/20b4fbb3e5470c0a6158a4726ebf18dde0d552cb))
+
 ## @bendyline/squisq [2.11.14](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.13...@bendyline/squisq@2.11.14) (2026-10-06)
 
 ### Bug Fixes
