@@ -314,3 +314,55 @@ describe('documentTitleFromFileName', () => {
     expect(documentTitleFromFileName(undefined)).toBe('');
   });
 });
+
+describe('buildPreviewDoc container templates', () => {
+  // A drawing or layout draws its child headings as the canvas. The preview
+  // projection used to drop them outside the compact summaries, so these
+  // blocks showed an empty frame in the slideshow, video, and PPTX.
+  const markdown = [
+    '# Doc',
+    '',
+    'Intro text.',
+    '',
+    '## Org chart {[drawing]}',
+    '',
+    '### CEO {#ceo} {[rectangle x=0 y=0 width=100 height=60]}',
+    '',
+    '### Dev {#dev} {[rectangle x=0 y=150 width=100 height=60]}',
+    '',
+    '### {[arrow from=ceo to=dev]}',
+    '',
+    '## Plan {[layout]}',
+    '',
+    '### {#t1} {[text x=100 y=100 width=800 height=200 fontSize=48]}',
+    '',
+    'Hello',
+    '',
+    '## Next',
+    '',
+    'More.',
+  ].join('\n');
+
+  it('keeps the children and does not turn them into slides', () => {
+    const slides = previewSlides(markdown);
+    expect(slides.map((slide) => slide.template)).toEqual([
+      'content',
+      'drawing',
+      'layout',
+      'content',
+    ]);
+    expect((slides[1]?.children as unknown[]).length).toBe(3);
+    expect((slides[2]?.children as unknown[]).length).toBe(1);
+  });
+
+  it('materializes the shapes and text instead of the empty hint', () => {
+    const [, drawing, layout] = previewSlides(markdown) as unknown as DocBlock[];
+    const drawingLayers = materializeBlockLayers(drawing!).layers;
+    expect(drawingLayers.some((layer) => layer.id.endsWith('-empty'))).toBe(false);
+    expect(drawingLayers.filter((layer) => layer.type === 'shape')).toHaveLength(2);
+    const layoutText = materializeBlockLayers(layout!)
+      .layers.filter((layer): layer is TextLayer => layer.type === 'text')
+      .map((layer) => layer.content.text);
+    expect(layoutText).toContain('Hello');
+  });
+});

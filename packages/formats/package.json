@@ -107,6 +107,11 @@
       "types": "./dist/outside-in/index.d.ts",
       "import": "./dist/outside-in/index.js",
       "default": "./dist/outside-in/index.js"
+    },
+    "./diagrams": {
+      "types": "./dist/diagrams/index.d.ts",
+      "import": "./dist/diagrams/index.js",
+      "default": "./dist/diagrams/index.js"
     }
   },
   "scripts": {

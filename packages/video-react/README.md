@@ -220,6 +220,36 @@ available, and otherwise skipped with `audioIncluded: false` plus an
 completes. GIF skips audio preparation entirely. `supportsWebCodecsH264(config)` probes a specific encoder
 configuration; `EncoderConfig` and `FfmpegWasmLoadConfig` are also exported.
 
+## Audio export
+
+`@bendyline/squisq-video-react/encoder` also exports a streaming audio-file
+encoder and a whole-document audio mix for hosts that export audio on its own
+(or save generated narration):
+
+```ts
+import {
+  createAudioFileEncoder,
+  renderDocumentAudio,
+  supportedAudioFileFormats,
+} from '@bendyline/squisq-video-react/encoder';
+
+const formats = await supportedAudioFileFormats(); // 'm4a' (AAC), 'opus-webm', 'wav' (always)
+const mixed = await renderDocumentAudio(doc, { readMedia: (src) => container.readFile(src) });
+if (mixed) {
+  const encoder = await createAudioFileEncoder({
+    format: formats[0],
+    sampleRate: mixed.sampleRate,
+    channels: 2,
+  });
+  await encoder.append([mixed.getChannelData(0), mixed.getChannelData(1)]);
+  const file = await encoder.finish(); // encoder.mimeType / encoder.extension
+}
+```
+
+M4A is an audio-only MP4; input at rates the codec rejects (24 kHz TTS for
+AAC) is resampled in-stream. See the
+[host guide](https://github.com/bendyline/squisq/blob/main/docs/narration-and-audio-export.md).
+
 ## Full API Reference
 
 See [docs/API.md](https://github.com/bendyline/squisq/blob/main/docs/API.md)

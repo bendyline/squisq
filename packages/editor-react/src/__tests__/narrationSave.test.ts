@@ -19,6 +19,7 @@ import {
   executeNarrationSave,
   type NarrationSaveProgress,
 } from '../teleprompter/recording/narrationSave';
+import type { ExecuteNarrationSaveDeps, NarrationSavePlanArgs } from '../teleprompter/index';
 import { buildFilename } from '../recorder/formats';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -302,6 +303,55 @@ describe('buildNarrationSavePlan', () => {
     expect(plan.cameraRelativeName).toBe('video/narration-cam.webm');
   });
 
+  it('records the teleprompter aligner as the default generator', () => {
+    const plan = buildNarrationSavePlan({
+      script,
+      alignment,
+      durationSec: 10,
+      audioExt: '.webm',
+      cameraExt: null,
+      baseWpm: 150,
+    });
+    expect(plan.sidecarPayload.generator).toEqual({
+      name: 'squisq-teleprompter',
+      method: 'dsp-align',
+      baseWpm: 150,
+    });
+  });
+
+  it('writes a host-supplied generator (generated narration, method "tts")', () => {
+    const plan = buildNarrationSavePlan({
+      script,
+      alignment,
+      durationSec: 10,
+      audioExt: '.webm',
+      cameraExt: null,
+      generator: { name: 'docblocks-kokoro', method: 'tts' },
+    });
+    expect(plan.sidecarPayload.generator).toEqual({ name: 'docblocks-kokoro', method: 'tts' });
+    const parsed = parseNarrationTimingJson(JSON.stringify(plan.sidecarPayload));
+    expect(parsed?.generator?.method).toBe('tts');
+    expect(parsed?.blocks.length).toBe(script.blocks.length);
+  });
+
+  it('keeps the host generator on the empty-timing fallback too', () => {
+    const plan = buildNarrationSavePlan({
+      script,
+      alignment: null,
+      durationSec: 10,
+      audioExt: '.webm',
+      cameraExt: null,
+      baseWpm: 160,
+      generator: { name: 'docblocks-kokoro', method: 'tts' },
+    });
+    expect(plan.sidecarPayload.blocks).toEqual([]);
+    expect(plan.sidecarPayload.generator).toEqual({
+      name: 'docblocks-kokoro',
+      method: 'tts',
+      baseWpm: 160,
+    });
+  });
+
   it('falls back to the timestamped narration- default without audioBasename', () => {
     const plan = buildNarrationSavePlan({
       script,
@@ -569,5 +619,84 @@ describe('executeNarrationSave — partial failure and retry', () => {
     const result = await executeNarrationSave(makePlan(), makeTake(), h.deps, {});
     expect(h.audioFiles()).toEqual([result.audioPath]);
     expect(h.source).toContain(`{[audio src=${result.audioPath} anchor=document]}`);
+  });
+});
+
+/**
+ * Generated narration (a host's TTS) saves through the same public surface a
+ * recorded take does: the host builds a plan with its own `generator` and runs
+ * `executeNarrationSave` with deps typed from the published entry.
+ */
+describe('executeNarrationSave — host-generated narration', () => {
+  it('writes the audio, a method "tts" sidecar, and the preamble in one source write', async () => {
+    const script = buildNarrationScript(
+      markdownToDoc(parseMarkdown('# One\n\nAlpha beta.\n\n# Two\n\nGamma delta.\n')),
+    );
+    const args: NarrationSavePlanArgs = {
+      script,
+      alignment: {
+        words: script.tokens.map((_, i) => ({ tokenIndex: i, tSec: i * 0.3, interpolated: true })),
+        blocks: script.blocks.map((range, i) => ({
+          blockId: range.blockId,
+          blockIndex: i,
+          charStart: range.charStart,
+          charEnd: range.charEnd,
+          startSec: i * 2,
+          endSec: (i + 1) * 2,
+        })),
+        detectedSyllables: 0,
+        cost: 0,
+      },
+      durationSec: 4,
+      audioExt: '.webm',
+      cameraExt: null,
+      audioBasename: 'narration-generated',
+      generator: { name: 'docblocks-kokoro', method: 'tts' },
+    };
+    const plan = buildNarrationSavePlan(args);
+
+    const sidecars = new Map<string, Uint8Array>();
+    let source = '# One\n\nAlpha beta.\n\n# Two\n\nGamma delta.\n';
+    let sourceWrites = 0;
+    let revisions = 0;
+    const deps: ExecuteNarrationSaveDeps = {
+      mediaProvider: {
+        addMedia: async (name: string) => name,
+        removeMedia: async () => {},
+        resolveUrl: async (p: string) => p,
+        listMedia: async () => [],
+        dispose: () => {},
+      } as unknown as MediaProvider,
+      container: {
+        writeFile: async (path: string, data: Uint8Array) => {
+          sidecars.set(path, data);
+        },
+      } as unknown as ContentContainer,
+      getMarkdownSource: () => source,
+      setMarkdownSource: (next) => {
+        source = next;
+        sourceWrites++;
+      },
+      bumpMediaRevision: () => {
+        revisions++;
+      },
+    };
+
+    const result = await executeNarrationSave(
+      plan,
+      { audioBlob: new Blob(['x']), audioMime: 'audio/webm', cameraBlob: null, cameraMime: null },
+      deps,
+    );
+
+    expect(result.audioPath).toBe('audio/narration-generated.webm');
+    const parsed = parseNarrationTimingJson(sidecars.get(result.sidecarPath)!);
+    expect(parsed?.generator).toEqual({ name: 'docblocks-kokoro', method: 'tts' });
+    expect(parsed?.blocks.map((b) => [b.startSec, b.endSec])).toEqual([
+      [0, 2],
+      [2, 4],
+    ]);
+    expect(sourceWrites).toBe(1);
+    expect(revisions).toBe(1);
+    expect(source).toContain('{[audio src=audio/narration-generated.webm anchor=document]}');
   });
 });

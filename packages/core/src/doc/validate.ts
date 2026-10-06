@@ -7,6 +7,7 @@
  *
  * - unknown template names (with a did-you-mean suggestion)
  * - unknown drawing shapes, and shape annotations used outside a `{[drawing]}`
+ *   or `{[layout]}`; unknown layout layers and layout images without `src=`
  * - `{[…]}` text that was not recognized as an annotation (bad quoting,
  *   non-heading placement, unknown inline icon)
  * - malformed heading-attribute values (`x=abc`, bad `startTime`) and
@@ -157,6 +158,14 @@ function isDrawingBlock(block: Block): boolean {
   return resolveTemplateName(block.template ?? '') === 'drawing';
 }
 
+/** True when `block` is a `{[layout]}` container (after alias resolution). */
+function isLayoutBlock(block: Block): boolean {
+  return resolveTemplateName(block.template ?? '') === 'layout';
+}
+
+/** Layer annotations a `{[layout]}` child may carry besides shape kinds. */
+const LAYOUT_IMAGE_LAYERS = new Set(['image', 'img']);
+
 function checkTemplate(
   block: Block,
   parent: Block | undefined,
@@ -188,12 +197,44 @@ function checkTemplate(
     return;
   }
 
+  // Inside a layout, the annotation names a layer: text, image, or a shape.
+  // Mirrors `computeLayoutLayers`, which skips anything else.
+  if (parent && isLayoutBlock(parent)) {
+    if (LAYOUT_IMAGE_LAYERS.has(requested.toLowerCase())) {
+      if (!block.templateOverrides?.src) {
+        diagnostics.push({
+          severity: 'warning',
+          code: 'layout-image-missing-src',
+          message: `Layout image "${block.id}" has no src= — the layer will be skipped`,
+          blockId: block.id,
+          ...lineOf(block),
+        });
+      }
+      return;
+    }
+    if (normalizeShapeKind(block.template ?? requested) || normalizeShapeKind(requested)) return;
+    const suggestion = nearestName(requested, new Set([...SHAPE_NAMES, 'image']), {
+      map: resolveTemplateName,
+    });
+    diagnostics.push({
+      severity: 'warning',
+      code: 'unknown-layer',
+      message:
+        `"${requested}" is not a layout layer — the child will be skipped. ` +
+        'Layers are text, image, or a drawing shape' +
+        (suggestion ? `. Did you mean "${suggestion}"?` : ''),
+      blockId: block.id,
+      ...lineOf(block),
+    });
+    return;
+  }
+
   // A shape annotation outside a drawing has no parent to interpret it.
   if (isShapeName(requested)) {
     diagnostics.push({
       severity: 'warning',
       code: 'shape-outside-drawing',
-      message: `Shape "${requested}" is only recognized on a child heading of a {[drawing]} block`,
+      message: `Shape "${requested}" is only recognized on a child heading of a {[drawing]} or {[layout]} block`,
       blockId: block.id,
       ...lineOf(block),
     });
@@ -233,8 +274,8 @@ function checkTemplateInputs(
 ): void {
   const requested = block.sourceHeading?.templateAnnotation?.template;
   if (!requested) return;
-  // Inside a drawing, the annotation names a shape primitive, not a template.
-  if (parent && isDrawingBlock(parent)) return;
+  // Inside a drawing or layout, the annotation names a shape or layer, not a template.
+  if (parent && (isDrawingBlock(parent) || isLayoutBlock(parent))) return;
   if (isShapeName(requested)) return;
 
   const canonical = resolveTemplateName(requested);
@@ -271,6 +312,9 @@ function isInputSatisfiable(canonical: string, block: Block, key: string): boole
 /** Numeric geometry keys carried in a shape's `{[…]}` params. */
 const NUMERIC_SHAPE_KEYS = ['x', 'y', 'width', 'height', 'w', 'h', 'strokeWidth', 'borderRadius'];
 
+/** Numeric keys a layout layer's `{[…]}` params may carry (geometry plus text metrics). */
+const NUMERIC_LAYER_KEYS = [...NUMERIC_SHAPE_KEYS, 'fontSize', 'lineHeight', 'padding'];
+
 /** Re-run heading-attribute coercion to surface its warnings with context. */
 function checkAttributeCoercion(
   block: Block,
@@ -292,11 +336,14 @@ function checkAttributeCoercion(
     }
   }
 
-  // A drawing shape's geometry lives in its `{[shape …]}` params
+  // A drawing shape's or layout layer's geometry lives in its `{[… ]}` params
   // (templateOverrides), not the Pandoc block — validate those numerics too.
-  if (parent && isDrawingBlock(parent) && isShapeName(block.template)) {
+  const inDrawing = parent !== undefined && isDrawingBlock(parent) && isShapeName(block.template);
+  const inLayout = parent !== undefined && isLayoutBlock(parent);
+  if (inDrawing || inLayout) {
     const overrides = block.templateOverrides ?? {};
-    for (const key of NUMERIC_SHAPE_KEYS) {
+    const label = inLayout ? 'Layout layer' : 'Drawing shape';
+    for (const key of inLayout ? NUMERIC_LAYER_KEYS : NUMERIC_SHAPE_KEYS) {
       const raw = overrides[key];
       if (raw == null) continue;
       const value = raw.replace(/,\s*$/, '').trim();
@@ -304,7 +351,7 @@ function checkAttributeCoercion(
         diagnostics.push({
           severity: 'warning',
           code: 'invalid-attribute',
-          message: `Drawing shape "${block.id}": "${key}" is not a number (${JSON.stringify(raw)})`,
+          message: `${label} "${block.id}": "${key}" is not a number (${JSON.stringify(raw)})`,
           blockId: block.id,
           ...lineOf(block),
         });

@@ -27,6 +27,8 @@ import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
+import type { DictationControl, SpeechInputCapability } from './speech/types';
+import { DictationStateContext, useDictationController } from './speech/useDictationController';
 import {
   DocumentVersionManager,
   type PrunePolicy,
@@ -35,8 +37,21 @@ import {
 } from '@bendyline/squisq/versions';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
+import { createDocument } from '@tiptap/core';
+import { closeHistory } from '@tiptap/pm/history';
 import { markdownToTiptap } from './tiptapBridge';
 import { getBlockSlices, sliceIndexAtOffset, type BlockSlice } from './blockRange';
+import { tiptapBlockInsertion } from './blockInsertion';
+import {
+  applySourceEditsToText,
+  blockInsertionPoint,
+  joinBlockAt,
+  minimalReplaceEdit,
+  normalizeSourceEdits,
+  type BlockInsertionContext,
+  type BlockPlacement,
+  type MarkdownSourceEdit,
+} from './sourceEdits';
 import { resolveFileKind } from './fileKind';
 import { useBlockNavigator } from './useBlockNavigator';
 import { embeddedMediaClips } from './mediaEdit/mediaEditTargets';
@@ -109,6 +124,28 @@ export type DocumentLinkProvider = (query: string) => Promise<DocumentLinkCandid
 // ─── Types ───────────────────────────────────────────────
 
 export type EditorView = 'raw' | 'wysiwyg' | 'preview';
+
+/** Options for {@link EditorActions.applySourceEdits}. */
+export interface ApplySourceEditsOptions {
+  /**
+   * The source the edits were planned against. When the document no longer
+   * matches it, nothing is applied and the action returns false.
+   */
+  baseSource?: string;
+}
+
+/**
+ * Builds the markdown for {@link EditorActions.insertBlockAfterCursor} once the
+ * insertion point is known, so a heading-based block can pick a depth that
+ * fits there. Return null to cancel.
+ */
+export type BlockInsertionBuilder = (context: BlockInsertionContext) => string | null;
+
+/** Options for {@link EditorActions.insertBlockAfterCursor}. */
+export interface InsertBlockOptions {
+  /** Defaults to `'afterBlock'`. Use `'sectionEnd'` for heading-based blocks. */
+  placement?: BlockPlacement;
+}
 
 /** What is selected in the active editing surface. */
 export interface EditorSelectionInfo {
@@ -349,8 +386,40 @@ export interface EditorActions {
   getBlockAtCursor: () => BlockSlice | null;
   /** Insert text at the current cursor position in the active editor */
   insertAtCursor: (text: string) => void;
-  /** Replace all editor content with the given text */
+  /**
+   * Replace all editor content with the given text. Undoable as one step in
+   * Write and Source views (Document layout); elsewhere it replaces the
+   * source directly.
+   */
   replaceAll: (text: string) => void;
+  /**
+   * Apply `{ start, end, text }` edits to the full markdown source as ONE
+   * undoable step. Offsets refer to `markdownSource` (frontmatter included).
+   *
+   * Source view edits Monaco's model in place, so the cursor, scroll and undo
+   * history survive. Write view loads the result as a minimal change.
+   * Returns false, applying nothing, in Preview, outside the Document layout,
+   * when the edits overlap or fall outside the source, or when the source no
+   * longer matches `options.baseSource`.
+   */
+  applySourceEdits: (
+    edits: readonly MarkdownSourceEdit[],
+    options?: ApplySourceEditsOptions,
+  ) => boolean;
+  /**
+   * Insert a markdown block near the cursor as ONE undoable step, leaving the
+   * selection where it is.
+   *
+   * `'afterBlock'` (default) puts it after the top-level block holding the
+   * cursor; `'sectionEnd'` puts it just before the next heading. Neither ever
+   * lands among a drawing's or layout's child headings. Pass a builder to
+   * choose the markdown once the surrounding heading depths are known.
+   * Returns false when the surface cannot be edited or the builder cancels.
+   */
+  insertBlockAfterCursor: (
+    block: string | BlockInsertionBuilder,
+    options?: InsertBlockOptions,
+  ) => boolean;
   /**
    * Request the modal image editor open on the given relative media path.
    * The path must resolve through the active `mediaProvider`. No-op when
@@ -476,6 +545,13 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * for the session.
    */
   proofingIgnoreStore: ProofingIgnoreStore | null;
+  /**
+   * Imperative dictation control for the host-injected `speechInput`
+   * capability — e.g. to drive dictation from a native menu command in a
+   * component rendered inside the shell's slots. `null` when no capability
+   * was injected. See docs/speech-input.md.
+   */
+  dictation: DictationControl | null;
   /** The document's article id — part of the proofing document ref. */
   articleId: string;
   /**
@@ -619,6 +695,11 @@ export interface EditorProviderProps {
   proofingGrammarEnabled?: boolean;
   /** Host-owned per-document storage for dismissed proofing findings. */
   proofingIgnoreStore?: ProofingIgnoreStore | null;
+  /**
+   * Speech-input (dictation) capability. Omit for no dictation; see
+   * `EditorShellProps.speechInput`.
+   */
+  speechInput?: SpeechInputCapability | null;
   /**
    * Async provider for sibling-document suggestions in the link dialog.
    * Omit to fall back to URL-only link insertion.
@@ -793,6 +874,7 @@ export function EditorProvider({
   proofingSpellingEnabled = true,
   proofingGrammarEnabled = true,
   proofingIgnoreStore = null,
+  speechInput = null,
   documentLinkProvider = null,
   fenceRenderers = null,
   onCopyCode,
@@ -846,6 +928,9 @@ export function EditorProvider({
   // has no text-editing surface at all; keep the same fallback so that any
   // host that switches into image mode doesn't end up in a stale view id.
   const [markdownSource, setMarkdownSourceRaw] = useState(initialMarkdown);
+  // Latest committed source, for actions that must not act on a stale closure.
+  const markdownSourceRef = useRef(markdownSource);
+  markdownSourceRef.current = markdownSource;
   const [markdownDoc, setMarkdownDocState] = useState<MarkdownDocument | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [activeView, setActiveViewRaw] = useState<EditorView>(
@@ -1338,26 +1423,155 @@ export function EditorProvider({
     [activeView, tiptapEditor, monacoEditor],
   );
 
+  const applySourceEdits = useCallback(
+    (edits: readonly MarkdownSourceEdit[], options?: ApplySourceEditsOptions): boolean => {
+      // Offsets address the full document, which only Document layout binds.
+      if (editorMode !== 'markdown' || layoutModeState !== 'document') return false;
+      if (activeView === 'raw' && monacoEditor) {
+        const model = monacoEditor.getModel();
+        if (!model) return false;
+        const base = model.getValue();
+        if (options?.baseSource !== undefined && options.baseSource !== base) return false;
+        const sorted = normalizeSourceEdits(base, edits);
+        if (!sorted) return false;
+        if (sorted.length === 0) return true;
+        const ops = sorted.map((edit) => {
+          const start = model.getPositionAt(edit.start);
+          const end = model.getPositionAt(edit.end);
+          return {
+            range: {
+              startLineNumber: start.lineNumber,
+              startColumn: start.column,
+              endLineNumber: end.lineNumber,
+              endColumn: end.column,
+            },
+            text: edit.text,
+          };
+        });
+        // Edit the model in place between undo stops — never setValue, which
+        // would clear Monaco's undo stack and reset the cursor.
+        monacoEditor.pushUndoStop();
+        monacoEditor.executeEdits('squisq-source-edits', ops);
+        monacoEditor.pushUndoStop();
+        return true;
+      }
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        const base = markdownSourceRef.current;
+        if (options?.baseSource !== undefined && options.baseSource !== base) return false;
+        const sorted = normalizeSourceEdits(base, edits);
+        if (!sorted) return false;
+        if (sorted.length === 0) return true;
+        // WysiwygEditor syncs this as one minimal, undoable change.
+        setMarkdownSourceRaw(applySourceEditsToText(base, sorted));
+        return true;
+      }
+      return false;
+    },
+    [activeView, editorMode, layoutModeState, monacoEditor, tiptapEditor],
+  );
+
   /**
    * Replace the whole document (file drop, version revert, host reset).
    *
-   * Writing `markdownSource` is the ONLY thing this needs to do: both editing
-   * surfaces already sync themselves from `editorSource` (WysiwygEditor and
-   * RawEditor each run an effect on it), and each applies the transform its
-   * own view requires — Tiptap strips frontmatter and holds it aside, Monaco
-   * keeps the raw text, and in `block` layout mode both scope to the active
-   * block's slice rather than the whole file.
+   * With a live editing surface in Document layout this goes through
+   * `applySourceEdits` as the smallest edit that produces `text`, so it is one
+   * undo step that keeps the caret: Monaco is edited in place (a `setValue`
+   * would wipe its undo history) and the Write view loads a minimal change.
    *
-   * This used to ALSO push `text` straight into the editors, which bypassed
-   * every one of those transforms: Tiptap received frontmatter-inclusive
-   * markdown, so YAML rendered as an `<hr>` plus literal `title: …`
-   * paragraphs until the sync effect corrected it a paint later (a visible
-   * flash and a needless second content reset), and in block mode the whole
-   * document was momentarily loaded into a block-scoped editor.
+   * Otherwise it only writes `markdownSource`: both editing surfaces sync
+   * themselves from `editorSource`, each applying the transform its view
+   * needs — Tiptap strips frontmatter and holds it aside, Monaco keeps the raw
+   * text, and in `block` layout both scope to the active block's slice. (This
+   * used to also push `text` straight into the editors, which bypassed those
+   * transforms: YAML flashed as an `<hr>` plus literal paragraphs, and in
+   * block mode the whole document briefly loaded into a block editor.)
    */
-  const replaceAll = useCallback((text: string) => {
-    setMarkdownSourceRaw(text);
-  }, []);
+  const replaceAll = useCallback(
+    (text: string) => {
+      const base =
+        activeView === 'raw' && monacoEditor
+          ? (monacoEditor.getModel()?.getValue() ?? null)
+          : markdownSourceRef.current;
+      const edit = base === null ? null : minimalReplaceEdit(base, text);
+      if (edit && applySourceEdits([edit])) return;
+      setMarkdownSourceRaw(text);
+    },
+    [activeView, monacoEditor, applySourceEdits],
+  );
+
+  const insertBlockAfterCursor = useCallback(
+    (block: string | BlockInsertionBuilder, options?: InsertBlockOptions): boolean => {
+      if (editorMode !== 'markdown') return false;
+      const placement = options?.placement ?? 'afterBlock';
+      const build = (context: BlockInsertionContext): string | null => {
+        const markdown = typeof block === 'function' ? block(context) : block;
+        return markdown && markdown.trim() ? markdown : null;
+      };
+      if (activeView === 'wysiwyg' && tiptapEditor) {
+        const { pos, ...context } = tiptapBlockInsertion(tiptapEditor.state, placement);
+        const markdown = build(context);
+        if (markdown === null) return false;
+        let content;
+        try {
+          content = createDocument(markdownToTiptap(markdown), tiptapEditor.schema).content;
+        } catch {
+          return false;
+        }
+        if (content.size === 0) return false;
+        // Insert the parsed blocks as top-level nodes in one transaction of
+        // its own: one undo step, never merged with typing just before it.
+        // The selection maps through the insert and stays where it was.
+        const inserted = tiptapEditor
+          .chain()
+          .command(({ tr, dispatch }) => {
+            if (dispatch) {
+              closeHistory(tr);
+              tr.insert(pos, content);
+            }
+            return true;
+          })
+          .run();
+        if (inserted) {
+          const dom = tiptapEditor.view.nodeDOM(pos);
+          if (dom instanceof HTMLElement && typeof dom.scrollIntoView === 'function') {
+            dom.scrollIntoView({ block: 'nearest' });
+          }
+        }
+        return inserted;
+      }
+      if (activeView === 'raw' && monacoEditor) {
+        const model = monacoEditor.getModel();
+        const selection = monacoEditor.getSelection();
+        if (!model || !selection) return false;
+        const source = model.getValue();
+        const cursorOffset = model.getOffsetAt(selection.getEndPosition());
+        const { offset, ...context } = blockInsertionPoint(source, cursorOffset, placement);
+        const markdown = build(context);
+        if (markdown === null) return false;
+        const edit = joinBlockAt(source, offset, markdown);
+        const start = model.getPositionAt(edit.start);
+        const end = model.getPositionAt(edit.end);
+        monacoEditor.pushUndoStop();
+        monacoEditor.executeEdits('squisq-insert-block', [
+          {
+            range: {
+              startLineNumber: start.lineNumber,
+              startColumn: start.column,
+              endLineNumber: end.lineNumber,
+              endColumn: end.column,
+            },
+            text: edit.text,
+          },
+        ]);
+        monacoEditor.pushUndoStop();
+        const firstLine = model.getPositionAt(Math.min(edit.start + 1, model.getValueLength()));
+        monacoEditor.revealLineInCenterIfOutsideViewport?.(firstLine.lineNumber);
+        return true;
+      }
+      return false;
+    },
+    [activeView, editorMode, monacoEditor, tiptapEditor],
+  );
 
   // ── Versioning ─────────────────────────────────────────
   // Build a manager only when versioning is opted in *and* a workspace
@@ -1493,6 +1707,15 @@ export function EditorProvider({
     return () => clearTimeout(timer);
   }, [mediaEditRenders]);
 
+  const dictationController = useDictationController({
+    capability: speechInput,
+    activeView,
+    editorMode,
+    tiptapEditor,
+    monacoEditor,
+  });
+  const dictation = dictationController.control;
+
   const value = useMemo<EditorContextValue>(
     () => ({
       markdownSource,
@@ -1539,6 +1762,7 @@ export function EditorProvider({
       proofingSpellingEnabled,
       proofingGrammarEnabled,
       proofingIgnoreStore,
+      dictation,
       articleId,
       documentLinkProvider,
       fenceRenderers,
@@ -1572,6 +1796,8 @@ export function EditorProvider({
       getBlockAtCursor,
       insertAtCursor,
       replaceAll,
+      applySourceEdits,
+      insertBlockAfterCursor,
       openImageEdit,
       closeImageEdit,
       openMediaEdit,
@@ -1617,6 +1843,7 @@ export function EditorProvider({
       proofingSpellingEnabled,
       proofingGrammarEnabled,
       proofingIgnoreStore,
+      dictation,
       articleId,
       documentLinkProvider,
       fenceRenderers,
@@ -1650,6 +1877,8 @@ export function EditorProvider({
       getBlockAtCursor,
       insertAtCursor,
       replaceAll,
+      applySourceEdits,
+      insertBlockAfterCursor,
       imageEditTarget,
       mediaEditTarget,
       mediaRevision,
@@ -1664,5 +1893,11 @@ export function EditorProvider({
     ],
   );
 
-  return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;
+  return (
+    <EditorContext.Provider value={value}>
+      <DictationStateContext.Provider value={dictationController.state}>
+        {children}
+      </DictationStateContext.Provider>
+    </EditorContext.Provider>
+  );
 }

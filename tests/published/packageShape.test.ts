@@ -51,10 +51,11 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // Includes the three Font Awesome OpenType faces embedded for portable
   // DOCX/PDF/PPTX/EPUB inline-icon export.
   '@bendyline/squisq-formats': 700_000,
-  // Ships the ESM entries plus the light and full standalone players, and the
-  // light player again as an embeddable string — so anything the player
-  // renders is paid roughly four times over.
-  '@bendyline/squisq-react': 2_900_000,
+  // Ships the ESM entries plus the light and full standalone players, and each
+  // again as an embeddable string (`standalone-source`, and the Mermaid-bearing
+  // `standalone-source/full`, ~1.4 MB packed on its own) — so anything the
+  // player renders is paid roughly four times over.
+  '@bendyline/squisq-react': 4_500_000,
   // Columnar store + kernel + TanStack-Virtual renderer; tiny by design.
   '@bendyline/squisq-grid-react': 60_000,
   '@bendyline/squisq-calc': 110_000,
@@ -64,7 +65,8 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // so exports decode clip frames directly (~90 KB packed), plus the
   // media-edit render engine: mediabunny's audio demuxers for imported
   // formats and its WebM/WAV writers (~60 KB packed; RNNoise stays an
-  // external dependency).
+  // external dependency), plus the audio-file encoder's audio-only MP4
+  // writer (loaded lazily, ~287 KB packed in total at release B).
   '@bendyline/squisq-video-react': 300_000,
   '@bendyline/squisq-editor-react': 1_000_000,
   // Includes compressed light and full standalone players plus one shared

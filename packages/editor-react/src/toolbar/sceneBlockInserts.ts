@@ -6,6 +6,8 @@ import {
   mermaidDiagramMarkdown,
 } from '../mermaid/mermaidDiagramTypes';
 import { CODE_SNIPPET_FOCUS_INSERTED_META } from '../codeSnippet/codeSnippetFocus';
+import { tiptapBlockInsertion } from '../blockInsertion';
+import { headingDepthForInsertion } from '../sourceEdits';
 
 // ─── Scene-block inserts (diagram / drawing / layout) ───
 
@@ -114,8 +116,9 @@ export function insertFenceBlock(
       if (!codeBlockType) return false;
       const attrs = lang ? { language: lang } : null;
       const block = codeBlockType.create(attrs, state.schema.text(art));
-      const { $from } = state.selection;
-      const insertPos = $from.depth > 0 ? $from.after(1) : state.doc.content.size;
+      // After the caret's top-level block — or before a drawing/layout the
+      // caret sits in, so the fence never lands among its child headings.
+      const insertPos = tiptapBlockInsertion(state, 'afterBlock').pos;
       if (dispatch) {
         tr.insert(insertPos, block);
         if (options.focusInsertedCodeSnippet) {
@@ -149,8 +152,12 @@ export function insertChartBlock(
     .command(({ tr, state, dispatch }) => {
       const { heading, paragraph, table, tableRow, tableHeader, tableCell } = state.schema.nodes;
       if (!heading) return false;
+      // A chart heading owns everything up to the next heading, so it goes at
+      // the end of the caret's section rather than splitting it.
+      const { pos: insertPos, ...context } = tiptapBlockInsertion(state, 'sectionEnd');
+      const level = headingDepthForInsertion(context) ?? 2;
       const headingNode = heading.create(
-        { level: 2, dataTemplate: opts.template },
+        { level, dataTemplate: opts.template },
         state.schema.text(opts.headingText),
       );
       const nodes = [headingNode];
@@ -166,8 +173,6 @@ export function insertChartBlock(
         );
         nodes.push(table.create(null, Fragment.fromArray([headerRow, ...bodyRows])));
       }
-      const { $from } = state.selection;
-      const insertPos = $from.depth > 0 ? $from.after(1) : state.doc.content.size;
       if (dispatch) {
         tr.insert(insertPos, Fragment.fromArray(nodes));
         // Drop the caret into the new heading's text so it can be renamed.
@@ -197,16 +202,18 @@ export function insertTemplateHeading(
     .command(({ tr, state, dispatch }) => {
       const headingType = state.schema.nodes.heading;
       if (!headingType) return false;
+      // Scene templates consume the headings under them: insert at the end
+      // of the caret's section, deep enough to nest and shallow enough that
+      // the next heading closes the new block.
+      const { pos: insertPos, ...context } = tiptapBlockInsertion(state, 'sectionEnd');
       const heading = headingType.create(
         {
-          level: opts.level ?? 2,
+          level: opts.level ?? headingDepthForInsertion(context, { childLevels: 1 }) ?? 2,
           dataTemplate: opts.template,
           dataBlockAttrs: opts.blockAttrs ?? null,
         },
         state.schema.text(opts.text),
       );
-      const { $from } = state.selection;
-      const insertPos = $from.depth > 0 ? $from.after(1) : state.doc.content.size;
       if (dispatch) {
         tr.insert(insertPos, heading);
         // Drop the caret into the new heading's text so it can be renamed.
@@ -232,19 +239,19 @@ export function insertLayoutBlock(editor: TiptapEditor): void {
       const headingType = state.schema.nodes.heading;
       const paragraphType = state.schema.nodes.paragraph;
       if (!headingType || !paragraphType) return false;
+      const { pos: insertPos, ...context } = tiptapBlockInsertion(state, 'sectionEnd');
+      const level = headingDepthForInsertion(context, { childLevels: 1 }) ?? 2;
       const parent = headingType.create(
-        { level: 2, dataTemplate: 'layout' },
+        { level, dataTemplate: 'layout' },
         state.schema.text('Layout'),
       );
       const child = headingType.create({
-        level: 3,
+        level: level + 1,
         dataTemplate: 'text',
         dataTemplateParams: LAYOUT_STARTER_TEXT_PARAMS,
         dataBlockAttrs: '#text-1',
       });
       const body = paragraphType.create(null, state.schema.text('Layout'));
-      const { $from } = state.selection;
-      const insertPos = $from.depth > 0 ? $from.after(1) : state.doc.content.size;
       if (dispatch) {
         tr.insert(insertPos, Fragment.fromArray([parent, child, body]));
         tr.setSelection(TextSelection.create(tr.doc, insertPos + 1));

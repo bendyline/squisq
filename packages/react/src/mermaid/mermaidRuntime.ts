@@ -64,6 +64,34 @@ export function renderMermaidSvg(
   });
 }
 
+/**
+ * Render one source for a static picture (a document export) rather than for
+ * the page. Labels are SVG text instead of HTML: an SVG with
+ * `<foreignObject>` labels cannot be drawn onto a canvas and read back in
+ * every browser. `fontFamily` should be a system font, because a picture of
+ * the SVG cannot load the page's web fonts.
+ */
+export function renderMermaidSvgForExport(
+  id: string,
+  source: string,
+  theme: Theme = DEFAULT_THEME,
+  fontFamily?: string,
+): Promise<string> {
+  return enqueue(async () => {
+    const mermaid = await loadMermaid();
+    const themeVariables = buildMermaidThemeVariables(theme);
+    mermaid.initialize({
+      ...MERMAID_BASE_CONFIG,
+      theme: 'base',
+      themeVariables: fontFamily ? { ...themeVariables, fontFamily } : themeVariables,
+      htmlLabels: false,
+      journey: { textPlacement: 'tspan' },
+    });
+    const { svg } = await mermaid.render(id, source);
+    return svg;
+  });
+}
+
 export function mermaidRenderErrorMessage(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error);
   return (

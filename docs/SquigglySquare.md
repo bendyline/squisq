@@ -814,7 +814,8 @@ Notes:
   (`x=21, y=25` works) but the canonical form omits it.
 - Shape annotations are only recognized on a drawing's (or layout's) children. A
   `{[rectangle]}` elsewhere is flagged `shape-outside-drawing`; an unknown shape inside
-  a drawing is flagged `unknown-shape` (with a did-you-mean).
+  a drawing is flagged `unknown-shape`, and a layout child that is not a layer is
+  flagged `unknown-layer` (both with a did-you-mean).
 - Authoring is markdown-first: shapes render in previews and exports and git-diff cleanly.
 
 ## Validation
@@ -825,9 +826,11 @@ Diagnostics carry one of three severities: **error**, **warning**, or **info** (
 
 - `unknown-template` — annotation names no built-in, alias, or doc-defined template (includes a did-you-mean suggestion) — _warning_
 - `unknown-shape` — a `{[drawing]}` child's annotation names no known shape (includes a did-you-mean among the shape primitives) — _warning_
-- `shape-outside-drawing` — a shape annotation (`{[rectangle]}`, `{[line]}`, …) on a heading that isn't a drawing's child — _warning_
+- `shape-outside-drawing` — a shape annotation (`{[rectangle]}`, `{[line]}`, …) on a heading that isn't a drawing's or layout's child — _warning_
+- `unknown-layer` — a `{[layout]}` child whose annotation is not a layer (`text`, `image`, or a shape primitive); the child is skipped (includes a did-you-mean) — _warning_
+- `layout-image-missing-src` — a `{[layout]}` image layer with no `src=`; the layer is skipped — _warning_
 - `unparsed-annotation` — literal `{[…]}` text that wasn't recognized (broken quoting, or a `{[…]}` paragraph nested inside a list item / blockquote — those aren't lifted, or an unknown inline icon) — _warning_
-- `invalid-attribute` — malformed heading-attribute values (`x=abc`, bad `startTime`/`duration`) or non-numeric drawing-shape geometry — _warning_
+- `invalid-attribute` — malformed heading-attribute values (`x=abc`, bad `startTime`/`duration`) or non-numeric drawing-shape or layout-layer geometry — _warning_
 - `unknown-input` — a `{[…]}` param key that isn't a known input for the template (includes a did-you-mean among the template's inputs + block-meta keys) — _warning_
 - `invalid-input-value` — a `{[…]}` value outside a closed enum, or one that fails its coercion (bad `zoom`, malformed `center`) — _warning_
 - `missing-input` — a required template input is absent from the annotation and can't be derived from the block's fields, a data fence, or the body — _warning_

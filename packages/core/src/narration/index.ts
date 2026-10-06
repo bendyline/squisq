@@ -80,9 +80,11 @@ export { alignNarration, type AlignInput } from './align.js';
 export {
   buildNarrationTimingJson,
   parseNarrationTimingJson,
+  resolveNarrationTimingGenerator,
   type NarrationTimingJsonV3,
   type NarrationTimingBlock,
   type NarrationTimingMethod,
+  type NarrationTimingGenerator,
   type BuildNarrationTimingOptions,
 } from './sidecar.js';
 

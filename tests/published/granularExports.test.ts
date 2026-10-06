@@ -21,6 +21,7 @@ const expectedSubpaths = {
     './recorder': 'RecorderModal',
     './teleprompter': 'TeleprompterView',
     './proofing': 'createHarperProofingProvider',
+    './speech': 'resolveSpeechInputProvider',
   },
   'video-react': {
     './components': 'VideoExportModal',

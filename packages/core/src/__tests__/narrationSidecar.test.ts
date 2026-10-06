@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { buildNarrationTimingJson, parseNarrationTimingJson } from '../narration/sidecar';
+import {
+  buildNarrationTimingJson,
+  parseNarrationTimingJson,
+  resolveNarrationTimingGenerator,
+  type NarrationTimingMethod,
+} from '../narration/sidecar';
 import { alignNarration } from '../narration/align';
 import { scriptFromMarkdown, takeFromScript } from './narrationTestSignals';
 
@@ -24,6 +29,67 @@ describe('narration sidecar v3', () => {
     expect(parsed!.bookmarks.length).toBe(script.tokens.length);
     expect(parsed!.blocks.length).toBe(script.blocks.length);
     expect(parsed!.generator?.method).toBe('dsp-align');
+  });
+
+  it('defaults the generator to the teleprompter aligner', () => {
+    expect(sidecar.generator).toEqual({
+      name: 'squisq-teleprompter',
+      method: 'dsp-align',
+      baseWpm: 150,
+    });
+  });
+
+  describe('generator override', () => {
+    it('lets a TTS host name itself without post-editing the payload', () => {
+      const tts = buildNarrationTimingJson(script, alignment, take.durationSec, {
+        generator: { name: 'docblocks-kokoro', method: 'tts' },
+      });
+      expect(tts.generator).toEqual({ name: 'docblocks-kokoro', method: 'tts' });
+      // Everything else is still built from the script + alignment.
+      expect(tts.blocks).toEqual(sidecar.blocks);
+      expect(tts.bookmarks).toEqual(sidecar.bookmarks);
+    });
+
+    it('round-trips method "tts" through the parser', () => {
+      const tts = buildNarrationTimingJson(script, alignment, take.durationSec, {
+        generator: { name: 'docblocks-kokoro', method: 'tts', baseWpm: 170 },
+      });
+      const parsed = parseNarrationTimingJson(JSON.stringify(tts));
+      expect(parsed?.generator).toEqual({
+        name: 'docblocks-kokoro',
+        method: 'tts',
+        baseWpm: 170,
+      });
+    });
+
+    it("prefers the override's baseWpm and falls back to the option's", () => {
+      expect(
+        resolveNarrationTimingGenerator({
+          baseWpm: 150,
+          generator: { name: 'host', method: 'tts', baseWpm: 180 },
+        }),
+      ).toEqual({ name: 'host', method: 'tts', baseWpm: 180 });
+      expect(
+        resolveNarrationTimingGenerator({
+          baseWpm: 150,
+          generator: { name: 'host', method: 'tts' },
+        }),
+      ).toEqual({ name: 'host', method: 'tts', baseWpm: 150 });
+      expect(resolveNarrationTimingGenerator()).toEqual({
+        name: 'squisq-teleprompter',
+        method: 'dsp-align',
+      });
+    });
+
+    it.each<NarrationTimingMethod>(['dsp-align', 'presenter-advance', 'tts'])(
+      'accepts method %s',
+      (method) => {
+        const built = buildNarrationTimingJson(script, alignment, take.durationSec, {
+          generator: { name: 'x', method },
+        });
+        expect(parseNarrationTimingJson(JSON.stringify(built))?.generator?.method).toBe(method);
+      },
+    );
   });
 
   it('fills bookmarks with real char offsets and monotonic times', () => {

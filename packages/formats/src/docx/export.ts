@@ -46,6 +46,7 @@ import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 import { createPackage } from '../ooxml/writer.js';
 import { RelIdAllocator } from '../ooxml/relIds.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
+import { fitWithin, readImageDimensions } from '../shared/images.js';
 import { stripHtmlTags } from '../shared/text.js';
 import { normalizeOoxmlHex } from '../shared/ooxmlColor.js';
 import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
@@ -132,8 +133,16 @@ export interface DocxExportOptions {
    * Pre-resolved image data keyed by image URL/path as it appears in the
    * markdown source. When provided, images are embedded in the .docx file
    * as binary parts instead of emitting placeholder text.
+   *
+   * `width` / `height` give the display size in CSS pixels (96 per inch).
+   * Pass them for a high-density image, such as a diagram rendered at 2×,
+   * that should not print at its pixel size; otherwise the size is read from
+   * the image header.
    */
-  images?: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
+  images?: Map<
+    string,
+    { data: ArrayBuffer | Uint8Array; contentType: string; width?: number; height?: number }
+  >;
   /** Permit carefully validated relative hyperlink targets. Default: false. */
   allowRelativeHyperlinks?: boolean;
 }
@@ -271,7 +280,7 @@ class ExportContext {
   readonly backgroundColor: string | undefined;
 
   /** Pre-resolved image data keyed by markdown image URL */
-  readonly resolvedImages: Map<string, { data: ArrayBuffer | Uint8Array; contentType: string }>;
+  readonly resolvedImages: NonNullable<DocxExportOptions['images']>;
   readonly allowRelativeHyperlinks: boolean;
   readonly signal: AbortSignal | undefined;
   /** Font Awesome families referenced while converting body/header/footer runs. */
@@ -860,31 +869,37 @@ function convertImage(node: MarkdownImage, ctx: ExportContext): string {
   const filename = `image${ctx.images.length + 1}.${ext}`;
   const { relId, docPrId } = ctx.addImage(data, contentType, filename);
 
-  // Read dimensions from binary header; fall back to 5×3 inches
-  const dims = readImageDimensions(data);
+  // Display size: the caller's, else the image header's; fall back to 5×3 in.
+  const dims =
+    imageEntry.width && imageEntry.height
+      ? { width: imageEntry.width, height: imageEntry.height }
+      : readImageDimensions(data);
   const EMU_PER_INCH = 914400;
-  const MAX_WIDTH_EMU = 6 * EMU_PER_INCH; // 6 inch content width
+  // Fit the 6 in content width and keep a tall image (a long diagram) on
+  // one page: 8 in leaves room for the line above it on Letter and A4.
+  const MAX_WIDTH_EMU = 6 * EMU_PER_INCH;
+  const MAX_HEIGHT_EMU = 8 * EMU_PER_INCH;
   let cx: number;
   let cy: number;
 
   if (dims) {
-    // Scale to fit within max width, assuming 96 DPI for pixel → inch
-    const widthEmu = (dims.width / 96) * EMU_PER_INCH;
-    const heightEmu = (dims.height / 96) * EMU_PER_INCH;
-    if (widthEmu > MAX_WIDTH_EMU) {
-      const scale = MAX_WIDTH_EMU / widthEmu;
-      cx = MAX_WIDTH_EMU;
-      cy = Math.round(heightEmu * scale);
-    } else {
-      cx = Math.round(widthEmu);
-      cy = Math.round(heightEmu);
-    }
+    // 96 pixels per inch
+    const fitted = fitWithin(
+      (dims.width / 96) * EMU_PER_INCH,
+      (dims.height / 96) * EMU_PER_INCH,
+      MAX_WIDTH_EMU,
+      MAX_HEIGHT_EMU,
+    );
+    cx = Math.round(fitted.width);
+    cy = Math.round(fitted.height);
   } else {
     cx = 5 * EMU_PER_INCH;
     cy = 3 * EMU_PER_INCH;
   }
 
   const name = escapeXml(node.alt || filename);
+  // `descr` is the picture's alt text in Word; `name` is only an object name.
+  const description = node.alt ? ` descr="${escapeXml(node.alt)}"` : '';
   const NS_A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
   const NS_PIC = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 
@@ -892,7 +907,7 @@ function convertImage(node: MarkdownImage, ctx: ExportContext): string {
     `<w:r><w:drawing>` +
     `<wp:inline distT="0" distB="0" distL="0" distR="0">` +
     `<wp:extent cx="${cx}" cy="${cy}"/>` +
-    `<wp:docPr id="${docPrId}" name="${name}"/>` +
+    `<wp:docPr id="${docPrId}" name="${name}"${description}/>` +
     `<wp:cNvGraphicFramePr>` +
     `<a:graphicFrameLocks xmlns:a="${NS_A}" noChangeAspect="1"/>` +
     `</wp:cNvGraphicFramePr>` +
@@ -920,46 +935,6 @@ function convertImage(node: MarkdownImage, ctx: ExportContext): string {
     `</wp:inline>` +
     `</w:drawing></w:r>`
   );
-}
-
-/** Read width/height from PNG or JPEG binary headers. */
-function readImageDimensions(
-  data: ArrayBuffer | Uint8Array,
-): { width: number; height: number } | null {
-  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-  if (bytes.length < 24) return null;
-
-  // PNG: signature 0x89504E47, IHDR chunk at byte 16
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-    const width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
-    const height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
-    return { width, height };
-  }
-
-  // JPEG: search for SOF0 (0xFFC0) or SOF2 (0xFFC2) marker
-  if (bytes[0] === 0xff && bytes[1] === 0xd8) {
-    let offset = 2;
-    while (offset < bytes.length - 9) {
-      if (bytes[offset] !== 0xff) break;
-      const marker = bytes[offset + 1];
-      if (marker === 0xc0 || marker === 0xc2) {
-        const height = (bytes[offset + 5] << 8) | bytes[offset + 6];
-        const width = (bytes[offset + 7] << 8) | bytes[offset + 8];
-        return { width, height };
-      }
-      const segLen = (bytes[offset + 2] << 8) | bytes[offset + 3];
-      offset += 2 + segLen;
-    }
-  }
-
-  // GIF: width at bytes 6-7, height at bytes 8-9 (little-endian)
-  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) {
-    const width = bytes[6] | (bytes[7] << 8);
-    const height = bytes[8] | (bytes[9] << 8);
-    return { width, height };
-  }
-
-  return null;
 }
 
 function convertFootnoteRef(node: MarkdownFootnoteReference, ctx: ExportContext): string {

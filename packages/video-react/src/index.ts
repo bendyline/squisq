@@ -60,8 +60,17 @@ export { supportsWebCodecs, supportsWebCodecsH264, createEncoder } from './mainT
 export type { MainThreadEncoder, EncoderConfig, EncoderFrameSource } from './mainThreadEncoder.js';
 export type { FfmpegWasmLoadConfig } from '@bendyline/squisq-video';
 
-// ── Audio (capability probe) ───────────────────────────────────────
-export { supportsWebCodecsAac } from './audioTrack.js';
+// ── Audio (capability probe, document mix, audio-file encoding) ────
+export { supportsWebCodecsAac, renderAudioTimeline } from './audioTrack.js';
+export type { AudioTimelineClip } from '@bendyline/squisq-video';
+export { createAudioFileEncoder, supportedAudioFileFormats } from './audioFile/audioFileEncoder.js';
+export type {
+  AudioFileEncoder,
+  AudioFileEncoderOptions,
+  AudioFileFormat,
+} from './audioFile/audioFileEncoder.js';
+export { renderDocumentAudio } from './documentAudio.js';
+export type { RenderDocumentAudioOptions } from './documentAudio.js';
 
 // ── Media edits (processed-audio renders) ──────────────────────────
 export { createMediaEditRenderer } from './mediaEdit/mediaEditRenderer.js';

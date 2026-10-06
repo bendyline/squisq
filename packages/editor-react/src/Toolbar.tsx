@@ -30,6 +30,7 @@ import {
 import { useEditorContext, type EditorView } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
+import { DictationButton } from './speech/DictationButton';
 import { ViewMenuPanel } from './ViewMenuPanel';
 import { TransformMenu } from './TransformMenu';
 import {
@@ -2436,6 +2437,8 @@ export function Toolbar({
           />
         </>
       )}
+      {/* Dictation renders only with a `speechInput` capability, in Write/Source. */}
+      {!isCodeMode && <DictationButton />}
       {showDocumentChrome && (
         <button
           type="button"

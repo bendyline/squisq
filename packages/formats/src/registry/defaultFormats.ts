@@ -291,11 +291,15 @@ export function defaultFormats(): FormatDefinition[] {
       // (emoji/CJK/Cyrillic/…) rather than failing. Route that note into the
       // structured warnings channel instead of letting it hit console.warn.
       const pdfWarnings: string[] = [];
+      // Same image sources as DOCX: the container's files, then caller-supplied ones.
+      const containerImages = await collectContainerDocxImages(input.container, options.signal);
+      const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const buf = await markdownDocToPdf(markdownDoc, {
         ...raw,
         ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
         themeRegistry: options.themeRegistry ?? raw.themeRegistry,
+        images,
         onWarning: (message) => pdfWarnings.push(message),
       });
       return ok(await toBytes(buf), MIME.pdf, [

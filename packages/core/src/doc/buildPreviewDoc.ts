@@ -287,9 +287,11 @@ function blockToSlide(
     // authored rich elements (Mermaid fences today; other media can follow)
     // independently of the selected visual template.
     ...(block.contents ? { contents: block.contents } : {}),
-    // Custom templates consume child blocks through tokens. Compact summaries
-    // also retain the children owned by a diagram/drawing feature.
-    ...(block.children && (isCustomTemplate || (block.summaryMode && isContainerTemplate(template)))
+    // Custom templates consume child blocks through tokens, and container
+    // templates (diagram, drawing, layout) draw their children as the canvas:
+    // without them a drawing renders as an empty frame in the slideshow,
+    // video export, and PPTX. They are never flattened into their own slides.
+    ...(block.children && (isCustomTemplate || isContainerTemplate(template))
       ? { children: block.children }
       : {}),
     ...(block.summaryMode && block.layers ? { layers: block.layers } : {}),

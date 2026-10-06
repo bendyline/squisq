@@ -994,3 +994,154 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ─── Dictation (host-injected `speechInput`) ─────────── */
+
+.squisq-dictation {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Recording reads as "live", not as an ordinary toggled-on control. */
+.squisq-dictation-button--active,
+.squisq-dictation-button--active:hover {
+  background: var(--squisq-danger-soft);
+  color: var(--squisq-danger-strong);
+}
+
+.squisq-dictation-button--listening {
+  width: auto;
+  gap: 6px;
+  padding: 2px 8px 0;
+}
+
+.squisq-dictation-button[aria-busy='true'] > i {
+  animation: squisq-dictation-pulse 1.2s ease-in-out infinite;
+}
+
+.squisq-dictation-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  height: 16px;
+}
+
+.squisq-dictation-meter-bar {
+  width: 2px;
+  min-height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  transition: height 0.05s linear;
+}
+
+.squisq-dictation-error {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 110;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
+  padding: 8px 8px 8px 12px;
+  border: 1px solid var(--squisq-danger-border);
+  border-radius: 8px;
+  background: var(--squisq-surface);
+  box-shadow: var(--squisq-shadow-md);
+  color: var(--squisq-danger-text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.squisq-dictation-error-text {
+  flex: 1;
+}
+
+.squisq-dictation-error-dismiss {
+  flex-shrink: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: var(--squisq-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.squisq-dictation-error-dismiss:hover {
+  color: var(--squisq-text-strong);
+}
+
+/* Interim caret indicator — a widget (Write) / injected text (Source) that is
+   never document content. Kept small and quiet: it marks where the next
+   phrase lands, it isn't the phrase. */
+.squisq-dictation-interim {
+  display: inline-block;
+  margin-left: 2px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--squisq-danger-soft);
+  color: var(--squisq-text-muted);
+  font-size: 0.78em;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 1.5;
+  vertical-align: baseline;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+}
+
+.squisq-dictation-interim::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--squisq-danger);
+  vertical-align: 0.1em;
+  animation: squisq-dictation-pulse 1.2s ease-in-out infinite;
+}
+
+/* Monaco injected text lives inside a fixed-height code line: no pill, no
+   vertical padding, just a quiet trailing note. */
+.squisq-dictation-interim--source {
+  display: inline;
+  margin-left: 0.5ch;
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+  line-height: inherit;
+  opacity: 0.8;
+}
+
+.squisq-dictation-interim--source::before {
+  content: none;
+}
+
+@keyframes squisq-dictation-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squisq-dictation-interim::before,
+  .squisq-dictation-button[aria-busy='true'] > i {
+    animation: none;
+  }
+
+  .squisq-dictation-meter-bar {
+    transition: none;
+  }
+}

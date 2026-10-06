@@ -164,6 +164,18 @@ the player as a self-contained string constant (`PLAYER_BUNDLE`) with the
 shared icon styles composed once. It is used by `@bendyline/squisq-formats`
 and the CLI to produce single-file HTML and rendered video exports.
 
+## Diagram Pictures
+
+`@bendyline/squisq-react/diagram-pictures` draws diagrams as PNG for document
+exports (browser only): `renderMermaidPicture`, `renderSquisqDiagramPicture`
+(ASCII diagrams and timelines, drawing, layout and diagram blocks, cropped to
+their content without slide chrome), `renderTreePicture`, and
+`createDiagramPictureRenderer`, the renderer `rasterizeDiagrams` in
+`@bendyline/squisq-formats/diagrams` takes. Pictures are plain SVG drawn to a
+canvas — Mermaid with SVG-text labels, no `<foreignObject>` — so the read-back
+works in every browser, and text uses system fonts because a picture cannot
+load the page's web fonts.
+
 ## Styles
 
 Import the package CSS for block transitions and Font Awesome inline icons:

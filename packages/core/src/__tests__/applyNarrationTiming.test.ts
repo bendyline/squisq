@@ -275,3 +275,107 @@ describe('applyNarrationTiming with a trimmed or cut take', () => {
     expect(result.doc.duration).toBe(16);
   });
 });
+
+describe('applyNarrationTiming captions from word bookmarks', () => {
+  /**
+   * One bookmark per script token, one second apart (token i spoken at i s).
+   * The take runs 40 s so all 33 words fall inside it.
+   */
+  function wordTimedSidecar(doc: Doc): NarrationTimingJsonV3 {
+    const script = buildNarrationScript(doc);
+    return makeSidecar(doc, {
+      duration: 40,
+      bookmarks: script.tokens.map((token, i) => ({
+        id: `word-${i}`,
+        time: i,
+        charOffset: token.charOffset,
+        textFragment: token.text,
+      })),
+    });
+  }
+
+  function captionWords(doc: Doc): Array<{ text: string; startTime: number }> {
+    return (doc.captions?.phrases ?? []).flatMap((phrase) =>
+      (phrase.words ?? []).map((word) => ({ text: word.text, startTime: word.startTime })),
+    );
+  }
+
+  it('replaces reading-time captions with word-timed captions that follow the voice', async () => {
+    const doc = makeDoc();
+    const sidecar = wordTimedSidecar(doc);
+    const container = await containerWith(sidecar);
+    const result = await applyNarrationTiming(doc, container);
+
+    const words = captionWords(result.doc);
+    expect(words.length).toBe(sidecar.bookmarks.length);
+    words.forEach((word, i) => {
+      expect(word.text).toBe(sidecar.bookmarks[i].textFragment);
+      expect(word.startTime).toBe(i);
+    });
+    const phrases = result.doc.captions!.phrases;
+    expect(phrases[0].startTime).toBe(0);
+    // Every phrase stays inside the take.
+    expect(phrases[phrases.length - 1].endTime).toBeLessThanOrEqual(40);
+    // The input doc's own (reading-time) captions are untouched.
+    expect(doc.captions?.phrases.some((phrase) => phrase.words)).toBeFalsy();
+  });
+
+  it('drops words trimmed off the take and shifts the rest by the trim head', async () => {
+    const doc = makeDoc(
+      MD.replace('anchor=document]}', 'anchor=document clipStart=4 clipEnd=20]}'),
+    );
+    const sidecar = wordTimedSidecar(doc);
+    const result = await applyNarrationTiming(doc, await containerWith(sidecar));
+
+    const kept = sidecar.bookmarks.filter((b) => b.time >= 4 && b.time <= 20);
+    const words = captionWords(result.doc);
+    expect(words.map((w) => w.text)).toEqual(kept.map((b) => b.textFragment));
+    expect(words.map((w) => w.startTime)).toEqual(kept.map((b) => b.time - 4));
+    const phrases = result.doc.captions!.phrases;
+    expect(phrases[phrases.length - 1].endTime).toBeLessThanOrEqual(16);
+  });
+
+  it('drops words inside a cut and closes up the words after it', async () => {
+    const doc = makeDoc(MD.replace('anchor=document]}', 'anchor=document cuts="3-5 10-22"]}'));
+    const sidecar = wordTimedSidecar(doc);
+    const result = await applyNarrationTiming(doc, await containerWith(sidecar));
+
+    const playedAt = (t: number): number | null => {
+      if (t < 3) return t;
+      if (t < 5) return null;
+      if (t < 10) return t - 2;
+      if (t < 22) return null;
+      return t - 14;
+    };
+    const expected = sidecar.bookmarks
+      .map((b) => ({ text: b.textFragment, startTime: playedAt(b.time) }))
+      .filter((w): w is { text: string; startTime: number } => w.startTime !== null);
+    expect(captionWords(result.doc)).toEqual(expected);
+  });
+
+  it('drops words stamped past the end of an untrimmed take', async () => {
+    const doc = makeDoc();
+    const sidecar = { ...wordTimedSidecar(doc), duration: 30 };
+    const result = await applyNarrationTiming(doc, await containerWith(sidecar));
+    const words = captionWords(result.doc);
+    expect(words.length).toBe(31); // words at 0…30 s; 31 and 32 s are past the end
+    expect(words[words.length - 1].startTime).toBe(30);
+  });
+
+  it('keeps the existing captions when the sidecar has no word timings', async () => {
+    const doc = makeDoc();
+    const result = await applyNarrationTiming(doc, await containerWith(makeSidecar(doc)));
+    expect(result.applied).toBe(true);
+    expect(result.doc.captions).toBe(doc.captions);
+  });
+
+  it('orders hand-edited bookmarks before phrasing them', async () => {
+    const doc = makeDoc();
+    const sidecar = wordTimedSidecar(doc);
+    const shuffled = { ...sidecar, bookmarks: [...sidecar.bookmarks].reverse() };
+    const result = await applyNarrationTiming(doc, await containerWith(shuffled));
+    const starts = captionWords(result.doc).map((w) => w.startTime);
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
+    expect(starts.length).toBe(sidecar.bookmarks.length);
+  });
+});

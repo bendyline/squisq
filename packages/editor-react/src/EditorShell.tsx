@@ -33,6 +33,7 @@ import { ProofingRoot } from './proofing/ProofingContext';
 import { ReviewRoot } from './review/ReviewContext';
 import { ReviewPanel } from './review/ReviewPanel';
 import type { ReviewCapability } from './review/types';
+import type { SpeechInputCapability } from './speech/types';
 import { ProofingPanel } from './proofing/ProofingPanel';
 import { CodeContextZones } from './codeContext/CodeContextZones';
 import type { CodeContext } from './codeContext/types';
@@ -470,6 +471,17 @@ export interface EditorShellProps {
    */
   proofingIgnoreStore?: ProofingIgnoreStore | null;
   /**
+   * Dictation capability — a `SpeechInputProvider` (or factory) from
+   * `@bendyline/squisq-editor-react/speech`. Omit and the feature is off:
+   * no microphone button, no capture code loaded. With it, the toolbar
+   * gains a microphone in the Write and Source views that inserts
+   * recognized phrases as literal text at the caret; hosts can also drive
+   * it via `useEditorContext().dictation`. Instance = host-owned; factory =
+   * created on mount, disposed on unmount. Ignored when `readOnly`. Host
+   * guide: docs/speech-input.md.
+   */
+  speechInput?: SpeechInputCapability | null;
+  /**
    * Optional async provider for sibling-document suggestions in the
    * link insert dialog. When supplied, the dialog gains a "Browse
    * documents" picker so authors can pick a neighbor `.md` by name and
@@ -707,6 +719,7 @@ export function EditorShell({
   proofingSpellingEnabled = true,
   proofingGrammarEnabled = true,
   proofingIgnoreStore = null,
+  speechInput = null,
   documentLinkProvider,
   fenceRenderers,
   linkSchemes,
@@ -786,6 +799,7 @@ export function EditorShell({
         proofingSpellingEnabled={proofingSpellingEnabled}
         proofingGrammarEnabled={proofingGrammarEnabled}
         proofingIgnoreStore={proofingIgnoreStore}
+        speechInput={readOnly ? null : speechInput}
         documentLinkProvider={documentLinkProvider}
         fenceRenderers={fenceRenderers}
         onCopyCode={onCopyCode}

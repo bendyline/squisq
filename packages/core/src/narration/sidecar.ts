@@ -50,7 +50,7 @@ export interface NarrationTimingJsonV3 {
    */
   cameraOffsetSec?: number;
   /** Provenance of the timing data. */
-  generator?: { name: string; method: NarrationTimingMethod; baseWpm?: number };
+  generator?: NarrationTimingGenerator;
 }
 
 /**
@@ -60,12 +60,47 @@ export interface NarrationTimingJsonV3 {
  *   them from the take's audio against the expected script.
  * - `'presenter-advance'` — the presenter drove them directly, by advancing
  *   slides in the recorder while the take rolled. Observed, not inferred.
+ * - `'tts'` — a host synthesized the narration (text-to-speech). Block and
+ *   sentence boundaries are exact because each was synthesized separately;
+ *   word times are interpolated.
  */
-export type NarrationTimingMethod = 'dsp-align' | 'presenter-advance';
+export type NarrationTimingMethod = 'dsp-align' | 'presenter-advance' | 'tts';
+
+/** Provenance recorded in a sidecar's `generator` field. */
+export interface NarrationTimingGenerator {
+  /** Producer id, e.g. `'squisq-teleprompter'` or a host's TTS engine name. */
+  name: string;
+  method: NarrationTimingMethod;
+  /** Speaking rate the take was paced at, when the producer has one. */
+  baseWpm?: number;
+}
 
 export interface BuildNarrationTimingOptions {
   cameraOffsetSec?: number;
+  /**
+   * Recorded as `generator.baseWpm`. A `generator` override's own `baseWpm`
+   * wins over this one.
+   */
   baseWpm?: number;
+  /**
+   * Who produced the timings. Defaults to the teleprompter's aligner
+   * (`{ name: 'squisq-teleprompter', method: 'dsp-align' }`); hosts that
+   * produce their own timings (TTS, say) name themselves here instead of
+   * post-editing the payload.
+   */
+  generator?: NarrationTimingGenerator;
+}
+
+/** The `generator` block a sidecar records for these build options. */
+export function resolveNarrationTimingGenerator(
+  options?: BuildNarrationTimingOptions,
+): NarrationTimingGenerator {
+  const baseWpm = options?.generator?.baseWpm ?? options?.baseWpm;
+  return {
+    name: options?.generator?.name ?? 'squisq-teleprompter',
+    method: options?.generator?.method ?? 'dsp-align',
+    ...(baseWpm !== undefined ? { baseWpm } : {}),
+  };
 }
 
 /** Build the v3 sidecar payload from a script + its alignment. Pure. */
@@ -104,11 +139,7 @@ export function buildNarrationTimingJson(
     // (JSON has no NaN) and be dropped on parse anyway — omitting it here
     // keeps the emitted sidecar honest rather than carrying a dead field.
     ...(finiteNumber(options?.cameraOffsetSec) ? { cameraOffsetSec: options.cameraOffsetSec } : {}),
-    generator: {
-      name: 'squisq-teleprompter',
-      method: 'dsp-align',
-      ...(options?.baseWpm !== undefined ? { baseWpm: options.baseWpm } : {}),
-    },
+    generator: resolveNarrationTimingGenerator(options),
   };
 }
 

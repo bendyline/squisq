@@ -112,6 +112,30 @@ export async function renderMermaidDiagram(
   return enqueueMermaidWork(run);
 }
 
+/** Outcome of {@link validateMermaidSource}. */
+export type MermaidValidationResult =
+  | { ok: true; diagramType: string }
+  | { ok: false; message: string };
+
+/**
+ * Check that Mermaid can parse `source`, without rendering or measuring
+ * anything. Runs on the shared work queue like rendering, since parsing uses
+ * the same diagram databases. `message` is Mermaid's own error, trimmed.
+ */
+export function validateMermaidSource(source: string): Promise<MermaidValidationResult> {
+  return enqueueMermaidWork(async (): Promise<MermaidValidationResult> => {
+    const mermaid = await loadMermaid();
+    mermaid.initialize({ ...MERMAID_BASE_CONFIG, theme: 'base' });
+    try {
+      const parsed = await mermaid.parse(source);
+      if (!parsed) return { ok: false, message: 'Mermaid could not read this source.' };
+      return { ok: true, diagramType: parsed.diagramType };
+    } catch (error) {
+      return { ok: false, message: mermaidErrorMessage(error) };
+    }
+  });
+}
+
 /** Inspect the subset Mermaid exposes as structured flowchart nodes/edges. */
 export function inspectMermaidSource(source: string): Promise<MermaidEditableModel | null> {
   return enqueueMermaidWork(async () => {

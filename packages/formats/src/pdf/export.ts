@@ -19,7 +19,7 @@
  * ```
  */
 
-import { PDFDocument, StandardFonts, rgb, PDFFont, PDFPage, PDFString } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFFont, PDFImage, PDFPage, PDFString } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 
 import type { Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
@@ -53,9 +53,11 @@ import type {
   MarkdownInlineMath,
   MarkdownFootnoteReference,
   MarkdownInlineIcon,
+  MarkdownNode,
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 import { FootnoteIndex } from '../shared/footnotes.js';
+import { fitWithin, readImageDimensions } from '../shared/images.js';
 
 import { WinAnsiTracker } from './winAnsi.js';
 import {
@@ -127,6 +129,20 @@ export interface PdfExportOptions {
   /** Explicit caller-owned registry for non-document custom themes. */
   themeRegistry?: ThemeRegistry;
   /**
+   * Image data keyed by the image URL/path as it appears in the markdown.
+   * A PNG or JPEG found here is drawn when it stands alone in a paragraph
+   * (scaled to the text width and the page, centered); images inside running
+   * text, and any not supplied, still print as an `[Image: alt]` note.
+   *
+   * `width` / `height` give the display size in CSS pixels (96 per inch).
+   * Pass them for a high-density image, such as a diagram rendered at 2×;
+   * otherwise the pixel size is used.
+   */
+  images?: Map<
+    string,
+    { data: ArrayBuffer | Uint8Array; contentType?: string; width?: number; height?: number }
+  >;
+  /**
    * Receives non-fatal notes about the export — today, the one-shot summary
    * raised when characters outside the standard PDF fonts' WinAnsi encoding
    * had to be substituted. When omitted, such notes go to `console.warn`.
@@ -153,6 +169,8 @@ export async function markdownDocToPdf(
   pdfDoc.setModificationDate(new Date());
 
   const ctx = await createExportContext(pdfDoc, options, doc);
+  // Embedding is async and drawing is not, so every image is embedded first.
+  ctx.images = await embedDocumentImages(pdfDoc, doc, options.images);
 
   renderBlocks(doc.children, ctx, 0);
 
@@ -233,6 +251,57 @@ interface ExportContext {
    */
   text: WinAnsiTracker;
   signal?: AbortSignal;
+  /** Embedded images by markdown URL, with their display size in CSS pixels. */
+  images: Map<string, EmbeddedPdfImage>;
+}
+
+interface EmbeddedPdfImage {
+  image: PDFImage;
+  width: number;
+  height: number;
+}
+
+/** CSS pixels are 1/96 in; PDF points are 1/72 in. */
+const POINTS_PER_CSS_PIXEL = 0.75;
+
+function collectImageUrls(nodes: readonly MarkdownNode[], into: Set<string>): Set<string> {
+  for (const node of nodes) {
+    if (node.type === 'image') into.add((node as MarkdownImage).url);
+    const children = (node as { children?: unknown }).children;
+    if (Array.isArray(children)) collectImageUrls(children as MarkdownNode[], into);
+  }
+  return into;
+}
+
+/** Embed every supplied PNG or JPEG the document references. */
+async function embedDocumentImages(
+  pdfDoc: PDFDocument,
+  doc: MarkdownDocument,
+  images: PdfExportOptions['images'],
+): Promise<Map<string, EmbeddedPdfImage>> {
+  const embedded = new Map<string, EmbeddedPdfImage>();
+  if (!images || images.size === 0) return embedded;
+  for (const url of collectImageUrls(doc.children, new Set())) {
+    const entry = images.get(url);
+    if (!entry) continue;
+    const bytes = entry.data instanceof Uint8Array ? entry.data : new Uint8Array(entry.data);
+    const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+    const isJpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
+    if (!isPng && !isJpeg) continue;
+    try {
+      const image = isPng ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+      const pixels = readImageDimensions(bytes) ?? { width: image.width, height: image.height };
+      const sized = Boolean(entry.width && entry.height);
+      embedded.set(url, {
+        image,
+        width: sized ? (entry.width as number) : pixels.width,
+        height: sized ? (entry.height as number) : pixels.height,
+      });
+    } catch {
+      // A damaged image keeps its text note rather than failing the export.
+    }
+  }
+  return embedded;
 }
 
 async function createExportContext(
@@ -300,6 +369,7 @@ async function createExportContext(
     footnotes: new FootnoteIndex(doc),
     text: new WinAnsiTracker(),
     signal: options.signal,
+    images: new Map(),
   };
 }
 
@@ -811,6 +881,8 @@ function renderParagraph(
   const x0 = ctx.margin + extraIndent;
   const w = ctx.contentWidth - extraIndent;
 
+  if (renderImageParagraph(node, ctx, x0, w)) return;
+
   const spans = flattenInlines(node.children, ctx, {
     bold: false,
     italic: false,
@@ -820,6 +892,52 @@ function renderParagraph(
 
   drawSpans(spans, ctx, w, x0);
   ctx.y -= PARAGRAPH_SPACING;
+}
+
+/**
+ * Draw a paragraph that holds only images, one after another as blocks.
+ * Returns false (drawing nothing) for any other paragraph, or when none of
+ * its images was supplied.
+ */
+function renderImageParagraph(
+  node: MarkdownParagraph,
+  ctx: ExportContext,
+  x0: number,
+  width: number,
+): boolean {
+  const images = node.children.filter((child) => child.type === 'image') as MarkdownImage[];
+  const onlyImages = node.children.every(
+    (child) =>
+      child.type === 'image' ||
+      child.type === 'break' ||
+      (child.type === 'text' && !(child as MarkdownText).value.trim()),
+  );
+  if (!onlyImages || images.length === 0) return false;
+  if (!images.some((image) => ctx.images.has(image.url))) return false;
+  const maxHeight = ctx.pageHeight - 2 * ctx.margin;
+  for (const imageNode of images) {
+    const embedded = ctx.images.get(imageNode.url);
+    if (!embedded) {
+      const note = flattenInlines([imageNode], ctx, { bold: false, italic: false, code: false });
+      drawSpans(note, ctx, width, x0);
+      continue;
+    }
+    const size = fitWithin(
+      embedded.width * POINTS_PER_CSS_PIXEL,
+      embedded.height * POINTS_PER_CSS_PIXEL,
+      width,
+      maxHeight,
+    );
+    ensureSpace(ctx, size.height);
+    ctx.page.drawImage(embedded.image, {
+      x: x0 + (width - size.width) / 2,
+      y: ctx.y - size.height,
+      width: size.width,
+      height: size.height,
+    });
+    ctx.y -= size.height + PARAGRAPH_SPACING;
+  }
+  return true;
 }
 
 // ---- Blockquote ----
