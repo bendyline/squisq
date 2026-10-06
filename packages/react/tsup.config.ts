@@ -10,6 +10,7 @@ export default defineConfig({
     'hooks/index': 'src/entries/hooks.ts',
     'markdown/index': 'src/entries/markdown.ts',
     'json-view/index': 'src/entries/json-view.ts',
+    'diagram-pictures/index': 'src/export/diagramPictures.ts',
   },
   format: ['esm'],
   dts: true,

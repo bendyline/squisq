@@ -20,6 +20,7 @@ import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-react';
 import JSZip from 'jszip';
 import { collectAudioForHtmlExport, collectImagesForHtmlExport } from './exportHelpers';
+import { pictureDiagrams } from './exportDiagrams';
 import { slugifyTitle } from './exportFilename';
 import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
 import {
@@ -530,7 +531,11 @@ export function ExportConfigModal({
       switch (format) {
         case 'docx': {
           const { markdownDocToDocx } = await import('@bendyline/squisq-formats/docx');
-          const buf = await markdownDocToDocx(mdDoc, { themeId: exportThemeId });
+          const pictured = await pictureDiagrams(mdDoc);
+          const buf = await markdownDocToDocx(pictured.markdownDoc, {
+            themeId: exportThemeId,
+            images: pictured.images,
+          });
           downloadBlob(
             new Blob([buf], {
               type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -551,7 +556,14 @@ export function ExportConfigModal({
             transformStyle,
             themeId,
           });
-          const buf = await docToPptx(exportDoc, { themeId: exportThemeId, images });
+          // Drawings, timelines and ASCII diagrams export as native shapes;
+          // Mermaid needs a picture.
+          const { mermaid } = await pictureDiagrams(mdDoc, ['mermaid']);
+          const buf = await docToPptx(exportDoc, {
+            themeId: exportThemeId,
+            images,
+            diagramImages: mermaid,
+          });
           downloadBlob(
             new Blob([buf], {
               type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -562,7 +574,11 @@ export function ExportConfigModal({
         }
         case 'pdf': {
           const { markdownDocToPdf } = await import('@bendyline/squisq-formats/pdf');
-          const buf = await markdownDocToPdf(mdDoc, { themeId: exportThemeId });
+          const pictured = await pictureDiagrams(mdDoc);
+          const buf = await markdownDocToPdf(pictured.markdownDoc, {
+            themeId: exportThemeId,
+            images: pictured.images,
+          });
           downloadBlob(new Blob([buf], { type: 'application/pdf' }), `${filenameStem}.pdf`);
           break;
         }

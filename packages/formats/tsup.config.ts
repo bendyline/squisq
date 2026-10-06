@@ -17,6 +17,7 @@ export default defineConfig({
     'registry/index': 'src/registry/index.ts',
     'infer/index': 'src/infer/index.ts',
     'outside-in/index': 'src/outside-in/index.ts',
+    'diagrams/index': 'src/diagrams/index.ts',
   },
   format: ['esm'],
   dts: true,

@@ -64,6 +64,10 @@
       "types": "./dist/json-view/index.d.ts",
       "import": "./dist/json-view/index.js"
     },
+    "./diagram-pictures": {
+      "types": "./dist/diagram-pictures/index.d.ts",
+      "import": "./dist/diagram-pictures/index.js"
+    },
     "./styles": {
       "types": "./dist/styles/index.d.ts",
       "default": "./dist/styles/index.css"

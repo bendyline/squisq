@@ -96,7 +96,7 @@ export const SAMPLE_GROUPS: SampleGroup[] = [
   },
   {
     label: 'Test fixtures',
-    keys: ['e2e-tiny', 'e2e-gif', 'e2e-tasklist'],
+    keys: ['e2e-tiny', 'e2e-gif', 'e2e-tasklist', 'e2e-diagrams'],
   },
 ];
 
@@ -117,6 +117,49 @@ export const SAMPLES: Record<string, string> = {
   // markdown -- rather than typed into Monaco, which races the controlled
   // editor's value pipeline (see that test for the history).
   'e2e-tasklist': `# Tasks\n\n- [ ] open task\n- [x] closed task\n`,
+  // One diagram of each kind the document exports picture, for
+  // `e2e/export-diagrams.spec.ts`: a Mermaid flowchart, an ASCII timeline,
+  // a file tree, and a drawing block.
+  'e2e-diagrams': [
+    '# Diagrams',
+    '',
+    '## Flow',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  accTitle: Review flow',
+    '  a[Draft] --> b{Approved?}',
+    '  b -->|Yes| c[Publish]',
+    '```',
+    '',
+    '## History',
+    '',
+    '```timeline',
+    'Milestones: ● 2019 {#founded} ─────────● 2021 {#launch} ─────────● 2023 {#berlin} ───►',
+    '```',
+    '',
+    '## Files',
+    '',
+    '```tree',
+    'src/',
+    '├── index.ts',
+    '└── utils/',
+    '    └── helpers.ts',
+    '```',
+    '',
+    '## Team {[drawing]}',
+    '',
+    '### Lead {#lead} {[rectangle x=0 y=0 width=200 height=90]}',
+    '',
+    '### Engineer {#engineer} {[rectangle x=0 y=200 width=200 height=90]}',
+    '',
+    '### {[arrow from=lead to=engineer]}',
+    '',
+    '## After',
+    '',
+    'Closing paragraph.',
+    '',
+  ].join('\n'),
   // Used by the timeline e2e: a block with an embedded <video> the timeline
   // should surface and let the author re-time / move between blocks.
   'timeline-media': `# One {duration=10}
