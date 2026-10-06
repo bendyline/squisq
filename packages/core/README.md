@@ -67,6 +67,26 @@ console.log(doc.children); // AST nodes
 const md = stringifyMarkdown(doc);
 ```
 
+### Condense imported Markdown
+
+`condenseMarkdownSource(source)` removes table alignment padding, shortens
+GFM delimiter rows, and reduces decorative thematic breaks to three markers.
+It preserves table cells and alignment, code, math, HTML, links, footnotes,
+prose, and frontmatter. The output is reparsed and structurally compared with
+the original before returning; the API throws if equivalence cannot be proven.
+It is idempotent and does not summarize articles or remove citations.
+
+Run condensation after link/image edits, which can re-serialize padded tables.
+
+```ts
+import { condenseMarkdownSource } from '@bendyline/squisq/markdown';
+
+const compactMarkdown = condenseMarkdownSource(importedMarkdown);
+```
+
+The shared source-transform registry also exposes `condense`, available from
+the editor's Transform menu and `squisq transform file.md --ops condense`.
+
 ### Author an ASCII Timeline
 
 Timeline fences are source-of-truth markdown. Unicode marker rails are

@@ -166,6 +166,11 @@ Diagnostics are reported at three severities — `error`, `warning`, and `info` 
 
 ### `squisq transform <input>`
 
+The `condense` operation compacts table padding and decorative dividers while
+retaining table data, alignment, code, citations, and attribution. It verifies
+structural equivalence before returning. When combining operations, put
+`condense` after `cleanup` so serialization does not reintroduce padding.
+
 Apply one-time markdown **source** transforms to a `.md` file, in the order given: `unwrap` (remove forced line wrapping so each paragraph is one line — hard breaks kept), `wrap` (hard-wrap paragraph prose at a column width on word boundaries — code, tables, and headings untouched), and `cleanup` (canonical house-style normalization: bullets, emphasis, headings, table padding, spacing; annotations and frontmatter preserved). Not to be confused with the `--transform <style>` slideshow-style flag on `convert`/`video` — this command rewrites the markdown text itself.
 
 The transformed markdown goes to stdout by default (status messages go to stderr, so it pipes cleanly).
@@ -175,6 +180,7 @@ squisq transform doc.md --ops unwrap
 squisq transform doc.md --ops unwrap,cleanup > cleaned.md
 squisq transform doc.md --ops wrap --width 100 --in-place
 squisq transform doc.md --ops cleanup -o cleaned.md
+squisq transform doc.md --ops condense -o compact.md
 ```
 
 | Option         | Description                                                                |

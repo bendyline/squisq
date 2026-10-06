@@ -143,7 +143,7 @@ export function SceneTextOverlay({
         padding: pad,
         fontSize,
         fontFamily: style?.fontFamily || DEFAULT_DOC_FONT,
-        color: style?.color ?? '#1e293b',
+        color: style?.color ?? 'var(--squisq-text)',
         lineHeight: style?.lineHeight || 1.4,
         textAlign: style?.textAlign ?? 'left',
         background: 'var(--squisq-surface)',

@@ -246,7 +246,8 @@ export const BLOCK_MEDIA_LAYOUT_POLICIES = {
     unconsumedMedia: 'retain-native-layout',
   },
   leftFeature: {
-    summary: 'Requires a primary image in the left feature cell; text occupies the right cell.',
+    summary:
+      'Primary imagery or embedded visuals fill the left feature cell; text occupies the right cell.',
     noMedia: 'unsupported',
     ownership: 'required-native',
     nativeLayout: 'feature-left',
@@ -254,7 +255,8 @@ export const BLOCK_MEDIA_LAYOUT_POLICIES = {
     unconsumedMedia: 'retain-native-layout',
   },
   rightFeature: {
-    summary: 'Requires a primary image in the right feature cell; text occupies the left cell.',
+    summary:
+      'Primary imagery or embedded visuals fill the right feature cell; text occupies the left cell.',
     noMedia: 'unsupported',
     ownership: 'required-native',
     nativeLayout: 'feature-right',

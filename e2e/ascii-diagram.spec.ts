@@ -212,6 +212,62 @@ test.describe('ASCII diagram editor', () => {
     }).toPass({ timeout: 5_000 });
   });
 
+  for (const zoomedOut of [false, true]) {
+    test(`connects using the outer half of ports${zoomedOut ? ' when zoomed out' : ''}`, async ({
+      page,
+    }) => {
+      await loadDiagramSample(page);
+      const before = await fenceText(page);
+      const beforeArrows = (before.match(/[▲▼◄►]/g) ?? []).length;
+      await page.getByRole('button', { name: 'Connect', exact: true }).first().click();
+      if (zoomedOut) {
+        await page.getByRole('button', { name: 'Zoom out', exact: true }).first().click();
+        await page.getByRole('button', { name: 'Zoom out', exact: true }).first().click();
+      }
+      const source = await cardRect(page, 'child-2');
+      const target = await cardRect(page, 'child-3');
+      // These points are outside the card bounds, but visibly on/near the
+      // connection dots. A card-only hit test silently drops the gesture.
+      await page.mouse.move(source.x + source.w + 3, source.y + source.h / 2);
+      await page.mouse.down();
+      await page.mouse.move(target.x - 3, target.y + target.h / 2, { steps: 8 });
+      await expect(page.locator('circle.squisq-scene-connect-preview')).toBeVisible();
+      await expect(page.locator('.squisq-scene-connection-point--active')).toHaveCount(8);
+      await page.mouse.up();
+      await expect(page.locator('path.squisq-scene-connect-preview')).toHaveCount(0);
+      await expect(async () => {
+        const art = await fenceText(page);
+        expectFamilyLabels(art);
+        expect((art.match(/[▲▼◄►]/g) ?? []).length).toBe(beforeArrows + 1);
+      }).toPass({ timeout: 5_000 });
+    });
+  }
+
+  test('clears the connection preview after a missed drop or Escape', async ({ page }) => {
+    await loadDiagramSample(page);
+    const before = await fenceText(page);
+    await page.getByRole('button', { name: 'Connect', exact: true }).first().click();
+    const source = await cardCenter(page, 'child-2');
+    const viewport = await page.locator('.squisq-scene-viewport').first().boundingBox();
+    if (!viewport) throw new Error('Diagram viewport missing');
+    const empty = { x: viewport.x + 10, y: viewport.y + viewport.height - 10 };
+    for (const escape of [false, true]) {
+      await page.mouse.move(source.x, source.y);
+      await page.mouse.down();
+      await page.mouse.move(empty.x, empty.y, { steps: 8 });
+      await expect(page.locator('circle.squisq-scene-connect-preview')).toBeVisible();
+      if (escape) {
+        await page.keyboard.press('Escape');
+        await expect(page.locator('path.squisq-scene-connect-preview')).toHaveCount(0);
+        const target = await cardCenter(page, 'child-3');
+        await page.mouse.move(target.x, target.y);
+      }
+      await page.mouse.up();
+      await expect(page.locator('path.squisq-scene-connect-preview')).toHaveCount(0);
+      expect(await fenceText(page)).toBe(before);
+    }
+  });
+
   test('toolbar Node button adds a box; Delete removes the selection', async ({ page }) => {
     await loadDiagramSample(page);
     await page.locator('.squisq-scene-block-toolbar button', { hasText: 'Node' }).first().click();

@@ -442,6 +442,15 @@ describe('PreviewModeSwitch', () => {
     });
   });
 
+  it('restores the Headings and features summary from document frontmatter', async () => {
+    renderPreviewControls('---\nsquisq-transform: headings-and-features\n---\n\n# Hello');
+    await waitFor(() => {
+      expect(screen.getByTestId('active-mode').getAttribute('data-transform-style')).toBe(
+        'headings-and-features',
+      );
+    });
+  });
+
   it('copies a selected browser-library theme into the document atomically', async () => {
     saveLibraryTheme(
       compileTheme({

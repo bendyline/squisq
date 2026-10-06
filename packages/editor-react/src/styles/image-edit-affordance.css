@@ -188,3 +188,47 @@
 .squisq-image-edit-modal__error {
   color: var(--squisq-danger);
 }
+
+/* Pending and unavailable images never expose the browser's broken-image UI. */
+.squisq-image-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 260px;
+  max-width: 100%;
+  min-height: 80px;
+  padding: 16px;
+  border: 1px dashed var(--squisq-editor-control-border);
+  border-radius: 8px;
+  background: var(--squisq-editor-control-bg);
+  color: var(--squisq-text-muted);
+  font: 500 13px/1.4 var(--squisq-ux-font, system-ui, sans-serif);
+  user-select: none;
+}
+
+.squisq-image-placeholder svg {
+  flex-shrink: 0;
+}
+
+.squisq-image-placeholder[data-error='true'] {
+  border-style: solid;
+}
+
+.squisq-image-placeholder__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.squisq-image-placeholder__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.squisq-image-placeholder--thumbnail {
+  width: 100px;
+}

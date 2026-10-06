@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import type { mount } from '../../packages/react/src/standalone-entry';
 
 import { loadPublicPackages } from './_packages';
 
@@ -58,6 +59,32 @@ describe('@bendyline/squisq-react standalone browser contract', () => {
     expect(PLAYER_BUNDLE).toContain('globalThis.__SQUISQ_PLAYER_ICON_STYLES__=');
     expect(PLAYER_BUNDLE).toContain('data:font/woff2;base64');
   });
+
+  it.each(['squisq-player.global.js', 'squisq-player.full.global.js'])(
+    '%s injects its bundled animation CSS when mounted',
+    (file) => {
+      const bundle = readFileSync(resolve(pkg.dist, file), 'utf8');
+      const player = Function(`${bundle}; return SquisqPlayer;`)() as { mount: typeof mount };
+      const element = document.createElement('div');
+      document.body.appendChild(element);
+      const handle = player.mount(
+        element,
+        { articleId: 'standalone-css', duration: 0, blocks: [], audio: { segments: [] } },
+        { mode: 'static' },
+      );
+
+      try {
+        const style = document.head.querySelector('style[data-squisq-player="animations"]');
+        expect(style?.textContent).toContain('@keyframes slowZoomIn');
+        expect(style?.textContent).toContain('.squisq-flashcards');
+        expect(style?.textContent).not.toContain('[object Object]');
+      } finally {
+        handle.unmount();
+        element.remove();
+        document.head.querySelector('style[data-squisq-player="animations"]')?.remove();
+      }
+    },
+  );
 
   it.each(['squisq-player.global.js', 'squisq-player.full.global.js'])(
     '%s reports the package manifest version',

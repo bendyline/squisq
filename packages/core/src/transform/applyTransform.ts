@@ -12,8 +12,11 @@ import type { Doc } from '../schemas/Doc.js';
 import type { DocBlock, TitleBlockInput, SectionHeaderInput } from '../schemas/BlockTemplates.js';
 import type { TransformStyleInput, TransformOptions, TransformResult } from './types.js';
 import { resolveTransformStyle } from './registry.js';
-import { analyzeBlocks, extractDocImages } from './blockAnalyzer.js';
+import { analyzeBlocks, analyzeFlatBlocks, extractDocImages } from './blockAnalyzer.js';
 import { selectAndBuild } from './templateSelector.js';
+import type { SelectionResult } from './templateSelector.js';
+import { briefText, summarizeBlock } from './contentSummary.js';
+import { flattenRenderableBlocks } from '../doc/markdownToDoc.js';
 import { allocateTiming } from './timingAllocator.js';
 import { hashString } from '../random/SeededRandom.js';
 
@@ -42,14 +45,17 @@ export function applyTransform(
   const images = options?.images ?? extractDocImages(doc.blocks);
 
   // 1. Analyze blocks
-  const analyzed = analyzeBlocks(doc.blocks, {
-    minConfidence: config.minConfidence,
-    types: config.preferredTypes,
-  });
+  const analyzed = (config.contentMode ? analyzeFlatBlocks : analyzeBlocks)(
+    config.contentMode ? flattenRenderableBlocks(doc.blocks) : doc.blocks,
+    {
+      minConfidence: config.minConfidence,
+      types: config.preferredTypes,
+    },
+  );
 
   // If no blocks have meaningful content, return the doc unchanged
   const hasContent = analyzed.some((ab) => ab.bodyWordCount >= 5);
-  if (!hasContent) {
+  if (!hasContent && !config.contentMode) {
     return {
       doc: { ...doc },
       stats: {
@@ -61,7 +67,17 @@ export function applyTransform(
   }
 
   // 2. Select extractions and build template blocks
-  const selection = selectAndBuild(analyzed, config, images, seed);
+  const selection: SelectionResult =
+    config.contentMode === 'headings-and-features'
+      ? {
+          blocks: analyzed
+            .filter((ab) => ab.block.sourceHeading || ab.block.title)
+            .map((ab) => summarizeBlock(ab.block, 'headings-and-features')),
+          transformedCount: analyzed.filter((ab) => ab.block.sourceHeading || ab.block.title)
+            .length,
+          insertedCount: 0,
+        }
+      : selectAndBuild(analyzed, config, images, seed);
 
   // 2b. Pacing bookends: an opening title beat and/or a closing beat.
   let paced: DocBlock[] = selection.blocks;
@@ -100,6 +116,15 @@ export function applyTransform(
     ...doc,
     blocks: timedBlocks,
     themeId: options?.themeId ?? doc.themeId ?? config.suggestedThemeId,
+    ...(config.contentMode && doc.startBlock
+      ? {
+          startBlock: {
+            ...doc.startBlock,
+            subtitle:
+              config.contentMode === 'brief' ? briefText(doc.startBlock.subtitle ?? '') : undefined,
+          },
+        }
+      : {}),
   };
 
   return {

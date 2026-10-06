@@ -34,6 +34,13 @@ export interface TransformStyleConfig {
   description: string;
 
   /**
+   * Body-content policy. Omitted styles retain unpromoted source content.
+   * `brief` bounds prose and highlights; `headings-and-features` keeps only
+   * headings and visual content in each heading's own scope.
+   */
+  contentMode?: 'brief' | 'headings-and-features';
+
+  /**
    * Minimum confidence for extracted elements to become template blocks (0–1).
    * Higher values = fewer but higher-quality transformations.
    */

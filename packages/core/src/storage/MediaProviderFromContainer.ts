@@ -42,6 +42,8 @@ export function createMediaProviderFromContainer(container: ContentContainer): M
     const generation = generations.get(relativePath) ?? 0;
     const work = (async () => {
       const data = await container.readFile(relativePath);
+      if (disposed) return relativePath;
+      if ((generations.get(relativePath) ?? 0) !== generation) return resolveUrl(relativePath);
       const entries = data ? await container.listFiles() : [];
       if (disposed) return relativePath;
       // A read begun before a write must never refill the new cache.
@@ -81,6 +83,7 @@ export function createMediaProviderFromContainer(container: ContentContainer): M
     ): Promise<string> {
       // Invalidate any cached blob URL for this path before overwriting
       invalidate(name);
+      const generation = generations.get(name);
 
       let buffer: ArrayBuffer | Uint8Array;
       if (data instanceof Blob) {
@@ -89,7 +92,14 @@ export function createMediaProviderFromContainer(container: ContentContainer): M
         buffer = data;
       }
       await container.writeFile(name, buffer, mimeType);
+      const canCacheUpload = generations.get(name) === generation;
       invalidate(name);
+      // The upload is durable and its bytes/MIME are already available. Avoid
+      // reading it back and listing the whole container before it can appear.
+      if (!disposed && canCacheUpload) {
+        const bytes = ArrayBuffer.isView(buffer) ? new Uint8Array(buffer).slice().buffer : buffer;
+        blobUrlCache.set(name, URL.createObjectURL(new Blob([bytes], { type: mimeType })));
+      }
       return name;
     },
 

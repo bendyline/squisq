@@ -123,6 +123,8 @@ export function TeleprompterControls({
             <select
               aria-label="Microphone"
               value={prefs.micDeviceId ?? ''}
+              disabled={mic.sourceManaged}
+              title={mic.sourceManaged ? 'Microphone selected in recording settings' : undefined}
               onChange={(e) => setPrefs({ micDeviceId: e.target.value || null })}
             >
               <option value="">Default mic</option>

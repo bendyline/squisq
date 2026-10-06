@@ -131,6 +131,28 @@ describe('BLOCK_MEDIA_LAYOUT_POLICIES', () => {
     }
   });
 
+  it.each(['leftFeature', 'rightFeature'])(
+    'fills the primary cell of %s when there is no native image',
+    (template) => {
+      const layers = [background, foreground];
+      const result = resolveSupplementalMediaLayout(
+        layers,
+        template,
+        VIEWPORT_PRESETS.landscape,
+        1,
+        [0.2],
+      );
+      expect(result.layers).toBe(layers);
+      expect(result.framed).toBe(false);
+      expect(result.mediaRect).toEqual({
+        x: template === 'leftFeature' ? 0 : 960,
+        y: 0,
+        width: 960,
+        height: 1080,
+      });
+    },
+  );
+
   it('uses reserved variants only while optional native media is absent', () => {
     const optionalTemplates = Object.entries(BLOCK_MEDIA_LAYOUT_POLICIES).filter(
       ([, policy]) => policy.ownership === 'optional-native',

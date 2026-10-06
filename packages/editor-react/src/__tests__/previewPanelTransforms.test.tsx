@@ -7,7 +7,14 @@ import type { Doc } from '@bendyline/squisq/schemas';
 vi.mock('@bendyline/squisq-react', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@bendyline/squisq-react')>();
   const blockSummary = (doc: Doc) =>
-    JSON.stringify(doc.blocks.map((block) => ({ id: block.id, template: block.template })));
+    JSON.stringify(
+      doc.blocks.map((block) => ({
+        id: block.id,
+        template: block.template,
+        title: block.title,
+        contents: block.contents,
+      })),
+    );
   return {
     ...actual,
     useMediaProvider: () => null,
@@ -53,7 +60,14 @@ On January 15, 2026 the team shipped the largest release in company history.
 
 function TransformButton() {
   const { setSelectedTransformStyle } = usePreviewSettings();
-  return <button onClick={() => setSelectedTransformStyle('data-driven')}>Summarize now</button>;
+  return (
+    <>
+      <button onClick={() => setSelectedTransformStyle('data-driven')}>Summarize now</button>
+      <button onClick={() => setSelectedTransformStyle('headings-and-features')}>
+        Headings and features
+      </button>
+    </>
+  );
 }
 
 function Harness({ children }: { children?: ReactNode }) {
@@ -79,6 +93,21 @@ function renderMode(displayMode?: string) {
 }
 
 describe('PreviewPanel transform projection', () => {
+  it('renders headings without body prose when Headings and features is selected', async () => {
+    renderMode('slideshow');
+    await waitFor(() => expect(screen.getByTestId('mock-doc-player')).toBeTruthy());
+    expect(screen.getByTestId('mock-doc-player').textContent).toContain('Revenue increased');
+    fireEvent.click(screen.getByRole('button', { name: 'Headings and features' }));
+    await waitFor(() => {
+      const summary = screen.getByTestId('mock-doc-player').textContent ?? '';
+      expect(summary).toContain('Growth');
+      expect(summary).toContain('Milestone');
+      expect(summary).toContain('Customer voice');
+      expect(summary).not.toContain('Revenue increased');
+      expect(summary).not.toContain('workflow saves');
+    });
+  });
+
   it('replaces the slideshow deck when a summarization style is selected', async () => {
     renderMode('slideshow');
     await waitFor(() => expect(screen.getByTestId('mock-doc-player')).toBeTruthy());

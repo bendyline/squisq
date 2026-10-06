@@ -101,17 +101,18 @@ export type RecorderColorScheme = 'light' | 'dark';
 
 /**
  * Everything narration mode needs beyond the base recorder props. Supplying
- * this (with non-null `recording`) surfaces the "Show narration mode"
+ * this (with non-null `doc`) surfaces the "Show narration mode"
  * checkbox; when checked, the dialog expands and mounts the teleprompter
  * beside the capture preview, and mic recording switches to the narration
- * pipeline (voice-aligned v3 timing sidecar + document preamble insertion).
+ * pipeline when `recording` is provided. With null `recording`, the stage
+ * tracks the existing capture audio and the host keeps its save pipeline.
  */
 export interface RecorderNarrationOptions {
   /** Parsed document the prompter script is built from. */
   doc: Doc | null;
   /** Theme for the prompter surface (colors/fonts). */
   theme: Theme;
-  /** Editor plumbing for the narration save pipeline; null hides the checkbox. */
+  /** Editor plumbing for aligned narration saves; null keeps the capture recorder and host onSave. */
   recording: TeleprompterRecordingDeps | null;
 }
 
@@ -168,7 +169,7 @@ export interface RecorderModalProps {
    * markdown reference at the cursor — see {@link RecorderSaveResult}
    * for the fields a host needs to build that reference.
    *
-   * NOT fired for narration-mode saves: the narration pipeline writes its
+   * NOT fired for aligned narration saves (non-null narration.recording): that pipeline writes its
    * own `{[audio …]}` document preamble (via `executeNarrationSave`), so a
    * host insertion here would double up.
    */
@@ -500,10 +501,9 @@ const recordingStatusStyle: CSSProperties = {
 };
 
 /**
- * Narration mode expands the dialog to fill the viewport and turns the body
- * into a two-column flex row: the classic capture controls on the left, the
- * teleprompter stage on the right. The body must NOT scroll in this mode —
- * the prompter needs a bounded flex height, so only the left column scrolls.
+ * Optional panels expand the dialog to fill the viewport: capture controls
+ * on the left, with narration and/or slides beside them. Each panel needs a
+ * bounded flex height; the capture controls scroll independently.
  */
 const modalExpandedStyle: CSSProperties = {
   ...modalStyle,
@@ -733,13 +733,10 @@ export function RecorderModal({
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [cameraPlaybackUrl, setCameraPlaybackUrl] = useState<string | null>(null);
   const [playbackPositionMs, setPlaybackPositionMs] = useState(0);
-  // ONE mode, not two booleans: narration and slides both expand the dialog
-  // and both claim the right column, so checking either must structurally
-  // deselect the other. `narrationOn` stays as a derived alias so every
-  // existing narration branch reads exactly as it did.
   const [panelMode, setPanelMode] = useState<RecorderPanelMode>('none');
-  const narrationOn = panelMode === 'narration';
-  const slidesOn = panelMode === 'slides';
+  const narrationOn = panelMode === 'narration' || panelMode === 'both';
+  const slidesOn = panelMode === 'slides' || panelMode === 'both';
+  const narrationRecording = narrationOn && Boolean(narration?.recording);
   const expanded = isExpandedPanel(panelMode);
   const [narrationRequesting, setNarrationRequesting] = useState(false);
   const [narrationPreview, setNarrationPreview] = useState<MediaStream | null>(null);
@@ -811,13 +808,22 @@ export function RecorderModal({
   // ── Narration mode ─────────────────────────────────────────────────
   // Called unconditionally (rules of hooks); the stage hooks are idle-cheap
   // — no mic until play/record, no float window until opened.
-  const narrationAvailable = Boolean(narration && narration.recording);
+  const narrationAvailable = Boolean(narration?.doc);
   const basenameRef = useRef(basename);
   basenameRef.current = basename;
   const stage = useNarrationStage({
     doc: narration?.doc ?? null,
     maxRecordingBytes,
     recording: narration?.recording ?? null,
+    // A prompter-only stage borrows the take's audio. It never requests or
+    // stops capture tracks; the recorder remains their sole owner.
+    analysisStream: narration?.recording
+      ? undefined
+      : narrationOn && recorder.state !== 'stopped'
+        ? isDual
+          ? (recorder.camera?.stream ?? null)
+          : recorder.stream
+        : null,
     getAudioBasename: () => basenameRef.current.trim() || undefined,
     micConstraints: audioConstraints,
     cameraConstraints,
@@ -892,25 +898,32 @@ export function RecorderModal({
   useEffect(() => {
     setAdvanceLog(EMPTY_ADVANCE_LOG);
     setSlideIndex(0);
-  }, [panelMode, slideDeckKey]);
+  }, [slidesOn, slideDeckKey]);
+
+  useEffect(() => {
+    if (!narrationOn || narrationRecording) return;
+    const controller = stageRef.current.controller;
+    if (recorder.state === 'recording') controller.play();
+    else controller.pause();
+  }, [narrationOn, narrationRecording, recorder.state]);
 
   const handleDeviceSettingsChange = useCallback(
     (next: RecorderDeviceSettings) => {
       setDeviceSettings(next);
-      if (narrationOn) {
+      if (narrationRecording) {
         stageRef.current.controller.setPrefs({
           micDeviceId: next.audio.deviceId || null,
         });
       }
     },
-    [narrationOn],
+    [narrationRecording],
   );
 
   // The narration controls also expose a compact mic selector. Keep that
   // existing control and the advanced panel on the same source of truth.
   const narrationMicDeviceId = stage.controller.prefs.micDeviceId ?? '';
   useEffect(() => {
-    if (!narrationOn) return;
+    if (!narrationRecording) return;
     setDeviceSettings((current) =>
       current.audio.deviceId === narrationMicDeviceId
         ? current
@@ -919,10 +932,10 @@ export function RecorderModal({
             audio: { ...current.audio, deviceId: narrationMicDeviceId },
           },
     );
-  }, [narrationMicDeviceId, narrationOn]);
+  }, [narrationMicDeviceId, narrationRecording]);
 
-  // Mode edges. Entering narration releases the simple recorder's stream
-  // (no double mic capture); leaving quiets the prompter and its mic/float.
+  // Aligned narration owns capture; a reading aid borrows it. Leaving either
+  // narration view quiets the prompter and releases its analysis graph/float.
   // Deliberately NOT part of `captureKey` below — the checkbox lock rules
   // guarantee neither side has a take in flight when the mode flips.
   const prevNarrationOnRef = useRef(narrationOn);
@@ -931,7 +944,7 @@ export function RecorderModal({
     prevNarrationOnRef.current = narrationOn;
     if (was === narrationOn) return;
     if (narrationOn) {
-      recorder.cancel();
+      if (narrationRecording) recorder.cancel();
     } else {
       const s = stageRef.current;
       s.controller.pause();
@@ -940,7 +953,7 @@ export function RecorderModal({
       }
       if (s.float.isOpen) s.float.close();
     }
-  }, [narrationOn, recorder]);
+  }, [narrationOn, narrationRecording, recorder]);
 
   // While the prompter rolls, Escape means "pause", not "close". useModalDialog
   // swallows Escape via stopPropagation during the DOCUMENT CAPTURE phase, so a
@@ -965,7 +978,7 @@ export function RecorderModal({
   // as soon as that one exists (a brief overlap beats a black gap).
   const narrationMicLive = stage.controller.mic.status === 'live';
   const narrationPreviewWanted =
-    narrationOn &&
+    narrationRecording &&
     stage.recorder.withCamera &&
     narrationMicLive &&
     stage.recorder.cameraStream === null &&
@@ -1029,15 +1042,15 @@ export function RecorderModal({
     void stageRef.current.recorder.start();
   }, []);
 
-  const narrationCameraStream = narrationOn
+  const narrationCameraStream = narrationRecording
     ? (stage.recorder.cameraStream ?? narrationPreview)
     : null;
 
   // The two live capture streams, shared by the device pickers (a permission
   // grant reveals device labels without firing `devicechange`) and by the
   // advanced panel's "Active track settings" readout.
-  const activePrimaryStream = narrationOn ? stage.controller.mic.stream : recorder.stream;
-  const activeCameraStream = narrationOn
+  const activePrimaryStream = narrationRecording ? stage.controller.mic.stream : recorder.stream;
+  const activeCameraStream = narrationRecording
     ? narrationCameraStream
     : (recorder.camera?.stream ?? null);
   const { devices: mediaDevices, refresh: refreshMediaDevices } = useMediaDevices();
@@ -1047,13 +1060,17 @@ export function RecorderModal({
 
   useStreamPreview(
     previewRef,
-    narrationOn ? narrationCameraStream : recorder.state === 'stopped' ? null : recorder.stream,
+    narrationRecording
+      ? narrationCameraStream
+      : recorder.state === 'stopped'
+        ? null
+        : recorder.stream,
   );
   // The dual-take camera thumbnail (mirrors where the PiP bubble will land).
   // Only live before stop; the review players read the recorded blobs instead.
   useStreamPreview(
     cameraPreviewRef,
-    !narrationOn && isDual && recorder.state !== 'stopped'
+    !narrationRecording && isDual && recorder.state !== 'stopped'
       ? (recorder.camera?.stream ?? null)
       : null,
   );
@@ -1120,7 +1137,7 @@ export function RecorderModal({
   // take in flight (or unsaved in review) must be confirmed away first —
   // unmounting mid-take silently drops it.
   const handleClose = useCallback(() => {
-    if (!narrationOn) {
+    if (!narrationRecording) {
       if (isSaving || recorder.state === 'stopping' || recorder.state === 'requesting') return;
       if (
         (recorder.blob || recorder.camera?.blob || recorder.state === 'recording') &&
@@ -1131,7 +1148,7 @@ export function RecorderModal({
         return;
     }
     const s = stageRef.current;
-    if (closeNeedsConfirm(narrationOn, s.recorder.state, s.recorder.take !== null)) {
+    if (closeNeedsConfirm(narrationRecording, s.recorder.state, s.recorder.take !== null)) {
       if (!window.confirm('Discard the current narration take?')) return;
       s.handleDiscard();
     }
@@ -1143,7 +1160,7 @@ export function RecorderModal({
     }
     recorder.cancel();
     onClose();
-  }, [narrationOn, recorder, onClose, isSaving]);
+  }, [narrationOn, narrationRecording, recorder, onClose, isSaving]);
   useModalDialog({
     rootRef: overlayRef,
     dialogRef,
@@ -1405,7 +1422,8 @@ export function RecorderModal({
     dualSaveProgressRef.current = {};
     setAdvanceLog(EMPTY_ADVANCE_LOG);
     recorder.reset();
-  }, [recorder]);
+    if (narrationOn) stageRef.current.controller.restart();
+  }, [narrationOn, recorder]);
 
   const handlePlaybackTimeUpdate = useCallback(
     (media: HTMLMediaElement) => {
@@ -1451,7 +1469,7 @@ export function RecorderModal({
   );
   const timingDownloadFilename = `${downloadFilename}.timing.json`;
   useEffect(() => {
-    if (narrationOn || !canSave) {
+    if (narrationRecording || !canSave) {
       setTimingDownloadUrl(null);
       return;
     }
@@ -1472,7 +1490,7 @@ export function RecorderModal({
     setTimingDownloadUrl(url);
     return () => URL.revokeObjectURL(url);
   }, [
-    narrationOn,
+    narrationRecording,
     canSave,
     recorder.durationMs,
     slidesOn,
@@ -1561,11 +1579,11 @@ export function RecorderModal({
     recorder.blob !== null || recorder.camera?.blob != null,
     stage.recorder.state,
   );
-  const deviceSettingsLocked = narrationOn ? !narrationRecorderIdle : togglesLocked;
+  const deviceSettingsLocked = narrationRecording ? !narrationRecorderIdle : togglesLocked;
   // Narration always records the microphone; its camera is the stage's
   // separate video lane rather than the standalone Camera pill.
-  const microphoneEnabled = narrationOn ? true : micOn;
-  const cameraEnabled = narrationOn ? stage.recorder.withCamera : cameraOn;
+  const microphoneEnabled = narrationRecording ? true : micOn;
+  const cameraEnabled = narrationRecording ? stage.recorder.withCamera : cameraOn;
   const narrationToggleFor = (key: ToggleKey) => {
     switch (key) {
       case 'mic':
@@ -1628,7 +1646,16 @@ export function RecorderModal({
         </h2>
 
         <div style={expanded ? bodyRowStyle : undefined}>
-          <div style={expanded ? leftColStyle : undefined}>
+          <div
+            style={
+              expanded
+                ? {
+                    ...leftColStyle,
+                    ...(panelMode === 'both' ? { flex: '0 0 min(280px, 24vw)' } : {}),
+                  }
+                : undefined
+            }
+          >
             <div style={toggleRowStyle} role="group" aria-label="Capture sources">
               {TOGGLE_GROUPS.map((group, groupIndex) => (
                 <Fragment key={group.label}>
@@ -1638,7 +1665,7 @@ export function RecorderModal({
                       // System audio has no meaning without a display capture,
                       // and no platform outside desktop Chromium offers it.
                       if (t.key === 'systemAudio' && !canIncludeSystemAudio) return null;
-                      const props = narrationOn
+                      const props = narrationRecording
                         ? narrationToggleFor(t.key)
                         : simpleToggleProps(t.key);
                       return (
@@ -1661,7 +1688,7 @@ export function RecorderModal({
             </div>
 
             <p style={summaryStyle}>
-              {narrationOn
+              {narrationRecording
                 ? narrationCaptureSummary(stage.recorder.withCamera)
                 : captureSummary(micOn, cameraOn, screenOn, includeSystemAudio)}
             </p>
@@ -1678,7 +1705,7 @@ export function RecorderModal({
                   disabled={narrationToggleDisabled}
                   title={
                     narrationToggleDisabled
-                      ? narrationOn
+                      ? narrationRecording
                         ? 'Finish or discard the narration take first'
                         : 'Save or discard this recording before switching modes'
                       : undefined
@@ -1732,7 +1759,7 @@ export function RecorderModal({
               disabled={deviceSettingsLocked}
             />
 
-            {!narrationOn && screenOn && (
+            {!narrationRecording && screenOn && (
               <RecorderScreenSettings
                 value={deviceSettings.screen}
                 onChange={(screen) => handleDeviceSettingsChange({ ...deviceSettings, screen })}
@@ -1751,17 +1778,17 @@ export function RecorderModal({
               disabled={deviceSettingsLocked}
               microphoneEnabled={microphoneEnabled}
               cameraEnabled={cameraEnabled}
-              screenEnabled={narrationOn ? false : screenOn}
-              systemAudioEnabled={!narrationOn && includeSystemAudio}
-              separateAudioRecorder={narrationOn}
+              screenEnabled={narrationRecording ? false : screenOn}
+              systemAudioEnabled={!narrationRecording && includeSystemAudio}
+              separateAudioRecorder={narrationRecording}
               primaryStream={activePrimaryStream}
               cameraStream={activeCameraStream}
             />
 
-            {!narrationOn && recorder.error && (
+            {!narrationRecording && recorder.error && (
               <div style={errorStyle}>{recorder.error.message}</div>
             )}
-            {!narrationOn && saveError && (
+            {!narrationRecording && saveError && (
               <div role="alert" style={errorStyle}>
                 {saveError}
                 <p style={{ marginBottom: 0 }}>
@@ -1774,16 +1801,18 @@ export function RecorderModal({
               <p style={summaryStyle}>
                 Recording size:{' '}
                 {formatRecordingBytes(
-                  narrationOn ? stage.recorder.recordedBytes : recorder.recordedBytes,
+                  narrationRecording ? stage.recorder.recordedBytes : recorder.recordedBytes,
                 )}
                 . Automatically stops at{' '}
                 {formatRecordingBytes(
-                  narrationOn ? stage.recorder.maxRecordingBytes : recorder.maxRecordingBytes,
+                  narrationRecording
+                    ? stage.recorder.maxRecordingBytes
+                    : recorder.maxRecordingBytes,
                 )}{' '}
                 total. Final encoding may add more data.
               </p>
             }
-            {!narrationOn && recorder.limitReached && (
+            {!narrationRecording && recorder.limitReached && (
               <p role="status" style={recordingStatusStyle}>
                 Recording stopped at the size limit. Your complete recording is retained; download a
                 copy or save it to the document.
@@ -1799,7 +1828,7 @@ export function RecorderModal({
             before the take, recorder stream during it), a recorded-take
             status after stopping, a hint while the camera is armed but not
             yet previewing, or a mic meter. */}
-            {narrationOn && narrationCameraStream && (
+            {narrationRecording && narrationCameraStream && (
               <div style={previewBoxStyle}>
                 <video
                   ref={previewRef}
@@ -1810,14 +1839,14 @@ export function RecorderModal({
                 />
               </div>
             )}
-            {narrationOn && !narrationCameraStream && narrationTakeDone && (
+            {narrationRecording && !narrationCameraStream && narrationTakeDone && (
               <div style={audioMeterStyle}>
                 {stage.recorder.take
                   ? `✓ Recorded ${formatDurationMs(stage.recorder.take.durationSec * 1000)}`
                   : '● Processing take…'}
               </div>
             )}
-            {narrationOn &&
+            {narrationRecording &&
               !narrationCameraStream &&
               !narrationTakeDone &&
               stage.recorder.withCamera && (
@@ -1829,7 +1858,7 @@ export function RecorderModal({
                   </span>
                 </div>
               )}
-            {narrationOn &&
+            {narrationRecording &&
               !narrationCameraStream &&
               !narrationTakeDone &&
               !stage.recorder.withCamera && (
@@ -1860,7 +1889,7 @@ export function RecorderModal({
             - Playback (stopped): the captured blob bound to a <video>/<audio>
               with native controls so the user can audition before saving.
           */}
-            {!narrationOn && !showPreview && (
+            {!narrationRecording && !showPreview && (
               <div style={previewBoxStyle}>
                 <span>
                   {screenOn
@@ -1869,7 +1898,7 @@ export function RecorderModal({
                 </span>
               </div>
             )}
-            {!narrationOn && showPreview && recorder.state !== 'stopped' && !isAudioOnly && (
+            {!narrationRecording && showPreview && recorder.state !== 'stopped' && !isAudioOnly && (
               <div style={isDual ? { ...previewBoxStyle, position: 'relative' } : previewBoxStyle}>
                 <video
                   ref={previewRef}
@@ -1899,7 +1928,7 @@ export function RecorderModal({
                 )}
               </div>
             )}
-            {!narrationOn && showPreview && recorder.state !== 'stopped' && isAudioOnly && (
+            {!narrationRecording && showPreview && recorder.state !== 'stopped' && isAudioOnly && (
               <div style={audioMeterStyle}>
                 {recorder.state === 'recording' ? (
                   <>● Recording {formatDurationMs(recorder.durationMs)}</>
@@ -1908,7 +1937,7 @@ export function RecorderModal({
                 )}
               </div>
             )}
-            {!narrationOn && recorder.state === 'stopped' && playbackUrl && !isAudioOnly && (
+            {!narrationRecording && recorder.state === 'stopped' && playbackUrl && !isAudioOnly && (
               <div style={{ ...previewBoxStyle, position: 'relative' }}>
                 <video
                   src={playbackUrl}
@@ -1928,7 +1957,7 @@ export function RecorderModal({
                 </div>
               </div>
             )}
-            {!narrationOn && recorder.state === 'stopped' && isDual && cameraPlaybackUrl && (
+            {!narrationRecording && recorder.state === 'stopped' && isDual && cameraPlaybackUrl && (
               <div style={{ marginBottom: 12 }}>
                 <div style={summaryStyle}>Camera (picture-in-picture)</div>
                 <video
@@ -1945,7 +1974,7 @@ export function RecorderModal({
                 />
               </div>
             )}
-            {!narrationOn && recorder.state === 'stopped' && playbackUrl && isAudioOnly && (
+            {!narrationRecording && recorder.state === 'stopped' && playbackUrl && isAudioOnly && (
               <div style={{ marginBottom: 12 }}>
                 <div style={{ ...audioMeterStyle, marginBottom: 8 }}>
                   ✓ Recorded {formatDurationMs(recorder.durationMs)}
@@ -1954,7 +1983,7 @@ export function RecorderModal({
               </div>
             )}
 
-            {!narrationOn && canSave && playbackUrl && (
+            {!narrationRecording && canSave && playbackUrl && (
               <div
                 style={{
                   ...buttonRowStyle,
@@ -2019,14 +2048,18 @@ export function RecorderModal({
               id="recorder-basename"
               type="text"
               style={inputStyle}
-              placeholder={narrationOn ? 'narration' : isDual ? 'screen + camera' : filenameSeed}
+              placeholder={
+                narrationRecording ? 'narration' : isDual ? 'screen + camera' : filenameSeed
+              }
               value={basename}
               onChange={(e) => setBasename(e.target.value)}
-              disabled={narrationOn ? !narrationRecorderIdle : recorder.state === 'recording'}
+              disabled={
+                narrationRecording ? !narrationRecorderIdle : recorder.state === 'recording'
+              }
             />
 
             {/* Live duration during recording */}
-            {!narrationOn && recorder.state === 'recording' && !isAudioOnly && (
+            {!narrationRecording && recorder.state === 'recording' && !isAudioOnly && (
               <div style={recordingStatusStyle}>
                 ● Recording {formatDurationMs(recorder.durationMs)}
               </div>
@@ -2063,12 +2096,12 @@ export function RecorderModal({
                 type="button"
                 style={btnSecondary}
                 onClick={handleClose}
-                disabled={!narrationOn && isBusy}
+                disabled={!narrationRecording && isBusy}
               >
                 Close
               </button>
 
-              {narrationOn && (
+              {narrationRecording && (
                 <>
                   {narrationRecorderIdle && !narrationMicLive && (
                     <button
@@ -2128,7 +2161,7 @@ export function RecorderModal({
                 </>
               )}
 
-              {!narrationOn && (
+              {!narrationRecording && (
                 <>
                   {(recorder.state === 'idle' ||
                     recorder.state === 'error' ||
@@ -2191,7 +2224,7 @@ export function RecorderModal({
           </div>
 
           {narrationOn && narration && (
-            <div style={rightColStyle}>
+            <div style={{ ...rightColStyle, flex: '1 1 0' }}>
               <NarrationStage
                 stage={stage}
                 theme={narration.theme}
@@ -2205,7 +2238,7 @@ export function RecorderModal({
           )}
 
           {slidesOn && (
-            <div style={rightColStyle}>
+            <div style={{ ...rightColStyle, flex: '1 1 0' }}>
               <RecorderSlidesPanel
                 slides={slideDeck}
                 index={slideIndex}
@@ -2213,7 +2246,11 @@ export function RecorderModal({
                 viewport={slidesViewport}
                 basePath={slides?.basePath}
                 mediaProvider={slides?.mediaProvider ?? mediaProvider}
-                recording={recorder.state === 'recording'}
+                recording={
+                  narrationRecording
+                    ? stage.recorder.state === 'recording'
+                    : recorder.state === 'recording'
+                }
                 shownBlockIds={shownBlockIds}
               />
             </div>

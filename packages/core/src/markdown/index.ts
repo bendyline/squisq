@@ -205,3 +205,5 @@ export type { MarkdownReferenceOptions } from './contentReferences.js';
 
 export { normalizeDocfxMarkdown } from './docfxMarkdown.js';
 export type { DocfxMarkdownOptions } from './docfxMarkdown.js';
+
+export { condenseMarkdownSource } from './condenseMarkdown.js';

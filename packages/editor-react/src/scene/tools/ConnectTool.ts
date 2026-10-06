@@ -1,7 +1,7 @@
 /**
  * ConnectTool — drag from a diagram node to another to create an edge.
  *
- * Press on a node-card layer to anchor the connection start. While
+ * Press on a node or near one of its connection points to anchor the start. While
  * dragging, render a dashed preview path from the source node's center
  * to the pointer. On release over a different node-card layer, dispatch
  * an `addEdge` command. Release elsewhere cancels.
@@ -31,6 +31,10 @@ interface ConnectState {
   /** Currently-hovered target node id, if any (for highlight + drop). */
   hoveredTargetId: string | null;
 }
+
+// Screen pixels, so ports stay easy to grab even when the diagram is zoomed out.
+const CONNECTION_HIT_RADIUS = 12;
+const CONNECTION_POINT_RADIUS = 4;
 
 function getState(ctx: SceneToolContext): ConnectState | null {
   return (ctx.interaction.connect as ConnectState | undefined) ?? null;
@@ -95,6 +99,28 @@ function connectionPoints(box: EdgeNodeBox): Array<{ x: number; y: number }> {
   ];
 }
 
+function nodeAt(ctx: SceneToolContext, point: { x: number; y: number }): EdgeNodeBox | null {
+  const radius = CONNECTION_HIT_RADIUS / ctx.transform.scale;
+  let nearest: EdgeNodeBox | null = null;
+  let nearestDistance = radius * radius;
+  // Ports straddle the card border. Test their full hit area before the
+  // card interiors, including a child's ports inside a larger container.
+  // On equally close ports, prefer the visually topmost card.
+  for (const box of nodeBoxes(ctx).reverse()) {
+    for (const port of connectionPoints(box)) {
+      const distance = (port.x - point.x) ** 2 + (port.y - point.y) ** 2;
+      if (distance <= radius * radius && (!nearest || distance < nearestDistance)) {
+        nearest = box;
+        nearestDistance = distance;
+      }
+    }
+  }
+  if (nearest) return nearest;
+  const hitId = ctx.hit(point);
+  const nodeId = hitId ? nodeIdFromCardLayerId(hitId) : null;
+  return nodeId ? nodeBoxFromCard(ctx, nodeId) : null;
+}
+
 function updatePreview(
   sourceBox: EdgeNodeBox,
   current: { x: number; y: number },
@@ -125,21 +151,18 @@ export const ConnectTool: SceneTool = {
     if (e.button !== 0) return;
     const { sx, sy } = pointerFromEvent(e);
     const v = ctx.screenToViewport(sx, sy);
-    const hitId = ctx.hit(v);
-    if (!hitId) return;
-    const nodeId = nodeIdFromCardLayerId(hitId);
-    if (!nodeId) return;
-    const sourceBox = nodeBoxFromCard(ctx, nodeId);
+    const sourceBox = nodeAt(ctx, v);
     if (!sourceBox) return;
     const preview = updatePreview(sourceBox, v, null);
     setState(ctx, {
-      sourceNodeId: nodeId,
+      sourceNodeId: sourceBox.id,
       sourceBox,
       start: preview.start,
       end: preview.end,
       hoveredTargetId: null,
     });
     (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    e.preventDefault();
     e.stopPropagation();
   },
 
@@ -148,10 +171,8 @@ export const ConnectTool: SceneTool = {
     if (!state) return;
     const { sx, sy } = pointerFromEvent(e);
     const v = ctx.screenToViewport(sx, sy);
-    const hitId = ctx.hit(v);
-    const nodeId = hitId ? nodeIdFromCardLayerId(hitId) : null;
-    const targetId = nodeId && nodeId !== state.sourceNodeId ? nodeId : null;
-    const targetBox = targetId ? nodeBoxFromCard(ctx, targetId) : null;
+    const hit = nodeAt(ctx, v);
+    const targetBox = hit?.id !== state.sourceNodeId ? hit : null;
     const preview = updatePreview(state.sourceBox, v, targetBox);
     state.start = preview.start;
     state.end = preview.end;
@@ -161,12 +182,21 @@ export const ConnectTool: SceneTool = {
   onPointerUp(e, ctx) {
     const state = getState(ctx);
     if (!state) return;
-    const target = state.hoveredTargetId;
-    if (target) {
-      ctx.dispatch({ kind: 'addEdge', source: state.sourceNodeId, target });
-    }
-    (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+    // The release position is authoritative; the last move can be stale.
+    const { sx, sy } = pointerFromEvent(e);
+    const target = nodeAt(ctx, ctx.screenToViewport(sx, sy));
     setState(ctx, null);
+    (e.currentTarget as Element).releasePointerCapture?.(e.pointerId);
+    if (target && target.id !== state.sourceNodeId) {
+      ctx.dispatch({ kind: 'addEdge', source: state.sourceNodeId, target: target.id });
+    }
+  },
+
+  onKeyDown(e, ctx) {
+    if (e.key === 'Escape' && getState(ctx)) {
+      setState(ctx, null);
+      e.preventDefault();
+    }
   },
 
   renderOverlay(ctx): JSX.Element | null {
@@ -177,7 +207,7 @@ export const ConnectTool: SceneTool = {
           key: `${box.id}-${index}`,
           cx: point.x,
           cy: point.y,
-          r: 4,
+          r: CONNECTION_POINT_RADIUS / ctx.transform.scale,
           className:
             state?.hoveredTargetId === box.id
               ? 'squisq-scene-connection-point squisq-scene-connection-point--active'
@@ -201,7 +231,7 @@ export const ConnectTool: SceneTool = {
       createElement('circle', {
         cx: b.x,
         cy: b.y,
-        r: 4,
+        r: CONNECTION_POINT_RADIUS / ctx.transform.scale,
         className: 'squisq-scene-connect-preview',
       }),
     );

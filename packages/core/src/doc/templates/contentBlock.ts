@@ -16,6 +16,7 @@ import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUti
 import { createBackgroundLayer } from './captionUtils.js';
 
 function bodyNodes(context: TemplateContext): MarkdownBlockNode[] {
+  if (context.block?.summaryMode === 'headings-and-features') return [];
   return (context.block?.contents ?? []).filter(
     // Mermaid source is already materialized as a visual layer. Repeating the
     // fence text as prose makes the loss-averse default noisy without

@@ -13,7 +13,8 @@
 import type { Layer, Position } from '../schemas/Doc.js';
 import type { ViewportConfig, ViewportOrientation } from '../schemas/Viewport.js';
 import { getViewportOrientation } from '../schemas/Viewport.js';
-import { estimateTextHeight } from './templates/captionUtils.js';
+import { estimateTextHeight, fitProse } from './templates/captionUtils.js';
+import { featureMediaSlot } from './templates/featureMediaSlot.js';
 import {
   getBlockMediaLayoutPolicy,
   type SupplementalMediaLayoutVariant,
@@ -32,6 +33,109 @@ export interface SupplementalMediaLayout {
   mediaRect: LayerRect;
   /** Designed slots receive a visible frame; heuristic fallbacks do not. */
   framed: boolean;
+}
+
+/** Visible, contained feature area in the same grid used by materialization. */
+function containedFeatureArea(region: LayerRect, aspects: readonly (number | undefined)[]): number {
+  const count = aspects.length;
+  const columns = Math.min(
+    count,
+    Math.max(1, Math.ceil(Math.sqrt((count * region.width) / region.height))),
+  );
+  const rows = Math.ceil(count / columns);
+  const width = region.width / columns;
+  const height = region.height / rows;
+  return aspects.reduce<number>((area, aspect) => {
+    const ratio = aspect && Number.isFinite(aspect) && aspect > 0 ? aspect : 16 / 9;
+    const containedWidth = Math.min(width, height * ratio);
+    return area + containedWidth * (containedWidth / ratio);
+  }, 0);
+}
+
+/**
+ * Visual-first summary composition. Compare a compact title band with a
+ * title-only side column by actual contained media area, without cropping.
+ * Authored templates never call this path.
+ */
+export function resolveFeatureSummaryLayout(
+  layers: Layer[],
+  viewport: ViewportConfig,
+  aspectRatios: readonly (number | undefined)[],
+): SupplementalMediaLayout {
+  const title = layers.find((layer) => layer.type === 'text' && layer.id === 'title');
+  if (!title || title.type !== 'text') {
+    return { layers, mediaRect: rect(viewport, 0.045, 0.045, 0.91, 0.91), framed: false };
+  }
+  const unit = Math.min(viewport.width, viewport.height);
+  const margin = unit * 0.045;
+  const gap = unit * 0.035;
+  const baseFontSize = Math.min(title.content.style.fontSize, unit * 0.056);
+  const minFontSize = Math.min(baseFontSize, unit * 0.026);
+  const lineHeight = 1.2;
+  const topWidth = viewport.width - margin * 2;
+  const topFit = fitProse({
+    text: title.content.text,
+    baseFontSize,
+    minFontSize,
+    maxWidthPx: topWidth,
+    maxHeightPx: viewport.height * 0.26,
+    lineHeight,
+  });
+  const mediaTop = margin + topFit.heightPx + gap;
+  const topMedia: LayerRect = {
+    x: margin,
+    y: mediaTop,
+    width: topWidth,
+    height: viewport.height - margin - mediaTop,
+  };
+  const sideWidth = viewport.width * 0.25;
+  const sideMedia: LayerRect = {
+    x: margin + sideWidth + gap,
+    y: margin,
+    width: viewport.width - margin * 2 - sideWidth - gap,
+    height: viewport.height - margin * 2,
+  };
+  const side =
+    containedFeatureArea(sideMedia, aspectRatios) >
+    containedFeatureArea(topMedia, aspectRatios) * 1.04;
+  const titleWidth = side ? sideWidth : topWidth;
+  const titleFit = side
+    ? fitProse({
+        text: title.content.text,
+        baseFontSize,
+        minFontSize,
+        maxWidthPx: titleWidth,
+        maxHeightPx: sideMedia.height,
+        lineHeight,
+      })
+    : topFit;
+  const titleLayer: Layer = {
+    ...title,
+    position: {
+      ...title.position,
+      x: side ? margin : viewport.width / 2,
+      y: side ? viewport.height / 2 - titleFit.heightPx / 2 : margin + titleFit.heightPx / 2,
+      width: titleWidth,
+      height: titleFit.heightPx,
+      anchor: side ? 'top-left' : 'center',
+    },
+    content: {
+      ...title.content,
+      style: {
+        ...title.content.style,
+        fontSize: titleFit.fontSize,
+        lineHeight,
+        textAlign: side ? 'left' : 'center',
+        maxLines: titleFit.maxLines,
+        shrinkToFit: true,
+      },
+    },
+  };
+  return {
+    layers: [...layers.filter((layer) => isFullViewportBackground(layer, viewport)), titleLayer],
+    mediaRect: side ? sideMedia : topMedia,
+    framed: false,
+  };
 }
 
 interface DesignedLayout {
@@ -569,6 +673,7 @@ export function resolveSupplementalMediaLayout(
   viewport: ViewportConfig,
   mediaCount: number,
   aspectRatios: readonly (number | undefined)[],
+  featureOptions: { summaryFeature?: boolean; stackColumns?: boolean } = {},
 ): SupplementalMediaLayout {
   const policy = getBlockMediaLayoutPolicy(template);
   const shape = mediaShape(mediaCount, aspectRatios);
@@ -579,6 +684,30 @@ export function resolveSupplementalMediaLayout(
       layer.type === 'map' ||
       layer.type === 'mermaid',
   );
+  // A feature template without a primary image still owns its feature cell.
+  // Embedded videos and diagrams fill that cell instead of an extra-media inset.
+  if (
+    !alreadyOwnsMedia &&
+    (policy?.nativeLayout === 'feature-left' || policy?.nativeLayout === 'feature-right')
+  ) {
+    const { position } = featureMediaSlot(
+      policy.nativeLayout === 'feature-left' ? 'left' : 'right',
+      {
+        stack: featureOptions.stackColumns ?? getViewportOrientation(viewport) === 'portrait',
+        summaryFeature: featureOptions.summaryFeature ?? false,
+      },
+    );
+    return {
+      layers,
+      mediaRect: {
+        x: resolvePositionValue(position.x, viewport.width),
+        y: resolvePositionValue(position.y, viewport.height),
+        width: resolvePositionValue(position.width, viewport.width),
+        height: resolvePositionValue(position.height, viewport.height),
+      },
+      framed: false,
+    };
+  }
   const retainNativeLayout =
     policy?.unconsumedMedia === 'retain-native-layout' ||
     (policy?.unconsumedMedia === 'reserve-when-no-native-media' && alreadyOwnsMedia);

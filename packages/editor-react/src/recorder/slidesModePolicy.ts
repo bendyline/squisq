@@ -3,38 +3,32 @@
  * of `narrationModePolicy.ts`, kept DOM/MediaRecorder-free so every branch is
  * unit-testable.
  *
- * Slides mode and narration mode both expand the dialog and both claim its
- * right column, so they are mutually exclusive. That exclusion is STRUCTURAL:
- * the dialog holds one {@link RecorderPanelMode} rather than two booleans, so
- * checking one box cannot leave the other checked. There is deliberately no
- * "are these compatible?" predicate to keep in sync.
+ * Narration and slides are independent optional panels. The combined state
+ * keeps both visible without changing which pipeline owns a take.
  */
 
 import type { RecorderState } from './hooks/useMediaRecorder.js';
 
-/** Which optional panel occupies the dialog's right column. */
-export type RecorderPanelMode = 'none' | 'narration' | 'slides';
+/** Which optional panels appear beside the capture controls. */
+export type RecorderPanelMode = 'none' | 'narration' | 'slides' | 'both';
 
-/** Whether the dialog should render in its full-viewport two-column form. */
+/** Whether the dialog should render in its full-viewport form. */
 export function isExpandedPanel(mode: RecorderPanelMode): boolean {
   return mode !== 'none';
 }
 
 /**
- * The mode after toggling one of the two checkboxes. Checking a box selects
- * it (deselecting the other by construction); unchecking returns to 'none'.
- *
- * Unchecking a box that is not the active mode is a no-op rather than a
- * collapse — a stale change event from the box that was just superseded must
- * not close the panel the user actually opened.
+ * Toggle only the requested panel, preserving the other checkbox.
  */
 export function panelModeAfterToggle(
   current: RecorderPanelMode,
   target: 'narration' | 'slides',
   checked: boolean,
 ): RecorderPanelMode {
-  if (checked) return target;
-  return current === target ? 'none' : current;
+  const narration =
+    target === 'narration' ? checked : current === 'narration' || current === 'both';
+  const slides = target === 'slides' ? checked : current === 'slides' || current === 'both';
+  return narration ? (slides ? 'both' : 'narration') : slides ? 'slides' : 'none';
 }
 
 /** Clamp a slide index into `[0, count - 1]`, or 0 for an empty deck. */

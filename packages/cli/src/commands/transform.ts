@@ -38,7 +38,9 @@ interface TransformOpts {
 export function registerTransformCommand(program: Command): void {
   program
     .command('transform')
-    .description('Apply one-time markdown source transforms (unwrap, wrap, cleanup) to a document')
+    .description(
+      'Apply one-time markdown source transforms (unwrap, wrap, cleanup, condense) to a document',
+    )
     .argument('<input>', 'Path to a markdown (.md) file')
     .requiredOption(
       '--ops <list>',

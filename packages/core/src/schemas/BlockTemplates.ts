@@ -125,6 +125,10 @@ interface BaseTemplateBlock {
    * Provenance only — NOT a time (see sourceStartTime for seconds).
    */
   sourceCharOffset?: number;
+  /** Projection-only summary policy; keeps visual features on their owning slide. */
+  summaryMode?: 'brief' | 'headings-and-features';
+  /** Automatic title-and-feature composition; omitted for authored templates. */
+  summaryLayout?: 'feature';
   /**
    * Per-block override for the theme's photographic image grade
    * (`theme.style.imageTreatment`). `'none'` opts this block's imagery out;

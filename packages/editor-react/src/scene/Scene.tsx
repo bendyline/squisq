@@ -292,8 +292,10 @@ export function Scene(props: SceneProps) {
         return;
       }
       activeTool?.onPointerUp?.(e, ctxRef.current);
+      // A cancelled/no-op drop has no host update to clear its preview.
+      bumpTick();
     },
-    [activeTool],
+    [activeTool, bumpTick],
   );
 
   const handlePointerCancel = useCallback(
@@ -375,10 +377,11 @@ export function Scene(props: SceneProps) {
       }
       // Tool keydown (Delete, Escape, etc.).
       activeTool?.onKeyDown?.(e, ctxRef.current);
+      if (e.defaultPrevented) bumpTick();
     };
     root.addEventListener('keydown', onKey);
     return () => root.removeEventListener('keydown', onKey);
-  }, [tools, activeTool, setActiveTool, textEdit.activeRef]);
+  }, [tools, activeTool, setActiveTool, textEdit.activeRef, bumpTick]);
 
   // ── Responsive fit ──────────────────────────────────────────
   const [containerSize, setContainerSize] = useState<{ width: number; height: number } | null>(

@@ -145,7 +145,11 @@ function collectLeafBlocks(blocks: Block[]): Block[] {
  * @returns Analyzed blocks with extractions, in flattened order.
  */
 export function analyzeBlocks(blocks: Block[], options?: ExtractionOptions): AnalyzedBlock[] {
-  const flat = collectLeafBlocks(blocks);
+  return analyzeFlatBlocks(collectLeafBlocks(blocks), options);
+}
+
+/** Internal flat analysis for compact modes, which retain every heading's own scope. */
+export function analyzeFlatBlocks(flat: Block[], options?: ExtractionOptions): AnalyzedBlock[] {
   const results: AnalyzedBlock[] = [];
 
   for (const block of flat) {

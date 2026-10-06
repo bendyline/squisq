@@ -1921,7 +1921,7 @@ export function Toolbar({
                   }
                   setActiveView(view.id);
                 }}
-                data-tooltip={`${viewLabel} (${platformShortcut(view.shortcutKey)})`}
+                data-tooltip={`${viewLabel} (${platformShortcut(`Shift+${view.shortcutKey}`)})`}
               >
                 <span
                   className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"

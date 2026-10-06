@@ -284,7 +284,7 @@ Start editing this document in any of the three views:
 
 ### Tips
 
-- Use \`Ctrl+1/2/3\` to switch views
+- Use \`Ctrl+Shift+1/2/3\` to switch views
 - The toolbar provides quick formatting shortcuts
 - Check the Debug panel to inspect the parsed AST
 

@@ -25,6 +25,7 @@ import {
   themedImageTreatment,
 } from '../utils/themeUtils.js';
 import { estimateProseLineCount, fitProse } from './captionUtils.js';
+import { featureMediaSlot } from './featureMediaSlot.js';
 
 type FeatureInput = LeftFeatureInput | RightFeatureInput;
 
@@ -140,6 +141,7 @@ function buildFeatureLayers(
   const { theme, layout, viewport } = context;
 
   const treatment = themedImageTreatment(context, input.imageTreatment);
+  const summaryFeature = input.summaryMode === 'headings-and-features' && !body;
   // Treat the image as "sized" when the host gave us an explicit width
   // or height — that's our cue that the user resized the image in the
   // editor and we should respect that as a sizing hint instead of
@@ -157,47 +159,7 @@ function buildFeatureLayers(
   const bodyBaseSize = themedFontSize(24, context, false);
   const bodyMinSize = themedFontSize(18, context, false);
 
-  // Image takes the full left or right half. The text column gets the
-  // opposite half, with a comfortable inset so the text doesn't kiss
-  // the image edge or the card border. All values are percentages of
-  // the block viewport so they scale with the card size.
-  //
-  // When the image is "sized" we shrink it inside its half: the half
-  // still claims the space (so the text column stays the same width
-  // and the layout doesn't shift around when dimensions are toggled)
-  // but the image itself sits centered with padding around it. The
-  // sized box uses a square envelope sized to the smaller dimension of
-  // its half so the image breathes regardless of viewport aspect.
-  let imgX: string;
-  let imgY: string;
-  let imgW: string;
-  let imgH: string;
-  let imageFit: 'cover' | 'contain';
-  if (stack) {
-    imgX = '0';
-    imgY = '0';
-    imgW = '100%';
-    imgH = '50%';
-    imageFit = sized ? 'contain' : 'cover';
-  } else if (sized) {
-    // 90% of the half (with explicit aspect via fit='contain') so the
-    // image keeps its natural proportions and never touches the card
-    // edges. We don't try to honor the literal pixel value — block
-    // viewports are designed in their own coordinate space — but the
-    // *intent* (smaller image, padded, centered) is what comes through.
-    const halfStart = side === 'left' ? 5 : 55; // %
-    imgX = `${halfStart}%`;
-    imgY = '5%';
-    imgW = '40%';
-    imgH = '90%';
-    imageFit = 'contain';
-  } else {
-    imgX = side === 'left' ? '0' : '50%';
-    imgY = '0';
-    imgW = '50%';
-    imgH = '100%';
-    imageFit = 'cover';
-  }
+  const mediaSlot = featureMediaSlot(side, { stack, summaryFeature, sized });
 
   // Text-column geometry. `textX` is the LEFT edge of the column when
   // the side is "left" (image left, text right); when the side is
@@ -205,12 +167,17 @@ function buildFeatureLayers(
   // The mirror lives in the layout only — fully right-aligned
   // (ragged-left) running text on rightFeature was genuinely hard to read.
   const COLUMN_INSET = 4; // % of block width — padding from card edge / divider
-  const textColumnWidth = stack ? 90 : 42;
-  const textXPct = stack
-    ? (100 - textColumnWidth) / 2
-    : side === 'left'
-      ? 50 + COLUMN_INSET // text column starts just past the divider
-      : COLUMN_INSET + 2; // left edge of the left-half text column
+  const textColumnWidth = stack ? 90 : summaryFeature ? 26 : 42;
+  const textXPct =
+    summaryFeature && !stack
+      ? side === 'left'
+        ? 69
+        : 5
+      : stack
+        ? (100 - textColumnWidth) / 2
+        : side === 'left'
+          ? 50 + COLUMN_INSET // text column starts just past the divider
+          : COLUMN_INSET + 2; // left edge of the left-half text column
   const textX = `${textXPct}%`;
   const columnWidthPx = (textColumnWidth / 100) * viewport.width;
   const textAnchor = 'top-left';
@@ -220,7 +187,7 @@ function buildFeatureLayers(
   // the top and 10% at the bottom — the extra slack below absorbs faces
   // that wrap a line or two earlier than the renderer's 0.5em estimate.
   // In the stacked (portrait) layout the band sits under the image half.
-  const bandTop = (stack ? 0.56 : 0.08) * viewport.height;
+  const bandTop = (stack ? (summaryFeature ? 0.79 : 0.56) : 0.08) * viewport.height;
   const bandBottom = (stack ? 0.92 : 0.9) * viewport.height;
   const bandHeight = bandBottom - bandTop;
 
@@ -233,7 +200,7 @@ function buildFeatureLayers(
         baseFontSize: titleBaseSize,
         minFontSize: titleMinSize,
         maxWidthPx: titleWrapWidth,
-        maxHeightPx: bandHeight * 0.45,
+        maxHeightPx: bandHeight * (summaryFeature ? 1 : 0.45),
         lineHeight: TITLE_LINE_HEIGHT,
       })
     : null;
@@ -297,10 +264,10 @@ function buildFeatureLayers(
       content: {
         src: imageSrc,
         alt: imageAlt ?? title,
-        fit: imageFit,
+        fit: mediaSlot.fit,
         ...(treatment ? { treatment } : {}),
       },
-      position: { x: imgX, y: imgY, width: imgW, height: imgH },
+      position: mediaSlot.position,
     });
   }
 

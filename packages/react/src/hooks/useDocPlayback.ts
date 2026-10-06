@@ -30,6 +30,7 @@ import {
   VIEWPORT_PRESETS,
   type ViewportConfig,
 } from '@bendyline/squisq/doc';
+import { useFeatureMediaAspectRatios } from './useFeatureMediaAspectRatios.js';
 
 interface PlaybackState {
   /** Currently visible block */
@@ -67,6 +68,8 @@ interface PlaybackActions {
 }
 
 export interface UseDocPlaybackOptions {
+  /** Fallback media root for intrinsic feature metadata. */
+  basePath?: string;
   /** Target viewport used to materialize template blocks. */
   viewport?: ViewportConfig;
   /** Active theme used for materialization and transition defaults. */
@@ -107,7 +110,13 @@ export function useDocPlayback(
     useAudioSegmentTiming = true,
     deterministicTransitions = false,
     motion: motionOverride,
+    basePath = '.',
   } = options;
+  const mediaAspectRatios = useFeatureMediaAspectRatios(
+    script?.blocks,
+    basePath,
+    theme ?? DEFAULT_THEME,
+  );
   // Expand any template blocks into full blocks
   const blocks = useMemo(() => {
     if (!script?.blocks) {
@@ -146,6 +155,7 @@ export function useDocPlayback(
       const expanded = expandDocBlocks(flatBlocks as DocBlock[], {
         audioSegments,
         viewport,
+        mediaAspectRatios,
         persistentLayers,
         theme,
         motion: resolveMotionForDoc(
@@ -176,6 +186,7 @@ export function useDocPlayback(
     script?.motion,
     script?.frontmatter,
     motionOverride,
+    mediaAspectRatios,
     viewport,
     theme,
     useAudioSegmentTiming,

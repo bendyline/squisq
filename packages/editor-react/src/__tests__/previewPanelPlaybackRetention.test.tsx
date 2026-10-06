@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { DocPlayerProps } from '@bendyline/squisq-react';
-import type { ContentContainer } from '@bendyline/squisq/storage';
+import { MemoryContentContainer } from '@bendyline/squisq/storage';
+
+// This fixture has no data sidecars. Keep the unrelated lazy reader import
+// from making audio readiness depend on cold module-loading time.
+vi.mock('@bendyline/squisq-formats/data', () => ({
+  defaultDataReaders: () => [],
+}));
 
 vi.mock('@bendyline/squisq/doc', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@bendyline/squisq/doc')>();
@@ -63,7 +69,7 @@ import { EditorProvider, useEditorContext } from '../EditorContext';
 import { PreviewPanel } from '../PreviewPanel';
 import { PreviewSettingsProvider, usePreviewSettings } from '../PreviewControls';
 
-const WORKSPACE_CONTAINER = {} as ContentContainer;
+const WORKSPACE_CONTAINER = new MemoryContentContainer();
 
 function SelectThemeButton() {
   const { setSelectedThemeId } = usePreviewSettings();

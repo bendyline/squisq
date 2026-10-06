@@ -15,7 +15,7 @@ import {
   type RecorderPanelMode,
 } from '../recorder/slidesModePolicy';
 
-const MODES: RecorderPanelMode[] = ['none', 'narration', 'slides'];
+const MODES: RecorderPanelMode[] = ['none', 'narration', 'slides', 'both'];
 const STATES: RecorderState[] = [
   'idle',
   'requesting',
@@ -28,21 +28,22 @@ const STATES: RecorderState[] = [
 
 describe('isExpandedPanel', () => {
   it('expands for either panel and only for those', () => {
-    expect(MODES.map(isExpandedPanel)).toEqual([false, true, true]);
+    expect(MODES.map(isExpandedPanel)).toEqual([false, true, true, true]);
   });
 });
 
 describe('panelModeAfterToggle', () => {
-  it('checking a box selects it from any starting mode', () => {
+  it('toggles each panel independently in every starting state', () => {
     for (const mode of MODES) {
-      expect(panelModeAfterToggle(mode, 'slides', true)).toBe('slides');
-      expect(panelModeAfterToggle(mode, 'narration', true)).toBe('narration');
+      for (const target of ['slides', 'narration'] as const) {
+        for (const checked of [true, false]) {
+          const next = panelModeAfterToggle(mode, target, checked);
+          expect(next === target || next === 'both').toBe(checked);
+          const other = target === 'slides' ? 'narration' : 'slides';
+          expect(next === other || next === 'both').toBe(mode === other || mode === 'both');
+        }
+      }
     }
-  });
-
-  it('checking one box deselects the other — exclusion is structural', () => {
-    expect(panelModeAfterToggle('narration', 'slides', true)).toBe('slides');
-    expect(panelModeAfterToggle('slides', 'narration', true)).toBe('narration');
   });
 
   it('unchecking the active box collapses the panel', () => {

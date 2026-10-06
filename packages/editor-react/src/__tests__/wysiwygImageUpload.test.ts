@@ -67,3 +67,60 @@ describe('asynchronous WYSIWYG image upload', () => {
     expect(paragraph.child(2).text).toBe('after tail');
   });
 });
+
+describe('bounded image upload concurrency', () => {
+  it('lets later files finish first while retaining document order and at most three active uploads', async () => {
+    let state = EditorState.create({ schema });
+    const view = {
+      get state() {
+        return state;
+      },
+      dispatch(tr: typeof state.tr) {
+        state = state.apply(tr);
+      },
+    };
+    const finishes = new Map<string, (path: string) => void>();
+    let active = 0;
+    let maximum = 0;
+    const provider = {
+      addMedia: vi.fn(async (name: string) => {
+        active++;
+        maximum = Math.max(maximum, active);
+        const path = await new Promise<string>((resolve) => {
+          finishes.set(name, resolve);
+        });
+        active--;
+        return path;
+      }),
+    } as unknown as MediaProvider;
+    const files = ['first.png', 'second.png', 'third.png', 'fourth.png'].map(
+      (name) =>
+        ({
+          name,
+          type: 'image/png',
+          arrayBuffer: async () => new Uint8Array([1]).buffer,
+        }) as File,
+    );
+    const uploaded = vi.fn();
+    const pending = uploadAndInsertImages(view, files, provider, uploaded);
+    await vi.waitFor(() => expect(finishes.size).toBe(3));
+    finishes.get('third.png')!('assets/third.png');
+    await vi.waitFor(() => expect(finishes.size).toBe(4));
+    const sources: string[] = [];
+    state.doc.descendants((node) => {
+      if (node.type.name === 'image') sources.push(node.attrs.src);
+    });
+    expect(sources[2]).toBe('assets/third.png');
+    finishes.get('fourth.png')!('assets/fourth.png');
+    finishes.get('second.png')!('assets/second.png');
+    finishes.get('first.png')!('assets/first.png');
+    await pending;
+    const final: string[] = [];
+    state.doc.descendants((node) => {
+      if (node.type.name === 'image') final.push(node.attrs.src);
+    });
+    expect(final).toEqual(files.map((file) => `assets/${file.name}`));
+    expect(maximum).toBe(3);
+    expect(uploaded).toHaveBeenCalledTimes(4);
+  });
+});

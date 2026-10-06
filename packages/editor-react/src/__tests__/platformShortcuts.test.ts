@@ -2,6 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { platformShortcut } from '../platformShortcuts';
 
 describe('platformShortcut', () => {
+  it('includes Shift in view shortcut labels', () => {
+    expect(platformShortcut('Shift+1', 'Win32')).toBe('Ctrl+Shift+1');
+    expect(platformShortcut('Shift+2', 'MacIntel')).toBe('⌘⇧2');
+  });
+
   it('uses the Command glyph on Apple platforms', () => {
     expect(platformShortcut('2', 'MacIntel')).toBe('⌘2');
     expect(platformShortcut('3', 'iPhone')).toBe('⌘3');

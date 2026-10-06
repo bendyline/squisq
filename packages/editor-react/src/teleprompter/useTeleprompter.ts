@@ -139,6 +139,8 @@ function spokenWordTarget(
 export function useTeleprompter(opts: {
   doc: Doc | null;
   micConstraints?: MediaTrackConstraints;
+  /** Borrow capture audio instead of opening another microphone; null waits for capture. */
+  analysisStream?: MediaStream | null;
 }): TeleprompterController {
   const { doc } = opts;
   const script = useMemo(
@@ -151,7 +153,7 @@ export function useTeleprompter(opts: {
   const [countdownRemaining, setCountdownRemaining] = useState<number | null>(null);
   const [view, setView] = useState({ wordPos: 0, micLevel: 0, voiceActive: false });
 
-  const mic = useMicAnalysis(opts.micConstraints);
+  const mic = useMicAnalysis(opts.micConstraints, opts.analysisStream);
 
   const scriptRef = useRef(script);
   const prefsRef = useRef(prefs);
