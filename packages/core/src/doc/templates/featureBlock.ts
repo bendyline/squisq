@@ -140,6 +140,7 @@ function buildFeatureLayers(
   const { theme, layout, viewport } = context;
 
   const treatment = themedImageTreatment(context, input.imageTreatment);
+  const summaryFeature = input.summaryMode === 'headings-and-features' && !body;
   // Treat the image as "sized" when the host gave us an explicit width
   // or height — that's our cue that the user resized the image in the
   // editor and we should respect that as a sizing hint instead of
@@ -173,7 +174,15 @@ function buildFeatureLayers(
   let imgW: string;
   let imgH: string;
   let imageFit: 'cover' | 'contain';
-  if (stack) {
+  if (summaryFeature) {
+    // A title-only feature gives the visual the body column's unused space,
+    // and contains the entire image (screenshots and diagrams must not crop).
+    imgX = stack ? '5%' : side === 'left' ? '5%' : '35%';
+    imgY = '5%';
+    imgW = stack ? '90%' : '60%';
+    imgH = stack ? '70%' : '90%';
+    imageFit = 'contain';
+  } else if (stack) {
     imgX = '0';
     imgY = '0';
     imgW = '100%';
@@ -205,12 +214,17 @@ function buildFeatureLayers(
   // The mirror lives in the layout only — fully right-aligned
   // (ragged-left) running text on rightFeature was genuinely hard to read.
   const COLUMN_INSET = 4; // % of block width — padding from card edge / divider
-  const textColumnWidth = stack ? 90 : 42;
-  const textXPct = stack
-    ? (100 - textColumnWidth) / 2
-    : side === 'left'
-      ? 50 + COLUMN_INSET // text column starts just past the divider
-      : COLUMN_INSET + 2; // left edge of the left-half text column
+  const textColumnWidth = stack ? 90 : summaryFeature ? 26 : 42;
+  const textXPct =
+    summaryFeature && !stack
+      ? side === 'left'
+        ? 69
+        : 5
+      : stack
+        ? (100 - textColumnWidth) / 2
+        : side === 'left'
+          ? 50 + COLUMN_INSET // text column starts just past the divider
+          : COLUMN_INSET + 2; // left edge of the left-half text column
   const textX = `${textXPct}%`;
   const columnWidthPx = (textColumnWidth / 100) * viewport.width;
   const textAnchor = 'top-left';
@@ -220,7 +234,7 @@ function buildFeatureLayers(
   // the top and 10% at the bottom — the extra slack below absorbs faces
   // that wrap a line or two earlier than the renderer's 0.5em estimate.
   // In the stacked (portrait) layout the band sits under the image half.
-  const bandTop = (stack ? 0.56 : 0.08) * viewport.height;
+  const bandTop = (stack ? (summaryFeature ? 0.79 : 0.56) : 0.08) * viewport.height;
   const bandBottom = (stack ? 0.92 : 0.9) * viewport.height;
   const bandHeight = bandBottom - bandTop;
 
@@ -233,7 +247,7 @@ function buildFeatureLayers(
         baseFontSize: titleBaseSize,
         minFontSize: titleMinSize,
         maxWidthPx: titleWrapWidth,
-        maxHeightPx: bandHeight * 0.45,
+        maxHeightPx: bandHeight * (summaryFeature ? 1 : 0.45),
         lineHeight: TITLE_LINE_HEIGHT,
       })
     : null;

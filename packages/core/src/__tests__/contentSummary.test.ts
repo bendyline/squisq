@@ -132,14 +132,16 @@ describe('Headings and features summaries', () => {
     expect(visibleText(slides[0])).toContain('Output');
   });
 
-  it('replaces explicit text template inputs and removes the inferred cover subtitle', () => {
+  it('respects an authored stat template, removes prose, and removes the cover subtitle', () => {
     const doc = source(
       '# Title\n\nA long paragraph that becomes the inferred cover subtitle.\n\n## Stat {[statHighlight stat=42 description="Hidden description"]}\n\nMany more narrative words that are not visual features.',
       true,
     );
     const result = applyTransform(doc, 'headings-and-features').doc;
     expect(result.startBlock?.subtitle).toBeUndefined();
-    expect(buildPreviewDoc(result).blocks.map(visibleText)).toEqual(['Title', 'Stat']);
+    const slides = buildPreviewDoc(result).blocks;
+    expect(slides[1].template).toBe('statHighlight');
+    expect(slides.map(visibleText)).toEqual(['Title', '42\nStat']);
     expect(doc.startBlock?.subtitle).toContain('long paragraph');
   });
 
@@ -189,6 +191,120 @@ describe('Headings and features summaries', () => {
       posterSrc: 'poster.png',
     });
     expect(slides.map(visibleText)).toEqual(['Photo', 'Video']);
+    expect(slides.map((slide) => slide.template)).toEqual(['imageWithCaption', 'videoWithCaption']);
+  });
+
+  it.each(['leftFeature', 'rightFeature'])(
+    'keeps an authored %s with title-only contained imagery',
+    (template) => {
+      const doc = source(
+        `# Feature {[${template} imageSrc=photo.png body="Hidden typed body"]}\n\nHidden body prose.`,
+      );
+      const before = JSON.stringify(doc);
+      const slide = buildPreviewDoc(applyTransform(doc, 'headings-and-features').doc).blocks[0];
+      expect(slide.template).toBe(template);
+      expect(slide.summaryLayout).toBeUndefined();
+      expect(visibleText(slide)).toBe('Feature');
+      expect(layers(slide).find((layer) => layer.type === 'image')).toMatchObject({
+        content: { src: 'photo.png', fit: 'contain' },
+        position: { width: '60%', height: '90%', x: template === 'leftFeature' ? '5%' : '35%' },
+      });
+      expect(JSON.stringify(doc)).toBe(before);
+    },
+  );
+
+  it('respects explicit list/content templates without reintroducing prose or placeholder items', () => {
+    const doc = source(
+      '# List {[list items="Hidden,Items"]}\n\n- Hidden list prose\n\n## Content {[content]}\n\nHidden prose.\n\n![Feature alt](feature.png)',
+    );
+    const slides = buildPreviewDoc(applyTransform(doc, 'headings-and-features').doc).blocks;
+    expect(slides.map((slide) => slide.template)).toEqual(['list', 'content']);
+    expect(slides.map(visibleText)).toEqual(['List', 'Content']);
+    expect(layers(slides[1]).filter((layer) => layer.type === 'image')).toHaveLength(1);
+  });
+
+  it.each([0.5, 1, 16 / 9, 3])(
+    'uses more feature area for aspect ratio %s, leaving title margins',
+    (aspect) => {
+      const doc = source(
+        `# Seeing this in action\n\n<img src="feature.png" width="${aspect * 1000}" height="1000">`,
+      );
+      const slide = buildPreviewDoc(applyTransform(doc, 'headings-and-features').doc).blocks[0];
+      const rendered = layers(slide);
+      const image = rendered.find((layer) => layer.type === 'image')!;
+      const title = rendered.find((layer) => layer.type === 'text')!;
+      expect(slide.summaryLayout).toBe('feature');
+      expect(image.content.fit).toBe('contain');
+      expect(Number(image.position.height)).toBeGreaterThan(1080 * 0.79);
+      expect(Number(image.position.x)).toBeGreaterThanOrEqual(40);
+      expect(Number(image.position.y)).toBeGreaterThanOrEqual(40);
+      expect(Number(image.position.x) + Number(image.position.width)).toBeLessThanOrEqual(
+        1920 - 40,
+      );
+      expect(Number(image.position.y) + Number(image.position.height)).toBeLessThanOrEqual(
+        1080 - 40,
+      );
+      if (aspect <= 1) {
+        expect(title.position.anchor).toBe('top-left');
+        expect(Number(title.position.x) + Number(title.position.width)).toBeLessThan(
+          Number(image.position.x),
+        );
+      } else {
+        expect(title.position.anchor).toBe('center');
+        expect(Number(title.position.y) + Number(title.position.height) / 2).toBeLessThan(
+          Number(image.position.y),
+        );
+      }
+    },
+  );
+
+  it('uses intrinsic ratios when Markdown omits dimensions, without changing authored layouts', () => {
+    const doc = source('# Feature\n\n![Feature](feature.png)');
+    const slide = buildPreviewDoc(applyTransform(doc, 'headings-and-features').doc).blocks[0];
+    const initial = layers(slide).find((layer) => layer.type === 'image')!;
+    const measured = materializeBlockLayers(slide, {
+      persistentLayers: false,
+      mediaAspectRatios: { 'feature.png': 0.5 },
+    }).layers;
+    const image = measured.find((layer) => layer.type === 'image')!;
+    expect(Number(image.position.height)).toBeGreaterThan(Number(initial.position.height));
+    expect(measured.find((layer) => layer.type === 'text')?.position.anchor).toBe('top-left');
+  });
+
+  it.each([
+    { width: 1080, height: 1920 },
+    { width: 1080, height: 1080 },
+  ])('keeps long titles and multiple features inside a $width × $height slide', (viewport) => {
+    const doc = source(
+      '# A long heading about making images and diagrams easier to see while keeping comfortable margins on the slide\n\n![First](first.png)\n\n![Second](second.png)',
+    );
+    const slide = buildPreviewDoc(applyTransform(doc, 'headings-and-features').doc).blocks[0];
+    const rendered = materializeBlockLayers(slide, {
+      viewport: { ...viewport, name: 'Summary test' },
+      persistentLayers: false,
+      mediaAspectRatios: { 'first.png': 0.6, 'second.png': 1 },
+    }).layers;
+    const images = rendered.filter((layer) => layer.type === 'image');
+    expect(images).toHaveLength(2);
+    for (const image of images) {
+      expect(Number(image.position.x)).toBeGreaterThan(0);
+      expect(Number(image.position.y)).toBeGreaterThan(0);
+      expect(Number(image.position.x) + Number(image.position.width)).toBeLessThan(viewport.width);
+      expect(Number(image.position.y) + Number(image.position.height)).toBeLessThan(
+        viewport.height,
+      );
+    }
+    const title = rendered.find((layer) => layer.type === 'text')!;
+    const bottom =
+      Number(title.position.y) +
+      Number(title.position.height) / (title.position.anchor === 'center' ? 2 : 1);
+    if (title.position.anchor === 'center') {
+      expect(bottom).toBeLessThan(Number(images[0].position.y));
+    } else {
+      expect(Number(title.position.x) + Number(title.position.width)).toBeLessThan(
+        Number(images[0].position.x),
+      );
+    }
   });
 });
 

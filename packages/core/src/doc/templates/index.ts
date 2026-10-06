@@ -180,6 +180,8 @@ export interface ExpandDocBlocksOptions {
    * `resolveMotionForDoc()` so `Doc.motion` and frontmatter take part.
    */
   motion?: MotionSpec | null;
+  /** Intrinsic media aspect ratios for adaptive feature summaries. */
+  mediaAspectRatios?: Readonly<Record<string, number>>;
 }
 
 /**
@@ -209,6 +211,7 @@ function materializeScheduledBlock(
   failureMode: LayerMaterializationFailureMode,
   onDiagnostic?: ExpandDocBlocksOptions['onDiagnostic'],
   motion?: MotionSpec | null,
+  mediaAspectRatios?: ExpandDocBlocksOptions['mediaAspectRatios'],
 ): Block {
   const materialized = materializeBlockLayersWithRuntime(
     sourceBlock,
@@ -220,6 +223,7 @@ function materializeScheduledBlock(
       totalBlocks,
       failureMode,
       motion,
+      mediaAspectRatios,
     },
     { registry, expandedPersistentLayers },
   );
@@ -297,6 +301,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
         failureMode,
         onDiagnostic,
         motion,
+        opts.mediaAspectRatios,
       );
       expandedBlock.startTime = currentTime;
       currentTime += expandedBlock.duration;
@@ -337,6 +342,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
           failureMode,
           onDiagnostic,
           motion,
+          opts.mediaAspectRatios,
         );
 
         expandedBlock.startTime = offsetTime;
@@ -401,6 +407,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
         failureMode,
         onDiagnostic,
         motion,
+        opts.mediaAspectRatios,
       );
 
       const templateBlock = block as TemplateBlock;

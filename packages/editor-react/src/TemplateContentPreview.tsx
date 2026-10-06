@@ -2,40 +2,31 @@ import { useMemo } from 'react';
 import { BlockRenderer, MediaContext } from '@bendyline/squisq-react';
 import {
   resolveTemplateContentPreviewResult,
+  type TemplatePreviewResult,
   type TemplatePreviewSource,
 } from './templateContentPreviewResolver';
 
 export interface TemplateContentPreviewProps {
   templateName: string;
   source?: TemplatePreviewSource;
+  resolvedPreview?: TemplatePreviewResult;
   fallback: JSX.Element;
 }
 
 export function TemplateContentPreview({
   templateName,
   source,
+  resolvedPreview,
   fallback,
 }: TemplateContentPreviewProps) {
   const preview = useMemo(
-    () => (source ? resolveTemplateContentPreviewResult(templateName, source) : null),
-    [templateName, source],
+    () =>
+      resolvedPreview ??
+      (source ? resolveTemplateContentPreviewResult(templateName, source) : null),
+    [templateName, source, resolvedPreview],
   );
 
-  if (!source) return fallback;
-
-  if (!preview?.visual) {
-    if (!preview?.warning) return fallback;
-    return (
-      <div
-        className="squisq-template-gallery-content-preview squisq-template-gallery-content-preview--fallback"
-        style={{ aspectRatio: `${source.viewport.width} / ${source.viewport.height}` }}
-        aria-hidden="true"
-      >
-        <div className="squisq-template-gallery-content-preview-fallback">{fallback}</div>
-        <span className="squisq-template-gallery-content-preview-warning">{preview.warning}</span>
-      </div>
-    );
-  }
+  if (!source || !preview?.visual) return fallback;
 
   return (
     <div
@@ -49,6 +40,8 @@ export function TemplateContentPreview({
           blockTime={0}
           basePath={source.basePath ?? '/'}
           viewport={source.viewport}
+          theme={source.theme}
+          animationsEnabled={false}
         />
       </MediaContext.Provider>
     </div>

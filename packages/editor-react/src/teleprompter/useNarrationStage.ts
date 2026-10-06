@@ -49,6 +49,8 @@ export interface UseNarrationStageOptions {
   getAudioBasename?: () => string | undefined;
   /** Microphone constraints shared by voice analysis and audio recording. */
   micConstraints?: MediaTrackConstraints;
+  /** Optional borrowed capture stream for a prompter-only stage; null means no stream yet. */
+  analysisStream?: MediaStream | null;
   /** Constraints for the optional narration camera lane. */
   cameraConstraints?: MediaTrackConstraints;
   /** Combined narration audio/camera soft stop threshold, in bytes. */
@@ -76,7 +78,11 @@ export interface NarrationStageHandle {
 
 export function useNarrationStage(opts: UseNarrationStageOptions): NarrationStageHandle {
   const { doc, recording = null, getAudioBasename } = opts;
-  const controller = useTeleprompter({ doc, micConstraints: opts.micConstraints });
+  const controller = useTeleprompter({
+    doc,
+    micConstraints: opts.micConstraints,
+    analysisStream: opts.analysisStream,
+  });
   const float = useFloatingWindow(TELEPROMPTER_CSS);
   const controllerRef = useRef(controller);
   controllerRef.current = controller;

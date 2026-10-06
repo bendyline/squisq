@@ -2,8 +2,8 @@
  * TemplatePicker
  *
  * A custom popover that replaces the plain <select> for block templates.
- * Each template entry shows a mini wireframe SVG, a human-readable label,
- * and a one-sentence description so authors can quickly find the right layout.
+ * Each template entry previews the active block when it has suitable inputs,
+ * with a wireframe fallback, a label, and a one-sentence description.
  */
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -989,18 +989,24 @@ function TemplateCard({
   onSelect: (name: string) => void;
   previewSource?: TemplatePreviewSource;
 }) {
+  const preview = useMemo(
+    () =>
+      previewSource ? resolveTemplateContentPreviewResult(entry.name, previewSource) : undefined,
+    [entry.name, previewSource],
+  );
   return (
     <button
       type="button"
       aria-pressed={value === entry.name}
       className={`squisq-template-gallery-card${value === entry.name ? ' squisq-template-gallery-card--selected' : ''}`}
       onClick={() => onSelect(entry.name)}
-      title={entry.description}
+      title={preview?.warning ? `${entry.description}\n${preview.warning}` : entry.description}
     >
       <div className="squisq-template-gallery-card-icon">
         <TemplateContentPreview
           templateName={entry.name}
           source={previewSource}
+          resolvedPreview={preview}
           fallback={entry.icon}
         />
       </div>
@@ -1023,7 +1029,7 @@ function splitBlockTypeEntriesByContent(
 
   for (const entry of entries) {
     const result = resolveTemplateContentPreviewResult(entry.name, previewSource);
-    if (result.warning) contentNeededEntries.push(entry);
+    if (!result.visual && result.warning) contentNeededEntries.push(entry);
     else blockTypeEntries.push(entry);
   }
 
@@ -1252,7 +1258,9 @@ function TemplateGalleryBody({
 
               {contentNeededEntries.length > 0 && (
                 <div className="squisq-template-gallery-section">
-                  <h3 className="squisq-template-gallery-section-title">Block Types for Content</h3>
+                  <h3 className="squisq-template-gallery-section-title">
+                    Needs Additional Content
+                  </h3>
                   <div className="squisq-template-gallery-grid">
                     {contentNeededEntries.map((entry) => (
                       <TemplateCard

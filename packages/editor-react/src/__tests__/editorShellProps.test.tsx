@@ -916,6 +916,8 @@ describe('<Toolbar> Insert menu', () => {
     // share open state — and it names what it captures.
     expect(screen.getByRole('dialog', { name: 'Record document narration' })).toBeTruthy();
     expect(screen.queryByRole('dialog', { name: 'Record media' })).toBeNull();
+    expect(screen.getByRole('checkbox', { name: 'Show narration mode' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Show slides mode' })).toBeTruthy();
   });
 
   it('adds a default task list from the Insert menu in raw fallback mode', async () => {

@@ -7,6 +7,7 @@ import type {
   ViewportConfig,
 } from '@bendyline/squisq/schemas';
 import {
+  coerceTemplateParams,
   deriveTemplateInputs,
   extractBodyPlainText,
   extractBlockquoteText,
@@ -38,11 +39,6 @@ const NUMBER_RE =
 const DATE_RE =
   /\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4}|Q[1-4]\s+\d{4}|\d{4}s|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}|\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})\b/i;
 
-const AUDIO_VIDEO_SOURCE_RE =
-  /\.(?:aac|flac|m4a|m4v|mkv|mov|mp3|mp4|oga|ogg|ogv|opus|wav|webm)(?:$|[?#\s"'<>),])/i;
-const AUDIO_VIDEO_TAG_RE = /<\/?(?:audio|source|video)\b/i;
-const AUDIO_VIDEO_MIME_RE = /^(?:audio|video)\//i;
-
 export function resolveTemplateContentPreview(
   templateName: string,
   source: TemplatePreviewSource,
@@ -57,37 +53,33 @@ export function resolveTemplateContentPreviewResult(
   const { block, theme, viewport } = source;
   const headingText = getHeadingText(block);
   const bodyText = extractBodyPlainText(block.contents);
-  const topLevelLists = (block.contents ?? []).filter((node) => node.type === 'list').length;
-  const hasCompoundListBody =
-    topLevelLists > 1 ||
-    (topLevelLists === 1 && (block.contents ?? []).some((node) => node.type !== 'list'));
-
-  // A specialized thumbnail that silently drops prose or merges separate
-  // lists is misleading. Keep those templates available for an intentional
-  // transformation, but show their incompatibility instead of a mangled
-  // preview. `content` is the complete-body choice for this source shape.
-  if (templateName !== 'content' && hasCompoundListBody) {
-    return {
-      visual: null,
-      warning: 'Use Content to preserve mixed prose and list structure',
-    };
-  }
-
   const sameTemplate = block.template === templateName;
+  // Authored data fences survive a template change; automatically derived
+  // inputs are rebuilt from the body for the new template.
+  const templateData = sameTemplate || !block.autoTemplate ? block.templateData : undefined;
   const existingInputs =
     sameTemplate &&
     ((block.templateData && Object.keys(block.templateData).length > 0) ||
       (block.templateOverrides && Object.keys(block.templateOverrides).length > 0));
+  // Picking a different template preserves the heading's annotation params.
+  // Check them using the target template's coercion, just as rendering does.
+  const providedInputs: Record<string, unknown> = {
+    ...block,
+    ...templateData,
+    ...coerceTemplateParams(templateName, block.templateOverrides ?? {}).input,
+  };
   const { inputs, warning } = buildTemplatePreviewInputs(
     templateName,
     block,
     headingText,
     bodyText,
+    providedInputs,
   );
 
-  if (!inputs && !existingInputs) return { visual: null, warning };
+  if (!inputs && (warning || !existingInputs)) return { visual: null, warning };
 
   const candidate: Block = {
+    ...(inputs ?? {}),
     ...block,
     id: `template-preview-${block.id}-${templateName}`,
     template: templateName,
@@ -95,9 +87,8 @@ export function resolveTemplateContentPreviewResult(
     duration: 1,
     audioSegment: 0,
     layers: undefined,
-    templateData: sameTemplate ? block.templateData : undefined,
-    templateOverrides: sameTemplate ? block.templateOverrides : undefined,
-    ...(inputs ?? {}),
+    templateData,
+    templateOverrides: block.templateOverrides,
   };
 
   const ctx: MaterializeBlockLayersOptions = {
@@ -111,10 +102,12 @@ export function resolveTemplateContentPreviewResult(
   try {
     const materialized = materializeBlockLayers(candidate as unknown as DocBlock, ctx);
     const { layers } = materialized;
+    if (materialized.diagnostic) {
+      return { visual: null, warning: materialized.diagnostic.message };
+    }
     if (layers.length === 0) return { visual: null, warning };
     return {
       visual: { ...candidate, layers },
-      warning: warning ?? materialized.diagnostic?.message,
     };
   } catch {
     return { visual: null, warning };
@@ -126,9 +119,12 @@ function buildTemplatePreviewInputs(
   block: Block,
   headingText: string,
   bodyText: string,
+  provided: Record<string, unknown>,
 ): { inputs: Record<string, unknown> | null; warning?: string } {
   const contents = block.contents;
   const text = [headingText, bodyText].filter(Boolean).join('\n');
+  const hasAuthoredHeadingInput =
+    block.template === templateName && !!block.sourceHeading && !!headingText;
 
   switch (templateName) {
     case 'content':
@@ -160,7 +156,7 @@ function buildTemplatePreviewInputs(
       };
     }
     case 'statHighlight':
-      if (!NUMBER_RE.test(text)) {
+      if (!hasAuthoredHeadingInput && !hasTextOrNumber(provided.stat) && !NUMBER_RE.test(text)) {
         return { inputs: null, warning: 'No stat found in this block' };
       }
       return {
@@ -170,37 +166,51 @@ function buildTemplatePreviewInputs(
     case 'fullBleedQuote': {
       const quoteText = extractBlockquoteText(contents) || bodyText;
       return {
-        inputs: quoteText
-          ? deriveTemplateInputs(templateName, headingText, contents, { placeholders: false })
-          : null,
+        inputs:
+          quoteText ||
+          hasAuthoredHeadingInput ||
+          hasTextOrNumber(provided[templateName === 'quote' ? 'quote' : 'text'])
+            ? (deriveTemplateInputs(templateName, headingText, contents, { placeholders: false }) ??
+              {})
+            : null,
       };
     }
-    case 'pullQuote':
+    case 'pullQuote': {
+      const inputs = derivePullQuoteInputs(block, headingText, bodyText);
+      const hasImage =
+        hasMediaSource(provided.backgroundImage) || extractImages(contents, 1).length > 0;
       return {
-        inputs: derivePullQuoteInputs(block, headingText, bodyText),
-        ...(extractImages(contents, 1).length === 0
-          ? { warning: 'No image found in this block' }
-          : {}),
+        inputs: hasImage ? (inputs ?? { text: bodyText || headingText }) : null,
+        ...(hasImage ? {} : { warning: 'No image found in this block' }),
       };
+    }
     case 'factCard':
     case 'definitionCard':
       return {
         inputs:
-          headingText && bodyText
+          headingText &&
+          (bodyText ||
+            hasTextOrNumber(provided[templateName === 'factCard' ? 'explanation' : 'definition']))
             ? deriveTemplateInputs(templateName, headingText, contents, { placeholders: false })
             : null,
       };
     case 'twoColumn':
-      return { inputs: deriveTwoColumnInputs(block, headingText, bodyText) };
+      return {
+        inputs:
+          deriveTwoColumnInputs(block, headingText, bodyText) ??
+          (provided.left && provided.right ? {} : null),
+      };
     case 'dateEvent':
-      if (!DATE_RE.test(text)) {
+      if (!hasAuthoredHeadingInput && !hasTextOrNumber(provided.date) && !DATE_RE.test(text)) {
         return { inputs: null, warning: 'No date found in this block' };
       }
       return {
         inputs: deriveTemplateInputs(templateName, headingText, contents, { placeholders: false }),
       };
     case 'comparisonBar': {
-      const comparisonInputs = deriveComparisonInputs(block);
+      const comparisonInputs =
+        deriveComparisonInputs(block) ??
+        (hasTextOrNumber(provided.leftValue) && hasTextOrNumber(provided.rightValue) ? {} : null);
       return {
         inputs: comparisonInputs,
         ...(comparisonInputs ? {} : { warning: 'No stat found in this block' }),
@@ -211,23 +221,69 @@ function buildTemplatePreviewInputs(
     case 'rightFeature':
     case 'photoGrid': {
       const imageCount = extractImages(contents, templateName === 'photoGrid' ? 2 : 1).length;
-      const needsMoreImages = templateName === 'photoGrid' ? imageCount < 2 : imageCount === 0;
+      const hasProvidedImages =
+        templateName === 'photoGrid'
+          ? Array.isArray(provided.images) &&
+            provided.images.length > 0 &&
+            provided.images.every(hasMediaSource)
+          : hasText(provided.imageSrc);
+      const needsMoreImages =
+        !hasProvidedImages && (templateName === 'photoGrid' ? imageCount < 2 : imageCount === 0);
       return {
         inputs: needsMoreImages
           ? null
-          : deriveTemplateInputs(templateName, headingText, contents, { placeholders: false }),
-        ...(needsMoreImages ? { warning: 'No image found in this block' } : {}),
+          : (deriveTemplateInputs(templateName, headingText, contents, { placeholders: false }) ??
+            {}),
+        ...(needsMoreImages
+          ? {
+              warning:
+                imageCount === 1
+                  ? 'Photo Grid needs at least two images'
+                  : 'No image found in this block',
+            }
+          : {}),
       };
     }
-    case 'map':
-      return { inputs: null };
-    case 'videoWithCaption':
-    case 'videoPullQuote':
+    case 'map': {
+      const center = provided.center as { lat?: unknown; lng?: unknown } | undefined;
+      const hasLocation =
+        typeof center?.lat === 'number' &&
+        Number.isFinite(center.lat) &&
+        typeof center.lng === 'number' &&
+        Number.isFinite(center.lng);
       return {
-        inputs: null,
-        ...(hasAudioVideoMedia(contents) ? {} : { warning: 'No audio/video found in this block' }),
+        inputs: hasLocation ? {} : null,
+        ...(hasLocation ? {} : { warning: 'No map location found in this block' }),
       };
+    }
+    case 'videoWithCaption':
+    case 'videoPullQuote': {
+      const inputs = deriveTemplateInputs(templateName, headingText, contents, {
+        placeholders: false,
+      });
+      const hasVideo =
+        templateName === 'videoWithCaption'
+          ? hasText(provided.videoSrc) || hasText(inputs?.videoSrc)
+          : hasMediaSource(provided.backgroundVideo) || hasMediaSource(inputs?.backgroundVideo);
+      return {
+        inputs: hasVideo ? (inputs ?? {}) : null,
+        ...(hasVideo
+          ? {}
+          : {
+              warning: block.media?.some((clip) => clip.kind === 'video')
+                ? "This template needs an inline video; this block's video plays separately"
+                : 'No video found in this block',
+            }),
+      };
+    }
     case 'diagram':
+      return {
+        inputs:
+          deriveTemplateInputs(templateName, headingText, contents, { placeholders: false }) ??
+          (block.children?.length || (Array.isArray(provided.nodes) && provided.nodes.length > 0)
+            ? { title: headingText }
+            : null),
+      };
     case 'layout':
     case 'drawing':
       return {
@@ -239,13 +295,29 @@ function buildTemplatePreviewInputs(
     case 'donutChart':
     case 'lineChart':
     case 'areaChart':
-    case 'scatterChart': {
-      const chartInputs = deriveTemplateInputs(templateName, headingText, contents, {
-        placeholders: false,
-      });
+    case 'scatterChart':
+    case 'dataTable': {
+      const chartInputs =
+        deriveTemplateInputs(templateName, headingText, contents, {
+          placeholders: false,
+        }) ??
+        (Array.isArray(provided.headers) && Array.isArray(provided.rows) && provided.rows.length > 0
+          ? {}
+          : null);
       return {
         inputs: chartInputs,
         ...(chartInputs ? {} : { warning: 'No table found in this block' }),
+      };
+    }
+    case 'list': {
+      const inputs =
+        deriveTemplateInputs(templateName, headingText, contents, { placeholders: false }) ??
+        (Array.isArray(provided.items) && provided.items.length > 0 && provided.items.every(hasText)
+          ? {}
+          : null);
+      return {
+        inputs,
+        ...(inputs ? {} : { warning: 'No list found in this block' }),
       };
     }
     default:
@@ -349,29 +421,16 @@ function parseNumericValue(raw: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
-function hasAudioVideoMedia(value: unknown): boolean {
-  if (typeof value === 'string') {
-    return (
-      AUDIO_VIDEO_TAG_RE.test(value) ||
-      AUDIO_VIDEO_SOURCE_RE.test(value) ||
-      AUDIO_VIDEO_MIME_RE.test(value)
-    );
-  }
-  if (Array.isArray(value)) return value.some(hasAudioVideoMedia);
-  if (!value || typeof value !== 'object') return false;
+function hasTextOrNumber(value: unknown): boolean {
+  return hasText(value) || (typeof value === 'number' && Number.isFinite(value));
+}
 
-  const record = value as Record<string, unknown>;
-  const tagName = typeof record.tagName === 'string' ? record.tagName.toLowerCase() : '';
-  if (tagName === 'audio' || tagName === 'video') return true;
-  if (record.type === 'audio' || record.type === 'video') return true;
+function hasText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
 
-  const attributes = record.attributes;
-  if (attributes && typeof attributes === 'object') {
-    const attrs = attributes as Record<string, unknown>;
-    if (hasAudioVideoMedia(attrs.src) || hasAudioVideoMedia(attrs.type)) return true;
-  }
-
-  return Object.values(record).some(hasAudioVideoMedia);
+function hasMediaSource(value: unknown): boolean {
+  return !!value && typeof value === 'object' && hasText((value as Record<string, unknown>).src);
 }
 
 function getHeadingText(block: Block): string {

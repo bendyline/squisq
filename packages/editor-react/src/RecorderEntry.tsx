@@ -136,23 +136,21 @@ export function RecorderEntry({
   const isDocumentNarration = mode === 'document-narration';
 
   const narration = useMemo<RecorderNarrationOptions | null>(() => {
-    // Teleprompter narration owns its own save pipeline (it writes an
-    // `{[audio … anchor=document]}` preamble itself and never fires `onSave`),
-    // so offering it here would silently bypass this entry's insertion and
-    // could leave two document-anchored tracks. The document-narration entry
-    // is the plain capture dialog.
-    if (isDocumentNarration) return null;
+    // Document narration uses the prompter as a reading aid while the
+    // capture recorder owns the take, slide timings, and replacement insertion.
     if (!allowNarrate || !mediaProvider) return null;
     return {
       doc,
       theme,
-      recording: {
-        mediaProvider,
-        container: workspaceContainer ?? null,
-        markdownSource,
-        setMarkdownSource,
-        bumpMediaRevision,
-      },
+      recording: isDocumentNarration
+        ? null
+        : {
+            mediaProvider,
+            container: workspaceContainer ?? null,
+            markdownSource,
+            setMarkdownSource,
+            bumpMediaRevision,
+          },
     };
   }, [
     isDocumentNarration,

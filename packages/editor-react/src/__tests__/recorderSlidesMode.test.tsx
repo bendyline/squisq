@@ -6,7 +6,7 @@
  *
  * Two things are being pinned here. First, the mode itself: a sibling of
  * narration mode that expands the dialog, claims the right column, and is
- * mutually exclusive with it. Second, and more load-bearing, the timing
+ * can be shown alongside it. Second, and more load-bearing, the timing
  * capture: advances made while a take rolls must land in a v3 sidecar at the
  * path `applyNarrationTiming` reads, and must NOT be written when the user
  * unchecks the review checkbox (in which case the classic v1 script sidecar
@@ -141,7 +141,7 @@ describe('RecorderModal — slides mode', () => {
     expect(screen.getByText('Slide 2 of 3')).toBeTruthy();
   });
 
-  it('is mutually exclusive with narration mode', async () => {
+  it('keeps both panels visible and lets either checkbox be turned off independently', async () => {
     render(
       <RecorderModal
         mediaProvider={mediaProvider}
@@ -169,15 +169,19 @@ describe('RecorderModal — slides mode', () => {
     await act(async () => {
       fireEvent.click(checkbox('Show narration mode'));
     });
-    expect(dialog().getAttribute('data-panel-mode')).toBe('narration');
-    expect(dialog().getAttribute('data-slides')).toBeNull();
-    expect(checkbox('Show slides mode').checked).toBe(false);
+    expect(dialog().getAttribute('data-panel-mode')).toBe('both');
+    expect(dialog().getAttribute('data-slides')).toBe('true');
+    expect(checkbox('Show slides mode').checked).toBe(true);
+    expect(screen.getByTestId('teleprompter-view')).toBeTruthy();
+    expect(screen.getByTestId('recorder-slides-panel')).toBeTruthy();
 
     await act(async () => {
       fireEvent.click(checkbox('Show slides mode'));
     });
-    expect(dialog().getAttribute('data-panel-mode')).toBe('slides');
-    expect(dialog().getAttribute('data-narration')).toBeNull();
+    expect(dialog().getAttribute('data-panel-mode')).toBe('narration');
+    expect(dialog().getAttribute('data-slides')).toBeNull();
+    await act(async () => fireEvent.click(checkbox('Show narration mode')));
+    expect(dialog().getAttribute('data-panel-mode')).toBe('none');
   });
 });
 
@@ -200,11 +204,17 @@ describe('RecorderModal — slide timing capture', () => {
     vi.restoreAllMocks();
   });
 
-  function renderDialog(captureTimings = true) {
+  function renderDialog(
+    captureTimings = true,
+    withNarration = false,
+    initialMode: 'mic' | 'camera' = 'mic',
+  ) {
     render(
       <RecorderModal
         mediaProvider={mediaProvider}
         container={container}
+        initialMode={initialMode}
+        narration={withNarration ? { doc, theme, recording: null } : null}
         onClose={vi.fn()}
         onSave={onSave}
         slides={slidesOptions(captureTimings)}
@@ -232,6 +242,53 @@ describe('RecorderModal — slide timing capture', () => {
     expect(bytes).toBeTruthy();
     return JSON.parse(new TextDecoder().decode(bytes!)) as NarrationTimingJsonV3;
   }
+
+  it.each(['mic', 'camera'] as const)(
+    'saves observed timings through the host with both panels and %s capture',
+    async (source) => {
+      vi.stubGlobal(
+        'AudioContext',
+        class {
+          state = 'running';
+          sampleRate = 48000;
+          destination = {};
+          close = async () => undefined;
+          createMediaStreamSource() {
+            return { connect() {}, disconnect() {} };
+          }
+          createScriptProcessor() {
+            return { connect() {}, disconnect() {}, onaudioprocess: null };
+          }
+          createGain() {
+            return { gain: { value: 0 }, connect() {}, disconnect() {} };
+          }
+        },
+      );
+      renderDialog(true, true, source);
+      await act(async () => fireEvent.click(checkbox('Show narration mode')));
+      await recordWithAdvances();
+      expect(screen.getByTestId('teleprompter-view')).toBeTruthy();
+      expect(screen.getByTestId('recorder-slides-panel')).toBeTruthy();
+      expect(screen.getByTestId('teleprompter-controls').getAttribute('data-transport')).toBe(
+        'paused',
+      );
+      expect(checkbox('Show narration mode').disabled).toBe(true);
+      expect(checkbox('Show slides mode').disabled).toBe(true);
+      // Analysis must borrow capture audio, never request a second microphone.
+      expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+      await click('Save to document');
+      expect(onSave).toHaveBeenCalledTimes(1);
+      const result = onSave.mock.calls[0][0];
+      expect(result.source).toBe(source);
+      const timing = await readSidecar(result.slideTiming!.sidecarPath);
+      expect(timing.generator?.method).toBe('presenter-advance');
+      expect(timing.blocks.map((b) => [b.startSec, b.endSec])).toEqual([
+        [0, 10],
+        [10, 22],
+        [22, 30],
+      ]);
+    },
+  );
 
   it('downloads the observed slide timings with a stable matching media filename', async () => {
     renderDialog();

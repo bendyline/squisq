@@ -71,7 +71,7 @@ describe('RecorderModal — Show narration mode', () => {
     expect(screen.getByLabelText(/Script/)).toBeTruthy();
   });
 
-  it('hides the checkbox when narration.recording is null (prompter would have no save path)', () => {
+  it('offers a reading aid with the capture save path when narration.recording is null', async () => {
     render(
       <RecorderModal
         mediaProvider={mediaProvider}
@@ -79,7 +79,12 @@ describe('RecorderModal — Show narration mode', () => {
         narration={{ doc, theme: DEFAULT_THEME, recording: null }}
       />,
     );
-    expect(narrationCheckbox()).toBeNull();
+    expect(narrationCheckbox()).toBeTruthy();
+    await act(async () => fireEvent.click(narrationCheckbox()!));
+    expect(screen.getByTestId('teleprompter-view')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Screen' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('button', { name: 'Start preview' })).toBeTruthy();
+    expect(screen.queryByLabelText(/Script/)).toBeNull();
   });
 
   it('checking the box expands the dialog and mounts the narration stage', async () => {

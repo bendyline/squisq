@@ -494,38 +494,6 @@
   display: block;
 }
 
-.squisq-template-gallery-content-preview-fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-}
-
-.squisq-template-gallery-content-preview-fallback > svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.squisq-template-gallery-content-preview-warning {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  max-width: calc(100% - 16px);
-  padding: 3px 6px;
-  transform: translate(-50%, -50%);
-  border: 1px solid var(--squisq-template-gallery-preview-warning-border);
-  border-radius: 4px;
-  background: var(--squisq-template-gallery-preview-warning-bg);
-  color: var(--squisq-template-gallery-preview-warning-text);
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.2;
-  text-align: center;
-  pointer-events: none;
-}
-
 .squisq-template-gallery-card-body {
   display: flex;
   flex-direction: column;

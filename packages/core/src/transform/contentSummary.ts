@@ -33,6 +33,8 @@ const PROSE_KEYS = new Set([
   'subtitle',
   'description',
   'explanation',
+  'definition',
+  'detail',
   'caption',
   'quote',
   'text',
@@ -179,10 +181,18 @@ function typedMediaContents(block: Block): MarkdownBlockNode[] {
 export function summarizeBlock(block: Block, mode: 'brief' | 'headings-and-features'): Block {
   const title = block.sourceHeading ? extractPlainText(block.sourceHeading) : (block.title ?? '');
   const nativeFeature = NATIVE_FEATURE_TEMPLATES.has(block.template ?? '');
-  const tableInputs = nativeFeature
+  const authoredTemplate =
+    mode === 'headings-and-features' &&
+    !!block.template &&
+    !block.autoTemplate &&
+    (!block.sourceHeading ||
+      !!block.sourceHeading.templateAnnotation ||
+      !!block.promotedBodyAnnotation);
+  const keepTemplate = nativeFeature || authoredTemplate;
+  const tableInputs = keepTemplate
     ? null
     : deriveTemplateInputs('dataTable', title, block.contents);
-  const featureContents = extractFeatureContents(block.contents, nativeFeature || !!tableInputs);
+  const featureContents = extractFeatureContents(block.contents, keepTemplate || !!tableInputs);
   const brief =
     mode === 'brief'
       ? briefText(
@@ -192,7 +202,7 @@ export function summarizeBlock(block: Block, mode: 'brief' | 'headings-and-featu
             .join(' '),
         )
       : '';
-  const template = nativeFeature
+  const template = keepTemplate
     ? block.template!
     : tableInputs
       ? 'dataTable'
@@ -215,6 +225,9 @@ export function summarizeBlock(block: Block, mode: 'brief' | 'headings-and-featu
     template,
     contents,
     summaryMode: mode,
+    ...(mode === 'headings-and-features' && !keepTemplate && !tableInputs && contents.length
+      ? { summaryLayout: 'feature' as const }
+      : {}),
     sourceBlockId: block.id,
     sourceCharOffset: 0,
     sourceStartTime: block.startTime,
@@ -225,13 +238,40 @@ export function summarizeBlock(block: Block, mode: 'brief' | 'headings-and-featu
       ? { sourceHeading: { ...block.sourceHeading, templateAnnotation: { template } } }
       : {}),
   };
-  if (!nativeFeature && !tableInputs) return base;
+  if (!keepTemplate && !tableInputs) return base;
+  // Blank defaults as well as authored prose: deriving template inputs from
+  // visual-only contents must not turn image alt text or diagram code into a body.
+  const headingInputs = authoredTemplate
+    ? {
+        body: '',
+        subtitle: '',
+        description: template === 'statHighlight' ? title : '',
+        explanation: '',
+        definition: '',
+        detail: '',
+        ...(template === 'list' ? { items: [] } : {}),
+        ...(template === 'imageWithCaption' || template === 'videoWithCaption'
+          ? { caption: title }
+          : {}),
+        ...(template === 'quote' ? { quote: title } : {}),
+        ...(template === 'pullQuote' || template === 'fullBleedQuote' ? { text: title } : {}),
+      }
+    : {};
   return {
-    ...(nativeFeature ? withoutProse(block as unknown as Record<string, unknown>) : {}),
+    ...(keepTemplate ? withoutProse(block as unknown as Record<string, unknown>) : {}),
     ...base,
-    children: nativeFeature && isContainerTemplate(template) ? block.children : undefined,
-    templateData: tableInputs ?? withoutProse(block.templateData),
-    templateOverrides: nativeFeature ? withoutProse(block.templateOverrides) : undefined,
+    ...headingInputs,
+    children: keepTemplate && isContainerTemplate(template) ? block.children : undefined,
+    templateData: tableInputs ?? { ...withoutProse(block.templateData), ...headingInputs },
+    templateOverrides: keepTemplate
+      ? withoutProse(
+          template === 'list'
+            ? Object.fromEntries(
+                Object.entries(block.templateOverrides ?? {}).filter(([key]) => key !== 'items'),
+              )
+            : block.templateOverrides,
+        )
+      : undefined,
   };
 }
 

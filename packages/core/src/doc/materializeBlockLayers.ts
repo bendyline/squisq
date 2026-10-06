@@ -43,6 +43,7 @@ import { deriveTemplateInputs, extractEmbeddedVideos, extractImages } from './te
 import {
   placeLayersInRect,
   resolveSupplementalMediaLayout,
+  resolveFeatureSummaryLayout,
   type LayerRect,
 } from './richMediaLayout.js';
 import {
@@ -140,6 +141,8 @@ export interface MaterializeBlockLayersOptions {
   failureMode?: LayerMaterializationFailureMode;
   /** Motion profile for template output; omitted → theme default, else `calm`. */
   motion?: MotionSpec | null;
+  /** Intrinsic media aspect ratios, keyed by image/video URL or Mermaid source. */
+  mediaAspectRatios?: Readonly<Record<string, number>>;
 }
 
 /** Pre-expanded scheduling cache; not part of the public materialization API. */
@@ -194,6 +197,7 @@ export function materializeBlockLayersWithRuntime(
       block as Block,
       theme,
       viewport,
+      options.mediaAspectRatios,
     );
     return {
       layers: injectPersistentLayers(
@@ -208,7 +212,13 @@ export function materializeBlockLayersWithRuntime(
   }
 
   if (!isTemplateBlock(block)) {
-    const layers = appendRichContentLayers([], block as Block, theme, viewport);
+    const layers = appendRichContentLayers(
+      [],
+      block as Block,
+      theme,
+      viewport,
+      options.mediaAspectRatios,
+    );
     return {
       layers: injectPersistentLayers(
         layers,
@@ -232,7 +242,13 @@ export function materializeBlockLayersWithRuntime(
       runtime.applyRenderStyle !== false
         ? applyRenderStyleToLayers(execution.layers, block as Block, theme)
         : execution.layers;
-    const layers = appendRichContentLayers(styledLayers, block as Block, theme, viewport);
+    const layers = appendRichContentLayers(
+      styledLayers,
+      block as Block,
+      theme,
+      viewport,
+      options.mediaAspectRatios,
+    );
     return {
       layers: injectPersistentLayers(
         layers,
@@ -579,18 +595,32 @@ function appendRichContentLayers(
   block: Block,
   theme: Theme,
   viewport: ViewportConfig,
+  mediaAspectRatios?: Readonly<Record<string, number>>,
 ): Layer[] {
   const timedLayers = applyEmbeddedVideoTiming(layers, block);
   const items = collectRichMediaItems(timedLayers, block);
   if (items.length === 0) return timedLayers;
 
-  const layout = resolveSupplementalMediaLayout(
-    timedLayers,
-    block.template ? resolveTemplateName(block.template) : undefined,
-    viewport,
-    items.length,
-    items.map((item) => item.aspectRatio),
-  );
+  const aspects = items.map((item) => {
+    const key =
+      item.kind === 'image' || item.kind === 'video'
+        ? item.src
+        : item.kind === 'mermaid'
+          ? item.source
+          : undefined;
+    const intrinsic = key ? mediaAspectRatios?.[key] : undefined;
+    return intrinsic && Number.isFinite(intrinsic) && intrinsic > 0 ? intrinsic : item.aspectRatio;
+  });
+  const layout =
+    block.summaryLayout === 'feature'
+      ? resolveFeatureSummaryLayout(timedLayers, viewport, aspects)
+      : resolveSupplementalMediaLayout(
+          timedLayers,
+          block.template ? resolveTemplateName(block.template) : undefined,
+          viewport,
+          items.length,
+          aspects,
+        );
   const cells = gridCells(layout.mediaRect, items.length, viewport, layout.framed);
   const counters: Record<RichMediaItem['kind'], number> = {
     image: 0,

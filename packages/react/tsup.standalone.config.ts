@@ -15,7 +15,12 @@ const common = {
   sourcemap: false,
   clean: false,
   treeshake: true,
-  injectStyle: false,
+  // Export minified CSS as text for standalone-entry's mount-time injection.
+  // tsup's CSS plugin overrides esbuildOptions.loader, so use its transform
+  // hook to avoid extracted CSS files and a second pass over the JS bundles.
+  injectStyle(css: string) {
+    return `export default ${css};`;
+  },
   esbuildOptions(options) {
     options.jsx = 'automatic';
     options.alias = {
@@ -28,7 +33,6 @@ const common = {
       ...options.define,
       __SQUISQ_VERSION__: JSON.stringify(pkg.version),
     };
-    options.loader = { ...options.loader, '.css': 'text' };
   },
 };
 

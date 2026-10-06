@@ -1,7 +1,16 @@
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import { fireEvent } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, waitFor } from '@testing-library/react';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from 'vitest';
 import { markdownToTiptap, tiptapToMarkdown } from '../../tiptapBridge';
 import { replaceAsciiFenceText } from '../../asciiDiagram/asciiDiagramCommands';
 import {
@@ -94,6 +103,12 @@ const SAMPLE = [
 ].join('\n');
 
 const editors: Editor[] = [];
+let consoleError: MockInstance<typeof console.error>;
+
+beforeEach(() => {
+  // Keep logging enabled, but fail this suite if its React synchronization regresses.
+  consoleError = vi.spyOn(console, 'error');
+});
 
 beforeAll(() => {
   if (typeof globalThis.ResizeObserver !== 'undefined') return;
@@ -105,17 +120,21 @@ beforeAll(() => {
   globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 });
 
-function makeEditor(markdown: string, enabled = true): Editor {
-  const editor = new Editor({
-    extensions: [
-      StarterKit.configure({
-        codeBlock: { HTMLAttributes: { class: 'squisq-code-block' } },
-      }),
-      MermaidDiagramExtension.configure({ enabled }),
-    ],
-    content: markdownToTiptap(markdown),
+async function makeEditor(markdown: string, enabled = true): Promise<Editor> {
+  let editor!: Editor;
+  // Tiptap mounts a separate React root; await its effects and Mermaid's async render.
+  await act(async () => {
+    editor = new Editor({
+      extensions: [
+        StarterKit.configure({
+          codeBlock: { HTMLAttributes: { class: 'squisq-code-block' } },
+        }),
+        MermaidDiagramExtension.configure({ enabled }),
+      ],
+      content: markdownToTiptap(markdown),
+    });
+    editors.push(editor);
   });
-  editors.push(editor);
   return editor;
 }
 
@@ -123,64 +142,82 @@ function entriesOf(editor: Editor) {
   return MERMAID_DIAGRAM_KEY.getState(editor.state)?.entries ?? [];
 }
 
-afterEach(() => {
-  for (const editor of editors) editor.destroy();
-  editors.length = 0;
+afterEach(async () => {
+  try {
+    await act(async () => {
+      for (const editor of editors) editor.destroy();
+      editors.length = 0;
+      // Widget destruction defers root.unmount() to the next timer turn.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+    const actWarnings = consoleError.mock.calls.filter(
+      ([message]) => typeof message === 'string' && /\bact\(/.test(message),
+    );
+    expect(actWarnings).toEqual([]);
+  } finally {
+    consoleError.mockRestore();
+  }
 });
 
 describe('MermaidDiagramExtension', () => {
-  it('claims explicit Mermaid fences regardless of diagram type or validity', () => {
-    const editor = makeEditor(
+  it('claims explicit Mermaid fences regardless of diagram type or validity', async () => {
+    const editor = await makeEditor(
       `\`\`\`mermaid\n${SAMPLE}\n\`\`\`\n\n\`\`\`mermaid\nnot finished yet\n\`\`\`\n`,
     );
     expect(entriesOf(editor)).toHaveLength(2);
   });
 
-  it('does not steal ordinary code or ASCII diagram fences', () => {
-    const editor = makeEditor(
+  it('does not steal ordinary code or ASCII diagram fences', async () => {
+    const editor = await makeEditor(
       '```js\nflowchart LR\n  a --> b\n```\n\n```diagram\n+---+  +---+\n| A |->| B |\n+---+  +---+\n```\n',
     );
     expect(entriesOf(editor)).toHaveLength(0);
   });
 
-  it('keeps one block id across edits above and inside the source fence', () => {
-    const editor = makeEditor(`\`\`\`mermaid\n${SAMPLE}\n\`\`\`\n`);
+  it('keeps one block id across edits above and inside the source fence', async () => {
+    const editor = await makeEditor(`\`\`\`mermaid\n${SAMPLE}\n\`\`\`\n`);
     const [before] = entriesOf(editor);
-    editor.commands.insertContentAt(0, '<p>Before</p>');
+    await act(async () => {
+      editor.commands.insertContentAt(0, '<p>Before</p>');
+    });
     const [shifted] = entriesOf(editor);
     expect(shifted.id).toBe(before.id);
     expect(shifted.pos).toBeGreaterThan(before.pos);
 
-    expect(replaceAsciiFenceText(editor, shifted.pos, `${SAMPLE}\n  guard --> documents`)).toBe(
-      true,
-    );
+    await act(async () => {
+      expect(replaceAsciiFenceText(editor, shifted.pos, `${SAMPLE}\n  guard --> documents`)).toBe(
+        true,
+      );
+    });
     const [rewritten] = entriesOf(editor);
     expect(rewritten.id).toBe(before.id);
     expect(findMermaidDiagramBlockPos(editor, before.id)).toBe(rewritten.pos);
   });
 
-  it('source visibility is session-only and does not mutate Mermaid text', () => {
-    const editor = makeEditor(`\`\`\`mermaid\n${SAMPLE}\n\`\`\`\n`);
+  it('source visibility is session-only and does not mutate Mermaid text', async () => {
+    const editor = await makeEditor(`\`\`\`mermaid\n${SAMPLE}\n\`\`\`\n`);
     const [entry] = entriesOf(editor);
     const before = tiptapToMarkdown(editor.getHTML());
     expect(isMermaidSourceVisible(editor, entry.id)).toBe(false);
-    toggleMermaidSource(editor, entry.id);
+    await act(async () => {
+      toggleMermaidSource(editor, entry.id);
+    });
     expect(isMermaidSourceVisible(editor, entry.id)).toBe(true);
     expect(tiptapToMarkdown(editor.getHTML())).toBe(before);
   });
 
-  it('round-trips the complex graph as a Mermaid code block byte-for-byte', () => {
+  it('round-trips the complex graph as a Mermaid code block byte-for-byte', async () => {
     const markdown = `\`\`\`mermaid\n${SAMPLE}\n\`\`\`\n`;
-    const editor = makeEditor(markdown);
+    const editor = await makeEditor(markdown);
     expect(tiptapToMarkdown(editor.getHTML())).toBe(markdown);
   });
 
   it('exposes Gantt task CRUD, dependencies, and diagram properties', async () => {
-    const editor = makeEditor(
+    const editor = await makeEditor(
       '```mermaid\ngantt\n  title Project plan\n  dateFormat YYYY-MM-DD\n  section Build\n  Design :done, design, 2026-01-01, 3d\n  Implement :active, build, after design, 5d\n  Ship :milestone, after build, 0d\n```\n',
     );
     const root = editor.view.dom;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('[data-squisq-node-id="design"]')).not.toBeNull();
     });
 
@@ -202,7 +239,7 @@ describe('MermaidDiagramExtension', () => {
     expect(propertiesButton?.disabled).toBe(false);
 
     fireEvent.doubleClick(root.querySelector('[data-squisq-node-id="design"]')!);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector<HTMLInputElement>('[aria-label="Mermaid node label"]')?.value).toBe(
         'Design',
       );
@@ -210,12 +247,12 @@ describe('MermaidDiagramExtension', () => {
     const label = root.querySelector<HTMLInputElement>('[aria-label="Mermaid node label"]')!;
     fireEvent.change(label, { target: { value: 'Plan' } });
     fireEvent.keyDown(label, { key: 'Enter' });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(tiptapToMarkdown(editor.getHTML())).toContain('Plan :done, design, 2026-01-01, 3d');
     });
 
-    propertiesButton?.click();
-    await vi.waitFor(() => {
+    fireEvent.click(propertiesButton!);
+    await waitFor(() => {
       expect(root.querySelector('[aria-label="Mermaid diagram properties"]')).not.toBeNull();
     });
     expect(
@@ -224,11 +261,11 @@ describe('MermaidDiagramExtension', () => {
   });
 
   it('edits Timeline events while explaining its ordered, connection-free grammar', async () => {
-    const editor = makeEditor(
+    const editor = await makeEditor(
       '```mermaid\ntimeline\n  title Product launch\n  Q1 : Research\n  Q2 : Build : Test\n  Q3 : Launch\n```\n',
     );
     const root = editor.view.dom;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('[data-squisq-node-id="timeline-2-0"]')).not.toBeNull();
     });
 
@@ -242,10 +279,8 @@ describe('MermaidDiagramExtension', () => {
     expect(connectButton?.disabled).toBe(true);
     expect(connectButton?.title).toContain('chronological order');
 
-    root
-      .querySelector('[data-squisq-node-id="timeline-2-0"]')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await vi.waitFor(() => {
+    fireEvent.click(root.querySelector('[data-squisq-node-id="timeline-2-0"]')!);
+    await waitFor(() => {
       expect(root.querySelector('[aria-label="Selected Mermaid node actions"]')).not.toBeNull();
     });
     expect(
@@ -253,73 +288,71 @@ describe('MermaidDiagramExtension', () => {
     ).toHaveLength(3);
 
     fireEvent.doubleClick(root.querySelector('[data-squisq-node-id="timeline-2-0"]')!);
-    const label = await vi.waitFor(() => {
+    const label = await waitFor(() => {
       const input = root.querySelector<HTMLInputElement>('[aria-label="Mermaid node label"]');
       expect(input?.value).toBe('Research');
       return input!;
     });
     fireEvent.change(label, { target: { value: 'Discovery' } });
     fireEvent.keyDown(label, { key: 'Enter' });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(tiptapToMarkdown(editor.getHTML())).toContain('Q1 : Discovery');
     });
   });
 
   it('edits Timeline title and period annotations through rename-only flyovers', async () => {
-    const editor = makeEditor(
+    const editor = await makeEditor(
       '```mermaid\ntimeline\n  title Product launch\n  Q1 : Research\n  Q2 : Build : Test\n  Q3 : Launch\n```\n',
     );
     const root = editor.view.dom;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('[data-squisq-text-id="property:title"]')).not.toBeNull();
       expect(root.querySelector('[data-squisq-text-id="timeline-period-2"]')).not.toBeNull();
     });
 
-    root
-      .querySelector('[data-squisq-text-id="timeline-period-2"]')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await vi.waitFor(() => {
+    fireEvent.click(root.querySelector('[data-squisq-text-id="timeline-period-2"]')!);
+    await waitFor(() => {
       expect(
         root.querySelectorAll('[aria-label="Selected Mermaid text actions"] button'),
       ).toHaveLength(1);
     });
     fireEvent.doubleClick(root.querySelector('[data-squisq-text-id="timeline-period-2"]')!);
-    const periodInput = await vi.waitFor(() => {
+    const periodInput = await waitFor(() => {
       const input = root.querySelector<HTMLInputElement>('[aria-label="Mermaid text"]');
       expect(input?.value).toBe('Q1');
       return input!;
     });
     fireEvent.change(periodInput, { target: { value: 'First quarter' } });
     fireEvent.keyDown(periodInput, { key: 'Enter' });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(tiptapToMarkdown(editor.getHTML())).toContain('First quarter : Research');
     });
 
     fireEvent.doubleClick(root.querySelector('[data-squisq-text-id="property:title"]')!);
-    const titleInput = await vi.waitFor(() => {
+    const titleInput = await waitFor(() => {
       const input = root.querySelector<HTMLInputElement>('[aria-label="Mermaid text"]');
       expect(input?.value).toBe('Product launch');
       return input!;
     });
     fireEvent.change(titleInput, { target: { value: 'Release plan' } });
     fireEvent.keyDown(titleInput, { key: 'Enter' });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(tiptapToMarkdown(editor.getHTML())).toContain('title Release plan');
     });
   });
 
   it('selects rendered nodes and exposes palette plus on-canvas edit gestures', async () => {
-    const editor = makeEditor('```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```\n');
+    const editor = await makeEditor(
+      '```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```\n',
+    );
     const root = editor.view.dom;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('g[data-squisq-node-id="start"]')).not.toBeNull();
     });
 
-    root
-      .querySelector('g[data-squisq-node-id="start"]')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    fireEvent.click(root.querySelector('g[data-squisq-node-id="start"]')!);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('[aria-label="Selected Mermaid node actions"]')).not.toBeNull();
     });
     expect(
@@ -330,34 +363,34 @@ describe('MermaidDiagramExtension', () => {
       (button) => button.textContent?.trim() === 'Shape',
     );
     expect(shapeButton?.disabled).toBe(false);
-    shapeButton?.click();
-    await vi.waitFor(() => {
+    fireEvent.click(shapeButton!);
+    await waitFor(() => {
       expect(root.querySelector('[aria-label="Mermaid node shapes"]')).not.toBeNull();
     });
     expect(root.querySelectorAll('[aria-label="Mermaid node shapes"] button')).toHaveLength(48);
 
-    root
-      .querySelector<HTMLButtonElement>(
+    fireEvent.click(
+      root.querySelector<HTMLButtonElement>(
         '[aria-label="Selected Mermaid node actions"] button[aria-label="Rename node"]',
-      )
-      ?.click();
-    await vi.waitFor(() => {
+      )!,
+    );
+    await waitFor(() => {
       expect(root.querySelector('[aria-label="Mermaid node label"]')).not.toBeNull();
     });
     const renameInput = root.querySelector<HTMLInputElement>('[aria-label="Mermaid node label"]');
     expect(renameInput?.value).toBe('Start');
     fireEvent.change(renameInput!, { target: { value: 'Begin' } });
     fireEvent.keyDown(renameInput!, { key: 'Enter' });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(tiptapToMarkdown(editor.getHTML())).toContain('start@{ shape: rect, label: "Begin" }');
     });
     expect(root.querySelector('[aria-label="Mermaid node label"]')).toBeNull();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('g[data-squisq-node-id="start"]')).not.toBeNull();
     });
     fireEvent.doubleClick(root.querySelector('g[data-squisq-node-id="start"]')!);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector<HTMLInputElement>('[aria-label="Mermaid node label"]')?.value).toBe(
         'Start',
       );
@@ -369,13 +402,13 @@ describe('MermaidDiagramExtension', () => {
     expect(tiptapToMarkdown(editor.getHTML())).not.toContain('Cancelled label');
 
     fireEvent.doubleClick(root.querySelector('g[data-squisq-node-id="start"]')!);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('[aria-label="Mermaid node label"]')).not.toBeNull();
     });
     const blurInput = root.querySelector<HTMLInputElement>('[aria-label="Mermaid node label"]')!;
     fireEvent.change(blurInput, { target: { value: 'Click away' } });
     fireEvent.blur(blurInput);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(tiptapToMarkdown(editor.getHTML())).toContain(
         'start@{ shape: rect, label: "Click away" }',
       );
@@ -383,47 +416,49 @@ describe('MermaidDiagramExtension', () => {
   });
 
   it('selects a node label as text independently from its structural node', async () => {
-    const editor = makeEditor('```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```\n');
+    const editor = await makeEditor(
+      '```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```\n',
+    );
     const root = editor.view.dom;
-    const text = await vi.waitFor(() => {
+    const text = await waitFor(() => {
       const item = root.querySelector('[data-squisq-text-id="node:start"]');
       expect(item).not.toBeNull();
       return item!;
     });
 
     fireEvent.click(text);
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('[aria-label="Selected Mermaid text actions"]')).not.toBeNull();
       expect(root.querySelector('[aria-label="Selected Mermaid node actions"]')).toBeNull();
     });
     fireEvent.doubleClick(text);
-    const input = await vi.waitFor(() => {
+    const input = await waitFor(() => {
       const item = root.querySelector<HTMLInputElement>('[aria-label="Mermaid text"]');
       expect(item?.value).toBe('Start');
       return item!;
     });
     fireEvent.change(input, { target: { value: 'Begin' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(tiptapToMarkdown(editor.getHTML())).toContain('label: "Begin"');
     });
   });
 
   it('edits connector labels inline and exposes on-canvas disconnect', async () => {
-    const editor = makeEditor('```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```\n');
+    const editor = await makeEditor(
+      '```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```\n',
+    );
     const root = editor.view.dom;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('.squisq-mermaid-edge-hit-target')).not.toBeNull();
     });
     expect(root.querySelector('.squisq-mermaid-edge-hit-target')?.getAttribute('aria-label')).toBe(
       'Connection from Start to Next',
     );
 
-    root
-      .querySelector('.squisq-mermaid-edge-hit-target')
-      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    fireEvent.click(root.querySelector('.squisq-mermaid-edge-hit-target')!);
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(
         root.querySelector('[aria-label="Selected Mermaid connection actions"]'),
       ).not.toBeNull();
@@ -438,8 +473,8 @@ describe('MermaidDiagramExtension', () => {
     );
     expect(sideLabelButton?.disabled).toBe(false);
 
-    root.querySelector<HTMLButtonElement>('button[aria-label="Edit connection label"]')?.click();
-    await vi.waitFor(() => {
+    fireEvent.click(root.querySelector('button[aria-label="Edit connection label"]')!);
+    await waitFor(() => {
       expect(root.querySelector('[aria-label="Mermaid connection label"]')).not.toBeNull();
     });
     const labelInput = root.querySelector<HTMLInputElement>(
@@ -448,16 +483,16 @@ describe('MermaidDiagramExtension', () => {
     expect(labelInput.value).toBe('');
     fireEvent.change(labelInput, { target: { value: 'continues' } });
     fireEvent.keyDown(labelInput, { key: 'Enter' });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(tiptapToMarkdown(editor.getHTML())).toContain('-->|"continues"| next["Next"]');
     });
     expect(root.querySelector('[aria-label="Mermaid connection label"]')).toBeNull();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('button[aria-label="Disconnect nodes"]')).not.toBeNull();
     });
-    root.querySelector<HTMLButtonElement>('button[aria-label="Disconnect nodes"]')?.click();
-    await vi.waitFor(() => {
+    fireEvent.click(root.querySelector('button[aria-label="Disconnect nodes"]')!);
+    await waitFor(() => {
       const markdown = tiptapToMarkdown(editor.getHTML());
       expect(markdown).not.toContain('-->');
       expect(markdown).toContain('start@{ shape: rect, label: "Start" }');
@@ -466,14 +501,16 @@ describe('MermaidDiagramExtension', () => {
   });
 
   it('offers a visual gallery of horizontal and vertical flow layouts', async () => {
-    const editor = makeEditor('```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```\n');
+    const editor = await makeEditor(
+      '```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```\n',
+    );
     const root = editor.view.dom;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('button[aria-label="Direction"]')).not.toBeNull();
     });
 
-    root.querySelector<HTMLButtonElement>('button[aria-label="Direction"]')?.click();
-    await vi.waitFor(() => {
+    fireEvent.click(root.querySelector('button[aria-label="Direction"]')!);
+    await waitFor(() => {
       expect(root.querySelector('[aria-label="Flowchart layout gallery"]')).not.toBeNull();
     });
 
@@ -485,16 +522,18 @@ describe('MermaidDiagramExtension', () => {
         ?.getAttribute('aria-pressed'),
     ).toBe('true');
 
-    gallery.querySelector<HTMLButtonElement>('[aria-label="Vertical: top to bottom"]')?.click();
-    await vi.waitFor(() => {
+    fireEvent.click(gallery.querySelector('[aria-label="Vertical: top to bottom"]')!);
+    await waitFor(() => {
       expect(tiptapToMarkdown(editor.getHTML())).toContain('flowchart TB');
     });
   });
 
   it('pans the rendered diagram with right-mouse drag and resets from Fit diagram', async () => {
-    const editor = makeEditor('```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```\n');
+    const editor = await makeEditor(
+      '```mermaid\nflowchart LR\n  start["Start"] --> next["Next"]\n```\n',
+    );
     const root = editor.view.dom;
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(root.querySelector('.squisq-mermaid-svg')).not.toBeNull();
     });
 
@@ -504,8 +543,8 @@ describe('MermaidDiagramExtension', () => {
     expect(fitButton.getAttribute('aria-pressed')).toBe('true');
     expect(diagram.style.transform).toBe('translate3d(0px, 0px, 0)');
 
-    root.querySelector<HTMLButtonElement>('button[aria-label="Zoom out"]')?.click();
-    await vi.waitFor(() => expect(fitButton.getAttribute('aria-pressed')).toBe('false'));
+    fireEvent.click(root.querySelector('button[aria-label="Zoom out"]')!);
+    await waitFor(() => expect(fitButton.getAttribute('aria-pressed')).toBe('false'));
 
     fireEvent.mouseDown(viewport, {
       button: 2,
@@ -513,29 +552,29 @@ describe('MermaidDiagramExtension', () => {
       clientX: 100,
       clientY: 80,
     });
-    await vi.waitFor(() => expect(viewport.dataset.panning).toBe('true'));
+    await waitFor(() => expect(viewport.dataset.panning).toBe('true'));
     fireEvent.mouseMove(window, {
       buttons: 2,
       clientX: 145,
       clientY: 110,
     });
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(diagram.style.transform).toBe('translate3d(45px, 30px, 0)');
     });
     expect(fireEvent.contextMenu(viewport)).toBe(false);
 
     fireEvent.mouseUp(window, { button: 2, buttons: 0 });
-    await vi.waitFor(() => expect(viewport.dataset.panning).toBeUndefined());
+    await waitFor(() => expect(viewport.dataset.panning).toBeUndefined());
 
-    fitButton.click();
-    await vi.waitFor(() => {
+    fireEvent.click(fitButton);
+    await waitFor(() => {
       expect(fitButton.getAttribute('aria-pressed')).toBe('true');
       expect(diagram.style.transform).toBe('translate3d(0px, 0px, 0)');
     });
   });
 
-  it('can be disabled without registering a plugin state', () => {
-    const editor = makeEditor(`\`\`\`mermaid\n${SAMPLE}\n\`\`\`\n`, false);
+  it('can be disabled without registering a plugin state', async () => {
+    const editor = await makeEditor(`\`\`\`mermaid\n${SAMPLE}\n\`\`\`\n`, false);
     expect(MERMAID_DIAGRAM_KEY.getState(editor.state)).toBeUndefined();
   });
 });

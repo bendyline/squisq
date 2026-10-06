@@ -522,6 +522,7 @@ function DocPlayerContent({
     blocks: expandedBlocks,
     suppressOutgoingForNextBlock,
   } = useDocPlayback(doc, currentTime, {
+    basePath,
     viewport: activeViewport,
     theme: effectiveTheme,
     motion: motionProp,

@@ -25,6 +25,8 @@ export interface MicAnalysisHandle {
   sampleRate: number | null;
   /** Known audio inputs (labels appear after the first grant). */
   devices: MediaDeviceInfo[];
+  /** The host owns stream/device selection; analysis must never stop its tracks. */
+  sourceManaged?: boolean;
   /**
    * Start (or restart) capture. Resolves with the live stream — callers
    * that need it immediately must use the return value, not the `stream`
@@ -39,6 +41,7 @@ export interface MicAnalysisHandle {
 
 interface LiveGraph {
   stream: MediaStream;
+  ownsStream: boolean;
   context: AudioContext;
   source: MediaStreamAudioSourceNode;
   node: AudioWorkletNode | ScriptProcessorNode;
@@ -46,7 +49,12 @@ interface LiveGraph {
   sink: GainNode | null;
 }
 
-export function useMicAnalysis(constraints?: MediaTrackConstraints): MicAnalysisHandle {
+export function useMicAnalysis(
+  constraints?: MediaTrackConstraints,
+  externalStream?: MediaStream | null,
+): MicAnalysisHandle {
+  const externalStreamRef = useRef(externalStream);
+  externalStreamRef.current = externalStream;
   const [status, setStatus] = useState<MicAnalysisStatus>('idle');
   const [error, setError] = useState<Error | null>(null);
   const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
@@ -93,7 +101,7 @@ export function useMicAnalysis(constraints?: MediaTrackConstraints): MicAnalysis
     } catch {
       // Best-effort teardown; the context close below is what matters.
     }
-    for (const track of graph.stream.getTracks()) track.stop();
+    if (graph.ownsStream) for (const track of graph.stream.getTracks()) track.stop();
     void graph.context.close().catch(() => undefined);
   }, []);
 
@@ -113,17 +121,28 @@ export function useMicAnalysis(constraints?: MediaTrackConstraints): MicAnalysis
       teardown();
       setStatus('starting');
       setError(null);
+      const ownsStream = externalStreamRef.current === undefined;
+      let acquiredStream: MediaStream | null = null;
+      let acquiredContext: AudioContext | null = null;
       try {
+        if (!ownsStream && !externalStreamRef.current?.getAudioTracks().length) {
+          setStatus('idle');
+          return null;
+        }
         const baseConstraints = constraintsRef.current;
-        const micStream = await requestMicStream({
-          ...(baseConstraints ?? {}),
-          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
-        });
+        const micStream =
+          externalStreamRef.current ??
+          (await requestMicStream({
+            ...(baseConstraints ?? {}),
+            ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+          }));
+        acquiredStream = micStream;
         if (generation !== generationRef.current) {
-          for (const track of micStream.getTracks()) track.stop();
+          if (ownsStream) for (const track of micStream.getTracks()) track.stop();
           return null;
         }
         const context = new AudioContext();
+        acquiredContext = context;
         // Autoplay policy can start contexts suspended when creation lands
         // after an await; resume explicitly (we're inside a user gesture).
         if (context.state === 'suspended') {
@@ -180,17 +199,19 @@ export function useMicAnalysis(constraints?: MediaTrackConstraints): MicAnalysis
         }
 
         if (generation !== generationRef.current) {
-          for (const track of micStream.getTracks()) track.stop();
+          if (ownsStream) for (const track of micStream.getTracks()) track.stop();
           void context.close().catch(() => undefined);
           return null;
         }
-        graphRef.current = { stream: micStream, context, source, node, sink };
+        graphRef.current = { stream: micStream, ownsStream, context, source, node, sink };
         setStream(micStream);
         setSampleRate(context.sampleRate);
         setStatus('live');
         void refreshDevices();
         return micStream;
       } catch (err: unknown) {
+        if (ownsStream) for (const track of acquiredStream?.getTracks() ?? []) track.stop();
+        if (acquiredContext) void acquiredContext.close().catch(() => undefined);
         if (generation !== generationRef.current) return null;
         setError(err instanceof Error ? err : new Error(String(err)));
         setStatus('error');
@@ -199,6 +220,15 @@ export function useMicAnalysis(constraints?: MediaTrackConstraints): MicAnalysis
     },
     [refreshDevices, teardown],
   );
+
+  // Stream identity changes when capture starts, stops, or switches devices.
+  // Disconnect only our analysis graph; the recorder owns every borrowed track.
+  useEffect(() => {
+    if (externalStream === undefined) return;
+    if (externalStream?.getAudioTracks().length) void start(null);
+    else stop();
+    return stop;
+  }, [externalStream, start, stop]);
 
   const subscribeHop = useCallback((listener: PcmHopListener) => {
     listenersRef.current.add(listener);
@@ -224,5 +254,15 @@ export function useMicAnalysis(constraints?: MediaTrackConstraints): MicAnalysis
     };
   }, [teardown]);
 
-  return { status, error, stream, sampleRate, devices, start, stop, subscribeHop };
+  return {
+    status,
+    error,
+    stream,
+    sampleRate,
+    devices,
+    sourceManaged: externalStream !== undefined,
+    start,
+    stop,
+    subscribeHop,
+  };
 }

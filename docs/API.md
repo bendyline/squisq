@@ -1259,8 +1259,14 @@ interface TransformResult {
 Built-in style ids: `documentary` (default), `magazine`, `data-driven`,
 `narrative`, `minimal`, `headings-and-features`. Headings and features produces
 one slide per heading, retains images, videos, diagrams and data visuals in
-that heading's own scope, and omits body prose and cover subtitles. Minimal
-keeps short highlights and bounds remaining prose to one sentence (at most
+that heading's own scope, and omits body prose and cover subtitles. Automatic
+feature slides choose a compact title band or a title-only side column to
+maximize the contained visual area. The player uses intrinsic image/video
+dimensions and Mermaid SVG aspect ratios; pure materialization also accepts
+`mediaAspectRatios` keyed by media URL or Mermaid source. Explicitly authored
+templates keep their layout and visual inputs, with prose removed; left/right
+feature templates give title-only summaries more image space without cropping.
+Minimal keeps short highlights and bounds remaining prose to one sentence (at most
 24 words / 180 characters) per section. Both operate on a projection and leave
 the source Doc unchanged. Custom styles can opt into these policies with
 `TransformStyleConfig.contentMode: 'brief' | 'headings-and-features'`.
