@@ -183,6 +183,14 @@ export interface PptxExportOptions {
    * showing `[Image: alt]` placeholders.
    */
   images?: Map<string, ArrayBuffer>;
+  /**
+   * Pictures of Mermaid diagrams, keyed by the Mermaid source as written in
+   * the fence (trimmed). A Mermaid layer with a picture here is drawn as that
+   * picture, fitted inside its area; otherwise its source shows as text.
+   * `width` / `height` are the picture's display size and set its aspect
+   * ratio, which also shapes the slide area reserved for the diagram.
+   */
+  diagramImages?: Map<string, { data: ArrayBuffer | Uint8Array; width: number; height: number }>;
   /** Permit carefully validated relative hyperlink targets. Default: false. */
   allowRelativeHyperlinks?: boolean;
   /**
@@ -289,12 +297,20 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
     { persistentLayers: doc.persistentLayers },
     theme,
   );
+  // Reserve each pictured diagram's own shape on the slide, as the player does.
+  const mediaAspectRatios: Record<string, number> = {};
+  for (const [source, picture] of effectiveOptions.diagramImages ?? []) {
+    if (picture.width > 0 && picture.height > 0) {
+      mediaAspectRatios[source] = picture.width / picture.height;
+    }
+  }
   const expanded = expandDocBlocks(flatBlocks, {
     audioSegments,
     viewport: VIEWPORT_PRESETS.landscape,
     persistentLayers,
     theme,
     customTemplates: doc.customTemplates,
+    mediaAspectRatios,
     // A .pptx is a discrete deck: the >20s pacing split would emit N identical
     // copies of one authored slide (a long single block became 18 duplicates),
     // and the <5s pacing merge would delete authored slides outright. Keep one
@@ -337,6 +353,7 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
       effectiveOptions.allowRelativeHyperlinks ?? false,
       effectiveOptions.signal,
     );
+    ctx.diagramImages = effectiveOptions.diagramImages;
     slideXmls.push(buildLayerSlideXml(slideBlocks[index], ctx));
     slideContexts.push(ctx);
   }
@@ -526,6 +543,8 @@ class SlideContext {
 
   readonly style: SlideStyle;
   readonly images: Map<string, ArrayBuffer> | undefined;
+  /** Pictures of Mermaid diagrams by source; see `PptxExportOptions.diagramImages`. */
+  diagramImages: PptxExportOptions['diagramImages'];
   readonly slideIndex: number;
   readonly embeddedImages: EmbeddedImage[] = [];
   private nextShapeId = 4; // 1=group, 2=title, 3=body
@@ -844,14 +863,51 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
         ),
       ];
     }
-    case 'mermaid':
+    case 'mermaid': {
+      const picture = ctx.diagramImages?.get(layer.content.source.trim());
+      if (picture && picture.width > 0 && picture.height > 0) {
+        const data =
+          picture.data instanceof Uint8Array
+            ? (picture.data.buffer.slice(
+                picture.data.byteOffset,
+                picture.data.byteOffset + picture.data.byteLength,
+              ) as ArrayBuffer)
+            : picture.data;
+        const relId = ctx.addImage(
+          `diagram-${ctx.embeddedImages.length + 1}.png`,
+          data,
+          mermaidTitle(layer.content.source),
+        );
+        const embedded = ctx.embeddedImages.find((candidate) => candidate.relId === relId)!;
+        // Fit inside the layer's area, keeping the picture's shape, centered.
+        const area = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
+        const scale = Math.min(area.width / picture.width, area.height / picture.height);
+        const width = Math.round(picture.width * scale);
+        const height = Math.round(picture.height * scale);
+        return [
+          buildImageShape(
+            embedded,
+            ctx.allocShapeId(),
+            area.x + Math.round((area.width - width) / 2),
+            area.y + Math.round((area.height - height) / 2),
+            width,
+            height,
+          ),
+        ];
+      }
       return [
         buildLayerTextShape(
           textLayerForPlaceholder(layer.position, layer.content.source, ctx),
           ctx.allocShapeId(),
         ),
       ];
+    }
   }
+}
+
+/** A Mermaid diagram's `accTitle`, for a picture's name; "Diagram" without one. */
+function mermaidTitle(source: string): string {
+  return /^\s*accTitle\s*:\s*(.+?)\s*$/mu.exec(source)?.[1] ?? 'Diagram';
 }
 
 interface LayerRect {
