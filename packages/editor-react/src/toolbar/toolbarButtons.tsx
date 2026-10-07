@@ -226,7 +226,6 @@ export const BUTTONS: ToolbarButton[] = [
   },
 ];
 
-export const FIRST_MEDIA_INDEX = BUTTONS.findIndex((b) => b.group === 'media');
 export const MEDIA_BUTTONS = BUTTONS.filter((b) => b.group === 'media');
 /** Buttons that store a file through the MediaProvider — disabled without one. */
 export const FILE_STORING_BUTTONS: ReadonlySet<string> = new Set(['image', 'file']);
@@ -237,13 +236,6 @@ export const MERMAID_TYPE_MENU_WIDTH = 520;
 export const CHART_TYPE_MENU_WIDTH = 360;
 export const TASK_LIST_ITEMS = ['Task 1', 'Task 2', 'Task 3'] as const;
 export const TASK_LIST_MARKDOWN = TASK_LIST_ITEMS.map((item) => `- [ ] ${item}`).join('\n');
-
-// BUTTONS position per id — stamped on each rendered button as
-// data-btn-index so the overflow measurement can map a clipped DOM button
-// back to its BUTTONS entry. Walking a counter over the DOM instead would
-// drift whenever some entries render no button of their own (hidden H5/H6
-// heading levels, the media group collapsed behind the Insert dropdown).
-export const BUTTON_INDEX_BY_ID = new Map(BUTTONS.map((b, i) => [b.id, i]));
 
 /**
  * Renders a button's icon: a Font Awesome glyph when set, else the text label

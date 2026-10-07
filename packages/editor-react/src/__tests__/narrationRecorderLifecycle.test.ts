@@ -220,7 +220,6 @@ describe('useNarrationRecorder — startup media lifecycle', () => {
       await started;
     });
 
-    // TeleprompterView starts the prompter rolling from this callback.
     expect(onRecordingStart).not.toHaveBeenCalled();
   });
 
@@ -242,6 +241,91 @@ describe('useNarrationRecorder — startup media lifecycle', () => {
       await started;
     });
 
+    expect(liveCameraTracks()).toEqual([]);
+  });
+
+  /** A recorder whose count-in the test finishes by hand. */
+  function renderCountingIn() {
+    let finish: (rolled: boolean) => void = () => {};
+    const countIn = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const onRecordingStop = vi.fn();
+    const hook = renderHook(() =>
+      useNarrationRecorder({
+        mic: micHandle(),
+        getScript: () => script,
+        getWordPos: () => 0,
+        getMicDeviceId: () => null,
+        countIn,
+        onRecordingStop,
+      }),
+    );
+    act(() => hook.result.current.setWithCamera(true));
+    let started: Promise<void> = Promise.resolve();
+    act(() => {
+      started = hook.result.current.start();
+    });
+    return {
+      ...hook,
+      countIn,
+      onRecordingStop,
+      finishCountIn: (rolled: boolean) => finish(rolled),
+      started: () => started,
+    };
+  }
+
+  it('captures nothing until the count-in ends', async () => {
+    const recorderStart = vi.spyOn(FakeMediaRecorder.prototype, 'start');
+    const { result, countIn, finishCountIn, started } = renderCountingIn();
+    await waitFor(() => expect(countIn).toHaveBeenCalledTimes(1));
+
+    // Devices are live and the self-view has the camera, but no bytes yet.
+    expect(result.current.state).toBe('starting');
+    expect(result.current.cameraStream).not.toBeNull();
+    expect(recorderStart).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishCountIn(true);
+      await started();
+    });
+    expect(result.current.state).toBe('recording');
+    expect(recorderStart).toHaveBeenCalledTimes(2);
+  });
+
+  it('records nothing and releases the camera when the count-in is cancelled', async () => {
+    const recorderStart = vi.spyOn(FakeMediaRecorder.prototype, 'start');
+    const { result, countIn, finishCountIn, started } = renderCountingIn();
+    await waitFor(() => expect(countIn).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      finishCountIn(false);
+      await started();
+    });
+    expect(result.current.state).toBe('idle');
+    expect(result.current.error).toBeNull();
+    expect(result.current.cameraStream).toBeNull();
+    expect(recorderStart).not.toHaveBeenCalled();
+    expect(liveCameraTracks()).toEqual([]);
+  });
+
+  it('stop() during the count-in halts the prompter and records nothing', async () => {
+    const recorderStart = vi.spyOn(FakeMediaRecorder.prototype, 'start');
+    const { result, countIn, onRecordingStop, finishCountIn, started } = renderCountingIn();
+    await waitFor(() => expect(countIn).toHaveBeenCalledTimes(1));
+    // Like the prompter: pausing mid-countdown cancels the count-in.
+    onRecordingStop.mockImplementation(() => finishCountIn(false));
+
+    await act(async () => {
+      await result.current.stop();
+      await started();
+    });
+    expect(onRecordingStop).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toBe('idle');
+    expect(recorderStart).not.toHaveBeenCalled();
     expect(liveCameraTracks()).toEqual([]);
   });
 

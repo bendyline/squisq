@@ -10,7 +10,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { ProofFinding } from '@bendyline/squisq/proof';
 import { useEscapeDismissal } from '../useEscapeDismissal';
-import { proofSuggestionLabel } from './findingText';
+import { proofMessageText, proofSuggestionLabel } from './findingText';
 import type { ProofingMenuAnchor } from './useProofing';
 
 export interface ProofingMenuProps {
@@ -143,7 +143,7 @@ export function ProofingMenu({
     >
       <div className="squisq-proof-menu-header">
         <span className={`squisq-proof-dot squisq-proof-dot--${finding.category}`} aria-hidden />
-        <span className="squisq-proof-menu-message">{finding.message}</span>
+        <span className="squisq-proof-menu-message">{proofMessageText(finding)}</span>
       </div>
       {actions.map((action, index) => (
         <button

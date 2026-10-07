@@ -16,10 +16,19 @@ async function waitForWysiwyg(page: Page) {
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 }
 
-/** Focus editable prose instead of the heading template badge affordances. */
+/**
+ * Focus editable prose instead of the heading template badge affordances.
+ *
+ * Only top-level paragraphs with no links qualify. A click on a link in the
+ * Write view goes to the host's `onLinkClick`, and the demo site opens the URL
+ * in a new tab. That tab takes the foreground, the editor page is throttled as
+ * a background tab, and the keystrokes that follow stall until the test times
+ * out. The sample ends in a list of links, so `p.last()` used to land on one.
+ */
 async function focusWysiwygParagraph(page: Page, position: 'first' | 'last' = 'last') {
   const editor = page.locator('.tiptap.ProseMirror');
-  const paragraph = position === 'first' ? editor.locator('p').first() : editor.locator('p').last();
+  const prose = editor.locator(':scope > p').filter({ hasNot: page.locator('a[href]') });
+  const paragraph = position === 'first' ? prose.first() : prose.last();
   await paragraph.click({ position: { x: 8, y: 8 } });
   await expect(page.locator('[data-squisq-template-gallery-portal]')).toHaveCount(0);
   return editor;

@@ -302,6 +302,67 @@ describe('parseMarkdown / stringifyMarkdown', () => {
       expect(math.type).toBe('math');
       expect(math.value).toContain('\\frac{-b');
     });
+
+    // Pandoc's flanking rules: prices must stay prose. Without them a quote
+    // exported with "$45 … $350" lost both dollar signs in every format.
+    describe('dollar amounts in prose', () => {
+      function inlineMath(md: string): string[] {
+        return findNodesByType<MarkdownInlineMath>(parse(md), 'inlineMath').map((n) => n.value);
+      }
+
+      it('keeps several prices in one paragraph as text', () => {
+        const md =
+          'Weekly lawn care is $45 per visit and the cleanup is $350, so your first month is $530 total.';
+        const doc = parse(md);
+        expect(findNodesByType(doc, 'inlineMath')).toEqual([]);
+        expect(extractPlainText(doc)).toBe(md);
+      });
+
+      it('keeps a price range as text when the closer is followed by a digit', () => {
+        expect(inlineMath('Most jobs run $5-$10 per square foot.')).toEqual([]);
+        expect(inlineMath('Budgets of $20,000 and $30,000 are both fine.')).toEqual([]);
+      });
+
+      it('requires a non-space character after the opening dollar', () => {
+        expect(inlineMath('Spaced $ x $ is not math.')).toEqual([]);
+      });
+
+      it('requires a non-space character before the closing dollar', () => {
+        expect(inlineMath('Tip $x and $y both.')).toEqual([]);
+      });
+
+      it('still parses real math next to a price', () => {
+        expect(inlineMath('It costs $5 and $x$ is unknown.')).toEqual(['x']);
+        expect(inlineMath('Area $x^2$ for $5 a foot.')).toEqual(['x^2']);
+      });
+
+      it('leaves double-dollar inline math alone', () => {
+        expect(inlineMath('Sum $$\\sum_i a_i$$ here.')).toEqual(['\\sum_i a_i']);
+      });
+
+      it('keeps emphasis between two prices', () => {
+        const doc = parse('Mowing is **$45** per visit, cleanup **$350** once.');
+        expect(findNodesByType(doc, 'inlineMath')).toEqual([]);
+        expect(findNodesByType(doc, 'strong').map((n) => extractPlainText(n))).toEqual([
+          '$45',
+          '$350',
+        ]);
+      });
+
+      it('keeps prices as text across a stringify round trip', () => {
+        const md = 'Lawn care is $45 per visit and cleanup is $350.';
+        const reparsed = parseMarkdown(stringifyMarkdown(parseMarkdown(md)));
+        expect(findNodesByType(reparsed, 'inlineMath')).toEqual([]);
+        expect(extractPlainText(reparsed)).toBe(md);
+      });
+
+      it('applies the same rules when parse options build a custom processor', () => {
+        const doc = parseMarkdown('Lawn care is $45 per visit and cleanup is $350.', {
+          directive: false,
+        });
+        expect(findNodesByType(doc, 'inlineMath')).toEqual([]);
+      });
+    });
   });
 
   // ============================================

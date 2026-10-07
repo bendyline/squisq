@@ -1032,6 +1032,37 @@ function DocPlayerContent({
 
   const hasCaptions = doc.captions && doc.captions.phrases.length > 0;
 
+  // Captions are HTML laid over the frame, so they are sized from the frame's
+  // rendered size, not the design viewport: a 1080×1920 story in a 376px-tall
+  // phone player would otherwise get type sized for a 1920px frame. Layout
+  // size (offsetWidth/Height) ignores CSS transforms, which scale the captions
+  // along with the frame. Render mode keeps the design viewport so exported
+  // video is unchanged; until measured (and in jsdom, which has no layout)
+  // the design viewport stands in.
+  const [frameSize, setFrameSize] = useState<{ width: number; height: number } | null>(null);
+  useEffect(() => {
+    const frame = containerRef.current;
+    if (!frame || renderMode || !hasCaptions) return;
+    const measure = () => {
+      const width = frame.offsetWidth;
+      const height = frame.offsetHeight;
+      if (width <= 0 || height <= 0) return;
+      setFrameSize((prev) =>
+        prev && prev.width === width && prev.height === height ? prev : { width, height },
+      );
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(frame);
+    window.addEventListener('resize', measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [renderMode, hasCaptions, isLinearMode, isDashboardMode]);
+  const captionViewport =
+    !renderMode && frameSize ? { ...activeViewport, ...frameSize } : activeViewport;
+
   // Map segment indices to human-readable titles (from sectionHeader blocks)
   const segmentTitleMap = useMemo(() => buildSegmentTitleMap(doc), [doc]);
 
@@ -1604,14 +1635,14 @@ function DocPlayerContent({
             captions={doc.captions}
             currentTime={currentTime}
             enabled={captionsEnabled && (renderMode || isPlaying || currentTime > 0)}
-            // Standard captions scale with the design viewport like the
-            // social style does — a fixed 16px is a whisker on a 1080
-            // basis (broadcast lower-thirds sit around 2.6% of height).
-            fontSize={Math.min(34, Math.max(16, Math.round(activeViewport.height * 0.026)))}
+            // Standard captions scale with the frame like the social style
+            // does — a fixed 16px is a whisker on a 1080 basis (broadcast
+            // lower-thirds sit around 2.6% of height).
+            fontSize={Math.min(34, Math.max(16, Math.round(captionViewport.height * 0.026)))}
             captionStyle={activeCaptionStyle}
             captionPosition={captionPosition}
             theme={effectiveTheme}
-            viewport={activeViewport}
+            viewport={captionViewport}
           />
         )}
 

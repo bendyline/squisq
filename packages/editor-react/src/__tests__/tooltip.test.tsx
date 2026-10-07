@@ -69,4 +69,65 @@ describe('TooltipLayer', () => {
     expect(tooltip.style.left).toBe('272px');
     expect(tooltip.style.visibility).toBe('visible');
   });
+
+  function pointer(type: string, target: Element, pointerType: 'mouse' | 'touch'): void {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'pointerType', { value: pointerType });
+    target.dispatchEvent(event);
+  }
+
+  function renderButton() {
+    render(
+      <div>
+        <button type="button" data-tooltip="Slideshow (⌘⇧3)">
+          Slideshow
+        </button>
+        <span data-testid="elsewhere">Elsewhere</span>
+        <TooltipLayer />
+      </div>,
+    );
+    return screen.getByRole('button', { name: 'Slideshow' });
+  }
+
+  it('takes the tooltip down on click and keeps it down until the pointer leaves', () => {
+    vi.useFakeTimers();
+    const button = renderButton();
+
+    act(() => {
+      pointer('pointerover', button, 'mouse');
+      fireEvent.mouseOver(button);
+      vi.advanceTimersByTime(180);
+    });
+    expect(screen.getByRole('tooltip')).toBeTruthy();
+
+    // Regression: the hint stayed up over whatever the click opened.
+    act(() => pointer('pointerdown', button, 'mouse'));
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    act(() => {
+      fireEvent.mouseOver(button);
+      vi.advanceTimersByTime(180);
+    });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+
+    act(() => {
+      fireEvent.mouseOut(button, { relatedTarget: screen.getByTestId('elsewhere') });
+      fireEvent.mouseOver(button);
+      vi.advanceTimersByTime(180);
+    });
+    expect(screen.getByRole('tooltip')).toBeTruthy();
+  });
+
+  it('shows no tooltip for the emulated hover that follows a tap', () => {
+    vi.useFakeTimers();
+    const button = renderButton();
+
+    // Regression: "Write (⌘⇧1)" stuck over the phone toolbar after a tap.
+    act(() => {
+      pointer('pointerdown', button, 'touch');
+      fireEvent.mouseOver(button);
+      vi.advanceTimersByTime(180);
+    });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
 });

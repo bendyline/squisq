@@ -222,13 +222,17 @@ describe('RecorderModal — slide timing capture', () => {
     );
   }
 
-  /** Enter slides mode, record a take, advancing at 10s and 22s, stop at 30s. */
-  async function recordWithAdvances() {
+  /**
+   * Enter slides mode, record a take, advancing at 10s and 22s, stop at 30s.
+   * `countInMs` covers the reading aid's countdown, which precedes the take.
+   */
+  async function recordWithAdvances(countInMs = 0) {
     await act(async () => {
       fireEvent.click(checkbox('Show slides mode'));
     });
     await click('Start preview');
     await click('Record');
+    await advanceClock(countInMs);
     await advanceClock(10_000);
     await click('Next slide');
     await advanceClock(12_000);
@@ -266,7 +270,8 @@ describe('RecorderModal — slide timing capture', () => {
       );
       renderDialog(true, true, source);
       await act(async () => fireEvent.click(checkbox('Show narration mode')));
-      await recordWithAdvances();
+      // Timings are take-relative: the 3 s countdown must not shift them.
+      await recordWithAdvances(3_000);
       expect(screen.getByTestId('teleprompter-view')).toBeTruthy();
       expect(screen.getByTestId('recorder-slides-panel')).toBeTruthy();
       expect(screen.getByTestId('teleprompter-controls').getAttribute('data-transport')).toBe(

@@ -29,7 +29,12 @@ import {
   themedImageTreatment,
 } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
-import { createAccentLayers, getAccentLayout, DEFAULT_LAYOUT } from './accentImage.js';
+import {
+  accentForViewport,
+  createAccentLayers,
+  getAccentLayout,
+  DEFAULT_LAYOUT,
+} from './accentImage.js';
 import { createBackgroundLayer, fitProse } from './captionUtils.js';
 
 /** Top of the optional title, as a fraction of the viewport height. */
@@ -46,8 +51,9 @@ const BODY_FILL = 0.94;
 const MIN_DECO_PX = 90;
 
 export function quoteBlock(input: QuoteBlockInput, context: TemplateContext): Layer[] {
-  const { title, quote, attribution, accentImage } = input;
+  const { title, quote, attribution } = input;
   const { theme, viewport } = context;
+  const accentImage = accentForViewport(input.accentImage, viewport);
   const H = viewport.height;
   const W = viewport.width;
   const pct = (px: number): string => `${Number(((px / H) * 100).toFixed(3))}%`;

@@ -66,7 +66,7 @@ describe('VideoExportModal', () => {
     expect(resolveVideoSaveActionLabel('mp4', () => 'Save MP4 as...')).toBe('Save MP4 as...');
   });
 
-  it('is only dismissed by explicit controls and has no automated WCAG A/AA violations', async () => {
+  it('is dismissed by Escape or its controls, never a stray backdrop click, and has no WCAG A/AA violations', async () => {
     const onClose = vi.fn();
     const { container, getByRole } = render(
       <VideoExportModal doc={minimalDoc()} onClose={onClose} />,
@@ -80,12 +80,18 @@ describe('VideoExportModal', () => {
     });
     expect(results.violations).toEqual([]);
 
+    // A stray click on the backdrop must not throw away the chosen options.
     fireEvent.click(container.querySelector('[data-color-scheme="light"]')!);
-    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
 
-    fireEvent.click(getByRole('button', { name: 'Close export dialog' }));
+    // Escape closes it, per the shared modal contract (docs/ACCESSIBILITY_AUDIT.md).
+    // While an export runs, or before a finished one is saved, it does not —
+    // see videoExportEscape.test.tsx.
+    fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledOnce();
+
+    fireEvent.click(getByRole('button', { name: 'Close export dialog' }));
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 
   it('closes from the explicit Cancel button', () => {

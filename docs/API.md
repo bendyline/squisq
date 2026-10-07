@@ -1048,12 +1048,20 @@ function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOptions): s
 
 interface ParseOptions {
   gfm?: boolean; // default true — tables, strikethrough, task lists, autolinks, footnotes
-  math?: boolean; // default true — $…$ and $$…$$
+  math?: boolean; // default true — $…$ (Pandoc rules, below) and $$…$$
   directive?: boolean; // default true — :::container, ::leaf, :text
   parseHtml?: boolean; // default true — raw HTML → HtmlNode sub-DOM
   frontmatter?: boolean; // default true — YAML --- blocks
 }
+```
 
+Single-dollar inline math follows Pandoc's rules: the opening `$` must be
+followed by a non-space character, and the closing `$` must be preceded by a
+non-space character and not followed by a digit. Prose such as
+`$45 per visit … $350` and `$5-$10` therefore stays text, while `$x^2$` is
+math. `$$…$$` is unaffected.
+
+```ts
 interface StringifyOptions {
   gfm?: boolean; // default true
   math?: boolean; // default true

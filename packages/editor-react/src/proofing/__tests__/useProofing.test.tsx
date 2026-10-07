@@ -665,3 +665,87 @@ describe('hover card', () => {
     expect(labels).toContain('Add to document word list');
   });
 });
+
+describe('view switches', () => {
+  // EditorShell mounts the Write editor only while its tab is showing, and the
+  // new instance reaches the proofing hook in a LATER task than the view
+  // switch: React schedules the registering update rather than flushing it in
+  // place, so the hook's immediate view-switch pass looks first and finds no
+  // live editor. These harnesses keep both halves of that, unlike `Harness`,
+  // whose single editor outlives every switch.
+  let switchView: ((view: 'raw' | 'wysiwyg' | 'preview') => void) | null = null;
+
+  function WriteSurface(): null {
+    const { setTiptapEditor, markdownSource } = useEditorContext();
+    useEffect(() => {
+      const editor = new Editor({
+        extensions: [
+          StarterKit.configure({ heading: false }),
+          HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+          ProofingExtension,
+        ],
+        content: markdownToTiptap(markdownSource),
+      });
+      const register = window.setTimeout(() => {
+        tiptap = editor;
+        setTiptapEditor(editor);
+      }, 0);
+      return () => {
+        window.clearTimeout(register);
+        setTiptapEditor(null);
+        editor.destroy();
+        if (tiptap === editor) tiptap = null;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return null;
+  }
+
+  function SwitchingHarness(): JSX.Element | null {
+    const { activeView, setActiveView } = useEditorContext();
+    lastState = useProofingState();
+    switchView = setActiveView;
+    return activeView === 'wysiwyg' ? <WriteSurface /> : null;
+  }
+
+  function mountSwitching() {
+    const provider = makeFakeProvider();
+    render(
+      <EditorProvider initialMarkdown={DEFAULT_MD} initialView="wysiwyg" proofing={provider}>
+        <ProofingRoot>
+          <SwitchingHarness />
+        </ProofingRoot>
+      </EditorProvider>,
+    );
+    return provider;
+  }
+
+  async function switchTo(view: 'raw' | 'wysiwyg' | 'preview'): Promise<void> {
+    await act(async () => {
+      switchView!(view);
+      await Promise.resolve();
+    });
+  }
+
+  afterEach(() => {
+    switchView = null;
+  });
+
+  for (const away of ['raw', 'preview'] as const) {
+    it(`re-lints the fresh Write editor after a trip to ${away === 'raw' ? 'Source' : 'Use mode'}`, async () => {
+      mountSwitching();
+      await vi.waitFor(() => expect(lastState?.findings).toHaveLength(1));
+
+      await switchTo(away);
+      await switchTo('wysiwyg');
+
+      // Regression: the panel read "No issues found" and the squiggles were
+      // gone, while the misspelling was still in the text.
+      await vi.waitFor(() => expect(lastState?.findings).toHaveLength(1));
+      expect(lastState?.findingsView).toBe('wysiwyg');
+      await vi.waitFor(() =>
+        expect(tiptap!.view.dom.innerHTML).toContain('squisq-proof-underline--spelling'),
+      );
+    });
+  }
+});

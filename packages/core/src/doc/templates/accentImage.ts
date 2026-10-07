@@ -10,6 +10,11 @@
  * - bottom-strip: 35% height horizontal strip at bottom, text area in upper 65%
  * - corner-inset: Small 25% corner image with gradient vignette
  *
+ * Positions are authored once per block, but the block renders at whatever
+ * viewport the player has. Templates pass the accent through
+ * `accentForViewport` first: on a portrait frame the side strips and the
+ * corner inset become the bottom strip (see that function for why).
+ *
  * This is shared code used by both site and efb-app doc renderers.
  */
 
@@ -21,6 +26,7 @@ import type {
   Animation,
 } from '../../schemas/Doc.js';
 import type { AccentImage, AccentPosition } from '../../schemas/BlockTemplates.js';
+import { getViewportOrientation, type ViewportConfig } from '../../schemas/Viewport.js';
 
 const PERCENTAGE_RE = /^(\d+(?:\.\d+)?)\s*%?$/;
 
@@ -89,6 +95,26 @@ export function mapAmbientMotion(
 export const ACCENT_STRIP_SIZE = 35;
 const STRIP_SIZE = ACCENT_STRIP_SIZE;
 const STRIP_SIZE_PCT = `${STRIP_SIZE}%`;
+
+/**
+ * The accent as it should render on `viewport`.
+ *
+ * A side strip is 35% of the frame's width at full height: a usable panel on
+ * a 16:9 frame (672×1080), a sliver on a 9:16 one (378×1920) that crops a
+ * landscape photo to a fifth of its width and upscales it ~3×. The corner
+ * inset turns just as tall and thin. On a portrait frame those positions
+ * become the full-width bottom strip (1080×672 at 9:16), which has the
+ * proportions of the photos accents carry. Landscape and square frames keep
+ * the authored position.
+ */
+export function accentForViewport(
+  accent: AccentImage | undefined,
+  viewport: ViewportConfig,
+): AccentImage | undefined {
+  if (!accent || accent.position === 'bottom-strip') return accent;
+  if (getViewportOrientation(viewport) !== 'portrait') return accent;
+  return { ...accent, position: 'bottom-strip' };
+}
 
 /**
  * Get layout adjustments based on accent position.

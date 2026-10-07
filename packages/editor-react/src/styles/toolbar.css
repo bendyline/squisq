@@ -630,14 +630,15 @@
   visibility: hidden;
 }
 
-/* Plain buttons past the measured overflow point are already represented in
-   the ··· menu. `overflow: hidden` on the actions row stops them painting, but
-   a clipped button stays in the tab order and still reports an on-screen rect,
-   so hosts that give the row less width end up with unreachable duplicates.
-   Same `visibility` trick as above: the layout box survives, so the
-   measurement still notices when the button fits again. */
-.squisq-toolbar-button--overflowed {
-  visibility: hidden;
+/* Buttons collapsed into the ··· menu (see toolbar/toolbarCollapse.ts). They
+   collapse by priority rather than from the right, so a collapsed button can
+   sit between two visible ones and must give up its layout box entirely —
+   the measurement remembers its width from when it was last displayed. A
+   group whose buttons have all collapsed goes too, separator included. The
+   doubled classes outrank the `display: flex` base rules further down. */
+.squisq-toolbar-button.squisq-toolbar-button--overflowed,
+.squisq-toolbar-group.squisq-toolbar-group--collapsed {
+  display: none;
 }
 
 .squisq-toolbar-view-tab {

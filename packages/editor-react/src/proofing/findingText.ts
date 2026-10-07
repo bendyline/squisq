@@ -26,6 +26,15 @@ export function proofSuggestionLabel(suggestion: ProofSuggestion): string {
   return suggestion.text;
 }
 
+/**
+ * A finding's message as prose. Engines quote words with Markdown code
+ * spans (Did you mean `opportunity`?), which every surface showed as
+ * literal backticks. They read as curly quotes instead, as suggestions do.
+ */
+export function proofMessageText(finding: ProofFinding): string {
+  return finding.message.replace(/`([^`]+)`/g, '“$1”');
+}
+
 /** The first `limit` suggestion labels, in engine order. */
 export function proofSuggestionLabels(finding: ProofFinding, limit: number): string[] {
   return finding.suggestions.slice(0, limit).map(proofSuggestionLabel);
@@ -42,7 +51,7 @@ export function proofHoverMarkdown(finding: ProofFinding, suggestionLimit = 3): 
   const lines = [
     `**${PROOF_CATEGORY_LABELS[finding.category]}**`,
     '',
-    escapeMarkdown(finding.message),
+    escapeMarkdown(proofMessageText(finding)),
   ];
   const labels = proofSuggestionLabels(finding, suggestionLimit);
   if (labels.length > 0) {

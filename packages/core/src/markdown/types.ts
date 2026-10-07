@@ -707,7 +707,11 @@ export interface ParseOptions {
   signal?: AbortSignal;
   /** Enable GFM extensions (tables, strikethrough, task lists, autolinks, footnotes). Default: true */
   gfm?: boolean;
-  /** Enable math extensions ($...$ and $$...$$). Default: true */
+  /**
+   * Enable math extensions ($...$ and $$...$$). Default: true.
+   * Single-dollar math follows Pandoc's flanking rules, so prose prices such
+   * as `$45 … $350` stay text.
+   */
   math?: boolean;
   /** Enable directive extensions (:::container, ::leaf, :text). Default: true */
   directive?: boolean;

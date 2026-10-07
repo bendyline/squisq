@@ -16,6 +16,7 @@ import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { DEFAULT_THEME, type MediaProvider } from '@bendyline/squisq/schemas';
 import { RecorderModal, type RecorderNarrationOptions } from '../recorder/RecorderModal';
+import { FakeMediaRecorder, stubRecorderGlobals } from './fakeMediaRecorder';
 
 const mediaProvider: MediaProvider = {
   resolveUrl: vi.fn(async (path: string) => path),
@@ -184,5 +185,94 @@ describe('RecorderModal — Show narration mode', () => {
     expect(screen.getByRole('button', { name: 'Screen' }).getAttribute('aria-pressed')).toBe(
       'true',
     );
+  });
+});
+
+describe('RecorderModal — reading-aid count-in', () => {
+  beforeEach(() => {
+    stubRecorderGlobals();
+    vi.stubGlobal(
+      'AudioContext',
+      class {
+        state = 'running';
+        sampleRate = 48000;
+        destination = {};
+        close = async () => undefined;
+        createMediaStreamSource() {
+          return { connect() {}, disconnect() {} };
+        }
+        createScriptProcessor() {
+          return { connect() {}, disconnect() {}, onaudioprocess: null };
+        }
+        createGain() {
+          return { gain: { value: 0 }, connect() {}, disconnect() {} };
+        }
+      },
+    );
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    window.localStorage.removeItem('squisq:teleprompter-prefs');
+  });
+
+  const transport = () =>
+    screen.getByTestId('teleprompter-controls').getAttribute('data-transport');
+
+  async function click(name: string) {
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name }));
+    });
+  }
+
+  async function advance(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  async function armReadingAid() {
+    render(
+      <RecorderModal
+        mediaProvider={mediaProvider}
+        onClose={vi.fn()}
+        narration={{ doc, theme: DEFAULT_THEME, recording: null }}
+      />,
+    );
+    await act(async () => fireEvent.click(narrationCheckbox()!));
+    await click('Start preview');
+  }
+
+  it('starts capturing when the countdown ends, not when Record is clicked', async () => {
+    const recorderStart = vi.spyOn(FakeMediaRecorder.prototype, 'start');
+    await armReadingAid();
+    await click('Record');
+    expect(document.querySelector('.squisq-teleprompter-countdown-digit')?.textContent).toBe('3');
+    expect(screen.queryByRole('button', { name: 'Record' })).toBeNull();
+
+    await advance(2_900);
+    expect(recorderStart).not.toHaveBeenCalled();
+
+    await advance(100);
+    expect(recorderStart).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.squisq-teleprompter-countdown-digit')).toBeNull();
+    expect(transport()).toBe('rolling');
+  });
+
+  it('Stop during the countdown cancels the take before anything is captured', async () => {
+    const recorderStart = vi.spyOn(FakeMediaRecorder.prototype, 'start');
+    await armReadingAid();
+    await click('Record');
+    await advance(1_000);
+
+    await click('Stop');
+    expect(screen.getByRole('button', { name: 'Record' })).toBeTruthy();
+    await advance(5_000);
+    expect(recorderStart).not.toHaveBeenCalled();
+    expect(transport()).toBe('stopped');
   });
 });

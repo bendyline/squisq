@@ -43,6 +43,7 @@ import {
   getAccentLayout,
   ACCENT_STRIP_SIZE,
   DEFAULT_LAYOUT,
+  accentForViewport,
 } from './accentImage.js';
 import { createBackgroundLayer, estimateProseLineCount, fitProse } from './captionUtils.js';
 
@@ -69,8 +70,9 @@ const HERO_MAX_SHARE = 0.28;
 const BOX_SLACK_EM = 0.35;
 
 export function definitionCard(input: DefinitionCardInput, context: TemplateContext): Layer[] {
-  const { term, definition, origin, colorScheme = 'blue', accentImage } = input;
+  const { term, definition, origin, colorScheme = 'blue' } = input;
   const { theme, viewport } = context;
+  const accentImage = accentForViewport(input.accentImage, viewport);
   const colors = resolveColorScheme(context, colorScheme);
 
   // Get layout adjustments if accent image is present

@@ -43,6 +43,7 @@ import {
   getAccentLayout,
   ACCENT_STRIP_SIZE,
   DEFAULT_LAYOUT,
+  accentForViewport,
 } from './accentImage.js';
 import { estimateProseLineCount, fitProse } from './captionUtils.js';
 
@@ -79,8 +80,9 @@ const HERO_MAX_SHARE = 0.28;
 const BOX_SLACK_EM = 0.35;
 
 export function dateEvent(input: DateEventInput, context: TemplateContext): Layer[] {
-  const { date, description, footer, mood = 'neutral', accentImage } = input;
+  const { date, description, footer, mood = 'neutral' } = input;
   const { theme, viewport } = context;
+  const accentImage = accentForViewport(input.accentImage, viewport);
   // Deepen the mood accent on light surfaces so the hero date keeps contrast.
   const moodAccent = MOOD_ACCENTS[mood];
   const dateColor =

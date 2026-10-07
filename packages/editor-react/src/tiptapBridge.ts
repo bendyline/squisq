@@ -68,6 +68,61 @@ const RE_STRIKETHROUGH = /~~(.+?)~~/g;
 const RE_LEGACY_BOLD_STAR = /\*\*(?![\s*])((?:(?!\*\*).)+?)(?<![\s*])([ \t]+)\*\*(?=$|[^\s*])/g;
 const RE_LEGACY_ITALIC_STAR = /(?<!\*)\*(?![\s*])([^*]+?)(?<![\s*])([ \t]+)\*(?=$|[^\s*])/g;
 
+const RE_BOLD_DELIMITER = /\*\*/g;
+const RE_ITALIC_DELIMITER = /\*/g;
+
+/**
+ * Delimiter runs before `end` that can open or close emphasis. A run with
+ * whitespace (or the line's edge) on both sides can do neither — it is the
+ * literal `*` of `2 * 3` — so it must not tip the pairing count.
+ */
+function countEmphasisDelimiters(text: string, end: number, delimiter: RegExp): number {
+  let count = 0;
+  delimiter.lastIndex = 0;
+  for (let match = delimiter.exec(text); match && match.index < end; match = delimiter.exec(text)) {
+    const before = text[match.index - 1];
+    const after = text[match.index + match[0].length];
+    if ((before === undefined || /\s/.test(before)) && (after === undefined || /\s/.test(after))) {
+      continue;
+    }
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Apply a legacy-recovery pattern only where its delimiter really OPENS.
+ *
+ * The legacy shape — an opener, text ending in a space, then a delimiter
+ * before a word — also describes the gap BETWEEN two ordinary spans when
+ * punctuation follows the first: in `**content**; the tag chooses the
+ * **template**`, the span `**; the tag chooses the **` matches. Recovering
+ * it nested the marks, Tiptap fused them, and simply opening the document
+ * in Write rewrote it as `**content; the tag chooses the** template`. An
+ * odd number of delimiters before a match means its first delimiter closes
+ * an earlier span, so the scan steps past that delimiter and carries on.
+ */
+function recoverLegacyEmphasis(
+  text: string,
+  pattern: RegExp,
+  delimiter: RegExp,
+  delimiterLength: number,
+  tag: 'strong' | 'em',
+): string {
+  let output = '';
+  let copied = 0;
+  pattern.lastIndex = 0;
+  for (let match = pattern.exec(text); match; match = pattern.exec(text)) {
+    if (countEmphasisDelimiters(text, match.index, delimiter) % 2 === 1) {
+      pattern.lastIndex = match.index + delimiterLength;
+      continue;
+    }
+    output += `${text.slice(copied, match.index)}<${tag}>${match[1]}</${tag}>${match[2]}`;
+    copied = match.index + match[0].length;
+  }
+  return output + text.slice(copied);
+}
+
 // The delimiters whose backslash escapes this pass understands. `\\` is
 // included so an even backslash run collapses correctly instead of
 // leaking a literal backslash in front of live emphasis.
@@ -1600,14 +1655,15 @@ function inlineToHtml(text: string): string {
 
   // Recover the invalid delimiter placement emitted by older versions of
   // this bridge before applying the normal CommonMark-ish emphasis rules.
-  result = result.replace(RE_LEGACY_BOLD_STAR, '<strong>$1</strong>$2');
+  result = recoverLegacyEmphasis(result, RE_LEGACY_BOLD_STAR, RE_BOLD_DELIMITER, 2, 'strong');
 
   // Bold: **text** or __text__
   result = result.replace(RE_BOLD_STAR, '<strong>$1</strong>');
   result = result.replace(RE_BOLD_UNDER, '<strong>$1</strong>');
 
   // Italic: *text* or _text_
-  result = result.replace(RE_LEGACY_ITALIC_STAR, '<em>$1</em>$2');
+  // Bold is already tags here, so every remaining `*` is a single delimiter.
+  result = recoverLegacyEmphasis(result, RE_LEGACY_ITALIC_STAR, RE_ITALIC_DELIMITER, 1, 'em');
   result = result.replace(RE_ITALIC_STAR, '<em>$1</em>');
   result = result.replace(RE_ITALIC_UNDER, '<em>$1</em>');
 

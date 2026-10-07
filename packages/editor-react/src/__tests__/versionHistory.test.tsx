@@ -301,6 +301,68 @@ describe('versioning wiring + VersionHistoryPanel', () => {
     readSpy.mockRestore();
   });
 
+  it('explains a lone snapshot of the current draft instead of claiming there are none', async () => {
+    // Regression: the newest snapshot hides behind the Current row when it
+    // matches the draft, so a document with exactly one snapshot — typed
+    // once, then left alone — showed "No versions yet" as if versioning
+    // were broken.
+    const container = new MemoryContentContainer();
+    await container.writeDocument('# Quote\n\nLawn care is $45.\n', 'index.md');
+    const onSaveVersion = vi.fn<(r: SaveVersionResult) => void>();
+    render(
+      <EditorProvider
+        initialMarkdown={'# Quote\n\nLawn care is $45.\n'}
+        workspaceContainer={container}
+        allowVersioning
+        versioningAutoSaveIdleMs={10}
+        onSaveVersion={onSaveVersion}
+      >
+        <VersionHistoryPanel />
+      </EditorProvider>,
+    );
+    await waitFor(() =>
+      expect(onSaveVersion).toHaveBeenCalledWith(expect.objectContaining({ saved: true })),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Version history' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/current draft is saved as a version/i)).toBeTruthy();
+    });
+    expect(screen.queryByText(/No versions yet/i)).toBeNull();
+    expect(screen.getByText('Current')).toBeTruthy();
+    // Nothing older to go back to yet.
+    expect(screen.queryByRole('button', { name: 'Revert' })).toBeNull();
+  });
+
+  it('promises automatic saves in the empty state only when they are on', async () => {
+    const container = new MemoryContentContainer();
+    const { unmount } = render(
+      <EditorProvider
+        workspaceContainer={container}
+        allowVersioning
+        versioningAutoSaveIdleMs={60_000}
+      >
+        <VersionHistoryPanel />
+      </EditorProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Version history' }));
+    await waitFor(() => {
+      expect(
+        screen.getByText(/saved automatically a few seconds after you stop typing/i),
+      ).toBeTruthy();
+    });
+    unmount();
+
+    render(
+      <EditorProvider workspaceContainer={container} allowVersioning versioningAutoSaveIdleMs={0}>
+        <VersionHistoryPanel />
+      </EditorProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Version history' }));
+    await waitFor(() => expect(screen.getByText('No versions yet.')).toBeTruthy());
+  });
+
   it('deduplicates identical saves', async () => {
     const container = new MemoryContentContainer();
     await container.writeDocument('# hi', 'index.md');

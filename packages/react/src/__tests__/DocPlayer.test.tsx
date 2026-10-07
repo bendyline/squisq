@@ -1315,3 +1315,82 @@ describe('DocPlayer front door (doc / markdown resolution)', () => {
     expect(container.querySelector('.doc-player')).toBeTruthy();
   });
 });
+
+describe('DocPlayer caption sizing', () => {
+  const portrait = { width: 1080, height: 1920, name: 'portrait' };
+  const captionDoc = (): Doc => ({
+    ...minimalDoc(),
+    captions: {
+      version: 1,
+      phrases: [{ text: 'At the top of Alaska', startTime: 0, endTime: 5, audioSegment: 0 }],
+    },
+  });
+
+  // jsdom has no layout: stand in a phone-sized player (212×376) for the frame.
+  function withFrameSize(width: number, height: number): () => void {
+    const w = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(width);
+    const h = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(height);
+    return () => {
+      w.mockRestore();
+      h.mockRestore();
+    };
+  }
+
+  it('sizes standard captions from the rendered frame, not the design viewport', () => {
+    const restore = withFrameSize(212, 376);
+    try {
+      const { container } = render(
+        <DocPlayer
+          doc={captionDoc()}
+          forceViewport={portrait}
+          audioController={controller({ currentTime: 1 })}
+        />,
+      );
+      // 2.6% of a 376px frame hits the 16px floor; the 1920px design height gave 34px.
+      expect(container.querySelector<HTMLElement>('.caption-overlay span')?.style.fontSize).toBe(
+        '16px',
+      );
+    } finally {
+      restore();
+    }
+  });
+
+  it('sizes social captions from the rendered frame, not the design viewport', () => {
+    const restore = withFrameSize(212, 376);
+    try {
+      const { container } = render(
+        <DocPlayer
+          doc={captionDoc()}
+          forceViewport={portrait}
+          captionStyle="social"
+          audioController={controller({ currentTime: 1 })}
+        />,
+      );
+      // 8.2% of a 212px-wide frame hits the 22px floor; the 1080px design width gave 89px.
+      expect(
+        container.querySelector<HTMLElement>('.social-caption-overlay__chunk')?.style.fontSize,
+      ).toBe('22px');
+    } finally {
+      restore();
+    }
+  });
+
+  it('keeps design-viewport sizing in render mode, so exported video is unchanged', () => {
+    const restore = withFrameSize(212, 376);
+    try {
+      const { container } = render(
+        <DocPlayer
+          doc={captionDoc()}
+          renderMode
+          forceViewport={portrait}
+          audioController={controller({ currentTime: 1 })}
+        />,
+      );
+      expect(container.querySelector<HTMLElement>('.caption-overlay span')?.style.fontSize).toBe(
+        '34px',
+      );
+    } finally {
+      restore();
+    }
+  });
+});

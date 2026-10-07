@@ -66,6 +66,7 @@ function stubController(): TeleprompterController {
     prefs: DEFAULT_TELEPROMPTER_PREFS,
     setPrefs: vi.fn(),
     play: vi.fn(),
+    countIn: vi.fn(async () => true),
     pause: vi.fn(),
     restart: vi.fn(),
     nudge: vi.fn(),

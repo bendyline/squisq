@@ -16,7 +16,7 @@
 import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { ProofFinding } from '@bendyline/squisq/proof';
-import { PROOF_CATEGORY_LABELS, proofSuggestionLabel } from './findingText';
+import { PROOF_CATEGORY_LABELS, proofMessageText, proofSuggestionLabel } from './findingText';
 import type { ProofingHoverAnchor } from './useProofing';
 
 export interface ProofingTooltipProps {
@@ -111,7 +111,7 @@ export function ProofingTooltip({
           {PROOF_CATEGORY_LABELS[finding.category]}
         </span>
       </div>
-      <div className="squisq-proof-tooltip-message">{finding.message}</div>
+      <div className="squisq-proof-tooltip-message">{proofMessageText(finding)}</div>
       {suggestions.length > 0 && (
         <div className="squisq-proof-tooltip-suggestions">
           {suggestions.map((suggestion, index) => (
