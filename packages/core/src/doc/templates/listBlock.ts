@@ -29,6 +29,7 @@ import {
   getAccentLayout,
   adjustY,
   DEFAULT_LAYOUT,
+  accentForViewport,
 } from './accentImage.js';
 import { estimateProseLineCount, estimateWrappedLineCount } from './captionUtils.js';
 
@@ -121,7 +122,8 @@ function measureListHeightPx(
 }
 
 export function listBlock(input: ListBlockInput, context: TemplateContext): Layer[] {
-  const { title, accentImage } = input;
+  const { title } = input;
+  const accentImage = accentForViewport(input.accentImage, context.viewport);
   // `items` is required by the schema, but malformed / partially-authored
   // blocks (e.g. someone wrote `template: list` with no items yet) reach
   // this code path during live preview. Treat missing/non-array as empty

@@ -41,7 +41,7 @@ import {
   getMotionProfile,
   motionEntrance,
 } from '../utils/themeUtils.js';
-import { createAccentLayers, getAccentLayout, DEFAULT_LAYOUT } from './accentImage.js';
+import { accentForViewport, createAccentLayers, getAccentLayout, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer, fitProse } from './captionUtils.js';
 
 /**
@@ -70,8 +70,9 @@ const DESC_LINE_HEIGHT = 1.5;
 const DETAIL_LINE_HEIGHT = 1.4;
 
 export function statHighlight(input: StatHighlightInput, context: TemplateContext): Layer[] {
-  const { stat, colorScheme = 'blue', accentImage } = input;
+  const { stat, colorScheme = 'blue' } = input;
   const { theme, viewport } = context;
+  const accentImage = accentForViewport(input.accentImage, viewport);
   const colors = resolveColorScheme(context, colorScheme);
 
   // Input derivation falls back to the heading for a missing body, which

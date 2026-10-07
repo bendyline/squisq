@@ -36,7 +36,7 @@ import {
   themedSurfaceGradient,
   themedImageTreatment,
 } from '../utils/themeUtils.js';
-import { createAccentLayers, getAccentLayout, DEFAULT_LAYOUT } from './accentImage.js';
+import { accentForViewport, createAccentLayers, getAccentLayout, DEFAULT_LAYOUT } from './accentImage.js';
 import { createBackgroundLayer, fitProse } from './captionUtils.js';
 
 /** Vertical band (fractions of the frame) the lockup may occupy. */
@@ -52,10 +52,11 @@ const EXPLAIN_LINE_HEIGHT = 1.5;
 const SOURCE_LINE_HEIGHT = 1.4;
 
 export function factCard(input: FactCardInput, context: TemplateContext): Layer[] {
-  const { fact, accentImage } = input;
+  const { fact } = input;
   const explanation = (input.explanation ?? '').trim();
   const source = (input.source ?? '').trim();
   const { theme, viewport } = context;
+  const accentImage = accentForViewport(input.accentImage, viewport);
 
   // Get layout adjustments if accent image is present
   const accentLayout = accentImage ? getAccentLayout(accentImage.position) : DEFAULT_LAYOUT;
