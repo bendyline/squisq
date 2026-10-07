@@ -25,6 +25,8 @@ import type {
   MarkdownContainerDirective,
 } from '@bendyline/squisq/markdown';
 
+import { parseMarkdown } from '@bendyline/squisq/markdown';
+
 import { markdownDocToDocx, docToDocx } from '../docx/export';
 
 // ============================================
@@ -218,6 +220,21 @@ describe('markdownDocToDocx', () => {
     const xmlText = await zip.file('word/document.xml')!.async('text');
     expect(xmlText).toContain('Consolas');
     expect(xmlText).toContain('console.log()');
+  });
+
+  it('exports prices in prose as text, not inline math', async () => {
+    // Two dollar amounts in one paragraph used to parse as inline math, so the
+    // exported quote read "45 per visit … 350" in a code font.
+    const quote =
+      'Weekly lawn care is $45 per visit and the cleanup is $350, so your first month is $530 total.';
+
+    const zip = await exportAndParse(parseMarkdown(quote));
+    const xml = await getDocumentXml(zip);
+    const text = Array.from(xml.getElementsByTagName('w:t'))
+      .map((t) => t.textContent)
+      .join('');
+    expect(text).toBe(quote);
+    expect(await zip.file('word/document.xml')!.async('text')).not.toContain('Consolas');
   });
 
   // ============================================

@@ -138,13 +138,11 @@ export interface ToolbarProps {
 
 import {
   BUTTONS,
-  BUTTON_INDEX_BY_ID,
   CHART_TYPE_MENU_WIDTH,
   CODE_SNIPPET_MENU_WIDTH,
   CONVERT_BUTTONS,
   fileCountBadge,
   fileCountLabel,
-  FIRST_MEDIA_INDEX,
   INSERT_MENU_WIDTH,
   FILE_STORING_BUTTONS,
   MEDIA_BUTTONS,
@@ -152,6 +150,7 @@ import {
   TASK_LIST_MARKDOWN,
   buttonIcon,
 } from './toolbar/toolbarButtons';
+import { chooseCollapsedItems, type CollapseGroup } from './toolbar/toolbarCollapse';
 
 import {
   blockConversionRange,
@@ -476,12 +475,21 @@ export function Toolbar({
 
   // ── Overflow detection ────────────────────────────────
   const actionsRef = useRef<HTMLDivElement>(null);
-  const [measuredOverflowIndex, setMeasuredOverflowIndex] = useState<number | null>(null);
+  // '|'-joined ids (see toolbar/toolbarCollapse.ts) of the buttons and
+  // document chrome currently collapsed into the ··· menu. Stored as a string
+  // so identical measurements bail out of re-rendering.
+  const [collapsedKey, setCollapsedKey] = useState('');
   // '|'-joined data-contextual ids of the contextual groups (template /
-  // transition pickers, table controls) whose right edge doesn't fit in the
-  // actions row. Stored as a string so identical measurements bail out of
-  // re-rendering.
+  // transition pickers, table controls) that don't fit in the actions row.
   const [clippedContextualKey, setClippedContextualKey] = useState('');
+  // Collapsed items are `display: none`, so their widths are remembered from
+  // the last time they were laid out — every item starts out displayed.
+  const itemWidthsRef = useRef(new Map<string, number>());
+  // Whether each chrome item shares the actions lane's row. Only a rowmate
+  // gives the lane width back when it collapses; on a wrapped toolbar the
+  // others are left alone.
+  const chromeOnLaneRowRef = useRef(new Map<string, boolean>());
+  const collapsedCountRef = useRef(0);
   const [showOverflow, setShowOverflow] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
 
@@ -501,43 +509,125 @@ export function Toolbar({
     closeEmojiPicker();
   }, [closeEmojiPicker, closeInsertMenu, findMode]);
 
-  const overflowIndex = measuredOverflowIndex;
-  const clippedContextual = new Set(clippedContextualKey ? clippedContextualKey.split('|') : []);
+  // The lane only exists outside preview / code / find mode. Without it
+  // nothing is measured, so nothing may stay collapsed: the ··· menu that
+  // would hold the collapsed chrome isn't rendered either.
+  const actionsLaneShown =
+    !findMode &&
+    activeView !== 'preview' &&
+    !isCodeMode &&
+    (showFormattingControls || showInsertControls);
+  const collapsed = new Set(actionsLaneShown && collapsedKey ? collapsedKey.split('|') : []);
+  const clippedContextual = new Set(
+    actionsLaneShown && clippedContextualKey ? clippedContextualKey.split('|') : [],
+  );
 
   useEffect(() => {
     const container = actionsRef.current;
     if (!container) return;
+    const toolbar = container.parentElement;
+    const widths = itemWidthsRef.current;
+    const onLaneRow = chromeOnLaneRowRef.current;
+
+    const gapOf = (element: Element | null | undefined): number =>
+      element ? Number.parseFloat(getComputedStyle(element).columnGap) || 0 : 0;
+    const isDisplayed = (element: HTMLElement): boolean =>
+      !element.classList.contains('squisq-toolbar-button--overflowed') &&
+      !element.closest('.squisq-toolbar-group--collapsed');
+    const remember = (id: string, element: HTMLElement): DOMRect => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width > 0) widths.set(id, rect.width);
+      return rect;
+    };
 
     const measure = () => {
-      const containerRight = container.getBoundingClientRect().right;
-      // Contextual groups aren't BUTTONS entries, so they must not shift the
-      // btnIndex mapping below — measure them separately.
-      const children = container.querySelectorAll<HTMLElement>(
-        ':scope > .squisq-toolbar-group:not(.squisq-toolbar-contextual) > .squisq-toolbar-button',
-      );
-      let firstHidden: number | null = null;
-      children.forEach((child) => {
-        if (firstHidden !== null) return;
-        // A button is hidden if its right edge extends past the container.
-        // Its data-btn-index carries its BUTTONS position (see
-        // BUTTON_INDEX_BY_ID for why the DOM can't be walked positionally).
-        if (child.getBoundingClientRect().right > containerRight + 2) {
-          const index = Number(child.dataset.btnIndex);
-          firstHidden = Number.isNaN(index) ? null : index;
+      const laneRect = container.getBoundingClientRect();
+
+      // The lane's groups, in layout order. Collapsed buttons stay in the DOM
+      // (display: none), so the structure is always complete.
+      const groups: CollapseGroup[] = [];
+      container.querySelectorAll<HTMLElement>(':scope > .squisq-toolbar-group').forEach((group) => {
+        const contextual = group.dataset.contextual;
+        if (contextual) {
+          // Clipped contextual groups are only visibility: hidden, so they
+          // still measure.
+          remember(`contextual:${contextual}`, group);
+          groups.push({ items: [`contextual:${contextual}`], separated: false });
+          return;
         }
-      });
-      setMeasuredOverflowIndex(firstHidden);
-      // Contextual groups (template/transition pickers, table controls) that
-      // don't fit move into the overflow menu instead of painting cropped.
-      const clipped: string[] = [];
-      container
-        .querySelectorAll<HTMLElement>(':scope > .squisq-toolbar-contextual')
-        .forEach((group) => {
-          if (group.getBoundingClientRect().right > containerRight + 2) {
-            clipped.push(group.dataset.contextual ?? '');
-          }
+        const items: string[] = [];
+        group.querySelectorAll<HTMLElement>(':scope > [data-toolbar-item]').forEach((item) => {
+          const id = item.dataset.toolbarItem!;
+          items.push(id);
+          if (isDisplayed(item)) remember(id, item);
         });
-      setClippedContextualKey(clipped.join('|'));
+        if (items.length > 0) groups.push({ items, separated: true });
+      });
+
+      const separator = container.querySelector<HTMLElement>(
+        ':scope > .squisq-toolbar-group:not(.squisq-toolbar-contextual):not(.squisq-toolbar-group--collapsed) > .squisq-toolbar-separator',
+      );
+      if (separator) {
+        const style = getComputedStyle(separator);
+        const width =
+          separator.getBoundingClientRect().width +
+          (Number.parseFloat(style.marginLeft) || 0) +
+          (Number.parseFloat(style.marginRight) || 0);
+        if (width > 0) widths.set('separator', width);
+      }
+
+      // Everything the lane, the collapsible chrome and the ··· trigger share.
+      const rowGap = gapOf(toolbar);
+      let budget = laneRect.width;
+      const chrome: string[] = [];
+      toolbar?.querySelectorAll<HTMLElement>(':scope > [data-toolbar-item]').forEach((item) => {
+        const id = item.dataset.toolbarItem!;
+        if (isDisplayed(item)) {
+          const rect = remember(id, item);
+          if (rect.width > 0 && rect.height > 0) {
+            onLaneRow.set(id, rect.top < laneRect.bottom && rect.bottom > laneRect.top);
+          }
+          if (onLaneRow.get(id)) budget += (widths.get(id) ?? 0) + rowGap;
+        }
+        if (onLaneRow.get(id)) chrome.push(id);
+      });
+      const trigger = toolbar?.querySelector<HTMLElement>(':scope > .squisq-toolbar-overflow');
+      const triggerWidth = trigger?.getBoundingClientRect().width ?? 0;
+      if (triggerWidth > 0) {
+        widths.set('trigger', triggerWidth);
+        budget += triggerWidth + rowGap;
+      }
+
+      const known = [...widths.values()];
+      const fallbackWidth = known.length > 0 ? Math.min(...known) : 32;
+      const layout = {
+        groups,
+        chrome,
+        widthOf: (id: string) => widths.get(id) ?? fallbackWidth,
+        separatorWidth: widths.get('separator') ?? 0,
+        groupGap: gapOf(container.querySelector(':scope > .squisq-toolbar-group')),
+        laneGap: gapOf(container),
+        rowGap,
+        triggerWidth: widths.get('trigger') ?? fallbackWidth,
+        budget,
+      };
+      let next = chooseCollapsedItems(layout);
+      // Restore items only with a little slack to spare, so a row sitting
+      // right at a threshold can't flip back and forth between measurements.
+      if (next.size < collapsedCountRef.current) {
+        next = chooseCollapsedItems({ ...layout, budget: budget - 4 });
+      }
+      collapsedCountRef.current = next.size;
+      const ordered = [...groups.flatMap((group) => group.items), ...chrome].filter((id) =>
+        next.has(id),
+      );
+      setCollapsedKey(ordered.filter((id) => !id.startsWith('contextual:')).join('|'));
+      setClippedContextualKey(
+        ordered
+          .filter((id) => id.startsWith('contextual:'))
+          .map((id) => id.slice('contextual:'.length))
+          .join('|'),
+      );
     };
 
     // Observe the row and every group in it: contextual groups mount/unmount
@@ -565,7 +655,7 @@ export function Toolbar({
       if (!ro) window.removeEventListener('resize', measure);
       mo.disconnect();
     };
-  }, [activeView]);
+  }, [activeView, actionsLaneShown]);
 
   // Close overflow menu on outside click. Clicks inside the template
   // gallery / transition flyout portals count as inside: those popovers are
@@ -1563,10 +1653,22 @@ export function Toolbar({
   };
   const hasVisibleMediaButtons = MEDIA_BUTTONS.some((b) => isButtonVisible(b.id));
   const showInsertInOverflow =
-    showInsertControls &&
-    overflowIndex !== null &&
-    overflowIndex <= FIRST_MEDIA_INDEX &&
-    hasVisibleMediaButtons;
+    showInsertControls && collapsed.has('insert') && hasVisibleMediaButtons;
+  // Formatting buttons in the ··· menu, in their usual toolbar order. Media
+  // buttons never appear inline: the Insert dropdown stands in for them.
+  const collapsedFormatButtons = showFormattingControls
+    ? BUTTONS.filter((b) => b.group !== 'media' && isButtonVisible(b.id) && collapsed.has(b.id))
+    : [];
+  const collapsedChrome = (['layouts', 'docSettings', 'files'] as const).filter((id) =>
+    collapsed.has(id),
+  );
+  // Formatting groups with at least one inline button; each one after the
+  // first opens with a separator.
+  const shownFormatGroups: readonly string[] = showFormattingControls
+    ? groups.filter((group) =>
+        BUTTONS.some((b) => b.group === group && isButtonVisible(b.id) && !collapsed.has(b.id)),
+      )
+    : [];
 
   // Detect whether cursor is inside a table (WYSIWYG mode only)
   const isInTable = isWysiwyg ? tiptapEditor.isActive('table') : false;
@@ -1862,11 +1964,11 @@ export function Toolbar({
   const showBlockSectionInOverflow = showTemplateInOverflow || showTransitionInOverflow;
   const overflowBlockLabel = currentTemplate ? templateLabel(currentTemplate) : 'Heading';
   const showToolbarOverflow =
-    !findMode &&
-    !isPreview &&
-    !isCodeMode &&
-    ((showFormattingControls && (overflowIndex !== null || clippedContextual.size > 0)) ||
-      showInsertInOverflow);
+    actionsLaneShown &&
+    (collapsedFormatButtons.length > 0 ||
+      (showFormattingControls && clippedContextual.size > 0) ||
+      showInsertInOverflow ||
+      collapsedChrome.length > 0);
 
   return (
     <div
@@ -1965,12 +2067,20 @@ export function Toolbar({
       {/* After-tabs slot — left side, before formatting or preview controls. */}
       {findMode ? <FindToolbar onClose={() => setFindMode(false)} /> : slotAfterTabs}
       {/* Built-in actions — formatting and Insert can be controlled independently. */}
-      {!findMode && !isPreview && !isCodeMode && (showFormattingControls || showInsertControls) && (
+      {actionsLaneShown && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>
+          {/* Collapsed buttons stay mounted (display: none) so the
+              measurement always sees the whole structure; a group whose
+              buttons are all collapsed hides with its separator. */}
           {showFormattingControls &&
-            groups.map((group, gi) => (
-              <div key={group} className="squisq-toolbar-group">
-                {gi > 0 && <div className="squisq-toolbar-separator" />}
+            groups.map((group) => (
+              <div
+                key={group}
+                className={`squisq-toolbar-group${shownFormatGroups.includes(group) ? '' : ' squisq-toolbar-group--collapsed'}`}
+              >
+                {shownFormatGroups.indexOf(group) > 0 && (
+                  <div className="squisq-toolbar-separator" />
+                )}
                 {BUTTONS.filter((b) => b.group === group && isButtonVisible(b.id)).map((btn) => {
                   const active =
                     btn.id === 'emoji'
@@ -1980,15 +2090,13 @@ export function Toolbar({
                         : false;
                   const disabled =
                     (FILE_STORING_BUTTONS.has(btn.id) && !mediaProvider) || !buttonAllowed(btn.id);
-                  const btnIndex = BUTTON_INDEX_BY_ID.get(btn.id);
-                  const overflowed =
-                    overflowIndex !== null && btnIndex !== undefined && btnIndex >= overflowIndex;
+                  const overflowed = collapsed.has(btn.id);
                   return (
                     <button
                       key={btn.id}
                       ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
                       className={`squisq-toolbar-button${active ? ' squisq-toolbar-button--active' : ''}${overflowed ? ' squisq-toolbar-button--overflowed' : ''}`}
-                      data-btn-index={btnIndex}
+                      data-toolbar-item={btn.id}
                       data-tooltip={
                         dataCardFocused
                           ? 'Formatting applies to document text — click into the prose first'
@@ -2010,12 +2118,14 @@ export function Toolbar({
 
           {/* Insert menu button — collapses all media-group actions into a single dropdown */}
           {showInsertControls && (
-            <div className="squisq-toolbar-group">
-              {showFormattingControls && <div className="squisq-toolbar-separator" />}
+            <div
+              className={`squisq-toolbar-group${collapsed.has('insert') ? ' squisq-toolbar-group--collapsed' : ''}`}
+            >
+              {shownFormatGroups.length > 0 && <div className="squisq-toolbar-separator" />}
               <button
                 ref={insertMenuButtonRef}
-                className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}${showInsertInOverflow ? ' squisq-toolbar-button--overflowed' : ''}`}
-                data-btn-index={FIRST_MEDIA_INDEX}
+                className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}${collapsed.has('insert') ? ' squisq-toolbar-button--overflowed' : ''}`}
+                data-toolbar-item="insert"
                 data-tooltip={
                   dataCardFocused
                     ? 'Inserts land in document text — click into the prose first'
@@ -2255,41 +2365,34 @@ export function Toolbar({
             <div
               className={`squisq-toolbar-overflow-menu squisq-toolbar-overflow-menu--${overflowPlacement}`}
             >
-              {showFormattingControls &&
-                BUTTONS.slice(overflowIndex ?? BUTTONS.length)
-                  .filter((b) => isButtonVisible(b.id))
-                  // Media buttons are represented by the synthetic Insert dropdown
-                  // in both the visible toolbar and the overflow menu.
-                  .filter((b) => b.group !== 'media')
-                  .map((btn) => {
-                    const active =
-                      btn.id === 'emoji'
-                        ? emojiPickerAnchor !== null
-                        : formatActive && formattingEditor
-                          ? isTiptapActive(formattingEditor, btn.id)
-                          : false;
-                    const disabled =
-                      (FILE_STORING_BUTTONS.has(btn.id) && !mediaProvider) ||
-                      !buttonAllowed(btn.id);
-                    return (
-                      <button
-                        key={btn.id}
-                        ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
-                        className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
-                        onClick={() => {
-                          handleAction(btn.id);
-                          // Keep the overflow open when opening the emoji
-                          // picker — otherwise its anchor (the overflow
-                          // item) unmounts and the popover loses its ref.
-                          if (btn.id !== 'emoji') setShowOverflow(false);
-                        }}
-                        disabled={disabled}
-                      >
-                        <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
-                        <span>{btn.title}</span>
-                      </button>
-                    );
-                  })}
+              {collapsedFormatButtons.map((btn) => {
+                const active =
+                  btn.id === 'emoji'
+                    ? emojiPickerAnchor !== null
+                    : formatActive && formattingEditor
+                      ? isTiptapActive(formattingEditor, btn.id)
+                      : false;
+                const disabled =
+                  (FILE_STORING_BUTTONS.has(btn.id) && !mediaProvider) || !buttonAllowed(btn.id);
+                return (
+                  <button
+                    key={btn.id}
+                    ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
+                    className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                    onClick={() => {
+                      handleAction(btn.id);
+                      // Keep the overflow open when opening the emoji
+                      // picker — otherwise its anchor (the overflow
+                      // item) unmounts and the popover loses its ref.
+                      if (btn.id !== 'emoji') setShowOverflow(false);
+                    }}
+                    disabled={disabled}
+                  >
+                    <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
+                    <span>{btn.title}</span>
+                  </button>
+                );
+              })}
 
               {showInsertInOverflow && (
                 <button
@@ -2309,6 +2412,62 @@ export function Toolbar({
                     <Icon icon="fa-solid fa-plus" />
                   </span>
                   <span>Insert...</span>
+                </button>
+              )}
+
+              {/* Document chrome collapses here when the row is too narrow to
+                  keep it alongside the formatting controls. */}
+              {collapsedChrome.length > 0 &&
+                (collapsedFormatButtons.length > 0 || showInsertInOverflow) && (
+                  <div
+                    className="squisq-toolbar-separator"
+                    style={{ margin: '4px 0', width: '100%', height: 1 }}
+                  />
+                )}
+              {collapsedChrome.includes('layouts') && (
+                <button
+                  className="squisq-toolbar-overflow-item"
+                  onClick={() => {
+                    setShowLayoutManager(true);
+                    setShowOverflow(false);
+                  }}
+                >
+                  <span className="squisq-toolbar-overflow-icon">
+                    <Icon icon="fa-solid fa-shapes" />
+                  </span>
+                  <span>Custom layouts</span>
+                </button>
+              )}
+              {collapsedChrome.includes('docSettings') && (
+                <button
+                  className="squisq-toolbar-overflow-item"
+                  onClick={() => {
+                    setShowDocSettings(true);
+                    setShowOverflow(false);
+                  }}
+                >
+                  <span className="squisq-toolbar-overflow-icon">
+                    <Icon icon="fa-solid fa-file-lines" />
+                  </span>
+                  <span>Document settings</span>
+                </button>
+              )}
+              {collapsedChrome.includes('files') && onToggleFiles && (
+                <button
+                  className={`squisq-toolbar-overflow-item${showFiles ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                  aria-pressed={showFiles}
+                  onClick={() => {
+                    onToggleFiles();
+                    setShowOverflow(false);
+                  }}
+                >
+                  <span className="squisq-toolbar-overflow-icon">
+                    <Icon icon="fa-solid fa-paperclip" />
+                  </span>
+                  <span>
+                    {showFiles ? 'Hide' : 'Show'} Files panel
+                    {resolvedFileCount > 0 ? ` (${fileCountLabel(resolvedFileCount)})` : ''}
+                  </span>
                 </button>
               )}
 
@@ -2442,7 +2601,8 @@ export function Toolbar({
       {showDocumentChrome && (
         <button
           type="button"
-          className={`squisq-toolbar-button${showLayoutManager ? ' squisq-toolbar-button--active' : ''}`}
+          className={`squisq-toolbar-button${showLayoutManager ? ' squisq-toolbar-button--active' : ''}${collapsed.has('layouts') ? ' squisq-toolbar-button--overflowed' : ''}`}
+          data-toolbar-item="layouts"
           onClick={() => setShowLayoutManager(true)}
           data-tooltip="Custom layouts"
           aria-label="Custom layouts"
@@ -2455,7 +2615,8 @@ export function Toolbar({
       {showDocumentChrome && (
         <button
           type="button"
-          className="squisq-toolbar-button"
+          className={`squisq-toolbar-button${collapsed.has('docSettings') ? ' squisq-toolbar-button--overflowed' : ''}`}
+          data-toolbar-item="docSettings"
           onClick={() => setShowDocSettings(true)}
           data-tooltip="Document settings"
           aria-label="Document settings"
@@ -2466,7 +2627,8 @@ export function Toolbar({
       {/* Files toggle — visible when callback is provided */}
       {onToggleFiles && (
         <button
-          className={`squisq-toolbar-button squisq-toolbar-files-toggle${showFiles ? ' squisq-toolbar-button--active' : ''}`}
+          className={`squisq-toolbar-button squisq-toolbar-files-toggle${showFiles ? ' squisq-toolbar-button--active' : ''}${collapsed.has('files') ? ' squisq-toolbar-button--overflowed' : ''}`}
+          data-toolbar-item="files"
           onClick={onToggleFiles}
           data-tooltip={`${showFiles ? 'Hide' : 'Show'} Files panel${resolvedFileCount > 0 ? ` (${fileCountLabel(resolvedFileCount)})` : ''}`}
           aria-pressed={showFiles}

@@ -13,6 +13,7 @@ import remarkDirective from 'remark-directive';
 import remarkFrontmatter from 'remark-frontmatter';
 import type { MarkdownDocument, ParseOptions } from './types.js';
 import { fromMdast } from './convert.js';
+import { remarkDollarMathRules } from './dollarMath.js';
 import { parseFrontmatter } from './utils.js';
 import { assertMarkdownDocumentWithinLimits, assertMarkdownSourceWithinLimits } from './limits.js';
 
@@ -56,6 +57,7 @@ export function parseMarkdown(markdown: string, options?: ParseOptions): Markdow
         .use(remarkParse)
         .use(remarkGfm)
         .use(remarkMath)
+        .use(remarkDollarMathRules)
         .use(remarkDirective)
         .use(remarkFrontmatter, ['yaml']);
     }
@@ -70,7 +72,7 @@ export function parseMarkdown(markdown: string, options?: ParseOptions): Markdow
       processor = processor.use(remarkGfm);
     }
     if (options?.math !== false) {
-      processor = processor.use(remarkMath);
+      processor = processor.use(remarkMath).use(remarkDollarMathRules);
     }
     if (options?.directive !== false) {
       processor = processor.use(remarkDirective);
