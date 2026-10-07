@@ -494,6 +494,12 @@ export interface EditorContextValue extends EditorState, EditorActions {
    */
   versioning: DocumentVersionManager | null;
   /**
+   * Whether versions are also saved automatically after an idle pause
+   * (`versioningAutoSaveIdleMs` above zero), so the version-history panel
+   * only promises automatic saves when the host has them on.
+   */
+  versioningAutoSaves: boolean;
+  /**
    * Stamp a new snapshot of the current document. No-op (returns
    * `unchanged`) when content matches the latest version. Always safe
    * to call — when versioning is disabled, returns `no-document`
@@ -1752,6 +1758,7 @@ export function EditorProvider({
       sceneTextChannel,
       workspaceContainer,
       versioning,
+      versioningAutoSaves: versioningAutoSaveIdleMs > 0,
       saveVersion,
       mediaProvider,
       mediaEditRenders,
@@ -1833,6 +1840,7 @@ export function EditorProvider({
       sceneTextChannel,
       workspaceContainer,
       versioning,
+      versioningAutoSaveIdleMs,
       saveVersion,
       mediaProvider,
       mediaEditRenders,

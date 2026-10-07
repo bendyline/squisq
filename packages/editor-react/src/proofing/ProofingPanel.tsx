@@ -4,6 +4,7 @@
  * findings in document order with jump-to navigation.
  */
 
+import { proofMessageText } from './findingText';
 import { useProofingState } from './ProofingContext';
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -92,7 +93,7 @@ export function ProofingPanel(): JSX.Element | null {
               />
               <span className="squisq-proof-panel-row-body">
                 <span className="squisq-proof-panel-excerpt">{finding.originalText}</span>
-                <span className="squisq-proof-panel-message">{finding.message}</span>
+                <span className="squisq-proof-panel-message">{proofMessageText(finding)}</span>
               </span>
             </button>
           </li>

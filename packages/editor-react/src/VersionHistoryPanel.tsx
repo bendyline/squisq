@@ -119,7 +119,8 @@ function formatBytes(n: number): string {
 }
 
 export function VersionHistoryPanel() {
-  const { versioning, saveVersion, replaceAll, markdownSource, colorScheme } = useEditorContext();
+  const { versioning, versioningAutoSaves, saveVersion, replaceAll, markdownSource, colorScheme } =
+    useEditorContext();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<PanelState>(initialState);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -311,9 +312,11 @@ export function VersionHistoryPanel() {
             {state.error && <div className="squisq-version-history-error">{state.error}</div>}
             {state.loading ? (
               <div className="squisq-version-history-empty">Loading…</div>
-            ) : visibleVersions.length === 0 ? (
+            ) : state.versions.length === 0 ? (
               <div className="squisq-version-history-empty">
-                No versions yet. Versions are saved automatically as you edit.
+                {versioningAutoSaves
+                  ? 'No versions yet. One is saved automatically a few seconds after you stop typing.'
+                  : 'No versions yet.'}
               </div>
             ) : (
               <ul className="squisq-version-history-list">
@@ -394,6 +397,15 @@ export function VersionHistoryPanel() {
                     </li>
                   );
                 })}
+                {/* The only snapshot is the draft itself, hidden behind the
+                    Current row. This used to fall through to "No versions
+                    yet", which read as if versioning were broken. */}
+                {visibleVersions.length === 0 && (
+                  <li className="squisq-version-history-note">
+                    Your current draft is saved as a version. Earlier versions will appear here as
+                    you keep editing.
+                  </li>
+                )}
               </ul>
             )}
           </div>

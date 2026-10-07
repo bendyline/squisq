@@ -38,6 +38,15 @@ describe('StatusBar', () => {
     expect(screen.queryByText('1 blocks')).toBeNull();
   });
 
+  it('uses singular labels for one word, character, and line', () => {
+    renderStatusBar('a');
+
+    expect(screen.getByText('1 word')).toBeTruthy();
+    expect(screen.getByText('1 char')).toBeTruthy();
+    expect(screen.getByText('1 line')).toBeTruthy();
+    expect(screen.queryByText('1 lines')).toBeNull();
+  });
+
   it('renders host status content without exposing parse progress', () => {
     renderStatusBar('Working draft', <span>Autosave pending</span>);
 

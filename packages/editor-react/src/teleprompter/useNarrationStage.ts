@@ -98,7 +98,8 @@ export function useNarrationStage(opts: UseNarrationStageOptions): NarrationStag
     maxRecordingBytes: opts.maxRecordingBytes,
     audioRecorderOptions: opts.audioRecorderOptions,
     cameraRecorderOptions: opts.cameraRecorderOptions,
-    onRecordingStart: () => controllerRef.current.play(),
+    // The take starts when the countdown ends, with the prompter already rolling.
+    countIn: () => controllerRef.current.countIn(),
     onRecordingStop: () => controllerRef.current.pause(),
   });
   const recorderRef = useRef(recorder);

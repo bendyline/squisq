@@ -428,6 +428,9 @@ export function VideoExportModal({
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // The export output last saved or downloaded. Compared by identity, so a
+  // new export is unsaved until its own file goes somewhere.
+  const [savedOutput, setSavedOutput] = useState<Blob | null>(null);
   const handleSave = useCallback(async () => {
     if (!downloadUrl || !outputBlob) return;
     const ts = new Date().toISOString().slice(0, 10);
@@ -441,12 +444,14 @@ export function VideoExportModal({
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      setSavedOutput(outputBlob);
       return;
     }
 
     setSaving(true);
     try {
-      await saveOutput(outputBlob, filename);
+      // `false` means the user cancelled the host's picker.
+      if ((await saveOutput(outputBlob, filename)) !== false) setSavedOutput(outputBlob);
     } catch (caught: unknown) {
       setSaveError(caught instanceof Error ? caught.message : 'The export could not be saved.');
     } finally {
@@ -464,10 +469,19 @@ export function VideoExportModal({
   }, [state, cancelExport, resetExport, onClose]);
 
   const isExporting = state === 'preparing' || state === 'capturing' || state === 'encoding';
+  // Escape dismisses the dialog whenever nothing would be lost, as every other
+  // dialog does. It stays inert while an export (or the wait for edited audio)
+  // is running, since closing cancels it, and over a finished export that is
+  // not yet saved, since closing discards it. Close and Cancel stay explicit.
+  const escapeCloses =
+    !preparingEdits &&
+    (state === 'idle' ||
+      state === 'error' ||
+      (state === 'complete' && outputBlob !== null && savedOutput === outputBlob));
   useModalDialog({
     rootRef: overlayRef,
     dialogRef,
-    closeOnEscape: false,
+    closeOnEscape: escapeCloses,
     onClose: handleClose,
   });
 

@@ -66,8 +66,15 @@ export interface UseNarrationRecorderOptions {
   cameraRecorderOptions?: NarrationMediaRecorderOptions;
   /** Combined audio/camera soft stop threshold; defaults to 90 MiB. Final chunks are retained. */
   maxRecordingBytes?: number;
-  /** Fired when capture actually starts (View starts the prompter). */
+  /**
+   * Awaited once every device is live, immediately before the first byte is
+   * captured — the prompter's countdown. Resolving false cancels the start
+   * with nothing recorded.
+   */
+  countIn?: () => Promise<boolean>;
+  /** Fired once capture is running. */
   onRecordingStart?: () => void;
+  /** Fired on stop, including a stop while the start (or its count-in) is pending. */
   onRecordingStop?: () => void;
 }
 
@@ -307,6 +314,15 @@ export function useNarrationRecorder(
         cameraExt = videoFormat.extension;
       }
 
+      // Count in only after permission prompts are done, and capture from
+      // "go": a take recorded through "3, 2, 1" opens on dead air. The
+      // self-view shows the camera meanwhile so the user can frame the shot.
+      if (opts.countIn) {
+        setCameraStream(camera);
+        if (!(await opts.countIn())) throw new StartAborted();
+        if (superseded()) throw new StartAborted();
+      }
+
       const capture: ActiveCapture = {
         audioRecorder,
         audioChunks: [],
@@ -401,6 +417,8 @@ export function useNarrationRecorder(
       // media it acquired.
       if (startingRef.current) {
         cancelPendingStart();
+        // Ends a running count-in too, so the prompter doesn't roll on.
+        optionsRef.current.onRecordingStop?.();
         setState('idle');
       }
       return;

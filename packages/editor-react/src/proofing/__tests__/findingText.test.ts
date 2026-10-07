@@ -3,6 +3,7 @@ import type { ProofFinding } from '@bendyline/squisq/proof';
 import {
   PROOF_CATEGORY_LABELS,
   proofHoverMarkdown,
+  proofMessageText,
   proofSuggestionLabel,
   proofSuggestionLabels,
 } from '../findingText';
@@ -74,5 +75,23 @@ describe('proofHoverMarkdown', () => {
   it('escapes markdown characters an engine message may contain', () => {
     const markdown = proofHoverMarkdown(finding({ message: 'Use *emphasis* not _this_' }));
     expect(markdown).toContain('Use \\*emphasis\\* not \\_this\\_');
+  });
+});
+
+describe('proofMessageText', () => {
+  it('turns the engine\u2019s code-span quotes into curly quotes', () => {
+    // Regression: the panel read "Did you mean `opportunity`?", backticks and all.
+    expect(proofMessageText(finding({ message: 'Did you mean `opportunity`?' }))).toBe(
+      'Did you mean \u201copportunity\u201d?',
+    );
+    expect(
+      proofMessageText(finding({ message: 'Did you mean to spell `recieve` this way?' })),
+    ).toBe('Did you mean to spell \u201crecieve\u201d this way?');
+  });
+
+  it('leaves the Monaco hover free of literal backticks too', () => {
+    const markdown = proofHoverMarkdown(finding({ message: 'Did you mean `opportunity`?' }));
+    expect(markdown).toContain('Did you mean \u201copportunity\u201d?');
+    expect(markdown).not.toContain('`');
   });
 });

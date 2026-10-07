@@ -57,6 +57,13 @@ export interface TeleprompterController {
   prefs: TeleprompterPrefs;
   setPrefs: (patch: Partial<TeleprompterPrefs>) => void;
   play: () => void;
+  /**
+   * `play()`, resolving when the prompter actually rolls: true once the
+   * countdown finishes (at once if there is none or it is already rolling),
+   * false if pause/restart/unmount cancels the countdown first. Capture
+   * awaits this so a take opens at "go", not on "3, 2, 1".
+   */
+  countIn: () => Promise<boolean>;
   pause: () => void;
   restart: () => void;
   /** Move by spoken words and re-anchor voice tracking. */
@@ -166,6 +173,7 @@ export function useTeleprompter(opts: {
   const levelRef = useRef(0);
   const voiceRef = useRef(false);
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const countInWaitersRef = useRef<((rolled: boolean) => void)[]>([]);
 
   scriptRef.current = script;
   prefsRef.current = prefs;
@@ -196,13 +204,21 @@ export function useTeleprompter(opts: {
     for (const cb of tickSubsRef.current) cb(wordPosRef.current);
   }, []);
 
+  const settleCountIn = useCallback((rolled: boolean) => {
+    const waiters = countInWaitersRef.current;
+    countInWaitersRef.current = [];
+    for (const resolve of waiters) resolve(rolled);
+  }, []);
+
+  /** Cancel any countdown; countIn() callers learn it never rolled. */
   const clearCountdown = useCallback(() => {
     if (countdownTimerRef.current !== null) {
       clearInterval(countdownTimerRef.current);
       countdownTimerRef.current = null;
     }
     setCountdownRemaining(null);
-  }, []);
+    settleCountIn(false);
+  }, [settleCountIn]);
 
   const finish = useCallback(() => {
     setTransport('finished');
@@ -293,13 +309,15 @@ export function useTeleprompter(opts: {
 
   // ── Transport ───────────────────────────────────────────────────────
   const beginRolling = useCallback(() => {
+    // Before clearCountdown, which would report the waiters as cancelled.
+    settleCountIn(true);
     clearCountdown();
     if (sessionRef.current) {
       sessionRef.current = reanchorSession(sessionRef.current, wordPosRef.current);
     }
     setTransport('rolling');
     transportRef.current = 'rolling';
-  }, [clearCountdown]);
+  }, [clearCountdown, settleCountIn]);
 
   const play = useCallback(() => {
     if (transportRef.current === 'rolling' || transportRef.current === 'countdown') return;
@@ -327,6 +345,16 @@ export function useTeleprompter(opts: {
       beginRolling();
     }
   }, [beginRolling, mic, publish]);
+
+  const countIn = useCallback((): Promise<boolean> => {
+    if (transportRef.current === 'rolling') return Promise.resolve(true);
+    const rolled = new Promise<boolean>((resolve) => {
+      countInWaitersRef.current.push(resolve);
+    });
+    // Joins a countdown already running; with none configured, settles now.
+    play();
+    return rolled;
+  }, [play]);
 
   const pause = useCallback(() => {
     if (transportRef.current === 'countdown') {
@@ -476,6 +504,7 @@ export function useTeleprompter(opts: {
     prefs,
     setPrefs,
     play,
+    countIn,
     pause,
     restart,
     nudge,

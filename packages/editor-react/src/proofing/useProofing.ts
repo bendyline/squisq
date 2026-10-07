@@ -518,6 +518,19 @@ export function useProofing(): ProofingState | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [monacoEditor]);
 
+  // The same for the Write view, whose editor is also rebuilt each time its
+  // tab returns. The new instance registers in a later task than the view
+  // switch, so the switch's immediate pass above finds no live editor and
+  // lints nothing — without this the panel read "No issues found" and every
+  // squiggle was gone until the next keystroke.
+  useEffect(() => {
+    lastWriteDecorationsRef.current = [];
+    if (status === 'ready' && enabled && activeView === 'wysiwyg' && tiptapEditor) {
+      schedule('immediate');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tiptapEditor]);
+
   // ── Doc-settings sync while ready ───────────────────────────────────
   const dictionaryKey = settings.dictionary.join('\n');
   const syncedDictionaryRef = useRef(dictionaryKey);

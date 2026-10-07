@@ -29,7 +29,12 @@ import {
   themedImageTreatment,
 } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
-import { accentForViewport, createAccentLayers, getAccentLayout, DEFAULT_LAYOUT } from './accentImage.js';
+import {
+  accentForViewport,
+  createAccentLayers,
+  getAccentLayout,
+  DEFAULT_LAYOUT,
+} from './accentImage.js';
 import { createBackgroundLayer, fitProse } from './captionUtils.js';
 
 /** Top of the optional title, as a fraction of the viewport height. */

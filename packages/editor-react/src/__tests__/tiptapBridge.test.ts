@@ -131,6 +131,30 @@ describe('markdownToTiptap', () => {
     );
   });
 
+  it('does not mistake the gap between two spans for legacy whitespace', () => {
+    // Regression: punctuation after a closing delimiter made the gap
+    // (`**; the tag chooses the **`) look like the legacy shape. Recovering
+    // it fused the marks, and the Write view rewrote documents on open.
+    for (const source of [
+      'supply the **content**; the tag chooses the **template** and sets **style**.',
+      'Load the **diagram family tree**, **diagram architecture**, or **drawing org chart** samples.',
+      '**Price**: $45 per **visit**.',
+      'A *note*, then *more*.',
+      'Two * three is six; *this*, then *that*.',
+    ]) {
+      expect(tiptapToMarkdown(markdownToTiptap(source))).toBe(source + '\n');
+    }
+    expect(markdownToTiptap('**Price**: $45 per **visit**.')).toBe(
+      '<p><strong>Price</strong>: $45 per <strong>visit</strong>.</p>',
+    );
+  });
+
+  it('still recovers legacy whitespace after an ordinary span on the same line', () => {
+    expect(markdownToTiptap('**Note**, then **Implication: **Next')).toBe(
+      '<p><strong>Note</strong>, then <strong>Implication:</strong> Next</p>',
+    );
+  });
+
   it('keeps two emphasized phrases in one line separate', () => {
     const source = 'This is **bold** as well as this is **also bold** today';
     const html = markdownToTiptap(source);

@@ -1,8 +1,8 @@
 /**
  * @vitest-environment jsdom
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { buildNarrationScript } from '@bendyline/squisq/narration';
@@ -295,6 +295,84 @@ describe('normalizeTeleprompterPrefs', () => {
       baseWpm: 210,
       mirrored: true,
     });
+  });
+});
+
+describe('useTeleprompter countIn', () => {
+  const doc = markdownToDoc(parseMarkdown(MD));
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Start a count-in and expose its result once it settles. */
+  function startCountIn(controller: { countIn: () => Promise<boolean> }) {
+    const outcome: { rolled?: boolean } = {};
+    act(() => {
+      void controller.countIn().then((rolled) => {
+        outcome.rolled = rolled;
+      });
+    });
+    return outcome;
+  }
+
+  async function advance(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  it('resolves true only when the countdown ends and the prompter rolls', async () => {
+    const { result } = renderHook(() => useTeleprompter({ doc }));
+    const outcome = startCountIn(result.current);
+    expect(result.current.transport).toBe('countdown');
+
+    await advance(2_999);
+    expect(outcome.rolled).toBeUndefined();
+    expect(result.current.countdownRemaining).toBe(1);
+
+    await advance(1);
+    expect(outcome.rolled).toBe(true);
+    expect(result.current.transport).toBe('rolling');
+  });
+
+  it('resolves false when the countdown is cancelled, and never rolls later', async () => {
+    const { result } = renderHook(() => useTeleprompter({ doc }));
+    const outcome = startCountIn(result.current);
+    await advance(1_000);
+
+    act(() => result.current.pause());
+    await advance(0);
+    expect(outcome.rolled).toBe(false);
+
+    await advance(5_000);
+    expect(result.current.transport).toBe('stopped');
+  });
+
+  it('resolves false when the prompter unmounts mid-countdown', async () => {
+    const { result, unmount } = renderHook(() => useTeleprompter({ doc }));
+    const outcome = startCountIn(result.current);
+    unmount();
+    await advance(0);
+    expect(outcome.rolled).toBe(false);
+  });
+
+  it('resolves at once with the countdown off or the prompter already rolling', async () => {
+    const { result } = renderHook(() => useTeleprompter({ doc }));
+    act(() => result.current.setPrefs({ countdownSec: 0 }));
+
+    const first = startCountIn(result.current);
+    await advance(0);
+    expect(first.rolled).toBe(true);
+    expect(result.current.transport).toBe('rolling');
+
+    const second = startCountIn(result.current);
+    await advance(0);
+    expect(second.rolled).toBe(true);
   });
 });
 

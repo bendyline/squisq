@@ -41,7 +41,12 @@ import {
   getMotionProfile,
   motionEntrance,
 } from '../utils/themeUtils.js';
-import { accentForViewport, createAccentLayers, getAccentLayout, DEFAULT_LAYOUT } from './accentImage.js';
+import {
+  accentForViewport,
+  createAccentLayers,
+  getAccentLayout,
+  DEFAULT_LAYOUT,
+} from './accentImage.js';
 import { createBackgroundLayer, fitProse } from './captionUtils.js';
 
 /**

@@ -23,6 +23,11 @@ export interface StatusBarProps {
  * Status bar displaying document statistics: character count, word count,
  * block count, parse errors, and optional host status.
  */
+/** `1 line`, `2 lines`: an empty document used to read "1 lines". */
+function countLabel(count: number, noun: string): string {
+  return `${count} ${count === 1 ? noun : `${noun}s`}`;
+}
+
 export function StatusBar({ className, slotRight }: StatusBarProps) {
   const { markdownSource, doc, parseError } = useEditorContext();
   const proofingState = useProofingState();
@@ -47,12 +52,16 @@ export function StatusBar({ className, slotRight }: StatusBarProps) {
 
   return (
     <div className={`squisq-status-bar ${className || ''}`}>
-      <span className="squisq-status-item">{stats.words} words</span>
-      <span className="squisq-status-item">{stats.chars} chars</span>
-      <span className="squisq-status-item">{stats.lines} lines</span>
-      <span className="squisq-status-item">
-        {blocks} {blocks === 1 ? 'block' : 'blocks'}
+      <span className="squisq-status-item squisq-status-words">
+        {countLabel(stats.words, 'word')}
       </span>
+      <span className="squisq-status-item squisq-status-chars">
+        {countLabel(stats.chars, 'char')}
+      </span>
+      <span className="squisq-status-item squisq-status-lines">
+        {countLabel(stats.lines, 'line')}
+      </span>
+      <span className="squisq-status-item squisq-status-blocks">{countLabel(blocks, 'block')}</span>
       {proofingState && proofingState.enabled && (
         <button
           type="button"

@@ -458,6 +458,23 @@
   color: var(--squisq-text-muted);
   flex-shrink: 0;
   gap: 12px;
+  container: squisq-status-bar / inline-size;
+}
+
+/* On a phone the six readouts ran past the edge and clipped the parse status
+   to "✓ O". The secondary counts go first, so the word count, proofing, and
+   parse status (plus anything a host docks on the right) stay readable. */
+@container squisq-status-bar (max-width: 520px) {
+  .squisq-status-chars,
+  .squisq-status-lines {
+    display: none;
+  }
+}
+
+@container squisq-status-bar (max-width: 300px) {
+  .squisq-status-blocks {
+    display: none;
+  }
 }
 
 .squisq-status-item {
@@ -3209,7 +3226,8 @@
   background: var(--squisq-danger-soft);
 }
 
-.squisq-version-history-empty {
+.squisq-version-history-empty,
+.squisq-version-history-note {
   padding: 16px 12px;
   font-size: 12px;
   color: var(--squisq-text-muted);

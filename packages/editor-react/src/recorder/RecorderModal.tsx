@@ -739,6 +739,8 @@ export function RecorderModal({
   const narrationRecording = narrationOn && Boolean(narration?.recording);
   const expanded = isExpandedPanel(panelMode);
   const [narrationRequesting, setNarrationRequesting] = useState(false);
+  // Reading-aid takes wait for the prompter's countdown before capturing.
+  const [countingIn, setCountingIn] = useState(false);
   const [narrationPreview, setNarrationPreview] = useState<MediaStream | null>(null);
   const [deviceSettings, setDeviceSettings] = useState<RecorderDeviceSettings>(() => ({
     ...DEFAULT_RECORDER_DEVICE_SETTINGS,
@@ -1181,21 +1183,33 @@ export function RecorderModal({
     }
   }, [recorder]);
 
-  const handleStart = useCallback(() => {
+  const handleStart = useCallback(async () => {
     setSaveError(null);
     dualSaveProgressRef.current = {};
+    if (narrationOn) {
+      // Capture from "go", not "3": the reading aid counts in first, and a
+      // cancelled countdown (Stop, Escape, close) records nothing.
+      setCountingIn(true);
+      const rolled = await stageRef.current.controller.countIn();
+      setCountingIn(false);
+      if (!rolled) return;
+    }
     recorder.start();
     // Seed the log with whatever slide is already on screen, at t=0. Without
     // this the first block would have no observation and would collapse to a
     // zero-length range — the take begins on the slide the presenter chose.
     const blockId = slideDeckRef.current[slideIndexRef.current]?.blockId;
     setAdvanceLog(blockId ? recordSlideShown(EMPTY_ADVANCE_LOG, blockId, 0) : EMPTY_ADVANCE_LOG);
-  }, [recorder]);
+  }, [narrationOn, recorder]);
 
   const handleStop = useCallback(async () => {
     setSaveError(null);
+    if (countingIn) {
+      stageRef.current.controller.pause();
+      return;
+    }
     await recorder.stop();
-  }, [recorder]);
+  }, [countingIn, recorder]);
 
   /**
    * Write the observed slide advances as a v3 per-block timing sidecar beside
@@ -1435,8 +1449,8 @@ export function RecorderModal({
 
   const isAudioOnly = recordedMediaKind(source, recorder.stream, recorder.mimeType) === 'audio';
   const showPreview = recorder.state !== 'idle' && recorder.state !== 'error';
-  const canRecord = recorder.state === 'ready';
-  const canStop = recorder.state === 'recording';
+  const canRecord = recorder.state === 'ready' && !countingIn;
+  const canStop = recorder.state === 'recording' || countingIn;
   const canSave = recorder.state === 'stopped' && recorder.blob !== null;
   const isBusy = recorder.state === 'requesting' || recorder.state === 'stopping' || isSaving;
 
@@ -1515,6 +1529,7 @@ export function RecorderModal({
   // "Discard & re-record" button (already the affordance in this state),
   // which clears the take and re-enables these toggles.
   const togglesLocked =
+    countingIn ||
     recorder.state === 'recording' ||
     recorder.state === 'requesting' ||
     recorder.state === 'stopping' ||
@@ -2177,7 +2192,12 @@ export function RecorderModal({
                   )}
 
                   {canRecord && (
-                    <button type="button" style={btnRecord} onClick={handleStart} disabled={isBusy}>
+                    <button
+                      type="button"
+                      style={btnRecord}
+                      onClick={() => void handleStart()}
+                      disabled={isBusy}
+                    >
                       <span
                         className="squisq-recorder-record-dot"
                         style={recordDotFrameStyle}

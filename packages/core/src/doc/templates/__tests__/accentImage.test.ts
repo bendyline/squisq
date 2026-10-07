@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createTemplateContext } from '../../../schemas/BlockTemplates.js';
-import type { AccentImage, AccentPosition, TemplateBlock } from '../../../schemas/BlockTemplates.js';
+import type {
+  AccentImage,
+  AccentPosition,
+  TemplateBlock,
+} from '../../../schemas/BlockTemplates.js';
 import type { ImageLayer, Layer } from '../../../schemas/Doc.js';
 import { DEFAULT_THEME } from '../../../schemas/themeLibrary.js';
 import { VIEWPORT_PRESETS, type ViewportConfig } from '../../../schemas/Viewport.js';
@@ -12,7 +16,11 @@ import { listBlock } from '../listBlock.js';
 import { quoteBlock } from '../quoteBlock.js';
 import { statHighlight } from '../statHighlight.js';
 
-const accent = (position: AccentPosition): AccentImage => ({ src: 'mill.jpg', alt: 'Mill', position });
+const accent = (position: AccentPosition): AccentImage => ({
+  src: 'mill.jpg',
+  alt: 'Mill',
+  position,
+});
 const POSITIONS: AccentPosition[] = ['left-strip', 'right-strip', 'bottom-strip', 'corner-inset'];
 
 describe('accentForViewport', () => {
@@ -49,13 +57,92 @@ function accentBox(layers: Layer[], viewport: ViewportConfig) {
 }
 
 const base = { id: 'b', duration: 8, audioSegment: 0 };
-const TEMPLATES: Array<[string, (a: AccentImage, ctx: ReturnType<typeof createTemplateContext>) => Layer[]]> = [
-  ['dateEvent', (a, ctx) => dateEvent({ ...base, template: 'dateEvent', date: '1888', description: 'Kirk arrives.', accentImage: a }, ctx)],
-  ['factCard', (a, ctx) => factCard({ ...base, template: 'factCard', fact: 'The mill never rolled steel.', explanation: 'The Panic of 1893 hit first.', accentImage: a }, ctx)],
-  ['statHighlight', (a, ctx) => statHighlight({ ...base, template: 'statHighlight', stat: '120 acres', description: 'around Forbes Lake', accentImage: a }, ctx)],
-  ['quote', (a, ctx) => quoteBlock({ ...base, template: 'quote', quote: 'A practical monopoly of the Pacific Coast', accentImage: a }, ctx)],
-  ['definitionCard', (a, ctx) => definitionCard({ ...base, template: 'definitionCard', term: 'Pig iron', definition: 'Crude iron from a blast furnace.', accentImage: a }, ctx)],
-  ['list', (a, ctx) => listBlock({ ...base, template: 'list', title: 'Works', items: ['Foundry', 'Machine shops'], accentImage: a } as TemplateBlock & { template: 'list' }, ctx)],
+const TEMPLATES: Array<
+  [string, (a: AccentImage, ctx: ReturnType<typeof createTemplateContext>) => Layer[]]
+> = [
+  [
+    'dateEvent',
+    (a, ctx) =>
+      dateEvent(
+        {
+          ...base,
+          template: 'dateEvent',
+          date: '1888',
+          description: 'Kirk arrives.',
+          accentImage: a,
+        },
+        ctx,
+      ),
+  ],
+  [
+    'factCard',
+    (a, ctx) =>
+      factCard(
+        {
+          ...base,
+          template: 'factCard',
+          fact: 'The mill never rolled steel.',
+          explanation: 'The Panic of 1893 hit first.',
+          accentImage: a,
+        },
+        ctx,
+      ),
+  ],
+  [
+    'statHighlight',
+    (a, ctx) =>
+      statHighlight(
+        {
+          ...base,
+          template: 'statHighlight',
+          stat: '120 acres',
+          description: 'around Forbes Lake',
+          accentImage: a,
+        },
+        ctx,
+      ),
+  ],
+  [
+    'quote',
+    (a, ctx) =>
+      quoteBlock(
+        {
+          ...base,
+          template: 'quote',
+          quote: 'A practical monopoly of the Pacific Coast',
+          accentImage: a,
+        },
+        ctx,
+      ),
+  ],
+  [
+    'definitionCard',
+    (a, ctx) =>
+      definitionCard(
+        {
+          ...base,
+          template: 'definitionCard',
+          term: 'Pig iron',
+          definition: 'Crude iron from a blast furnace.',
+          accentImage: a,
+        },
+        ctx,
+      ),
+  ],
+  [
+    'list',
+    (a, ctx) =>
+      listBlock(
+        {
+          ...base,
+          template: 'list',
+          title: 'Works',
+          items: ['Foundry', 'Machine shops'],
+          accentImage: a,
+        } as TemplateBlock & { template: 'list' },
+        ctx,
+      ),
+  ],
 ];
 
 describe('accent templates on a portrait frame', () => {
