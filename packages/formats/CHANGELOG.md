@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.6.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.6.15...@bendyline/squisq-formats@2.6.16) (2026-10-07)
+
+### Bug Fixes
+
+* Small UX and formatting fixes ([#77](https://github.com/bendyline/squisq/issues/77)) ([1ced263](https://github.com/bendyline/squisq/commit/1ced2639fd92f46c52d0948e22a7ef3cd3012318))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.16
+
 ## @bendyline/squisq-formats [2.6.15](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.6.14...@bendyline/squisq-formats@2.6.15) (2026-10-06)
 
 ### Bug Fixes

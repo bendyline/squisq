@@ -1,3 +1,18 @@
+## @bendyline/squisq-editor-react [2.11.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.11.18...@bendyline/squisq-editor-react@2.11.19) (2026-10-07)
+
+### Bug Fixes
+
+* Small UX and formatting fixes ([#77](https://github.com/bendyline/squisq/issues/77)) ([1ced263](https://github.com/bendyline/squisq/commit/1ced2639fd92f46c52d0948e22a7ef3cd3012318))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.16
+* **@bendyline/squisq-formats:** upgraded to 2.6.16
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.17
+* **@bendyline/squisq-react:** upgraded to 2.11.18
+* **@bendyline/squisq-video-react:** upgraded to 2.4.22
+
 ## @bendyline/squisq-editor-react [2.11.18](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.11.17...@bendyline/squisq-editor-react@2.11.18) (2026-10-06)
 
 ### Bug Fixes

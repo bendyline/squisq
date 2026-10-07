@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.11.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.15...@bendyline/squisq@2.11.16) (2026-10-07)
+
+### Bug Fixes
+
+* Small UX and formatting fixes ([#77](https://github.com/bendyline/squisq/issues/77)) ([1ced263](https://github.com/bendyline/squisq/commit/1ced2639fd92f46c52d0948e22a7ef3cd3012318))
+
 ## @bendyline/squisq [2.11.15](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.14...@bendyline/squisq@2.11.15) (2026-10-06)
 
 ### Bug Fixes
