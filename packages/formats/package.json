@@ -108,6 +108,11 @@
       "import": "./dist/outside-in/index.js",
       "default": "./dist/outside-in/index.js"
     },
+    "./outside-in-layout": {
+      "types": "./dist/outside-in/layout.d.ts",
+      "import": "./dist/outside-in/layout.js",
+      "default": "./dist/outside-in/layout.js"
+    },
     "./diagrams": {
       "types": "./dist/diagrams/index.d.ts",
       "import": "./dist/diagrams/index.js",

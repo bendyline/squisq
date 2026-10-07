@@ -30,6 +30,7 @@ import {
   FRONTMATTER_SETTING_DEFAULTS,
   FRONTMATTER_SETTING_KEYS,
   omitFrontmatterDefault,
+  themeFrontmatterValue,
 } from './frontmatterSettings';
 import { useModalDialog } from './modal/useModalDialog';
 import { PROOF_DIALECTS, PROOF_FRONTMATTER_KEYS } from '@bendyline/squisq/proof';
@@ -62,6 +63,16 @@ export interface DocumentSettingsDialogProps {
   onSave: (nextSource: string) => void;
   /** Called when the dialog is dismissed (Cancel, Escape, backdrop click). */
   onClose: () => void;
+  /**
+   * Host default theme a document without its own theme inherits (see
+   * `EditorShell`'s `defaultThemeId`). When set, the Theme picker's default
+   * entry names it, and choosing any concrete theme — the built-in default
+   * included — is saved explicitly; only the default entry removes the key.
+   * Omitted: choosing the built-in default removes the key, as before.
+   */
+  defaultThemeId?: string;
+  /** Label for the Theme picker's default entry. Defaults to `'Default'`. */
+  defaultThemeLabel?: string;
 }
 
 // ── Component ─────────────────────────────────────────────────────
@@ -70,7 +81,10 @@ export function DocumentSettingsDialog({
   markdownSource,
   onSave,
   onClose,
+  defaultThemeId,
+  defaultThemeLabel,
 }: DocumentSettingsDialogProps) {
+  const hostDefaultThemeId = defaultThemeId?.trim() || undefined;
   // Parse once at open; further edits flow through local form state and
   // are committed in a single `setFrontmatterValues` call on Save.
   const parsed = useMemo(() => parseMarkdown(markdownSource), [markdownSource]);
@@ -169,9 +183,9 @@ export function DocumentSettingsDialog({
       const updates: Record<string, string | null> = {
         title: nextTitle,
         subtitle: nextSubtitle,
-        [FRONTMATTER_SETTING_KEYS.theme.canonical]: omitFrontmatterDefault(
-          theme || FRONTMATTER_SETTING_DEFAULTS.theme,
-          FRONTMATTER_SETTING_DEFAULTS.theme,
+        [FRONTMATTER_SETTING_KEYS.theme.canonical]: themeFrontmatterValue(
+          theme,
+          hostDefaultThemeId !== undefined,
         ),
         // Saving settings canonicalizes all older theme spellings.
         [FRONTMATTER_SETTING_KEYS.theme.legacy[0]]: null,
@@ -213,6 +227,7 @@ export function DocumentSettingsDialog({
       proofDialect,
       inferredTitle,
       inferredSubtitle,
+      hostDefaultThemeId,
       markdownSource,
       onSave,
     ],
@@ -299,6 +314,8 @@ export function DocumentSettingsDialog({
               value={theme}
               onChange={setTheme}
               includeDefault
+              defaultThemeId={hostDefaultThemeId}
+              defaultLabel={defaultThemeLabel}
               variant="full"
               ariaLabel="Theme"
             />

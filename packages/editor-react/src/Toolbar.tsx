@@ -2654,6 +2654,8 @@ export function Toolbar({
             setShowDocSettings(false);
           }}
           onClose={() => setShowDocSettings(false)}
+          defaultThemeId={previewSettings?.inheritedThemeId}
+          defaultThemeLabel={previewSettings?.inheritedThemeLabel}
         />
       )}
 

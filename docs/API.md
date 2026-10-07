@@ -3070,6 +3070,8 @@ interface EditorShellProps {
   // Theming & view preferences
   themeInheritance?: ThemeInheritance; // default 'fonts'
   themeOverride?: Theme | null;
+  defaultThemeId?: string; // host fallback theme for docs whose frontmatter names none
+  defaultThemeLabel?: string; // picker label for that fallback; default 'Default'
   uxFont?: string; // font stack for the editor chrome (toolbar/tabs/status bar)
   viewPreferences?: ViewPreferences;
   onViewPreferencesChange?: (prefs: ViewPreferences) => void;
@@ -3081,6 +3083,17 @@ interface EditorShellProps {
   submitOnEnter?: () => void;
 }
 ```
+
+`defaultThemeId` is a host default for the document theme with fallback
+semantics: a document whose frontmatter names no theme (`squisq-theme`, legacy
+`themeId` / `theme`) renders with it, while a document's own theme always wins
+(`themeOverride`, by contrast, replaces the document's theme). Built-in and
+custom-theme ids are accepted. While it is set, the theme pickers offer a
+`"<defaultThemeLabel> (<theme name>)"` entry that removes the document's theme
+key, and choosing any concrete theme — `standard` included — writes it so the
+document stays pinned. Without it, choosing `standard` removes the key as
+before. `usePreviewSettings()` exposes the resolved `inheritedThemeId`,
+`inheritedThemeLabel`, and the document's own `explicitThemeId`.
 
 `writeCanvasSettings` controls only the WYSIWYG Write canvas and can be updated
 live by the host without changing document markdown. `textSize` is a CSS-pixel

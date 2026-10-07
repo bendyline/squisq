@@ -653,6 +653,25 @@ export interface EditorShellProps {
    * in-progress theme without mutating the document.
    */
   themeOverride?: Theme | null;
+  /**
+   * Host default document theme — a FALLBACK for documents whose frontmatter
+   * names no theme (`squisq-theme`, legacy `themeId` / `theme`). A document's
+   * own theme always wins; built-in and custom-theme ids are accepted. Every
+   * surface (Use/Play, inline and block previews, the Write view's
+   * `themeInheritance` mirroring) renders the same resolved theme.
+   *
+   * While set, the theme pickers offer a "Default (<theme name>)" entry that
+   * removes the document's theme key, and choosing any concrete theme —
+   * `standard` included — writes it explicitly so the document stays pinned.
+   * Unlike {@link themeOverride}, this never overrides the document.
+   */
+  defaultThemeId?: string;
+  /**
+   * Label for the picker entry that follows {@link defaultThemeId}, rendered
+   * as `"<label> (<theme name>)"` — e.g. `'Workspace default'`. Defaults to
+   * `'Default'`.
+   */
+  defaultThemeLabel?: string;
 }
 
 /**
@@ -743,6 +762,8 @@ export function EditorShell({
   viewPreferences,
   onViewPreferencesChange,
   themeOverride = null,
+  defaultThemeId,
+  defaultThemeLabel,
 }: EditorShellProps) {
   const effectiveContainer = workspaceContainer ?? null;
 
@@ -871,6 +892,8 @@ export function EditorShell({
               inlinePreviewWidth={inlinePreviewWidth}
               outlineWidth={outlineWidth}
               themeOverride={themeOverride}
+              defaultThemeId={defaultThemeId}
+              defaultThemeLabel={defaultThemeLabel}
             />
           </ReviewRoot>
         </ProofingRoot>
@@ -932,6 +955,8 @@ interface EditorShellInnerProps {
   inlinePreviewWidth: number;
   outlineWidth?: number;
   themeOverride: Theme | null;
+  defaultThemeId?: string;
+  defaultThemeLabel?: string;
 }
 
 function UseModeToolbarControls({ allowPrint }: { allowPrint: boolean }) {
@@ -1015,6 +1040,8 @@ function EditorShellInner({
   inlinePreviewWidth,
   outlineWidth,
   themeOverride,
+  defaultThemeId,
+  defaultThemeLabel,
 }: EditorShellInnerProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const {
@@ -1466,6 +1493,8 @@ function EditorShellInner({
           doc={doc}
           defaultViewportPreset={defaultViewportPreset}
           themeOverride={themeOverride}
+          defaultThemeId={defaultThemeId}
+          defaultThemeLabel={defaultThemeLabel}
         >
           <UseModeProviders
             rootRef={shellRef}
