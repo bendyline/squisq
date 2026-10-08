@@ -9,7 +9,8 @@
  * composed canvas) gives per-cell clipping and `useId`-scoped fragment
  * ids for free, and every layer type behaves exactly as it does on a
  * slide. Video layers render as paused, muted poster frames — a dashboard
- * has no clock.
+ * has no clock — while a hosted video (YouTube, Vimeo, …) gets its live player,
+ * which plays only when the viewer presses play.
  *
  * In render mode the view publishes a minimal `SquisqRenderAPI` whose
  * `seekTo` resolves once fonts and images have settled, so headless
@@ -275,6 +276,9 @@ export function DashboardView({
               muted={muted}
               animationsEnabled={animationsEnabled}
               theme={activeTheme}
+              // A hosted video plays on demand, so an interactive dashboard
+              // can host its player; a captured image gets a still.
+              videoEmbeds={renderMode ? 'placeholder' : 'player'}
             />
             {cell.frame && cell.frame.overlayLayers.length > 0 && (
               // Borders and accents ride above the block: a template that

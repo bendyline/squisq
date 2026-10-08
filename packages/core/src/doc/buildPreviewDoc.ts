@@ -188,6 +188,13 @@ function getTemplateDefaults(
           items: ['Item 1', 'Item 2', 'Item 3'],
         }
       );
+    case 'videoWithCaption':
+    case 'videoPullQuote':
+      // The slide must carry its clip: the projection drops `sourceHeading`,
+      // so materialization cannot re-derive it. Without this the template drew
+      // an empty video and the rich-media pass added the body's clip (or
+      // hosted player) as a second, separate copy.
+      return deriveTemplateInputs(templateName, headingText, block.contents) ?? {};
     case 'definitionCard':
       return { term: headingText, definition: body || headingText };
     case 'dateEvent':

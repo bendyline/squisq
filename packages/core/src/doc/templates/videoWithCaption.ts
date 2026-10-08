@@ -8,6 +8,11 @@
  *
  * Adapts caption positioning and font sizes for different viewports.
  *
+ * A hosted video (`videoSrc` is a YouTube/Vimeo/… page) plays in the
+ * provider's own player instead, and its caption sits BELOW the frame rather
+ * than over it: a band across an interactive player would cover its picture
+ * and swallow clicks.
+ *
  * This is shared code used by both site and efb-app doc renderers.
  *
  * Related Files:
@@ -20,7 +25,8 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { VideoWithCaptionInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
-import { cleanCaption } from './captionUtils.js';
+import { cleanCaption, createBackgroundLayer } from './captionUtils.js';
+import { isVideoEmbedUrl } from '../../markdown/videoEmbed.js';
 
 export function videoWithCaption(input: VideoWithCaptionInput, context: TemplateContext): Layer[] {
   const {
@@ -41,6 +47,40 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
 
   const captionFontSize = themedFontSize(30, context, false);
   const creditFontSize = themedFontSize(16, context, false);
+
+  if (isVideoEmbedUrl(videoSrc)) {
+    const layers: Layer[] = [
+      createBackgroundLayer('bg', theme.colors.background),
+      {
+        type: 'videoEmbed',
+        id: 'bg-video',
+        content: { url: videoSrc, ...(videoAlt ? { title: videoAlt } : {}) },
+        position: caption
+          ? { x: '4%', y: '4%', width: '92%', height: '78%' }
+          : { x: '4%', y: '4%', width: '92%', height: '92%' },
+      },
+    ];
+    if (caption) {
+      layers.push({
+        type: 'text',
+        id: 'caption',
+        content: {
+          text: caption,
+          style: {
+            fontSize: captionFontSize,
+            fontFamily: getThemeFont(context, 'body'),
+            color: theme.colors.text,
+            textAlign: 'center',
+            lineHeight: 1.18,
+            maxLines: 2,
+          },
+        },
+        position: { x: '50%', y: '90%', anchor: 'center', width: '84%' },
+        animation: { type: 'fadeIn', duration: 1.5, delay: 0.5 },
+      });
+    }
+    return layers;
+  }
 
   const layers: Layer[] = [
     // Background video clip

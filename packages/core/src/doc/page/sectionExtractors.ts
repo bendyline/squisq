@@ -41,6 +41,7 @@ import type {
 } from '../../schemas/BlockTemplates.js';
 import type { MarkdownBlockNode } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
+import { isVideoEmbedUrl } from '../../markdown/videoEmbed.js';
 import { extractRichListItems } from '../templateInputs.js';
 import { buildChartData } from '../templates/chart/parse.js';
 import type { PageEmphasis } from '../../schemas/PageStyle.js';
@@ -417,6 +418,20 @@ const pullQuote: SectionExtractor = (input) => {
 
 const videoWithCaption: SectionExtractor = (input) => {
   const v = input as VideoWithCaptionInput;
+  if (isVideoEmbedUrl(v.videoSrc)) {
+    return {
+      kind: 'media-figure',
+      variant: 'video',
+      slots: {
+        media: {
+          type: 'videoEmbed',
+          url: v.videoSrc,
+          ...(v.videoAlt ? { title: v.videoAlt } : {}),
+        },
+        caption: v.caption,
+      },
+    };
+  }
   return {
     kind: 'media-figure',
     variant: 'video',

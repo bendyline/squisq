@@ -9,9 +9,10 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { Block } from '@bendyline/squisq/schemas';
 import type { PageMedia, PageSection } from '@bendyline/squisq/doc';
-import { sanitizeUrl } from '@bendyline/squisq/markdown';
+import { parseVideoEmbedUrl, sanitizeUrl } from '@bendyline/squisq/markdown';
 import { MarkdownRenderer } from '../MarkdownRenderer';
 import { InlineVideoPlayer } from '../InlineVideoPlayer';
+import { VideoEmbedFrame } from '../VideoEmbedFrame';
 import { useMediaUrl } from '../hooks/MediaContext';
 import { usePageView } from './PageViewContext';
 
@@ -71,13 +72,21 @@ function BackdropVideo({ media }: { media: Extract<PageMedia, { type: 'video' }>
   );
 }
 
+/** A hosted video's player (YouTube, Vimeo, …) for a media slot. */
+function PageVideoEmbed({ media }: { media: Extract<PageMedia, { type: 'videoEmbed' }> }) {
+  const embed = parseVideoEmbedUrl(media.url);
+  return embed ? <VideoEmbedFrame embed={embed} title={media.title} showCaption={false} /> : null;
+}
+
 function Eyebrow({ section }: { section: PageSection }) {
   if (!section.slots.eyebrow) return null;
   return <span className="squisq-page-eyebrow">{section.slots.eyebrow}</span>;
 }
 
 function MediaCredit({ media }: { media?: PageMedia }) {
-  if (!media || media.type === 'canvas' || !media.credit) return null;
+  if (!media || media.type === 'canvas' || media.type === 'videoEmbed' || !media.credit) {
+    return null;
+  }
   return (
     <span className="squisq-page-media-credit">
       {media.credit}
@@ -186,7 +195,12 @@ export function StatBandSection({ section }: SectionProps) {
 
 export function QuoteBandSection({ section }: SectionProps) {
   const media = section.slots.media;
-  const backdrop = section.background === 'media' && media && media.type !== 'canvas';
+  // A hosted player is interactive, never a backdrop under the quote.
+  const backdrop =
+    section.background === 'media' &&
+    media &&
+    media.type !== 'canvas' &&
+    media.type !== 'videoEmbed';
   return (
     <>
       {backdrop && (
@@ -251,14 +265,16 @@ export function MediaFigureSection({ section }: SectionProps) {
       <div className="squisq-page-media-frame">
         {media.type === 'image' ? (
           <PageImg media={media} />
+        ) : media.type === 'videoEmbed' ? (
+          <PageVideoEmbed media={media} />
         ) : (
           <InlineVideoPlayer src={media.src} poster={media.posterSrc} basePath={basePath} />
         )}
       </div>
-      {(section.slots.caption || media.credit) && (
+      {(section.slots.caption || (media.type !== 'videoEmbed' && media.credit)) && (
         <figcaption>
           {section.slots.caption}
-          {media.credit && (
+          {media.type !== 'videoEmbed' && media.credit && (
             <>
               {section.slots.caption ? ' ' : ''}
               <MediaCredit media={media} />

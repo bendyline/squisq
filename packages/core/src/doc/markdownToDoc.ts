@@ -43,6 +43,7 @@ import type {
 } from '../markdown/types.js';
 import { mediaKindForUrl } from '../markdown/mediaReference.js';
 import { extractPlainText, readFrontmatterThemeId } from '../markdown/utils.js';
+import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { coerceAnnotationValues, type CoercedBlockMeta } from '../markdown/annotationCoercion.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
 import {
@@ -1011,8 +1012,11 @@ export function getBlockBodyText(block: Block): string {
     (tmpl === 'tree' && block.templateData !== undefined && 'items' in block.templateData);
   // Join with newlines to preserve paragraph/list-item boundaries.
   // splitIntoPhrases uses these newlines as natural split points.
+  // A hosted-video paragraph is a player, not prose: captioning or reading
+  // aloud `https://youtu.be/…` (or the link's title) says nothing.
   return block.contents
     .filter((node) => !(consumedFence && node.type === 'code'))
+    .filter((node) => findBlockVideoEmbed(node) === null)
     .map((node) => extractPlainText(node))
     .join('\n')
     .trim();

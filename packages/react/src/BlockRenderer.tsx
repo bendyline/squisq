@@ -16,6 +16,7 @@ import { ShapeLayer } from './layers/ShapeLayer';
 import { PathLayer } from './layers/PathLayer';
 import { MapLayer } from './layers/MapLayer';
 import { VideoLayer } from './layers/VideoLayer';
+import { VideoEmbedLayer, type VideoEmbedMode } from './layers/VideoEmbedLayer';
 import { TableLayer } from './layers/TableLayer';
 import type { TableLayerContentRenderer } from './layers/TableLayer';
 import { TreeLayer } from './layers/TreeLayer';
@@ -173,6 +174,12 @@ interface BlockRendererProps {
   tableContentRenderer?: TableLayerContentRenderer;
   /** Grow all slide text by one shared factor without overflow or new overlap. */
   growTextToFit?: boolean;
+  /**
+   * How hosted-video layers (YouTube, Vimeo, …) draw: a live `player`, a
+   * `poster` (default — thumbnails and previews never load a player), or a
+   * `placeholder` poster with no remote thumbnail, for frame capture.
+   */
+  videoEmbeds?: VideoEmbedMode;
 }
 
 export function BlockRenderer({
@@ -189,6 +196,7 @@ export function BlockRenderer({
   theme,
   tableContentRenderer,
   growTextToFit = false,
+  videoEmbeds = 'poster',
 }: BlockRendererProps) {
   // Build transition class and inline style for dynamic duration
   let transitionClass = '';
@@ -302,6 +310,7 @@ export function BlockRenderer({
             theme={theme}
             tableContentRenderer={tableContentRenderer}
             textScale={textScale}
+            videoEmbeds={videoEmbeds}
           />
         ))}
       </g>
@@ -321,6 +330,7 @@ interface LayerRendererProps {
   theme?: Theme;
   tableContentRenderer?: TableLayerContentRenderer;
   textScale: number;
+  videoEmbeds: VideoEmbedMode;
 }
 
 /**
@@ -338,6 +348,7 @@ function LayerRenderer({
   theme,
   tableContentRenderer,
   textScale,
+  videoEmbeds,
 }: LayerRendererProps) {
   // Render policy must not mutate caller-owned Docs. A shallow copy is enough:
   // every layer renderer reads animation only from the base layer field.
@@ -388,6 +399,8 @@ function LayerRenderer({
           muted={muted}
         />
       );
+    case 'videoEmbed':
+      return <VideoEmbedLayer layer={renderedLayer} viewport={viewport} mode={videoEmbeds} />;
     case 'table':
       return (
         <TableLayer

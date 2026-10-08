@@ -183,7 +183,7 @@ End.
   // pauses show up. ~200 words keeps the script scrollable but quick to read.
   'video-embeds': `# Video embeds
 
-Put a YouTube, Vimeo, Loom, Dailymotion or Wistia link on a line of its own and it plays right in the document. Anywhere that doesn't know the convention -- GitHub, Word, PDF -- it is still just a link. Insert -> Online Video does this for you, and pasting a video's embed code works too.
+Put a YouTube, Vimeo, Loom, Dailymotion or Wistia link on a line of its own and it plays right in the document -- and on its slide in the slideshow. Word exports get a playable online video; anywhere that doesn't know the convention -- GitHub, PDF -- it is still just a link. Insert -> Online Video does this for you, and pasting a video's embed code works too.
 
 ## A titled link
 
@@ -198,6 +198,10 @@ https://youtu.be/eRsGyueVLvQ?t=60
 ## Vimeo
 
 https://vimeo.com/76979871
+
+## A full-slide video {[videoWithCaption]}
+
+https://youtu.be/aqz-KE-bpKQ?t=30
 
 ## Links in prose stay links
 

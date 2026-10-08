@@ -9,6 +9,7 @@
  */
 
 import { mediaKindForUrl } from '../markdown/mediaReference.js';
+import { isVideoEmbedUrl } from '../markdown/videoEmbed.js';
 import { extractPlainText, findNodesByType, walkMarkdownTree } from '../markdown/utils.js';
 import type {
   HtmlElement,
@@ -92,8 +93,6 @@ const DATE_PATTERNS: RegExp[] = [
   /\b\d{1,2}(st|nd|rd|th)\s+century\b/i,
 ];
 
-const VIDEO_HOST_RE = /(youtube\.com|youtu\.be|vimeo\.com|wistia\.|loom\.com)/i;
-
 function htmlElementsByTag(root: MarkdownNode, tagNames: Set<string>): HtmlElement[] {
   const blocks = findNodesByType<MarkdownHtmlBlock>(root, 'htmlBlock');
   // Inline HTML (htmlInline) also carries htmlChildren; include both.
@@ -154,17 +153,18 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
       break;
     }
     const src = el.attributes.src || el.attributes.href || '';
-    if (VIDEO_HOST_RE.test(src)) {
+    if (isVideoEmbedUrl(src)) {
       hasVideo = true;
       break;
     }
   }
 
-  // Link-only video embeds (markdown link to a known video host).
+  // Link-only video embeds (markdown link to a supported hosted video —
+  // the same provider grammar the renderers play).
   if (!hasVideo) {
     const links = findNodesByType<MarkdownNode & { url?: string }>(root, 'link');
     for (const link of links) {
-      if (link.url && VIDEO_HOST_RE.test(link.url)) {
+      if (isVideoEmbedUrl(link.url)) {
         hasVideo = true;
         break;
       }

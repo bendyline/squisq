@@ -396,6 +396,7 @@ export const PAGE_BASE_CSS = `
 /* ── Media figure ─────────────────────────────────────────────────── */
 .squisq-page-figure { margin: 0; }
 .squisq-page-figure img, .squisq-page-figure video { width: 100%; display: block; }
+.squisq-page-figure .squisq-video-embed { max-width: none; margin: 0; }
 .squisq-page-figure figcaption { margin-top: 0.9em; font-size: 0.9rem; color: var(--squisq-page-text-muted); text-align: center; }
 .squisq-page-media-credit { font-size: 0.78rem; opacity: 0.75; }
 

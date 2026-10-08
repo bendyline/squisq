@@ -681,6 +681,7 @@ export function resolveSupplementalMediaLayout(
     (layer) =>
       layer.type === 'image' ||
       layer.type === 'video' ||
+      layer.type === 'videoEmbed' ||
       layer.type === 'map' ||
       layer.type === 'mermaid',
   );

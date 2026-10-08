@@ -13,6 +13,7 @@ import type {
   Layer,
   MermaidLayer,
   ShapeLayer,
+  VideoEmbedLayer,
   VideoLayer,
 } from '../schemas/Doc.js';
 import type {
@@ -39,7 +40,13 @@ import { coerceTemplateParams } from './templates/inputDescriptors.js';
 import { fallbackBlockLayers } from './templates/fallbackBlock.js';
 import { expandPersistentLayers, wrapWithPersistentLayers } from './templates/persistentLayers.js';
 import { resolveTemplateName } from './templates/templateNames.js';
-import { deriveTemplateInputs, extractEmbeddedVideos, extractImages } from './templateInputs.js';
+import {
+  deriveTemplateInputs,
+  extractEmbeddedVideos,
+  extractHostedVideos,
+  extractImages,
+} from './templateInputs.js';
+import { parseVideoEmbedUrl } from '../markdown/videoEmbed.js';
 import {
   placeLayersInRect,
   resolveSupplementalMediaLayout,
@@ -319,6 +326,7 @@ type RichMediaItem =
       clipStart?: number;
       clipEnd?: number;
     }
+  | { kind: 'videoEmbed'; url: string; title: string | null; aspectRatio: number }
   | { kind: 'mermaid'; source: string; aspectRatio: number }
   | {
       kind: 'spatial';
@@ -394,6 +402,13 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
       .filter((layer): layer is MermaidLayer => layer.type === 'mermaid')
       .map((layer) => layer.content.source),
   );
+  // A template that already plays a hosted video (videoWithCaption) may name it
+  // by any URL form; compare canonical page URLs.
+  const existingEmbeds = new Set(
+    layers
+      .filter((layer): layer is VideoEmbedLayer => layer.type === 'videoEmbed')
+      .map((layer) => parseVideoEmbedUrl(layer.content.url)?.watchUrl ?? layer.content.url),
+  );
 
   const embeddedVideos = extractEmbeddedVideos(block.contents);
   const videos = embeddedVideos.filter((video) => !existingVideos.has(video.src));
@@ -405,6 +420,9 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
     return true;
   });
   const sources = mermaidSources(block).filter((source) => !existingMermaid.has(source));
+  const hosted = extractHostedVideos(block.contents).filter(
+    (video) => !existingEmbeds.has(video.url),
+  );
 
   return [
     ...images.map(
@@ -425,6 +443,14 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
         ...(video.startAt != null ? { startAt: video.startAt } : {}),
         ...(video.clipStart != null ? { clipStart: video.clipStart } : {}),
         ...(video.clipEnd != null ? { clipEnd: video.clipEnd } : {}),
+      }),
+    ),
+    ...hosted.map(
+      (video): RichMediaItem => ({
+        kind: 'videoEmbed',
+        url: video.url,
+        title: video.title,
+        aspectRatio: video.aspectRatio,
       }),
     ),
     ...sources.map((source): RichMediaItem => ({ kind: 'mermaid', source, aspectRatio: 16 / 9 })),
@@ -514,6 +540,17 @@ function richMediaLayers(
       },
     ];
   }
+  if (item.kind === 'videoEmbed') {
+    const title = item.title || block.title;
+    return [
+      {
+        id: `${block.id}-video-embed-${kindIndex}`,
+        type: 'videoEmbed',
+        position,
+        content: { url: item.url, ...(title ? { title } : {}) },
+      },
+    ];
+  }
   if (item.kind === 'mermaid') {
     return [
       {
@@ -589,7 +626,10 @@ function applyEmbeddedVideoTiming(layers: Layer[], block: Block): Layer[] {
   });
 }
 
-/** Promote unconsumed images, videos, and rich diagram fences through one layout path. */
+/**
+ * Promote unconsumed images, videos (clips and hosted players), and rich
+ * diagram fences through one layout path.
+ */
 function appendRichContentLayers(
   layers: Layer[],
   block: Block,
@@ -631,6 +671,7 @@ function appendRichContentLayers(
   const counters: Record<RichMediaItem['kind'], number> = {
     image: 0,
     video: 0,
+    videoEmbed: 0,
     mermaid: 0,
     spatial: 0,
   };

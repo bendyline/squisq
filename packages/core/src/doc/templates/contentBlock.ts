@@ -11,17 +11,21 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { ContentBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { MarkdownBlockNode, MarkdownList } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
-import { markdownBlockSeparatorLines, renderMarkdownBlocksHtml } from '../templateInputs.js';
+import {
+  isMaterializedMediaNode,
+  markdownBlockSeparatorLines,
+  renderMarkdownBlocksHtml,
+} from '../templateInputs.js';
 import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
 function bodyNodes(context: TemplateContext): MarkdownBlockNode[] {
   if (context.block?.summaryMode === 'headings-and-features') return [];
   return (context.block?.contents ?? []).filter(
-    // Mermaid source is already materialized as a visual layer. Repeating the
-    // fence text as prose makes the loss-averse default noisy without
-    // preserving any additional authored meaning.
-    (node) => !(node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid'),
+    // Mermaid source and hosted-video links are already materialized as
+    // visual layers (a diagram, a player). Repeating them as prose makes the
+    // loss-averse default noisy without preserving any additional meaning.
+    (node) => !isMaterializedMediaNode(node),
   );
 }
 

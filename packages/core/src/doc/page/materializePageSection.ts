@@ -30,6 +30,7 @@ import { DEFAULT_THEME } from '../../schemas/themeLibrary.js';
 import { VIEWPORT_PRESETS } from '../../schemas/Viewport.js';
 import { defaultPageStyle } from '../../schemas/pageStyleDefaults.js';
 import { extractPlainText } from '../../markdown/utils.js';
+import { findBlockVideoEmbed, parseVideoEmbedUrl } from '../../markdown/videoEmbed.js';
 import type { MarkdownBlockNode } from '../../markdown/types.js';
 import { extractBodyPlainText } from '../templateInputs.js';
 import { isContainerTemplate } from '../templates/templateNames.js';
@@ -253,10 +254,20 @@ function unconsumedRichContent(
   const templateHasMedia =
     Boolean(draft.slots.media) ||
     Boolean(draft.slots.items?.some((item) => item.media !== undefined));
+  // A hosted video is never body text (see `isMaterializedMediaNode`), so it
+  // must reach the page here — unless the template's own slot plays it.
+  const media = draft.slots.media;
+  const playedVideo =
+    media?.type === 'videoEmbed' ? (parseVideoEmbedUrl(media.url)?.watchUrl ?? media.url) : null;
+  const isUnplayedVideo = (node: MarkdownBlockNode): boolean => {
+    const video = findBlockVideoEmbed(node);
+    return video !== null && video.embed.watchUrl !== playedVideo;
+  };
   const markdown = block.contents.filter(
     (node) =>
       isWidgetFence(node, widgetFenceLangs) ||
-      (!templateHasMedia && markdownNodeContainsMedia(node)),
+      (!templateHasMedia && markdownNodeContainsMedia(node)) ||
+      isUnplayedVideo(node),
   );
   if (markdown.length === 0) return undefined;
   return {

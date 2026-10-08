@@ -41,7 +41,11 @@ import type {
   MarkdownFootnoteReference,
   MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
-import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
+import {
+  findBlockVideoEmbed,
+  readFrontmatterThemeId,
+  type BlockVideoEmbed,
+} from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
 import { RelIdAllocator } from '../ooxml/relIds.js';
@@ -50,6 +54,7 @@ import { fitWithin, readImageDimensions } from '../shared/images.js';
 import { stripHtmlTags } from '../shared/text.js';
 import { normalizeOoxmlHex } from '../shared/ooxmlColor.js';
 import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
+import { buildWordVideoRun, wordVideoSize } from './videoEmbed.js';
 import {
   fontAwesomeFace,
   fontAwesomeFaces,
@@ -169,6 +174,10 @@ export async function markdownDocToDocx(
       : { ...options, themeId: readFrontmatterThemeId(doc.frontmatter) };
   const ctx = new ExportContext(resolvedOptions, doc);
   const stories = partitionDocumentStories(doc.children);
+  // Only a document with a hosted video loads the poster/PNG encoder.
+  if ([...stories.body, ...stories.header, ...stories.footer].some(isVideoBlock)) {
+    ctx.videoPosters = await import('../shared/videoPoster.js');
+  }
   ctx.setRelationshipSource('document');
   const bodyXml = convertBlocks(stories.body, ctx);
   ctx.setRelationshipSource('header');
@@ -285,6 +294,8 @@ class ExportContext {
   readonly signal: AbortSignal | undefined;
   /** Font Awesome families referenced while converting body/header/footer runs. */
   readonly iconFamilies = new Set<IconFamily>();
+  /** Poster + embed-code helpers, loaded only when the document has a video. */
+  videoPosters: typeof import('../shared/videoPoster.js') | null = null;
 
   private nextDocPrId = 1;
 
@@ -463,9 +474,60 @@ function convertBlocks(nodes: MarkdownBlockNode[], ctx: ExportContext): string {
   for (let index = 0; index < nodes.length; index++) {
     if ((index & 255) === 0) ctx.signal?.throwIfAborted();
     const node = nodes[index]!;
-    parts.push(convertBlock(node, ctx, 0));
+    const video = ctx.videoPosters ? findBlockVideoEmbed(node) : null;
+    parts.push((video && convertVideoEmbed(video, ctx)) || convertBlock(node, ctx, 0));
   }
   return parts.join('');
+}
+
+/** A top-level paragraph that is only a link to a hosted video (or its embed code). */
+function isVideoBlock(node: MarkdownBlockNode): boolean {
+  return findBlockVideoEmbed(node) !== null;
+}
+
+/**
+ * A hosted video as a Word online video: a paragraph holding the poster
+ * picture (which Word plays in place) and, kept with it, a caption paragraph
+ * linking to the video's page — the title, or the URL when untitled — so a
+ * printed copy still says what and where the video is. Empty string when no
+ * poster can be made, which leaves the link paragraph as it was authored.
+ */
+function convertVideoEmbed(video: BlockVideoEmbed, ctx: ExportContext): string {
+  const posters = ctx.videoPosters;
+  if (!posters) return '';
+  const { embed, title } = video;
+  const portrait = embed.aspectRatio < 1;
+  const thumbnail = embed.thumbnailUrl ? ctx.resolvedImages.get(embed.thumbnailUrl) : undefined;
+  const poster = thumbnail ?? posters.videoPosterPng(portrait);
+  if (!poster) return '';
+
+  const ext = poster.contentType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+  const { relId, docPrId } = ctx.addImage(
+    poster.data,
+    poster.contentType,
+    `video${ctx.images.length + 1}.${ext}`,
+  );
+  const { pixelWidth, pixelHeight } = wordVideoSize(embed);
+  const run = buildWordVideoRun({
+    embed,
+    title,
+    imageRelId: relId,
+    linkRelId: ctx.addHyperlink(embed.watchUrl),
+    docPrId,
+    embeddedHtml: posters.officeVideoEmbedHtml(embed, title, pixelWidth, pixelHeight),
+  });
+  const caption = convertInlines(
+    [
+      {
+        type: 'link',
+        url: embed.watchUrl,
+        children: [{ type: 'text', value: title || embed.watchUrl }],
+      },
+    ],
+    ctx,
+    bodyFormat(ctx),
+  );
+  return `<w:p><w:pPr><w:keepNext/></w:pPr>${run}</w:p><w:p>${caption}</w:p>`;
 }
 
 function convertBlock(node: MarkdownBlockNode, ctx: ExportContext, listDepth: number): string {

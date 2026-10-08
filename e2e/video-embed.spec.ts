@@ -42,9 +42,9 @@ async function markdownSource(page: Page): Promise<string> {
 test('the Write view plays standalone video links above their captions', async ({ page }) => {
   await loadSample(page, 'video-embeds');
   const players = page.locator('.tiptap.ProseMirror .squisq-video-embed-host iframe');
-  // Titled link, bare URL, Vimeo, and the embed-code line — not the prose
-  // link or the list item.
-  await expect(players).toHaveCount(4);
+  // Titled link, bare URL, Vimeo, the full-slide video, and the embed-code
+  // line — not the prose link or the list item.
+  await expect(players).toHaveCount(5);
   await expect(players.first()).toHaveAttribute('src', BUNNY_EMBED);
   await expect(players.nth(1)).toHaveAttribute(
     'src',
@@ -59,10 +59,25 @@ test('the Write view plays standalone video links above their captions', async (
 
 test('Insert → Online Video writes a link paragraph that plays', async ({ page }) => {
   await loadSample(page, 'e2e-tiny');
+  const contentSecurityPolicy = await page
+    .locator('meta[http-equiv="Content-Security-Policy"]')
+    .getAttribute('content');
+  for (const playerOrigin of [
+    'https://www.youtube-nocookie.com',
+    'https://player.vimeo.com',
+    'https://www.loom.com',
+    'https://www.dailymotion.com',
+    'https://fast.wistia.net',
+  ]) {
+    expect(contentSecurityPolicy).toContain(playerOrigin);
+  }
+
   await page.locator('.tiptap.ProseMirror').click();
   await page.keyboard.press('ControlOrMeta+End');
   await page.getByRole('button', { name: 'Insert', exact: true }).click();
-  await page.getByRole('menuitem', { name: 'Online Video', exact: true }).click();
+  await page
+    .getByRole('menuitem', { name: 'Online Video (YouTube, Vimeo, etc.)', exact: true })
+    .click();
 
   const dialog = page.getByTestId('video-embed-dialog');
   await expect(dialog.getByRole('button', { name: 'Insert' })).toBeDisabled();
@@ -78,9 +93,11 @@ test('Insert → Online Video writes a link paragraph that plays', async ({ page
   await expect(
     page.locator('.tiptap.ProseMirror .squisq-video-embed-host iframe').last(),
   ).toHaveAttribute('src', `${BUNNY_EMBED}?start=30`);
-  expect(await markdownSource(page)).toContain(
-    '[Big Buck Bunny](https://www.youtube.com/watch?v=aqz-KE-bpKQ&t=30s)',
-  );
+  await expect(async () => {
+    expect(await markdownSource(page)).toContain(
+      '[Big Buck Bunny](https://www.youtube.com/watch?v=aqz-KE-bpKQ&t=30s)',
+    );
+  }).toPass({ timeout: 5_000 });
 });
 
 test('Page mode renders players; the sandboxed Document preview shows posters', async ({
@@ -91,15 +108,56 @@ test('Page mode renders players; the sandboxed Document preview shows posters', 
 
   await selectUseMode(page, 'Page');
   const pagePlayers = page.locator('.squisq-video-embed iframe');
-  await expect(pagePlayers).toHaveCount(4);
+  await expect(pagePlayers).toHaveCount(5);
   await expect(pagePlayers.first()).toHaveAttribute('src', BUNNY_EMBED);
 
   await selectUseMode(page, 'Document');
   const frame = page.frameLocator('[data-testid="plain-html-preview"]');
-  await expect(frame.locator('.squisq-video-embed-poster')).toHaveCount(4);
+  await expect(frame.locator('.squisq-video-embed-poster')).toHaveCount(5);
   await expect(frame.locator('iframe')).toHaveCount(0);
   await expect(frame.locator('.squisq-video-embed-poster').first()).toHaveAttribute(
     'href',
     'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
   );
+});
+
+test('the slideshow plays a hosted video on its slide and stops it on the next', async ({
+  page,
+}) => {
+  await loadSample(page, 'video-embeds');
+  await switchView(page, 'Play');
+  await selectUseMode(page, 'Slideshow');
+  await page.locator('.doc-player').waitFor({ state: 'visible', timeout: 5_000 });
+
+  const counter = page.getByTestId('slide-counter');
+  const next = page.getByTestId('slide-next');
+  const activePlayer = page.locator('.doc-player__block--active .block-layer--video-embed iframe');
+
+  // Advance from the cover to the first slide that carries a player.
+  for (let step = 0; step < 4 && (await activePlayer.count()) === 0; step++) {
+    await next.click();
+  }
+  await expect(activePlayer).toHaveCount(1);
+  await expect(activePlayer).toHaveAttribute('src', BUNNY_EMBED);
+  await expect(activePlayer).toHaveAttribute('title', 'Big Buck Bunny -- Blender Foundation');
+  // The video's link is the player now, not a line of slide text.
+  await expect(page.locator('.doc-player__block--active')).not.toContainText(
+    'Big Buck Bunny -- Blender Foundation',
+  );
+
+  // The next slide plays its own video; the first player is gone with its slide.
+  const before = (await counter.textContent())?.trim();
+  await next.click();
+  await expect(counter).not.toHaveText(before ?? '');
+  await expect(activePlayer).toHaveAttribute(
+    'src',
+    'https://www.youtube-nocookie.com/embed/eRsGyueVLvQ?start=60',
+  );
+  await expect(page.locator(`.doc-player iframe[src="${BUNNY_EMBED}"]`)).toHaveCount(0);
+
+  // `{[videoWithCaption]}` plays the video in its own slot, captioned below.
+  await next.click();
+  await next.click();
+  await expect(activePlayer).toHaveAttribute('src', `${BUNNY_EMBED}?start=30`);
+  await expect(page.locator('.doc-player__block--active')).toContainText('A full-slide video');
 });

@@ -24,6 +24,7 @@ const LAYER_TYPES = new Set([
   'path',
   'map',
   'video',
+  'videoEmbed',
   'table',
   'tree',
   'mermaid',
@@ -186,6 +187,9 @@ function validateLayerContent(
       requiredString(content, 'alt', `${path}.alt`, issues);
       requiredFiniteNumber(content, 'clipStart', `${path}.clipStart`, issues, { min: 0 });
       requiredFiniteNumber(content, 'clipEnd', `${path}.clipEnd`, issues, { min: 0 });
+      break;
+    case 'videoEmbed':
+      requiredString(content, 'url', `${path}.url`, issues);
       break;
     case 'table':
       requiredStringArray(content, 'headers', `${path}.headers`, issues);
