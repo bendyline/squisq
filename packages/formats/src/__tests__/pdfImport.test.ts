@@ -79,8 +79,9 @@ function flatText(node: MarkdownBlockNode): string {
 // ============================================
 
 describe('pdfToMarkdownDoc', () => {
-  // PDF.js cold-loading and fake-worker startup can exceed Vitest's 5s default
-  // when the Windows CI runner is saturated by the full parallel test suite.
+  // PDF.js cold-loading and fake-worker startup can exceed Vitest's 5s default,
+  // and has occasionally crossed 30s when the Windows CI runner is saturated
+  // by the full parallel test suite.
   it('returns an empty document for a blank PDF', async () => {
     const doc = await PDFDocument.create();
     doc.addPage([612, 792]);
@@ -89,7 +90,7 @@ describe('pdfToMarkdownDoc', () => {
     const md = await pdfToMarkdownDoc(buffer);
     expect(md.type).toBe('document');
     expect(md.children.length).toBe(0);
-  }, 30_000);
+  }, 60_000);
 
   it('imports a single paragraph', async () => {
     const buffer = await buildSimplePdf([{ text: 'Hello World', x: 72, y: 700, fontSize: 11 }]);
