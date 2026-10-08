@@ -2834,9 +2834,22 @@ interface PlainHtmlExportOptions {
   htmlPolicy?: HtmlPolicy; // default 'sanitize'
 }
 interface HtmlImportOptions {
-  sanitize?: boolean;
-} // default true
+  sanitize?: boolean; // default true
+  headMetadata?: boolean; // default true: <title> / <meta name="description"> → frontmatter
+}
 ```
+
+HTML import never turns head content into body text: `<head>`, `<title>`,
+`<script>`, `<style>` and similar elements are removed before sanitizing (the
+sanitizer would otherwise unwrap `<title>` and keep its text). With
+`headMetadata` (the default), the page's `<title>` and
+`<meta name="description">` become frontmatter `title` / `description`
+(whitespace collapsed, control characters removed, at most 1,024 characters);
+pass `false` where frontmatter is unwanted, such as an email body. Inline
+whitespace is laid out the way a browser shows it — runs collapse across
+element boundaries, block edges are trimmed, and edge spaces sit outside
+emphasis and links — so pretty-printed HTML imports without `&#x20;` escapes
+or `** bold **` runs.
 
 ### Subpath: Container
 
