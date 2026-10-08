@@ -136,6 +136,26 @@ export type { KnownBlockMetaKey, BlockMetaKeyDescriptor } from './annotationCoer
 export { parseHtmlToNodes, stringifyHtmlNodes } from './htmlParse.js';
 export { sanitizeHtmlNodes, sanitizeUrl } from './sanitize.js';
 export type { HtmlPolicy, SanitizeUrlOptions, UrlKind } from './sanitize.js';
+
+// Hosted-video embeds: a paragraph that is only a link (or bare URL) to a
+// YouTube/Vimeo/Loom/Dailymotion/Wistia page renders as the provider's player.
+export {
+  VIDEO_EMBED_PROVIDERS,
+  VIDEO_EMBED_IFRAME_ALLOW,
+  parseVideoEmbedUrl,
+  parseVideoEmbedInput,
+  parseVideoStartTime,
+  isVideoEmbedUrl,
+  videoEmbedFromIframe,
+  videoEmbedIframeAttributes,
+  findBlockVideoEmbed,
+} from './videoEmbed.js';
+export type {
+  VideoEmbed,
+  VideoEmbedProviderId,
+  VideoEmbedProviderInfo,
+  BlockVideoEmbed,
+} from './videoEmbed.js';
 export {
   DEFAULT_MARKDOWN_SAFETY_LIMITS,
   MarkdownLimitError,
@@ -207,3 +227,6 @@ export { normalizeDocfxMarkdown } from './docfxMarkdown.js';
 export type { DocfxMarkdownOptions } from './docfxMarkdown.js';
 
 export { condenseMarkdownSource } from './condenseMarkdown.js';
+
+export { mediaKindForUrl } from './mediaReference.js';
+export type { MediaReferenceKind } from './mediaReference.js';

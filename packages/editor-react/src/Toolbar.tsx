@@ -61,6 +61,7 @@ import { PreviewModeMenu, displayModeLabel, usePreviewSettingsOptional } from '.
 import { filterVisibleMediaEntries } from './mediaEntries';
 import { MEDIA_FILE_ACCEPT } from './mediaDragMime';
 import { addFileToDocument } from './mediaInsertion';
+import { useVideoEmbedDialog } from './videoEmbed/useVideoEmbedDialog';
 import {
   selectionToTable,
   selectionToTableMarkdown,
@@ -326,6 +327,7 @@ export function Toolbar({
     rawRange: IRange | null;
   } | null>(null);
 
+  const { open: openVideoEmbedDialog, element: videoEmbedDialog } = useVideoEmbedDialog();
   // Emoji picker — toolbar-anchored popover. We track the trigger
   // button's screen rect so the picker can position itself just below
   // it via createPortal (the toolbar's overflow:hidden actions row
@@ -1385,6 +1387,7 @@ export function Toolbar({
         fileInputRef.current?.click();
         return;
       }
+      if (id === 'video') return openVideoEmbedDialog();
       if (id === 'emoji') {
         // Toggle the popover: clicking the button again closes it.
         if (emojiPickerAnchor) closeEmojiPicker();
@@ -1408,6 +1411,7 @@ export function Toolbar({
       emojiPickerAnchor,
       openEmojiPicker,
       closeEmojiPicker,
+      openVideoEmbedDialog,
     ],
   );
 
@@ -2676,6 +2680,7 @@ export function Toolbar({
           linkSchemes={linkSchemes}
         />
       )}
+      {videoEmbedDialog}
 
       {/* Insert menu — portaled to the document body so the overflow:hidden
           actions row doesn't clip it. Position computed from trigger rect. */}

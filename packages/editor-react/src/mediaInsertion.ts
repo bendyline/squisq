@@ -7,7 +7,9 @@
  * becomes a sidecar reference block the Write view shows as a live grid; and
  * anything else becomes a link to the file. The Insert menu's Image/Media and
  * File items, file drops and Files-panel uploads all come through here, so
- * they can never disagree about what a given file turns into.
+ * they can never disagree about what a given file turns into. A hosted video
+ * (Insert → Online Video) is the one reference with no stored file: a
+ * paragraph that is only a link to the video's page.
  */
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
@@ -23,6 +25,7 @@ import {
   type SquisqMediaDragPayload,
 } from './mediaDragMime';
 import { escapeLinkLabel, formatLinkDestination } from './markdownDestination';
+import { videoEmbedMarkdown, videoEmbedParagraphJson } from './videoEmbed/videoEmbedParagraph';
 import {
   classifyFile,
   processDataFiles,
@@ -188,6 +191,26 @@ export function insertDataReference(
   const markdown =
     `## ${title} {[dataTable ${params}]}\n\n` +
     `[${escapeLinkLabel(fileName)}](${formatLinkDestination(relativePath)})`;
+  if (activeView === 'raw' && monacoEditor && writeToSource(monacoEditor, markdown, true)) return;
+  target.appendMarkdown(markdown);
+}
+
+/**
+ * Insert a hosted video (YouTube, Vimeo, …) as its own top-level paragraph:
+ * `[title](watchUrl)`, or the bare URL when untitled. Renderers that know the
+ * convention play it; everything else shows a link.
+ */
+export function insertVideoEmbedReference(
+  target: MediaInsertionTarget,
+  watchUrl: string,
+  title?: string | null,
+): void {
+  const { activeView, tiptapEditor, monacoEditor } = target;
+  if (activeView === 'wysiwyg' && tiptapEditor) {
+    insertTopLevel(tiptapEditor, [videoEmbedParagraphJson(watchUrl, title)]);
+    return;
+  }
+  const markdown = videoEmbedMarkdown(watchUrl, title);
   if (activeView === 'raw' && monacoEditor && writeToSource(monacoEditor, markdown, true)) return;
   target.appendMarkdown(markdown);
 }

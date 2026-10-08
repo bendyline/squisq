@@ -15,12 +15,17 @@
  */
 
 import {
+  findBlockVideoEmbed,
   sanitizeHtmlNodes,
   sanitizeUrl,
+  videoEmbedFromIframe,
+  videoEmbedIframeAttributes,
   type HtmlPolicy,
   type MarkdownDocument,
   type MarkdownNode,
   type HtmlNode,
+  type MarkdownBlockNode,
+  type VideoEmbed,
   readFrontmatterThemeId,
 } from '@bendyline/squisq/markdown';
 import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
@@ -95,6 +100,18 @@ export interface PlainHtmlExportOptions {
    * event handlers, and executable URL schemes before emitting HTML.
    */
   htmlPolicy?: HtmlPolicy;
+  /**
+   * How a hosted video (a paragraph that is only a link to a YouTube, Vimeo,
+   * Loom, Dailymotion or Wistia page, or that provider's `<iframe>` embed
+   * code) renders:
+   *
+   * - `player` (default) — the provider's player iframe;
+   * - `poster` — a static card linking to the video's page (the provider's
+   *   thumbnail where it serves one). For contexts where a player cannot run:
+   *   a preview iframe sandboxed without `allow-scripts` (nested frames
+   *   inherit the sandbox, so the player would load broken), or print.
+   */
+  videoEmbeds?: 'player' | 'poster';
 }
 
 /**
@@ -106,6 +123,7 @@ interface RenderCtx {
   images?: Map<string, string>;
   links?: Map<string, string>;
   htmlPolicy: HtmlPolicy;
+  videoEmbeds?: 'player' | 'poster';
   /**
    * Footnote numbering for the document being rendered. Undefined for the
    * fragment helpers that render a node with no document around it — a
@@ -136,6 +154,7 @@ export function markdownDocToPlainHtml(
     iconsCss,
     htmlPolicy = 'sanitize',
     externalResources = 'deny',
+    videoEmbeds,
   } = options;
   // Fall back chain for theme: explicit `theme` → explicit `themeId`
   // option → doc frontmatter `themeId`. Hosts whose export dialog
@@ -152,7 +171,7 @@ export function markdownDocToPlainHtml(
     options.theme ??
     (resolveId ? resolveThemeForDoc(doc, resolveId, options.themeRegistry) : undefined);
   const footnotes = new FootnoteIndex(doc);
-  const ctx: RenderCtx = { images, links, htmlPolicy, footnotes };
+  const ctx: RenderCtx = { images, links, htmlPolicy, footnotes, videoEmbeds };
   const body = renderTopLevel(doc.children, ctx) + renderFootnotesSection(footnotes, ctx);
   const fontsLink = theme && externalResources === 'allow' ? renderFontsLink(theme) : '';
   // Resolve how to load FontAwesome — only when the doc actually uses
@@ -175,7 +194,8 @@ export function markdownDocToPlainHtml(
   // less-than sign as a CSS code point so caller-owned theme values cannot
   // break back into HTML. This is a final output-boundary defense in addition
   // to theme validation and font-family quoting.
-  const safeCss = escapeStyleText(`${themedCss}\n${FEATURE_CSS}`);
+  const videoCss = docUsesVideoEmbeds(doc, htmlPolicy) ? `\n${VIDEO_EMBED_CSS}` : '';
+  const safeCss = escapeStyleText(`${themedCss}\n${FEATURE_CSS}${videoCss}`);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -218,6 +238,31 @@ function docUsesIcons(doc: MarkdownDocument): boolean {
   return visit(doc);
 }
 
+/**
+ * Whether anything renders as a video player or poster — a top-level video
+ * paragraph, or a provider `<iframe>` in raw HTML — so a document without
+ * one ships none of its CSS.
+ */
+function docUsesVideoEmbeds(doc: MarkdownDocument, htmlPolicy: HtmlPolicy): boolean {
+  const iframeIn = (nodes: readonly HtmlNode[]): boolean =>
+    nodes.some(
+      (node) =>
+        node.type === 'htmlElement' &&
+        (videoEmbedFromIframe(node) !== null || iframeIn(node.children)),
+    );
+  const visit = (node: unknown): boolean => {
+    if (!node || typeof node !== 'object') return false;
+    const n = node as { type?: string; htmlChildren?: HtmlNode[]; children?: unknown[] };
+    if (htmlPolicy !== 'strip' && Array.isArray(n.htmlChildren) && iframeIn(n.htmlChildren)) {
+      return true;
+    }
+    return Array.isArray(n.children) && n.children.some(visit);
+  };
+  return doc.children.some(
+    (node) => (node.type === 'paragraph' && findBlockVideoEmbed(node) !== null) || visit(node),
+  );
+}
+
 // ── Top-level walk with feature-section grouping ───────────────────
 
 /**
@@ -242,6 +287,14 @@ function renderTopLevel(children: MarkdownNode[], ctx: RenderCtx | undefined): s
         i = end - 1;
         continue;
       }
+    }
+    // Only a TOP-LEVEL paragraph that is nothing but a link to a video page is
+    // a player; inside a list or blockquote it stays a link.
+    const video =
+      node && node.type === 'paragraph' ? findBlockVideoEmbed(node as MarkdownBlockNode) : null;
+    if (video) {
+      out.push(videoEmbedToHtml(video.embed, video.title, ctx));
+      continue;
     }
     out.push(nodeToHtml(node as MarkdownNode, ctx));
   }
@@ -517,7 +570,12 @@ const FEATURE_CSS = `  .squisq-feature {
 
 // ── Theme-driven CSS ───────────────────────────────────────────────
 
-const DEFAULT_CSS = `  body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #1f2937; }
+// The unthemed page sets its text colour, so it must set the background
+// that colour was chosen against as well (WCAG failure F24). Relying on the
+// browser's default canvas breaks wherever the page is embedded or viewed with
+// a dark default: dark text on a dark background.
+const DEFAULT_CSS = `  :root { color-scheme: light; }
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #1f2937; background: #fff; }
   h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; }
   pre { background: #f3f4f6; padding: 1em; border-radius: 4px; overflow-x: auto; }
   code { background: #f3f4f6; padding: 0.15em 0.3em; border-radius: 3px; font-size: 0.9em; }
@@ -746,13 +804,18 @@ function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): str
       return `<i class="fa-${family} fa-${name}" data-icon="${token}" aria-hidden="true"></i>`;
     }
     case 'htmlBlock':
-    case 'htmlInline':
+    case 'htmlInline': {
       if (resolveHtmlPolicy(ctx) === 'strip') return '';
+      // Pasted provider embed code renders as the same player a link
+      // paragraph gets, not the snippet's fixed-size iframe and wrappers.
+      const video = node.type === 'htmlBlock' ? findBlockVideoEmbed(node) : null;
+      if (video) return videoEmbedToHtml(video.embed, video.title, ctx);
       // Resized images and other authored HTML survive the round-trip
       // as parsed `htmlChildren` — rewriting `<img src>` through the
       // image map keeps the preview consistent with the markdown-image
       // path. Other tags pass through unmodified.
       return htmlChildrenToHtml(resolveHtmlNodes(node.htmlChildren, ctx), ctx);
+    }
     default: {
       // Unknown / unhandled node — recurse into children if any so we
       // don't drop content (e.g. directives, footnotes).
@@ -830,6 +893,15 @@ function htmlChildrenToHtml(nodes: HtmlNode[] | undefined, ctx?: RenderCtx): str
     }
     // htmlElement
     const tag = node.tagName.toLowerCase();
+    if (tag === 'iframe') {
+      // A provider player nested in authored HTML; under `trusted` an
+      // unrecognized iframe still passes through verbatim, as before.
+      const video = videoEmbedFromIframe(node);
+      if (video) {
+        out.push(videoEmbedToHtml(video.embed, video.title, ctx, true));
+        continue;
+      }
+    }
     const attrs = { ...node.attributes };
     // Route media `src` attrs through the export's `ctx.images` URL
     // map (which is actually a generic media map — see header comment).
@@ -873,6 +945,65 @@ function htmlChildrenToHtml(nodes: HtmlNode[] | undefined, ctx?: RenderCtx): str
   }
   return out.join('');
 }
+
+// ── Video embeds ───────────────────────────────────────────────────
+
+/**
+ * A hosted video as HTML: the provider's player, or (`videoEmbeds: 'poster'`)
+ * a static card linking to its page. The iframe's attributes come from core's
+ * `videoEmbedIframeAttributes` — the same set the React renderer and the
+ * sanitizer emit. `inline` swaps the `<figure>` for spans, for a player nested
+ * in authored HTML where a figure would close an enclosing `<p>`.
+ */
+function videoEmbedToHtml(
+  embed: VideoEmbed,
+  title: string | null,
+  ctx: RenderCtx | undefined,
+  inline = false,
+): string {
+  const root = inline ? 'span' : 'figure';
+  const orientation = embed.aspectRatio < 1 ? 'portrait' : 'landscape';
+  const ratio = `aspect-ratio: ${embed.aspectRatio < 1 ? '9 / 16' : '16 / 9'}`;
+  const watchUrl = escapeAttr(embed.watchUrl);
+  let frame: string;
+  if (ctx?.videoEmbeds === 'poster') {
+    const label = title
+      ? `Watch \u201c${title}\u201d on ${embed.providerName}`
+      : `Watch on ${embed.providerName}`;
+    const thumbnail = embed.thumbnailUrl
+      ? `<img src="${escapeAttr(embed.thumbnailUrl)}" alt="" loading="lazy" />`
+      : '';
+    frame =
+      `<a class="squisq-video-embed-frame squisq-video-embed-poster" href="${watchUrl}"` +
+      ` style="${ratio}" aria-label="${escapeAttr(label)}">${thumbnail}` +
+      `<span class="squisq-video-embed-play" aria-hidden="true"></span>` +
+      `<span class="squisq-video-embed-provider" aria-hidden="true">${escapeHtml(embed.providerName)}</span></a>`;
+  } else {
+    const attrs = Object.entries(videoEmbedIframeAttributes(embed, title))
+      .map(([name, value]) => (value === '' ? ` ${name}` : ` ${name}="${escapeAttr(value)}"`))
+      .join('');
+    frame = `<span class="squisq-video-embed-frame" style="${ratio}"><iframe${attrs}></iframe></span>`;
+  }
+  const caption =
+    title && !inline
+      ? `<figcaption class="squisq-video-embed-caption"><a href="${watchUrl}">${escapeHtml(title)}</a></figcaption>`
+      : '';
+  return (
+    `<${root} class="squisq-video-embed" data-provider="${embed.provider}"` +
+    ` data-orientation="${orientation}">${frame}${caption}</${root}>`
+  );
+}
+
+/** Player / poster layout. Colors are fixed: a video frame is always dark. */
+const VIDEO_EMBED_CSS = `  .squisq-video-embed { display: block; max-width: 720px; margin: 1.25em 0; }
+  .squisq-video-embed[data-orientation="portrait"] { max-width: 340px; }
+  .squisq-video-embed-frame { position: relative; display: block; overflow: hidden; border-radius: 6px; background: #000; }
+  .squisq-video-embed-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .squisq-video-embed-poster img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .squisq-video-embed-play { position: absolute; left: 50%; top: 50%; width: 64px; height: 44px; margin: -22px 0 0 -32px; border-radius: 12px; background: rgba(0, 0, 0, 0.72); }
+  .squisq-video-embed-play::after { content: ''; position: absolute; left: 26px; top: 12px; border-style: solid; border-width: 10px 0 10px 16px; border-color: transparent transparent transparent #fff; }
+  .squisq-video-embed-provider { position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 0.8em; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
+  .squisq-video-embed-caption { margin-top: 0.4em; font-size: 0.875em; opacity: 0.8; }`;
 
 // ── Escaping ───────────────────────────────────────────────────────
 

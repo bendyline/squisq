@@ -1,4 +1,5 @@
 import type { HtmlElement, HtmlNode } from './types.js';
+import { videoEmbedFromIframe, videoEmbedIframeAttributes } from './videoEmbed.js';
 
 export type HtmlPolicy = 'strip' | 'sanitize' | 'trusted';
 
@@ -203,6 +204,7 @@ function sanitizeHtmlNode(node: HtmlNode): HtmlNode[] {
 function sanitizeHtmlElement(node: HtmlElement): HtmlNode[] {
   const tag = node.tagName.toLowerCase();
 
+  if (tag === 'iframe') return sanitizeVideoEmbedIframe(node);
   if (DROP_WITH_CONTENT_TAGS.has(tag)) return [];
 
   const children = sanitizeHtmlNodes(node.children);
@@ -217,6 +219,26 @@ function sanitizeHtmlElement(node: HtmlElement): HtmlNode[] {
       selfClosing: node.selfClosing,
     },
   ];
+}
+
+/**
+ * A hosted-video player iframe (YouTube, Vimeo, …) survives as a fresh element
+ * whose `src` is rebuilt from the provider's validated video id and whose
+ * attributes are the canonical player set — nothing the author wrote is kept
+ * except an integer `width`/`height` and the `title`. Every other iframe is
+ * dropped with its content, as before.
+ */
+function sanitizeVideoEmbedIframe(node: HtmlElement): HtmlNode[] {
+  const found = videoEmbedFromIframe(node);
+  if (!found) return [];
+  const attributes = videoEmbedIframeAttributes(found.embed, found.title);
+  for (const [rawName, value] of Object.entries(node.attributes)) {
+    const name = rawName.toLowerCase();
+    if ((name === 'width' || name === 'height') && isNonNegativeInteger(value)) {
+      attributes[name] = value.trim();
+    }
+  }
+  return [{ type: 'htmlElement', tagName: 'iframe', attributes, children: [], selfClosing: false }];
 }
 
 function sanitizeAttrs(tag: string, attrs: Record<string, string>): Record<string, string> {

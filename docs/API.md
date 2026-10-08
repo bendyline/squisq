@@ -1096,6 +1096,11 @@ function parseHtmlToNodes(html: string, policy?: HtmlPolicy): HtmlNode[];
 function stringifyHtmlNodes(nodes: HtmlNode[]): string;
 function sanitizeHtmlNodes(nodes: HtmlNode[]): HtmlNode[];
 function sanitizeUrl(url: string): string;
+// 'video' | 'audio' | null by extension. Image syntax is markdown's only embed, so
+// MarkdownRenderer plays `![alt](clip.mp4)` / `![alt](bell.mp3)` and never treats them as
+// pictures (cover, template image slots, auto-template image counts). `.webm`/`.mp4`
+// under `audio/` are recorder narration (audio), as in narration discovery.
+function mediaKindForUrl(url: string): 'video' | 'audio' | null;
 
 function walkMarkdownTree(node: MarkdownNode, visitor: (node: MarkdownNode) => void): void;
 function findNodesByType(root: MarkdownDocument, type: string): MarkdownNode[];
@@ -1951,8 +1956,8 @@ interface BlockRendererProps {
 | `DocControlsBottom`     | Bottom bar with progress + counter.                                                                                                                                                                    |
 | `DocControlsSidebar`    | Side panel with block thumbnails.                                                                                                                                                                      |
 | `DocControlsSlideshow`  | Minimal slideshow controls (arrows + counter).                                                                                                                                                         |
-| `InlineVideoPlayer`     | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                                                  |
-| `InlineAudioPlayer`     | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                                                           |
+| `InlineVideoPlayer`     | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`; `label` names it. `MarkdownRenderer` uses it for raw `<video>` and for `![alt](clip.mp4)`.                                       |
+| `InlineAudioPlayer`     | Native `<audio>` wrapper resolving `src` via `MediaContext`; `label` names it. `MarkdownRenderer` uses it for raw `<audio>` and for `![alt](bell.mp3)`.                                                |
 | `AnimatedImageControls` | Play/pause pill + paused still frame over an animated GIF/WebP/APNG `<img>`; driven by `useAnimatedImage`. `MarkdownRenderer` images and the editor's image node use it.                               |
 | `JsonView`              | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                                                  |
 

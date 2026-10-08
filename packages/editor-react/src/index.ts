@@ -534,6 +534,31 @@ export type {
   DataCardPluginState,
 } from './dataCard/DataCardExtension.js';
 export { DataCardWidget } from './dataCard/DataCardWidget.js';
+
+// Hosted-video embeds — a top-level paragraph that is only a link (or bare
+// URL) to a YouTube/Vimeo/Loom/Dailymotion/Wistia page plays inline in the
+// Write view, with the paragraph kept as its editable caption. Insert →
+// Online Video writes that paragraph; pasted `<iframe>` embed code becomes it.
+export {
+  VideoEmbedExtension,
+  VIDEO_EMBED_KEY,
+  convertVideoEmbedToLink,
+  findVideoEmbedBlockPos,
+} from './videoEmbed/VideoEmbedExtension.js';
+export type {
+  VideoEmbedBlockEntry,
+  VideoEmbedExtensionOptions,
+  VideoEmbedPluginState,
+} from './videoEmbed/VideoEmbedExtension.js';
+export {
+  videoEmbedOfParagraph,
+  videoEmbedMarkdown,
+  videoEmbedParagraphJson,
+} from './videoEmbed/videoEmbedParagraph.js';
+export { pasteVideoEmbedCode } from './videoEmbed/videoEmbedPaste.js';
+export { VideoEmbedDialog } from './videoEmbed/VideoEmbedDialog.js';
+export type { VideoEmbedDialogProps } from './videoEmbed/VideoEmbedDialog.js';
+export { insertVideoEmbedReference } from './mediaInsertion.js';
 export { loadDataPreview, dataExtensionOf } from './dataCard/dataPreview.js';
 export type { DataPreview } from './dataCard/dataPreview.js';
 export { ingestSidecarBytes, XLSX_LOCKED_REASON } from './dataCard/ingestAdapters.js';

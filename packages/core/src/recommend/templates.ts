@@ -8,6 +8,7 @@
  * "Recommended for this block" section above the full template list.
  */
 
+import { mediaKindForUrl } from '../markdown/mediaReference.js';
 import { extractPlainText, findNodesByType, walkMarkdownTree } from '../markdown/utils.js';
 import type {
   HtmlElement,
@@ -128,7 +129,11 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
   const plainParts: string[] = [];
 
   for (const node of nodes) {
-    imageCount += findNodesByType(node, 'image').length;
+    // A clip or recording in image syntax plays inline in its paragraph; it
+    // must not pull the block into an image layout whose slot it cannot fill.
+    imageCount += findNodesByType(node, 'image').filter(
+      (img) => !mediaKindForUrl((img as { url?: string }).url ?? ''),
+    ).length;
     imageCount += findNodesByType(node, 'imageReference').length;
     if (findNodesByType(node, 'blockquote').length > 0) hasBlockquote = true;
     if (findNodesByType(node, 'list').length > 0) hasList = true;

@@ -26,6 +26,21 @@ describe('markdownDocToPlainHtml', () => {
     expect(html.trim().endsWith('</html>')).toBe(true);
   });
 
+  it('paints the background its text colour was chosen against', () => {
+    // Text colour without a background is WCAG failure F24: embedded in a
+    // dark host (or a dark default canvas) the unthemed page went dark-on-dark.
+    const unthemed = render('# Hello');
+    const body = /\n\s*body \{[^}]*\}/.exec(unthemed)?.[0] ?? '';
+    expect(body).toContain('color: #1f2937');
+    expect(body).toContain('background: #fff');
+    expect(unthemed).toContain(':root { color-scheme: light; }');
+
+    const themed = render('# Hello', { themeId: 'warm-earth' });
+    expect(themed).toMatch(
+      /body \{[^}]*color: var\(--plain-text\);[^}]*background: var\(--plain-bg\);/,
+    );
+  });
+
   it('uses the title option and escapes it', () => {
     const html = render('# x', { title: 'A <script> & more' });
     expect(html).toContain('<title>A &lt;script&gt; &amp; more</title>');

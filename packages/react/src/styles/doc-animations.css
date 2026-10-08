@@ -3346,6 +3346,37 @@
   width: 100%;
 }
 
+/* <VideoEmbedFrame>: a hosted-video player (YouTube, Vimeo, …) for a
+ * paragraph that is only a link to the video's page. The frame keeps the
+ * provider's aspect ratio (set inline) and fills the column up to a
+ * readable width; Shorts stay a phone-width portrait card. */
+.squisq-video-embed {
+  display: block;
+  width: 100%;
+  max-width: 720px;
+  margin: 1em 0;
+}
+
+.squisq-video-embed[data-orientation='portrait'] {
+  max-width: 340px;
+}
+
+.squisq-video-embed-frame {
+  overflow: hidden;
+  border-radius: 6px;
+  background: #000;
+}
+
+.squisq-video-embed-caption {
+  margin-top: 0.4em;
+  font-size: 0.875em;
+  opacity: 0.75;
+}
+
+.squisq-video-embed-caption a {
+  color: inherit;
+}
+
 /* ── Animated image controls ─────────────────────────────────────── */
 /* <AnimatedImageControls> lays a play/pause pill over an animated GIF,
  * WebP or APNG. Like native video controls it floats over arbitrary

@@ -32,6 +32,8 @@ export interface InlineVideoPlayerProps {
   preload?: 'none' | 'metadata' | 'auto';
   /** Extra className on the wrapper. */
   className?: string;
+  /** Accessible name — a markdown reference's alt text; `<video>` has no `alt`. */
+  label?: string;
 }
 
 export function InlineVideoPlayer({
@@ -43,6 +45,7 @@ export function InlineVideoPlayer({
   controls = true,
   preload = 'metadata',
   className,
+  label,
 }: InlineVideoPlayerProps) {
   const resolvedSrc = useMediaUrl(src, basePath);
   // Always call the hook (Rules of Hooks); only use the result if a poster
@@ -62,6 +65,8 @@ export function InlineVideoPlayer({
         width={width}
         height={height}
         playsInline
+        aria-label={label}
+        title={label}
       />
     </span>
   );

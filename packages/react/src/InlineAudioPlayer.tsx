@@ -23,6 +23,8 @@ export interface InlineAudioPlayerProps {
   preload?: 'none' | 'metadata' | 'auto';
   /** Extra className on the wrapper. */
   className?: string;
+  /** Accessible name — a markdown reference's alt text; `<audio>` has no `alt`. */
+  label?: string;
 }
 
 export function InlineAudioPlayer({
@@ -31,6 +33,7 @@ export function InlineAudioPlayer({
   controls = true,
   preload = 'metadata',
   className,
+  label,
 }: InlineAudioPlayerProps) {
   const resolvedSrc = useMediaUrl(src, basePath);
 
@@ -38,7 +41,13 @@ export function InlineAudioPlayer({
 
   return (
     <span className={`squisq-inline-audio-player ${className ?? ''}`.trim()}>
-      <audio src={resolvedSrc} controls={controls} preload={preload} />
+      <audio
+        src={resolvedSrc}
+        controls={controls}
+        preload={preload}
+        aria-label={label}
+        title={label}
+      />
     </span>
   );
 }

@@ -37,6 +37,7 @@ export const SAMPLE_LABELS: Record<string, string> = {
   'e2e-gif': 'E2E gif',
   'e2e-tasklist': 'E2E tasklist',
   'teleprompter-demo': 'Teleprompter (Narrate mode)',
+  'video-embeds': 'Video embeds (YouTube, Vimeo…)',
   'flashcards-demo': 'Flashcards & quiz',
 };
 
@@ -88,7 +89,7 @@ export const SAMPLE_GROUPS: SampleGroup[] = [
   },
   {
     label: 'Media & narration',
-    keys: ['timeline-media', 'teleprompter-demo'],
+    keys: ['timeline-media', 'teleprompter-demo', 'video-embeds'],
   },
   {
     label: 'Content packages',
@@ -180,6 +181,34 @@ End.
   // display-mode) with varied-length spoken prose -- short punchy lines and
   // one long paragraph -- to exercise voice pacing, plus a list so list-item
   // pauses show up. ~200 words keeps the script scrollable but quick to read.
+  'video-embeds': `# Video embeds
+
+Put a YouTube, Vimeo, Loom, Dailymotion or Wistia link on a line of its own and it plays right in the document. Anywhere that doesn't know the convention -- GitHub, Word, PDF -- it is still just a link. Insert -> Online Video does this for you, and pasting a video's embed code works too.
+
+## A titled link
+
+The link text becomes the caption.
+
+[Big Buck Bunny -- Blender Foundation](https://www.youtube.com/watch?v=aqz-KE-bpKQ)
+
+## A bare URL, starting a minute in
+
+https://youtu.be/eRsGyueVLvQ?t=60
+
+## Vimeo
+
+https://vimeo.com/76979871
+
+## Links in prose stay links
+
+Mention [Sintel](https://youtu.be/eRsGyueVLvQ) in a sentence and it stays a link. So does a video link in a list:
+
+- https://youtu.be/aqz-KE-bpKQ
+
+## Embed code
+
+<iframe width="560" height="315" src="https://www.youtube.com/embed/aqz-KE-bpKQ?si=demo" title="YouTube video player" allowfullscreen></iframe>
+`,
   'teleprompter-demo': `---
 title: Teleprompter Demo
 display-mode: narrate

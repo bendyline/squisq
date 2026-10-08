@@ -26,6 +26,7 @@ import type {
   MarkdownTable,
 } from '../markdown/types.js';
 import { parseTimeSeconds } from '../markdown/annotationCoercion.js';
+import { mediaKindForUrl } from '../markdown/mediaReference.js';
 import { sanitizeUrl } from '../markdown/sanitize.js';
 import { extractPlainText } from '../markdown/utils.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
@@ -325,7 +326,10 @@ export function extractImages(
     if (!node || typeof node !== 'object') return;
     const n = node as Record<string, unknown>;
     if (n.type === 'image' && typeof n.url === 'string' && n.url) {
-      found.push({ src: n.url, alt: typeof n.alt === 'string' ? n.alt : '' });
+      // A clip or recording in image syntax is not a picture for an image slot.
+      if (!mediaKindForUrl(n.url)) {
+        found.push({ src: n.url, alt: typeof n.alt === 'string' ? n.alt : '' });
+      }
       return;
     }
     if ((n.type === 'htmlBlock' || n.type === 'htmlInline') && Array.isArray(n.htmlChildren)) {

@@ -27,6 +27,7 @@ import {
   parseHtmlToNodes,
   sanitizeHtmlNodes,
   stringifyMarkdown,
+  videoEmbedFromIframe,
 } from '@bendyline/squisq/markdown';
 import { docToMarkdown } from '@bendyline/squisq/doc';
 import type { Doc } from '@bendyline/squisq/schemas';
@@ -404,6 +405,20 @@ function blockForElement(node: HtmlElement, tag: string): MarkdownBlockNode[] | 
   }
   if (tag === 'br') return 'inline';
   if (tag === 'hr') return [{ type: 'thematicBreak' }];
+  if (tag === 'iframe') {
+    // A YouTube/Vimeo/… player becomes the paragraph-that-is-only-a-link
+    // form, which renders as the player again and reads as a link anywhere
+    // else. Any other iframe has no markdown counterpart.
+    const video = videoEmbedFromIframe(node);
+    if (!video) return [];
+    const url = video.embed.watchUrl;
+    return [
+      {
+        type: 'paragraph',
+        children: [{ type: 'link', url, children: [{ type: 'text', value: video.title ?? url }] }],
+      },
+    ];
+  }
   if (tag === 'blockquote') {
     return [{ type: 'blockquote', children: blocksFromNodes(node.children) }];
   }

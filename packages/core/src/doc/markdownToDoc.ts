@@ -41,6 +41,7 @@ import type {
   MarkdownNode,
   HtmlNode,
 } from '../markdown/types.js';
+import { mediaKindForUrl } from '../markdown/mediaReference.js';
 import { extractPlainText, readFrontmatterThemeId } from '../markdown/utils.js';
 import { coerceAnnotationValues, type CoercedBlockMeta } from '../markdown/annotationCoercion.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
@@ -1121,7 +1122,8 @@ function findFirstHtmlImage(nodes: HtmlNode[]): ImageRef | undefined {
 function findFirstImage(node: MarkdownNode): ImageRef | undefined {
   if (node.type === 'image') {
     const img = node as { url: string; alt?: string };
-    return { url: img.url, alt: img.alt };
+    // A clip or recording in image syntax plays inline; it is never a cover picture.
+    return mediaKindForUrl(img.url) ? undefined : { url: img.url, alt: img.alt };
   }
   if (node.type === 'htmlBlock' || node.type === 'htmlInline') {
     const html = node as { htmlChildren?: HtmlNode[] };
