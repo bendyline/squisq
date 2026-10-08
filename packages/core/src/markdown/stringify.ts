@@ -22,6 +22,8 @@ let defaultProcessor: any;
 // Annotation-span unescaping
 // ============================================
 
+// Keep quoted runs disjoint from the unquoted alternative. Otherwise an
+// unfinished OCR/template span can exponentially partition subsequent quotes.
 // Quoted runs as they appear in remark-stringify output. Backslashes inside
 // the span are doubled by remark (a literal `\` before punctuation becomes
 // `\\`), so `\\.` covers both authored escapes and remark's own.
@@ -34,7 +36,7 @@ const SQ_RUN = `'(?:[^'\\\\]|\\\\.)*'`;
  * and quoted runs (which may themselves contain `]`).
  */
 const ESCAPED_TEMPLATE_SPAN_RE = new RegExp(
-  `\\{\\\\\\[((?:${DQ_RUN}|${SQ_RUN}|\\\\.|[^\\]\\\\])*)\\]\\}`,
+  `\\{\\\\\\[((?:${DQ_RUN}|${SQ_RUN}|\\\\.|[^\\]\\\\"'])*)\\]\\}`,
   'g',
 );
 
@@ -46,7 +48,7 @@ const HEADING_LINE_RE = /^#{1,6} .*$/gm;
  * already-unescaped `{[…]}` template span (canonical emit order).
  */
 const TRAILING_ESCAPED_PANDOC_SPAN_RE = new RegExp(
-  `\\{(?!\\\\?\\[)((?:${DQ_RUN}|${SQ_RUN}|\\\\.|[^}\\\\])*)\\}(?=\\s*(?:\\{\\[.*)?$)`,
+  `\\{(?!\\\\?\\[)((?:${DQ_RUN}|${SQ_RUN}|\\\\.|[^}\\\\"'])*)\\}(?=\\s*(?:\\{\\[.*)?$)`,
 );
 
 /**
@@ -70,6 +72,39 @@ const UNESCAPE_PUNCT_RE = /\\([\\[\]:#.,+=/?;@%$(){}'"-])/g;
 
 function unescapeMarkdownPunct(text: string): string {
   return text.replace(UNESCAPE_PUNCT_RE, '$1');
+}
+
+// Upstream unsafe rules can treat a neighboring escaped character as enough
+// protection for a dollar or colon. Math still recognizes dollars beside an
+// escaped underscore, and a closing emphasis marker is not an escaped literal.
+// Also protect backslashes before spaces that attention handling may encode.
+function literalTextUnsafe(options?: StringifyOptions) {
+  return [
+    // GFM's writer only guards lowercase protocol endings, while its parser
+    // recognizes uppercase ones. Escape the colon before the domain dot can
+    // become a literal backslash inside an automatically recognized URL.
+    ...(options?.gfm === false
+      ? []
+      : [
+          {
+            character: ':',
+            before: '[PS]',
+            after: '\\/',
+            inConstruct: 'phrasing' as const,
+            notInConstruct: [
+              'autolink' as const,
+              'link' as const,
+              'image' as const,
+              'label' as const,
+            ],
+          },
+        ]),
+    { character: '\\', after: '[ \t]', inConstruct: 'phrasing' as const },
+    ...(options?.math === false ? [] : [{ character: '$', inConstruct: 'phrasing' as const }]),
+    ...(options?.directive === false
+      ? []
+      : [{ character: ':', after: '[A-Za-z]', inConstruct: 'phrasing' as const }]),
+  ];
 }
 
 // ============================================
@@ -316,6 +351,7 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
           rule: '-',
           fence: '`',
           setext: false,
+          unsafe: literalTextUnsafe(),
         });
     }
     processor = defaultProcessor;
@@ -343,6 +379,7 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
       rule: options?.rule ?? '-',
       fence: options?.fence ?? '`',
       setext: options?.setext ?? false,
+      unsafe: literalTextUnsafe(options),
     });
   }
 

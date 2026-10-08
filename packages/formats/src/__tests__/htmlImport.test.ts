@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { markdownToDoc } from '@bendyline/squisq/doc';
-import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { parseMarkdown, extractPlainText } from '@bendyline/squisq/markdown';
 import { docToHtml, markdownDocToPlainHtml } from '../html/index.js';
 import { htmlToMarkdown, htmlToMarkdownDocSync } from '../html/import.js';
 
@@ -161,5 +161,23 @@ describe('htmlToMarkdown', () => {
         '# Documents\n\n- [DocBlocks](aboutDocBlocks.md) — Write in plain Markdown.\n',
       );
     });
+  });
+});
+
+describe('HTML literal text and mark boundaries', () => {
+  it('collapses whitespace and places it outside emphasis, strong and strike markers', () => {
+    expect(
+      htmlToMarkdown(
+        '<p>In <em>Miranda, </em>the court <strong> held </strong><s> otherwise </s>.</p>',
+      ),
+    ).toBe('In *Miranda,* the court **held** ~~otherwise~~ .\n');
+  });
+
+  it('does not turn imported dollars, OCR punctuation or words into Markdown extensions', () => {
+    const html =
+      '<p>In <em>Miranda, </em>:cferring to awards of $_ and $334.72. County <em>\\ </em>next. $$**$$$</p>';
+    const original = htmlToMarkdownDocSync(html);
+    const output = parseMarkdown(htmlToMarkdown(html));
+    expect(extractPlainText(output)).toBe(extractPlainText(original));
   });
 });

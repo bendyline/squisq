@@ -268,6 +268,43 @@ const blockInlines = (nodes: HtmlNode[]): MarkdownInlineNode[] =>
 
 // ── inline conversion ───────────────────────────────────────────────
 
+/** Move boundary whitespace outside marks so CommonMark can represent them. */
+function appendMarkedInlines(
+  output: MarkdownInlineNode[],
+  type: 'strong' | 'emphasis' | 'delete',
+  input: MarkdownInlineNode[],
+): void {
+  const children = [...input];
+  let leading = '';
+  let trailing = '';
+  while (children[0]?.type === 'text') {
+    const first = children[0];
+    const space = /^ +/.exec(first.value)?.[0] ?? '';
+    if (!space) break;
+    leading += space;
+    if (space.length === first.value.length) children.shift();
+    else {
+      children[0] = { ...first, value: first.value.slice(space.length) };
+      break;
+    }
+  }
+  while (children[children.length - 1]?.type === 'text') {
+    const last = children[children.length - 1];
+    if (last.type !== 'text') break;
+    const space = / +$/.exec(last.value)?.[0] ?? '';
+    if (!space) break;
+    trailing = space + trailing;
+    if (space.length === last.value.length) children.pop();
+    else {
+      children[children.length - 1] = { ...last, value: last.value.slice(0, -space.length) };
+      break;
+    }
+  }
+  if (leading) output.push({ type: 'text', value: leading });
+  if (children.length) output.push({ type, children });
+  if (trailing) output.push({ type: 'text', value: trailing });
+}
+
 function inlinesFromNodes(nodes: HtmlNode[]): MarkdownInlineNode[] {
   const out: MarkdownInlineNode[] = [];
   for (const node of nodes) {
@@ -283,11 +320,11 @@ function inlinesFromNodes(nodes: HtmlNode[]): MarkdownInlineNode[] {
     if (tag === 'br') {
       out.push({ type: 'break' });
     } else if (INLINE_STRONG.has(tag)) {
-      out.push({ type: 'strong', children: inlinesFromNodes(node.children) });
+      appendMarkedInlines(out, 'strong', inlinesFromNodes(node.children));
     } else if (INLINE_EM.has(tag)) {
-      out.push({ type: 'emphasis', children: inlinesFromNodes(node.children) });
+      appendMarkedInlines(out, 'emphasis', inlinesFromNodes(node.children));
     } else if (INLINE_DEL.has(tag)) {
-      out.push({ type: 'delete', children: inlinesFromNodes(node.children) });
+      appendMarkedInlines(out, 'delete', inlinesFromNodes(node.children));
     } else if (INLINE_SUP.has(tag)) {
       out.push({ type: 'superscript', children: inlinesFromNodes(node.children) });
     } else if (INLINE_SUB.has(tag)) {
