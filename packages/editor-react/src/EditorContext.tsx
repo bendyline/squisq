@@ -40,6 +40,7 @@ import type { editor as MonacoEditorNs } from 'monaco-editor';
 import { createDocument } from '@tiptap/core';
 import { closeHistory } from '@tiptap/pm/history';
 import { markdownToTiptap } from './tiptapBridge';
+import { selectionMarkdown } from './selectionMarkdown';
 import { getBlockSlices, sliceIndexAtOffset, type BlockSlice } from './blockRange';
 import { tiptapBlockInsertion } from './blockInsertion';
 import {
@@ -153,6 +154,8 @@ export interface EditorSelectionInfo {
   view: EditorView;
   /** The selected text, empty when the selection is a bare cursor. */
   text: string;
+  /** Selected Markdown, preserving formatting and block metadata when available. */
+  markdown?: string;
   /** True when the selection is a bare cursor rather than a range. */
   empty: boolean;
 }
@@ -1350,6 +1353,7 @@ export function EditorProvider({
       return {
         view: 'wysiwyg',
         text: empty ? '' : tiptapEditor.state.doc.textBetween(from, to, '\n', ' '),
+        markdown: selectionMarkdown(tiptapEditor.state),
         empty,
       };
     }
