@@ -7,6 +7,7 @@
  * Hidden in Preview mode.
  */
 
+import { EditorInsertMenuItems } from './InsertMenuItems';
 import type { ReactNode } from 'react';
 import {
   useCallback,
@@ -2769,6 +2770,7 @@ export function Toolbar({
                 </button>
               );
             })}
+            <EditorInsertMenuItems onClose={closeInsertMenu} />
             {allowRecording && mediaProvider && (
               <button
                 type="button"

@@ -7,6 +7,7 @@
  * and Doc so all views stay in sync.
  */
 
+import { EditorInsertMenuProvider } from './InsertMenuItems';
 import {
   createContext,
   useContext,
@@ -1908,7 +1909,7 @@ export function EditorProvider({
   return (
     <EditorContext.Provider value={value}>
       <DictationStateContext.Provider value={dictationController.state}>
-        {children}
+        <EditorInsertMenuProvider>{children}</EditorInsertMenuProvider>
       </DictationStateContext.Provider>
     </EditorContext.Provider>
   );

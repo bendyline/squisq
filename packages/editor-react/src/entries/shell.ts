@@ -32,3 +32,6 @@ export { WysiwygEditor } from '../WysiwygEditor.js';
 export type { WysiwygEditorProps } from '../WysiwygEditor.js';
 export { PreviewPanel } from '../PreviewPanel.js';
 export type { PreviewPanelProps } from '../PreviewPanel.js';
+
+export { useEditorInsertMenuItems } from '../InsertMenuItems';
+export type { EditorInsertMenuItem } from '../InsertMenuItems';

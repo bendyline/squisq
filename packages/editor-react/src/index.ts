@@ -836,3 +836,6 @@ export type {
   SpeechInputTranscribeOptions,
   SpeechInputTranscript,
 } from './speech/index.js';
+
+export { useEditorInsertMenuItems } from './InsertMenuItems';
+export type { EditorInsertMenuItem } from './InsertMenuItems';
