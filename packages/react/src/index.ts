@@ -37,6 +37,8 @@ export { InlineVideoPlayer } from './InlineVideoPlayer.js';
 export type { InlineVideoPlayerProps } from './InlineVideoPlayer.js';
 export { InlineAudioPlayer } from './InlineAudioPlayer.js';
 export type { InlineAudioPlayerProps } from './InlineAudioPlayer.js';
+export { VideoEmbedFrame } from './VideoEmbedFrame.js';
+export type { VideoEmbedFrameProps } from './VideoEmbedFrame.js';
 export { AnimatedImageControls } from './animatedImage/AnimatedImageControls.js';
 export type { AnimatedImageControlsProps } from './animatedImage/AnimatedImageControls.js';
 export { useAnimatedImage } from './animatedImage/useAnimatedImage.js';

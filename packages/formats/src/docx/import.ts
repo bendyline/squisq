@@ -21,7 +21,8 @@
 
 import type { Doc } from '@bendyline/squisq/schemas';
 import { markdownToDoc } from '@bendyline/squisq/doc';
-import { stringifyMarkdown } from '@bendyline/squisq/markdown';
+import { findBlockVideoEmbed, stringifyMarkdown } from '@bendyline/squisq/markdown';
+import { readWordVideo } from './videoEmbed.js';
 import type {
   MarkdownDocument,
   MarkdownBlockNode,
@@ -211,6 +212,10 @@ interface ImportContext {
   extractedImages: Map<string, { data: ArrayBuffer; mimeType: string }>;
   /** Counter for generating unique image filenames */
   imageCounter: number;
+  /** Word online-video drawings converted so far (see `absorbVideoCaption`). */
+  videoDrawings: number;
+  /** Paragraphs that hold a converted online-video drawing. */
+  videoParagraphs: WeakSet<MarkdownBlockNode>;
 }
 
 interface NumberingInfo {
@@ -237,6 +242,8 @@ async function buildImportContext(
     options,
     extractedImages: new Map(),
     imageCounter: 0,
+    videoDrawings: 0,
+    videoParagraphs: new WeakSet(),
   };
 
   // Initialize with built-in defaults
@@ -496,8 +503,10 @@ async function convertBlockElements(
         continue;
       }
 
+      const videoDrawingsBefore = ctx.videoDrawings;
       const block = await convertParagraph(el, ctx);
-      if (block) {
+      if (block && ctx.videoDrawings > videoDrawingsBefore) ctx.videoParagraphs.add(block);
+      if (block && !absorbVideoCaption(result, block, ctx)) {
         result.push(block);
       }
       i++;
@@ -530,6 +539,36 @@ async function convertBlockElements(
   }
 
   return result;
+}
+
+/**
+ * Drop the caption paragraph that follows a Word online video when it is only
+ * a link to the same video — the export writes one (the title, linking to the
+ * page) so a printed copy names the video. Its text becomes the video's title
+ * when the drawing had none. Only a paragraph made from a video DRAWING
+ * absorbs a caption: two authored links in a row stay two paragraphs.
+ */
+function absorbVideoCaption(
+  result: MarkdownBlockNode[],
+  block: MarkdownBlockNode,
+  ctx: ImportContext,
+): boolean {
+  const previous = result[result.length - 1];
+  if (previous?.type !== 'paragraph' || block.type !== 'paragraph') return false;
+  if (!ctx.videoParagraphs.has(previous)) return false;
+  const video = findBlockVideoEmbed(previous);
+  const caption = findBlockVideoEmbed(block);
+  if (!video || !caption || caption.embed.watchUrl !== video.embed.watchUrl) return false;
+  if (!video.title && caption.title) {
+    previous.children = [
+      {
+        type: 'link',
+        url: video.embed.watchUrl,
+        children: [{ type: 'text', value: caption.title }],
+      },
+    ];
+  }
+  return true;
 }
 
 // ============================================
@@ -708,6 +747,25 @@ async function convertDrawingContent(
   ctx: ImportContext,
 ): Promise<MarkdownInlineNode[]> {
   const result: MarkdownInlineNode[] = [];
+
+  // A Word online video: its poster picture carries the provider embed code.
+  // It becomes a link to the video's page — a paragraph of only that link is
+  // the markdown video form — and the poster itself is not kept.
+  const video = readWordVideo(el, (relId) => {
+    const rel = ctx.documentRels.get(relId);
+    return rel?.targetMode === 'External' ? rel.target : null;
+  });
+  if (video) {
+    const url = video.embed.watchUrl;
+    ctx.videoDrawings++;
+    return [
+      {
+        type: 'link',
+        url,
+        children: [{ type: 'text', value: video.title ?? url }],
+      } satisfies MarkdownLink,
+    ];
+  }
 
   // A positioned Word shape may be a text box, an image, or both. Text box
   // paragraphs are nested inside the drawing rather than being paragraph

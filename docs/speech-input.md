@@ -230,3 +230,20 @@ microphone in the renderer, encodes each take locally, and hands the bytes to
 nothing after a take is transcribed. The level meter and pause detection are
 computed locally and are not sent anywhere. Where the audio goes from there is
 entirely the host's decision, and worth stating to your users.
+
+## Host transcript dialogs
+
+A host can capture into its own transcript instead of inserting each phrase into
+the editor. Call `startDictationSession` from the `/speech` entry on a recording
+gesture, with a provider, abort signal, and transcript/activity/error callbacks.
+Its `stop()` releases the microphone and drains the final takes; `cancel()` (or
+aborting the signal) drops pending results. Dispose the session when the dialog
+closes or its document unmounts. Capture modules remain dynamically loaded.
+The same entry exposes async `encodeMonoPcm16Wav` for independently encoded,
+bounded upload takes; the host owns decoding, file/duration limits and queuing.
+
+Register host Insert actions with `useEditorInsertMenuItems` from a component
+inside the editor (for example a toolbar slot). Each item has an `id`, `label`,
+optional `icon`/`disabled`, and `onSelect`. Registrations belong to that editor
+instance and are removed on unmount. The menu closes before invoking the current
+callback, so a host-owned dialog can remain mounted outside the menu.

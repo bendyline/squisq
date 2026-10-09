@@ -63,6 +63,12 @@ export type PageMedia =
       license?: string;
     }
   | {
+      /** A hosted video (YouTube, Vimeo, …) by its page URL; renderers play it. */
+      type: 'videoEmbed';
+      url: string;
+      title?: string;
+    }
+  | {
       type: 'canvas';
       spatial: PageSpatialKind;
       /**

@@ -202,6 +202,51 @@ describe('MarkdownRenderer', () => {
     expect(img.alt).toBe('A cat');
   });
 
+  it('plays a video or a recording referenced with image syntax', async () => {
+    const provider: MediaProvider = {
+      ...mediaProviderWith('clips/plane.mp4'),
+      async resolveUrl(path: string) {
+        return `blob:resolved/${path}`;
+      },
+    };
+    const { container } = render(
+      <MediaContext.Provider value={provider}>
+        <MarkdownRenderer
+          nodes={parseNodes(
+            'Watch: ![Planing a board](clips/plane.mp4)\n\nListen: ![A brass bell ringing](sounds/bell.mp3)\n\n![A recorded note](audio/note.webm) ![A photo](photo.png)',
+          )}
+        />
+      </MediaContext.Provider>,
+    );
+    await waitFor(() =>
+      expect(container.querySelector('video')?.getAttribute('src')).toBe(
+        'blob:resolved/clips/plane.mp4',
+      ),
+    );
+    const video = container.querySelector('.squisq-inline-video-player video') as HTMLVideoElement;
+    expect(video.getAttribute('aria-label')).toBe('Planing a board');
+    expect(video.controls).toBe(true);
+    const audios = [...container.querySelectorAll('.squisq-inline-audio-player audio')];
+    expect(audios.map((a) => a.getAttribute('aria-label'))).toEqual([
+      'A brass bell ringing',
+      'A recorded note',
+    ]);
+    await waitFor(() =>
+      expect(audios[0]?.getAttribute('src')).toBe('blob:resolved/sounds/bell.mp3'),
+    );
+    // An ordinary picture is still a picture, and no media reference became one.
+    const imgs = [...container.querySelectorAll('img.squisq-md-image')];
+    expect(imgs.map((i) => i.getAttribute('alt'))).toEqual(['A photo']);
+  });
+
+  it('drops a media reference whose URL is unsafe', () => {
+    const { container } = render(
+      <MarkdownRenderer nodes={parseNodes('![x](javascript:alert(1)//clip.mp4)')} />,
+    );
+    expect(container.querySelector('video, audio, img')).toBeNull();
+    expect(container.innerHTML).not.toContain('javascript:');
+  });
+
   it('renders an unordered list', () => {
     const nodes: MarkdownBlockNode[] = [
       {

@@ -9,6 +9,10 @@
  * so rather than silently dropping the caller's text.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { Editor } from '@tiptap/core';
+import StarterKit from '@tiptap/starter-kit';
+import { HeadingWithTemplate } from '../TemplateAnnotation';
+import { markdownToTiptap } from '../tiptapBridge';
 import { act, render } from '@testing-library/react';
 import { EditorProvider, useEditorContext } from '../EditorContext';
 import type { EditorContextValue } from '../EditorContext';
@@ -143,4 +147,29 @@ describe('EditorContext selection actions', () => {
     act(() => listeners.forEach((fn) => fn()));
     expect(ctx.current?.selectionVersion).toBe(before + 1);
   });
+});
+
+// Exercise the host-facing API with the real rich-text schema, not a mock.
+it('exposes selected Markdown alongside the readable text', () => {
+  const source = '## Advice {[factCard]}\n\nKeep **formatting**.';
+  const editor = new Editor({
+    extensions: [StarterKit.configure({ heading: false }), HeadingWithTemplate],
+    content: markdownToTiptap(source),
+  });
+  try {
+    editor.commands.selectAll();
+    const ctx = captureContext();
+    act(() => {
+      ctx.current?.setActiveView('wysiwyg');
+      ctx.current?.setTiptapEditor(editor);
+    });
+    expect(ctx.current?.getSelection()).toEqual({
+      view: 'wysiwyg',
+      empty: false,
+      text: 'Advice\nKeep formatting.',
+      markdown: source,
+    });
+  } finally {
+    editor.destroy();
+  }
 });

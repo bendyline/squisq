@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { markdownToDoc } from '@bendyline/squisq/doc';
-import { parseMarkdown } from '@bendyline/squisq/markdown';
-import { docToHtml } from '../html/index.js';
+import { parseMarkdown, extractPlainText } from '@bendyline/squisq/markdown';
+import { docToHtml, markdownDocToPlainHtml } from '../html/index.js';
 import { htmlToMarkdown, htmlToMarkdownDocSync } from '../html/import.js';
 
 describe('htmlToMarkdown', () => {
@@ -76,5 +76,108 @@ describe('htmlToMarkdown', () => {
     expect(() =>
       htmlToMarkdown('<script type="application/json" data-squisq-doc="1">{bad</script>'),
     ).toThrow('Invalid embedded Squisq Doc JSON');
+  });
+  describe('page head', () => {
+    const page =
+      '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n' +
+      '<meta name="Description" content=" About  &amp; more ">\n' +
+      '<title>\n  Docs &amp; Notes\n</title>\n</head>\n' +
+      '<body><svg><title>icon</title></svg><h1>Docs &amp; Notes</h1><p>Body.</p></body></html>';
+
+    it('keeps the title and description as frontmatter, never as body text', () => {
+      const doc = htmlToMarkdownDocSync(page);
+      expect(doc.frontmatter).toEqual({ title: 'Docs & Notes', description: 'About & more' });
+      expect(doc.children.map((node) => node.type)).toEqual(['heading', 'paragraph']);
+      const md = htmlToMarkdown(page);
+      expect(md).toMatch(
+        /^---\n[\s\S]*title: .*Docs & Notes[\s\S]*\n---\n\n# Docs & Notes\n\nBody\.\n$/,
+      );
+      // An SVG's <title> is a tooltip, not the page title.
+      expect(md).not.toContain('icon');
+    });
+
+    it('drops head content without frontmatter when asked', () => {
+      const doc = htmlToMarkdownDocSync(page, { headMetadata: false });
+      expect(doc.frontmatter).toBeUndefined();
+      expect(htmlToMarkdown(page, { headMetadata: false })).toBe('# Docs & Notes\n\nBody.\n');
+    });
+
+    it('never surfaces a title as body text, even without sanitizing', () => {
+      const md = htmlToMarkdown('<title>Hello</title><h1>Hello</h1><p>x</p>', {
+        sanitize: false,
+        headMetadata: false,
+      });
+      expect(md).toBe('# Hello\n\nx\n');
+    });
+
+    it('bounds and cleans head metadata', () => {
+      const doc = htmlToMarkdownDocSync(
+        `<title>${'a'.repeat(5000)}</title><meta name="description" content="one\u0007two"><p>x</p>`,
+      );
+      expect((doc.frontmatter?.title as string).length).toBe(1024);
+      expect(doc.frontmatter?.description).toBe('one two');
+      expect(htmlToMarkdownDocSync('<title>   </title><p>x</p>').frontmatter).toBeUndefined();
+    });
+  });
+
+  describe('whitespace', () => {
+    it('lays out pretty-printed HTML the way a browser shows it', () => {
+      expect(htmlToMarkdown('<p>\n  Hello  <b>world</b>\n</p>')).toBe('Hello **world**\n');
+      expect(htmlToMarkdown('<h1>\n  Title\n</h1>')).toBe('# Title\n');
+      expect(htmlToMarkdown('<ul>\n<li>\n  item one\n</li>\n</ul>')).toMatch(/^[-*] item one\n$/);
+      expect(htmlToMarkdown('<div>a</div>\n  loose text\n  <div>b</div>')).toBe(
+        'a\n\nloose text\n\nb\n',
+      );
+      expect(htmlToMarkdown('<p>one <span> </span> two</p>')).toBe('one two\n');
+    });
+
+    it('moves edge spaces outside emphasis and links', () => {
+      expect(htmlToMarkdown('<p>x<strong> bold </strong>y</p>')).toBe('x **bold** y\n');
+      expect(htmlToMarkdown('<p>a <em> b </em> c</p>')).toBe('a *b* c\n');
+      expect(htmlToMarkdown('<p>see <a href="https://x.test"> link </a>.</p>')).toBe(
+        'see [link](https://x.test) .\n',
+      );
+      // A link whose text was only whitespace falls back to its URL (an autolink).
+      expect(htmlToMarkdown('<p><a href="https://x.test"> </a></p>')).toBe('<https://x.test>\n');
+      expect(htmlToMarkdown('<p>a<strong> </strong>b</p>')).toBe('a b\n');
+    });
+
+    it('trims table cells and never emits escaped edge spaces', () => {
+      const md = htmlToMarkdown(
+        '<table><tr><th>\n H \n</th></tr><tr><td>\n c \n</td></tr></table><p> x <br>\n y </p>',
+      );
+      expect(md).toContain('| H |');
+      expect(md).toContain('| c |');
+      expect(md).not.toContain('&#x20;');
+    });
+
+    it('round-trips a plain HTML export without stray title text', () => {
+      const source = '# Documents\n\n- [DocBlocks](aboutDocBlocks.md) — Write in plain Markdown.\n';
+      const html = markdownDocToPlainHtml(parseMarkdown(source), { title: 'Documents' });
+      const md = htmlToMarkdown(html);
+      expect(md).not.toContain('&#x20;');
+      expect(md).toContain('title: Documents');
+      expect(md).toContain(
+        '# Documents\n\n- [DocBlocks](aboutDocBlocks.md) — Write in plain Markdown.\n',
+      );
+    });
+  });
+});
+
+describe('HTML literal text and mark boundaries', () => {
+  it('collapses whitespace and places it outside emphasis, strong and strike markers', () => {
+    expect(
+      htmlToMarkdown(
+        '<p>In <em>Miranda, </em>the court <strong> held </strong><s> otherwise </s>.</p>',
+      ),
+    ).toBe('In *Miranda,* the court **held** ~~otherwise~~ .\n');
+  });
+
+  it('does not turn imported dollars, OCR punctuation or words into Markdown extensions', () => {
+    const html =
+      '<p>In <em>Miranda, </em>:cferring to awards of $_ and $334.72. County <em>\\ </em>next. $$**$$$</p>';
+    const original = htmlToMarkdownDocSync(html);
+    const output = parseMarkdown(htmlToMarkdown(html));
+    expect(extractPlainText(output)).toBe(extractPlainText(original));
   });
 });

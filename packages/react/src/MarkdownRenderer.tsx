@@ -8,6 +8,9 @@
  * Supports all block and inline node types from the markdown DOM:
  * - Block: paragraph, heading, blockquote, list, code, table,
  *   thematicBreak, math, htmlBlock, definitionList, directives
+ *   (a paragraph that is only a link to a YouTube/Vimeo/… page, or an HTML
+ *   block holding that provider's `<iframe>` embed code, renders as the
+ *   provider's player — see `findBlockVideoEmbed`)
  * - Inline: text, emphasis, strong, delete, inlineCode, link,
  *   image, break, inlineMath, htmlInline, footnoteReference,
  *   superscript, subscript
@@ -21,8 +24,11 @@ import type { Theme } from '@bendyline/squisq/schemas';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
 import { mayBeAnimatedImage } from '@bendyline/squisq/imageEdit';
 import {
+  findBlockVideoEmbed,
   sanitizeHtmlNodes,
+  mediaKindForUrl,
   sanitizeUrl,
+  videoEmbedFromIframe,
   type HtmlPolicy,
   type HtmlElement,
   type HtmlNode,
@@ -36,6 +42,7 @@ import { useMediaProvider, useMediaUrl } from './hooks/MediaContext';
 import { useFenceRenderers } from './hooks/FenceRendererContext';
 import { InlineVideoPlayer } from './InlineVideoPlayer.js';
 import { InlineAudioPlayer } from './InlineAudioPlayer.js';
+import { VideoEmbedFrame } from './VideoEmbedFrame.js';
 import { AnimatedImageControls } from './animatedImage/AnimatedImageControls.js';
 import { useAnimatedImage } from './animatedImage/useAnimatedImage.js';
 import { MermaidDiagram } from './mermaid/MermaidDiagram.js';
@@ -103,9 +110,19 @@ interface RenderCtx {
   onCopyCode?: CodeBlockCopyHandler;
   fenceRenderers?: FenceRendererMap;
   accessoryPaths?: ReadonlySet<string>;
+  /**
+   * Inside a list item, blockquote, or other container. A video link there
+   * stays a link: only a top-level paragraph that is nothing but a link to a
+   * video page renders as the player.
+   */
+  nested?: boolean;
 }
 
 const DEFAULT_CTX: RenderCtx = { htmlPolicy: 'sanitize' };
+
+function nestedCtx(ctx: RenderCtx): RenderCtx {
+  return ctx.nested ? ctx : { ...ctx, nested: true };
+}
 
 type CodeCopyStatus = 'idle' | 'copying' | 'copied' | 'failed';
 
@@ -345,10 +362,25 @@ function renderInline(
         );
       }
 
-      case 'image':
+      case 'image': {
+        // Image syntax is markdown's only embed, so `![A bell](bell.mp3)`
+        // and `![A clip](clip.mp4)` play inline instead of drawing a broken
+        // picture. The alt text names the player for assistive technology.
+        const kind = mediaKindForUrl(node.url);
+        if (kind) {
+          const src = sanitizeUrl(node.url, 'media');
+          if (!src) return null;
+          const label = node.alt || node.title || undefined;
+          return kind === 'video' ? (
+            <InlineVideoPlayer key={key} src={src} basePath="." label={label} />
+          ) : (
+            <InlineAudioPlayer key={key} src={src} basePath="." label={label} />
+          );
+        }
         return (
           <MdImage key={key} src={node.url} alt={node.alt ?? ''} title={node.title ?? undefined} />
         );
+      }
 
       case 'break':
         return <br key={key} />;
@@ -439,12 +471,15 @@ function renderBlock(
   ctx: RenderCtx = DEFAULT_CTX,
 ): React.ReactNode {
   switch (node.type) {
-    case 'paragraph':
+    case 'paragraph': {
+      const video = ctx.nested ? null : findBlockVideoEmbed(node);
+      if (video) return <VideoEmbedFrame key={key} embed={video.embed} title={video.title} />;
       return (
         <p key={key} className="squisq-md-p">
           {renderInline(node.children, key, ctx)}
         </p>
       );
+    }
 
     case 'heading': {
       const Tag = `h${node.depth}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
@@ -458,7 +493,7 @@ function renderBlock(
     case 'blockquote':
       return (
         <blockquote key={key} className="squisq-md-blockquote">
-          {renderBlocks(node.children, key, ctx)}
+          {renderBlocks(node.children, key, nestedCtx(ctx))}
         </blockquote>
       );
 
@@ -511,8 +546,12 @@ function renderBlock(
     case 'table':
       return renderTable(node.children, node.align, key, ctx);
 
-    case 'htmlBlock':
+    case 'htmlBlock': {
       if (ctx.htmlPolicy === 'strip') return null;
+      // Pasted provider embed code: the same player a link paragraph gets,
+      // not the snippet's fixed-size iframe and wrapper divs.
+      const video = findBlockVideoEmbed(node);
+      if (video) return <VideoEmbedFrame key={key} embed={video.embed} title={video.title} />;
       // The structural walker is deliberately the only rendering path: raw
       // HTML strings never bypass the tag, attribute, and URL policy below.
       return (
@@ -520,6 +559,7 @@ function renderBlock(
           {renderHtmlNodes(resolveHtmlNodes(node.htmlChildren, ctx.htmlPolicy), `${key}h`, ctx)}
         </div>
       );
+    }
 
     case 'math':
       return (
@@ -536,7 +576,7 @@ function renderBlock(
       return (
         <div key={key} className="squisq-md-footnote-def" id={`fn-${node.identifier}`}>
           <sup>{node.label ?? node.identifier}</sup>
-          {renderBlocks(node.children, key, ctx)}
+          {renderBlocks(node.children, key, nestedCtx(ctx))}
         </div>
       );
 
@@ -548,7 +588,7 @@ function renderBlock(
           data-directive={node.name}
         >
           {node.label && <div className="squisq-md-directive-label">{node.label}</div>}
-          {renderBlocks(node.children, key, ctx)}
+          {renderBlocks(node.children, key, nestedCtx(ctx))}
         </div>
       );
 
@@ -576,7 +616,7 @@ function renderBlock(
             }
             return (
               <dd key={`${key}dd${i}`} className="squisq-md-dd">
-                {renderBlocks(child.children, `${key}dd${i}`, ctx)}
+                {renderBlocks(child.children, `${key}dd${i}`, nestedCtx(ctx))}
               </dd>
             );
           })}
@@ -600,7 +640,7 @@ function renderListItem(
       {isTask && (
         <input type="checkbox" checked={!!item.checked} readOnly className="squisq-md-checkbox" />
       )}
-      {renderBlocks(item.children, key, ctx)}
+      {renderBlocks(item.children, key, nestedCtx(ctx))}
     </li>
   );
 }
@@ -717,6 +757,10 @@ function resolveHtmlNodes(nodes: HtmlNode[], htmlPolicy: HtmlPolicy): HtmlNode[]
  * applies document-wide (CSS has no per-element scoping outside shadow
  * DOM / iframes), which is exactly how an embedded game's `<style>`
  * leaked onto the surrounding app chrome.
+ *
+ * `iframe` has one exception, checked before this list: a hosted-video
+ * player whose `src` resolves to a supported provider renders as
+ * `VideoEmbedFrame`, which rebuilds the src from the validated video id.
  */
 const DANGEROUS_HTML_TAGS = new Set([
   'base',
@@ -805,6 +849,12 @@ function reactPropsFromAttrs(
 
 function renderHtmlElement(el: HtmlElement, key: string, ctx: RenderCtx): React.ReactNode {
   const tagName = el.tagName.toLowerCase();
+  if (tagName === 'iframe') {
+    const video = videoEmbedFromIframe(el);
+    return video ? (
+      <VideoEmbedFrame key={key} embed={video.embed} title={video.title} inline />
+    ) : null;
+  }
   // Never reconstruct a host-affecting element (e.g. a <style> that would
   // leak globally), whatever the policy.
   if (DANGEROUS_HTML_TAGS.has(tagName)) return null;

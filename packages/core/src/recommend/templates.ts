@@ -8,6 +8,8 @@
  * "Recommended for this block" section above the full template list.
  */
 
+import { mediaKindForUrl } from '../markdown/mediaReference.js';
+import { isVideoEmbedUrl } from '../markdown/videoEmbed.js';
 import { extractPlainText, findNodesByType, walkMarkdownTree } from '../markdown/utils.js';
 import type {
   HtmlElement,
@@ -91,8 +93,6 @@ const DATE_PATTERNS: RegExp[] = [
   /\b\d{1,2}(st|nd|rd|th)\s+century\b/i,
 ];
 
-const VIDEO_HOST_RE = /(youtube\.com|youtu\.be|vimeo\.com|wistia\.|loom\.com)/i;
-
 function htmlElementsByTag(root: MarkdownNode, tagNames: Set<string>): HtmlElement[] {
   const blocks = findNodesByType<MarkdownHtmlBlock>(root, 'htmlBlock');
   // Inline HTML (htmlInline) also carries htmlChildren; include both.
@@ -128,7 +128,11 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
   const plainParts: string[] = [];
 
   for (const node of nodes) {
-    imageCount += findNodesByType(node, 'image').length;
+    // A clip or recording in image syntax plays inline in its paragraph; it
+    // must not pull the block into an image layout whose slot it cannot fill.
+    imageCount += findNodesByType(node, 'image').filter(
+      (img) => !mediaKindForUrl((img as { url?: string }).url ?? ''),
+    ).length;
     imageCount += findNodesByType(node, 'imageReference').length;
     if (findNodesByType(node, 'blockquote').length > 0) hasBlockquote = true;
     if (findNodesByType(node, 'list').length > 0) hasList = true;
@@ -149,17 +153,18 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
       break;
     }
     const src = el.attributes.src || el.attributes.href || '';
-    if (VIDEO_HOST_RE.test(src)) {
+    if (isVideoEmbedUrl(src)) {
       hasVideo = true;
       break;
     }
   }
 
-  // Link-only video embeds (markdown link to a known video host).
+  // Link-only video embeds (markdown link to a supported hosted video —
+  // the same provider grammar the renderers play).
   if (!hasVideo) {
     const links = findNodesByType<MarkdownNode & { url?: string }>(root, 'link');
     for (const link of links) {
-      if (link.url && VIDEO_HOST_RE.test(link.url)) {
+      if (isVideoEmbedUrl(link.url)) {
         hasVideo = true;
         break;
       }

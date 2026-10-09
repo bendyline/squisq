@@ -186,7 +186,12 @@ export function PlainHtmlPreview({
   }, [renderFn]);
 
   const html = useMemo(
-    () => (renderFn ? renderFn(mdDoc, { title, images: mergedImages, theme, iconsCss }) : ''),
+    () =>
+      renderFn
+        ? // The frame is sandboxed without scripts, and a nested player
+          // iframe inherits that sandbox — so videos show as linked posters.
+          renderFn(mdDoc, { title, images: mergedImages, theme, iconsCss, videoEmbeds: 'poster' })
+        : '',
     [renderFn, mdDoc, title, mergedImages, theme, iconsCss],
   );
 

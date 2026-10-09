@@ -89,8 +89,13 @@ describe('profileBlockContents', () => {
   });
 
   it('detects a YouTube embed via link', () => {
-    const p = profileOf('[Watch](https://www.youtube.com/watch?v=abc)');
+    const p = profileOf('[Watch](https://www.youtube.com/watch?v=dQw4w9WgXcQ)');
     expect(p.hasVideo).toBe(true);
+  });
+
+  it('detects every supported video host, and only actual videos', () => {
+    expect(profileOf('https://www.dailymotion.com/video/x7tgad0').hasVideo).toBe(true);
+    expect(profileOf('[Our channel](https://www.youtube.com/@bendyline)').hasVideo).toBe(false);
   });
 
   it('detects a <video> tag', () => {

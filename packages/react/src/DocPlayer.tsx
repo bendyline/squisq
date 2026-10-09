@@ -1558,6 +1558,7 @@ function DocPlayerContent({
               theme={effectiveTheme}
               tableContentRenderer={tableContentRenderer}
               growTextToFit={isSlideshowMode}
+              videoEmbeds={renderMode ? 'placeholder' : 'poster'}
             />
           </div>
         )}
@@ -1584,6 +1585,9 @@ function DocPlayerContent({
               theme={effectiveTheme}
               tableContentRenderer={tableContentRenderer}
               growTextToFit={isSlideshowMode}
+              // A slide on its way out shows a still; its player unmounted
+              // (and stopped) with the slide.
+              videoEmbeds={renderMode ? 'placeholder' : 'poster'}
             />
           </div>
         )}
@@ -1625,6 +1629,9 @@ function DocPlayerContent({
               theme={effectiveTheme}
               tableContentRenderer={tableContentRenderer}
               growTextToFit={isSlideshowMode}
+              // Only the current slide plays a hosted video; frame capture
+              // draws a still (a cross-origin player cannot be captured).
+              videoEmbeds={renderMode ? 'placeholder' : 'player'}
             />
           </div>
         )}

@@ -73,7 +73,7 @@ import type {
   MarkdownImage,
   MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
-import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
+import { parseVideoEmbedUrl, readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
 import { RelIdAllocator } from '../ooxml/relIds.js';
@@ -342,6 +342,13 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
     slideBlocks.push({ id: 'empty-slide', startTime: 0, duration: 0, audioSegment: 0, layers: [] });
   }
 
+  // Only a deck with a hosted video loads the poster/PNG encoder.
+  const videoPosters = slideBlocks.some((block) =>
+    block.layers?.some((layer) => layer.type === 'videoEmbed'),
+  )
+    ? await import('../shared/videoPoster.js')
+    : null;
+
   const slideXmls: string[] = [];
   const slideContexts: SlideContext[] = [];
   for (let index = 0; index < slideBlocks.length; index++) {
@@ -354,6 +361,7 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
       effectiveOptions.signal,
     );
     ctx.diagramImages = effectiveOptions.diagramImages;
+    ctx.videoPosters = videoPosters;
     slideXmls.push(buildLayerSlideXml(slideBlocks[index], ctx));
     slideContexts.push(ctx);
   }
@@ -545,6 +553,8 @@ class SlideContext {
   readonly images: Map<string, ArrayBuffer> | undefined;
   /** Pictures of Mermaid diagrams by source; see `PptxExportOptions.diagramImages`. */
   diagramImages: PptxExportOptions['diagramImages'];
+  /** Poster helpers for hosted videos, loaded only when the deck has one. */
+  videoPosters: typeof import('../shared/videoPoster.js') | null = null;
   readonly slideIndex: number;
   readonly embeddedImages: EmbeddedImage[] = [];
   private nextShapeId = 4; // 1=group, 2=title, 3=body
@@ -857,6 +867,47 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
           textLayerForPlaceholder(
             layer.position,
             `[Video: ${layer.content.alt || layer.content.src}]`,
+            ctx,
+          ),
+          ctx.allocShapeId(),
+        ),
+      ];
+    }
+    case 'videoEmbed': {
+      // A poster picture that opens the video's page when clicked in the
+      // slideshow, letterboxed to the video's shape inside the layer's area.
+      const embed = parseVideoEmbedUrl(layer.content.url);
+      const thumbnail = embed?.thumbnailUrl ? ctx.images?.get(embed.thumbnailUrl) : undefined;
+      const poster =
+        embed && (thumbnail ?? ctx.videoPosters?.videoPosterPng(embed.aspectRatio < 1)?.data);
+      if (embed && poster) {
+        const label = layer.content.title || `${embed.providerName} video`;
+        const relId = ctx.addImage(
+          thumbnail ? (embed.thumbnailUrl ?? 'poster.jpg') : 'video-poster.png',
+          poster,
+          label,
+        );
+        const embedded = ctx.embeddedImages.find((candidate) => candidate.relId === relId)!;
+        const area = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
+        const width = Math.min(area.width, Math.round(area.height * embed.aspectRatio));
+        const height = Math.round(width / embed.aspectRatio);
+        return [
+          buildImageShape(
+            embedded,
+            ctx.allocShapeId(),
+            area.x + Math.round((area.width - width) / 2),
+            area.y + Math.round((area.height - height) / 2),
+            width,
+            height,
+            ctx.addHyperlink(embed.watchUrl),
+          ),
+        ];
+      }
+      return [
+        buildLayerTextShape(
+          textLayerForPlaceholder(
+            layer.position,
+            `[Video: ${layer.content.title || layer.content.url}]`,
             ctx,
           ),
           ctx.allocShapeId(),
@@ -1706,13 +1757,18 @@ function buildImageShape(
   top: number,
   maxWidth: number,
   maxHeight: number,
+  /** Relationship id of a click hyperlink (a hosted video's page). */
+  hyperlinkRelId?: string | null,
 ): string {
+  const name = escapeXml(img.alt || 'Picture');
+  const descr = img.alt ? ` descr="${escapeXml(img.alt)}"` : '';
+  const link = hyperlinkRelId ? `<a:hlinkClick r:id="${hyperlinkRelId}"/>` : '';
   return (
     `<p:pic>` +
     `<p:nvPicPr>` +
-    `<p:cNvPr id="${shapeId}" name="${escapeXml(img.alt || 'Picture')}"${
-      img.alt ? ` descr="${escapeXml(img.alt)}"` : ''
-    }/>` +
+    (link
+      ? `<p:cNvPr id="${shapeId}" name="${name}"${descr}>${link}</p:cNvPr>`
+      : `<p:cNvPr id="${shapeId}" name="${name}"${descr}/>`) +
     `<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>` +
     `<p:nvPr/>` +
     `</p:nvPicPr>` +

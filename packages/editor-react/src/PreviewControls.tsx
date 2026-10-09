@@ -86,6 +86,7 @@ import {
   FRONTMATTER_SETTING_DEFAULTS,
   FRONTMATTER_SETTING_KEYS,
   omitFrontmatterDefault,
+  themeFrontmatterValue,
 } from './frontmatterSettings';
 
 // ── Context ──────────────────────────────────────────────────────
@@ -100,8 +101,32 @@ export interface PreviewSettings {
   activeDisplayMode: DisplayMode;
   setSelectedDisplayMode: (mode: DisplayMode | null) => void;
   activeThemeId: string;
+  /**
+   * Choose the document theme. A theme id is persisted to `squisq-theme`
+   * (see {@link inheritedThemeId} for when the built-in default is written);
+   * `''` removes the key so the document follows the inherited default;
+   * `null` only drops an unsaved in-session selection.
+   */
   setSelectedThemeId: (id: string | null) => void;
   activeTheme: Theme;
+  /**
+   * The theme the document itself chose — the in-session selection or its
+   * frontmatter `squisq-theme` (legacy `themeId` / `theme`). `null` when the
+   * document names no known theme and renders with {@link inheritedThemeId}
+   * (or the built-in default).
+   */
+  explicitThemeId: string | null;
+  /**
+   * The host default theme (`EditorShell`'s `defaultThemeId`) resolved to a
+   * known theme id: what a document without its own theme renders with.
+   * `undefined` when the host supplies no default. While a host default is
+   * present, choosing any concrete theme — the built-in default included —
+   * is written to frontmatter, and theme pickers offer a
+   * "`inheritedThemeLabel` (<theme name>)" entry that removes the key.
+   */
+  inheritedThemeId: string | undefined;
+  /** Label for the inherited-default picker entry (host-overridable; default `'Default'`). */
+  inheritedThemeLabel: string;
   activeTransformStyle: string;
   setSelectedTransformStyle: (id: string | null) => void;
   /** The caption style used when captions are enabled. */
@@ -192,6 +217,21 @@ export function usePreviewSettings(): PreviewSettings {
  */
 export function usePreviewSettingsOptional(): PreviewSettings | null {
   return useContext(PreviewSettingsContext);
+}
+
+/**
+ * The `ThemePicker` value for the current settings: `''` (the picker's
+ * "Default" entry) while the document follows the inherited host default,
+ * otherwise the active theme id.
+ */
+function themePickerValue(
+  s: Pick<PreviewSettings, 'activeThemeId' | 'explicitThemeId' | 'inheritedThemeId'>,
+): string {
+  const followsInherited =
+    s.inheritedThemeId !== undefined &&
+    s.explicitThemeId === null &&
+    s.activeThemeId === s.inheritedThemeId;
+  return followsInherited ? '' : s.activeThemeId;
 }
 
 // ── Frontmatter resolvers ────────────────────────────────────────
@@ -354,6 +394,18 @@ export interface PreviewSettingsProviderProps {
    * present, `activeTheme` is this value and `activeThemeId` is its `id`.
    */
   themeOverride?: Theme | null;
+  /**
+   * Host default theme for a document whose frontmatter names no theme
+   * (`squisq-theme` / legacy `themeId` / `theme`). A document's own theme
+   * always wins; built-in and custom-theme ids are accepted. Unlike
+   * `themeOverride`, this never overrides the document.
+   */
+  defaultThemeId?: string;
+  /**
+   * Label for the picker entry that follows {@link defaultThemeId}, rendered
+   * as `"<label> (<theme name>)"`. Defaults to `'Default'`.
+   */
+  defaultThemeLabel?: string;
 }
 
 function readFrontmatterKey(
@@ -411,6 +463,8 @@ export function PreviewSettingsProvider({
   children,
   defaultViewportPreset = 'landscape',
   themeOverride,
+  defaultThemeId,
+  defaultThemeLabel,
 }: PreviewSettingsProviderProps) {
   const frontmatter = doc?.frontmatter;
   const { markdownSource, setMarkdownSource, allowNarrate } = useEditorContext();
@@ -469,7 +523,24 @@ export function PreviewSettingsProvider({
   );
   const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
   useEffect(() => setSelectedThemeId(null), [fmTheme]);
-  const resolvedThemeId = selectedThemeId ?? fmTheme ?? FRONTMATTER_SETTING_DEFAULTS.theme;
+  // Host default — a FALLBACK for documents that name no theme, resolved like
+  // a frontmatter value (loose spellings, custom-theme ids). An id that
+  // resolves to nothing still counts as a host default (pickers keep the
+  // explicit-write semantics) but renders as the built-in default.
+  const hostDefaultThemeId = defaultThemeId?.trim() || undefined;
+  const inheritedThemeId = useMemo(
+    () =>
+      hostDefaultThemeId === undefined
+        ? undefined
+        : (resolveFrontmatterTheme(hostDefaultThemeId, customIds) ??
+          FRONTMATTER_SETTING_DEFAULTS.theme),
+    [hostDefaultThemeId, customIds],
+  );
+  const inheritedThemeLabel = defaultThemeLabel?.trim() || 'Default';
+  const explicitThemeId = selectedThemeId ?? fmTheme;
+  // The single theme resolution point: every surface (Use/Play, the inline
+  // and block previews, the Write view's theme mirroring) reads activeTheme.
+  const resolvedThemeId = explicitThemeId ?? inheritedThemeId ?? FRONTMATTER_SETTING_DEFAULTS.theme;
   // Doc themes precede browser-library themes in `allThemes`; choosing a
   // library-only entry copies it into the document below for portable export.
   const resolvedTheme = useMemo(
@@ -498,15 +569,22 @@ export function PreviewSettingsProvider({
         setSelectedThemeId(null);
         return;
       }
-      const selectedCustom = customThemes.find((theme) => theme.id === id);
       const updates: Record<string, string | null> = {
-        [FRONTMATTER_SETTING_KEYS.theme.canonical]: omitFrontmatterDefault(
+        [FRONTMATTER_SETTING_KEYS.theme.canonical]: themeFrontmatterValue(
           id,
-          FRONTMATTER_SETTING_DEFAULTS.theme,
+          inheritedThemeId !== undefined,
         ),
         [FRONTMATTER_SETTING_KEYS.theme.legacy[0]]: null,
         [FRONTMATTER_SETTING_KEYS.theme.legacy[1]]: null,
       };
+      if (id === '') {
+        // Follow the inherited default: drop the document's own theme.
+        setThemeSaveError(null);
+        setSelectedThemeId(null);
+        persistFrontmatter(updates);
+        return;
+      }
+      const selectedCustom = customThemes.find((theme) => theme.id === id);
       // A built-in selection only writes the id — nothing to merge, so it can
       // never clobber the custom-themes key. Copying a library theme into the
       // doc rewrites that key wholesale, so it must merge onto the live source.
@@ -525,7 +603,7 @@ export function PreviewSettingsProvider({
       setSelectedThemeId(id);
       persistFrontmatter(updates);
     },
-    [customThemes, markdownSource, persistFrontmatter],
+    [customThemes, inheritedThemeId, markdownSource, persistFrontmatter],
   );
 
   const openThemeDesigner = useCallback((theme: Theme | null) => {
@@ -1020,6 +1098,9 @@ export function PreviewSettingsProvider({
       activeThemeId,
       setSelectedThemeId: handleSetThemeId,
       activeTheme,
+      explicitThemeId,
+      inheritedThemeId,
+      inheritedThemeLabel,
       activeTransformStyle,
       setSelectedTransformStyle: handleSetTransformStyle,
       activeCaptionStyle,
@@ -1063,6 +1144,9 @@ export function PreviewSettingsProvider({
       activeDisplayMode,
       activeThemeId,
       activeTheme,
+      explicitThemeId,
+      inheritedThemeId,
+      inheritedThemeLabel,
       activeTransformStyle,
       activeCaptionStyle,
       activeCaptionsEnabled,
@@ -1948,9 +2032,12 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
           >
             <label style={labelStyle}>Theme:</label>
             <ThemePicker
-              value={s.activeThemeId}
+              value={themePickerValue(s)}
               onChange={(v) => s.setSelectedThemeId(v)}
               ariaLabel="Theme"
+              includeDefault={s.inheritedThemeId !== undefined}
+              defaultThemeId={s.inheritedThemeId}
+              defaultLabel={s.inheritedThemeLabel}
               customThemes={s.customThemes}
               onCreateCustom={() => s.openThemeDesigner(null)}
               onEditCustom={(id) =>

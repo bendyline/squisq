@@ -423,6 +423,7 @@ export type Layer =
   | PathLayer
   | MapLayer
   | VideoLayer
+  | VideoEmbedLayer
   | TableLayer
   | TreeLayer
   | MermaidLayer;
@@ -703,6 +704,32 @@ export interface VideoLayer extends BaseLayer {
     credit?: string;
     /** License identifier (e.g., 'CC BY-SA 4.0') */
     license?: string;
+  };
+}
+
+/**
+ * Hosted video layer — the YouTube / Vimeo / Loom / Dailymotion / Wistia
+ * player for a paragraph that is only a link to the video's page.
+ *
+ * Carries the page URL, never a player URL: renderers re-derive the iframe
+ * `src` with `parseVideoEmbedUrl` (`@bendyline/squisq/markdown`), so an
+ * authored layer cannot smuggle in an arbitrary frame, and a URL that is not a
+ * supported video renders nothing. The player keeps the video's aspect ratio
+ * (16:9, or 9:16 for Shorts), letterboxed within the layer's bounds.
+ *
+ * Unlike {@link VideoLayer} this is not a clip on the document timeline: it
+ * does not follow play/pause, is never sought by frame capture, and adds no
+ * audio to exports. Live players appear only where a viewer can use them (the
+ * player's current slide); thumbnails, exports and frame capture draw a
+ * poster instead.
+ */
+export interface VideoEmbedLayer extends BaseLayer {
+  type: 'videoEmbed';
+  content: {
+    /** The video's page URL — any form `parseVideoEmbedUrl` recognizes. */
+    url: string;
+    /** Names the player for assistive tech and labels the poster. */
+    title?: string;
   };
 }
 

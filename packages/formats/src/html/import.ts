@@ -27,6 +27,7 @@ import {
   parseHtmlToNodes,
   sanitizeHtmlNodes,
   stringifyMarkdown,
+  videoEmbedFromIframe,
 } from '@bendyline/squisq/markdown';
 import { docToMarkdown } from '@bendyline/squisq/doc';
 import type { Doc } from '@bendyline/squisq/schemas';
@@ -47,6 +48,13 @@ export interface HtmlImportOptions {
    * trusted input where you want raw fidelity.
    */
   sanitize?: boolean;
+  /**
+   * Keep the page's `<title>` and `<meta name="description">` as frontmatter
+   * `title` / `description`. Default `true`. Head content never becomes body
+   * text either way; pass `false` where frontmatter is unwanted (for example
+   * when converting an email body).
+   */
+  headMetadata?: boolean;
 }
 
 // ── tag classification ──────────────────────────────────────────────
@@ -95,7 +103,208 @@ const isText = (n: HtmlNode): n is { type: 'htmlText'; value: string } => n.type
 
 const collapseWs = (s: string): string => s.replace(/\s+/g, ' ');
 
+/** Longest `title` / `description` kept from the page head. */
+const HEAD_METADATA_MAX_CHARS = 1024;
+
+// ── head content ────────────────────────────────────────────────────
+
+function headMetadataValue(raw: string): string | undefined {
+  // eslint-disable-next-line no-control-regex -- strip control characters from page metadata
+  const value = collapseWs(raw.replace(/[\u0000-\u001f\u007f]/g, ' ')).trim();
+  return value ? value.slice(0, HEAD_METADATA_MAX_CHARS) : undefined;
+}
+
+/**
+ * The page's own `<title>` and `<meta name="description">`. The fragment
+ * parse flattens `<html>`/`<head>`, so head elements surface at the top
+ * level; nested ones (an SVG's `<title>` tooltip) are not page metadata.
+ */
+function readHeadMetadata(nodes: HtmlNode[]): Record<string, string> {
+  const metadata: Record<string, string> = {};
+  const visit = (list: HtmlNode[]) => {
+    for (const node of list) {
+      if (!isElement(node)) continue;
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'html' || tag === 'head') {
+        visit(node.children);
+      } else if (tag === 'title' && metadata.title === undefined) {
+        const title = headMetadataValue(textContent(node));
+        if (title) metadata.title = title;
+      } else if (
+        tag === 'meta' &&
+        metadata.description === undefined &&
+        node.attributes.name?.toLowerCase() === 'description'
+      ) {
+        const description = headMetadataValue(node.attributes.content ?? '');
+        if (description) metadata.description = description;
+      }
+    }
+  };
+  visit(nodes);
+  return metadata;
+}
+
+/**
+ * Remove elements whose text must never become document content. This runs
+ * BEFORE sanitizing: the sanitizer unwraps elements it does not allow (such
+ * as `<title>`) and keeps their text, which is how a page title used to leak
+ * into the body as a stray first paragraph.
+ */
+function dropContentlessElements(nodes: HtmlNode[]): HtmlNode[] {
+  return nodes.flatMap((node): HtmlNode[] => {
+    if (!isElement(node)) return [node];
+    if (DROP.has(node.tagName.toLowerCase())) return [];
+    return [{ ...node, children: dropContentlessElements(node.children) }];
+  });
+}
+
+// ── whitespace ──────────────────────────────────────────────────────
+
+type InlineParent = Extract<
+  MarkdownInlineNode,
+  { type: 'strong' | 'emphasis' | 'delete' | 'link' | 'superscript' | 'subscript' }
+>;
+
+const INLINE_PARENT_TYPES = new Set<string>([
+  'strong',
+  'emphasis',
+  'delete',
+  'link',
+  'superscript',
+  'subscript',
+]);
+
+const isInlineParent = (node: MarkdownInlineNode): node is InlineParent =>
+  INLINE_PARENT_TYPES.has(node.type);
+
+/** Remove trailing spaces from the end of a run, dropping emptied text nodes. */
+function trimRunEnd(run: MarkdownInlineNode[]): void {
+  for (let last = run[run.length - 1]; last?.type === 'text'; last = run[run.length - 1]) {
+    const value = last.value.replace(/ +$/, '');
+    if (value) {
+      run[run.length - 1] = { ...last, value };
+      return;
+    }
+    run.pop();
+  }
+}
+
+function mergeAdjacentText(run: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  const out: MarkdownInlineNode[] = [];
+  for (const node of run) {
+    const previous = out[out.length - 1];
+    if (node.type === 'text' && previous?.type === 'text') {
+      out[out.length - 1] = { ...previous, value: previous.value + node.value };
+    } else if (isInlineParent(node)) {
+      out.push({ ...node, children: mergeAdjacentText(node.children) } as MarkdownInlineNode);
+    } else {
+      out.push(node);
+    }
+  }
+  return out;
+}
+
+/**
+ * Lay out one block's inline content the way a browser does: whitespace runs
+ * collapse across element boundaries, vanish at the block's edges, and sit
+ * outside emphasis and links rather than inside them. Markdown preserves what
+ * it is given — edge spaces come out as `&#x20;` and `** bold **` is not
+ * emphasis — so pretty-printed HTML must be normalized here.
+ */
+function normalizeInlineWhitespace(inlines: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  // At the start of a block, leading whitespace is dropped as if a space preceded it.
+  const state = { spaced: true };
+  const walk = (run: MarkdownInlineNode[]): MarkdownInlineNode[] => {
+    const out: MarkdownInlineNode[] = [];
+    for (const node of run) {
+      if (node.type === 'text') {
+        const value = state.spaced ? node.value.replace(/^ +/, '') : node.value;
+        if (!value) continue;
+        out.push({ ...node, value });
+        state.spaced = value.endsWith(' ');
+      } else if (node.type === 'break') {
+        trimRunEnd(out);
+        out.push(node);
+        state.spaced = true;
+      } else if (isInlineParent(node)) {
+        const children = walk(node.children);
+        // A leading space inside the container belongs before it.
+        const first = children[0];
+        if (first?.type === 'text' && first.value.startsWith(' ')) {
+          const value = first.value.replace(/^ +/, '');
+          if (value) children[0] = { ...first, value };
+          else children.shift();
+          out.push({ type: 'text', value: ' ' });
+        }
+        // A trailing space inside the container belongs after it.
+        const last = children[children.length - 1];
+        const trailing = last?.type === 'text' && last.value.endsWith(' ');
+        if (trailing) trimRunEnd(children);
+        if (children.length > 0) {
+          out.push({ ...node, children } as MarkdownInlineNode);
+        } else if (node.type === 'link') {
+          out.push({ ...node, children: [{ type: 'text', value: node.url }] });
+        }
+        if (trailing) {
+          out.push({ type: 'text', value: ' ' });
+          state.spaced = true;
+        } else if (children.length > 0 || node.type === 'link') {
+          state.spaced = false;
+        }
+      } else {
+        out.push(node);
+        state.spaced = false;
+      }
+    }
+    return out;
+  };
+  const out = walk(inlines);
+  trimRunEnd(out);
+  return mergeAdjacentText(out);
+}
+
+/** Inline content for one block, laid out as a browser would show it. */
+const blockInlines = (nodes: HtmlNode[]): MarkdownInlineNode[] =>
+  normalizeInlineWhitespace(inlinesFromNodes(nodes));
+
 // ── inline conversion ───────────────────────────────────────────────
+
+/** Move boundary whitespace outside marks so CommonMark can represent them. */
+function appendMarkedInlines(
+  output: MarkdownInlineNode[],
+  type: 'strong' | 'emphasis' | 'delete',
+  input: MarkdownInlineNode[],
+): void {
+  const children = [...input];
+  let leading = '';
+  let trailing = '';
+  while (children[0]?.type === 'text') {
+    const first = children[0];
+    const space = /^ +/.exec(first.value)?.[0] ?? '';
+    if (!space) break;
+    leading += space;
+    if (space.length === first.value.length) children.shift();
+    else {
+      children[0] = { ...first, value: first.value.slice(space.length) };
+      break;
+    }
+  }
+  while (children[children.length - 1]?.type === 'text') {
+    const last = children[children.length - 1];
+    if (last.type !== 'text') break;
+    const space = / +$/.exec(last.value)?.[0] ?? '';
+    if (!space) break;
+    trailing = space + trailing;
+    if (space.length === last.value.length) children.pop();
+    else {
+      children[children.length - 1] = { ...last, value: last.value.slice(0, -space.length) };
+      break;
+    }
+  }
+  if (leading) output.push({ type: 'text', value: leading });
+  if (children.length) output.push({ type, children });
+  if (trailing) output.push({ type: 'text', value: trailing });
+}
 
 function inlinesFromNodes(nodes: HtmlNode[]): MarkdownInlineNode[] {
   const out: MarkdownInlineNode[] = [];
@@ -112,11 +321,11 @@ function inlinesFromNodes(nodes: HtmlNode[]): MarkdownInlineNode[] {
     if (tag === 'br') {
       out.push({ type: 'break' });
     } else if (INLINE_STRONG.has(tag)) {
-      out.push({ type: 'strong', children: inlinesFromNodes(node.children) });
+      appendMarkedInlines(out, 'strong', inlinesFromNodes(node.children));
     } else if (INLINE_EM.has(tag)) {
-      out.push({ type: 'emphasis', children: inlinesFromNodes(node.children) });
+      appendMarkedInlines(out, 'emphasis', inlinesFromNodes(node.children));
     } else if (INLINE_DEL.has(tag)) {
-      out.push({ type: 'delete', children: inlinesFromNodes(node.children) });
+      appendMarkedInlines(out, 'delete', inlinesFromNodes(node.children));
     } else if (INLINE_SUP.has(tag)) {
       out.push({ type: 'superscript', children: inlinesFromNodes(node.children) });
     } else if (INLINE_SUB.has(tag)) {
@@ -150,9 +359,6 @@ function textContent(node: HtmlNode): string {
   return '';
 }
 
-const onlyWhitespace = (inlines: MarkdownInlineNode[]): boolean =>
-  inlines.every((n) => n.type === 'text' && n.value.trim() === '');
-
 // ── block conversion ────────────────────────────────────────────────
 
 function blocksFromNodes(nodes: HtmlNode[]): MarkdownBlockNode[] {
@@ -161,11 +367,9 @@ function blocksFromNodes(nodes: HtmlNode[]): MarkdownBlockNode[] {
 
   const flush = () => {
     if (inlineBuffer.length === 0) return;
-    const inlines = inlinesFromNodes(inlineBuffer);
+    const inlines = blockInlines(inlineBuffer);
     inlineBuffer = [];
-    if (inlines.length > 0 && !onlyWhitespace(inlines)) {
-      out.push({ type: 'paragraph', children: inlines });
-    }
+    if (inlines.length > 0) out.push({ type: 'paragraph', children: inlines });
   };
 
   for (const node of nodes) {
@@ -192,17 +396,29 @@ function blocksFromNodes(nodes: HtmlNode[]): MarkdownBlockNode[] {
 /** Returns the block node(s) for a block element, `'inline'` for inline ones. */
 function blockForElement(node: HtmlElement, tag: string): MarkdownBlockNode[] | 'inline' | null {
   if (tag in HEADINGS) {
-    const children = inlinesFromNodes(node.children);
+    const children = blockInlines(node.children);
     return [{ type: 'heading', depth: HEADINGS[tag]!, children }];
   }
   if (tag === 'p') {
-    const children = inlinesFromNodes(node.children);
-    return children.length > 0 && !onlyWhitespace(children)
-      ? [{ type: 'paragraph', children }]
-      : [];
+    const children = blockInlines(node.children);
+    return children.length > 0 ? [{ type: 'paragraph', children }] : [];
   }
   if (tag === 'br') return 'inline';
   if (tag === 'hr') return [{ type: 'thematicBreak' }];
+  if (tag === 'iframe') {
+    // A YouTube/Vimeo/… player becomes the paragraph-that-is-only-a-link
+    // form, which renders as the player again and reads as a link anywhere
+    // else. Any other iframe has no markdown counterpart.
+    const video = videoEmbedFromIframe(node);
+    if (!video) return [];
+    const url = video.embed.watchUrl;
+    return [
+      {
+        type: 'paragraph',
+        children: [{ type: 'link', url, children: [{ type: 'text', value: video.title ?? url }] }],
+      },
+    ];
+  }
   if (tag === 'blockquote') {
     return [{ type: 'blockquote', children: blocksFromNodes(node.children) }];
   }
@@ -267,7 +483,7 @@ function tableFromElement(node: HtmlElement): MarkdownBlockNode | null {
             isElement(cell) &&
             (cell.tagName.toLowerCase() === 'td' || cell.tagName.toLowerCase() === 'th')
           ) {
-            cells.push({ type: 'tableCell', children: inlinesFromNodes(cell.children) });
+            cells.push({ type: 'tableCell', children: blockInlines(cell.children) });
           }
         }
         if (cells.length > 0) rows.push({ type: 'tableRow', children: cells });
@@ -357,7 +573,12 @@ export function htmlToMarkdownDocSync(
   // by the time it has run the wrapper is gone and only a bare `<ol>` remains.
   // Both halves are sanitized below, so nothing skips the filter — the pass
   // only reads the shape, it never trusts the content.
-  const { nodes: bodyNodes, bodies, identifiers } = extractFootnoteSection(nodes);
+  const headMetadata = options.headMetadata === false ? {} : readHeadMetadata(nodes);
+  const {
+    nodes: bodyNodes,
+    bodies,
+    identifiers,
+  } = extractFootnoteSection(dropContentlessElements(nodes));
   const clean = (input: HtmlNode[]): HtmlNode[] =>
     options.sanitize === false ? input : sanitizeHtmlNodes(input);
 
@@ -368,7 +589,11 @@ export function htmlToMarkdownDocSync(
     for (const [id, body] of bodies) definitions.set(id, blocksFromNodes(clean(body)));
     children.push(...buildFootnoteDefinitions(definitions));
   }
-  return { type: 'document', children };
+  return {
+    type: 'document',
+    children,
+    ...(Object.keys(headMetadata).length > 0 ? { frontmatter: headMetadata } : {}),
+  };
 }
 
 /** Async, ArrayBuffer-accepting entry mirroring docx/pdf importers. */

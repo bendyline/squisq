@@ -58,3 +58,19 @@ export function omitFrontmatterDefault<T extends string | number | boolean>(
 ): T | null {
   return value === defaultValue ? null : value;
 }
+
+/**
+ * The `squisq-theme` value a theme choice persists (`null` removes the key).
+ *
+ * `''` means "no theme of its own" and always removes the key. Without a
+ * host default theme the built-in default (`standard`) is removed too — the
+ * historical behavior, since an absent key renders as `standard` anyway.
+ * With a host default an absent key inherits THAT theme, so every concrete
+ * choice — `standard` included — is written to pin the document to it.
+ */
+export function themeFrontmatterValue(themeId: string, hasHostDefault: boolean): string | null {
+  if (!themeId) return null;
+  return hasHostDefault
+    ? themeId
+    : omitFrontmatterDefault<string>(themeId, FRONTMATTER_SETTING_DEFAULTS.theme);
+}

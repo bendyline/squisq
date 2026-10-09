@@ -40,6 +40,8 @@ import { createMermaidThemeStore, type MermaidThemeStore } from './mermaid/merma
 import { CodeSnippetExtension } from './codeSnippet/CodeSnippetExtension';
 import { HostFenceExtension } from './fenceWidgets/HostFenceExtension';
 import { DataCardExtension } from './dataCard/DataCardExtension';
+import { VideoEmbedExtension } from './videoEmbed/VideoEmbedExtension';
+import { pasteVideoEmbedCode } from './videoEmbed/videoEmbedPaste';
 import { fenceRendererLangs } from '@bendyline/squisq/fence';
 import { TreeViewExtension } from './treeview/TreeViewExtension';
 import { shouldPasteAsTreeFence } from './treeview/treePaste';
@@ -403,6 +405,7 @@ export function WysiwygEditor({
         onMediaSaved: () => bumpMediaRevisionRef.current?.(),
         calcEngineFactory: () => calcEngineFactoryRef.current,
       }),
+      VideoEmbedExtension,
       RepairableDiagramExtension.configure({ onRepair: applyRepairCommand }),
       TimelineViewExtension,
       TreeViewExtension,
@@ -508,6 +511,13 @@ export function WysiwygEditor({
 
         const text = clipboard.getData('text/plain');
         if (!text) return false;
+
+        // A provider's embed code (`<iframe src="…youtube.com/embed/…">`) →
+        // the link paragraph VideoEmbedExtension plays, not literal HTML.
+        if (pasteVideoEmbedCode(view, text)) {
+          event.preventDefault();
+          return true;
+        }
 
         // Bare (unfenced) ASCII diagram art → verbatim into a fresh code
         // block, which AsciiDiagramExtension turns into an interactive

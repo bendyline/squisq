@@ -217,6 +217,16 @@ export const BUTTONS: ToolbarButton[] = [
     faIcon: 'fa-solid fa-file-arrow-up',
   },
   {
+    // A hosted video by URL (YouTube, Vimeo, Loom, …): stores no file — the
+    // document gets a paragraph that is only a link, which plays inline.
+    id: 'video',
+    label: 'video',
+    icon: '',
+    title: 'Insert Online Video (YouTube, Vimeo, etc.)',
+    group: 'media',
+    faIcon: 'fa-solid fa-circle-play',
+  },
+  {
     id: 'emoji',
     label: '😊',
     icon: '😊',

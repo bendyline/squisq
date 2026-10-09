@@ -26,8 +26,10 @@ import type {
   MarkdownTable,
 } from '../markdown/types.js';
 import { parseTimeSeconds } from '../markdown/annotationCoercion.js';
+import { mediaKindForUrl } from '../markdown/mediaReference.js';
 import { sanitizeUrl } from '../markdown/sanitize.js';
 import { extractPlainText } from '../markdown/utils.js';
+import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
 import {
   detectAsciiDiagram,
@@ -62,11 +64,58 @@ export interface EmbeddedVideo {
 
 const VIDEO_FILE_RE = /\.(?:webm|mp4|mov|m4v|ogv)(?:[?#].*)?$/i;
 
+/** A hosted video (YouTube, Vimeo, …) a block body stands for. */
+export interface HostedVideo {
+  /** Canonical page URL — what a `videoEmbed` layer carries. */
+  url: string;
+  /** The author's label (link text or iframe title), when there is one. */
+  title: string | null;
+  /** Width ÷ height: 16/9, or 9/16 for YouTube Shorts. */
+  aspectRatio: number;
+}
+
+/**
+ * Hosted videos in a block body: each TOP-LEVEL paragraph that is only a link
+ * (or bare URL) to a video page, or HTML block holding a provider `<iframe>`
+ * (core `findBlockVideoEmbed`). Deduplicated by page URL, in document order.
+ * A video link inside prose, a list or a quote is not one — it stays a link.
+ */
+export function extractHostedVideos(
+  contents: readonly MarkdownBlockNode[] | undefined,
+  limit = Infinity,
+): HostedVideo[] {
+  const found: HostedVideo[] = [];
+  const seen = new Set<string>();
+  for (const node of contents ?? []) {
+    if (found.length >= limit) break;
+    const video = findBlockVideoEmbed(node);
+    if (!video || seen.has(video.embed.watchUrl)) continue;
+    seen.add(video.embed.watchUrl);
+    found.push({
+      url: video.embed.watchUrl,
+      title: video.title,
+      aspectRatio: video.embed.aspectRatio,
+    });
+  }
+  return found;
+}
+
+/**
+ * Body nodes that render as their own visual layer rather than as prose: a
+ * Mermaid fence (a diagram) and a hosted-video paragraph (a player, via
+ * `appendRichContentLayers`). Repeating them as body text would print the
+ * diagram source or the video's link under the very thing they became.
+ */
+export function isMaterializedMediaNode(node: MarkdownBlockNode): boolean {
+  if (node.type === 'code') return node.lang?.trim().toLowerCase() === 'mermaid';
+  return findBlockVideoEmbed(node) !== null;
+}
+
 /** Plain text of a block's body contents (excluding the heading). */
 export function extractBodyPlainText(contents?: MarkdownBlockNode[]): string {
   if (!contents || contents.length === 0) return '';
   return contents
-    .filter((node) => !(node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid'))
+    .filter((node) => !isMaterializedMediaNode(node))
     .map((n) => extractPlainText(n))
     .join('\n')
     .trim();
@@ -325,7 +374,10 @@ export function extractImages(
     if (!node || typeof node !== 'object') return;
     const n = node as Record<string, unknown>;
     if (n.type === 'image' && typeof n.url === 'string' && n.url) {
-      found.push({ src: n.url, alt: typeof n.alt === 'string' ? n.alt : '' });
+      // A clip or recording in image syntax is not a picture for an image slot.
+      if (!mediaKindForUrl(n.url)) {
+        found.push({ src: n.url, alt: typeof n.alt === 'string' ? n.alt : '' });
+      }
       return;
     }
     if ((n.type === 'htmlBlock' || n.type === 'htmlInline') && Array.isArray(n.htmlChildren)) {
@@ -643,8 +695,11 @@ export function autoTemplatePreservesContent(
       return bodyText === '' || bodyText === representedText;
     }
     case 'videoWithCaption': {
+      // Exactly one video — a clip or a hosted player — and no other prose.
+      // A hosted video paragraph is never body text, so a section that is
+      // only that link has an empty body.
       const videos = extractEmbeddedVideos(nodes);
-      if (videos.length !== 1) return false;
+      if (videos.length + extractHostedVideos(nodes).length !== 1) return false;
       const bodyText = normalizeCoverageText(extractBodyPlainText(nodes));
       return bodyText === normalizeCoverageText(videos[0]?.alt ?? '');
     }
@@ -837,7 +892,19 @@ export function deriveTemplateInputs(
     }
     case 'videoWithCaption': {
       const video = extractFirstEmbeddedVideo(contents);
-      if (!video) return placeholders ? { caption: headingText } : null;
+      if (!video) {
+        // A hosted video plays in the same slot; the template swaps the clip
+        // layer for the provider's player when `videoSrc` is a video page.
+        const hosted = extractHostedVideos(contents, 1)[0];
+        if (hosted) {
+          return {
+            videoSrc: hosted.url,
+            videoAlt: hosted.title || headingText,
+            caption: headingText,
+          };
+        }
+        return placeholders ? { caption: headingText } : null;
+      }
       return {
         videoSrc: video.src,
         posterSrc: video.posterSrc,

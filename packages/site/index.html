@@ -9,12 +9,20 @@
         default-src 'self';
         script-src  'self' blob: 'unsafe-inline' 'wasm-unsafe-eval';
         style-src   'self' 'unsafe-inline';
-        img-src     'self' blob: data:;
+        img-src     'self' blob: data:
+                    https://i.ytimg.com
+                    https://www.dailymotion.com
+                    https://*.dmcdn.net;
         media-src   'self' blob:;
         font-src    'self' data:;
         connect-src 'self' blob: ws://localhost:* http://localhost:*;
         worker-src  'self' blob:;
-        frame-src   'self' blob: data:;
+        frame-src   'self' blob: data:
+                    https://www.youtube-nocookie.com
+                    https://player.vimeo.com
+                    https://www.loom.com
+                    https://www.dailymotion.com
+                    https://fast.wistia.net;
         child-src   'self' blob:;
         object-src  'none';
         base-uri    'self';

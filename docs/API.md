@@ -1096,6 +1096,11 @@ function parseHtmlToNodes(html: string, policy?: HtmlPolicy): HtmlNode[];
 function stringifyHtmlNodes(nodes: HtmlNode[]): string;
 function sanitizeHtmlNodes(nodes: HtmlNode[]): HtmlNode[];
 function sanitizeUrl(url: string): string;
+// 'video' | 'audio' | null by extension. Image syntax is markdown's only embed, so
+// MarkdownRenderer plays `![alt](clip.mp4)` / `![alt](bell.mp3)` and never treats them as
+// pictures (cover, template image slots, auto-template image counts). `.webm`/`.mp4`
+// under `audio/` are recorder narration (audio), as in narration discovery.
+function mediaKindForUrl(url: string): 'video' | 'audio' | null;
 
 function walkMarkdownTree(node: MarkdownNode, visitor: (node: MarkdownNode) => void): void;
 function findNodesByType(root: MarkdownDocument, type: string): MarkdownNode[];
@@ -1951,8 +1956,8 @@ interface BlockRendererProps {
 | `DocControlsBottom`     | Bottom bar with progress + counter.                                                                                                                                                                    |
 | `DocControlsSidebar`    | Side panel with block thumbnails.                                                                                                                                                                      |
 | `DocControlsSlideshow`  | Minimal slideshow controls (arrows + counter).                                                                                                                                                         |
-| `InlineVideoPlayer`     | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`.                                                                                                                                  |
-| `InlineAudioPlayer`     | Native `<audio>` wrapper resolving `src` via `MediaContext`.                                                                                                                                           |
+| `InlineVideoPlayer`     | Native `<video>` wrapper resolving `src`/`poster` via `MediaContext`; `label` names it. `MarkdownRenderer` uses it for raw `<video>` and for `![alt](clip.mp4)`.                                       |
+| `InlineAudioPlayer`     | Native `<audio>` wrapper resolving `src` via `MediaContext`; `label` names it. `MarkdownRenderer` uses it for raw `<audio>` and for `![alt](bell.mp3)`.                                                |
 | `AnimatedImageControls` | Play/pause pill + paused still frame over an animated GIF/WebP/APNG `<img>`; driven by `useAnimatedImage`. `MarkdownRenderer` images and the editor's image node use it.                               |
 | `JsonView`              | Read-only viewer for a JSON value bound to a Squisq-annotated schema.                                                                                                                                  |
 
@@ -2834,9 +2839,22 @@ interface PlainHtmlExportOptions {
   htmlPolicy?: HtmlPolicy; // default 'sanitize'
 }
 interface HtmlImportOptions {
-  sanitize?: boolean;
-} // default true
+  sanitize?: boolean; // default true
+  headMetadata?: boolean; // default true: <title> / <meta name="description"> → frontmatter
+}
 ```
+
+HTML import never turns head content into body text: `<head>`, `<title>`,
+`<script>`, `<style>` and similar elements are removed before sanitizing (the
+sanitizer would otherwise unwrap `<title>` and keep its text). With
+`headMetadata` (the default), the page's `<title>` and
+`<meta name="description">` become frontmatter `title` / `description`
+(whitespace collapsed, control characters removed, at most 1,024 characters);
+pass `false` where frontmatter is unwanted, such as an email body. Inline
+whitespace is laid out the way a browser shows it — runs collapse across
+element boundaries, block edges are trimmed, and edge spaces sit outside
+emphasis and links — so pretty-printed HTML imports without `&#x20;` escapes
+or `** bold **` runs.
 
 ### Subpath: Container
 
@@ -3070,6 +3088,8 @@ interface EditorShellProps {
   // Theming & view preferences
   themeInheritance?: ThemeInheritance; // default 'fonts'
   themeOverride?: Theme | null;
+  defaultThemeId?: string; // host fallback theme for docs whose frontmatter names none
+  defaultThemeLabel?: string; // picker label for that fallback; default 'Default'
   uxFont?: string; // font stack for the editor chrome (toolbar/tabs/status bar)
   viewPreferences?: ViewPreferences;
   onViewPreferencesChange?: (prefs: ViewPreferences) => void;
@@ -3081,6 +3101,17 @@ interface EditorShellProps {
   submitOnEnter?: () => void;
 }
 ```
+
+`defaultThemeId` is a host default for the document theme with fallback
+semantics: a document whose frontmatter names no theme (`squisq-theme`, legacy
+`themeId` / `theme`) renders with it, while a document's own theme always wins
+(`themeOverride`, by contrast, replaces the document's theme). Built-in and
+custom-theme ids are accepted. While it is set, the theme pickers offer a
+`"<defaultThemeLabel> (<theme name>)"` entry that removes the document's theme
+key, and choosing any concrete theme — `standard` included — writes it so the
+document stays pinned. Without it, choosing `standard` removes the key as
+before. `usePreviewSettings()` exposes the resolved `inheritedThemeId`,
+`inheritedThemeLabel`, and the document's own `explicitThemeId`.
 
 `writeCanvasSettings` controls only the WYSIWYG Write canvas and can be updated
 live by the host without changing document markdown. `textSize` is a CSS-pixel

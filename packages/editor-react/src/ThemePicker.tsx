@@ -36,6 +36,16 @@ export interface ThemePickerProps {
    */
   includeDefault?: boolean;
   /**
+   * Theme the "Default" entry stands for — a host default that a document
+   * without its own theme inherits. When set (with `includeDefault`), the
+   * entry and the trigger preview this theme and read
+   * `"<defaultLabel> (<theme name>)"`. Built-in ids and ids from
+   * `customThemes` are recognized; other ids are shown by id.
+   */
+  defaultThemeId?: string;
+  /** Label for the "Default" entry (e.g. a host's "Workspace default"). Defaults to `'Default'`. */
+  defaultLabel?: string;
+  /**
    * `'compact'` (default) renders a small toolbar trigger; `'full'`
    * stretches to fill the parent and is sized for dialog layouts.
    */
@@ -125,6 +135,8 @@ export function ThemePicker({
   value,
   onChange,
   includeDefault,
+  defaultThemeId,
+  defaultLabel,
   variant = 'compact',
   ariaLabel = 'Theme',
   customThemes,
@@ -163,16 +175,39 @@ export function ThemePicker({
     return findEntry(value) ?? null;
   }, [value, findEntry]);
 
+  // A host default makes "Default" a real, named theme: the entry previews
+  // it and says which one it is.
+  const baseDefaultLabel = defaultLabel?.trim() || 'Default';
+  const inheritedEntry = useMemo<ThemeEntry | null>(() => {
+    if (!defaultThemeId) return null;
+    return (
+      findEntry(defaultThemeId) ?? {
+        id: defaultThemeId,
+        name: defaultThemeId,
+        theme: resolveTheme('standard'),
+      }
+    );
+  }, [defaultThemeId, findEntry]);
+  const defaultEntryLabel = inheritedEntry
+    ? `${baseDefaultLabel} (${inheritedEntry.name})`
+    : baseDefaultLabel;
+
   // The trigger always wants *something* to preview. When `includeDefault`
   // is on and the value is empty, we treat the selection as the implicit
   // "Default" — the chip uses plain OS styling (white bg, dark text,
-  // italic) rather than the standard theme's actual dark-navy palette.
+  // italic) rather than the standard theme's actual dark-navy palette,
+  // unless a host default names the theme the document really inherits.
   const isDefault = !selectedEntry && includeDefault === true;
-  const previewEntry = selectedEntry ?? entryById('standard') ?? THEME_ENTRIES[0];
+  const isPlainDefault = isDefault && !inheritedEntry;
+  const previewEntry =
+    selectedEntry ??
+    (isDefault ? inheritedEntry : null) ??
+    entryById('standard') ??
+    THEME_ENTRIES[0];
   const triggerLabel = selectedEntry
     ? selectedEntry.name
     : includeDefault
-      ? 'Default'
+      ? defaultEntryLabel
       : (previewEntry?.name ?? 'Theme');
 
   const updatePosition = useCallback(() => {
@@ -266,18 +301,37 @@ export function ThemePicker({
           aria-label={ariaLabel}
           style={popoverStyle}
         >
-          {includeDefault && (
+          {includeDefault && inheritedEntry && (
             <button
               type="button"
               role="option"
               aria-selected={value === ''}
-              aria-label="Default"
+              aria-label={defaultEntryLabel}
+              className={`squisq-theme-picker-row${value === '' ? ' squisq-theme-picker-row--selected' : ''}`}
+              onClick={() => handleSelect('')}
+              title={defaultEntryLabel}
+            >
+              <ThemeNameChip theme={inheritedEntry.theme} label={defaultEntryLabel} />
+              <span className="squisq-theme-picker-row-meta">
+                <Swatches theme={inheritedEntry.theme} />
+                <span className="squisq-theme-picker-row-desc">
+                  Follows the default theme; the document saves no theme of its own.
+                </span>
+              </span>
+            </button>
+          )}
+          {includeDefault && !inheritedEntry && (
+            <button
+              type="button"
+              role="option"
+              aria-selected={value === ''}
+              aria-label={defaultEntryLabel}
               className={`squisq-theme-picker-row${value === '' ? ' squisq-theme-picker-row--selected' : ''}`}
               onClick={() => handleSelect('')}
             >
               <ThemeNameChip
                 theme={resolveTheme('standard')}
-                label="Default"
+                label={defaultEntryLabel}
                 className="squisq-theme-picker-name-chip--default"
               />
               <span className="squisq-theme-picker-row-meta">
@@ -402,11 +456,11 @@ export function ThemePicker({
             theme={previewEntry.theme}
             label={triggerLabel}
             className={`squisq-theme-picker-name-chip--trigger${
-              isDefault ? ' squisq-theme-picker-name-chip--default' : ''
+              isPlainDefault ? ' squisq-theme-picker-name-chip--default' : ''
             }`}
           />
         )}
-        {previewEntry && variant === 'full' && !isDefault && (
+        {previewEntry && variant === 'full' && !isPlainDefault && (
           <Swatches theme={previewEntry.theme} />
         )}
         <svg
