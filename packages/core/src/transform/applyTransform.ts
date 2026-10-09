@@ -1,3 +1,4 @@
+import { PRESENTATION_KEY } from './presentationPlan.js';
 /**
  * Apply Transform
  *
@@ -34,6 +35,12 @@ export function applyTransform(
   style: TransformStyleInput,
   options?: TransformOptions,
 ): TransformResult {
+  if (Object.prototype.hasOwnProperty.call(doc.frontmatter ?? {}, PRESENTATION_KEY)) {
+    return {
+      doc,
+      stats: { totalInputBlocks: doc.blocks.length, transformedBlocks: 0, insertedBlocks: 0 },
+    };
+  }
   const baseConfig = resolveTransformStyle(style, options?.registry);
   const config = options?.overrides
     ? { ...baseConfig, ...options.overrides, id: baseConfig.id }

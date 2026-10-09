@@ -274,10 +274,21 @@ export async function encodeAacTrack(
   const channels = audioBuffer.numberOfChannels;
 
   let encodeError: Error | null = null;
+  let inFlight = 0;
+  let wake: (() => void) | undefined;
   const encoder = new AudioEncoder({
-    output: (chunk, meta) => sink.addAudioChunk(chunk, meta ?? undefined),
+    output: (chunk, meta) => {
+      inFlight = Math.max(0, inFlight - 1);
+      try {
+        sink.addAudioChunk(chunk, meta ?? undefined);
+      } catch (error: unknown) {
+        encodeError = error instanceof Error ? error : new Error(String(error));
+      }
+      wake?.();
+    },
     error: (err) => {
       encodeError = err instanceof Error ? err : new Error(String(err));
+      wake?.();
     },
   });
 
@@ -296,11 +307,14 @@ export async function encodeAacTrack(
   try {
     for (let offset = 0; offset < total; offset += AAC_FRAME_SAMPLES) {
       if (encodeError) throw encodeError;
-      // Closing AudioData does not guarantee Chromium has released the native
-      // PCM surface. Drain at a short timeline bound rather than queueing a
-      // multi-minute narration in one burst.
-      if (encoder.encodeQueueSize >= queueLimit) {
-        await encoder.flush();
+      // Bound native PCM by completed output, not just the request queue.
+      // Mid-stream flush restarts AAC priming on macOS and overlaps DTS at
+      // every batch boundary. Keep one continuous stream and flush only once.
+      while (inFlight >= queueLimit) {
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+        wake = undefined;
         if (encodeError) throw encodeError;
       }
 
@@ -320,6 +334,7 @@ export async function encodeAacTrack(
         data: planar,
       });
       try {
+        inFlight++;
         encoder.encode(audioData);
       } finally {
         audioData.close();

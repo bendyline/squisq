@@ -112,6 +112,50 @@ describe('Write view source edits', () => {
     expect(live.ctx.markdownSource).not.toContain('let a = 1;');
   });
 
+  it('undoes metadata-only source edits without undoing narration or body text', async () => {
+    const original = '{[audio src=take.webm anchor=document]}\n\n' + DOC;
+    const live = await mountWrite(original);
+    const next = '---\nsquisq-presentation: {"version":1}\n---\n' + original;
+    act(() => {
+      live.ctx.applySourceEdits([{ start: 0, end: original.length, text: next }], {
+        baseSource: original,
+      });
+    });
+    await waitFor(() =>
+      expect(live.editor.state.doc.attrs.sourceFrontmatter).toContain('squisq-presentation'),
+    );
+    act(() => {
+      live.editor.commands.undo();
+    });
+    await waitFor(() => expect(live.ctx.markdownSource).not.toContain('squisq-presentation'));
+    expect(live.ctx.markdownSource).toContain('anchor=document');
+    expect(live.ctx.markdownSource).toContain('First paragraph.');
+    act(() => {
+      live.editor.commands.redo();
+    });
+    await waitFor(() => expect(live.ctx.markdownSource).toContain('squisq-presentation'));
+    expect(live.ctx.markdownSource).toContain('anchor=document');
+  });
+
+  it('keeps document frontmatter out of a block slice after changing layouts', async () => {
+    const live = await mountWrite('---\nsquisq-theme: gezellig\n---\n\n' + DOC);
+    act(() => {
+      live.ctx.setLayoutMode('block');
+    });
+    await waitFor(() => expect(live.editor.state.doc.attrs.sourceFrontmatter).toBe(''));
+    act(() => {
+      live.editor.commands.insertContent('Added words. ');
+    });
+    await waitFor(() => expect(live.ctx.markdownSource).toContain('Added words.'));
+    expect(live.ctx.markdownSource.match(/squisq-theme/g)).toHaveLength(1);
+    act(() => {
+      live.ctx.setLayoutMode('document');
+    });
+    await waitFor(() =>
+      expect(live.editor.state.doc.attrs.sourceFrontmatter).toContain('squisq-theme'),
+    );
+  });
+
   it('inserts a block after the caret block, leaving the caret, undone in one step', async () => {
     const live = await mountWrite();
     const { editor } = live;

@@ -85,6 +85,16 @@ export interface DocDiagnostic {
  * A complete visual doc for an article.
  */
 export interface Doc {
+  /** Projection-only source/timing metadata from the document narration take. */
+  presentationNarration?: {
+    sourceText: string;
+    src: string;
+    startTime: number;
+    duration: number;
+    bookmarks: AudioBookmark[];
+  };
+  /** Projection-only guard: never compile an accepted plan twice. */
+  presentationApplied?: boolean;
   /** Article ID this doc belongs to */
   articleId: string;
 

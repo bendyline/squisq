@@ -26,6 +26,20 @@ function makeInput(overrides: Partial<DiagramBlockInput> = {}): DiagramBlockInpu
 }
 
 describe('diagramBlock template', () => {
+  it('can paint a themed opaque surface for standalone slides, including empty diagrams', () => {
+    const theme = resolveTheme('warm-earth');
+    const ctx = createTemplateContext(theme, 0, 1, VIEWPORT_PRESETS.landscape);
+    for (const nodes of [[], [{ id: 'a', label: 'First', x: 0, y: 0, w: 180, h: 64 }]]) {
+      const layers = diagramBlock(makeInput({ background: 'surface', nodes }), ctx);
+      const background = layers[0] as ShapeLayer;
+      expect(background.id).toBe('diagram-bg');
+      expect(background.content.fill).toContain(theme.colors.backgroundLight);
+      expect(background.position).toEqual({ x: 0, y: 0, width: '100%', height: '100%' });
+      expect(
+        diagramBlock(makeInput({ nodes }), ctx).some((layer) => layer.id === 'diagram-bg'),
+      ).toBe(false);
+    }
+  });
   it('emits node card + label layers for each child', () => {
     const ctx = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
     ctx.children = [

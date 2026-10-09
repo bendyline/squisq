@@ -1153,6 +1153,15 @@ export async function renderDocToMp4(
   options: RenderDocToMp4Options,
 ): Promise<RenderDocToMp4Result> {
   options.signal?.throwIfAborted();
+  if (
+    Object.prototype.hasOwnProperty.call(doc.frontmatter ?? {}, 'squisq-presentation') &&
+    !doc.presentationApplied
+  ) {
+    const { resolveAudioMapping, buildPreviewDoc } = await import('@bendyline/squisq/doc');
+    doc = buildPreviewDoc(await resolveAudioMapping(doc, container));
+  }
+  const presentationError = doc.diagnostics?.find((item) => item.code === 'presentation-invalid');
+  if (presentationError) throw new Error(presentationError.message);
   const fps = options.fps ?? 30;
   const quality = options.quality ?? 'normal';
   const orientation = options.orientation ?? 'landscape';

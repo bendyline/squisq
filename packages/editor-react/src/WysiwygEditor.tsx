@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { Selection } from '@tiptap/pm/state';
+import { Extension } from '@tiptap/core';
 import type { EditorView as ProseMirrorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
@@ -143,6 +144,28 @@ const BLOCK_TAG_DATA_VALUES = {
 function pickEmptyPrompt(): string {
   return EMPTY_PROMPTS[Math.floor(Math.random() * EMPTY_PROMPTS.length)];
 }
+
+// Keep hidden source metadata in the document so ProseMirror history can
+// undo a metadata-only edit together with any accompanying body change.
+const SourceFrontmatter = Extension.create<{ initial: string }>({
+  name: 'sourceFrontmatter',
+  addOptions() {
+    return { initial: '' };
+  },
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['doc'],
+        attributes: {
+          sourceFrontmatter: {
+            default: this.options.initial,
+            rendered: false,
+          },
+        },
+      },
+    ];
+  },
+});
 
 export interface WysiwygEditorProps {
   /**
@@ -375,6 +398,7 @@ export function WysiwygEditor({
     shouldRerenderOnTransaction: false,
     editable: !readOnly,
     extensions: [
+      SourceFrontmatter.configure({ initial: frontmatterRef.current }),
       StarterKit.configure({
         // Disable built-in heading; we use HeadingWithTemplate instead
         heading: false,
@@ -444,7 +468,7 @@ export function WysiwygEditor({
       // parse remains debounced in EditorContext, so correctness here does not
       // reintroduce parse-on-every-keystroke work.
       const bodyMd = persistFromWrite(tiptapToMarkdown(ed.getHTML()), wrapStateRef.current);
-      const newSource = frontmatterRef.current + bodyMd;
+      const newSource = String(ed.state.doc.attrs.sourceFrontmatter ?? '') + bodyMd;
       pendingLocalSourcesRef.current.push(newSource);
       lastSourceRef.current = newSource;
       setEditorSourceRef.current(newSource);
@@ -808,11 +832,18 @@ export function WysiwygEditor({
     if (layoutMode === 'document') {
       // Replace only what changed: unchanged nodes keep their widgets, the
       // caret and scroll survive, and the update is one undo step.
-      replaceDocumentMinimal(editor, content);
+      replaceDocumentMinimal(editor, content, frontmatter);
     } else {
       // Block/timeline layouts swap in a different block's slice here; a
       // diff against the previous block gains nothing.
-      editor.commands.setContent(content);
+      editor
+        .chain()
+        .setContent(content)
+        .command(({ tr }) => {
+          tr.setDocAttribute('sourceFrontmatter', frontmatter);
+          return true;
+        })
+        .run();
     }
     lastSourceRef.current = editorSource;
     isExternalUpdate.current = false;

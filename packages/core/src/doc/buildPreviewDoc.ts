@@ -1,3 +1,4 @@
+import { applySavedPresentation } from '../transform/presentationCompiler.js';
 /**
  * buildPreviewDoc — Converts a markdown-derived Doc into a player-ready Doc
  * with TemplateBlock slides and interleaved images.
@@ -416,6 +417,8 @@ function resolveDocumentTitle(doc: Doc, provided?: string): string {
 }
 
 export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc {
+  doc = applySavedPresentation(doc);
+  if (doc.presentationApplied) options = { ...options, interleaveImages: false };
   // Container templates (`diagram`, `drawing`) render their children as
   // nodes/shapes, so those children must not also become preview slides.
   const flat = flattenRenderableBlocks(doc.blocks);

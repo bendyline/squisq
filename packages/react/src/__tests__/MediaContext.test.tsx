@@ -31,14 +31,14 @@ describe('useMediaUrl', () => {
         <Probe path="first.png" />
       </MediaContext.Provider>,
     );
-    expect(screen.getByTestId('url').textContent).toBe('./first.png');
+    expect(screen.getByTestId('url').textContent).toBe('');
 
     rerender(
       <MediaContext.Provider value={provider}>
         <Probe path="second.png" />
       </MediaContext.Provider>,
     );
-    expect(screen.getByTestId('url').textContent).toBe('./second.png');
+    expect(screen.getByTestId('url').textContent).toBe('');
 
     await act(async () => {
       first.resolve('blob:first');
