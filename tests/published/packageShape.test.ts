@@ -47,7 +47,9 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // These are coarse release guardrails, not byte-level regression targets.
   // Keep enough headroom that normal feature work does not require continually
   // ratcheting the limits while still catching accidental payload additions.
-  '@bendyline/squisq': 650_000,
+  // Core packs to ~651 KB with presentation planning/compiler support.
+  // Leave roughly 15% headroom for normal runtime and declaration growth.
+  '@bendyline/squisq': 750_000,
   // Includes the three Font Awesome OpenType faces embedded for portable
   // DOCX/PDF/PPTX/EPUB inline-icon export.
   '@bendyline/squisq-formats': 700_000,
