@@ -78,27 +78,38 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
   // Fast path: no provider or absolute URL — return synchronously, skip effect entirely
   const needsProvider = !isAbsolute && !!provider;
 
-  const [url, setUrl] = useState(fallback);
+  const [resolved, setResolved] = useState<{
+    path: string;
+    provider: MediaProvider | null;
+    policy: ResourcePolicy;
+    url: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!needsProvider) {
-      setUrl(fallback);
       return;
     }
 
     let cancelled = false;
-    // Never show the prior asset while a new provider/path is resolving.
-    setUrl(fallback);
+    // Relative workspace paths must not hit the page origin while resolving.
+    // Bind the result to its provider/path so even the render before this
+    // effect runs cannot expose the previous asset or an unresolved URL.
     provider!.resolveUrl(safePath).then(
       (resolved) => {
         if (!cancelled) {
-          setUrl(isResourceUrlAllowed(resolved, resourcePolicy) ? resolved : '');
+          setResolved({
+            path: safePath,
+            provider,
+            policy: resourcePolicy,
+            url: isResourceUrlAllowed(resolved, resourcePolicy) ? resolved : '',
+          });
         }
       },
       () => {
         // Resolution failures should be non-fatal and must not become
         // unhandled promise rejections in rendering surfaces.
-        if (!cancelled) setUrl(fallback);
+        if (!cancelled)
+          setResolved({ path: safePath, provider, policy: resourcePolicy, url: fallback });
       },
     );
 
@@ -109,5 +120,11 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
 
   // When provider is not needed, return fallback directly to avoid
   // the one-frame delay from the initial useState → useEffect cycle
-  return needsProvider ? url : fallback;
+  return !needsProvider
+    ? fallback
+    : resolved?.path === safePath &&
+        resolved.provider === provider &&
+        resolved.policy === resourcePolicy
+      ? resolved.url
+      : '';
 }

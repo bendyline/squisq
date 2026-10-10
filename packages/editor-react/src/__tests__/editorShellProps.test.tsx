@@ -1000,3 +1000,24 @@ describe('<Toolbar> Insert menu', () => {
     });
   });
 });
+
+describe('preview keeps the active editing surface', () => {
+  it.each(['wysiwyg', 'raw'] as const)(
+    'preserves %s identity through preview for undo history',
+    (view) => {
+      render(<EditorShell initialMarkdown="# Story" initialView={view} />);
+      const editing = screen.getByTestId(
+        view === 'raw' ? 'raw-editor-stub' : 'wysiwyg-editor-stub',
+      );
+      fireEvent.click(screen.getByRole('tab', { name: 'Slideshow' }));
+      expect(editing.isConnected).toBe(true);
+      expect(editing.closest('[hidden]')).not.toBeNull();
+      expect(screen.getByTestId('preview-stub')).toBeTruthy();
+      fireEvent.click(screen.getByRole('tab', { name: view === 'raw' ? 'Source' : 'Write' }));
+      expect(screen.getByTestId(view === 'raw' ? 'raw-editor-stub' : 'wysiwyg-editor-stub')).toBe(
+        editing,
+      );
+      expect(editing.closest('[hidden]')).toBeNull();
+    },
+  );
+});

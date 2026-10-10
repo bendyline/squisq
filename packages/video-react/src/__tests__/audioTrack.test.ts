@@ -196,12 +196,13 @@ describe('renderAudioTimeline', () => {
 });
 
 describe('encodeAacTrack', () => {
-  it('flushes a long narration in bounded queue batches', async () => {
+  it('bounds a continuous narration by completed output and flushes only at the end', async () => {
     let queueSize = 0;
     let maxQueueSize = 0;
     let flushCount = 0;
 
     class FakeAudioEncoder {
+      constructor(private readonly callbacks: AudioEncoderInit) {}
       state: 'unconfigured' | 'configured' | 'closed' = 'unconfigured';
       get encodeQueueSize(): number {
         return queueSize;
@@ -212,10 +213,14 @@ describe('encodeAacTrack', () => {
       encode(): void {
         queueSize++;
         maxQueueSize = Math.max(maxQueueSize, queueSize);
+        setTimeout(() => {
+          queueSize--;
+          this.callbacks.output({} as EncodedAudioChunk, {});
+        }, 0);
       }
       async flush(): Promise<void> {
         flushCount++;
-        queueSize = 0;
+        await new Promise((resolve) => setTimeout(resolve, 1));
       }
       close(): void {
         this.state = 'closed';
@@ -240,7 +245,7 @@ describe('encodeAacTrack', () => {
     await encodeAacTrack(audioBuffer, { addAudioChunk: vi.fn() }, 128_000);
 
     expect(maxQueueSize).toBeLessThan(100);
-    expect(flushCount).toBeGreaterThan(1);
+    expect(flushCount).toBe(1);
   });
 });
 

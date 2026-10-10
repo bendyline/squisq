@@ -40,9 +40,10 @@ import {
   getThemeFont,
   themedFontSize,
   getMotionProfile,
+  themedSurfaceGradient,
 } from '../utils/themeUtils.js';
 import { DIAGRAM_LABEL_LINE_HEIGHT, fitDiagramLabel } from '../utils/diagramText.js';
-import { fitProse, type ProseFit } from './captionUtils.js';
+import { createBackgroundLayer, fitProse, type ProseFit } from './captionUtils.js';
 import {
   anchorPoint,
   connectorPath,
@@ -500,6 +501,10 @@ function nodesFromTemplateData(input: DiagramBlockInput): ResolvedDiagram {
 export function diagramBlock(input: DiagramBlockInput, context: TemplateContext): Layer[] {
   const { theme, viewport, children = [] } = context;
   const colors = input.colorScheme ? resolveColorScheme(context, input.colorScheme) : undefined;
+  const background =
+    input.background === 'surface'
+      ? [createBackgroundLayer('diagram-bg', themedSurfaceGradient(context, 170))]
+      : [];
 
   const resolved =
     children.length > 0
@@ -512,6 +517,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
     // Empty diagram — render a single hint label so the block has visible
     // content. Wrapped within the frame so a long heading cannot run off.
     return [
+      ...background,
       {
         type: 'text',
         id: 'diagram-empty',
@@ -566,7 +572,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
     h: n.h * scale,
   });
 
-  const layers: Layer[] = [];
+  const layers: Layer[] = [...background];
 
   // Optional title above the diagram.
   if (input.title) {

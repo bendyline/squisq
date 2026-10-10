@@ -1,3 +1,5 @@
+import { DYNAMIC_PRESENTATION_STYLE, usesDynamicPresentation } from './presentationHints.js';
+import { PRESENTATION_KEY } from './presentationPlan.js';
 /**
  * Apply Transform
  *
@@ -35,6 +37,27 @@ export function applyTransform(
   options?: TransformOptions,
 ): TransformResult {
   const baseConfig = resolveTransformStyle(style, options?.registry);
+  if (baseConfig.contentMode === 'presentation') {
+    return {
+      doc: {
+        ...doc,
+        frontmatter: { ...doc.frontmatter, 'squisq-transform': DYNAMIC_PRESENTATION_STYLE },
+      },
+      stats: { totalInputBlocks: doc.blocks.length, transformedBlocks: 0, insertedBlocks: 0 },
+    };
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(doc.frontmatter ?? {}, PRESENTATION_KEY) &&
+    !usesDynamicPresentation(doc)
+  ) {
+    return {
+      doc,
+      stats: { totalInputBlocks: doc.blocks.length, transformedBlocks: 0, insertedBlocks: 0 },
+    };
+  }
+  if (usesDynamicPresentation(doc)) {
+    doc = { ...doc, frontmatter: { ...doc.frontmatter, 'squisq-transform': baseConfig.id } };
+  }
   const config = options?.overrides
     ? { ...baseConfig, ...options.overrides, id: baseConfig.id }
     : baseConfig;

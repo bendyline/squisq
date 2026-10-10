@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { Selection } from '@tiptap/pm/state';
+import { Extension } from '@tiptap/core';
 import type { EditorView as ProseMirrorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
@@ -143,6 +144,28 @@ const BLOCK_TAG_DATA_VALUES = {
 function pickEmptyPrompt(): string {
   return EMPTY_PROMPTS[Math.floor(Math.random() * EMPTY_PROMPTS.length)];
 }
+
+// Keep hidden source metadata in the document so ProseMirror history can
+// undo a metadata-only edit together with any accompanying body change.
+const SourceFrontmatter = Extension.create<{ initial: string }>({
+  name: 'sourceFrontmatter',
+  addOptions() {
+    return { initial: '' };
+  },
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['doc'],
+        attributes: {
+          sourceFrontmatter: {
+            default: this.options.initial,
+            rendered: false,
+          },
+        },
+      },
+    ];
+  },
+});
 
 export interface WysiwygEditorProps {
   /**
@@ -285,6 +308,7 @@ export function WysiwygEditor({
   const resolvedPlaceholder = useMemo(() => placeholder ?? pickEmptyPrompt(), [placeholder]);
   const isExternalUpdate = useRef(false);
   const lastSourceRef = useRef(editorSource);
+  const sourceLayoutRef = useRef(layoutMode);
   // React may commit several rapid editor updates one at a time. Remember
   // every locally emitted value so an intermediate commit is not mistaken
   // for an external replacement and fed back through setContent(), which
@@ -336,10 +360,8 @@ export function WysiwygEditor({
       cancelled = true;
     };
   }, [mediaProvider, mediaRevision]);
-  // Preserve frontmatter across edits — hidden from WYSIWYG but prepended on
-  // save. In block mode the bound slice carries no frontmatter, so this is an
-  // empty string and the splice in `setEditorSource` keeps the doc's real
-  // frontmatter intact.
+  // Frontmatter for the bound source channel. Block slices normally carry
+  // none; their source writer preserves the full document's metadata.
   const frontmatterRef = useRef(stripFrontmatter(editorSource).frontmatter);
   // The document's detected wrap convention — the wrapping sibling of
   // frontmatterRef. When set, Tiptap edits the UNWRAPPED body and every
@@ -375,6 +397,7 @@ export function WysiwygEditor({
     shouldRerenderOnTransaction: false,
     editable: !readOnly,
     extensions: [
+      SourceFrontmatter.configure({ initial: frontmatterRef.current }),
       StarterKit.configure({
         // Disable built-in heading; we use HeadingWithTemplate instead
         heading: false,
@@ -444,7 +467,11 @@ export function WysiwygEditor({
       // parse remains debounced in EditorContext, so correctness here does not
       // reintroduce parse-on-every-keystroke work.
       const bodyMd = persistFromWrite(tiptapToMarkdown(ed.getHTML()), wrapStateRef.current);
-      const newSource = frontmatterRef.current + bodyMd;
+      const frontmatter =
+        sourceLayoutRef.current === 'document'
+          ? String(ed.state.doc.attrs.sourceFrontmatter ?? '')
+          : frontmatterRef.current;
+      const newSource = frontmatter + bodyMd;
       pendingLocalSourcesRef.current.push(newSource);
       lastSourceRef.current = newSource;
       setEditorSourceRef.current(newSource);
@@ -768,6 +795,8 @@ export function WysiwygEditor({
   // path reloads the card with the newly selected block's slice.
   useEffect(() => {
     if (!editor) return;
+    const layoutChanged = sourceLayoutRef.current !== layoutMode;
+    sourceLayoutRef.current = layoutMode;
     const pendingIndex = pendingLocalSourcesRef.current.lastIndexOf(editorSource);
     if (pendingIndex >= 0) {
       // This state value came from Tiptap itself. Drop it and every older
@@ -805,14 +834,31 @@ export function WysiwygEditor({
       wrapStateRef.current = null;
     }
     const content = markdownToTiptap(displayBody);
-    if (layoutMode === 'document') {
+    // Frontmatter belongs to the whole document, not the selected slice.
+    // Changing a root-node attribute makes ProseMirror rebuild every node
+    // view, even with a minimal content diff. Keep it stable in scoped
+    // layouts; onUpdate emits only the bound channel's frontmatter there.
+    const storedFrontmatter =
+      layoutMode === 'document'
+        ? frontmatter
+        : String(editor.state.doc.attrs.sourceFrontmatter ?? '');
+    if (layoutMode === 'document' || layoutChanged) {
       // Replace only what changed: unchanged nodes keep their widgets, the
       // caret and scroll survive, and the update is one undo step.
-      replaceDocumentMinimal(editor, content);
+      // Entering a block/timeline layout also keeps the active block's media
+      // mounted instead of restarting it when the surrounding blocks leave.
+      replaceDocumentMinimal(editor, content, storedFrontmatter);
     } else {
-      // Block/timeline layouts swap in a different block's slice here; a
-      // diff against the previous block gains nothing.
-      editor.commands.setContent(content);
+      // Navigation within block/timeline layouts swaps in another block's
+      // slice; a diff against the previous block gains nothing.
+      editor
+        .chain()
+        .setContent(content)
+        .command(({ tr }) => {
+          tr.setDocAttribute('sourceFrontmatter', storedFrontmatter);
+          return true;
+        })
+        .run();
     }
     lastSourceRef.current = editorSource;
     isExternalUpdate.current = false;

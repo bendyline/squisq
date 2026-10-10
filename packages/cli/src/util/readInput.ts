@@ -294,7 +294,10 @@ async function buildBareMarkdownContainer(
   // per-file `<audio>.timing.json` sidecars.
   refs.add('timing.json');
   for (const ref of [...refs]) {
-    if (NARRATION_EXTENSIONS.has(extname(stripUrlSuffix(ref)).toLowerCase())) {
+    if (
+      NARRATION_EXTENSIONS.has(extname(stripUrlSuffix(ref)).toLowerCase()) ||
+      /\.(?:webm|mp4)$/i.test(stripUrlSuffix(ref))
+    ) {
       refs.add(`${stripUrlSuffix(ref)}.timing.json`);
     }
   }

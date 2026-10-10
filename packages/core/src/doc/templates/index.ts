@@ -326,6 +326,28 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
 
   for (const [segmentIndex, segmentBlocks] of blocksBySegment) {
     const audioSegment = audioSegments[segmentIndex];
+    if (segmentBlocks.every(({ block }) => (block as TemplateBlock).timelineLocked === true)) {
+      for (const { block, originalIndex } of segmentBlocks) {
+        const expanded = materializeScheduledBlock(
+          block,
+          originalIndex,
+          totalBlocks,
+          theme,
+          viewport,
+          effectivePersistentLayers,
+          expandedPersistentLayers,
+          registry,
+          failureMode,
+          onDiagnostic,
+          motion,
+          opts.mediaAspectRatios,
+        );
+        expanded.startTime = (block as TemplateBlock).sourceStartTime ?? 0;
+        expanded.duration = block.duration;
+        expandedBlocks[originalIndex] = expanded;
+      }
+      continue;
+    }
     if (!audioSegment) {
       // No audio segment info - use simple sequential timing within the segment
       let offsetTime = 0;

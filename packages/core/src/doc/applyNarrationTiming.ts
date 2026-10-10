@@ -352,6 +352,18 @@ export async function applyNarrationTiming(
       ...doc,
       blocks,
       duration,
+      presentationNarration: {
+        sourceText: timing.sourceText,
+        src: clip.src,
+        startTime: clip.startAt,
+        duration: playedDuration,
+        bookmarks: timing.bookmarks.flatMap((bookmark) => {
+          const time = timeMap ? timeMap.sourceToPlayed(bookmark.time) : bookmark.time;
+          return time !== null && time >= 0 && time <= playedDuration
+            ? [{ ...bookmark, time: clip.startAt + time }]
+            : [];
+        }),
+      },
       ...(captions ? { captions } : {}),
       ...(ctx.diagnostics.length > 0
         ? { diagnostics: [...(doc.diagnostics ?? []), ...ctx.diagnostics] }

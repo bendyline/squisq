@@ -82,6 +82,29 @@ describe('readInput', () => {
     );
   });
 
+  it('hydrates generated WebM/MP4 narration sidecars beside document media', async () => {
+    await mkdir(join(tempDir, 'story_files', 'audio'), { recursive: true });
+    for (const extension of ['webm', 'mp4']) {
+      const media = `story_files/audio/take.${extension}`;
+      await writeFile(join(tempDir, media), Buffer.from([1]));
+      await writeFile(
+        join(tempDir, `${media}.timing.json`),
+        JSON.stringify({
+          version: 3,
+          sourceText: 'Narrated',
+          duration: 1,
+          blocks: [],
+          bookmarks: [],
+        }),
+      );
+      const source = join(tempDir, 'story.md');
+      await writeFile(source, `{[audio src=${media} anchor=document]}\n\n# Narrated`);
+      const result = await readInput(source);
+      expect(await result.container.readFile(`${media}.timing.json`)).not.to.equal(null);
+      expect(result.doc.presentationNarration?.duration).to.equal(1);
+    }
+  });
+
   it('preserves the exact reason of a pre-aborted read', async () => {
     const controller = new AbortController();
     const reason = new Error('caller cancelled input read');

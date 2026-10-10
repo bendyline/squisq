@@ -31,6 +31,7 @@ import { dirname, join, resolve as resolvePath } from 'node:path';
 import type { Doc, MotionSpec } from '@bendyline/squisq/schemas';
 import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import { flattenBlocks } from '@bendyline/squisq/doc';
+import { usesDynamicPresentation } from '@bendyline/squisq/transform';
 import type { DashboardStyleId } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type {
@@ -1153,6 +1154,16 @@ export async function renderDocToMp4(
   options: RenderDocToMp4Options,
 ): Promise<RenderDocToMp4Result> {
   options.signal?.throwIfAborted();
+  if (
+    (Object.prototype.hasOwnProperty.call(doc.frontmatter ?? {}, 'squisq-presentation') ||
+      usesDynamicPresentation(doc)) &&
+    !doc.presentationApplied
+  ) {
+    const { resolveAudioMapping, buildPreviewDoc } = await import('@bendyline/squisq/doc');
+    doc = buildPreviewDoc(await resolveAudioMapping(doc, container));
+  }
+  const presentationError = doc.diagnostics?.find((item) => item.code === 'presentation-invalid');
+  if (presentationError) throw new Error(presentationError.message);
   const fps = options.fps ?? 30;
   const quality = options.quality ?? 'normal';
   const orientation = options.orientation ?? 'landscape';

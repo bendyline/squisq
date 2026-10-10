@@ -89,6 +89,8 @@ export interface AccentImage {
  * Base properties shared by all template blocks.
  */
 interface BaseTemplateBlock {
+  /** Compiled presentation timing is authoritative; pacing must not merge or split it. */
+  timelineLocked?: boolean;
   /** Unique block ID */
   id: string;
   /** Block duration in seconds */
@@ -719,6 +721,8 @@ export interface DiagramTemplateEdge {
  */
 export interface DiagramBlockInput extends BaseTemplateBlock {
   template: 'diagram';
+  /** Paint an opaque themed surface for standalone slides; omitted stays transparent. */
+  background?: 'surface';
   /** Optional diagram title displayed above the canvas. */
   title?: string;
   /** Color scheme for nodes and edges. */
