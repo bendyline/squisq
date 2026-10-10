@@ -108,11 +108,7 @@ export type LayerMaterializationDiagnostic =
 
 /** Identifies which path produced a materialized layer graph. */
 export type LayerMaterializationSource =
-  | 'authored'
-  | 'template'
-  | 'rich-content'
-  | 'fallback'
-  | 'empty';
+  'authored' | 'template' | 'rich-content' | 'fallback' | 'empty';
 
 /**
  * Complete result from {@link materializeBlockLayers}. Failures are data, not
@@ -425,34 +421,28 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
   );
 
   return [
-    ...images.map(
-      (image): RichMediaItem => ({
-        kind: 'image',
-        src: image.src,
-        alt: image.alt,
-        ...(image.width && image.height ? { aspectRatio: image.width / image.height } : {}),
-      }),
-    ),
-    ...videos.map(
-      (video): RichMediaItem => ({
-        kind: 'video',
-        src: video.src,
-        ...(video.posterSrc ? { posterSrc: video.posterSrc } : {}),
-        alt: video.alt,
-        aspectRatio: 16 / 9,
-        ...(video.startAt != null ? { startAt: video.startAt } : {}),
-        ...(video.clipStart != null ? { clipStart: video.clipStart } : {}),
-        ...(video.clipEnd != null ? { clipEnd: video.clipEnd } : {}),
-      }),
-    ),
-    ...hosted.map(
-      (video): RichMediaItem => ({
-        kind: 'videoEmbed',
-        url: video.url,
-        title: video.title,
-        aspectRatio: video.aspectRatio,
-      }),
-    ),
+    ...images.map((image): RichMediaItem => ({
+      kind: 'image',
+      src: image.src,
+      alt: image.alt,
+      ...(image.width && image.height ? { aspectRatio: image.width / image.height } : {}),
+    })),
+    ...videos.map((video): RichMediaItem => ({
+      kind: 'video',
+      src: video.src,
+      ...(video.posterSrc ? { posterSrc: video.posterSrc } : {}),
+      alt: video.alt,
+      aspectRatio: 16 / 9,
+      ...(video.startAt != null ? { startAt: video.startAt } : {}),
+      ...(video.clipStart != null ? { clipStart: video.clipStart } : {}),
+      ...(video.clipEnd != null ? { clipEnd: video.clipEnd } : {}),
+    })),
+    ...hosted.map((video): RichMediaItem => ({
+      kind: 'videoEmbed',
+      url: video.url,
+      title: video.title,
+      aspectRatio: video.aspectRatio,
+    })),
     ...sources.map((source): RichMediaItem => ({ kind: 'mermaid', source, aspectRatio: 16 / 9 })),
     ...embeddedSpatialMedia(block),
   ];

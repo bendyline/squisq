@@ -1261,16 +1261,14 @@ function buildIconCategory(family: IconFamily, label: string): PickerCategory {
     id: `fa-${family}`,
     label,
     tab: tabIcon,
-    entries: familyIcons.map(
-      (i: IconEntry): PickerEntry => ({
-        kind: 'icon',
-        family: i.family,
-        name: i.name,
-        label: i.label,
-        keywords: i.keywords,
-        token: canonicalIconToken(i),
-      }),
-    ),
+    entries: familyIcons.map((i: IconEntry): PickerEntry => ({
+      kind: 'icon',
+      family: i.family,
+      name: i.name,
+      label: i.label,
+      keywords: i.keywords,
+      token: canonicalIconToken(i),
+    })),
   };
 }
 
@@ -1279,21 +1277,17 @@ function buildIconCategory(family: IconFamily, label: string): PickerCategory {
  * FontAwesome families. Drives the EmojiPicker tabs.
  */
 export const PICKER_CATEGORIES: PickerCategory[] = [
-  ...EMOJI_CATEGORIES.map(
-    (c): PickerCategory => ({
-      id: c.id,
-      label: c.label,
-      tab: { kind: 'emoji', char: c.icon },
-      entries: c.emojis.map(
-        (e): PickerEntry => ({
-          kind: 'emoji',
-          char: e.char,
-          name: e.name,
-          keywords: e.keywords,
-        }),
-      ),
-    }),
-  ),
+  ...EMOJI_CATEGORIES.map((c): PickerCategory => ({
+    id: c.id,
+    label: c.label,
+    tab: { kind: 'emoji', char: c.icon },
+    entries: c.emojis.map((e): PickerEntry => ({
+      kind: 'emoji',
+      char: e.char,
+      name: e.name,
+      keywords: e.keywords,
+    })),
+  })),
   buildIconCategory('brands', 'Brands'),
   buildIconCategory('solid', 'Solid'),
   buildIconCategory('regular', 'Regular'),

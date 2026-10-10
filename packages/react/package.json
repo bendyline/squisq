@@ -100,16 +100,16 @@
   },
   "dependencies": {
     "@bendyline/squisq": "2.11.18",
-    "@fortawesome/fontawesome-free": "7.2.0",
-    "mermaid": "11.16.1"
+    "@fortawesome/fontawesome-free": "7.3.1",
+    "mermaid": "11.17.2"
   },
   "devDependencies": {
-    "@types/react": "18.3.28",
-    "preact": "10.29.0",
+    "@types/react": "18.3.31",
+    "preact": "10.29.8",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "@testing-library/dom": "10.4.1",
-    "@testing-library/react": "16.3.2",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
     "@testing-library/jest-dom": "6.9.1",
     "jsdom": "25.0.1",
     "tsup": "8.5.1",

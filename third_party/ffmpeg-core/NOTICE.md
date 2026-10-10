@@ -1,7 +1,7 @@
-# @ffmpeg/core 0.12.9 - license and source notice
+# @ffmpeg/core 0.12.10 - license and source notice
 
 Squisq distributes the following unmodified files from the ESM build of
-`@ffmpeg/core@0.12.9` with its demo site:
+`@ffmpeg/core@0.12.10` with its demo site:
 
 | File               | SHA-256                                                            |
 | ------------------ | ------------------------------------------------------------------ |
@@ -13,7 +13,7 @@ Squisq distributes the following unmodified files from the ESM build of
 `@ffmpeg/core` is a WebAssembly build with an upstream dependency on the
 FFmpeg project and external libraries. The license applicable to a particular
 core build follows the components and configuration used to produce it. The
-`@ffmpeg/core@0.12.9` package metadata declares `GPL-2.0-or-later`.
+`@ffmpeg/core@0.12.10` package metadata declares `GPL-2.0-or-later`.
 
 The two files above are provided under GNU GPL version 2 or, at the
 recipient's option, any later version. A verbatim copy of GPLv2 is in
@@ -28,8 +28,8 @@ Upstream licensing references:
 ## Corresponding source
 
 Squisq does not modify the distributed `@ffmpeg/core` files. Upstream's
-`v12.14` release identifies `@ffmpeg/core` / `@ffmpeg/core-mt` version 0.12.9
-and commit `d3c018aa40a241384965268f0506b73f47dee60c` as that release's source.
+`v12.15` release identifies `@ffmpeg/core` / `@ffmpeg/core-mt` version 0.12.10
+and commit `71aa99d37c02a7b4c435275ca9ef50e612f6efa1` as that release's source.
 The tagged tree contains the ffmpeg.wasm source, patches, Dockerfile, and build
 scripts, including the recipes for the FFmpeg and external-library source
 inputs compiled into the WebAssembly artifact.
@@ -38,11 +38,11 @@ Equivalent network access to that source and its build materials is available
 here:
 
 - Release and build notes:
-  https://github.com/ffmpegwasm/ffmpeg.wasm/releases/tag/v12.14
+  https://github.com/ffmpegwasm/ffmpeg.wasm/releases/tag/v12.15
 - Version-pinned source tree:
-  https://github.com/ffmpegwasm/ffmpeg.wasm/tree/d3c018aa40a241384965268f0506b73f47dee60c
+  https://github.com/ffmpegwasm/ffmpeg.wasm/tree/71aa99d37c02a7b4c435275ca9ef50e612f6efa1
 - Source archive:
-  https://github.com/ffmpegwasm/ffmpeg.wasm/archive/refs/tags/v12.14.tar.gz
+  https://github.com/ffmpegwasm/ffmpeg.wasm/archive/refs/tags/v12.15.tar.gz
 - Core build instructions:
   https://ffmpegwasm.netlify.app/docs/contribution/core/
 

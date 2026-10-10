@@ -52,13 +52,7 @@ export interface RecorderExtendedMediaOptions {
 
 /** Discriminated state describing what the recorder is currently doing. */
 export type RecorderState =
-  | 'idle'
-  | 'requesting'
-  | 'ready'
-  | 'recording'
-  | 'stopping'
-  | 'stopped'
-  | 'error';
+  'idle' | 'requesting' | 'ready' | 'recording' | 'stopping' | 'stopped' | 'error';
 
 /**
  * The camera companion lane, present only for `source === 'screen+camera'`

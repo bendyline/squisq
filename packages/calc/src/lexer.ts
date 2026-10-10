@@ -15,15 +15,7 @@
  */
 
 export type TokenKind =
-  | 'number'
-  | 'string'
-  | 'sheet-quoted'
-  | 'ident'
-  | 'error'
-  | 'external'
-  | 'op'
-  | 'punct'
-  | 'end';
+  'number' | 'string' | 'sheet-quoted' | 'ident' | 'error' | 'external' | 'op' | 'punct' | 'end';
 
 export interface Token {
   kind: TokenKind;

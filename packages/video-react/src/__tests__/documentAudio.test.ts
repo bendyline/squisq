@@ -120,8 +120,8 @@ async function narratedDoc(annotation = '{[audio src=audio/take.webm anchor=docu
     'application/json',
   );
   const doc = await resolveAudioMapping(raw, container);
-  const readMedia = vi.fn(
-    async (src: string): Promise<ArrayBuffer | null> => container.readFile(src),
+  const readMedia = vi.fn(async (src: string): Promise<ArrayBuffer | null> =>
+    container.readFile(src),
   );
   return { doc, readMedia };
 }

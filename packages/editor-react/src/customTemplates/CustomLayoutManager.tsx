@@ -43,8 +43,7 @@ export interface CustomLayoutManagerProps {
  * resolve from the (by-then fresh) list.
  */
 type Selection =
-  | 'new'
-  | { source: 'doc' | 'library'; name: string; def?: CustomTemplateDefinition };
+  'new' | { source: 'doc' | 'library'; name: string; def?: CustomTemplateDefinition };
 
 export function CustomLayoutManager({ onClose }: CustomLayoutManagerProps) {
   const { docTemplates, onDocTemplatesChange } = useDocCustomTemplates();

@@ -39,10 +39,7 @@ export interface Flashcard {
 }
 
 export type FlashcardDiagnosticCode =
-  | 'empty-front'
-  | 'empty-back'
-  | 'multiple-choice-needs-distractor'
-  | 'multiple-correct-answers';
+  'empty-front' | 'empty-back' | 'multiple-choice-needs-distractor' | 'multiple-correct-answers';
 
 export interface FlashcardDiagnostic {
   severity: 'warning' | 'error';

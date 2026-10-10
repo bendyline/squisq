@@ -318,12 +318,7 @@ function exportMediaReader(sources: {
 // ── Types ──────────────────────────────────────────────────────────
 
 export type VideoExportState =
-  | 'idle'
-  | 'preparing'
-  | 'capturing'
-  | 'encoding'
-  | 'complete'
-  | 'error';
+  'idle' | 'preparing' | 'capturing' | 'encoding' | 'complete' | 'error';
 
 /** Browser export container format. */
 export type VideoOutputFormat = 'mp4' | 'gif';

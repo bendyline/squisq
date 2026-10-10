@@ -157,7 +157,7 @@
     "genson-js": "0.0.8",
     "hast-util-from-html": "2.0.3",
     "localforage": "1.10.0",
-    "ngeohash": "0.6.3",
+    "ngeohash": "0.6.4",
     "remark-directive": "3.0.1",
     "remark-frontmatter": "5.0.0",
     "remark-gfm": "4.0.1",

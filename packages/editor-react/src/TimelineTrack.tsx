@@ -134,12 +134,7 @@ function seekTimelineFrame(video: HTMLVideoElement, sampleTime: number): void {
 }
 
 type DragKind =
-  | 'block-right'
-  | 'block-left'
-  | 'clip-move'
-  | 'clip-right'
-  | 'embed-move'
-  | 'embed-right';
+  'block-right' | 'block-left' | 'clip-move' | 'clip-right' | 'embed-move' | 'embed-right';
 
 interface DragState {
   kind: DragKind;

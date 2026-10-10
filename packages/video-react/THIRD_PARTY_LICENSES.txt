@@ -6,7 +6,7 @@ repository license, the pinned upstream copy is vendored and identified below.
 
 COMPONENTS
 - @ffmpeg/ffmpeg@0.12.15 (MIT); files: VENDORED-ffmpeg-wasm-0.12.15.txt
-- mediabunny@1.57.0 (MPL-2.0); files: LICENSE
+- mediabunny@1.61.0 (MPL-2.0); files: LICENSE
 - mp4-muxer@5.2.2 (MIT); files: LICENSE
 
 ==============================================================================
@@ -35,7 +35,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-mediabunny@1.57.0 - LICENSE
+mediabunny@1.61.0 - LICENSE
 ==============================================================================
 Mozilla Public License Version 2.0
 ==================================

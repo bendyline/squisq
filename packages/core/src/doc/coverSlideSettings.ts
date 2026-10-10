@@ -7,12 +7,7 @@
 
 /** Built-in visual treatments that can render a document start block. */
 export type CoverSlideTemplate =
-  | 'cover'
-  | 'title'
-  | 'sectionHeader'
-  | 'imageWithCaption'
-  | 'bigText'
-  | 'bigTextImage';
+  'cover' | 'title' | 'sectionHeader' | 'imageWithCaption' | 'bigText' | 'bigTextImage';
 
 /** How an exported video's story clock behaves while the cover is visible. */
 export type CoverSlidePlayback = 'overlay' | 'preroll';

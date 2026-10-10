@@ -1097,10 +1097,13 @@
 }
 
 .squisq-toolbar-button.squisq-preview-design-button {
+  box-sizing: border-box;
+  align-self: stretch;
   width: auto;
-  height: 30px;
-  padding: 3px 8px 1px;
+  height: auto;
+  padding: 0 8px;
   border: 1px solid var(--squisq-border);
+  font-size: 12px;
 }
 
 .squisq-preview-control--compact {

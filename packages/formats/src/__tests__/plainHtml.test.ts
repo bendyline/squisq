@@ -340,7 +340,7 @@ describe('markdownDocToPlainHtml', () => {
     it('emits the matching FontAwesome CDN release after explicit opt-in', () => {
       const html = render('Hello {[github]} world', { externalResources: 'allow' });
       expect(html).toContain('href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/');
-      expect(html).toContain('/font-awesome/7.2.0/css/all.min.css');
+      expect(html).toContain('/font-awesome/7.3.1/css/all.min.css');
     });
 
     it('prefers caller-supplied inline icon CSS without external resources', () => {

@@ -28,17 +28,11 @@ export type SupplementalMediaVariantMatrix = Record<
 
 /** What the template does before supplemental rich media is considered. */
 export type NoMediaLayout =
-  | 'template-default'
-  | 'template-without-optional-media'
-  | 'unsupported'
-  | 'intrinsic-visual';
+  'template-default' | 'template-without-optional-media' | 'unsupported' | 'intrinsic-visual';
 
 /** Which part of the system owns the template's primary media geometry. */
 export type TemplateMediaOwnership =
-  | 'supplemental'
-  | 'optional-native'
-  | 'required-native'
-  | 'intrinsic-visual';
+  'supplemental' | 'optional-native' | 'required-native' | 'intrinsic-visual';
 
 /** Geometry already implemented by templates that own their primary media. */
 export type NativeMediaLayout =
@@ -55,9 +49,7 @@ export type NativeMediaLayout =
 
 /** How unconsumed body media behaves after the template renders. */
 export type UnconsumedMediaBehavior =
-  | 'reserved-slot'
-  | 'reserve-when-no-native-media'
-  | 'retain-native-layout';
+  'reserved-slot' | 'reserve-when-no-native-media' | 'retain-native-layout';
 
 export interface BlockMediaLayoutPolicy {
   /** Concise human-readable contract for reviewers and future template work. */

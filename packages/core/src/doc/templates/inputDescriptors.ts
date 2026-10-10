@@ -40,12 +40,7 @@ import { nearestName } from '../utils/nearest.js';
 
 /** How a raw `{[…]}` param string is coerced into a typed input value. */
 export type InputCoercion =
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'latLng'
-  | 'labeledPair'
-  | 'stringList';
+  'string' | 'number' | 'boolean' | 'latLng' | 'labeledPair' | 'stringList';
 
 /**
  * Editor/validator-facing description of a single template input key: what it

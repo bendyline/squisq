@@ -13,14 +13,7 @@
 
 /** Kinds of content the extractor recognises. */
 export type ExtractionType =
-  | 'stat'
-  | 'date'
-  | 'quote'
-  | 'comparison'
-  | 'fact'
-  | 'impactLine'
-  | 'list'
-  | 'definition';
+  'stat' | 'date' | 'quote' | 'comparison' | 'fact' | 'impactLine' | 'list' | 'definition';
 
 /** An extracted content element with source position. */
 export interface ExtractedElement {

@@ -129,7 +129,7 @@
     "@pdf-lib/fontkit": "1.1.1",
     "@pdf-lib/upng": "1.0.1",
     "@xmldom/xmldom": "0.9.12",
-    "jszip": "3.10.1",
+    "jszip": "3.10.2",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "4.10.38"
   },
@@ -142,9 +142,9 @@
     }
   },
   "devDependencies": {
-    "@fortawesome/fontawesome-free": "7.2.0",
-    "hyparquet": "1.29.1",
-    "hyparquet-writer": "0.16.6",
+    "@fortawesome/fontawesome-free": "7.3.1",
+    "hyparquet": "1.31.2",
+    "hyparquet-writer": "0.16.10",
     "tsup": "8.5.1",
     "typescript": "5.9.3"
   }

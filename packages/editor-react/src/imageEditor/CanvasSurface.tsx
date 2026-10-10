@@ -365,8 +365,7 @@ export function CanvasSurface({
     const sw =
       selectedLayer.type === 'shape' || selectedLayer.type === 'path'
         ? (((selectedLayer.content as Record<string, unknown>)['strokeWidth'] as
-            | number
-            | undefined) ?? 0)
+            number | undefined) ?? 0)
         : 0;
     const strokeHalf = sw / 2;
     const proportional = Math.max(doc.canvas.width, doc.canvas.height) * 0.007;

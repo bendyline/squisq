@@ -9,7 +9,7 @@ repository license, the pinned upstream copy is vendored and identified below.
 COMPONENTS
 - @braintree/sanitize-url@7.1.2 (MIT); files: LICENSE
 - @iconify/utils@3.1.4 (MIT); files: license.txt
-- @mermaid-js/parser@1.2.0 (MIT); files: LICENSE
+- @mermaid-js/parser@1.2.1 (MIT); files: LICENSE
 - @upsetjs/venn.js@2.0.0 (MIT); files: LICENSE
 - bail@2.0.2 (MIT); files: license
 - ccount@2.0.1 (MIT); files: license
@@ -67,6 +67,7 @@ COMPONENTS
 - es-toolkit@1.49.0 (MIT); files: LICENSE
 - escape-string-regexp@5.0.0 (MIT); files: license
 - extend@3.0.2 (MIT); files: LICENSE
+- fastdom@1.0.12 (MIT); files: VENDORED-fastdom-1.0.12.txt
 - fault@2.0.1 (MIT); files: license
 - format@0.2.2 (MIT); files: VENDORED-format-0.2.2.txt
 - hast-util-from-html@2.0.3 (MIT); files: license
@@ -102,7 +103,7 @@ COMPONENTS
 - mdast-util-phrasing@4.1.0 (MIT); files: license
 - mdast-util-to-markdown@2.1.2 (MIT); files: license
 - mdast-util-to-string@4.0.0 (MIT); files: license
-- mermaid@11.16.1 (MIT); files: LICENSE
+- mermaid@11.17.2 (MIT); files: LICENSE
 - micromark-core-commonmark@2.0.3 (MIT); files: license
 - micromark-extension-directive@3.0.2 (MIT); files: license
 - micromark-extension-frontmatter@2.0.0 (MIT); files: license
@@ -134,7 +135,7 @@ COMPONENTS
 - micromark@4.0.2 (MIT); files: license
 - parse-entities@4.0.2 (MIT); files: license
 - parse5@7.3.0 (MIT); files: LICENSE
-- preact@10.29.0 (MIT); files: LICENSE
+- preact@10.29.8 (MIT); files: LICENSE
 - property-information@7.1.0 (MIT); files: license
 - remark-directive@3.0.1 (MIT); files: license
 - remark-frontmatter@5.0.0 (MIT); files: license
@@ -212,7 +213,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-@mermaid-js/parser@1.2.0 - LICENSE
+@mermaid-js/parser@1.2.1 - LICENSE
 ==============================================================================
 The MIT License (MIT)
 
@@ -2065,6 +2066,19 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 ==============================================================================
+fastdom@1.0.12 - VENDORED-fastdom-1.0.12.txt
+==============================================================================
+(The MIT License)
+
+Copyright (c) 2016 Wilson Page <wilsonpage@me.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the 'Software'), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+==============================================================================
 fault@2.0.1 - license
 ==============================================================================
 (The MIT License)
@@ -2987,7 +3001,7 @@ TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ==============================================================================
-mermaid@11.16.1 - LICENSE
+mermaid@11.17.2 - LICENSE
 ==============================================================================
 The MIT License (MIT)
 
@@ -3815,7 +3829,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ==============================================================================
-preact@10.29.0 - LICENSE
+preact@10.29.8 - LICENSE
 ==============================================================================
 The MIT License (MIT)
 

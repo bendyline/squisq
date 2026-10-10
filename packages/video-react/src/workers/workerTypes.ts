@@ -94,8 +94,4 @@ export interface ErrorMessage {
 }
 
 export type WorkerToMainMessage =
-  | CapabilitiesMessage
-  | FrameCompleteMessage
-  | ProgressMessage
-  | CompleteMessage
-  | ErrorMessage;
+  CapabilitiesMessage | FrameCompleteMessage | ProgressMessage | CompleteMessage | ErrorMessage;

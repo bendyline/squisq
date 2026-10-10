@@ -58,10 +58,7 @@ session in flight. `speechInput` is ignored when the shell is `readOnly`.
 
 ```ts
 type SpeechInputReadinessState =
-  | 'ready'
-  | 'download-required'
-  | 'unavailable'
-  | 'permission-required';
+  'ready' | 'download-required' | 'unavailable' | 'permission-required';
 
 interface SpeechInputProvider {
   readonly id: string;
