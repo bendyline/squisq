@@ -1438,7 +1438,7 @@ export function EditorProvider({
     (edits: readonly MarkdownSourceEdit[], options?: ApplySourceEditsOptions): boolean => {
       // Offsets address the full document, which only Document layout binds.
       if (editorMode !== 'markdown' || layoutModeState !== 'document') return false;
-      if (activeView === 'raw' && monacoEditor) {
+      if ((activeView === 'raw' || activeView === 'preview') && monacoEditor) {
         const model = monacoEditor.getModel();
         if (!model) return false;
         const base = model.getValue();
@@ -1466,7 +1466,7 @@ export function EditorProvider({
         monacoEditor.pushUndoStop();
         return true;
       }
-      if (activeView === 'wysiwyg' && tiptapEditor) {
+      if ((activeView === 'wysiwyg' || activeView === 'preview') && tiptapEditor) {
         const base = markdownSourceRef.current;
         if (options?.baseSource !== undefined && options.baseSource !== base) return false;
         const sorted = normalizeSourceEdits(base, edits);

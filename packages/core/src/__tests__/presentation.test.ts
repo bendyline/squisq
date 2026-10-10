@@ -1,4 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import {
+  defaultPresentationHints,
+  parsePresentationHints,
+  serializePresentationHints,
+  presentationSections,
+  usesDynamicPresentation,
+  DYNAMIC_PRESENTATION_STYLE,
+  PRESENTATION_HINTS_KEY,
+} from '../transform/presentationHints.js';
 import { parseMarkdown, setFrontmatterValues } from '../markdown/index.js';
 import { markdownToDoc } from '../doc/markdownToDoc.js';
 import { buildPreviewDoc } from '../doc/buildPreviewDoc.js';
@@ -157,5 +166,128 @@ describe('source-preserving presentations', () => {
     const resolved = compilePresentationPlan(next.doc, plan);
     expect(resolved.duration).toBe(35);
     expect(resolved.blocks.map((block) => block.startTime)).toEqual([0, 10, 25]);
+  });
+});
+
+describe('dynamic slide summarization', () => {
+  const sky = '# Weather\n\nThe sky is pink.\n\n## Other\n\nKeep this separate passage.';
+  const dynamic = (text: string, hints = defaultPresentationHints()) =>
+    parse(
+      setFrontmatterValues(text, {
+        'squisq-transform': DYNAMIC_PRESENTATION_STYLE,
+        [PRESENTATION_HINTS_KEY]: serializePresentationHints(hints),
+      }),
+    );
+  it('stores only preferences and regenerates current text, deterministically', () => {
+    const doc = dynamic(sky);
+    expect(JSON.stringify(doc.frontmatter)).not.toContain('pink');
+    const a = buildPreviewDoc(doc);
+    expect(a).toEqual(buildPreviewDoc(doc));
+    const b = buildPreviewDoc(dynamic(sky.replace('pink', 'blue')));
+    expect(b.diagnostics?.some((d) => d.code === 'presentation-invalid')).not.toBe(true);
+    expect(JSON.stringify(b.blocks)).toContain('blue');
+    expect(JSON.stringify(b.blocks)).not.toContain('pink');
+    expect(a.blocks).not.toEqual(b.blocks);
+  });
+  it('reuses AI wording only for an unchanged passage, including after unrelated edits', () => {
+    const doc = parse(sky);
+    const plan = createPresentationPlan(doc);
+    const hints = defaultPresentationHints();
+    const section = presentationSections(doc)[0]!;
+    hints.blocks.push({
+      blockId: section.blockId,
+      ai: [
+        {
+          source: plan.sourceText.slice(plan.beats[0].sourceStart, plan.beats[0].sourceEnd),
+          layout: 'statement',
+          headline: 'A pink sky',
+          points: ['The sky is pink.'],
+        },
+      ],
+    });
+    expect(createPresentationPlan(doc, hints).beats[0].headline).toBe('A pink sky');
+    expect(
+      createPresentationPlan(parse(sky.replace('separate', 'unrelated')), hints).beats[0].headline,
+    ).toBe('A pink sky');
+    const changed = createPresentationPlan(parse(sky.replace('pink', 'blue')), hints);
+    expect(changed.origin).toBe('automatic');
+    expect(JSON.stringify(changed.beats)).not.toContain('pink');
+    hints.blocks[0].wording = { source: section.text, headline: 'My headline' };
+    expect(createPresentationPlan(doc, hints).beats[0].headline).toBe('My headline');
+    expect(
+      createPresentationPlan(parse(sky.replace('pink', 'blue')), hints).beats[0].headline,
+    ).not.toBe('My headline');
+  });
+  it('inserts supporting visuals at word cues without lengthening the narration, and honors per-section opt-out', async () => {
+    const text = source.replace(
+      'First organize your points. Then add diagrams. Finally share your presentation.',
+      'First organize all your ideas into a clear sequence of points. Then add diagrams to explain how the different pieces fit together. Finally share your presentation.',
+    );
+    const { doc } = await narrated(text);
+    const hints = defaultPresentationHints();
+    const plain = createPresentationPlan(doc, { ...hints, inbetweens: false });
+    const plan = createPresentationPlan(doc, hints);
+    expect(plan.beats.length).toBeGreaterThan(plain.beats.length);
+    const projected = compilePresentationPlan(doc, plan);
+    expect(projected.duration).toBe(doc.presentationNarration!.duration);
+    for (const [index, block] of projected.blocks.entries()) {
+      const cue =
+        index === 0
+          ? 0
+          : doc.presentationNarration!.bookmarks.find(
+              (w) => w.charOffset >= plan.beats[index].sourceStart,
+            )!.time;
+      expect(block.startTime).toBe(cue);
+    }
+    hints.blocks.push({ blockId: presentationSections(doc)[1].blockId, inbetweens: false });
+    expect(createPresentationPlan(doc, hints).beats.length).toBe(plain.beats.length);
+  });
+  it('leaves dynamic mode when an explicit different transform is selected', () => {
+    const doc = dynamic(sky);
+    expect(
+      usesDynamicPresentation({ ...doc, frontmatter: { 'transform-style': 'Dynamic slides' } }),
+    ).toBe(true);
+    expect(
+      usesDynamicPresentation({
+        ...doc,
+        frontmatter: { 'squisq-transform': 'minimal', 'transform-style': 'dynamic-slides' },
+      }),
+    ).toBe(false);
+    const transformed = applyTransform(doc, 'minimal').doc;
+    expect(usesDynamicPresentation(transformed)).toBe(false);
+    expect(buildPreviewDoc(transformed).presentationApplied).not.toBe(true);
+    expect(
+      usesDynamicPresentation(applyTransform(parse(sky), DYNAMIC_PRESENTATION_STYLE).doc),
+    ).toBe(true);
+  });
+  it('still rejects narration from old source while deriving fresh summaries', async () => {
+    const { doc } = await narrated();
+    const projected = buildPreviewDoc({
+      ...doc,
+      frontmatter: { 'squisq-transform': DYNAMIC_PRESENTATION_STYLE },
+      presentationNarration: { ...doc.presentationNarration!, sourceText: 'old prose' },
+    });
+    expect(
+      projected.diagnostics?.find((d) => d.code === 'presentation-invalid')?.message,
+    ).toContain('narration no longer matches');
+  });
+  it('validates durable hints without accepting generated plans or unbounded caches', () => {
+    expect(parsePresentationHints(serializePresentationHints(defaultPresentationHints()))).toEqual(
+      defaultPresentationHints(),
+    );
+    for (const patch of [
+      { beats: [] },
+      { density: 'unknown' },
+      { version: 2 },
+      { blocks: [{ blockId: 'x', inbetweens: 'false' }] },
+      { blocks: [{ blockId: 'x' }, { blockId: 'x' }] },
+      {
+        blocks: [
+          { blockId: 'x', ai: [{ source: 's', layout: 'steps', headline: 'h', points: [] }] },
+        ],
+      },
+    ])
+      expect(parsePresentationHints({ ...defaultPresentationHints(), ...patch })).toBeNull();
+    expect(parsePresentationHints('x'.repeat(160001))).toBeNull();
   });
 });

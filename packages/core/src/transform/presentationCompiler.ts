@@ -2,6 +2,13 @@
  * Seconds come from resolved narration bookmarks (or explicit reading estimates
  * without narration), never from generated display wording or model output.
  */
+import { createPresentationPlan } from './presentationPlanner.js';
+import {
+  defaultPresentationHints,
+  parsePresentationHints,
+  PRESENTATION_HINTS_KEY,
+  usesDynamicPresentation,
+} from './presentationHints.js';
 import type { Block, Doc } from '../schemas/Doc.js';
 import type { TemplateBlock } from '../schemas/BlockTemplates.js';
 import { buildNarrationScript } from '../narration/script.js';
@@ -170,13 +177,19 @@ function visualBlock(
   }
 }
 export function applySavedPresentation(doc: Doc): Doc {
-  if (
-    doc.presentationApplied ||
-    !Object.prototype.hasOwnProperty.call(doc.frontmatter ?? {}, PRESENTATION_KEY)
-  )
+  if (doc.presentationApplied) return doc;
+  const dynamic = usesDynamicPresentation(doc);
+  if (!dynamic && !Object.prototype.hasOwnProperty.call(doc.frontmatter ?? {}, PRESENTATION_KEY))
     return doc;
-  const plan = parsePresentationPlan(doc.frontmatter?.[PRESENTATION_KEY]);
   try {
+    const rawHints = doc.frontmatter?.[PRESENTATION_HINTS_KEY];
+    const hints =
+      rawHints === undefined ? defaultPresentationHints() : parsePresentationHints(rawHints);
+    if (dynamic && !hints)
+      throw new Error('The slide hints are invalid. Review the summarization settings.');
+    const plan = dynamic
+      ? createPresentationPlan(doc, hints!)
+      : parsePresentationPlan(doc.frontmatter?.[PRESENTATION_KEY]);
     if (!plan) throw new Error('The saved presentation is invalid. Make the presentation again.');
     return compilePresentationPlan(doc, plan);
   } catch (error: unknown) {

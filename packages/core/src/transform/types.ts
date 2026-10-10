@@ -38,7 +38,7 @@ export interface TransformStyleConfig {
    * `brief` bounds prose and highlights; `headings-and-features` keeps only
    * headings and visual content in each heading's own scope.
    */
-  contentMode?: 'brief' | 'headings-and-features';
+  contentMode?: 'brief' | 'headings-and-features' | 'presentation';
 
   /**
    * Minimum confidence for extracted elements to become template blocks (0–1).

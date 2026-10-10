@@ -274,6 +274,8 @@ export interface EditorShellProps {
   toolbarSlotAfterActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
   toolbarSlotRight?: ReactNode;
+  /** Optional designer opened beside Summarize in the preview toolbar. */
+  summarizationDesigner?: (onClose: () => void) => ReactNode;
   /** Host-supplied content rendered at the right edge of the bottom status bar. */
   statusBarSlotRight?: ReactNode;
   /**
@@ -710,6 +712,7 @@ export function EditorShell({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  summarizationDesigner,
   statusBarSlotRight,
   sidePanelSlot,
   reviewProviders,
@@ -867,6 +870,7 @@ export function EditorShell({
               toolbarSlotLeft={toolbarSlotLeft}
               toolbarSlotAfterActions={toolbarSlotAfterActions}
               toolbarSlotRight={toolbarSlotRight}
+              summarizationDesigner={summarizationDesigner}
               statusBarSlotRight={statusBarSlotRight}
               sidePanelSlot={sidePanelSlot}
               showPlayTab={showPlayTab}
@@ -924,6 +928,8 @@ interface EditorShellInnerProps {
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
+  /** Optional designer opened beside Summarize in the preview toolbar. */
+  summarizationDesigner?: (onClose: () => void) => ReactNode;
   statusBarSlotRight?: ReactNode;
   sidePanelSlot?: ReactNode;
   showPlayTab: boolean;
@@ -959,12 +965,18 @@ interface EditorShellInnerProps {
   defaultThemeLabel?: string;
 }
 
-function UseModeToolbarControls({ allowPrint }: { allowPrint: boolean }) {
+function UseModeToolbarControls({
+  allowPrint,
+  summarizationDesigner,
+}: {
+  allowPrint: boolean;
+  summarizationDesigner?: (onClose: () => void) => ReactNode;
+}) {
   const printMode = usePrintMode();
   if (printMode.active) return <PrintPreviewToolbar />;
   return (
     <>
-      <PreviewToolbarControls />
+      <PreviewToolbarControls summarizationDesigner={summarizationDesigner} />
       <PresentationModeControl />
       {allowPrint && <PrintModeControl />}
     </>
@@ -1015,6 +1027,7 @@ function EditorShellInner({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  summarizationDesigner,
   statusBarSlotRight,
   sidePanelSlot,
   showPlayTab,
@@ -1077,6 +1090,13 @@ function EditorShellInner({
   // CustomTemplateProvider is fed. Wraps the preview subtree so the theme
   // picker + designer can read/write both pools.
   const { docThemes, onDocThemesChange } = useDocCustomThemes();
+  // Keep the last editing surface mounted behind preview. Besides preserving
+  // selection and undo, preview settings can then make one undoable source edit.
+  const lastEditingView = useRef(activeView === 'raw' ? 'raw' : 'wysiwyg');
+  useEffect(() => {
+    if (activeView !== 'preview') lastEditingView.current = activeView;
+  }, [activeView]);
+  const editingView = activeView === 'preview' ? lastEditingView.current : activeView;
   const isPreview = activeView === 'preview';
   const isCodeMode = editorMode === 'code';
   const isImageMode = editorMode === 'image';
@@ -1520,7 +1540,13 @@ function EditorShellInner({
                   onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
                   slotLeft={toolbarSlotLeft}
                   slotAfterTabs={
-                    !isCodeMode && isPreview && <UseModeToolbarControls allowPrint={allowPrint} />
+                    !isCodeMode &&
+                    isPreview && (
+                      <UseModeToolbarControls
+                        allowPrint={allowPrint}
+                        summarizationDesigner={summarizationDesigner}
+                      />
+                    )
                   }
                   slotAfterActions={toolbarSlotAfterActions}
                   slotRight={toolbarSlotRight}
@@ -1573,8 +1599,13 @@ function EditorShellInner({
                 position — Monaco stays mounted and `monacoEditor` in
                 context stays stable, which is what `useHeadingLayout` needs
                 to compute positions. */}
-                {!isImageMode && activeView === 'raw' && (
-                  <div className="squisq-editor-with-gutter" key="raw-shell">
+                {!isImageMode && editingView === 'raw' && (
+                  <div
+                    className="squisq-editor-with-gutter"
+                    key="raw-shell"
+                    hidden={isPreview}
+                    style={isPreview ? { display: 'none' } : undefined}
+                  >
                     {isMarkdownMode && outlineVisible && (
                       <OutlinePanel key="outline" width={outlineWidth} readOnly={readOnly} />
                     )}
@@ -1619,8 +1650,13 @@ function EditorShellInner({
                 and the preview pipeline stays idle. Same always-wrapped
                 pattern as the Raw branch above so pane toggles don't
                 remount Tiptap. */}
-                {isMarkdownMode && activeView === 'wysiwyg' && (
-                  <div className="squisq-editor-with-gutter" key="wysiwyg-shell">
+                {isMarkdownMode && editingView === 'wysiwyg' && (
+                  <div
+                    className="squisq-editor-with-gutter"
+                    key="wysiwyg-shell"
+                    hidden={isPreview}
+                    style={isPreview ? { display: 'none' } : undefined}
+                  >
                     {outlineVisible && (
                       <OutlinePanel key="outline" width={outlineWidth} readOnly={readOnly} />
                     )}

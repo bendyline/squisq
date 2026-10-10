@@ -190,6 +190,7 @@ export function DocumentSettingsDialog({
         // Saving settings canonicalizes all older theme spellings.
         [FRONTMATTER_SETTING_KEYS.theme.legacy[0]]: null,
         [FRONTMATTER_SETTING_KEYS.theme.legacy[1]]: null,
+        ...(transform !== currentTransform ? { 'squisq-presentation': null } : {}),
         [FRONTMATTER_SETTING_KEYS.transform.canonical]: omitFrontmatterDefault(
           transform,
           FRONTMATTER_SETTING_DEFAULTS.transform,
@@ -221,6 +222,7 @@ export function DocumentSettingsDialog({
       subtitle,
       theme,
       transform,
+      currentTransform,
       captions,
       proofingState,
       proofingEnabled,

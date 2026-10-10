@@ -142,7 +142,7 @@ describe('Write view source edits', () => {
     act(() => {
       live.ctx.setLayoutMode('block');
     });
-    await waitFor(() => expect(live.editor.state.doc.attrs.sourceFrontmatter).toBe(''));
+    await waitFor(() => expect(live.ctx.editorSource).not.toContain('squisq-theme'));
     act(() => {
       live.editor.commands.insertContent('Added words. ');
     });
@@ -155,6 +155,46 @@ describe('Write view source edits', () => {
       expect(live.editor.state.doc.attrs.sourceFrontmatter).toContain('squisq-theme'),
     );
   });
+
+  it.each(['block', 'timeline'] as const)(
+    'keeps a newly inserted video mounted when switching to %s layout and back',
+    async (layout) => {
+      const live = await mountWrite('---\nsquisq-theme: gezellig\n---\n\n' + DOC);
+      const { editor } = live;
+      caretIn(editor, 'First');
+      act(() => {
+        editor.commands.insertContent('<video src="video/take.webm" controls width="480"></video>');
+      });
+      await waitFor(() => expect(live.ctx.markdownSource).toContain('<video'));
+      const video = editor.view.dom.querySelector('video');
+      expect(video).not.toBeNull();
+
+      act(() => {
+        live.ctx.setLayoutMode(layout);
+      });
+      await waitFor(() => expect(editor.state.doc.textContent).not.toContain('Third paragraph.'));
+      expect(editor.view.dom.querySelector('video')).toBe(video);
+      expect(live.ctx.editorSource).not.toContain('squisq-theme');
+
+      // Edits still use the block's source channel, preserving the rest of
+      // the document and its metadata while the player stays mounted.
+      caretIn(editor, 'Second');
+      act(() => {
+        editor.commands.insertContent('Added words. ');
+      });
+      await waitFor(() => expect(live.ctx.markdownSource).toContain('Added words.'));
+      expect(live.ctx.markdownSource).toContain('Third paragraph.');
+
+      act(() => {
+        live.ctx.setLayoutMode('document');
+      });
+      await waitFor(() => expect(editor.state.doc.textContent).toContain('Third paragraph.'));
+      expect(editor.view.dom.querySelector('video')).toBe(video);
+      expect(editor.state.doc.attrs.sourceFrontmatter).toContain('squisq-theme');
+      expect(live.ctx.markdownSource.match(/squisq-theme/g)).toHaveLength(1);
+      expect(live.ctx.markdownSource.match(/<video/g)).toHaveLength(1);
+    },
+  );
 
   it('inserts a block after the caret block, leaving the caret, undone in one step', async () => {
     const live = await mountWrite();

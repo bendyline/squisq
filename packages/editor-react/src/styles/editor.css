@@ -1096,6 +1096,13 @@
   max-width: calc(100vw - 16px);
 }
 
+.squisq-toolbar-button.squisq-preview-design-button {
+  width: auto;
+  height: 30px;
+  padding: 3px 8px 1px;
+  border: 1px solid var(--squisq-border);
+}
+
 .squisq-preview-control--compact {
   display: flex;
   align-items: center;

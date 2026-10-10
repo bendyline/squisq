@@ -17,7 +17,6 @@ import {
   useState,
   useMemo,
   useEffect,
-  useId,
   useLayoutEffect,
   useRef,
 } from 'react';
@@ -692,6 +691,7 @@ export function PreviewSettingsProvider({
       if (id !== null) {
         // Empty string = "None" — remove the key rather than writing a blank value.
         persistFrontmatter({
+          'squisq-presentation': null,
           [FRONTMATTER_SETTING_KEYS.transform.canonical]: omitFrontmatterDefault(
             id,
             FRONTMATTER_SETTING_DEFAULTS.transform,
@@ -1257,7 +1257,7 @@ const PIP_POSITION_OPTIONS: Array<{ key: PipPosition; label: string }> = [
   { key: 'bottom-right', label: 'Bottom right' },
 ];
 
-const DISPLAY_MODE_OPTIONS: {
+export const DISPLAY_MODE_OPTIONS: {
   key: DisplayMode;
   label: string;
   icon: string;
@@ -1772,9 +1772,17 @@ export interface PreviewToolbarControlsProps {
    * setting still writes through the shared preview-settings context.
    */
   displayMode?: DisplayMode;
+  /** Optional designer for the current document's slide summarization. */
+  summarizationDesigner?: (onClose: () => void) => ReactNode;
 }
 
-export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsProps = {}) {
+export function PreviewToolbarControls({
+  displayMode,
+  summarizationDesigner,
+}: PreviewToolbarControlsProps = {}) {
+  const { layoutMode } = useEditorContext();
+  const [designing, setDesigning] = useState(false);
+  const designerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const s = usePreviewSettings();
   const controlKeys = controlKeysForMode(displayMode ?? s.activeDisplayMode, s.hasVideoMedia);
   const [visibleCount, setVisibleCount] = useState(CONTROL_KEYS.length);
@@ -2091,7 +2099,29 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
             options={TRANSFORM_STYLE_OPTIONS}
             onChange={(v) => s.setSelectedTransformStyle(v)}
             compact={compact}
-          />
+          >
+            {summarizationDesigner &&
+              ['slideshow', 'video'].includes(displayMode ?? s.activeDisplayMode) && (
+                <button
+                  type="button"
+                  className="squisq-toolbar-button squisq-preview-design-button"
+                  aria-label="Summarization designer"
+                  title={
+                    layoutMode === 'document'
+                      ? 'Design dynamic slide summaries'
+                      : 'Switch to Document layout to design summarization'
+                  }
+                  disabled={layoutMode !== 'document'}
+                  onClick={(event) => {
+                    designerTriggerRef.current = event.currentTarget;
+                    closePopover();
+                    setDesigning(true);
+                  }}
+                >
+                  Design…
+                </button>
+              )}
+          </PreviewSelect>
         );
       case 'captions': {
         // Two independent toggles (either can be off): CC = standard captions,
@@ -2219,6 +2249,12 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
           )}
         </div>
       )}
+      {designing &&
+        summarizationDesigner?.(() => {
+          setDesigning(false);
+          const trigger = designerTriggerRef.current;
+          (trigger?.isConnected ? trigger : popoverTriggerRef.current)?.focus();
+        })}
     </div>
   );
 }
@@ -2249,190 +2285,6 @@ export function PreviewModeSwitch() {
         );
       })}
     </div>
-  );
-}
-
-const USE_MODE_MENU_WIDTH = 340;
-const USE_MODE_MENU_GAP = 4;
-const USE_MODE_MENU_MARGIN = 8;
-
-/**
- * Dropdown trigger rendered directly beside the Use tab. Selecting a mode
- * also enters the Use view, so the menu works from Write and Source as well
- * as from an already-active preview.
- */
-export interface PreviewModeMenuProps {
-  /** Incremented by the parent to open the menu from another control. */
-  openRequest?: number;
-}
-
-export function PreviewModeMenu({ openRequest = 0 }: PreviewModeMenuProps) {
-  const s = usePreviewSettings();
-  const { allowNarrate, colorScheme, setActiveView } = useEditorContext();
-  const options = DISPLAY_MODE_OPTIONS.filter((opt) => opt.key !== 'narrate' || allowNarrate);
-  const activeLabel = displayModeLabel(s.activeDisplayMode);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const itemIdPrefix = useId();
-  const [open, setOpen] = useState(false);
-  const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
-
-  const updatePosition = useCallback(() => {
-    const trigger = triggerRef.current;
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const menuWidth = Math.min(USE_MODE_MENU_WIDTH, window.innerWidth - USE_MODE_MENU_MARGIN * 2);
-    const maxLeft = Math.max(
-      USE_MODE_MENU_MARGIN,
-      window.innerWidth - menuWidth - USE_MODE_MENU_MARGIN,
-    );
-    setAnchor({
-      top: rect.bottom + USE_MODE_MENU_GAP,
-      left: Math.min(Math.max(USE_MODE_MENU_MARGIN, rect.right - menuWidth), maxLeft),
-    });
-  }, []);
-
-  const closeMenu = useCallback((restoreFocus = false) => {
-    setOpen(false);
-    setAnchor(null);
-    if (restoreFocus) triggerRef.current?.focus();
-  }, []);
-
-  const openMenu = useCallback(() => {
-    updatePosition();
-    setOpen(true);
-  }, [updatePosition]);
-
-  useEffect(() => {
-    if (openRequest > 0) openMenu();
-  }, [openMenu, openRequest]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      const eventPath = event.composedPath();
-      if (
-        (triggerRef.current && eventPath.includes(triggerRef.current)) ||
-        (menuRef.current && eventPath.includes(menuRef.current))
-      ) {
-        return;
-      }
-      closeMenu();
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      closeMenu(true);
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', updatePosition);
-    window.addEventListener('scroll', updatePosition, true);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
-    };
-  }, [closeMenu, open, updatePosition]);
-
-  useLayoutEffect(() => {
-    if (!open || !anchor) return;
-    const selected = menuRef.current?.querySelector<HTMLButtonElement>('[aria-checked="true"]');
-    const first = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitemradio"]');
-    (selected ?? first)?.focus();
-  }, [anchor, open]);
-
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`squisq-use-mode-trigger${open ? ' squisq-use-mode-trigger--open' : ''}`}
-        aria-label="Choose Use mode"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        title={`Use mode: ${activeLabel}`}
-        onClick={() => (open ? closeMenu() : openMenu())}
-        onKeyDown={(event) => {
-          if (event.key !== 'ArrowDown') return;
-          event.preventDefault();
-          openMenu();
-        }}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
-          <path d="M2 3.5 5 6.5 8 3.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-        </svg>
-      </button>
-      {open &&
-        anchor &&
-        createPortal(
-          <div
-            ref={menuRef}
-            className="squisq-use-mode-menu"
-            data-theme={colorScheme}
-            role="menu"
-            aria-label="Use mode"
-            style={{ top: anchor.top, left: anchor.left }}
-            onKeyDown={(event) => {
-              if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-              event.preventDefault();
-              const items = Array.from(
-                event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
-              );
-              if (items.length === 0) return;
-              const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
-              const nextIndex =
-                event.key === 'Home'
-                  ? 0
-                  : event.key === 'End'
-                    ? items.length - 1
-                    : event.key === 'ArrowUp'
-                      ? (currentIndex - 1 + items.length) % items.length
-                      : (currentIndex + 1) % items.length;
-              items[nextIndex]?.focus();
-            }}
-          >
-            {options.map((option) => {
-              const selected = option.key === s.activeDisplayMode;
-              const labelId = `${itemIdPrefix}-${option.key}-label`;
-              const summaryId = `${itemIdPrefix}-${option.key}-summary`;
-              return (
-                <button
-                  key={option.key}
-                  type="button"
-                  className={`squisq-use-mode-menu-item${selected ? ' squisq-use-mode-menu-item--selected' : ''}`}
-                  role="menuitemradio"
-                  aria-checked={selected}
-                  aria-labelledby={labelId}
-                  aria-describedby={summaryId}
-                  onClick={() => {
-                    s.setSelectedDisplayMode(option.key);
-                    setActiveView('preview');
-                    closeMenu(true);
-                  }}
-                >
-                  <span className="squisq-use-mode-menu-icon" aria-hidden="true">
-                    <Icon icon={option.icon} />
-                  </span>
-                  <span className="squisq-use-mode-menu-copy">
-                    <span id={labelId} className="squisq-use-mode-menu-label">
-                      {option.label}
-                    </span>
-                    <span id={summaryId} className="squisq-use-mode-menu-summary">
-                      {option.summary}
-                    </span>
-                  </span>
-                  <span className="squisq-use-mode-menu-check" aria-hidden="true">
-                    {selected && <Icon icon="fa-solid fa-check" />}
-                  </span>
-                </button>
-              );
-            })}
-          </div>,
-          document.body,
-        )}
-    </>
   );
 }
 
@@ -2490,6 +2342,7 @@ function PreviewSelect({
   options,
   onChange,
   compact,
+  children,
 }: {
   label: string;
   labelTooltip?: string;
@@ -2497,19 +2350,28 @@ function PreviewSelect({
   options: { key: string; label: string }[];
   onChange: (value: string) => void;
   compact?: boolean;
+  children?: ReactNode;
 }) {
   return (
     <div className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}>
       <label style={labelStyle} title={labelTooltip}>
         {label}:
       </label>
-      <select value={value} onChange={(e) => onChange(e.target.value)} style={selectStyle}>
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        style={selectStyle}
+      >
         {options.map((o) => (
           <option key={o.key} value={o.key}>
             {o.label}
           </option>
         ))}
       </select>
+      {children}
     </div>
   );
 }
+
+export { PreviewModeMenu } from './PreviewModeMenu';

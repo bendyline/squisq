@@ -33,3 +33,5 @@ export { analyzeBlocks, extractDocImages } from './blockAnalyzer.js';
 export * from './presentationPlan.js';
 export { createPresentationPlan } from './presentationPlanner.js';
 export { compilePresentationPlan, applySavedPresentation } from './presentationCompiler.js';
+
+export * from './presentationHints.js';

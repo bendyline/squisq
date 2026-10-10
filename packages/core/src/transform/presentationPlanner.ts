@@ -2,6 +2,11 @@
  * Canonical source passages provide the anchors; the visual suggestions are
  * deliberately separate from the text that the person hears.
  */
+import {
+  defaultPresentationHints,
+  parsePresentationHints,
+  type PresentationHints,
+} from './presentationHints.js';
 import type { Doc } from '../schemas/Doc.js';
 import { buildNarrationScript } from '../narration/script.js';
 import { extractDocImages } from './blockAnalyzer.js';
@@ -25,7 +30,11 @@ function field(block: unknown, key: string): string | undefined {
   const value = (block as Record<string, unknown>)[key];
   return typeof value === 'string' && value.trim() ? value : undefined;
 }
-export function createPresentationPlan(doc: Doc): PresentationPlan {
+export function createPresentationPlan(
+  doc: Doc,
+  hints: PresentationHints = defaultPresentationHints(),
+): PresentationPlan {
+  if (!parsePresentationHints(hints)) throw new Error('The slide hints are invalid.');
   const script = buildNarrationScript(doc);
   if (!script.sourceText.trim()) throw new Error('Add some text before making a presentation.');
   if (script.sourceText.length > PRESENTATION_LIMITS.sourceCharacters)
@@ -34,12 +43,17 @@ export function createPresentationPlan(doc: Doc): PresentationPlan {
     );
   const images = extractDocImages(doc.blocks);
   const beats: PresentationBeat[] = [];
+  const supportingOpeners = new Set<string>();
+  const wordLimit = { concise: 28, balanced: 42, detailed: 64 }[hints.density];
   for (const block of script.blocks) {
     const source = script.sourceText.slice(block.charStart, block.charEnd);
     const words = [...source.matchAll(/\S+/gu)];
+    const hint = hints.blocks.find((item) => item.blockId === block.blockId);
+    const wording = hint?.wording?.source === source ? hint.wording : undefined;
+    const inbetweens = hint?.inbetweens ?? hints.inbetweens;
     let first = 0;
     while (first < words.length) {
-      let last = Math.min(first + 42, words.length);
+      let last = Math.min(first + wordLimit, words.length);
       // Prefer complete sentences without making a very long paragraph one slide.
       if (last < words.length) {
         for (let cursor = last; cursor > first + 18; cursor--) {
@@ -70,7 +84,7 @@ export function createPresentationPlan(doc: Doc): PresentationPlan {
         .map((part) => part.trim())
         .filter(Boolean);
       const bodySentences = sentences.filter((part) => part !== block.heading);
-      const points = (bodySentences.length ? bodySentences : sentences)
+      let points = (bodySentences.length ? bodySentences : sentences)
         .slice(0, 3)
         .map((part) => clip(part, 22));
       let headline = clip(
@@ -94,15 +108,48 @@ export function createPresentationPlan(doc: Doc): PresentationPlan {
           ? images[Math.floor(index / 3) % images.length]
           : undefined;
       if (image) layout = 'image';
-      beats.push({
+      if (first === 0 && wording) {
+        headline = wording.headline ?? headline;
+        points = wording.points ?? points;
+      }
+      if (hint?.layout) {
+        const eligible =
+          hint.layout === 'image'
+            ? !!image
+            : hint.layout === 'comparison'
+              ? points.length === 2
+              : ['steps', 'list'].includes(hint.layout)
+                ? points.length >= 2
+                : true;
+        if (eligible) layout = hint.layout;
+      }
+      const beat: PresentationBeat = {
         id: `beat-${index + 1}`,
         sourceStart: start,
         sourceEnd: end,
         layout,
         headline,
         points,
-        ...(image ? { imageSrc: image.src } : {}),
-      });
+        ...(layout === 'image' && image ? { imageSrc: image.src } : {}),
+      };
+      // Optional supporting visuals share the passage's existing narration span.
+      // Split at a spoken token so the compiler can use the actual word cue.
+      const explainer =
+        inbetweens &&
+        last - first >= 24 &&
+        (layout === 'steps' || layout === 'comparison' || !!image);
+      if (explainer) {
+        const split = block.charStart + words[first + Math.floor((last - first) / 2)]!.index;
+        const { imageSrc: _image, ...textBeat } = beat;
+        supportingOpeners.add(`beat-${beats.length + 1}`);
+        beats.push({
+          ...textBeat,
+          id: `beat-${beats.length + 1}`,
+          layout: 'statement',
+          sourceEnd: split,
+        });
+        beats.push({ ...beat, id: `beat-${beats.length + 1}`, sourceStart: split });
+      } else beats.push(beat);
       first = last;
     }
   }
@@ -111,6 +158,59 @@ export function createPresentationPlan(doc: Doc): PresentationPlan {
       'This document has too many sections for one presentation. Split it into shorter documents.',
     );
   const closing = beats[beats.length - 1];
-  if (beats.length > 2 && closing?.layout === 'statement') closing.layout = 'title';
-  return { version: 1, sourceText: script.sourceText, origin: 'automatic', beats };
+  if (
+    beats.length > 2 &&
+    closing?.layout === 'statement' &&
+    !hints.blocks.some(
+      (hint) =>
+        hint.layout &&
+        script.blocks.some(
+          (block) =>
+            block.blockId === hint.blockId &&
+            closing.sourceStart >= block.charStart &&
+            closing.sourceStart < block.charEnd,
+        ),
+    )
+  )
+    closing.layout = 'title';
+  let origin: PresentationPlan['origin'] = 'automatic';
+  for (const beat of beats) {
+    const section = script.blocks.find(
+      (block) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
+    );
+    const hint = hints.blocks.find((item) => item.blockId === section?.blockId);
+    const cached = hint?.ai?.find(
+      (item) => item.source === script.sourceText.slice(beat.sourceStart, beat.sourceEnd),
+    );
+    if (cached && (cached.layout !== 'image' || beat.imageSrc)) {
+      beat.headline = cached.headline;
+      beat.points = [...cached.points];
+      beat.layout = cached.layout;
+      origin = 'ai';
+    }
+    // A deliberate author choice takes precedence over an AI suggestion.
+    if (
+      hint?.layout &&
+      !supportingOpeners.has(beat.id) &&
+      (hint.layout !== 'image' || beat.imageSrc) &&
+      (hint.layout !== 'comparison' || beat.points.length === 2) &&
+      (!['steps', 'list'].includes(hint.layout) || beat.points.length >= 2)
+    )
+      beat.layout = hint.layout;
+    if (
+      section &&
+      beat.sourceStart === section.charStart &&
+      hint?.wording?.source === script.sourceText.slice(section.charStart, section.charEnd)
+    ) {
+      beat.headline = hint.wording.headline ?? beat.headline;
+      beat.points = hint.wording.points ?? beat.points;
+    }
+    if (
+      ['steps', 'list', 'comparison'].includes(beat.layout) &&
+      (beat.points.length < 2 || (beat.layout === 'comparison' && beat.points.length !== 2))
+    )
+      beat.layout = 'statement';
+    if (beat.layout !== 'image') delete beat.imageSrc;
+  }
+  return { version: 1, sourceText: script.sourceText, origin, beats };
 }

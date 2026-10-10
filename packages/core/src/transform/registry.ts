@@ -6,6 +6,7 @@
  */
 
 import type { TransformStyleConfig, TransformStyleInput, TransformStyleRegistry } from './types.js';
+import { dynamicSlidesStyle } from './styles/dynamicSlides.js';
 import { documentaryStyle } from './styles/documentary.js';
 import { magazineStyle } from './styles/magazine.js';
 import { dataDrivenStyle } from './styles/dataDriven.js';
@@ -16,6 +17,7 @@ import { cloneAndFreezeData } from '../internal/immutable.js';
 
 /** All built-in transform styles, keyed by id. */
 const TRANSFORM_STYLES: Readonly<Record<string, TransformStyleConfig>> = Object.freeze({
+  [dynamicSlidesStyle.id]: cloneAndFreezeData(dynamicSlidesStyle),
   [documentaryStyle.id]: cloneAndFreezeData(documentaryStyle),
   [magazineStyle.id]: cloneAndFreezeData(magazineStyle),
   [dataDrivenStyle.id]: cloneAndFreezeData(dataDrivenStyle),
@@ -58,9 +60,10 @@ function validateTransformStyle(style: TransformStyleConfig): void {
   if (
     candidate.contentMode !== undefined &&
     candidate.contentMode !== 'brief' &&
-    candidate.contentMode !== 'headings-and-features'
+    candidate.contentMode !== 'headings-and-features' &&
+    candidate.contentMode !== 'presentation'
   ) {
-    fail('contentMode must be brief or headings-and-features');
+    fail('contentMode must be brief, headings-and-features, or presentation');
   }
   if (
     !Array.isArray(candidate.preferredTypes) ||

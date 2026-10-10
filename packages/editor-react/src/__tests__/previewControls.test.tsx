@@ -91,11 +91,23 @@ function PreviewHarness() {
 function PreviewToolbarHarness({
   displayMode,
   showMode = false,
-}: { displayMode?: 'video'; showMode?: boolean } = {}) {
+  designer = false,
+}: { displayMode?: 'video'; showMode?: boolean; designer?: boolean } = {}) {
   const { doc } = useEditorContext();
   return (
     <PreviewSettingsProvider doc={doc}>
-      <PreviewToolbarControls displayMode={displayMode} />
+      <PreviewToolbarControls
+        displayMode={displayMode}
+        summarizationDesigner={
+          designer
+            ? (onClose) => (
+                <div role="dialog" aria-label="Designer">
+                  <button onClick={onClose}>Done</button>
+                </div>
+              )
+            : undefined
+        }
+      />
       {showMode && <ModeProbe />}
     </PreviewSettingsProvider>
   );
@@ -1034,6 +1046,69 @@ describe('PreviewToolbarControls', () => {
       }
     }
   });
+});
+
+describe('Summarize designer action', () => {
+  it.each([1000, 40])(
+    'stays beside the dropdown at width %s and keeps the modal open independently',
+    async (width) => {
+      const previousWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'clientWidth');
+      const previousRect = HTMLElement.prototype.getBoundingClientRect;
+      const previousObserver = globalThis.ResizeObserver;
+      globalThis.ResizeObserver = class implements ResizeObserver {
+        constructor(readonly callback: ResizeObserverCallback) {}
+        observe() {
+          this.callback([], this);
+        }
+        unobserve() {}
+        disconnect() {}
+      };
+      HTMLElement.prototype.getBoundingClientRect = function () {
+        return new DOMRect(
+          0,
+          20,
+          this.classList.contains('squisq-preview-control') ? 100 : 200,
+          28,
+        );
+      };
+      Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+        configurable: true,
+        get() {
+          return width;
+        },
+      });
+      try {
+        render(
+          <EditorProvider initialMarkdown="# Story">
+            <PreviewToolbarHarness designer showMode />
+          </EditorProvider>,
+        );
+        if (width === 40)
+          fireEvent.click(await screen.findByRole('button', { name: 'More preview settings' }));
+        const button = screen.getByRole('button', { name: 'Summarization designer' });
+        expect(button.textContent).toBe('Design…');
+        expect(
+          within(button.parentElement!).getByRole('combobox', { name: 'Summarize' }),
+        ).toBeTruthy();
+        fireEvent.click(button);
+        expect(document.querySelector('.squisq-preview-controls-popover')).toBeNull();
+        expect(screen.getByRole('dialog', { name: 'Designer' })).toBeTruthy();
+        // Opening the designer does not accidentally select a different summarization mode.
+        expect(screen.getByTestId('active-mode').getAttribute('data-transform-style')).toBe('');
+        fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(screen.queryByRole('dialog', { name: 'Designer' })).toBeNull();
+        expect(document.activeElement).toBe(
+          width === 40 ? screen.getByRole('button', { name: 'More preview settings' }) : button,
+        );
+      } finally {
+        globalThis.ResizeObserver = previousObserver;
+        HTMLElement.prototype.getBoundingClientRect = previousRect;
+        if (previousWidth)
+          Object.defineProperty(HTMLElement.prototype, 'clientWidth', previousWidth);
+        else Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
+      }
+    },
+  );
 });
 
 describe('Use tab mode menu', () => {

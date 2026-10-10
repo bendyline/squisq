@@ -28,7 +28,7 @@ import {
   splitKeyValueToken,
   tokenizeAttrTokens,
 } from '@bendyline/squisq/markdown';
-import { useEditorContext, type EditorView } from './EditorContext';
+import { useEditorContext } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
 import { DictationButton } from './speech/DictationButton';
@@ -58,7 +58,8 @@ import { CustomLayoutManager } from './customTemplates/CustomLayoutManager';
 import { Icon } from './Icon';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
-import { PreviewModeMenu, displayModeLabel, usePreviewSettingsOptional } from './PreviewControls';
+import { usePreviewSettingsOptional } from './PreviewControls';
+import { EditorViewTabs } from './toolbar/EditorViewTabs';
 import { filterVisibleMediaEntries } from './mediaEntries';
 import { MEDIA_FILE_ACCEPT } from './mediaDragMime';
 import { addFileToDocument } from './mediaInsertion';
@@ -82,15 +83,8 @@ import {
 } from './mermaid/mermaidDiagramTypes';
 import { MermaidDiagramTypeThumbnail } from './mermaid/MermaidDiagramTypeThumbnail';
 import { FindToolbar } from './find/FindToolbar';
-import { platformShortcut } from './platformShortcuts';
 import { useEscapeDismissal } from './useEscapeDismissal';
 import type { EditorHostMode } from './editorHostMode';
-
-const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcutKey: string }[] = [
-  { id: 'wysiwyg', label: 'Write', shortcutKey: '1' },
-  { id: 'raw', label: 'Source', shortcutKey: '2' },
-  { id: 'preview', label: 'Use', shortcutKey: '3' },
-];
 
 const BLOCK_META_KEYS = new Set<string>(Object.keys(KNOWN_BLOCK_META_KEYS));
 
@@ -244,7 +238,6 @@ export function Toolbar({
 }: ToolbarProps) {
   const {
     activeView,
-    setActiveView,
     markdownSource,
     doc,
     setMarkdownSource,
@@ -268,7 +261,6 @@ export function Toolbar({
     insertAtCursor,
   } = useEditorContext();
   const previewSettings = usePreviewSettingsOptional();
-  const [useModeMenuRequest, requestUseModeMenu] = useReducer((count: number) => count + 1, 0);
   const [recorderOpen, setRecorderOpen] = useState(false);
   const [docNarrationOpen, setDocNarrationOpen] = useState(false);
   // When a canvas textbox is being edited, its Tiptap instance takes over
@@ -278,15 +270,6 @@ export function Toolbar({
   const sceneTextLevel = activeSceneText?.level ?? null;
   const isCodeMode = editorMode === 'code';
   const showDocumentChrome = !isCodeMode && hostMode !== 'chat';
-  // In code mode only the raw view is meaningful; the WYSIWYG and Preview
-  // surfaces aren't mounted, so hide their tabs.
-  const visibleViews = VIEWS.filter((v) => {
-    if (hostMode === 'chat') return v.id === 'wysiwyg';
-    if (isCodeMode) return v.id === 'raw';
-    if (v.id === 'preview' && !showPlayTab) return false;
-    return true;
-  });
-  const showViewTabs = visibleViews.length > 1;
   const [scannedFileCount, setScannedFileCount] = useState(0);
   const resolvedFileCount = fileCount ?? scannedFileCount;
 
@@ -2008,67 +1991,7 @@ export function Toolbar({
       />
       {/* Left slot — before view tabs */}
       {!findMode && slotLeft}
-      {/* View tabs — hidden when only one view is available (e.g. code mode). */}
-      {showViewTabs && (
-        <div className="squisq-toolbar-view-tabs" role="tablist" aria-label="Editor view">
-          {visibleViews.map((view) => {
-            const viewLabel =
-              view.id === 'preview' && previewSettings
-                ? displayModeLabel(previewSettings.activeDisplayMode)
-                : view.label;
-            const tab = (
-              <button
-                role="tab"
-                data-view={view.id}
-                aria-selected={activeView === view.id}
-                className={`squisq-toolbar-view-tab${activeView === view.id ? ' squisq-toolbar-view-tab--active' : ''}`}
-                onClick={() => {
-                  if (view.id === 'preview' && activeView === 'preview' && previewSettings) {
-                    requestUseModeMenu();
-                    return;
-                  }
-                  setActiveView(view.id);
-                }}
-                data-tooltip={`${viewLabel} (${platformShortcut(`Shift+${view.shortcutKey}`)})`}
-              >
-                <span
-                  className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"
-                  data-label={viewLabel}
-                >
-                  {viewLabel}
-                </span>
-                {view.shortLabel && view.shortLabel !== view.label && (
-                  <span
-                    className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--short"
-                    data-label={view.shortLabel}
-                  >
-                    {view.shortLabel}
-                  </span>
-                )}
-              </button>
-            );
-
-            if (view.id !== 'preview' || !previewSettings) {
-              return (
-                <div key={view.id} className="squisq-toolbar-view-tab-wrap" role="presentation">
-                  {tab}
-                </div>
-              );
-            }
-
-            return (
-              <div
-                key={view.id}
-                className={`squisq-toolbar-view-tab-wrap squisq-toolbar-use-tab${activeView === 'preview' ? ' squisq-toolbar-use-tab--active' : ''}`}
-                role="presentation"
-              >
-                {tab}
-                <PreviewModeMenu openRequest={useModeMenuRequest} />
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <EditorViewTabs showPlayTab={showPlayTab} hostMode={hostMode} />
       {/* After-tabs slot — left side, before formatting or preview controls. */}
       {findMode ? <FindToolbar onClose={() => setFindMode(false)} /> : slotAfterTabs}
       {/* Built-in actions — formatting and Insert can be controlled independently. */}
