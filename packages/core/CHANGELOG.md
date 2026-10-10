@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.11.18](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.17...@bendyline/squisq@2.11.18) (2026-10-10)
+
+### Bug Fixes
+
+* Story planning ([#79](https://github.com/bendyline/squisq/issues/79)) ([3db5555](https://github.com/bendyline/squisq/commit/3db5555c4b1242cf569c98ce287e494e41633838))
+
 ## @bendyline/squisq [2.11.17](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.16...@bendyline/squisq@2.11.17) (2026-10-09)
 
 ### Bug Fixes

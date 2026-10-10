@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.11.20](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.19...@bendyline/squisq-react@2.11.20) (2026-10-10)
+
+### Bug Fixes
+
+* Story planning ([#79](https://github.com/bendyline/squisq/issues/79)) ([3db5555](https://github.com/bendyline/squisq/commit/3db5555c4b1242cf569c98ce287e494e41633838))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.18
+
 ## @bendyline/squisq-react [2.11.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.18...@bendyline/squisq-react@2.11.19) (2026-10-09)
 
 ### Bug Fixes

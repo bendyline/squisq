@@ -1,3 +1,16 @@
+## @bendyline/squisq-cli [2.8.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.8.18...@bendyline/squisq-cli@2.8.19) (2026-10-10)
+
+### Bug Fixes
+
+* Story planning ([#79](https://github.com/bendyline/squisq/issues/79)) ([3db5555](https://github.com/bendyline/squisq/commit/3db5555c4b1242cf569c98ce287e494e41633838))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.11.18
+* **@bendyline/squisq-formats:** upgraded to 2.6.18
+* **@bendyline/squisq-video:** upgraded to 2.3.22
+
 ## @bendyline/squisq-cli [2.8.18](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.8.17...@bendyline/squisq-cli@2.8.18) (2026-10-09)
 
 ### Bug Fixes
