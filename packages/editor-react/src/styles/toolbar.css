@@ -597,6 +597,32 @@
   margin-left: 2px;
 }
 
+/* Match case / Whole word: text toggles, pressed state from aria-pressed. */
+.squisq-find-option {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.squisq-find-option--word span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.squisq-find-option[aria-pressed='true'] {
+  background: var(--squisq-accent-subtle);
+  color: var(--squisq-accent-strong);
+  box-shadow: inset 0 0 0 1px var(--squisq-accent-border);
+}
+
+.squisq-find-replace-toggle {
+  width: 20px;
+  font-size: 10px;
+}
+
+.squisq-replace-field {
+  flex-basis: 260px;
+}
+
 /* Shared by Tiptap decorations, Monaco inline decorations, and the fallback
    used when a preview webview lacks the CSS Custom Highlight API. */
 .squisq-find-match {

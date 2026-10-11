@@ -3049,6 +3049,8 @@ interface EditorShellProps {
   language?: string;
   findMode?: boolean; // controlled; no built-in trigger button
   onFindModeChange?: (active: boolean) => void;
+  findRequest?: FindRequest | null; // { query, matchCase?, wholeWord?, occurrence? }
+  findShortcut?: boolean; // default false; Ctrl/Cmd+F and Ctrl+H / Cmd+Option+F
   readOnly?: boolean;
   imageSrc?: string;
   imageAlt?: string;
@@ -3098,6 +3100,31 @@ stronger highlight, and Enter / Shift+Enter or the arrow buttons navigate the
 results. Handle `onFindModeChange` so the X button can close a controlled Find
 mode. Descendants rendered inside `EditorProvider` can instead call
 `setFindMode(true)` from `useEditorContext()`.
+
+The same literal matcher runs in Write, Source, and Use, so counts agree across
+views. **Match case** and **Match whole word** toggle beside the field; whole
+word only constrains the ends of the query that are word characters, so `c++`
+still matches. Opening Find seeds the query from a single-line editor
+selection, with the match at that selection current. Moving between matches
+selects the match in the editor, so closing Find (Esc or X) returns focus to
+the editor with the match selected; editing the document while Find is open
+updates the highlights without moving the caret. In an editable document the
+chevron before the field opens **Replace**: Enter replaces the current match
+and moves to the next one after the inserted text, and Ctrl/Cmd+Enter or
+**Replace all** replaces every match in one undo step. Replace is not offered
+when `readOnly` is set or in the Use view.
+
+`findRequest` shows particular results — for example, a host opening a
+document at a workspace-search hit. Its `query`, `matchCase`, and `wholeWord`
+replace the bar's state, and `occurrence` (0-based, in document order) selects
+that match once it exists. It applies when Find opens and whenever a new
+request object is passed; set `findMode` as well. `findShortcut` binds
+Ctrl/Cmd+F (find) and Ctrl+H, or Cmd+Option+F on Apple platforms (replace),
+while focus is inside this editor, ahead of Monaco's own find widget. It is off
+by default so hosts that bind their own shortcut keep control. Hosts restyle
+the highlights in every view with `--squisq-find-match`,
+`--squisq-find-match-current`, `--squisq-find-match-ring`, and
+`--squisq-find-match-text`.
 
 In the Use view, the Presentation split button can fill only the current
 `EditorShell`, open a read-only audience window synchronized to the main

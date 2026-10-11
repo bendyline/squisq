@@ -57,6 +57,7 @@ import {
 import { resolveFileKind } from './fileKind';
 import { useBlockNavigator } from './useBlockNavigator';
 import { embeddedMediaClips } from './mediaEdit/mediaEditTargets';
+import type { FindRequest } from './find/findModel';
 import type { MediaEditRenderManager } from '@bendyline/squisq-video-react/media-edit';
 import {
   createSceneTextChannel,
@@ -214,6 +215,8 @@ export interface EditorState {
   editorMode: EditorMode;
   /** Whether the host-triggered Find toolbar is active. */
   findMode: boolean;
+  /** Host request for a particular query and match (see `EditorShellProps.findRequest`). */
+  findRequest: FindRequest | null;
   /** Monaco language ID for the Raw editor. */
   language: string;
   /**
@@ -768,6 +771,8 @@ export interface EditorProviderProps {
   findMode?: boolean;
   /** Notified when Find mode requests a state change (for example, its X button). */
   onFindModeChange?: (active: boolean) => void;
+  /** Query, options, and match to show when Find mode opens or the request changes. */
+  findRequest?: FindRequest | null;
   /**
    * Initial visibility of the inline preview gutter. Defaults to false.
    * The toolbar's View menu can toggle it at runtime.
@@ -898,6 +903,7 @@ export function EditorProvider({
   language,
   findMode: controlledFindMode,
   onFindModeChange,
+  findRequest = null,
   inlinePreview = false,
   showStatusBar = true,
   outline = false,
@@ -1738,6 +1744,7 @@ export function EditorProvider({
       colorScheme,
       editorMode,
       findMode,
+      findRequest,
       language: resolvedLanguage,
       inlinePreviewVisible,
       statusBarVisible,
@@ -1826,6 +1833,7 @@ export function EditorProvider({
       colorScheme,
       editorMode,
       findMode,
+      findRequest,
       resolvedLanguage,
       inlinePreviewVisible,
       statusBarVisible,

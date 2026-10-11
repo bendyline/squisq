@@ -102,9 +102,11 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   highlighting with line and block comment support.
 - **Host-triggered Find mode** — control `findMode` and
   `onFindModeChange` (or call `setFindMode` from context) to replace the
-  toolbar's editing actions with live search, previous/next navigation, and
-  highlighted matches. No Find trigger button is added unless the host supplies
-  one.
+  toolbar's editing actions with live search, Match case / Whole word,
+  previous/next navigation, highlighted matches, and Replace / Replace all in
+  editable documents. `findRequest` opens Find at a given query and match;
+  `findShortcut` opts in to Ctrl/Cmd+F and Ctrl+H (Cmd+Option+F on Apple). No
+  Find trigger button is added unless the host supplies one.
 - **Embedding** — `readOnly`, `placeholder`, `submitOnEnter`, `fullWidth`,
   `thinMargins`, `minHeight`/`maxHeight` auto-grow for chat-composer use, plus
   host-controlled Write typography through `writeCanvasSettings` (`textSize`
