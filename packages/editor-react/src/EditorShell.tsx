@@ -121,6 +121,7 @@ import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { useModalDialog } from './modal/useModalDialog';
 import type { EditorHostMode } from './editorHostMode';
+import type { FindRequest } from './find/findModel';
 
 export type { EditorColorScheme } from './EditorContext';
 
@@ -426,6 +427,19 @@ export interface EditorShellProps {
   findMode?: boolean;
   /** Called when Find mode requests a state change, including its X button. */
   onFindModeChange?: (active: boolean) => void;
+  /**
+   * Show particular results in Find mode: the query, its Match case / Whole
+   * word options, and which match (`occurrence`, 0-based in document order)
+   * to select. Applied when Find opens and whenever a new request object is
+   * passed, so a host can open a document straight at a search hit.
+   */
+  findRequest?: FindRequest | null;
+  /**
+   * Bind Ctrl/Cmd+F (find) and Ctrl+H / Cmd+Option+F (replace) while focus is
+   * inside this editor. Off by default so hosts with their own shortcut keep
+   * control; when on, the shortcuts replace Monaco's built-in find widget.
+   */
+  findShortcut?: boolean;
   /**
    * Optional async provider for `@`-mention suggestions. When supplied,
    * typing `@` inside the editor opens a popover of candidates; selecting
@@ -735,6 +749,8 @@ export function EditorShell({
   language,
   findMode,
   onFindModeChange,
+  findRequest,
+  findShortcut = false,
   mentionProvider,
   proofing = null,
   proofingDefaultEnabled = true,
@@ -837,6 +853,7 @@ export function EditorShell({
         language={language}
         findMode={findMode}
         onFindModeChange={onFindModeChange}
+        findRequest={findRequest}
         inlinePreview={inlinePreview}
         showStatusBar={showStatusBar}
         outline={outline}
@@ -886,6 +903,7 @@ export function EditorShell({
               thinMargins={thinMargins}
               writeCanvasSettings={writeCanvasSettings}
               readOnly={readOnly}
+              findShortcut={findShortcut}
               imageSrc={imageSrc}
               imageAlt={imageAlt}
               imageMode={imageMode}
@@ -951,6 +969,7 @@ interface EditorShellInnerProps {
   thinMargins: boolean;
   writeCanvasSettings?: WriteCanvasSettings;
   readOnly: boolean;
+  findShortcut: boolean;
   imageSrc?: string;
   imageAlt?: string;
   imageMode: 'view' | 'edit';
@@ -1043,6 +1062,7 @@ function EditorShellInner({
   thinMargins,
   writeCanvasSettings,
   readOnly,
+  findShortcut,
   imageSrc,
   imageAlt,
   imageMode,
@@ -1554,6 +1574,8 @@ function EditorShellInner({
                   showFormattingControls={showFormattingControls}
                   showInsertControls={showInsertControls}
                   hostMode={hostMode}
+                  readOnly={readOnly}
+                  findShortcut={findShortcut}
                 />
               </div>
             )}

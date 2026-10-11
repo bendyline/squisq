@@ -14,12 +14,11 @@ it('keeps every editor grid import behind a dynamic boundary', () => {
         continue;
       }
       if (!/\.tsx?$/.test(path)) continue;
-      const file = ts.createSourceFile(
-        path,
-        readFileSync(path, 'utf8'),
-        ts.ScriptTarget.Latest,
-        true,
-      );
+      const source = readFileSync(path, 'utf8');
+      // Parsing every file in the package costs seconds under a loaded
+      // full-suite run; only a file naming the package can import it.
+      if (!source.includes('@bendyline/squisq-grid-react')) continue;
+      const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
       for (const node of file.statements) {
         if (
           !ts.isImportDeclaration(node) ||

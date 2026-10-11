@@ -101,4 +101,82 @@ describe('<EditorShell> Find mode', () => {
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(onFindModeChange).toHaveBeenCalledWith(false);
   });
+
+  it('opens with a host find request and toggles its options', () => {
+    render(
+      <EditorShell
+        initialMarkdown="Alpha beta alpha"
+        initialView="raw"
+        findMode
+        findRequest={{ query: 'alpha', matchCase: true, occurrence: 1 }}
+      />,
+    );
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Find in document' });
+    expect(input.value).toBe('alpha');
+    const matchCase = screen.getByRole('button', { name: 'Match case' });
+    const wholeWord = screen.getByRole('button', { name: 'Match whole word' });
+    expect(matchCase.getAttribute('aria-pressed')).toBe('true');
+    expect(wholeWord.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(wholeWord);
+    expect(wholeWord.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('offers Replace only for an editable document', () => {
+    const { unmount } = render(
+      <EditorShell initialMarkdown="Alpha" initialView="raw" findMode readOnly />,
+    );
+    expect(screen.queryByRole('button', { name: 'Toggle replace' })).toBeNull();
+    unmount();
+
+    render(<EditorShell initialMarkdown="Alpha" initialView="raw" findMode />);
+    const toggle = screen.getByRole('button', { name: 'Toggle replace' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('textbox', { name: 'Replace with' })).toBeNull();
+    fireEvent.click(toggle);
+    const replaceInput = screen.getByRole('textbox', { name: 'Replace with' });
+    expect(document.activeElement).toBe(replaceInput);
+    expect(screen.getByRole('button', { name: 'Replace all' })).toBeTruthy();
+  });
+
+  it('binds the find and replace shortcuts inside the editor only when asked', () => {
+    const onFindModeChange = vi.fn();
+    const { container, rerender } = render(
+      <EditorShell
+        initialMarkdown="Alpha"
+        initialView="raw"
+        findMode={false}
+        onFindModeChange={onFindModeChange}
+      />,
+    );
+    const inside = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    fireEvent.keyDown(inside, { key: 'f', code: 'KeyF', ctrlKey: true });
+    expect(onFindModeChange).not.toHaveBeenCalled();
+
+    rerender(
+      <EditorShell
+        initialMarkdown="Alpha"
+        initialView="raw"
+        findMode={false}
+        onFindModeChange={onFindModeChange}
+        findShortcut
+      />,
+    );
+    // Outside this editor the shortcut is left alone.
+    fireEvent.keyDown(document.body, { key: 'f', code: 'KeyF', ctrlKey: true });
+    expect(onFindModeChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(inside, { key: 'f', code: 'KeyF', ctrlKey: true });
+    expect(onFindModeChange).toHaveBeenCalledWith(true);
+
+    rerender(
+      <EditorShell
+        initialMarkdown="Alpha"
+        initialView="raw"
+        findMode
+        onFindModeChange={onFindModeChange}
+        findShortcut
+      />,
+    );
+    fireEvent.keyDown(inside, { key: 'h', code: 'KeyH', ctrlKey: true });
+    expect(screen.getByRole('textbox', { name: 'Replace with' })).toBeTruthy();
+  });
 });

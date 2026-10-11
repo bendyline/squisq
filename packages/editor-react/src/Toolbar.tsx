@@ -130,6 +130,10 @@ export interface ToolbarProps {
    * keyboard-switch targets. Defaults to `'document'`.
    */
   hostMode?: EditorHostMode;
+  /** The document cannot be edited: Find offers no Replace. */
+  readOnly?: boolean;
+  /** Bind Ctrl/Cmd+F and Ctrl+H / Cmd+Option+F while focus is inside this editor. */
+  findShortcut?: boolean;
 }
 
 import {
@@ -217,6 +221,11 @@ function keepBlockMetaParamString(inner: string | null | undefined): string | nu
   return params.length > 0 ? params.join(' ') : null;
 }
 
+/** Apple platforms reserve Cmd+H (hide app), so replace is Cmd+Option+F there. */
+function isApplePlatform(): boolean {
+  return typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/u.test(navigator.platform);
+}
+
 /**
  * Formatting toolbar.
  * - WYSIWYG: calls Tiptap chain commands (toggleBold, etc.)
@@ -235,6 +244,8 @@ export function Toolbar({
   showFormattingControls = true,
   showInsertControls = true,
   hostMode = 'document',
+  readOnly = false,
+  findShortcut = false,
 }: ToolbarProps) {
   const {
     activeView,
@@ -494,6 +505,40 @@ export function Toolbar({
     closeInsertMenu();
     closeEmojiPicker();
   }, [closeEmojiPicker, closeInsertMenu, findMode]);
+
+  // Find state the toolbar owns so a shortcut can reach a mounted find bar.
+  const toolbarRootRef = useRef<HTMLDivElement>(null);
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [findFocusRequest, setFindFocusRequest] = useState(0);
+  useEffect(() => {
+    if (!findMode) setReplaceOpen(false);
+  }, [findMode]);
+
+  // ── Ctrl/Cmd+F → find, Ctrl+H / Cmd+Option+F → replace (opt-in) ──
+  // Scoped to this editor shell so several editors on one page do not all
+  // answer, and claimed in the capture phase ahead of Monaco's own widget.
+  useEffect(() => {
+    if (!findShortcut || editorMode === 'image') return;
+    const apple = isApplePlatform();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.shiftKey) return;
+      const accel = event.ctrlKey || event.metaKey;
+      const find = accel && !event.altKey && event.code === 'KeyF';
+      const replace = apple
+        ? event.metaKey && event.altKey && event.code === 'KeyF'
+        : event.ctrlKey && !event.altKey && event.code === 'KeyH';
+      if (!find && !replace) return;
+      const shell = toolbarRootRef.current?.closest('.squisq-editor-shell');
+      if (!shell || !(event.target instanceof Node) || !shell.contains(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (replace && !readOnly) setReplaceOpen(true);
+      setFindMode(true);
+      setFindFocusRequest((request) => request + 1);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [editorMode, findShortcut, readOnly, setFindMode]);
 
   // The lane only exists outside preview / code / find mode. Without it
   // nothing is measured, so nothing may stay collapsed: the ··· menu that
@@ -1960,6 +2005,7 @@ export function Toolbar({
 
   return (
     <div
+      ref={toolbarRootRef}
       className={`squisq-toolbar${findMode ? ' squisq-toolbar--find' : ''} ${className || ''}`}
       role="toolbar"
       aria-label={
@@ -1993,7 +2039,17 @@ export function Toolbar({
       {!findMode && slotLeft}
       <EditorViewTabs showPlayTab={showPlayTab} hostMode={hostMode} />
       {/* After-tabs slot — left side, before formatting or preview controls. */}
-      {findMode ? <FindToolbar onClose={() => setFindMode(false)} /> : slotAfterTabs}
+      {findMode ? (
+        <FindToolbar
+          onClose={() => setFindMode(false)}
+          allowReplace={!readOnly}
+          replaceOpen={replaceOpen && !readOnly}
+          onReplaceOpenChange={setReplaceOpen}
+          focusRequest={findFocusRequest}
+        />
+      ) : (
+        slotAfterTabs
+      )}
       {/* Built-in actions — formatting and Insert can be controlled independently. */}
       {actionsLaneShown && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>

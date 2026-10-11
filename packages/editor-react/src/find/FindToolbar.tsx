@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { editor as MonacoEditorNs } from 'monaco-editor';
+import type { Editor as TiptapEditor } from '@tiptap/core';
+import type { editor as MonacoEditorNs, IRange } from 'monaco-editor';
 import { useEditorContext } from '../EditorContext';
 import { Icon } from '../Icon';
-import { updateTiptapFindHighlights } from './FindHighlightExtension';
-import { findTextMatches, normalizeFindIndex } from './findModel';
+import {
+  replaceAllTiptapFindMatches,
+  replaceTiptapFindMatch,
+  updateTiptapFindHighlights,
+} from './FindHighlightExtension';
+import {
+  findProseMirrorMatches,
+  findTextMatches,
+  nextFindIndexAfter,
+  normalizeFindIndex,
+  type FindOptions,
+  type FindRequest,
+} from './findModel';
 
 interface HighlightRegistryLike {
   set(name: string, highlight: unknown): void;
@@ -21,27 +33,78 @@ interface PreviewHighlightResult {
 
 export interface FindToolbarProps {
   onClose: () => void;
+  /** The document is editable, so Replace may be offered. */
+  allowReplace?: boolean;
+  /** Show the replace field. */
+  replaceOpen?: boolean;
+  onReplaceOpenChange?: (open: boolean) => void;
+  /** Advances when the find shortcut is pressed again while the bar is open. */
+  focusRequest?: number;
 }
 
+/** Longest editor selection that seeds the query; longer ones are not a search. */
+const MAX_SEEDED_QUERY = 200;
+
 /** Search controls shown immediately to the right of the Write/Source/Use tabs. */
-export function FindToolbar({ onClose }: FindToolbarProps) {
-  const { activeView, markdownSource, tiptapEditor, monacoEditor } = useEditorContext();
-  const [query, setQuery] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState(0);
+export function FindToolbar({
+  onClose,
+  allowReplace = false,
+  replaceOpen = false,
+  onReplaceOpenChange,
+  focusRequest = 0,
+}: FindToolbarProps) {
+  const { activeView, markdownSource, tiptapEditor, monacoEditor, findRequest } =
+    useEditorContext();
+  const [initial] = useState(() =>
+    initialFindState(findRequest, activeView, tiptapEditor, monacoEditor),
+  );
+  const [query, setQuery] = useState(initial.query);
+  const [matchCase, setMatchCase] = useState(initial.matchCase ?? false);
+  const [wholeWord, setWholeWord] = useState(initial.wholeWord ?? false);
+  const [selectedIndex, setSelectedIndex] = useState(initial.occurrence ?? 0);
   const [matchCount, setMatchCount] = useState(0);
+  const [replacement, setReplacement] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
   const reactId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const previewHighlightName = `squisq-find-${reactId}`;
   const previewSelectedName = `${previewHighlightName}-selected`;
+  const canReplace = allowReplace && activeView !== 'preview';
+  const showReplace = canReplace && replaceOpen;
+  const options: FindOptions = { matchCase, wholeWord };
+
+  // Reveal (scroll to and select) the current match only when the user
+  // navigates — never because the document changed, or typing in the
+  // document with Find open would keep yanking the caret to the match. A
+  // reveal stays pending until there is a match to reveal (a document that
+  // is still loading has none yet).
+  const lastNavigationRef = useRef('');
+  const pendingRevealRef = useRef(false);
 
   useEffect(() => {
     inputRef.current?.focus();
-  }, []);
+    inputRef.current?.select();
+  }, [focusRequest]);
+
+  useEffect(() => {
+    if (showReplace) replaceInputRef.current?.focus();
+  }, [showReplace, focusRequest]);
+
+  // A new host request (e.g. a workspace search hit) replaces the query.
+  const appliedRequestRef = useRef(findRequest);
+  useEffect(() => {
+    if (!findRequest || findRequest === appliedRequestRef.current) return;
+    appliedRequestRef.current = findRequest;
+    setQuery(findRequest.query);
+    setMatchCase(findRequest.matchCase ?? false);
+    setWholeWord(findRequest.wholeWord ?? false);
+    setSelectedIndex(findRequest.occurrence ?? 0);
+  }, [findRequest]);
 
   useEffect(() => {
     const style = document.createElement('style');
     style.dataset.squisqFindHighlight = reactId;
-    style.textContent = `::highlight(${previewHighlightName}) { background: #fde68a; color: inherit; } ::highlight(${previewSelectedName}) { background: #f59e0b; color: #111827; }`;
+    style.textContent = `::highlight(${previewHighlightName}) { background: var(--squisq-find-match, #fde68a); color: inherit; } ::highlight(${previewSelectedName}) { background: var(--squisq-find-match-current, #f59e0b); color: var(--squisq-find-match-text, #111827); }`;
     document.head.append(style);
     return () => style.remove();
   }, [previewHighlightName, previewSelectedName, reactId]);
@@ -49,28 +112,39 @@ export function FindToolbar({ onClose }: FindToolbarProps) {
   useEffect(() => {
     let cleanup = () => {};
     let count = 0;
+    const navigationKey = [activeView, query, matchCase, wholeWord, selectedIndex].join('\u0000');
+    if (navigationKey !== lastNavigationRef.current) {
+      lastNavigationRef.current = navigationKey;
+      pendingRevealRef.current = true;
+    }
+    const reveal = pendingRevealRef.current;
+    const findOptions: FindOptions = { matchCase, wholeWord };
 
     if (activeView === 'raw' && monacoEditor) {
       const model = monacoEditor.getModel();
-      const matches = model
-        ? model.findMatches(query.trim(), false, false, false, null, false)
-        : [];
-      count = query.trim() ? matches.length : 0;
+      const ranges = model ? findMonacoRanges(model, query, findOptions) : [];
+      count = ranges.length;
       const selected = normalizeFindIndex(selectedIndex, count);
       const decorations = monacoEditor.createDecorationsCollection(
-        matches.slice(0, count).map((match, index) => ({
-          range: match.range,
+        ranges.map((range, index) => ({
+          range,
           options: monacoDecorationOptions(index === selected),
         })),
       );
-      if (count > 0) monacoEditor.revealRangeInCenter(matches[selected].range);
+      if (reveal && count > 0) {
+        monacoEditor.setSelection(ranges[selected]!);
+        monacoEditor.revealRangeInCenter(ranges[selected]!);
+      }
       cleanup = () => decorations.clear();
     } else if (activeView === 'wysiwyg' && tiptapEditor && !tiptapEditor.isDestroyed) {
-      count = updateTiptapFindHighlights(tiptapEditor, query, selectedIndex);
-      const selected = tiptapEditor.view.dom.querySelector<HTMLElement>(
-        '.squisq-find-match--selected',
-      );
-      selected?.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+      count = updateTiptapFindHighlights(tiptapEditor, query, selectedIndex, findOptions, {
+        select: reveal,
+      });
+      if (reveal) {
+        tiptapEditor.view.dom
+          .querySelector<HTMLElement>('.squisq-find-match--selected')
+          ?.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+      }
       cleanup = () => {
         if (!tiptapEditor.isDestroyed) updateTiptapFindHighlights(tiptapEditor, '', 0);
       };
@@ -82,27 +156,34 @@ export function FindToolbar({ onClose }: FindToolbarProps) {
         const result = applyPreviewHighlights(
           root,
           query,
+          findOptions,
           selectedIndex,
           previewHighlightName,
           previewSelectedName,
+          reveal,
         );
         count = result.count;
         cleanup = result.cleanup;
       }
     }
 
+    if (count > 0) pendingRevealRef.current = false;
     setMatchCount(count);
-    setSelectedIndex((current) => normalizeFindIndex(current, count));
+    // With no matches yet (a document still loading), keep a requested
+    // occurrence rather than collapsing it to the first match.
+    setSelectedIndex((current) => (count === 0 ? current : normalizeFindIndex(current, count)));
     return cleanup;
   }, [
     activeView,
     markdownSource,
+    matchCase,
     monacoEditor,
     previewHighlightName,
     previewSelectedName,
     query,
     selectedIndex,
     tiptapEditor,
+    wholeWord,
   ]);
 
   const moveSelection = useCallback(
@@ -113,6 +194,38 @@ export function FindToolbar({ onClose }: FindToolbarProps) {
     [matchCount],
   );
 
+  const replaceCurrent = () => {
+    if (!canReplace || matchCount === 0) return;
+    let next: number | null = null;
+    if (activeView === 'raw' && monacoEditor) {
+      next = replaceMonacoMatch(monacoEditor, query, selectedIndex, replacement, options);
+    } else if (activeView === 'wysiwyg' && tiptapEditor && !tiptapEditor.isDestroyed) {
+      next = replaceTiptapFindMatch(tiptapEditor, query, selectedIndex, replacement, options);
+    }
+    if (next === null) return;
+    pendingRevealRef.current = true;
+    setSelectedIndex(next);
+  };
+
+  const replaceAll = () => {
+    if (!canReplace || matchCount === 0) return;
+    if (activeView === 'raw' && monacoEditor) {
+      replaceAllMonacoMatches(monacoEditor, query, replacement, options);
+    } else if (activeView === 'wysiwyg' && tiptapEditor && !tiptapEditor.isDestroyed) {
+      replaceAllTiptapFindMatches(tiptapEditor, query, replacement, options);
+    }
+    setSelectedIndex(0);
+  };
+
+  /** Close and hand focus back to the editor, where the current match is selected. */
+  const close = () => {
+    if (activeView === 'raw') monacoEditor?.focus();
+    else if (activeView === 'wysiwyg' && tiptapEditor && !tiptapEditor.isDestroyed) {
+      tiptapEditor.commands.focus();
+    }
+    onClose();
+  };
+
   const resultLabel =
     query.trim() === ''
       ? '0 of 0'
@@ -122,6 +235,18 @@ export function FindToolbar({ onClose }: FindToolbarProps) {
 
   return (
     <div className="squisq-find-toolbar" role="search" aria-label="Find in document">
+      {canReplace && (
+        <button
+          type="button"
+          className="squisq-find-button squisq-find-replace-toggle"
+          aria-label="Toggle replace"
+          aria-expanded={showReplace}
+          data-tooltip="Toggle replace"
+          onClick={() => onReplaceOpenChange?.(!replaceOpen)}
+        >
+          <Icon icon={showReplace ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'} />
+        </button>
+      )}
       <div className="squisq-find-field">
         <Icon icon="fa-solid fa-magnifying-glass" />
         <input
@@ -143,7 +268,7 @@ export function FindToolbar({ onClose }: FindToolbarProps) {
               moveSelection(event.shiftKey ? -1 : 1);
             } else if (event.key === 'Escape') {
               event.preventDefault();
-              onClose();
+              close();
             }
           }}
         />
@@ -151,6 +276,32 @@ export function FindToolbar({ onClose }: FindToolbarProps) {
           {resultLabel}
         </span>
       </div>
+      <button
+        type="button"
+        className="squisq-find-button squisq-find-option"
+        aria-label="Match case"
+        aria-pressed={matchCase}
+        data-tooltip="Match case"
+        onClick={() => {
+          setMatchCase((value) => !value);
+          setSelectedIndex(0);
+        }}
+      >
+        <span aria-hidden="true">Aa</span>
+      </button>
+      <button
+        type="button"
+        className="squisq-find-button squisq-find-option squisq-find-option--word"
+        aria-label="Match whole word"
+        aria-pressed={wholeWord}
+        data-tooltip="Match whole word"
+        onClick={() => {
+          setWholeWord((value) => !value);
+          setSelectedIndex(0);
+        }}
+      >
+        <span aria-hidden="true">ab</span>
+      </button>
       <button
         type="button"
         className="squisq-find-button"
@@ -171,17 +322,157 @@ export function FindToolbar({ onClose }: FindToolbarProps) {
       >
         <Icon icon="fa-solid fa-chevron-down" />
       </button>
+      {showReplace && (
+        <>
+          <div className="squisq-find-field squisq-replace-field">
+            <Icon icon="fa-solid fa-right-left" />
+            <input
+              ref={replaceInputRef}
+              type="text"
+              value={replacement}
+              className="squisq-find-input"
+              aria-label="Replace with"
+              placeholder="Replace"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => setReplacement(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  if (event.ctrlKey || event.metaKey) replaceAll();
+                  else replaceCurrent();
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  close();
+                }
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            className="squisq-find-button"
+            aria-label="Replace"
+            data-tooltip="Replace (Enter)"
+            disabled={matchCount === 0}
+            onClick={replaceCurrent}
+          >
+            <Icon icon="fa-solid fa-arrow-right-long" />
+          </button>
+          <button
+            type="button"
+            className="squisq-find-button"
+            aria-label="Replace all"
+            data-tooltip="Replace all (Ctrl+Enter)"
+            disabled={matchCount === 0}
+            onClick={replaceAll}
+          >
+            <Icon icon="fa-solid fa-angles-right" />
+          </button>
+        </>
+      )}
       <button
         type="button"
         className="squisq-find-button squisq-find-close"
         aria-label="Close find"
         data-tooltip="Close find (Esc)"
-        onClick={onClose}
+        onClick={close}
       >
         <Icon icon="fa-solid fa-xmark" />
       </button>
     </div>
   );
+}
+
+/**
+ * What Find opens with: the host's request, or else the editor's single-line
+ * selection, with the match at that selection already current.
+ */
+function initialFindState(
+  request: FindRequest | null,
+  activeView: string,
+  tiptapEditor: TiptapEditor | null,
+  monacoEditor: MonacoEditorNs.IStandaloneCodeEditor | null,
+): FindRequest {
+  if (request) return request;
+  let text = '';
+  let index = 0;
+  if (activeView === 'raw' && monacoEditor) {
+    const selection = monacoEditor.getSelection();
+    const model = monacoEditor.getModel();
+    if (selection && model && !selection.isEmpty()) {
+      text = model.getValueInRange(selection);
+      const start = model.getOffsetAt(selection.getStartPosition());
+      index = nextFindIndexAfter(findTextMatches(model.getValue(), text), start);
+    }
+  } else if (activeView === 'wysiwyg' && tiptapEditor && !tiptapEditor.isDestroyed) {
+    const { from, to } = tiptapEditor.state.selection;
+    if (from !== to) {
+      text = tiptapEditor.state.doc.textBetween(from, to, '\n');
+      index = nextFindIndexAfter(findProseMirrorMatches(tiptapEditor.state.doc, text), from);
+    }
+  }
+  if (!text.trim() || text.includes('\n') || text.length > MAX_SEEDED_QUERY) return { query: '' };
+  return { query: text, occurrence: index };
+}
+
+/** Source-view matches, using the same matcher as Write and Use. */
+function findMonacoRanges(
+  model: MonacoEditorNs.ITextModel,
+  query: string,
+  options: FindOptions,
+): IRange[] {
+  return findTextMatches(model.getValue(), query, options).map((match) => {
+    const start = model.getPositionAt(match.from);
+    const end = model.getPositionAt(match.to);
+    return {
+      startLineNumber: start.lineNumber,
+      startColumn: start.column,
+      endLineNumber: end.lineNumber,
+      endColumn: end.column,
+    };
+  });
+}
+
+function replaceMonacoMatch(
+  editor: MonacoEditorNs.IStandaloneCodeEditor,
+  query: string,
+  selectedIndex: number,
+  replacement: string,
+  options: FindOptions,
+): number | null {
+  const model = editor.getModel();
+  if (!model) return null;
+  const ranges = findMonacoRanges(model, query, options);
+  const range = ranges[normalizeFindIndex(selectedIndex, ranges.length)];
+  if (!range) return null;
+  const start = model.getOffsetAt({ lineNumber: range.startLineNumber, column: range.startColumn });
+  editor.pushUndoStop();
+  editor.executeEdits('squisq-find', [{ range, text: replacement }]);
+  editor.pushUndoStop();
+  return nextFindIndexAfter(
+    findTextMatches(model.getValue(), query, options),
+    start + replacement.length,
+  );
+}
+
+function replaceAllMonacoMatches(
+  editor: MonacoEditorNs.IStandaloneCodeEditor,
+  query: string,
+  replacement: string,
+  options: FindOptions,
+): number {
+  const model = editor.getModel();
+  if (!model) return 0;
+  const ranges = findMonacoRanges(model, query, options);
+  if (ranges.length === 0) return 0;
+  // One edit operation between undo stops: a single undo restores everything.
+  editor.pushUndoStop();
+  editor.executeEdits(
+    'squisq-find',
+    ranges.map((range) => ({ range, text: replacement })),
+  );
+  editor.pushUndoStop();
+  return ranges.length;
 }
 
 function monacoDecorationOptions(selected: boolean): MonacoEditorNs.IModelDecorationOptions {
@@ -195,11 +486,13 @@ function monacoDecorationOptions(selected: boolean): MonacoEditorNs.IModelDecora
 function applyPreviewHighlights(
   root: HTMLElement,
   query: string,
+  options: FindOptions,
   selectedIndex: number,
   highlightName: string,
   selectedName: string,
+  reveal: boolean,
 ): PreviewHighlightResult {
-  const ranges = collectTextRanges(root, query);
+  const ranges = collectTextRanges(root, query, options);
   const selected = normalizeFindIndex(selectedIndex, ranges.length);
   const css = globalThis.CSS as (typeof CSS & { highlights?: HighlightRegistryLike }) | undefined;
   const HighlightConstructor = (
@@ -211,8 +504,8 @@ function applyPreviewHighlights(
   if (css?.highlights && HighlightConstructor) {
     css.highlights.set(highlightName, new HighlightConstructor(...ranges));
     if (ranges.length > 0) {
-      css.highlights.set(selectedName, new HighlightConstructor(ranges[selected]));
-      scrollRangeIntoView(ranges[selected]);
+      css.highlights.set(selectedName, new HighlightConstructor(ranges[selected]!));
+      if (reveal) scrollRangeIntoView(ranges[selected]!);
     } else {
       css.highlights.delete(selectedName);
     }
@@ -229,12 +522,14 @@ function applyPreviewHighlights(
   // DOM-mark fallback for older embedded webviews; Preview is read-only, and
   // every inserted mark is unwrapped when the query changes or Find closes.
   const marks = markPreviewRanges(ranges, selected);
-  marks
-    .find((mark) => mark.classList.contains('squisq-find-match--selected'))
-    ?.scrollIntoView?.({
-      block: 'center',
-      inline: 'nearest',
-    });
+  if (reveal) {
+    marks
+      .find((mark) => mark.classList.contains('squisq-find-match--selected'))
+      ?.scrollIntoView?.({
+        block: 'center',
+        inline: 'nearest',
+      });
+  }
   return {
     count: ranges.length,
     cleanup: () => {
@@ -250,7 +545,7 @@ function applyPreviewHighlights(
   };
 }
 
-function collectTextRanges(root: HTMLElement, query: string): Range[] {
+function collectTextRanges(root: HTMLElement, query: string, options: FindOptions): Range[] {
   if (!query.trim()) return [];
   const doc = root.ownerDocument;
   const showText = doc.defaultView?.NodeFilter.SHOW_TEXT ?? 4;
@@ -266,7 +561,7 @@ function collectTextRanges(root: HTMLElement, query: string): Range[] {
         'button, input, textarea, select, script, style, [aria-hidden="true"], [data-squisq-find-ignore]',
       )
     ) {
-      for (const match of findTextMatches(text.data, query)) {
+      for (const match of findTextMatches(text.data, query, options)) {
         const range = doc.createRange();
         range.setStart(text, match.from);
         range.setEnd(text, match.to);
