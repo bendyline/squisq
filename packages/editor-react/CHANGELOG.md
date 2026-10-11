@@ -1,3 +1,9 @@
+## @bendyline/squisq-editor-react [2.11.23](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.11.22...@bendyline/squisq-editor-react@2.11.23) (2026-10-11)
+
+### Bug Fixes
+
+* Search basics ([#81](https://github.com/bendyline/squisq/issues/81)) ([d78f396](https://github.com/bendyline/squisq/commit/d78f396585e4a043ec70e525fc0505ad18d361f2))
+
 ## @bendyline/squisq-editor-react [2.11.22](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.11.21...@bendyline/squisq-editor-react@2.11.22) (2026-10-11)
 
 ### Bug Fixes
