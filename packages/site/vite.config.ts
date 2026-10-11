@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import type { Connect, Plugin } from 'vite';
-import { SQUISQ_DEV_PORT, SQUISQ_E2E_PORT } from '../../scripts/portUtils';
+import { SQUISQ_DEV_PORT, SQUISQ_E2E_PORT } from '../../scripts/portUtils.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

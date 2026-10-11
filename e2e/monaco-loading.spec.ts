@@ -6,7 +6,7 @@ function isMonacoJavaScript(url: string): boolean {
   const name = pathname.split('/').at(-1) ?? '';
   return (
     pathname.endsWith('.js') &&
-    /^(?:editor\.api|markdown(?:\.contribution)?|markdownHoverParticipant|monaco-|monacoRichFeatures|monacoSuggestions)-/.test(
+    /^(?:editor\.api|markdown(?:\.contribution)?|markdownHoverParticipant|monaco|monacoRichFeatures|monacoSuggestions)-/.test(
       name,
     )
   );
