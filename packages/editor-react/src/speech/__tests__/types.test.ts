@@ -71,15 +71,14 @@ describe('dictation lazy-load boundary', () => {
           continue;
         }
         if (!/\.tsx?$/.test(path)) continue;
-        const file = ts.createSourceFile(
-          path,
-          readFileSync(path, 'utf8'),
-          ts.ScriptTarget.Latest,
-          true,
-        );
         // The lazy modules may import each other; nothing else may.
         const self = LAZY.some((name) => path === join(speechDir, `${name}.ts`));
         if (self) continue;
+        const source = readFileSync(path, 'utf8');
+        // Parsing every file under src/ costs seconds under a loaded
+        // full-suite run; only a file naming a lazy module can import it.
+        if (!LAZY.some((name) => source.includes(name))) continue;
+        const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
         for (const node of file.statements) {
           if (!ts.isImportDeclaration(node) && !ts.isExportDeclaration(node)) continue;
           const specifier = node.moduleSpecifier;
