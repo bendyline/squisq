@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.11.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.18...@bendyline/squisq@2.11.19) (2026-10-11)
+
+### Bug Fixes
+
+* Some speech work ([#80](https://github.com/bendyline/squisq/issues/80)) ([2d835fd](https://github.com/bendyline/squisq/commit/2d835fd2838d823e6df6c2161cc525fd3f0952fb))
+
 ## @bendyline/squisq [2.11.18](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.17...@bendyline/squisq@2.11.18) (2026-10-10)
 
 ### Bug Fixes
