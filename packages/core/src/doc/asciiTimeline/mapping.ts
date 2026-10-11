@@ -21,18 +21,16 @@ export function asciiTimelineToTemplateData(timeline: AsciiTimeline): {
     id: track.id,
     ...(track.label ? { label: track.label } : {}),
     ...(track.endLabel ? { endLabel: track.endLabel } : {}),
-    events: track.events.map(
-      (event): TimelineTemplateEvent => ({
-        id: event.id,
-        label: event.label,
-        ...(event.description ? { description: event.description } : {}),
-        position: clamp01((event.column - globalStart) / span),
-        ...(event.side ? { side: event.side } : {}),
-        ...(event.descriptionSide ? { descriptionSide: event.descriptionSide } : {}),
-        ...(event.callout === false ? { callout: false } : {}),
-        ...(event.marker ? { marker: event.marker } : {}),
-      }),
-    ),
+    events: track.events.map((event): TimelineTemplateEvent => ({
+      id: event.id,
+      label: event.label,
+      ...(event.description ? { description: event.description } : {}),
+      position: clamp01((event.column - globalStart) / span),
+      ...(event.side ? { side: event.side } : {}),
+      ...(event.descriptionSide ? { descriptionSide: event.descriptionSide } : {}),
+      ...(event.callout === false ? { callout: false } : {}),
+      ...(event.marker ? { marker: event.marker } : {}),
+    })),
   }));
   const links: TimelineTemplateLink[] = timeline.links.map((link) => ({ ...link }));
   return { tracks, links };

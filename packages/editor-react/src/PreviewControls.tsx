@@ -2095,6 +2095,7 @@ export function PreviewToolbarControls({
             key="transform"
             label="Summarize"
             labelTooltip={SUMMARIZE_TOOLTIP}
+            style={{ ...selectStyle, padding: '3px 6px' }}
             value={s.activeTransformStyle}
             options={TRANSFORM_STYLE_OPTIONS}
             onChange={(v) => s.setSelectedTransformStyle(v)}
@@ -2343,6 +2344,7 @@ function PreviewSelect({
   onChange,
   compact,
   children,
+  style = selectStyle,
 }: {
   label: string;
   labelTooltip?: string;
@@ -2351,6 +2353,7 @@ function PreviewSelect({
   onChange: (value: string) => void;
   compact?: boolean;
   children?: ReactNode;
+  style?: React.CSSProperties;
 }) {
   return (
     <div className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}>
@@ -2361,7 +2364,7 @@ function PreviewSelect({
         aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        style={selectStyle}
+        style={style}
       >
         {options.map((o) => (
           <option key={o.key} value={o.key}>

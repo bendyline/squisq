@@ -131,14 +131,7 @@ The discriminated union has **eight** members:
 
 ```ts
 type Layer =
-  | ImageLayer
-  | TextLayer
-  | ShapeLayer
-  | PathLayer
-  | MapLayer
-  | VideoLayer
-  | TableLayer
-  | TreeLayer;
+  ImageLayer | TextLayer | ShapeLayer | PathLayer | MapLayer | VideoLayer | TableLayer | TreeLayer;
 
 interface BaseLayer {
   id: string;
@@ -332,9 +325,7 @@ interface MotionProfile {
 
 // A name, a named profile with overrides, or a resolved profile.
 type MotionSpec =
-  | MotionProfileName
-  | (Partial<MotionProfile> & { profile?: MotionProfileName })
-  | MotionProfile;
+  MotionProfileName | (Partial<MotionProfile> & { profile?: MotionProfileName }) | MotionProfile;
 
 const MOTION_PROFILES: Record<MotionProfileName, MotionProfile>;
 function resolveMotionProfile(
@@ -1191,14 +1182,7 @@ function stripMarkdown(markdown: string): string;
 function mapElementToBlock(element: ExtractedElement, options: MapOptions): TemplateBlock;
 
 type ExtractionType =
-  | 'stat'
-  | 'date'
-  | 'quote'
-  | 'comparison'
-  | 'fact'
-  | 'impactLine'
-  | 'list'
-  | 'definition';
+  'stat' | 'date' | 'quote' | 'comparison' | 'fact' | 'impactLine' | 'list' | 'definition';
 
 interface ExtractionOptions {
   minConfidence?: number;
@@ -2133,13 +2117,7 @@ interface AnimatedImagePlayback {
 
 ```ts
 type DisplayMode =
-  | 'video'
-  | 'slideshow'
-  | 'linear'
-  | 'page'
-  | 'narrate'
-  | 'dashboard'
-  | 'flashcards';
+  'video' | 'slideshow' | 'linear' | 'page' | 'narrate' | 'dashboard' | 'flashcards';
 type CaptionStyle = 'standard' | 'social';
 type CaptionMode = 'off' | 'standard' | 'social';
 type ControlsLayout = 'overlay' | 'sidebar' | 'bottom';
@@ -2335,15 +2313,7 @@ contract as separate adapter packages.
 // Values: null = empty cell; errors are branded objects, never strings.
 type CalcValue = number | string | boolean | CalcErrorValue | null;
 type CalcErrorCode =
-  | '#DIV/0!'
-  | '#N/A'
-  | '#NAME?'
-  | '#NULL!'
-  | '#NUM!'
-  | '#REF!'
-  | '#VALUE!'
-  | '#SPILL!'
-  | '#CALC!';
+  '#DIV/0!' | '#N/A' | '#NAME?' | '#NULL!' | '#NUM!' | '#REF!' | '#VALUE!' | '#SPILL!' | '#CALC!';
 function calcError(code: CalcErrorCode): CalcErrorValue;
 function isCalcError(value: unknown): value is CalcErrorValue;
 

@@ -8,7 +8,7 @@ Third-party components remain under their respective license terms.
 
 | Package                 | Version              | License | Repository                          |
 | ----------------------- | -------------------- | ------- | ----------------------------------- |
-| @tanstack/react-virtual | 3.14.10              | MIT     | https://github.com/TanStack/virtual |
+| @tanstack/react-virtual | 3.14.13              | MIT     | https://github.com/TanStack/virtual |
 | react _(peer)_          | ^18.0.0 \|\| ^19.0.0 | MIT     | https://github.com/facebook/react   |
 | react-dom _(peer)_      | ^18.0.0 \|\| ^19.0.0 | MIT     | https://github.com/facebook/react   |
 

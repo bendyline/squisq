@@ -4,9 +4,10 @@ Some bundled npm packages omit their repository-level license file from the
 published tarball. These files reproduce the license for the pinned source
 version so published Squisq bundles remain self-contained.
 
-| File                      | Applies to               | Upstream source                                                                                         |
-| ------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `remark-math-6.0.0.txt`   | `remark-math@6.0.0`      | https://github.com/remarkjs/remark-math/blob/6.0.0/license                                              |
-| `tiptap-2.27.3.txt`       | `@tiptap/*@2.27.3`       | https://github.com/ueberdosis/tiptap/blob/0ed4a30a6cda23799a01881f67d01ad218a2ac6d/LICENSE.md           |
-| `ffmpeg-wasm-0.12.15.txt` | `@ffmpeg/ffmpeg@0.12.15` | https://github.com/ffmpegwasm/ffmpeg.wasm/blob/main/LICENSE                                             |
-| `format-0.2.2.txt`        | `format@0.2.2`           | The MIT notice and copyright in the package README plus its declared `http://sjs.mit-license.org` terms |
+| File                      | Applies to               | Upstream source                                                                                                                                        |
+| ------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `remark-math-6.0.0.txt`   | `remark-math@6.0.0`      | https://github.com/remarkjs/remark-math/blob/6.0.0/license                                                                                             |
+| `tiptap-2.27.3.txt`       | `@tiptap/*@2.27.3`       | https://github.com/ueberdosis/tiptap/blob/0ed4a30a6cda23799a01881f67d01ad218a2ac6d/LICENSE.md                                                          |
+| `ffmpeg-wasm-0.12.15.txt` | `@ffmpeg/ffmpeg@0.12.15` | https://github.com/ffmpegwasm/ffmpeg.wasm/blob/main/LICENSE                                                                                            |
+| `format-0.2.2.txt`        | `format@0.2.2`           | The MIT notice and copyright in the package README plus its declared `http://sjs.mit-license.org` terms                                                |
+| `fastdom-1.0.12.txt`      | `fastdom@1.0.12`         | The MIT license in the published package README; https://github.com/wilsonpage/fastdom/blob/a7b9044d58952b970c8b918dcf0e7c8824ba0ff5/README.md#license |

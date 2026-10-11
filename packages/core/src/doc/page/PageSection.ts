@@ -31,15 +31,7 @@ export interface PageRichText {
 
 /** Which spatial pipeline a canvas-embed section renders through. */
 export type PageSpatialKind =
-  | 'diagram'
-  | 'tree'
-  | 'timeline'
-  | 'map'
-  | 'chart'
-  | 'drawing'
-  | 'layout'
-  | 'custom'
-  | 'authored';
+  'diagram' | 'tree' | 'timeline' | 'map' | 'chart' | 'drawing' | 'layout' | 'custom' | 'authored';
 
 /** Media content for a section slot. */
 export type PageMedia =
@@ -102,12 +94,7 @@ export interface PageSectionDiagnostic {
 
 /** Where a section's content came from. */
 export type PageSectionSource =
-  | 'template'
-  | 'prose'
-  | 'authored'
-  | 'custom-template'
-  | 'cover'
-  | 'fallback';
+  'template' | 'prose' | 'authored' | 'custom-template' | 'cover' | 'fallback';
 
 /**
  * One variable-height page section. The `kind` selects the layout family;

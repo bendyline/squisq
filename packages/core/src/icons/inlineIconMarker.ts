@@ -35,8 +35,7 @@ export function stripIconMarkers(value: string): string {
 
 /** A run of a marker-bearing string: literal text or a resolved icon. */
 export type IconTextRun =
-  | { type: 'text'; text: string }
-  | { type: 'icon'; family: IconFamily; name: string };
+  { type: 'text'; text: string } | { type: 'icon'; family: IconFamily; name: string };
 
 /**
  * Split a string into ordered text/icon runs. Text between markers is

@@ -114,8 +114,7 @@ export async function renderMermaidDiagram(
 
 /** Outcome of {@link validateMermaidSource}. */
 export type MermaidValidationResult =
-  | { ok: true; diagramType: string }
-  | { ok: false; message: string };
+  { ok: true; diagramType: string } | { ok: false; message: string };
 
 /**
  * Check that Mermaid can parse `source`, without rendering or measuring

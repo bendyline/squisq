@@ -47,15 +47,15 @@ describe('third-party notices stay in sync', () => {
   });
 
   it('records the ffmpeg core license and upstream dependency neutrally', () => {
-    expect(notice).toMatch(/\|\s*@ffmpeg\/core\s*\|\s*0\.12\.9\s*\|\s*GPL-2\.0-or-later\s*\|/);
+    expect(notice).toMatch(/\|\s*@ffmpeg\/core\s*\|\s*0\.12\.10\s*\|\s*GPL-2\.0-or-later\s*\|/);
     expect(notice).toContain('has an upstream dependency on FFmpeg and external libraries');
     expect(notice).not.toContain('does not relicense');
     expect(notice).not.toContain('badge displayed');
-    expect(notice).toContain('d3c018aa40a241384965268f0506b73f47dee60c');
+    expect(notice).toContain('71aa99d37c02a7b4c435275ca9ef50e612f6efa1');
   });
 
   it('records Mermaid and its verified license', () => {
-    expect(notice).toMatch(/\|\s*mermaid\s*\|\s*11\.16\.1\s*\|\s*MIT\s*\|/);
+    expect(notice).toMatch(/\|\s*mermaid\s*\|\s*11\.17\.2\s*\|\s*MIT\s*\|/);
     expect(notice).toContain('Copyright (c) 2014-2022 Knut Sveidqvist');
   });
 
@@ -143,7 +143,7 @@ describe('third-party notices stay in sync', () => {
     expect(componentNotice).toContain(
       '9f57947a5bd530d8f00c5b3f2cb2a3492faa7e5d823315342d6a8656d0a6b7b7',
     );
-    expect(componentNotice).toContain('releases/tag/v12.14');
+    expect(componentNotice).toContain('releases/tag/v12.15');
     expect(componentNotice).toContain('upstream dependency on the\nFFmpeg project');
     expect(componentNotice).not.toContain('does not relicense');
     const videoReactNotice = readFileSync(resolve(packagesDir, 'video-react/NOTICE.md'), 'utf8');

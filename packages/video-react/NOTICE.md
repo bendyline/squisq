@@ -8,12 +8,12 @@ Third-party components remain under their respective license terms.
 
 | Package                 | Version              | License          | Repository                                |
 | ----------------------- | -------------------- | ---------------- | ----------------------------------------- |
-| @ffmpeg/core            | 0.12.9               | GPL-2.0-or-later | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/core            | 0.12.10              | GPL-2.0-or-later | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | @ffmpeg/ffmpeg          | 0.12.15              | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | @ffmpeg/util            | 0.12.2               | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | @shiguredo/rnnoise-wasm | 2025.1.5             | Apache-2.0       | https://github.com/shiguredo/rnnoise-wasm |
 | html2canvas             | 1.4.1                | MIT              | https://github.com/niklasvh/html2canvas   |
-| mediabunny _(bundled)_  | 1.57.0               | MPL-2.0          | https://github.com/Vanilagy/mediabunny    |
+| mediabunny _(bundled)_  | 1.61.0               | MPL-2.0          | https://github.com/Vanilagy/mediabunny    |
 | mp4-muxer _(bundled)_   | 5.2.2                | MIT              | https://github.com/Vanilagy/mp4-muxer     |
 | react _(peer)_          | ^18.0.0 \|\| ^19.0.0 | MIT              | https://github.com/facebook/react         |
 | react-dom _(peer)_      | ^18.0.0 \|\| ^19.0.0 | MIT              | https://github.com/facebook/react         |
@@ -21,20 +21,20 @@ Third-party components remain under their respective license terms.
 ## @ffmpeg/core WebAssembly runtime
 
 @ffmpeg/core is a WebAssembly build with an upstream dependency on the FFmpeg
-project and external libraries. Version 0.12.9 declares GPL-2.0-or-later. A
+project and external libraries. Version 0.12.10 declares GPL-2.0-or-later. A
 verbatim copy of GPLv2 is included as COPYING.GPL-2.0.txt. Hosts that publish
 ffmpeg-core.js or ffmpeg-core.wasm must preserve the applicable notices,
 provide the GPL text, and provide equivalent access to the corresponding
 source for the exact binaries.
 
-Squisq's demo site uses the unmodified ESM files from @ffmpeg/core@0.12.9.
-Upstream identifies ffmpeg.wasm release v12.14, commit
-d3c018aa40a241384965268f0506b73f47dee60c, as the source release containing
+Squisq's demo site uses the unmodified ESM files from @ffmpeg/core@0.12.10.
+Upstream identifies ffmpeg.wasm release v12.15, commit
+71aa99d37c02a7b4c435275ca9ef50e612f6efa1, as the source release containing
 that package version:
 
-- https://github.com/ffmpegwasm/ffmpeg.wasm/releases/tag/v12.14
-- https://github.com/ffmpegwasm/ffmpeg.wasm/tree/d3c018aa40a241384965268f0506b73f47dee60c
-- https://github.com/ffmpegwasm/ffmpeg.wasm/archive/refs/tags/v12.14.tar.gz
+- https://github.com/ffmpegwasm/ffmpeg.wasm/releases/tag/v12.15
+- https://github.com/ffmpegwasm/ffmpeg.wasm/tree/71aa99d37c02a7b4c435275ca9ef50e612f6efa1
+- https://github.com/ffmpegwasm/ffmpeg.wasm/archive/refs/tags/v12.15.tar.gz
 - https://ffmpegwasm.netlify.app/docs/contribution/core/
 
 mp4-muxer is bundled as a private runtime implementation detail so its legacy

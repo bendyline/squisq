@@ -67,13 +67,7 @@ export type PipPosition = VideoPipPosition;
  *   document's nested block hierarchy, including multiple-choice quizzes.
  */
 export type DisplayMode =
-  | 'video'
-  | 'slideshow'
-  | 'linear'
-  | 'page'
-  | 'narrate'
-  | 'dashboard'
-  | 'flashcards';
+  'video' | 'slideshow' | 'linear' | 'page' | 'narrate' | 'dashboard' | 'flashcards';
 
 /**
  * Caption display style.

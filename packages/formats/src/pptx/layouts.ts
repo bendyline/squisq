@@ -60,13 +60,7 @@ export interface PctRect {
 }
 
 export type PlaceholderKind =
-  | 'title'
-  | 'subtitle'
-  | 'text'
-  | 'picture'
-  | 'table'
-  | 'chart'
-  | 'other';
+  'title' | 'subtitle' | 'text' | 'picture' | 'table' | 'chart' | 'other';
 
 export interface PlaceholderTextStyle {
   fontSizePt?: number;
@@ -121,10 +115,7 @@ export interface PptxColorHints {
 }
 
 export type BuiltinParamSpec =
-  | 'titleSubtitle'
-  | 'comparisonPairs'
-  | 'featureImage'
-  | 'photoGridGate';
+  'titleSubtitle' | 'comparisonPairs' | 'featureImage' | 'photoGridGate';
 
 export type LayoutVerdict =
   | { kind: 'plain' }

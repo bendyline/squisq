@@ -96,14 +96,12 @@ export function TimelineEditorWidget({ editor, blockId }: TimelineEditorWidgetPr
     const normalized = asciiTimelineToTemplateData(view.timeline).tracks;
     return view.timeline.tracks.flatMap((track, trackIndex) => {
       const templateTrack = normalized[trackIndex];
-      return track.events.map(
-        (event, eventIndex): PositionedEvent => ({
-          event,
-          trackId: track.id,
-          trackIndex,
-          position: templateTrack?.events[eventIndex]?.position ?? 0,
-        }),
-      );
+      return track.events.map((event, eventIndex): PositionedEvent => ({
+        event,
+        trackId: track.id,
+        trackIndex,
+        position: templateTrack?.events[eventIndex]?.position ?? 0,
+      }));
     });
   }, [view]);
 

@@ -40,10 +40,7 @@ export interface EditorContextMenuContext {
 }
 
 export type EditorContextMenuItemVisibility =
-  | 'always'
-  | 'selection'
-  | 'location'
-  | ((context: EditorContextMenuContext) => boolean);
+  'always' | 'selection' | 'location' | ((context: EditorContextMenuContext) => boolean);
 
 export interface EditorContextMenuItem {
   /** Stable within one host registration. */

@@ -220,7 +220,7 @@ function escapeStyleText(css: string): string {
  * Hosted FontAwesome Free CSS. Pinned to the same release as the editor's
  * local icon catalog and emitted only after an explicit external-resource opt-in.
  */
-const FONT_AWESOME_LINK = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.2.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
+const FONT_AWESOME_LINK = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 `;
 
 /** Walk the doc looking for any `inlineIcon` node. Cheap depth-first

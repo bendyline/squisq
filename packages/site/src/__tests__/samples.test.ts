@@ -49,8 +49,7 @@ describe('site samples', () => {
         if (node.type === 'image' && typeof node.url === 'string') return [node.url];
 
         const annotation = node.templateAnnotation as
-          | { params?: Record<string, string> }
-          | undefined;
+          { params?: Record<string, string> } | undefined;
         const imageSrc = annotation?.params?.imageSrc;
         return imageSrc ? [imageSrc] : [];
       });

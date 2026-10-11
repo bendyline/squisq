@@ -28,13 +28,7 @@ import type { RecorderExtendedMediaOptions } from '../../recorder/hooks/useMedia
 import type { MicAnalysisHandle } from '../useMicAnalysis';
 
 export type NarrationRecorderState =
-  | 'idle'
-  | 'starting'
-  | 'recording'
-  | 'processing'
-  | 'review'
-  | 'saving'
-  | 'error';
+  'idle' | 'starting' | 'recording' | 'processing' | 'review' | 'saving' | 'error';
 
 export type NarrationMediaRecorderOptions = MediaRecorderOptions & RecorderExtendedMediaOptions;
 

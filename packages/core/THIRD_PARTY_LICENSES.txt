@@ -5,10 +5,10 @@ and notice files are reproduced verbatim. When an npm tarball omits its
 repository license, the pinned upstream copy is vendored and identified below.
 
 COMPONENTS
-- @fortawesome/fontawesome-free@7.2.0 ((CC-BY-4.0 AND OFL-1.1 AND MIT)); files: LICENSE.txt
+- @fortawesome/fontawesome-free@7.3.1 ((CC-BY-4.0 AND OFL-1.1 AND MIT)); files: LICENSE.txt
 
 ==============================================================================
-@fortawesome/fontawesome-free@7.2.0 - LICENSE.txt
+@fortawesome/fontawesome-free@7.3.1 - LICENSE.txt
 ==============================================================================
 Fonticons, Inc. (https://fontawesome.com)
 

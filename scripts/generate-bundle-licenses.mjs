@@ -105,6 +105,8 @@ async function repositoryLicenseFallback(manifest) {
     filename = 'tiptap-2.27.3.txt';
   } else if (manifest.name === '@ffmpeg/ffmpeg' && manifest.version === '0.12.15') {
     filename = 'ffmpeg-wasm-0.12.15.txt';
+  } else if (manifest.name === 'fastdom' && manifest.version === '1.0.12') {
+    filename = 'fastdom-1.0.12.txt';
   } else if (manifest.name === 'format' && manifest.version === '0.2.2') {
     filename = 'format-0.2.2.txt';
   } else {

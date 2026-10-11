@@ -23,15 +23,7 @@
 
 /** The Excel error space, plus `#CALC!` for a cycle under `cyclePolicy: 'error'`. */
 export type CalcErrorCode =
-  | '#DIV/0!'
-  | '#N/A'
-  | '#NAME?'
-  | '#NULL!'
-  | '#NUM!'
-  | '#REF!'
-  | '#VALUE!'
-  | '#SPILL!'
-  | '#CALC!';
+  '#DIV/0!' | '#N/A' | '#NAME?' | '#NULL!' | '#NUM!' | '#REF!' | '#VALUE!' | '#SPILL!' | '#CALC!';
 
 /**
  * An error as a VALUE (errors flow through references and arithmetic like

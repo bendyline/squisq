@@ -4,7 +4,7 @@ This file lists the direct open-source runtime dependencies used by the Squisq
 packages, plus notable bundled and transitive components, along with their
 licenses. Most dependencies are permissively licensed. The `@ffmpeg/core`
 WebAssembly runtime used by browser video export is built from the upstream
-FFmpeg project and external libraries; version 0.12.9 declares
+FFmpeg project and external libraries; version 0.12.10 declares
 GPL-2.0-or-later and is distributed under those terms.
 
 ## Scope of the Squisq MIT license
@@ -18,7 +18,7 @@ terms.
 The ffmpeg.wasm JavaScript wrapper and utility packages are MIT licensed. Its
 WebAssembly core has an upstream dependency on FFmpeg and external libraries
 and follows the licenses applicable to that build. The
-`@ffmpeg/core@0.12.9` package used by Squisq declares
+`@ffmpeg/core@0.12.10` package used by Squisq declares
 `GPL-2.0-or-later`; upstream describes the component licenses in its
 [licensing FAQ](https://ffmpegwasm.netlify.app/docs/faq/#what-is-the-license-of-ffmpegwasm).
 
@@ -36,7 +36,7 @@ license terms.
 | genson-js           | 0.0.8   | Apache-2.0 | https://github.com/aspecto-io/genson-js                                |
 | hast-util-from-html | 2.0.3   | MIT        | https://github.com/syntax-tree/hast-util-from-html                     |
 | localforage         | 1.10.0  | Apache-2.0 | https://github.com/localForage/localForage                             |
-| ngeohash            | 0.6.3   | MIT        | https://github.com/sunng87/node-geohash                                |
+| ngeohash            | 0.6.4   | MIT        | https://github.com/sunng87/node-geohash                                |
 | remark-directive    | 3.0.1   | MIT        | https://github.com/remarkjs/remark-directive                           |
 | remark-frontmatter  | 5.0.0   | MIT        | https://github.com/remarkjs/remark-frontmatter                         |
 | remark-gfm          | 4.0.1   | MIT        | https://github.com/remarkjs/remark-gfm                                 |
@@ -70,7 +70,7 @@ IronCalc engine.
 | Package                 | Version   | License | Repository                          |
 | ----------------------- | --------- | ------- | ----------------------------------- |
 | @bendyline/squisq       | workspace | MIT     | (internal)                          |
-| @tanstack/react-virtual | 3.14.10   | MIT     | https://github.com/TanStack/virtual |
+| @tanstack/react-virtual | 3.14.13   | MIT     | https://github.com/TanStack/virtual |
 | react _(peer)_          | ^18 / ^19 | MIT     | https://reactjs.org                 |
 | react-dom _(peer)_      | ^18 / ^19 | MIT     | https://reactjs.org                 |
 
@@ -82,7 +82,7 @@ IronCalc engine.
 | @pdf-lib/fontkit             | 1.1.1     | MIT                     | https://github.com/Hopding/fontkit   |
 | @xmldom/xmldom               | 0.9.12    | MIT                     | https://github.com/xmldom/xmldom     |
 | hyparquet _(peer, optional)_ | ^1.29.1   | MIT                     | https://github.com/hyparam/hyparquet |
-| jszip                        | 3.10.1    | MIT OR GPL-3.0-or-later | https://github.com/Stuk/jszip        |
+| jszip                        | 3.10.2    | MIT OR GPL-3.0-or-later | https://github.com/Stuk/jszip        |
 | pdf-lib                      | 1.17.1    | MIT                     | https://pdf-lib.js.org               |
 | pdfjs-dist                   | 4.10.38   | Apache-2.0              | https://mozilla.github.io/pdf.js     |
 
@@ -93,7 +93,7 @@ IronCalc engine.
 | @bendyline/squisq              | workspace | MIT                           | (internal)                                   |
 | @bendyline/squisq-formats      | workspace | MIT                           | (internal)                                   |
 | @bendyline/squisq-react        | workspace | MIT                           | (internal)                                   |
-| @fortawesome/fontawesome-free  | 7.2.0     | CC-BY-4.0 AND OFL-1.1 AND MIT | https://github.com/FortAwesome/Font-Awesome  |
+| @fortawesome/fontawesome-free  | 7.3.1     | CC-BY-4.0 AND OFL-1.1 AND MIT | https://github.com/FortAwesome/Font-Awesome  |
 | @monaco-editor/react           | 4.7.0     | MIT                           | https://github.com/suren-atoyan/monaco-react |
 | @tiptap/core                   | 2.27.3    | MIT                           | https://github.com/ueberdosis/tiptap         |
 | @tiptap/extension-heading      | 2.27.3    | MIT                           | https://github.com/ueberdosis/tiptap         |
@@ -111,7 +111,7 @@ IronCalc engine.
 | @tiptap/react                  | 2.27.3    | MIT                           | https://tiptap.dev                           |
 | @tiptap/starter-kit            | 2.27.3    | MIT                           | https://tiptap.dev                           |
 | @tiptap/suggestion             | 2.27.3    | MIT                           | https://tiptap.dev                           |
-| mermaid                        | 11.16.1   | MIT                           | https://github.com/mermaid-js/mermaid        |
+| mermaid                        | 11.17.2   | MIT                           | https://github.com/mermaid-js/mermaid        |
 | type-fest                      | 4.41.0    | MIT OR CC0-1.0                | https://github.com/sindresorhus/type-fest    |
 | harper.js _(peer, optional)_   | ^2.7.0    | Apache-2.0                    | https://github.com/automattic/harper         |
 | monaco-editor _(peer)_         | >=0.50.0  | MIT                           | https://github.com/microsoft/monaco-editor   |
@@ -147,7 +147,7 @@ metadata but ships an MIT license file with its distribution.
 | @bendyline/squisq       | workspace | MIT              | (internal)                                |
 | @bendyline/squisq-video | workspace | MIT              | (internal)                                |
 | @bendyline/squisq-react | workspace | MIT              | (internal)                                |
-| @ffmpeg/core            | 0.12.9    | GPL-2.0-or-later | https://github.com/ffmpegwasm/ffmpeg.wasm |
+| @ffmpeg/core            | 0.12.10   | GPL-2.0-or-later | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | @ffmpeg/ffmpeg          | 0.12.15   | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | @ffmpeg/util            | 0.12.2    | MIT              | https://github.com/ffmpegwasm/ffmpeg.wasm |
 | @shiguredo/rnnoise-wasm | 2025.1.5  | Apache-2.0       | https://github.com/shiguredo/rnnoise-wasm |
@@ -162,7 +162,7 @@ reduce background noise. It runs locally and downloads nothing at runtime.
 
 `@ffmpeg/core` is the separately distributed single-thread WebAssembly runtime
 used by the browser fallback and GIF encoder. It is built from the upstream
-FFmpeg project and external libraries. The 0.12.9 package declares
+FFmpeg project and external libraries. The 0.12.10 package declares
 GPL-2.0-or-later and is distributed under those terms.
 
 Squisq's demo site distributes unmodified ESM copies of `ffmpeg-core.js` and
@@ -173,13 +173,13 @@ notice and GPL text beside the core files. The `@bendyline/squisq-video-react`
 npm package also includes this notice and the GPLv2 text so hosts are informed
 before redistributing the optional runtime.
 
-Upstream identifies its `v12.14` release, commit
-`d3c018aa40a241384965268f0506b73f47dee60c`, as the release containing
-`@ffmpeg/core` / `@ffmpeg/core-mt` 0.12.9. Source and build materials:
+Upstream identifies its `v12.15` release, commit
+`71aa99d37c02a7b4c435275ca9ef50e612f6efa1`, as the release containing
+`@ffmpeg/core` / `@ffmpeg/core-mt` 0.12.10. Source and build materials:
 
-- https://github.com/ffmpegwasm/ffmpeg.wasm/releases/tag/v12.14
-- https://github.com/ffmpegwasm/ffmpeg.wasm/tree/d3c018aa40a241384965268f0506b73f47dee60c
-- https://github.com/ffmpegwasm/ffmpeg.wasm/archive/refs/tags/v12.14.tar.gz
+- https://github.com/ffmpegwasm/ffmpeg.wasm/releases/tag/v12.15
+- https://github.com/ffmpegwasm/ffmpeg.wasm/tree/71aa99d37c02a7b4c435275ca9ef50e612f6efa1
+- https://github.com/ffmpegwasm/ffmpeg.wasm/archive/refs/tags/v12.15.tar.gz
 - https://ffmpegwasm.netlify.app/docs/contribution/core/
 
 Redistributors of the core files must preserve the applicable copyright and
@@ -275,5 +275,5 @@ text. OFL-1.1 fonts require attribution and permit redistribution. The
 FontAwesome Free icon artwork (CC-BY-4.0) requires visible attribution to
 FontAwesome when the icons are redistributed. The separately distributed
 `@ffmpeg/core` WebAssembly runtime is built from upstream FFmpeg and external
-libraries; version 0.12.9 declares GPL-2.0-or-later and must be redistributed
+libraries; version 0.12.10 declares GPL-2.0-or-later and must be redistributed
 under those terms.
