@@ -1,3 +1,9 @@
+## @bendyline/squisq-formats [2.6.20](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.6.19...@bendyline/squisq-formats@2.6.20) (2026-10-12)
+
+### Bug Fixes
+
+* Media export update fixes ([#82](https://github.com/bendyline/squisq/issues/82)) ([22a651e](https://github.com/bendyline/squisq/commit/22a651e13e301222720f22909e032ed1e5703cf9))
+
 ## @bendyline/squisq-formats [2.6.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.6.18...@bendyline/squisq-formats@2.6.19) (2026-10-11)
 
 ### Bug Fixes

@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-react",
-  "version": "2.11.21",
+  "version": "2.11.22",
   "description": "React component library for doc playback, block rendering, and media layers",
   "license": "MIT",
   "author": "Bendyline",

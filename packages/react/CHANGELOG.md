@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.11.22](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.21...@bendyline/squisq-react@2.11.22) (2026-10-12)
+
+### Bug Fixes
+
+* Media export update fixes ([#82](https://github.com/bendyline/squisq/issues/82)) ([22a651e](https://github.com/bendyline/squisq/commit/22a651e13e301222720f22909e032ed1e5703cf9))
+
 ## @bendyline/squisq-react [2.11.21](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.20...@bendyline/squisq-react@2.11.21) (2026-10-11)
 
 ### Bug Fixes

@@ -1,3 +1,16 @@
+## @bendyline/squisq-editor-react [2.11.24](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.11.23...@bendyline/squisq-editor-react@2.11.24) (2026-10-12)
+
+### Bug Fixes
+
+* Media export update fixes ([#82](https://github.com/bendyline/squisq/issues/82)) ([22a651e](https://github.com/bendyline/squisq/commit/22a651e13e301222720f22909e032ed1e5703cf9))
+
+
+### Dependencies
+
+* **@bendyline/squisq-formats:** upgraded to 2.6.20
+* **@bendyline/squisq-react:** upgraded to 2.11.22
+* **@bendyline/squisq-video-react:** upgraded to 2.4.26
+
 ## @bendyline/squisq-editor-react [2.11.23](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.11.22...@bendyline/squisq-editor-react@2.11.23) (2026-10-11)
 
 ### Bug Fixes
