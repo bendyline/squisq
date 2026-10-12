@@ -34,6 +34,7 @@ import { EditorShell, createHarperProofingProvider } from '@bendyline/squisq-edi
 const proofing = createHarperProofingProvider({
   wasmUrl: '/harper/harper_wasm_bg.wasm',   // root-relative is fine — absolutized internally
   initialWords: myAppDictionary,            // app-level accepted words
+  lintConfig: { UseTitleCase: false },      // optional house style; other rules keep their defaults
   onDictionaryWord: (word) => saveToAppDictionary(word),
 });
 

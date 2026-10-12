@@ -82,6 +82,9 @@ export function createHarperProofingProvider(config: HarperProofingConfig = {}):
     const linter: HarperLinter =
       typeof Worker !== 'undefined' ? new harper.WorkerLinter(init) : new harper.LocalLinter(init);
     await linter.setup();
+    if (config.lintConfig) {
+      await linter.setLintConfig({ ...(await linter.getLintConfig()), ...config.lintConfig });
+    }
     if (words.size > 0) await linter.importWords([...words]);
     return { harper, linter };
   };

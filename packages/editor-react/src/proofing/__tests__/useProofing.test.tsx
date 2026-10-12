@@ -237,6 +237,39 @@ describe('activation', () => {
     expect(lastState?.findings[0].category).toBe('spelling');
   });
 
+  it('keeps code and findings crossing it out of prose while checking adjacent words', async () => {
+    const fake = makeFakeProvider();
+    const original = fake.nextFindings;
+    fake.nextFindings = (text) => {
+      const findings = original(text);
+      const code = text.indexOf('\u0000');
+      if (code >= 0) {
+        findings.push({
+          id: 'crossing-code',
+          start: code - 1,
+          end: code + 4,
+          originalText: text.slice(code - 1, code + 4),
+          category: 'style',
+          kind: 'Formatting',
+          message: 'Artificial gap around inline code.',
+          suggestions: [],
+        });
+      }
+      return findings;
+    };
+    mount({
+      capability: fake,
+      markdown:
+        '# Title\n\nOpen a `teh` file and correct **teh** typo.\n\n```js\nconst teh = 1;\n```\n',
+    });
+    await vi.waitFor(() => expect(fake.lintCalls.length).toBeGreaterThan(0));
+    await vi.waitFor(() => expect(lastState?.findings).toHaveLength(1));
+    const decoration = tiptap!.view.dom.querySelector('.squisq-proof-underline');
+    expect(decoration?.textContent).toBe('teh');
+    expect(decoration?.closest('strong')).not.toBeNull();
+    expect(tiptap!.view.dom.querySelector('code .squisq-proof-underline')).toBeNull();
+  });
+
   it('applies squiggle decorations to the Tiptap editor', async () => {
     mount();
     await vi.waitFor(() => expect(lastState?.findings.length).toBe(1));

@@ -15,7 +15,7 @@
  * Text carrying the inline `code` mark is machine vocabulary for the same
  * reason a fence is — `raycast(origin, dir, maxDist)` is an API signature,
  * not a sentence with a misspelling in it — so it becomes an equal-length
- * run of spaces contributing NO span. Length is preserved so every
+ * run of NUL placeholders contributing NO span. Length is preserved so every
  * surrounding offset stays exact; the missing span is what drops the
  * findings, since `resolveRunOffsets` needs both endpoints inside one
  * — the same mechanism that already discards findings landing on atoms.
@@ -56,8 +56,10 @@ export function collectTextblockRuns(doc: ProseMirrorNode): TextblockRun[] {
     node.descendants((child, offset) => {
       if (child.isText && child.text) {
         if (child.marks.some((mark) => mark.type.name === 'code')) {
-          // Blanked, not skipped: equal length keeps later offsets exact.
-          text += ' '.repeat(child.text.length);
+          // Like an atom, code must not manufacture whitespace lints. Equal
+          // length keeps offsets exact; NUL also rejects findings that cross
+          // the code with both endpoints in surrounding prose.
+          text += '\u0000'.repeat(child.text.length);
           return true;
         }
         const from = text.length;

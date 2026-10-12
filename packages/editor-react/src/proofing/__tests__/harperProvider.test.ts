@@ -22,6 +22,7 @@ const harness = vi.hoisted(() => {
     lintCalls: [] as { text: string; options: unknown }[],
     ignoreCalls: [] as FakeLintSpec[][],
     importWordsCalls: [] as string[][],
+    lintConfigCalls: [] as Record<string, boolean | null>[],
     importIgnoredCalls: [] as string[],
     clearIgnoredCalls: 0,
     setDialectCalls: [] as number[],
@@ -70,6 +71,12 @@ const harness = vi.hoisted(() => {
     async clearIgnoredLints(): Promise<void> {
       state.clearIgnoredCalls += 1;
     }
+    async getLintConfig(): Promise<Record<string, boolean | null>> {
+      return { SpellCheck: true, UseTitleCase: null, RepeatedWords: true };
+    }
+    async setLintConfig(config: Record<string, boolean | null>): Promise<void> {
+      state.lintConfigCalls.push(config);
+    }
     async importWords(words: string[]): Promise<void> {
       state.importWordsCalls.push([...words].sort());
     }
@@ -103,6 +110,7 @@ beforeEach(() => {
   state.lintCalls = [];
   state.ignoreCalls = [];
   state.importWordsCalls = [];
+  state.lintConfigCalls = [];
   state.importIgnoredCalls = [];
   state.clearIgnoredCalls = 0;
   state.setDialectCalls = [];
@@ -136,6 +144,25 @@ describe('binary resolution', () => {
     await provider.setup();
     const init = harness.state.constructedWith[0] as { binary: { kind: string } };
     expect(init.binary).toEqual({ kind: 'default-binary' });
+  });
+});
+
+describe('host rule preferences', () => {
+  it('applies only requested overrides, lazily and once, preserving other rules', async () => {
+    const provider = createHarperProofingProvider({ lintConfig: { UseTitleCase: false } });
+    expect(harness.state.constructedWith).toHaveLength(0);
+    expect(harness.state.lintConfigCalls).toHaveLength(0);
+    await provider.setup();
+    await provider.setup();
+    expect(harness.state.lintConfigCalls).toEqual([
+      { SpellCheck: true, UseTitleCase: false, RepeatedWords: true },
+    ]);
+  });
+
+  it('leaves engine defaults untouched without host overrides', async () => {
+    const provider = createHarperProofingProvider();
+    await provider.setup();
+    expect(harness.state.lintConfigCalls).toHaveLength(0);
   });
 });
 
