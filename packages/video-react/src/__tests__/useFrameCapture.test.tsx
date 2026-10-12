@@ -666,6 +666,42 @@ describe('capture clone raster lifetime', () => {
     expect(replacement.height).toBe(0);
   });
 
+  it('freezes captured animation styles and applies slide opacity only once', async () => {
+    const originalRoot = document.createElement('div');
+    originalRoot.innerHTML =
+      '<svg class="block-svg transition-fade-enter" viewBox="0 0 640 360" style="opacity:0.5;animation-name:fadeIn">' +
+      '<g class="anim-fadeIn" style="opacity:0.75;transform:translateY(5px);animation-name:fadeIn"><text>Visible title</text></g></svg>';
+    const clone = originalRoot.cloneNode(true) as HTMLElement;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    let serialized = '';
+    stubImageDecode(async (image) => {
+      serialized = decodeURIComponent(image.src.split(',')[1]);
+    });
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async () => ({ close: vi.fn() })),
+    );
+
+    await rasterizeCaptureSvgClones(originalRoot, clone);
+
+    const raster = document.createElement('div');
+    raster.innerHTML = serialized;
+    const svg = raster.querySelector('svg')!;
+    const group = svg.querySelector('g')!;
+    expect(svg.style.opacity).toBe('1');
+    expect(group.style.opacity).toBe('0.75');
+    expect(group.style.transform).toBe('translateY(5px)');
+    expect(group.style.animation).toBe('none');
+    expect(group.style.getPropertyPriority('animation')).toBe('important');
+    const canvas = clone.querySelector('canvas')!;
+    expect(canvas.style.opacity).toBe('0.5');
+    expect(canvas.style.animation).toBe('none');
+    expect(originalRoot.querySelector('svg')!.style.animationName).toBe('fadeIn');
+  });
+
   it('reuses an unchanged slide raster while per-frame overlays advance', async () => {
     const originalRoot = document.createElement('div');
     originalRoot.innerHTML =

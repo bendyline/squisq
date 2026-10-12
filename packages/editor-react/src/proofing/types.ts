@@ -138,6 +138,12 @@ export interface HarperProofingConfig {
   wasmUrl?: string;
   /** Initial dialect (default American). */
   dialect?: ProofDialect;
+  /**
+   * Overrides for named Harper rules, applied lazily during setup. Omitted
+   * rules retain the engine defaults; null restores a rule's default. Plain
+   * data keeps the optional Harper dependency out of published declarations.
+   */
+  lintConfig?: Readonly<Record<string, boolean | null>>;
   /** App-level dictionary loaded during setup. */
   initialWords?: readonly string[];
   /**

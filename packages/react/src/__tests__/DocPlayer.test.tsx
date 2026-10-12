@@ -684,6 +684,32 @@ describe('DocPlayer smoke test', () => {
     expect(container.querySelector('[class*="anim-"]')).toBeNull();
   });
 
+  it('holds an export cover at its readable rest state even when story animations are enabled', async () => {
+    let api: SquisqRenderAPI | null = null;
+    const { container } = render(
+      <DocPlayer
+        doc={docWithCover()}
+        renderMode
+        animationsEnabled
+        onRenderAPIReady={(value) => {
+          api = value;
+        }}
+      />,
+    );
+    await act(async () => {
+      await api!.showCover();
+      await api!.seekTo(0);
+    });
+    const cover = container.querySelector('.doc-player__block--cover');
+    expect(cover?.textContent).toContain('Managed Cover');
+    expect(cover?.querySelector('[class*="anim-"]')).toBeNull();
+    await act(async () => {
+      await api!.hideCover();
+      await api!.seekTo(0.25);
+    });
+    expect(container.querySelector('.doc-player__block--cover')).toBeNull();
+  });
+
   it('uses static cuts without an outgoing slide while preserving timeline changes', () => {
     const doc = docWithTransition();
     const onRenderAPIReady = vi.fn();

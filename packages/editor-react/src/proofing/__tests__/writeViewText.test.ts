@@ -107,6 +107,20 @@ describe('collectTextblockRuns', () => {
     expect(runs.map((run) => run.text)).toEqual(['alpha item', 'beta item']);
   });
 
+  it('masks inline identifiers without manufacturing spaces and preserves surrounding offsets', () => {
+    const editor = makeEditor(
+      'Open a `.md` file with `raycast(origin, maxDist)` and fix teh typo.\n',
+    );
+    const [run] = collectTextblockRuns(editor.state.doc);
+    expect(run.text).toBe(
+      'Open a ' + '\u0000'.repeat(3) + ' file with ' + '\u0000'.repeat(24) + ' and fix teh typo.',
+    );
+    expect(resolveRunOffsets(run, 7, 10)).toBeNull();
+    const typo = run.text.indexOf('teh');
+    const range = resolveRunOffsets(run, typo, typo + 3);
+    expect(editor.state.doc.textBetween(range!.from, range!.to)).toBe('teh');
+  });
+
   it('returns null for out-of-span offsets', () => {
     const editor = makeEditor('Short.\n');
     const runs = collectTextblockRuns(editor.state.doc);

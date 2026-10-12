@@ -23,6 +23,7 @@ import { PDFDocument, StandardFonts, rgb, PDFFont, PDFImage, PDFPage, PDFString 
 import fontkit from '@pdf-lib/fontkit';
 
 import type { Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
+import { contrastRatio } from '@bendyline/squisq/schemas';
 import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
@@ -122,7 +123,8 @@ export interface PdfExportOptions {
   defaultFontSize?: number;
   /**
    * Squisq theme ID to apply (e.g., 'documentary', 'cinematic').
-   * When set, overrides heading, text, and link colors with the theme palette.
+   * Uses readable heading, text, and link colors from the theme palette on
+   * white paper. Colors with insufficient contrast use the default PDF ink.
    * Font changes are not supported (pdf-lib uses standard 14 PDF fonts only).
    */
   themeId?: string;
@@ -348,9 +350,9 @@ async function createExportContext(
   if (themeId) {
     const theme = resolveThemeForDoc(doc, themeId, options.themeRegistry);
     if (theme.colors) {
-      colorText = hexToRgb(theme.colors.text) ?? COLOR_TEXT;
-      colorHeading = hexToRgb(theme.colors.primary) ?? COLOR_HEADING;
-      colorLink = hexToRgb(theme.colors.highlight || theme.colors.secondary) ?? COLOR_LINK;
+      colorText = paperInk(theme.colors.text, COLOR_TEXT);
+      colorHeading = paperInk(theme.colors.primary, COLOR_HEADING);
+      colorLink = paperInk(theme.colors.highlight || theme.colors.secondary, COLOR_LINK);
     }
   }
 
@@ -1344,6 +1346,28 @@ function renderFallbackBlock(
 // ============================================
 // Color Helpers
 // ============================================
+
+/**
+ * PDF pages are white, independent of the theme's screen background. Never
+ * copy pale screen text onto paper. The same ink also appears in shaded
+ * table headers, so require readable contrast on both exported surfaces.
+ */
+function paperInk(hex: string, fallback: RgbColor): RgbColor {
+  const color = hexToRgb(hex);
+  if (!color) return fallback;
+  const tableHeader =
+    '#' +
+    [COLOR_TABLE_HEADER_BG.r, COLOR_TABLE_HEADER_BG.g, COLOR_TABLE_HEADER_BG.b]
+      .map((channel) =>
+        Math.round(channel * 255)
+          .toString(16)
+          .padStart(2, '0'),
+      )
+      .join('');
+  return contrastRatio(hex, '#ffffff') >= 4.5 && contrastRatio(hex, tableHeader) >= 4.5
+    ? color
+    : fallback;
+}
 
 function hexToRgb(hex: string): RgbColor | undefined {
   const h = hex.startsWith('#') ? hex.slice(1) : hex;

@@ -12,6 +12,29 @@ import { describe, expect, it } from 'vitest';
 import { createHarperProofingProvider } from '../harperProvider';
 
 describe.skipIf(!process.env.HARPER_INTEGRATION)('harper.js integration', () => {
+  it(
+    'allows sentence-case headings without disabling real spelling and spacing checks',
+    { timeout: 120_000 },
+    async () => {
+      const { binaryInlined } = await import('harper.js/binaryInlined');
+      const provider = createHarperProofingProvider({
+        binary: binaryInlined,
+        lintConfig: { UseTitleCase: false },
+      });
+      try {
+        const findings = await provider.lint(
+          '# A sentence case heading\n\nThis is teh typo. There is  extra space.',
+          { language: 'markdown' },
+        );
+        expect(findings).toHaveLength(2);
+        expect(findings.some((finding) => finding.originalText === 'teh')).toBe(true);
+        expect(findings.some((finding) => finding.kind === 'Formatting')).toBe(true);
+      } finally {
+        provider.dispose();
+      }
+    },
+  );
+
   it('lints, suggests, and round-trips an ignore', { timeout: 120_000 }, async () => {
     const { binaryInlined } = await import('harper.js/binaryInlined');
     const provider = createHarperProofingProvider({ binary: binaryInlined });

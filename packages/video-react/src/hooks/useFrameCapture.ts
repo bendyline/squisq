@@ -1033,6 +1033,14 @@ export async function rasterizeCaptureSvgClones(
   try {
     for (const [index, svg] of clonedSvgs.entries()) {
       const originalSvg = originalSvgs[index];
+      // html2canvas has copied computed SVG styles, including the requested
+      // frame's opacity/transforms. Its clone also carries animation classes:
+      // stop them overriding that snapshot or restarting during image decode.
+      for (const element of [svg, ...Array.from(svg.querySelectorAll<SVGElement>('*'))]) {
+        if (!element.style) continue;
+        element.style.setProperty('animation', 'none', 'important');
+        element.style.setProperty('transition', 'none', 'important');
+      }
       const { width, height } = captureSvgRasterSize(svg, originalSvg);
       const cacheKey = captureSvgRasterCacheKey(originalSvg ?? svg, index);
       activeCacheKeys.add(cacheKey);
@@ -1046,7 +1054,16 @@ export async function rasterizeCaptureSvgClones(
       let rasterCanvas: HTMLCanvasElement | null = null;
       try {
         await embedCaptureSvgImages(svg, imageDataUrls);
+        // The replacement canvas keeps the slide's transition opacity. Do not
+        // also bake it into the raster: applying it twice darkens crossfades.
+        // Descendant layer opacity stays in the SVG, and a pure slide fade can
+        // reuse the same raster while its outer opacity advances.
+        const opacity = svg.style.getPropertyValue('opacity');
+        const opacityPriority = svg.style.getPropertyPriority('opacity');
+        svg.style.setProperty('opacity', '1', 'important');
         const serializedSvg = new XMLSerializer().serializeToString(svg);
+        if (opacity) svg.style.setProperty('opacity', opacity, opacityPriority);
+        else svg.style.removeProperty('opacity');
         let entry = cache.get(cacheKey);
 
         if (
