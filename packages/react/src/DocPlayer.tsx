@@ -1554,7 +1554,10 @@ function DocPlayerContent({
               isEntering={false}
               viewport={activeViewport}
               muted={renderMode || muted}
-              animationsEnabled={animationsEnabled}
+              // Export covers are held still: preroll capture seeks to time 0.
+              // An entrance paused there would hide the title for the entire
+              // cover (and in a single-frame cover-image export).
+              animationsEnabled={animationsEnabled && !renderMode}
               theme={effectiveTheme}
               tableContentRenderer={tableContentRenderer}
               growTextToFit={isSlideshowMode}
