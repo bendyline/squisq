@@ -293,48 +293,13 @@ export default defineConfig({
               priority: 18,
             },
             {
-              name: 'pdf-vendor',
-              test: /node_modules[\\/]pdfjs-dist[\\/]/,
-              priority: 17,
-            },
-            {
               name: 'squisq-standalone-player',
               test: /packages[\\/]react[\\/](src|dist)[\\/]standalone-source/,
               priority: 17,
             },
-            {
-              name: (id) => {
-                if (id.includes('/packages/core/')) return 'squisq-core';
-                if (id.includes('/packages/react/')) return 'squisq-react';
-                if (id.includes('/packages/formats/')) return 'squisq-formats';
-                if (id.includes('/packages/editor-react/')) {
-                  // These modules are reached only through Source/code/diff
-                  // demand. Folding them into the statically imported editor
-                  // package chunk makes Vite modulepreload Monaco at startup.
-                  if (
-                    /packages[\\/]editor-react[\\/](?:src|dist)[\\/]monaco(?:Features|Suggestions)?(?:[.-])/.test(
-                      id,
-                    )
-                  ) {
-                    return null;
-                  }
-                  return 'squisq-editor';
-                }
-                if (id.includes('/packages/video-react/')) return 'squisq-video-react';
-                if (id.includes('/packages/video/')) return 'squisq-video';
-                return null;
-              },
-              test: /packages[\\/](core|react|formats|editor-react|video|video-react)[\\/]/,
-              priority: 16,
-            },
-            {
-              name: 'vendor',
-              // Monaco must remain governed by its native dynamic-import
-              // graph; putting it in this static vendor group eagerly loads
-              // the entire editor and every language contribution.
-              test: /node_modules[\\/](?!monaco-editor[\\/])/,
-              priority: 5,
-            },
+            // Preserve native import boundaries for workspace packages and other
+            // dependencies. Package-wide groups merge lazy converters, PDF
+            // support and media tools with modules needed by the editor.
           ],
         },
       },

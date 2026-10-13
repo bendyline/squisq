@@ -6,7 +6,8 @@
  * visually consistent with the page that opened it.
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useId } from 'react';
+import { useModalDialog } from '@bendyline/squisq-react';
 import { createPortal } from 'react-dom';
 import { stringifyMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
 import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
@@ -18,7 +19,6 @@ import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-react';
-import JSZip from 'jszip';
 import { collectAudioForHtmlExport, collectImagesForHtmlExport } from './exportHelpers';
 import { pictureDiagrams } from './exportDiagrams';
 import { slugifyTitle } from './exportFilename';
@@ -80,7 +80,7 @@ const EXPORT_DIALOG_PALETTES: Record<'light' | 'dark', ExportDialogPalette> = {
     text: '#4a3c1f',
     heading: '#2d2310',
     label: '#5a4a2a',
-    muted: '#8a7a5a',
+    muted: '#6f6044',
     secondary: '#E8DFC6',
     primary: '#8B6914',
     primaryBorder: '#7a5c10',
@@ -96,7 +96,7 @@ const EXPORT_DIALOG_PALETTES: Record<'light' | 'dark', ExportDialogPalette> = {
     label: '#cbd5e1',
     muted: '#94a3b8',
     secondary: '#1e293b',
-    primary: '#9a7416',
+    primary: '#8B6914',
     primaryBorder: '#d1a73b',
     danger: '#fca5a5',
   },
@@ -114,7 +114,10 @@ const overlayStyle: React.CSSProperties = {
 const modalStyle: React.CSSProperties = {
   borderRadius: 0,
   padding: '24px 28px',
-  minWidth: 380,
+  width: 'calc(100vw - 32px)',
+  boxSizing: 'border-box',
+  maxHeight: 'calc(100dvh - 32px)',
+  overflowY: 'auto',
   maxWidth: 480,
   boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
   fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -124,7 +127,6 @@ const modalStyle: React.CSSProperties = {
 const modalStyleWide: React.CSSProperties = {
   ...modalStyle,
   maxWidth: 960,
-  minWidth: 720,
 };
 
 const titleStyle: React.CSSProperties = {
@@ -262,7 +264,10 @@ async function downloadPlainHtmlZip(
   filename: string,
   theme?: Theme,
 ): Promise<void> {
-  const { markdownDocToPlainHtml } = await import('@bendyline/squisq-formats/html');
+  const [{ markdownDocToPlainHtml }, { default: JSZip }] = await Promise.all([
+    import('@bendyline/squisq-formats/html'),
+    import('jszip'),
+  ]);
   const html = markdownDocToPlainHtml(mdDoc, { title, theme });
   const zip = new JSZip();
   zip.file('index.html', html);
@@ -403,6 +408,10 @@ export function ExportConfigModal({
   const [videoExportDoc, setVideoExportDoc] = useState<Doc | null>(null);
 
   const playerScriptRef = useRef<string | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const id = useId();
+  useModalDialog({ rootRef: overlayRef, dialogRef, onClose, closeOnEscape: !busy });
 
   useEffect(() => {
     let cancelled = false;
@@ -705,26 +714,40 @@ export function ExportConfigModal({
   return (
     <>
       <div
+        ref={overlayRef}
         style={{ ...overlayStyle, background: palette.overlay }}
         data-color-scheme={colorScheme}
         onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
+          if (!busy && e.target === e.currentTarget) onClose();
         }}
       >
-        <div style={{ ...(showPreview ? modalStyleWide : modalStyle), ...modalColorStyle }}>
-          <h2 style={themedTitleStyle}>Export with Options</h2>
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={`${id}-title`}
+          tabIndex={-1}
+          style={{ ...(showPreview ? modalStyleWide : modalStyle), ...modalColorStyle }}
+        >
+          <h2 id={`${id}-title`} style={themedTitleStyle}>
+            Export with Options
+          </h2>
 
           <div
             style={{
               display: 'flex',
+              flexWrap: 'wrap',
               gap: 20,
               alignItems: 'stretch',
             }}
           >
-            <div style={{ flex: showPreview ? '0 0 320px' : '1 1 auto', minWidth: 0 }}>
+            <div style={{ flex: showPreview ? '1 1 280px' : '1 1 auto', minWidth: 0 }}>
               {/* Format */}
-              <label style={themedLabelStyle}>Format</label>
+              <label htmlFor={`${id}-format`} style={themedLabelStyle}>
+                Format
+              </label>
               <select
+                id={`${id}-format`}
                 style={themedSelectStyle}
                 value={format}
                 onChange={(e) => setFormat(e.target.value as ExportFormat)}
@@ -748,6 +771,7 @@ export function ExportConfigModal({
                         <button
                           key={s}
                           type="button"
+                          aria-pressed={active}
                           onClick={() => setHtmlStyle(s)}
                           disabled={busy}
                           style={{
@@ -811,8 +835,11 @@ export function ExportConfigModal({
               {/* Render Mode — for HTML and Video formats (rendered only) */}
               {showModeSelector && (
                 <>
-                  <label style={themedLabelStyle}>Mode</label>
+                  <label htmlFor={`${id}-mode`} style={themedLabelStyle}>
+                    Mode
+                  </label>
                   <select
+                    id={`${id}-mode`}
                     style={themedSelectStyle}
                     value={renderMode}
                     onChange={(e) => setRenderMode(e.target.value as RenderMode)}
@@ -830,8 +857,11 @@ export function ExportConfigModal({
               )}
 
               {/* Theme — applied to both rendered and plain HTML output */}
-              <label style={themedLabelStyle}>Theme</label>
+              <label htmlFor={`${id}-theme`} style={themedLabelStyle}>
+                Theme
+              </label>
               <select
+                id={`${id}-theme`}
                 style={themedSelectStyle}
                 value={themeId}
                 onChange={(e) => setThemeId(e.target.value)}
@@ -848,8 +878,11 @@ export function ExportConfigModal({
               {/* Transform — plain HTML preserves markdown as-is, no transform */}
               {htmlStyle !== 'plain' || !isHtmlFormat ? (
                 <>
-                  <label style={themedLabelStyle}>Transform</label>
+                  <label htmlFor={`${id}-transform`} style={themedLabelStyle}>
+                    Transform
+                  </label>
                   <select
+                    id={`${id}-transform`}
                     style={themedSelectStyle}
                     value={transformStyle}
                     onChange={(e) => setTransformStyle(e.target.value)}
@@ -867,7 +900,7 @@ export function ExportConfigModal({
 
               {/* Error */}
               {error && (
-                <div style={{ color: palette.danger, fontSize: 13, marginBottom: 12 }}>
+                <div role="alert" style={{ color: palette.danger, fontSize: 13, marginBottom: 12 }}>
                   Export failed: {error}
                 </div>
               )}
@@ -886,7 +919,7 @@ export function ExportConfigModal({
             {showPreview && (
               <div
                 style={{
-                  flex: '1 1 auto',
+                  flex: '1 1 360px',
                   minWidth: 0,
                   border: `1px solid ${palette.border}`,
                   background: palette.control,

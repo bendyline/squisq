@@ -54,7 +54,7 @@ const ALLOWED_HEAVY: Record<string, readonly string[]> = {
   // not pull the encoder into ordinary consumers. `fetchFile` remains a small
   // compatibility re-export from the video package.
   '@bendyline/squisq-video': ['@ffmpeg/util'],
-  '@bendyline/squisq-video-react': ['html2canvas'],
+  '@bendyline/squisq-video-react': [],
   // editor-react deliberately keeps monaco-editor *off* this list —
   // the package lazy-loads monaco through `useMonacoLoader` so that
   // consumers who only import JsonEditor or a type don't drag in

@@ -43,9 +43,7 @@ test('loads the compact Markdown editor only when Source is opened', async ({ pa
   expect(
     requestedNames.some(
       (name) =>
-        name.startsWith('monacoRichFeatures-') ||
-        name.startsWith('monacoSuggestions-') ||
-        name.startsWith('markdownHoverParticipant-'),
+        name.startsWith('monacoRichFeatures-') || name.startsWith('markdownHoverParticipant-'),
     ),
   ).toBe(false);
   // Markdown uses grammar-only highlighting. Monaco can opportunistically
@@ -61,21 +59,49 @@ test('loads the compact Markdown editor only when Source is opened', async ({ pa
     ),
   ).toBe(true);
 
-  // The page is already network-idle here, so another waitForLoadState can
-  // resolve before the keydown's dynamic import starts. Wait for the specific
-  // request that proves first keyboard use crossed the lazy-load boundary.
-  const suggestionsRequest = page.waitForRequest((request) => {
-    const pathname = new URL(request.url()).pathname;
-    return (
-      pathname.endsWith('.js') &&
-      (pathname.split('/').at(-1) ?? '').startsWith('monacoSuggestions-')
-    );
+  // Completion controllers must register before editor construction. The core
+  // remains lazy until Source opens, and unrelated language workers stay out.
+  expect(requestedNames.some((name) => name.startsWith('monacoSuggestions-'))).toBe(true);
+});
+
+test('deferred suggestions remain available when Source is followed by fenced-code editors', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
   });
-  await page.locator('textarea.inputarea').press('KeyA');
-  await suggestionsRequest;
-  expect(
-    requestedScripts.some((url) =>
-      (new URL(url).pathname.split('/').at(-1) ?? '').startsWith('monacoSuggestions-'),
-    ),
-  ).toBe(true);
+  await page.goto('/');
+  await switchView(page, 'Markdown');
+  const source = page.locator('[data-testid="raw-editor"] textarea.inputarea');
+  await expect(source).toBeVisible();
+  const modifier = await page.evaluate(() =>
+    navigator.userAgent.includes('Macintosh') ? 'Meta' : 'Control',
+  );
+  await source.press(`${modifier}+a`);
+  await page.keyboard.insertText(
+    '# Completion regression\n\n```javascript\nconst marker = 42;\nconsole.log(marker);\n```\n',
+  );
+  for (let cycle = 0; cycle < 2; cycle++) {
+    await switchView(page, 'Editor');
+    const inset = page.locator('.tiptap .monaco-editor');
+    await expect(inset).toBeVisible();
+    await expect(inset).toContainText('const marker = 42;');
+    const input = inset.locator('textarea.inputarea');
+    await input.press(`${modifier}+End`);
+    await input.press('Enter');
+    await page.keyboard.insertText('mar');
+    await input.press('Control+Space');
+    await expect
+      .poll(async () => {
+        expect(errors).toEqual([]);
+        return inset.locator('.suggest-widget.visible').isVisible();
+      })
+      .toBe(true);
+    await page.keyboard.press('Escape');
+    await switchView(page, 'Markdown');
+    await expect(page.locator('[data-testid="raw-editor"]')).toContainText('console.log(marker);');
+  }
+  expect(errors).toEqual([]);
 });

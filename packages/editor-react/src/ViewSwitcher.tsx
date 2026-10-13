@@ -6,6 +6,8 @@
 
 import { useEditorContext, type EditorView } from './EditorContext';
 import { platformShortcut } from './platformShortcuts';
+import { navigateViewTabs } from './viewTabKeyboard';
+import { useEffect, useState } from 'react';
 
 const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcutKey: string }[] = [
   { id: 'wysiwyg', label: 'Write', shortcutKey: '1' },
@@ -23,6 +25,8 @@ export interface ViewSwitcherProps {
  */
 export function ViewSwitcher({ className }: ViewSwitcherProps) {
   const { activeView, setActiveView, editorMode } = useEditorContext();
+  const [focusedView, setFocusedView] = useState(activeView);
+  useEffect(() => setFocusedView(activeView), [activeView]);
   // In code mode, only the raw view is meaningful. With just one entry in
   // the tab list there's nothing to switch between, so suppress the whole
   // switcher rather than render a single lonely tab.
@@ -38,8 +42,14 @@ export function ViewSwitcher({ className }: ViewSwitcherProps) {
       {visibleViews.map((view) => (
         <button
           key={view.id}
+          type="button"
           role="tab"
+          tabIndex={focusedView === view.id ? 0 : -1}
+          onFocus={() => setFocusedView(view.id)}
           aria-selected={activeView === view.id}
+          onKeyDown={(event) => {
+            navigateViewTabs(event);
+          }}
           className={`squisq-view-tab ${activeView === view.id ? 'squisq-view-tab--active' : ''}`}
           onClick={() => setActiveView(view.id)}
           title={`${view.label} (${platformShortcut(`Shift+${view.shortcutKey}`)})`}

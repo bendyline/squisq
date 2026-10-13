@@ -1121,9 +1121,11 @@ describe('Use tab mode menu', () => {
 
     const useTab = screen.getByRole('tab', { name: 'Slideshow' });
     expect(screen.queryByRole('tab', { name: 'Use' })).toBeNull();
-    const tabGroup = useTab.parentElement;
-    expect(tabGroup).not.toBeNull();
-    expect(within(tabGroup!).getByRole('button', { name: 'Choose Use mode' })).toBeTruthy();
+    const tabCluster = useTab.closest<HTMLElement>('.squisq-toolbar-view-tabs');
+    expect(tabCluster).not.toBeNull();
+    const trigger = within(tabCluster!).getByRole('button', { name: 'Choose Use mode' });
+    expect(trigger.closest('[role="tablist"]')).toBeNull();
+    expect(useTab.closest('[role="tablist"]')).not.toBeNull();
 
     // The first click enters Use; once active, clicking the tab again opens
     // the mode menu.

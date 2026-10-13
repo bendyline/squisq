@@ -11,24 +11,37 @@
 import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const loadState = vi.hoisted(() => ({ attempts: 0 }));
+const loadState = vi.hoisted(() => ({
+  attempts: 0,
+  deferSuggestions: false,
+  finishSuggestions: null as (() => void) | null,
+}));
 
 vi.mock('@monaco-editor/react', () => ({
   loader: { config: () => undefined },
 }));
 
-vi.mock('../monaco.js', () => {
-  loadState.attempts += 1;
-  // Fail only the first attempt, so the same mock covers both the rejection
-  // and the retry that a reset cache is supposed to make possible.
-  if (loadState.attempts === 1) throw new Error('simulated chunk load failure');
-  return { loadMonacoLanguages: () => Promise.resolve() };
-});
-
 beforeEach(() => {
   // The loader caches its promise in module scope; each test needs its own.
   vi.resetModules();
   loadState.attempts = 0;
+  loadState.deferSuggestions = false;
+  loadState.finishSuggestions = null;
+  vi.doMock('../monaco.js', () => {
+    loadState.attempts += 1;
+    // Fail only the first attempt, so the same mock covers both the rejection
+    // and the retry that a reset cache is supposed to make possible.
+    if (loadState.attempts === 1) throw new Error('simulated chunk load failure');
+    return {
+      loadMonacoLanguages: () => Promise.resolve(),
+      loadMonacoSuggestions: () =>
+        loadState.deferSuggestions
+          ? new Promise<void>((resolve) => {
+              loadState.finishSuggestions = resolve;
+            })
+          : Promise.resolve(),
+    };
+  });
 });
 
 async function withUnhandledRejectionSpy(run: () => Promise<void>): Promise<string[]> {
@@ -63,6 +76,21 @@ describe('Monaco loader failure handling', () => {
     });
 
     expect(unhandled).toEqual([]);
+  });
+
+  it('does not expose a ready profile until completion controllers are registered', async () => {
+    loadState.attempts = 1;
+    loadState.deferSuggestions = true;
+    const { preloadMonaco } = await import('../useMonacoLoader');
+    let ready = false;
+    const loading = preloadMonaco('markdown').then(() => {
+      ready = true;
+    });
+    await waitFor(() => expect(loadState.finishSuggestions).not.toBeNull());
+    expect(ready).toBe(false);
+    loadState.finishSuggestions!();
+    await loading;
+    expect(ready).toBe(true);
   });
 
   it('clears the cached promise so a later subscriber retries', async () => {

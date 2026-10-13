@@ -126,6 +126,8 @@ import type { FindRequest } from './find/findModel';
 export type { EditorColorScheme } from './EditorContext';
 
 export interface EditorShellProps {
+  /** Accessible name for the editing surface, separate from its empty placeholder. */
+  ariaLabel?: string;
   /** Initial markdown content */
   initialMarkdown?: string;
   /** Initial active view (default: 'wysiwyg') */
@@ -695,6 +697,7 @@ export interface EditorShellProps {
  * editing modes: Raw (Monaco), WYSIWYG (Tiptap), and Preview.
  */
 export function EditorShell({
+  ariaLabel,
   initialMarkdown = '',
   initialView = 'wysiwyg',
   hostMode = 'document',
@@ -866,6 +869,14 @@ export function EditorShell({
         <ProofingRoot>
           <ReviewRoot providers={reviewProviders}>
             <EditorShellInner
+              ariaLabel={
+                ariaLabel ??
+                (hostMode === 'chat'
+                  ? 'Message'
+                  : fileName
+                    ? `Edit ${fileName}`
+                    : 'Document editor')
+              }
               basePath={basePath}
               defaultViewportPreset={defaultViewportPreset}
               onChange={onChange}
@@ -925,6 +936,7 @@ export function EditorShell({
 }
 
 interface EditorShellInnerProps {
+  ariaLabel: string;
   basePath: string;
   defaultViewportPreset: ViewportPreset;
   onChange?: (source: string) => void;
@@ -1025,6 +1037,7 @@ function UseModeProviders({
 }
 
 function EditorShellInner({
+  ariaLabel,
   basePath,
   defaultViewportPreset,
   onChange,
@@ -1642,6 +1655,7 @@ function EditorShellInner({
                     >
                       <div key="raw-editor" className="squisq-raw-editor-container">
                         <RawEditor
+                          ariaLabel={`${ariaLabel} — source`}
                           monacoTheme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
                           submitOnEnter={submitOnEnter}
                           readOnly={readOnly}
@@ -1692,6 +1706,7 @@ function EditorShellInner({
                       onAdd={addBlock}
                     >
                       <WysiwygEditor
+                        ariaLabel={ariaLabel}
                         key="wysiwyg-editor"
                         submitOnEnter={submitOnEnter}
                         placeholder={placeholder}

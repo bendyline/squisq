@@ -127,6 +127,10 @@ export function PreviewModeMenu({ openRequest = 0 }: PreviewModeMenuProps) {
             aria-label="Use mode"
             style={{ top: anchor.top, left: anchor.left }}
             onKeyDown={(event) => {
+              if (event.key === 'Tab') {
+                closeMenu(true);
+                return;
+              }
               if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
               event.preventDefault();
               const items = Array.from(
@@ -157,6 +161,7 @@ export function PreviewModeMenu({ openRequest = 0 }: PreviewModeMenuProps) {
                   type="button"
                   className={`squisq-use-mode-menu-item${selected ? ' squisq-use-mode-menu-item--selected' : ''}`}
                   role="menuitemradio"
+                  tabIndex={-1}
                   aria-checked={selected}
                   aria-labelledby={labelId}
                   aria-describedby={summaryId}

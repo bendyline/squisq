@@ -24,7 +24,7 @@ import {
   isMarkdownFencedCodeModelLine,
   ownsMonacoModel,
 } from './rawEditorIsolation';
-import { preloadMonacoSuggestions, useMonacoLoader } from './useMonacoLoader';
+import { useMonacoLoader } from './useMonacoLoader';
 import { monacoLanguagesForDocument, normalizeMonacoLanguage } from './monacoLanguageDetection';
 import { useEditorContextMenuAvailable } from './EditorContextMenu';
 
@@ -70,6 +70,8 @@ function useDocumentMonacoLanguages(language: string, source: string): readonly 
 }
 
 export interface RawEditorProps {
+  /** Accessible name shared by Monaco and its loading fallback. */
+  ariaLabel?: string;
   /**
    * Monaco editor theme name (default: `'vs'`). Accepts Monaco's built-in
    * theme ids (`'vs'`, `'vs-dark'`, `'hc-black'`) — which are transparently
@@ -100,6 +102,7 @@ export interface RawEditorProps {
  * Binds to the shared EditorContext for source synchronization.
  */
 export function RawEditor({
+  ariaLabel = 'Document source',
   monacoTheme = 'vs',
   minimap = false,
   fontSize = 14,
@@ -533,7 +536,6 @@ export function RawEditor({
       // Cmd/Ctrl+Enter falls through so the native newline still works.
       keyDisposable.current?.dispose();
       keyDisposable.current = editor.onKeyDown((e) => {
-        void preloadMonacoSuggestions().catch(() => undefined);
         if (e.keyCode !== monaco.KeyCode.Enter) return;
         if (!submitOnEnterRef.current) return;
         if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -712,7 +714,7 @@ export function RawEditor({
     return (
       <textarea
         className={className}
-        aria-label="Document source"
+        aria-label={ariaLabel}
         aria-busy="true"
         autoFocus
         readOnly={readOnly}
@@ -773,6 +775,7 @@ export function RawEditor({
         onMount={handleMount}
         onChange={handleChange}
         options={{
+          ariaLabel,
           fontSize,
           wordWrap,
           minimap: { enabled: minimap },

@@ -90,7 +90,7 @@ function overflowed(name: string): boolean {
 function openOverflowMenu(): HTMLElement {
   const trigger = screen.getByRole('button', { name: 'More actions' });
   fireEvent.click(trigger);
-  const menu = trigger.parentElement!.querySelector<HTMLElement>('.squisq-toolbar-overflow-menu');
+  const menu = document.querySelector<HTMLElement>('.squisq-toolbar-overflow-menu');
   expect(menu).not.toBeNull();
   return menu!;
 }

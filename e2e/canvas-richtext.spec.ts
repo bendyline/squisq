@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { waitForAppReady } from './appReady';
 import { switchView } from './view-tabs';
 
@@ -33,12 +34,14 @@ async function insertLayout(page: Page) {
   await page.locator('[data-layer-id="text-1"]').first().waitFor({ state: 'visible' });
 }
 
-/** Read the rendered Monaco lines around the active edit. The inserted layout
- * stays in view when switching from Write to Source, and reading these lines
- * avoids Monaco's transient selection/copy buffer during that transition. */
-async function readVisibleMonacoMarkdown(page: Page): Promise<string> {
-  const value = await page.locator('.monaco-editor .view-lines').first().innerText();
-  return value.replace(/\s+/g, ' ');
+/** Read the saved document, including edits outside Monaco's virtualized viewport. */
+async function readSavedMarkdown(page: Page): Promise<string> {
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '↓ Download', exact: true }).click();
+  await page.getByRole('button', { name: 'Markdown (.md)', exact: true }).click();
+  const path = await (await downloadPromise).path();
+  if (!path) throw new Error('Document download did not finish');
+  return (await readFile(path, 'utf8')).replace(/\s+/g, ' ');
 }
 
 test('double-click opens an inline editor and the toolbar bolds the selection', async ({
@@ -86,7 +89,7 @@ test('double-click opens an inline editor and the toolbar bolds the selection', 
   await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
   await expect(async () => {
-    const md = await readVisibleMonacoMarkdown(page);
+    const md = await readSavedMarkdown(page);
     expect(md).toContain('Hello bold');
     expect(md).toContain('{[text');
     expect(md).not.toContain('layers=');
@@ -131,7 +134,7 @@ test('a selected layout box exposes Fill/Stroke in the toolbar and applies', asy
   await switchView(page, 'Markdown');
   await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
   await expect(async () => {
-    const md = await readVisibleMonacoMarkdown(page);
+    const md = await readSavedMarkdown(page);
     expect(md).toMatch(/fill="?#00ff00"?/i);
     expect(md).not.toContain('layers=');
   }).toPass({ timeout: 3_000 });

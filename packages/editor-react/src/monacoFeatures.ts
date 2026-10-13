@@ -9,6 +9,12 @@
  * full CSS/HTML/JSON/JavaScript/TypeScript file.
  */
 
+// StandaloneServices snapshots singleton registrations when the first editor
+// initializes. Register completion memory now so loading the suggestion UI
+// later (or opening a second editor) cannot miss ISuggestMemories. The service
+// itself remains lazy, and the suggestion/snippet controllers stay deferred.
+import 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestMemory.js';
+
 import 'monaco-editor/esm/vs/editor/browser/coreCommands.js';
 import 'monaco-editor/esm/vs/editor/browser/widget/codeEditor/codeEditorWidget.js';
 import 'monaco-editor/esm/vs/editor/contrib/bracketMatching/browser/bracketMatching.js';

@@ -16,7 +16,6 @@
  * element path, which stays correct at realtime speed.
  */
 
-import { BlobSource, Input, MATROSKA, MP4, QTFF, VideoSampleSink, WEBM } from 'mediabunny';
 import type { RenderVideoFrameSelector } from '@bendyline/squisq-react';
 
 /** Presentation-time slack so a target computed as 0.0333329 still selects the 0.033333 frame. */
@@ -29,7 +28,6 @@ const FRAME_TIME_EPSILON_SECONDS = 1e-4;
 const MAX_SEQUENTIAL_DECODE_GAP_SECONDS = 3;
 /** Sources whose bytes are already local. Remote URLs keep the element path. */
 const DECODABLE_SOURCE_URL = /^(?:blob|data):/i;
-const INPUT_FORMATS = [MP4, QTFF, WEBM, MATROSKA];
 
 /** A decoded replacement for one element's pixels. */
 export interface DecodedCaptureFrame {
@@ -146,7 +144,17 @@ export class DecodedVideoCursor {
 
   /** Open a local source, or null when it has no decodable video track. */
   static async open(blob: Blob, ownerDocument: Document): Promise<DecodedVideoCursor | null> {
-    const input = new Input({ source: new BlobSource(blob), formats: INPUT_FORMATS });
+    // Keep the demuxers off the editor's startup path. The named-export module
+    // also keeps unrelated codecs out of the bundled dynamic import.
+    let codecs: typeof import('./captureVideoCodecs.js');
+    try {
+      codecs = await import('./captureVideoCodecs.js');
+    } catch {
+      // A failed chunk load must retain the element-based capture fallback.
+      return null;
+    }
+    const { BlobSource, Input, MATROSKA, MP4, QTFF, VideoSampleSink, WEBM } = codecs;
+    const input = new Input({ source: new BlobSource(blob), formats: [MP4, QTFF, WEBM, MATROSKA] });
     try {
       const track = await input.getPrimaryVideoTrack();
       if (!track || !(await track.canDecode())) {

@@ -19,7 +19,6 @@ import { resolveDashboardStyleId } from '@bendyline/squisq/doc';
 import type { RenderHtmlOptions } from '@bendyline/squisq-video';
 import { DocPlayer, MediaContext } from '@bendyline/squisq-react';
 import type { SquisqRenderAPI, CaptionMode, CaptionStyle } from '@bendyline/squisq-react';
-import html2canvas from 'html2canvas';
 import {
   CaptureVideoFrameRegistry,
   getDecodedCaptureFrame,
@@ -1921,6 +1920,10 @@ export function useFrameCapture(): FrameCaptureHandle {
       if (!root) {
         throw new Error('Capture root element not found');
       }
+
+      // Capture is optional: opening an editor or export dialog needs no rasterizer.
+      const { default: html2canvas } = await import('html2canvas');
+      assertActive();
 
       // Bind decoders to newly mounted or re-sourced videos, then index any
       // the decoder cannot serve. Returns how many changed frame source.

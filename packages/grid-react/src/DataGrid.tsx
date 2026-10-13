@@ -313,6 +313,8 @@ export function DataGrid({
   const rootRef = useRef<HTMLDivElement | null>(null);
   const opMenuRef = useRef<HTMLDivElement | null>(null);
   const valueMenuRef = useRef<HTMLDivElement | null>(null);
+  const menuTriggerRef = useRef<HTMLElement | null>(null);
+  const pendingCellFocus = useRef(false);
   const focusRef = useRef<HTMLDivElement | null>(null);
   /** When the inline cell editor closes, DOM focus would fall to <body>
    * (the input unmounts) — return it to the focused cell so keyboard flow
@@ -378,6 +380,7 @@ export function DataGrid({
       await restoreRef.current;
       const result = await provider.setView(next);
       cache.current = { version: cache.current.version + 1, pages: new Map() };
+      selectionCells.current.clear();
       inFlight.current.clear();
       setViewRowCount(result.viewRowCount);
       setStaleView(false);
@@ -445,7 +448,9 @@ export function DataGrid({
 
   // ── Selection prefetch (clipboard) ─────────────────────────────────
 
+  const viewVersion = cache.current.version;
   useEffect(() => {
+    selectionCells.current.clear();
     if (!selection || !schema) return;
     const { r0, r1 } = normalizedRange(selection);
     if ((r1 - r0 + 1) * schema.columns.length > COPY_CELL_CAP) return;
@@ -458,11 +463,15 @@ export function DataGrid({
         page.cells.forEach((cells, index) => rows.set(page.start + index, cells));
       }
       selectionCells.current = rows;
-    })();
+    })().catch(() => {
+      // A provider may be disposed while a selection read is in flight.
+      // Leave the clipboard fallback to the visible page cache.
+      if (!cancelled) selectionCells.current.clear();
+    });
     return () => {
       cancelled = true;
     };
-  }, [provider, schema, selection]);
+  }, [provider, schema, selection, viewVersion, dirtyTick]);
 
   const handleCopy = useCallback(
     (event: React.ClipboardEvent) => {
@@ -478,7 +487,7 @@ export function DataGrid({
       const lines: string[] = [];
       const htmlRows: string[] = [];
       for (let row = r0; row <= lastRow; row++) {
-        const cells = selectionCells.current.get(row) ?? cellAt(row)?.cells;
+        const cells = cellAt(row)?.cells ?? selectionCells.current.get(row);
         const values: string[] = [];
         for (let col = c0; col <= c1; col++) values.push(cellDisplay(cells?.[col] ?? null));
         lines.push(values.join('\t'));
@@ -820,6 +829,7 @@ export function DataGrid({
     (col: number, columnName: string, next: FilterOpState) => {
       setFilterOps((prev) => ({ ...prev, [col]: next }));
       setOpMenuCol(null);
+      menuTriggerRef.current?.focus();
       const clause = viewRef.current.filter.find((entry) => entry.column === columnName);
       if (next.unary) {
         // Value-less: activates immediately and clears any typed text.
@@ -849,6 +859,7 @@ export function DataGrid({
       }));
       setOpMenuCol(null);
       setColumnFilter(columnName, '', prior.op, prior.caseSensitive);
+      menuTriggerRef.current?.focus();
     },
     [opStateFor, schema, setColumnFilter],
   );
@@ -863,6 +874,7 @@ export function DataGrid({
 
   const toggleOpMenu = useCallback(
     (col: number, anchor: HTMLElement) => {
+      menuTriggerRef.current = anchor;
       setValueMenuCol(null);
       setOpMenuPos(menuAnchorPos(anchor));
       setOpMenuCol((open) => (open === col ? null : col));
@@ -873,6 +885,7 @@ export function DataGrid({
   /** Toggle the distinct-values picker; values load async on open. */
   const openValueMenu = useCallback(
     (col: number, anchor: HTMLElement) => {
+      menuTriggerRef.current = anchor;
       setOpMenuCol(null);
       if (valueMenuCol === col) {
         setValueMenuCol(null);
@@ -900,11 +913,43 @@ export function DataGrid({
     }
   }, [opMenuCol, valueMenuCol, valueMenuData]);
 
+  useLayoutEffect(() => {
+    const menu = opMenuRef.current ?? valueMenuRef.current;
+    if (!menu || menu.contains(document.activeElement)) return;
+    (
+      menu.querySelector<HTMLButtonElement>('[aria-checked="true"]') ??
+      menu.querySelector<HTMLButtonElement>('[role^="menuitem"]')
+    )?.focus();
+  }, [opMenuCol, valueMenuCol, valueMenuData]);
+
+  const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === 'Tab') {
+      setOpMenuCol(null);
+      setValueMenuCol(null);
+      menuTriggerRef.current?.focus();
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const items = [...event.currentTarget.querySelectorAll<HTMLElement>('[role^="menuitem"]')];
+    const current = items.indexOf(document.activeElement as HTMLElement);
+    const next =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? items.length - 1
+          : event.key === 'ArrowUp'
+            ? (current - 1 + items.length) % items.length
+            : (current + 1) % items.length;
+    items[next]?.focus();
+  };
+
   const chooseFilterValue = useCallback(
     (col: number, columnName: string, value: string) => {
       setFilterOps((prev) => ({ ...prev, [col]: { op: '=', caseSensitive: false } }));
       setValueMenuCol(null);
       setColumnFilter(columnName, value, '=', false);
+      menuTriggerRef.current?.focus();
     },
     [setColumnFilter],
   );
@@ -913,7 +958,8 @@ export function DataGrid({
 
   const moveFocus = useCallback(
     (rowDelta: number, colDelta: number, extend: boolean, absolute?: Partial<CellPos>) => {
-      if (!schema) return;
+      if (!schema || viewRowCount === 0 || schema.columns.length === 0) return;
+      pendingCellFocus.current = true;
       setSelection((prev) => {
         const from = prev?.focus ?? { row: 0, col: 0 };
         const next: CellPos = {
@@ -932,15 +978,24 @@ export function DataGrid({
     [schema, viewRowCount, virtualizer],
   );
 
+  useLayoutEffect(() => {
+    if (!pendingCellFocus.current || editing || !focusRef.current) return;
+    focusRef.current.focus();
+    pendingCellFocus.current = false;
+  });
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
-      if (!schema) return;
+      if (!schema || event.defaultPrevented) return;
       // Keys typed into a text-entry element inside the grid (the header
       // FILTER inputs) belong to that element — without this guard they
       // bubble here and the "typing opens the cell editor" branch starts
       // editing the focused cell with the filter's keystrokes. The cell
       // editor itself is exempt: its keys are governed by `editing` below.
       const target = event.target as HTMLElement | null;
+      // Headers, filter menus and footer buttons own their native keys.
+      // Enter on one of these must never open the selected cell's editor.
+      if (!target?.closest('[role="gridcell"]')) return;
       const inTextEntry =
         target instanceof HTMLInputElement ||
         target instanceof HTMLTextAreaElement ||
@@ -961,7 +1016,7 @@ export function DataGrid({
         return;
       }
 
-      const pageRows = Math.max(1, Math.floor(height / ROW_HEIGHT) - 1);
+      const pageRows = Math.max(1, Math.floor(height / rowHeight) - 1);
       switch (event.key) {
         case 'ArrowDown':
           moveFocus(
@@ -1043,6 +1098,7 @@ export function DataGrid({
       commitEdit,
       editing,
       height,
+      rowHeight,
       moveFocus,
       runJournal,
       schema,
@@ -1079,6 +1135,8 @@ export function DataGrid({
   }, [colWidths, defaultColumnWidths, schema]);
 
   const range = selection ? normalizedRange(selection) : null;
+  const focusRowRendered =
+    selection && virtualItems.some((item) => item.index === selection.focus.row);
   const filterValueFor = (name: string): string =>
     view.filter.find((clause) => clause.column === name)?.value ?? '';
 
@@ -1086,10 +1144,6 @@ export function DataGrid({
     <div
       ref={rootRef}
       className={`squisq-grid${className ? ` ${className}` : ''}`}
-      role="grid"
-      aria-rowcount={viewRowCount + 1}
-      aria-colcount={schema?.columns.length ?? 0}
-      aria-multiselectable="true"
       onKeyDown={handleKeyDown}
       onCopy={handleCopy}
       onPaste={handlePaste}
@@ -1108,13 +1162,20 @@ export function DataGrid({
         }
       }}
       onKeyDownCapture={(event) => {
-        if (event.key !== 'Escape') return;
+        if (event.key !== 'Escape' || (opMenuCol === null && valueMenuCol === null)) return;
+        event.preventDefault();
+        event.stopPropagation();
         if (opMenuCol !== null) setOpMenuCol(null);
         if (valueMenuCol !== null) setValueMenuCol(null);
+        menuTriggerRef.current?.focus();
       }}
     >
       <div
         className="squisq-grid-scroller"
+        role="grid"
+        aria-rowcount={viewRowCount + 1}
+        aria-colcount={schema?.columns.length ?? 0}
+        aria-multiselectable="true"
         ref={bodyRef}
         style={{ height }}
         onScroll={() => {
@@ -1165,6 +1226,7 @@ export function DataGrid({
                             }`}
                             aria-label={`Filter operator for ${column.name}`}
                             aria-expanded={opMenuCol === col}
+                            aria-haspopup="menu"
                             title={`${
                               opChoicesFor(column.kind).find((c) => choiceMatches(c, opState))
                                 ?.label ?? opState.op
@@ -1205,6 +1267,7 @@ export function DataGrid({
                               className="squisq-grid-valuebutton"
                               aria-label={`Filter ${column.name} by value`}
                               aria-expanded={valueMenuCol === col}
+                              aria-haspopup="menu"
                               title="Filter by value"
                               onClick={(event) => openValueMenu(col, event.currentTarget)}
                             >
@@ -1289,8 +1352,21 @@ export function DataGrid({
                           : {})}
                       {...(locked ? { 'aria-readonly': 'true' } : {})}
                       className={classes}
-                      tabIndex={isFocus ? 0 : -1}
+                      tabIndex={
+                        isFocus ||
+                        (!focusRowRendered && item.index === virtualItems[0]?.index && col === 0)
+                          ? 0
+                          : -1
+                      }
                       ref={isFocus ? focusRef : undefined}
+                      onFocus={() => {
+                        const pos = { row: item.index, col };
+                        setSelection((prev) =>
+                          prev?.focus.row === pos.row && prev.focus.col === pos.col
+                            ? prev
+                            : { anchor: pos, focus: pos },
+                        );
+                      }}
                       onMouseDown={(event) => {
                         const pos = { row: item.index, col };
                         setSelection((prev) =>
@@ -1305,6 +1381,8 @@ export function DataGrid({
                         <input
                           className={`squisq-grid-editor${editing.error ? ' squisq-grid-editor--error' : ''}`}
                           autoFocus
+                          aria-label={`Edit ${column.name}, row ${item.index + 1}`}
+                          aria-invalid={editing.error ? true : undefined}
                           value={editing.draft}
                           title={editing.error}
                           onChange={(event) =>
@@ -1337,6 +1415,8 @@ export function DataGrid({
               ref={opMenuRef}
               className="squisq-grid-opmenu"
               role="menu"
+              aria-label={`Filter operator for ${column.name}`}
+              onKeyDown={handleMenuKeyDown}
               style={{ left: opMenuPos.left, top: opMenuPos.top }}
             >
               {filterActive && (
@@ -1371,20 +1451,22 @@ export function DataGrid({
                 </button>
               ))}
               {caseCapable && (
-                <label className="squisq-grid-opcase">
-                  <input
-                    type="checkbox"
-                    checked={opState.caseSensitive}
-                    onChange={(event) =>
-                      chooseFilterOp(col, column.name, {
-                        op: opState.op,
-                        caseSensitive: event.target.checked,
-                        ...(opState.unary ? { unary: true } : {}),
-                      })
-                    }
-                  />
+                <button
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={opState.caseSensitive}
+                  className="squisq-grid-opoption squisq-grid-opcase"
+                  onClick={() =>
+                    chooseFilterOp(col, column.name, {
+                      op: opState.op,
+                      caseSensitive: !opState.caseSensitive,
+                      ...(opState.unary ? { unary: true } : {}),
+                    })
+                  }
+                >
+                  <span aria-hidden="true">{opState.caseSensitive ? '✓' : '□'}</span>
                   Case sensitive
-                </label>
+                </button>
               )}
             </div>
           );
@@ -1402,6 +1484,8 @@ export function DataGrid({
               ref={valueMenuRef}
               className="squisq-grid-valuemenu"
               role="menu"
+              aria-label={`Filter ${column.name} by value`}
+              onKeyDown={handleMenuKeyDown}
               style={{ left: valueMenuPos.left, top: valueMenuPos.top }}
             >
               {valueMenuData?.col === col ? (

@@ -382,7 +382,7 @@ describe('DataGrid', () => {
     // Open Region's menu: text ops + comparisons + the case toggle.
     await act(async () => (opButtons[0] as HTMLButtonElement).click());
     const menu = host.querySelector('.squisq-grid-opmenu')!;
-    const labels = [...menu.querySelectorAll('.squisq-grid-opoption')].map((el) =>
+    const labels = [...menu.querySelectorAll('[role="menuitemradio"]')].map((el) =>
       el.textContent!.slice(el.querySelector('.squisq-grid-opglyph')!.textContent!.length).trim(),
     );
     expect(labels).toEqual([
@@ -402,7 +402,7 @@ describe('DataGrid', () => {
     expect(menu.querySelector('.squisq-grid-opcase')).not.toBeNull();
 
     // Choose "Starts with", then type: the emitted clause carries ^~.
-    const startsWith = [...menu.querySelectorAll('.squisq-grid-opoption')].find((el) =>
+    const startsWith = [...menu.querySelectorAll('[role="menuitemradio"]')].find((el) =>
       el.textContent!.includes('Starts with'),
     ) as HTMLButtonElement;
     await act(async () => startsWith.click());
@@ -421,7 +421,7 @@ describe('DataGrid', () => {
 
     // Toggle case sensitivity: the active clause re-emits with the flag.
     await act(async () => (opButtons[0] as HTMLButtonElement).click());
-    const caseBox = host.querySelector('.squisq-grid-opcase input') as HTMLInputElement;
+    const caseBox = host.querySelector('.squisq-grid-opcase') as HTMLButtonElement;
     await act(async () => caseBox.click());
     expect(changes[changes.length - 1]?.filter).toEqual([
       { column: 'Region', op: '^~', value: 'We', caseSensitive: true },

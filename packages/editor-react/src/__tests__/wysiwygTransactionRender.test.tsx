@@ -40,3 +40,34 @@ describe('WysiwygEditor transactions', () => {
     expect(setOptions).not.toHaveBeenCalled();
   });
 });
+
+describe('WysiwygEditor accessible input', () => {
+  it('keeps the name, multiline and read-only state in sync without replacing the document', async () => {
+    const view = render(
+      <EditorProvider initialMarkdown="Keep this draft" initialView="wysiwyg">
+        <WysiwygEditor />
+        <EditorProbe />
+      </EditorProvider>,
+    );
+    const input = await screen.findByRole('textbox', { name: 'Document editor' });
+    expect(input.getAttribute('aria-multiline')).toBe('true');
+    expect(input.getAttribute('aria-readonly')).toBe('false');
+    await waitFor(() => expect(captured).not.toBeNull());
+    const editor = captured!;
+    act(() => {
+      editor.commands.insertContent('More text. ');
+    });
+    expect(screen.getByRole('textbox', { name: 'Document editor' })).toBe(input);
+    view.rerender(
+      <EditorProvider initialMarkdown="Keep this draft" initialView="wysiwyg">
+        <WysiwygEditor ariaLabel="Task description" readOnly />
+        <EditorProbe />
+      </EditorProvider>,
+    );
+    await waitFor(() => expect(input.getAttribute('aria-readonly')).toBe('true'));
+    expect(screen.getByRole('textbox', { name: 'Task description' })).toBe(input);
+    expect(captured).toBe(editor);
+    expect(editor.getText()).toContain('Keep this draft');
+    expect(editor.getText()).toContain('More text.');
+  });
+});

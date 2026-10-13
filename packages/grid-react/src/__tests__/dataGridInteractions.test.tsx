@@ -218,6 +218,38 @@ describe('DataGrid interactions', () => {
     host.remove();
   });
 
+  it('copy follows a changed sort order without requiring a new selection', async () => {
+    const provider = makeProvider();
+    const { host, root } = await mount(<DataGrid provider={provider} view={EMPTY_VIEW} />);
+    try {
+      const cell = selectFirstCell(host);
+      await settle();
+      await act(async () => pressKey(cell, 'End', { ctrlKey: true, shiftKey: true }));
+      await settle();
+      await act(async () =>
+        root.render(
+          <DataGrid
+            provider={provider}
+            view={{ sort: [{ column: 'Revenue', dir: 'desc' }], filter: [] }}
+          />,
+        ),
+      );
+      await settle();
+      await settle();
+      const payload = new Map<string, string>();
+      const copy = new Event('copy', { bubbles: true, cancelable: true });
+      Object.defineProperty(copy, 'clipboardData', {
+        value: { setData: (type: string, data: string) => payload.set(type, data) },
+      });
+      await act(async () => focusedCell(host)!.dispatchEvent(copy));
+      expect(payload.get('text/plain')).toBe('East\t2000\nWest\t100\nNorth\t30');
+    } finally {
+      await act(async () => root.unmount());
+      provider.dispose();
+      host.remove();
+    }
+  });
+
   it('editing a sorted column raises the refresh affordance; clicking re-sorts', async () => {
     const provider = makeProvider();
     const journal = new EditJournal();

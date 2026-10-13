@@ -40,7 +40,7 @@ const TYPE_EXPORTS = [
 function staticImports(file: string): string[] {
   const source = readFileSync(file, 'utf8');
   const specifiers = [
-    ...source.matchAll(/^import\s+(?:[^'"]*?\s+from\s+)?["'](\.{1,2}\/[^"']+)["']/gm),
+    ...source.matchAll(/^(?:import|export)\s+(?:[^'"]*?\s+from\s+)?["'](\.{1,2}\/[^"']+)["']/gm),
   ].map((match) => match[1]);
   return specifiers.map((specifier) => resolve(dirname(file), specifier));
 }
@@ -77,6 +77,21 @@ describe('audio export API (published)', () => {
       /\bMp4OutputFormat\b/.test(readFileSync(file, 'utf8').replace(/import\([^)]*\)/g, '')),
     );
     expect(eager).toEqual([]);
+  });
+
+  it.each([
+    'index',
+    'components/index',
+    'hooks/index',
+    'cover-image/index',
+    'dashboard-image/index',
+  ])('keeps capture dependencies off the %s static import graph', (entry) => {
+    const graph = staticGraph(resolve(videoReactDist, `${entry}.js`));
+    for (const file of graph) {
+      const source = readFileSync(file, 'utf8');
+      expect(source, file).not.toMatch(/^import\b[^;]*from\s*['"]html2canvas['"]/m);
+      expect(source, file).not.toContain('node_modules/mediabunny/');
+    }
   });
 
   it('reports WAV as always available where WebCodecs is absent', async () => {

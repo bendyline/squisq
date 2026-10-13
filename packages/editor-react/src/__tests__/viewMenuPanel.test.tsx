@@ -44,7 +44,7 @@ function renderViewMenu({
   );
 
   fireEvent.click(screen.getByRole('button', { name: 'View options' }));
-  return screen.getByRole('radiogroup', { name: 'Show block tags' });
+  return screen.getByRole('group', { name: 'Show block tags' });
 }
 
 describe('ViewMenuPanel block-tag visibility', () => {
@@ -63,11 +63,9 @@ describe('ViewMenuPanel block-tag visibility', () => {
     const group = renderViewMenu();
 
     const items = within(group).getAllByRole('menuitemradio');
-    expect(items.map((item) => item.textContent?.trim())).toEqual([
-      'No inline block tags',
-      'Selected/hovered block',
-      'Always show',
-    ]);
+    expect(
+      items.map((item) => item.querySelector('.squisq-view-menu-radio-label')?.textContent?.trim()),
+    ).toEqual(['No inline block tags', 'Selected/hovered block', 'Always show']);
     expect(
       within(group)
         .getByRole('menuitemradio', { name: 'Selected/hovered block' })

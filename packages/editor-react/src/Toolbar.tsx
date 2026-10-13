@@ -33,6 +33,7 @@ import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
 import { DictationButton } from './speech/DictationButton';
 import { ViewMenuPanel } from './ViewMenuPanel';
+import { useAnchoredPopover } from './useAnchoredPopover';
 import { TransformMenu } from './TransformMenu';
 import {
   TemplatePicker,
@@ -489,6 +490,12 @@ export function Toolbar({
   const collapsedCountRef = useRef(0);
   const [showOverflow, setShowOverflow] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
+  const overflowMenuRef = useRef<HTMLDivElement>(null);
+  const overflowStyle = useAnchoredPopover(showOverflow, overflowTriggerRef, overflowMenuRef);
+  useLayoutEffect(() => {
+    if (showOverflow && overflowStyle.visibility === 'visible')
+      overflowMenuRef.current?.querySelector<HTMLElement>('button:not(:disabled)')?.focus();
+  }, [showOverflow, overflowStyle.visibility]);
 
   useEscapeDismissal(showOverflow, () => setShowOverflow(false), overflowTriggerRef);
   useEscapeDismissal(insertMenuAnchor !== null, closeInsertMenu, insertMenuReturnFocusRef);
@@ -696,7 +703,8 @@ export function Toolbar({
     if (!showOverflow) return;
     const handleClick = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (overflowRef.current?.contains(target)) return;
+      if (overflowRef.current?.contains(target) || overflowMenuRef.current?.contains(target))
+        return;
       if (
         target instanceof Element &&
         target.closest(`${TEMPLATE_GALLERY_PORTAL_SELECTOR}, #${TRANSITION_FLYOUT_PORTAL_ID}`)
@@ -755,31 +763,6 @@ export function Toolbar({
       return { ...current, top, maxHeight, placement };
     });
   }, [insertMenuOpen]);
-
-  // Open-up vs open-down: the overflow menu is anchored to its trigger with
-  // `top: 100%` by default. When the toolbar lives near the bottom of a
-  // small container (e.g. a chat composer), a downward menu gets clipped.
-  // Measure on open and flip the anchor to `bottom: 100%` if the space
-  // above the trigger is larger than the space below.
-  const [overflowPlacement, setOverflowPlacement] = useState<'down' | 'up'>('down');
-  useEffect(() => {
-    if (!showOverflow || !overflowRef.current) return;
-    const trigger = overflowRef.current.querySelector<HTMLElement>(
-      '.squisq-toolbar-overflow-trigger',
-    );
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-    // Assume a typical menu height; exact measurement is unreliable on first
-    // open because the menu hasn't rendered yet when this runs.
-    const ESTIMATED_MENU_HEIGHT = 260;
-    if (spaceBelow < ESTIMATED_MENU_HEIGHT && spaceAbove > spaceBelow) {
-      setOverflowPlacement('up');
-    } else {
-      setOverflowPlacement('down');
-    }
-  }, [showOverflow]);
 
   // Force re-render when Tiptap selection or formatting state changes
   const [, forceUpdate] = useReducer((c: number) => c + 1, 0);
@@ -2345,213 +2328,221 @@ export function Toolbar({
           >
             ···
           </button>
-          {showOverflow && (
-            <div
-              className={`squisq-toolbar-overflow-menu squisq-toolbar-overflow-menu--${overflowPlacement}`}
-            >
-              {collapsedFormatButtons.map((btn) => {
-                const active =
-                  btn.id === 'emoji'
-                    ? emojiPickerAnchor !== null
-                    : formatActive && formattingEditor
-                      ? isTiptapActive(formattingEditor, btn.id)
-                      : false;
-                const disabled =
-                  (FILE_STORING_BUTTONS.has(btn.id) && !mediaProvider) || !buttonAllowed(btn.id);
-                return (
+          {showOverflow &&
+            createPortal(
+              <div
+                ref={overflowMenuRef}
+                className="squisq-toolbar-overflow-menu"
+                data-theme={colorScheme}
+                style={overflowStyle}
+              >
+                {collapsedFormatButtons.map((btn) => {
+                  const active =
+                    btn.id === 'emoji'
+                      ? emojiPickerAnchor !== null
+                      : formatActive && formattingEditor
+                        ? isTiptapActive(formattingEditor, btn.id)
+                        : false;
+                  const disabled =
+                    (FILE_STORING_BUTTONS.has(btn.id) && !mediaProvider) || !buttonAllowed(btn.id);
+                  return (
+                    <button
+                      key={btn.id}
+                      ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
+                      className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                      onClick={() => {
+                        handleAction(btn.id);
+                        // Keep the overflow open when opening the emoji
+                        // picker — otherwise its anchor (the overflow
+                        // item) unmounts and the popover loses its ref.
+                        if (btn.id !== 'emoji') setShowOverflow(false);
+                      }}
+                      disabled={disabled}
+                    >
+                      <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
+                      <span>{btn.title}</span>
+                    </button>
+                  );
+                })}
+
+                {showInsertInOverflow && (
                   <button
-                    key={btn.id}
-                    ref={btn.id === 'emoji' ? emojiButtonRef : undefined}
-                    className={`squisq-toolbar-overflow-item${active ? ' squisq-toolbar-overflow-item--active' : ''}`}
-                    onClick={() => {
-                      handleAction(btn.id);
-                      // Keep the overflow open when opening the emoji
-                      // picker — otherwise its anchor (the overflow
-                      // item) unmounts and the popover loses its ref.
-                      if (btn.id !== 'emoji') setShowOverflow(false);
-                    }}
-                    disabled={disabled}
-                  >
-                    <span className="squisq-toolbar-overflow-icon">{buttonIcon(btn)}</span>
-                    <span>{btn.title}</span>
-                  </button>
-                );
-              })}
-
-              {showInsertInOverflow && (
-                <button
-                  className={`squisq-toolbar-overflow-item${insertMenuAnchor ? ' squisq-toolbar-overflow-item--active' : ''}`}
-                  onClick={(event) => {
-                    if (insertMenuAnchor) {
-                      closeInsertMenu();
-                    } else {
-                      openInsertMenu(event.currentTarget);
-                    }
-                    setShowOverflow(false);
-                  }}
-                  aria-haspopup="menu"
-                  aria-expanded={insertMenuAnchor !== null}
-                >
-                  <span className="squisq-toolbar-overflow-icon">
-                    <Icon icon="fa-solid fa-plus" />
-                  </span>
-                  <span>Insert...</span>
-                </button>
-              )}
-
-              {/* Document chrome collapses here when the row is too narrow to
-                  keep it alongside the formatting controls. */}
-              {collapsedChrome.length > 0 &&
-                (collapsedFormatButtons.length > 0 || showInsertInOverflow) && (
-                  <div
-                    className="squisq-toolbar-separator"
-                    style={{ margin: '4px 0', width: '100%', height: 1 }}
-                  />
-                )}
-              {collapsedChrome.includes('layouts') && (
-                <button
-                  className="squisq-toolbar-overflow-item"
-                  onClick={() => {
-                    setShowLayoutManager(true);
-                    setShowOverflow(false);
-                  }}
-                >
-                  <span className="squisq-toolbar-overflow-icon">
-                    <Icon icon="fa-solid fa-shapes" />
-                  </span>
-                  <span>Custom layouts</span>
-                </button>
-              )}
-              {collapsedChrome.includes('docSettings') && (
-                <button
-                  className="squisq-toolbar-overflow-item"
-                  onClick={() => {
-                    setShowDocSettings(true);
-                    setShowOverflow(false);
-                  }}
-                >
-                  <span className="squisq-toolbar-overflow-icon">
-                    <Icon icon="fa-solid fa-file-lines" />
-                  </span>
-                  <span>Document settings</span>
-                </button>
-              )}
-              {collapsedChrome.includes('files') && onToggleFiles && (
-                <button
-                  className={`squisq-toolbar-overflow-item${showFiles ? ' squisq-toolbar-overflow-item--active' : ''}`}
-                  aria-pressed={showFiles}
-                  onClick={() => {
-                    onToggleFiles();
-                    setShowOverflow(false);
-                  }}
-                >
-                  <span className="squisq-toolbar-overflow-icon">
-                    <Icon icon="fa-solid fa-paperclip" />
-                  </span>
-                  <span>
-                    {showFiles ? 'Hide' : 'Show'} Files panel
-                    {resolvedFileCount > 0 ? ` (${fileCountLabel(resolvedFileCount)})` : ''}
-                  </span>
-                </button>
-              )}
-
-              {/* Per-block section — the template + transition pickers move
-                  here when clipped, under a divider and a "<name> Block:"
-                  heading that names the block they configure. */}
-              {showBlockSectionInOverflow && (
-                <>
-                  <div
-                    className="squisq-toolbar-separator"
-                    style={{ margin: '4px 0', width: '100%', height: 1 }}
-                  />
-                  <div className="squisq-toolbar-overflow-heading">{overflowBlockLabel} Block:</div>
-                </>
-              )}
-
-              {/* Contextual: template picker in overflow — only when the
-                  inline one is clipped, so the control lives in exactly one
-                  visible place at a time. */}
-              {showTemplateInOverflow && (
-                <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
-                  <TemplatePicker
-                    value={currentTemplate!}
-                    onChange={(v) => {
-                      handleTemplatePick(v);
+                    className={`squisq-toolbar-overflow-item${insertMenuAnchor ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                    onClick={(event) => {
+                      if (insertMenuAnchor) {
+                        closeInsertMenu();
+                      } else {
+                        openInsertMenu(event.currentTarget);
+                      }
                       setShowOverflow(false);
                     }}
-                    colorScheme={colorScheme}
-                    recommended={recommendedTemplates}
-                    previewSource={templatePreviewSource}
-                  />
-                </div>
-              )}
+                    aria-haspopup="menu"
+                    aria-expanded={insertMenuAnchor !== null}
+                  >
+                    <span className="squisq-toolbar-overflow-icon">
+                      <Icon icon="fa-solid fa-plus" />
+                    </span>
+                    <span>Insert...</span>
+                  </button>
+                )}
 
-              {/* Contextual: transition picker in overflow — mirrors the
-                  template picker above. The menu stays open on change since
-                  the flyout carries follow-up controls (direction/duration). */}
-              {showTransitionInOverflow && (
-                <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
-                  <TransitionPicker
-                    value={currentTransition!}
-                    onChange={handleTransitionPick}
-                    colorScheme={colorScheme}
-                    accentColor={previewSettings?.activeTheme.colors.primary}
-                  />
-                </div>
-              )}
+                {/* Document chrome collapses here when the row is too narrow to
+                  keep it alongside the formatting controls. */}
+                {collapsedChrome.length > 0 &&
+                  (collapsedFormatButtons.length > 0 || showInsertInOverflow) && (
+                    <div
+                      className="squisq-toolbar-separator"
+                      style={{ margin: '4px 0', width: '100%', height: 1 }}
+                    />
+                  )}
+                {collapsedChrome.includes('layouts') && (
+                  <button
+                    className="squisq-toolbar-overflow-item"
+                    onClick={() => {
+                      setShowLayoutManager(true);
+                      setShowOverflow(false);
+                    }}
+                  >
+                    <span className="squisq-toolbar-overflow-icon">
+                      <Icon icon="fa-solid fa-shapes" />
+                    </span>
+                    <span>Custom layouts</span>
+                  </button>
+                )}
+                {collapsedChrome.includes('docSettings') && (
+                  <button
+                    className="squisq-toolbar-overflow-item"
+                    onClick={() => {
+                      setShowDocSettings(true);
+                      setShowOverflow(false);
+                    }}
+                  >
+                    <span className="squisq-toolbar-overflow-icon">
+                      <Icon icon="fa-solid fa-file-lines" />
+                    </span>
+                    <span>Document settings</span>
+                  </button>
+                )}
+                {collapsedChrome.includes('files') && onToggleFiles && (
+                  <button
+                    className={`squisq-toolbar-overflow-item${showFiles ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                    aria-pressed={showFiles}
+                    onClick={() => {
+                      onToggleFiles();
+                      setShowOverflow(false);
+                    }}
+                  >
+                    <span className="squisq-toolbar-overflow-icon">
+                      <Icon icon="fa-solid fa-paperclip" />
+                    </span>
+                    <span>
+                      {showFiles ? 'Hide' : 'Show'} Files panel
+                      {resolvedFileCount > 0 ? ` (${fileCountLabel(resolvedFileCount)})` : ''}
+                    </span>
+                  </button>
+                )}
 
-              {/* Contextual: table controls in overflow */}
-              {showFormattingControls && isInTable && clippedContextual.has('table') && (
-                <>
-                  <div
-                    className="squisq-toolbar-separator"
-                    style={{ margin: '4px 0', width: '100%', height: 1 }}
-                  />
-                  {[
-                    {
-                      label: 'Add column before',
-                      action: () => tiptapEditor!.chain().focus().addColumnBefore().run(),
-                    },
-                    {
-                      label: 'Add column after',
-                      action: () => tiptapEditor!.chain().focus().addColumnAfter().run(),
-                    },
-                    {
-                      label: 'Delete column',
-                      action: () => tiptapEditor!.chain().focus().deleteColumn().run(),
-                    },
-                    {
-                      label: 'Add row above',
-                      action: () => tiptapEditor!.chain().focus().addRowBefore().run(),
-                    },
-                    {
-                      label: 'Add row below',
-                      action: () => tiptapEditor!.chain().focus().addRowAfter().run(),
-                    },
-                    {
-                      label: 'Delete row',
-                      action: () => tiptapEditor!.chain().focus().deleteRow().run(),
-                    },
-                    {
-                      label: 'Delete table',
-                      action: () => tiptapEditor!.chain().focus().deleteTable().run(),
-                    },
-                  ].map((item) => (
-                    <button
-                      key={item.label}
-                      className={`squisq-toolbar-overflow-item${item.label.startsWith('Delete') ? ' squisq-toolbar-overflow-item--danger' : ''}`}
-                      onClick={() => {
-                        item.action();
+                {/* Per-block section — the template + transition pickers move
+                  here when clipped, under a divider and a "<name> Block:"
+                  heading that names the block they configure. */}
+                {showBlockSectionInOverflow && (
+                  <>
+                    <div
+                      className="squisq-toolbar-separator"
+                      style={{ margin: '4px 0', width: '100%', height: 1 }}
+                    />
+                    <div className="squisq-toolbar-overflow-heading">
+                      {overflowBlockLabel} Block:
+                    </div>
+                  </>
+                )}
+
+                {/* Contextual: template picker in overflow — only when the
+                  inline one is clipped, so the control lives in exactly one
+                  visible place at a time. */}
+                {showTemplateInOverflow && (
+                  <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
+                    <TemplatePicker
+                      value={currentTemplate!}
+                      onChange={(v) => {
+                        handleTemplatePick(v);
                         setShowOverflow(false);
                       }}
-                    >
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                </>
-              )}
-            </div>
-          )}
+                      colorScheme={colorScheme}
+                      recommended={recommendedTemplates}
+                      previewSource={templatePreviewSource}
+                    />
+                  </div>
+                )}
+
+                {/* Contextual: transition picker in overflow — mirrors the
+                  template picker above. The menu stays open on change since
+                  the flyout carries follow-up controls (direction/duration). */}
+                {showTransitionInOverflow && (
+                  <div className="squisq-toolbar-overflow-item squisq-toolbar-overflow-template">
+                    <TransitionPicker
+                      value={currentTransition!}
+                      onChange={handleTransitionPick}
+                      colorScheme={colorScheme}
+                      accentColor={previewSettings?.activeTheme.colors.primary}
+                    />
+                  </div>
+                )}
+
+                {/* Contextual: table controls in overflow */}
+                {showFormattingControls && isInTable && clippedContextual.has('table') && (
+                  <>
+                    <div
+                      className="squisq-toolbar-separator"
+                      style={{ margin: '4px 0', width: '100%', height: 1 }}
+                    />
+                    {[
+                      {
+                        label: 'Add column before',
+                        action: () => tiptapEditor!.chain().focus().addColumnBefore().run(),
+                      },
+                      {
+                        label: 'Add column after',
+                        action: () => tiptapEditor!.chain().focus().addColumnAfter().run(),
+                      },
+                      {
+                        label: 'Delete column',
+                        action: () => tiptapEditor!.chain().focus().deleteColumn().run(),
+                      },
+                      {
+                        label: 'Add row above',
+                        action: () => tiptapEditor!.chain().focus().addRowBefore().run(),
+                      },
+                      {
+                        label: 'Add row below',
+                        action: () => tiptapEditor!.chain().focus().addRowAfter().run(),
+                      },
+                      {
+                        label: 'Delete row',
+                        action: () => tiptapEditor!.chain().focus().deleteRow().run(),
+                      },
+                      {
+                        label: 'Delete table',
+                        action: () => tiptapEditor!.chain().focus().deleteTable().run(),
+                      },
+                    ].map((item) => (
+                      <button
+                        key={item.label}
+                        className={`squisq-toolbar-overflow-item${item.label.startsWith('Delete') ? ' squisq-toolbar-overflow-item--danger' : ''}`}
+                        onClick={() => {
+                          item.action();
+                          setShowOverflow(false);
+                        }}
+                      >
+                        <span>{item.label}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>,
+              overflowTriggerRef.current?.closest('[role="dialog"][aria-modal="true"]') ??
+                document.body,
+            )}
         </div>
       )}
 
