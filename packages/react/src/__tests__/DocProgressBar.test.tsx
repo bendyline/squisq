@@ -100,6 +100,31 @@ describe('DocProgressBar fill', () => {
     expect(seekTo).toHaveBeenLastCalledWith(8);
   });
 
+  // Hosts restyle the controls to their palette; the accent must not be a
+  // hard-coded inline color they can only beat with !important.
+  it('draws the fill and chapter rings in the host-settable player accent', () => {
+    const { container } = render(
+      <DocProgressBar
+        state={makeState({ currentTime: 10, totalDuration: 30 })}
+        actions={actions}
+        blockMarkers={[
+          {
+            block: { id: 'a', startTime: 0, duration: 5, audioSegment: 0, layers: [] },
+            index: 0,
+            position: 0,
+            title: 'One',
+            isSectionStart: true,
+          },
+        ]}
+        expandedBlocks={[]}
+      />,
+    );
+    const fill = container.querySelector<HTMLElement>('[data-testid="doc-progress-fill"]');
+    const chapter = container.querySelector<HTMLElement>('[data-marker="chapter"]');
+    expect(fill?.getAttribute('style')).toContain('var(--squisq-player-accent, #5b9bd5)');
+    expect(chapter?.getAttribute('style')).toContain('var(--squisq-player-accent, #5b9bd5)');
+  });
+
   it('draws chapter starts larger than slide transitions and keeps only chapters in the tab order', () => {
     const block = (id: string, startTime: number, audioSegment: number) => ({
       id,
