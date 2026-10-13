@@ -45,11 +45,88 @@ function mockSegmentFetches(): void {
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 }
 
+/**
+ * Holds every segment download open until the test releases it by file name,
+ * so a test can act while a narration file is still in flight. Release one
+ * segment at a time: blob URLs are named after the last released segment.
+ */
+function holdSegmentFetches(): {
+  release: (name: string) => Promise<void>;
+  requested: () => string[];
+} {
+  const pending = new Map<string, () => void>();
+  const requested: string[] = [];
+  let lastName = '';
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const name = String(input).split('/').pop() ?? '';
+    requested.push(name);
+    return new Promise<Response>((resolve) => {
+      pending.set(name, () => {
+        lastName = name;
+        resolve(
+          new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'audio/mpeg' } }),
+        );
+      });
+    });
+  });
+  vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:${lastName}`);
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+  return {
+    release: async (name) => {
+      pending.get(name)?.();
+      pending.delete(name);
+      // Let the body read and blob creation settle before the next release.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    },
+    requested: () => [...requested],
+  };
+}
+
+/**
+ * Models how browsers settle `play()`: with a source attached it resolves;
+ * with none it stays pending until the next `load()` or `pause()` aborts it.
+ * That abort is what surfaced as "Audio playback failed" when a listener
+ * pressed Play before the narration download finished. Returns the `src`
+ * attribute each `play()` call saw ('' = no source yet).
+ */
+function emulatePlaySettling(audio: HTMLAudioElement): string[] {
+  const calls: string[] = [];
+  let abortPending: ((reason: string) => void) | null = null;
+  vi.spyOn(audio, 'play').mockImplementation(() => {
+    const src = audio.getAttribute('src') ?? '';
+    calls.push(src);
+    if (src) return Promise.resolve();
+    return new Promise<void>((_resolve, reject) => {
+      abortPending = (reason) => {
+        const aborted = new Error(`The play() request was interrupted by ${reason}.`);
+        aborted.name = 'AbortError';
+        reject(aborted);
+      };
+    });
+  });
+  vi.spyOn(audio, 'load').mockImplementation(() => {
+    abortPending?.('a new load request');
+    abortPending = null;
+  });
+  vi.spyOn(audio, 'pause').mockImplementation(() => {
+    abortPending?.('a call to pause()');
+    abortPending = null;
+  });
+  return calls;
+}
+
 const threeSegments: AudioTrack = {
   segments: [
     { src: 'a.mp3', name: 'a', duration: 2, startTime: 0 },
     { src: 'b.mp3', name: 'b', duration: 3, startTime: 2 },
     { src: 'c.mp3', name: 'c', duration: 2, startTime: 5 },
+  ],
+};
+
+const twoSegmentTrack: AudioTrack = {
+  segments: [
+    { src: 'a.mp3', name: 'a', duration: 2, startTime: 0 },
+    { src: 'b.mp3', name: 'b', duration: 2, startTime: 2 },
   ],
 };
 
@@ -504,5 +581,197 @@ describe('useAudioSync unloadable segments', () => {
 
     expect(result.current.isAvailable).toBe(false);
     expect(result.current.isPlaying).toBe(false);
+  });
+});
+
+describe('useAudioSync play before the segment is ready', () => {
+  // The player shows Play as soon as it mounts, while the active segment is
+  // still downloading. play() on an element with no source stays pending, and
+  // the load() that attaches the downloaded blob aborts it — which used to be
+  // reported as a permanent "Audio playback failed".
+  it('starts playback once the segment arrives when Play beats the download', async () => {
+    const audio = createAudioElement();
+    const downloads = holdSegmentFetches();
+    const plays = emulatePlaySettling(audio);
+    const { result } = renderHook(() => useAudioSync({ current: audio }, track));
+    await waitFor(() => expect(downloads.requested()).toEqual(['a.mp3']));
+
+    act(() => {
+      void result.current.play();
+    });
+    expect(result.current.isPlaying).toBe(true);
+    // The controls show the loading ring until sound actually starts.
+    expect(result.current.isBuffering).toBe(true);
+
+    await act(() => downloads.release('a.mp3'));
+    await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
+    act(() => audio.dispatchEvent(new Event('canplay')));
+
+    await waitFor(() => expect(plays[plays.length - 1]).toBe('blob:a.mp3'));
+    expect(result.current.isAvailable).toBe(true);
+    expect(result.current.unavailableMessage).toBeUndefined();
+    expect(result.current.isPlaying).toBe(true);
+    expect(result.current.isBuffering).toBe(true);
+
+    act(() => audio.dispatchEvent(new Event('playing')));
+    expect(result.current.isBuffering).toBe(false);
+  });
+
+  it('reports buffering during a mid-segment stall and never while paused', async () => {
+    const audio = createAudioElement();
+    mockSegmentFetches();
+    vi.spyOn(audio, 'play').mockResolvedValue(undefined);
+    const { result } = renderHook(() => useAudioSync({ current: audio }, track));
+    await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
+    expect(result.current.isBuffering).toBe(false);
+
+    await act(() => result.current.play());
+    act(() => {
+      audio.dispatchEvent(new Event('play'));
+      audio.dispatchEvent(new Event('playing'));
+    });
+    expect(result.current.isBuffering).toBe(false);
+
+    act(() => audio.dispatchEvent(new Event('waiting')));
+    expect(result.current.isBuffering).toBe(true);
+    act(() => audio.dispatchEvent(new Event('playing')));
+    expect(result.current.isBuffering).toBe(false);
+
+    act(() => audio.dispatchEvent(new Event('pause')));
+    expect(result.current.isBuffering).toBe(false);
+  });
+
+  it('does not start playback after the download if the listener paused while waiting', async () => {
+    const audio = createAudioElement();
+    const downloads = holdSegmentFetches();
+    const plays = emulatePlaySettling(audio);
+    const { result } = renderHook(() => useAudioSync({ current: audio }, track));
+    await waitFor(() => expect(downloads.requested()).toEqual(['a.mp3']));
+
+    act(() => {
+      void result.current.play();
+    });
+    await act(() => result.current.pause());
+    await act(() => downloads.release('a.mp3'));
+    await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
+    act(() => audio.dispatchEvent(new Event('canplay')));
+    await act(async () => Promise.resolve());
+
+    expect(plays).not.toContain('blob:a.mp3');
+    expect(result.current.isPlaying).toBe(false);
+    expect(result.current.isBuffering).toBe(false);
+    expect(result.current.isAvailable).toBe(true);
+  });
+
+  it('does not report a superseded play() as a media failure', async () => {
+    const audio = createAudioElement();
+    mockSegmentFetches();
+    const superseded = new Error('The play() request was interrupted by a call to pause().');
+    superseded.name = 'AbortError';
+    vi.spyOn(audio, 'play').mockRejectedValue(superseded);
+    const { result } = renderHook(() => useAudioSync({ current: audio }, track));
+    await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
+
+    await act(() => result.current.play());
+
+    expect(result.current.isAvailable).toBe(true);
+    expect(result.current.unavailableMessage).toBeUndefined();
+    expect(result.current.isPlaying).toBe(false);
+  });
+
+  // Seeking to another segment while paused swaps the source only once that
+  // segment downloads. Playing in between used to start the OLD segment, which
+  // the swap then silenced while the player kept showing Pause.
+  it('plays the sought segment, not the previous one, when Play follows a seek', async () => {
+    const audio = createAudioElement();
+    const downloads = holdSegmentFetches();
+    const plays = emulatePlaySettling(audio);
+    const { result } = renderHook(() => useAudioSync({ current: audio }, twoSegmentTrack));
+    await act(() => downloads.release('a.mp3'));
+    await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
+    act(() => audio.dispatchEvent(new Event('canplay')));
+
+    let seekPromise!: Promise<void>;
+    act(() => {
+      seekPromise = result.current.seekTo(2.5);
+    });
+    await waitFor(() => expect(downloads.requested()).toEqual(['a.mp3', 'b.mp3']));
+    act(() => {
+      void result.current.play();
+    });
+    expect(plays).toEqual([]);
+
+    await act(() => downloads.release('b.mp3'));
+    await waitFor(() => expect(audio.src).toBe('blob:b.mp3'));
+    await act(async () => {
+      audio.dispatchEvent(new Event('canplay'));
+      await seekPromise;
+    });
+
+    expect(plays).toEqual(['blob:b.mp3']);
+    expect(audio.currentTime).toBeCloseTo(0.5, 5);
+    expect(result.current.isPlaying).toBe(true);
+  });
+
+  // load() pauses a playing element without firing `pause`, so a source swap
+  // that nobody asked to resume must not leave the player showing Pause.
+  it('reports playback stopped when a segment switch reloads a playing element', async () => {
+    const audio = createAudioElement();
+    mockSegmentFetches();
+    vi.spyOn(audio, 'play').mockResolvedValue(undefined);
+    const { result } = renderHook(() => useAudioSync({ current: audio }, twoSegmentTrack));
+    await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
+    act(() => audio.dispatchEvent(new Event('canplay')));
+    await act(() => result.current.play());
+    act(() => audio.dispatchEvent(new Event('play')));
+    expect(result.current.isPlaying).toBe(true);
+
+    await act(() => result.current.skipToSegment(1));
+    await waitFor(() => expect(audio.src).toBe('blob:b.mp3'));
+
+    expect(result.current.isPlaying).toBe(false);
+  });
+});
+
+describe('useAudioSync next-segment download', () => {
+  const longSegments: AudioTrack = {
+    segments: [
+      { src: 'a.mp3', name: 'a', duration: 120, startTime: 0 },
+      { src: 'b.mp3', name: 'b', duration: 120, startTime: 120 },
+      { src: 'c.mp3', name: 'c', duration: 120, startTime: 240 },
+    ],
+  };
+
+  function playTo(audio: HTMLAudioElement, seconds: number): void {
+    act(() => {
+      audio.currentTime = seconds;
+      audio.dispatchEvent(new Event('timeupdate'));
+    });
+  }
+
+  const fetchedNames = () =>
+    vi.mocked(globalThis.fetch).mock.calls.map(([input]) => String(input).split('/').pop());
+
+  // Each segment used to download only when the previous one ended, leaving
+  // an audible gap at every chapter boundary.
+  it('downloads the next segment shortly before the current one ends, and no further', async () => {
+    const audio = createAudioElement();
+    mockSegmentFetches();
+    const { result } = renderHook(() => useAudioSync({ current: audio }, longSegments));
+    await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
+
+    playTo(audio, 30);
+    expect(fetchedNames()).toEqual(['a.mp3']);
+
+    playTo(audio, 95);
+    await waitFor(() => expect(fetchedNames()).toEqual(['a.mp3', 'b.mp3']));
+    playTo(audio, 100);
+    expect(fetchedNames()).toEqual(['a.mp3', 'b.mp3']);
+
+    // The next segment is attached straight from the download already made.
+    act(() => audio.dispatchEvent(new Event('ended')));
+    await waitFor(() => expect(audio.src).toBe('blob:b.mp3'));
+    expect(fetchedNames()).toEqual(['a.mp3', 'b.mp3']);
+    expect(result.current.currentSegment).toBe(1);
   });
 });

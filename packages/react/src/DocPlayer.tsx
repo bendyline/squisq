@@ -301,6 +301,7 @@ function DocPlayerContent({
     totalDuration,
     isEnded,
     isReady: isAudioReady,
+    isBuffering = false,
     isAvailable,
     unavailableMessage,
     play,
@@ -1070,6 +1071,7 @@ function DocPlayerContent({
   const playbackState: PlaybackState = useMemo(
     () => ({
       isPlaying,
+      isBuffering,
       currentTime,
       totalDuration,
       isCoverVisible: showCoverBlock,
@@ -1092,6 +1094,7 @@ function DocPlayerContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- doc.audio.segments is stable within a given doc
     [
       isPlaying,
+      isBuffering,
       currentTime,
       totalDuration,
       showCoverBlock,

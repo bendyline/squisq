@@ -107,6 +107,8 @@ export interface SlideNavActions {
 /** Playback state exposed to external control components */
 export interface PlaybackState {
   isPlaying: boolean;
+  /** Playback was requested but audio has not started yet (see AudioState.isBuffering). */
+  isBuffering?: boolean;
   currentTime: number;
   totalDuration: number;
   /** Whether the managed cover is the visual currently shown. */

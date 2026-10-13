@@ -26,6 +26,13 @@ export interface AudioState {
   isEnded: boolean;
   /** Whether audio is loaded and ready to play */
   isReady: boolean;
+  /**
+   * Whether playback was requested but no sound has started yet: the segment
+   * is still downloading or decoding, or playback stalled. Controls show a
+   * loading state on the Play/Pause button. Optional for controllers that
+   * cannot tell (an absent value means "not buffering").
+   */
+  isBuffering?: boolean;
   /** Whether the audio backend is available/connected */
   isAvailable: boolean;
   /** Message to show when not available */
