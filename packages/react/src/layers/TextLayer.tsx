@@ -175,7 +175,6 @@ function IconTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
           <div
             data-squisq-text-content="true"
             style={{ width: '100%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-            aria-label={plain}
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </div>
@@ -568,7 +567,6 @@ function RichTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
           <div
             data-squisq-text-content="true"
             className={cls}
-            aria-label={content.text}
             // Keep the foreground on the XHTML content itself. html2canvas
             // serializes the surrounding SVG before rasterizing it, and
             // Chromium can lose color inherited from the foreignObject's

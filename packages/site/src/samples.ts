@@ -354,13 +354,13 @@ Welcome to the **Squisq Editor**. This is a simple markdown document.
 
 Start editing this document in any of the three views:
 
-1. **Raw** -- Direct markdown source editing with Monaco
-2. **Editor** -- WYSIWYG rich text editing with Tiptap
-3. **Preview** -- See how the document maps to blocks
+1. **Write** -- Edit and format your document visually
+2. **Source** -- Edit the Markdown directly
+3. **Use** -- Open Slideshow, or use its dropdown to choose Page, Video, and other views
 
 ### Tips
 
-- Use \`Ctrl+Shift+1/2/3\` to switch views
+- Use \`Ctrl+Shift+1/2/3\` (\`Cmd+Shift+1/2/3\` on Mac) to switch views
 - The toolbar provides quick formatting shortcuts
 - Check the Debug panel to inspect the parsed AST
 
@@ -384,9 +384,9 @@ Author in the Markdown you already know. You can focus on your thoughts; layer o
 
 ## One Document, Three Views {[list colorScheme=teal]}
 
-- **Raw** -- the Markdown source, with autocomplete for every tag and parameter
-- **Editor** -- WYSIWYG rich-text editing
-- **Play** -- the same content rendered as a slideshow or video
+- **Write** -- visual rich-text editing
+- **Source** -- the Markdown source, with autocomplete for every tag and parameter
+- **Use** -- the same content as a slideshow, page, video, or another rendition; this tab takes the name of the selected mode
 
 ## The Anatomy of a Tag {[sectionHeader colorScheme=purple]}
 
@@ -453,9 +453,9 @@ In video mode every block sits on a clock. \`startTime=1:30\` pins when a block 
 
 A FontAwesome name inside a squiggly-square becomes an icon right in your prose: {[rocket]} {[paintbrush]} {[wand-magic-sparkles]} {[github]} {[youtube]}. Qualify a name that lives in two styles -- \`{[fa-solid:star]}\` -- and unknown or ambiguous names stay as plain text, so writing \`{[notathing]}\` is never swallowed.
 
-## Diagrams From Headings {[factCard]}
+## Diagrams and Drawings {[factCard]}
 
-A few tags turn **child** headings into parts. Under \`{[diagram]}\`, each \`###\` becomes a node and \`connectsTo=\` draws the edges; under \`{[drawing]}\`, children are shapes such as \`{[rectangle]}\` joined by \`{[arrow from=… to=…]}\`. Load the **diagram family tree**, **diagram architecture**, or **drawing org chart** samples to see them rendered.
+Author diagrams as ASCII art in a \`diagram\` code fence, or use a \`mermaid\` fence for more complex diagrams. Write view turns those fences into editable canvases. Drawings use \`{[drawing]}\` headings with child shapes such as \`{[rectangle]}\` joined by \`{[arrow from=… to=…]}\`. Load the **diagram family tree**, **diagram architecture**, or **drawing org chart** samples to try them.
 
 ## Guidelines {[list colorScheme=teal]}
 

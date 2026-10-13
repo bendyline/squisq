@@ -42,7 +42,14 @@ async function loadMonacoProfile(
   const monaco = await loadMonacoModule();
 
   if (!loadedLanguageProfiles.has(requestKey)) {
-    await monaco.loadMonacoLanguages(languagesFromRequestKey(requestKey), { languageServices });
+    // Monaco snapshots the contribution registry when each editor is created.
+    // Loading controllers on its first keydown is too late for that editor and
+    // races the next code inset. Keep the bundle lazy, but finish registration
+    // before exposing a ready profile to any React consumer.
+    await Promise.all([
+      preloadMonacoSuggestions(),
+      monaco.loadMonacoLanguages(languagesFromRequestKey(requestKey), { languageServices }),
+    ]);
     loadedLanguageProfiles.add(requestKey);
   }
   return monaco;
@@ -78,7 +85,7 @@ export function preloadMonaco(
   return loadMonacoProfile(requestKey, languageServices);
 }
 
-/** Load completion and snippet UI after the compact editor is already usable. */
+/** Register completion and snippet UI before a React editor can mount. */
 export function preloadMonacoSuggestions(): Promise<void> {
   monacoSuggestionsPromise ??= loadMonacoModule()
     .then((monaco) => monaco.loadMonacoSuggestions())

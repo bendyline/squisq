@@ -13,6 +13,8 @@
  */
 
 import type { DocumentImportProgress, DocumentImportStage } from './documentImport';
+import { useRef } from 'react';
+import { useModalDialog } from '@bendyline/squisq-react';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -62,7 +64,7 @@ const PALETTES: Record<'light' | 'dark', ImportDialogPalette> = {
     border: '#c9b98a',
     text: '#4a3c1f',
     heading: '#2d2310',
-    muted: '#8a7a5a',
+    muted: '#6f6044',
     track: '#E8DFC6',
     bar: '#8B6914',
     secondary: '#E8DFC6',
@@ -104,9 +106,13 @@ export function ImportProgressModal({ state, colorScheme, onClose }: ImportProgr
   const failed = state.phase === 'error';
   const fileName = failed ? state.fileName : state.progress.fileName;
   const current = failed ? -1 : stageIndex(state.progress.stage);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalDialog({ rootRef, dialogRef, onClose, closeOnEscape: failed });
 
   return (
     <div
+      ref={rootRef}
       style={{
         position: 'fixed',
         inset: 0,
@@ -116,19 +122,24 @@ export function ImportProgressModal({ state, colorScheme, onClose }: ImportProgr
         background: palette.overlay,
         zIndex: 10000,
       }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="squisq-site-import-title"
       data-testid="import-progress-dialog"
     >
       <style>{KEYFRAMES}</style>
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="squisq-site-import-title"
+        tabIndex={-1}
         style={{
           background: palette.surface,
           border: `1px solid ${palette.border}`,
           borderRadius: 0,
           padding: '24px 28px',
-          minWidth: 380,
+          width: 'calc(100vw - 32px)',
+          boxSizing: 'border-box',
+          maxHeight: 'calc(100dvh - 32px)',
+          overflowY: 'auto',
           maxWidth: 460,
           boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
           fontFamily: 'system-ui, -apple-system, sans-serif',

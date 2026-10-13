@@ -168,6 +168,8 @@ const SourceFrontmatter = Extension.create<{ initial: string }>({
 });
 
 export interface WysiwygEditorProps {
+  /** Accessible name of this multiline text input. */
+  ariaLabel?: string;
   /**
    * Placeholder text when the editor is empty. If omitted, one of several
    * rotating prompts is picked at random on mount. Pass a fixed string to
@@ -204,6 +206,7 @@ export interface WysiwygEditorProps {
  * Binds to the shared EditorContext for source synchronization.
  */
 export function WysiwygEditor({
+  ariaLabel = 'Document editor',
   placeholder,
   className,
   submitOnEnter,
@@ -480,6 +483,10 @@ export function WysiwygEditor({
       attributes: {
         class: 'squisq-wysiwyg-editor',
         'data-testid': 'wysiwyg-editor',
+        role: 'textbox',
+        'aria-label': ariaLabel,
+        'aria-multiline': 'true',
+        'aria-readonly': String(readOnly),
       },
       // Chat-composer mode: Enter commits via submitOnEnter(), Cmd/Ctrl+Enter
       // inserts a soft break. When no callback is set, fall through to Tiptap's

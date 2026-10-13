@@ -41,7 +41,82 @@ function Fixture({ open = true, onClose = () => undefined, empty = false }) {
   );
 }
 
+function StackedDialogs({
+  first = true,
+  second = true,
+  onFirstClose = vi.fn(),
+  onSecondClose = vi.fn(),
+}) {
+  const openerRef = useRef<HTMLButtonElement>(null);
+  return (
+    <>
+      <button ref={openerRef} data-testid="opener">
+        Open
+      </button>
+      {first && <Dialog returnFocusRef={openerRef} onClose={onFirstClose} />}
+      {second && <Dialog returnFocusRef={openerRef} onClose={onSecondClose} />}
+    </>
+  );
+}
+
+function HiddenControlsDialog() {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useModalDialog({ rootRef, dialogRef, onClose: vi.fn() });
+  return (
+    <div ref={rootRef}>
+      <div ref={dialogRef} role="dialog" tabIndex={-1}>
+        <div style={{ display: 'none' }}>
+          <button>Hidden first</button>
+        </div>
+        <button>Visible first</button>
+        <button>Visible last</button>
+        <button tabIndex={-1}>Not a tab stop</button>
+        <div hidden>
+          <button>Hidden last</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 describe('useModalDialog', () => {
+  it('gives a child popover first refusal of Escape', () => {
+    const onClose = vi.fn();
+    const view = render(<Fixture onClose={onClose} />);
+    const input = view.getByRole('textbox');
+    input.addEventListener('keydown', (event) => event.preventDefault());
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('only dismisses the top dialog and preserves isolation during out-of-order removal', () => {
+    const onFirstClose = vi.fn();
+    const onSecondClose = vi.fn();
+    const view = render(
+      <StackedDialogs onFirstClose={onFirstClose} onSecondClose={onSecondClose} />,
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onFirstClose).not.toHaveBeenCalled();
+    expect(onSecondClose).toHaveBeenCalledOnce();
+    view.rerender(<StackedDialogs first={false} />);
+    expect(view.getByTestId('opener').inert).toBe(true);
+    view.rerender(<StackedDialogs first={false} second={false} />);
+    expect(view.getByTestId('opener').inert).toBe(false);
+    expect(view.getByTestId('opener').hasAttribute('aria-hidden')).toBe(false);
+  });
+
+  it('skips hidden descendants and negative tabindex controls when wrapping focus', () => {
+    const view = render(<HiddenControlsDialog />);
+    const first = view.getByRole('button', { name: 'Visible first' });
+    const last = view.getByRole('button', { name: 'Visible last' });
+    expect(document.activeElement).toBe(first);
+    last.focus();
+    fireEvent.keyDown(last, { key: 'Tab' });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
+  });
   it('focuses and selects the initial field, isolates siblings, then restores both', () => {
     const view = render(<Fixture />);
     const opener = view.getByTestId('opener');

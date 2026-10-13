@@ -56,7 +56,7 @@ it('recalculates dependents when undo restores an input value', async () => {
     await waitFor(() => expect(ui.container.querySelector('[role="gridcell"]')).not.toBeNull());
     await act(async () => {
       ui.container
-        .querySelector('[role="grid"]')!
+        .querySelector('[role="gridcell"]')!
         .dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true }));
     });
     const page = await store.rows(0, 1);

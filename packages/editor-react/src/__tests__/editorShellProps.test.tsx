@@ -15,11 +15,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { RawEditorProps } from '../RawEditor';
+import type { WysiwygEditorProps } from '../WysiwygEditor';
 import type { MediaEntry, MediaProvider } from '@bendyline/squisq/schemas';
 import { useMediaProvider } from '@bendyline/squisq-react';
 
 // Records the props the shell passes to RawEditor on each render.
 const rawEditorProps: RawEditorProps[] = [];
+const wysiwygEditorProps: WysiwygEditorProps[] = [];
 
 vi.mock('../RawEditor', () => ({
   RawEditor: (props: RawEditorProps) => {
@@ -28,7 +30,10 @@ vi.mock('../RawEditor', () => ({
   },
 }));
 vi.mock('../WysiwygEditor', () => ({
-  WysiwygEditor: () => <div data-testid="wysiwyg-editor-stub" />,
+  WysiwygEditor: (props: WysiwygEditorProps) => {
+    wysiwygEditorProps.push(props);
+    return <div data-testid="wysiwyg-editor-stub" />;
+  },
 }));
 vi.mock('../PreviewPanel', () => ({
   PreviewPanel: () => <div data-testid="preview-stub" />,
@@ -133,6 +138,7 @@ function mutableMediaProviderWith(entries: MediaEntry[]): {
 
 beforeEach(() => {
   rawEditorProps.length = 0;
+  wysiwygEditorProps.length = 0;
   // jsdom lacks matchMedia / ResizeObserver, which the Toolbar uses.
   if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
     Object.defineProperty(window, 'matchMedia', {
@@ -1020,4 +1026,24 @@ describe('preview keeps the active editing surface', () => {
       expect(editing.closest('[hidden]')).toBeNull();
     },
   );
+});
+
+describe('EditorShell accessible names', () => {
+  it.each(['raw', 'wysiwyg'] as const)('passes the host name to %s', async (initialView) => {
+    render(<EditorShell initialView={initialView} ariaLabel="Project brief" />);
+    await screen.findByTestId(`${initialView}-editor-stub`);
+    const props =
+      initialView === 'raw'
+        ? rawEditorProps[rawEditorProps.length - 1]
+        : wysiwygEditorProps[wysiwygEditorProps.length - 1];
+    expect(props?.ariaLabel).toBe(
+      initialView === 'raw' ? 'Project brief — source' : 'Project brief',
+    );
+  });
+
+  it('uses the file name when the host has not supplied a label', async () => {
+    render(<EditorShell fileName="notes.md" />);
+    await screen.findByTestId('wysiwyg-editor-stub');
+    expect(wysiwygEditorProps[wysiwygEditorProps.length - 1]?.ariaLabel).toBe('Edit notes.md');
+  });
 });

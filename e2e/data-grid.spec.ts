@@ -34,7 +34,7 @@ test.describe('data grid', () => {
     await page.keyboard.press('Escape');
 
     const card = page.locator('.squisq-data-card');
-    const grid = page.locator('.squisq-data-card-grid[role="grid"]');
+    const grid = page.locator('.squisq-data-card-grid [role="grid"]');
     await expect(card).toBeVisible({ timeout: 20_000 });
     await expect(card.locator('.squisq-data-card-name')).toHaveText('pg_catalog.csv');
     await expect(grid).toBeVisible();
@@ -61,7 +61,7 @@ test.describe('data grid', () => {
     });
     await switchView(page, 'Editor');
 
-    await expect(page.locator('.squisq-data-card-grid[role="grid"]')).toBeVisible({
+    await expect(page.locator('.squisq-data-card-grid [role="grid"]')).toBeVisible({
       timeout: 20_000,
     });
     await page.locator('.squisq-grid-valuebutton').first().click();
@@ -92,7 +92,7 @@ test.describe('data grid', () => {
     await switchView(page, 'Editor');
 
     // The data card mounts the real grid (not the fallback preview card).
-    const grid = page.locator('.squisq-data-card-grid[role="grid"]');
+    const grid = page.locator('.squisq-data-card-grid [role="grid"]');
     await expect(grid).toBeVisible({ timeout: 20_000 });
 
     const status = page.locator('.squisq-grid-status');
@@ -141,7 +141,7 @@ test.describe('data grid', () => {
     await page.locator('select').first().selectOption('data-csv-sales');
     await switchView(page, 'Editor');
 
-    const grid = page.locator('.squisq-data-card-grid[role="grid"]');
+    const grid = page.locator('.squisq-data-card-grid [role="grid"]');
     await expect(grid).toBeVisible({ timeout: 20_000 });
     // The sample ships `sort=Revenue:desc` on the heading — the first data
     // row must carry the highest revenue in view.
@@ -166,7 +166,7 @@ test.describe('data grid', () => {
     await page.locator('select').first().selectOption('data-xlsx-formulas');
     await switchView(page, 'Editor');
 
-    const grid = page.locator('.squisq-data-card-grid[role="grid"]');
+    const grid = page.locator('.squisq-data-card-grid [role="grid"]');
     await expect(grid).toBeVisible({ timeout: 20_000 });
 
     // Formula cells render with the affordance and their source as tooltip.
@@ -212,7 +212,7 @@ test.describe('data grid', () => {
     await page.locator('select').first().selectOption('data-xlsx-formulas');
     await switchView(page, 'Editor');
 
-    const grid = page.locator('.squisq-data-card-grid[role="grid"]');
+    const grid = page.locator('.squisq-data-card-grid [role="grid"]');
     await expect(grid).toBeVisible({ timeout: 20_000 });
     const widgetRow = page.locator('.squisq-grid-body [role="row"]', { hasText: 'Widget' });
     const editor = page.locator('.squisq-grid-editor');

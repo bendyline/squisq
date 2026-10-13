@@ -9,7 +9,7 @@
  * preview-on-hover style listing rather than a wall of names.
  */
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscapeDismissal } from './useEscapeDismissal';
 import {
@@ -289,7 +289,15 @@ export function ThemePicker({
   const handleSelect = (id: string) => {
     onChange(id);
     setOpen(false);
+    triggerRef.current?.focus();
   };
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const options = popoverRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]');
+    const selected = popoverRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]');
+    (selected ?? options?.[0])?.focus();
+  }, [open]);
 
   const popover = open
     ? createPortal(
@@ -300,6 +308,33 @@ export function ThemePicker({
           role="listbox"
           aria-label={ariaLabel}
           style={popoverStyle}
+          onKeyDown={(event) => {
+            if (event.key === 'Tab') {
+              setOpen(false);
+              triggerRef.current?.focus();
+              return;
+            }
+            if (
+              !['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(
+                event.key,
+              )
+            )
+              return;
+            event.preventDefault();
+            const options = [
+              ...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+            ];
+            const current = options.indexOf(document.activeElement as HTMLButtonElement);
+            const next =
+              event.key === 'Home'
+                ? 0
+                : event.key === 'End'
+                  ? options.length - 1
+                  : event.key === 'ArrowUp' || event.key === 'ArrowLeft'
+                    ? Math.max(0, current - 1)
+                    : Math.min(options.length - 1, current + 1);
+            options[next]?.focus();
+          }}
         >
           {includeDefault && inheritedEntry && (
             <button
@@ -433,7 +468,8 @@ export function ThemePicker({
             </button>
           )}
         </div>,
-        document.body,
+        // Keep choices inside the modal's focus and accessibility boundary.
+        triggerRef.current?.closest('[role="dialog"][aria-modal="true"]') ?? document.body,
       )
     : null;
 
@@ -446,6 +482,12 @@ export function ThemePicker({
           open ? ' squisq-theme-picker-trigger--open' : ''
         }`}
         onClick={handleToggle}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+          event.preventDefault();
+          updatePosition();
+          setOpen(true);
+        }}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? popoverId : undefined}

@@ -190,48 +190,35 @@ test.describe('Editor toolbar', () => {
     expect(tabsBg).not.toBe(toolbarBg);
   });
 
-  test('keyboard focus frames the whole Use split tab', async ({ page }) => {
+  test('Use tab and its adjacent menu have distinct visible keyboard focus', async ({ page }) => {
     const useTab = viewTab(page, 'Play');
-    const useTabGroup = page.locator('.squisq-toolbar-use-tab');
     const modeTrigger = page.getByRole('button', { name: 'Choose Use mode', exact: true });
-
-    await useTab.click();
-    // Return by keyboard so Chromium applies :focus-visible to the tab.
-    await page.keyboard.press('Shift+Tab');
-    await page.keyboard.press('Tab');
+    await useTab.focus();
+    await useTab.press('Home');
+    await page.keyboard.press('End');
     await expect(useTab).toBeFocused();
-
-    const focusStyle = await useTabGroup.evaluate((group) => {
-      const ring = getComputedStyle(group, '::after');
-      const tab = group.querySelector<HTMLElement>('.squisq-toolbar-view-tab');
-      const trigger = group.querySelector<HTMLElement>('.squisq-use-mode-trigger');
-      return {
-        tabOutline: tab ? getComputedStyle(tab).outlineStyle : null,
-        ringContent: ring.content,
-        ringBorderStyle: ring.borderStyle,
-        ringBorderWidth: ring.borderWidth,
-        ringLeft: ring.left,
-        ringRight: ring.right,
-        groupWidth: group.getBoundingClientRect().width,
-        tabWidth: tab?.getBoundingClientRect().width ?? 0,
-        triggerWidth: trigger?.getBoundingClientRect().width ?? 0,
-      };
+    const ring = (selector: string) =>
+      page.locator(selector).evaluate((group) => {
+        const style = getComputedStyle(group, '::after');
+        return {
+          content: style.content,
+          borderStyle: style.borderStyle,
+          borderWidth: style.borderWidth,
+        };
+      });
+    expect(await ring('.squisq-toolbar-use-tab')).toEqual({
+      content: '""',
+      borderStyle: 'solid',
+      borderWidth: '2px',
     });
-
-    expect(focusStyle).toMatchObject({
-      tabOutline: 'none',
-      ringContent: '""',
-      ringBorderStyle: 'solid',
-      ringBorderWidth: '2px',
-      ringLeft: '0px',
-      ringRight: '0px',
-    });
-    expect(focusStyle.groupWidth).toBeCloseTo(focusStyle.tabWidth + focusStyle.triggerWidth, 4);
-
-    // Moving to the chevron keeps the same compound-control ring.
     await page.keyboard.press('Tab');
     await expect(modeTrigger).toBeFocused();
-    await expect(useTabGroup).toHaveCSS('position', 'relative');
+    expect(await ring('.squisq-toolbar-use-menu')).toEqual({
+      content: '""',
+      borderStyle: 'solid',
+      borderWidth: '2px',
+    });
+    expect(await modeTrigger.evaluate((button) => button.closest('[role="tablist"]'))).toBeNull();
   });
 });
 

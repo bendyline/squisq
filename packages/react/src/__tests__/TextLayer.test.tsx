@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import type { TextLayer as TextLayerType } from '@bendyline/squisq/schemas';
 import { TextLayer } from '../layers/TextLayer';
+import { iconMarker } from '@bendyline/squisq/icon-marker';
 
 const viewport = { width: 1920, height: 1080 };
 
@@ -28,15 +29,39 @@ describe('TextLayer', () => {
     );
 
     const richContent = container.querySelector<HTMLElement>(
-      'foreignObject [aria-label="Raw -- the Markdown source"]',
+      'foreignObject [data-squisq-text-content="true"]',
     );
     const foreignObject = container.querySelector<SVGForeignObjectElement>('foreignObject');
 
     expect(richContent).not.toBeNull();
+    // The native rich-text descendants supply their own accessible content.
+    // A generic div cannot be named with aria-label.
+    expect(richContent!.hasAttribute('aria-label')).toBe(false);
     expect(richContent!.style.color).toBe('rgb(15, 23, 42)');
     expect(foreignObject?.getAttribute('color')).toBe('#0f172a');
     expect(foreignObject?.style.color).toBe('rgb(15, 23, 42)');
     expect(richContent!.querySelector('strong')?.textContent).toBe('Raw');
+  });
+
+  it('exposes icon text through native text while keeping decorative glyphs hidden', () => {
+    const layer: TextLayerType = {
+      id: 'icon-text',
+      type: 'text',
+      content: {
+        text: `${iconMarker('solid', 'rocket')} Ready to launch`,
+        style: { fontSize: 28, color: '#fff' },
+      },
+      position: { x: 100, y: 200, width: 900, height: 80 },
+    };
+    const { container } = render(
+      <svg>
+        <TextLayer layer={layer} viewport={viewport} blockTime={0} />
+      </svg>,
+    );
+    const content = container.querySelector('[data-squisq-text-content]');
+    expect(content?.textContent).toBe(' Ready to launch');
+    expect(content?.hasAttribute('aria-label')).toBe(false);
+    expect(content?.querySelector('i')?.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('renders authored lists as semantic lists with space before following prose', () => {

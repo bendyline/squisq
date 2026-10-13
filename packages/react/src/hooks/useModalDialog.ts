@@ -7,7 +7,11 @@ const FOCUSABLE_SELECTOR = [
   'select:not([disabled])',
   'textarea:not([disabled])',
   '[tabindex]:not([tabindex="-1"])',
+  '[contenteditable="true"]',
 ].join(',');
+
+const modalStack: symbol[] = [];
+const inertOwners = new Map<HTMLElement, InertSnapshot & { count: number }>();
 
 export interface ModalDialogOptions {
   /** The backdrop/portal root. Siblings of this branch are made inert. */
@@ -28,24 +32,45 @@ interface InertSnapshot {
   ariaHidden: string | null;
 }
 
-function isolateModal(root: HTMLElement): InertSnapshot[] {
-  const snapshots: InertSnapshot[] = [];
+function isolateModal(root: HTMLElement): HTMLElement[] {
+  const elements: HTMLElement[] = [];
   let branch: HTMLElement | null = root;
   while (branch?.parentElement) {
     for (const sibling of branch.parentElement.children) {
       if (sibling === branch || !(sibling instanceof HTMLElement)) continue;
-      snapshots.push({
-        element: sibling,
-        inert: sibling.inert === true,
-        ariaHidden: sibling.getAttribute('aria-hidden'),
-      });
+      const owner = inertOwners.get(sibling);
+      if (owner) owner.count++;
+      else
+        inertOwners.set(sibling, {
+          element: sibling,
+          inert: sibling.inert === true,
+          ariaHidden: sibling.getAttribute('aria-hidden'),
+          count: 1,
+        });
+      elements.push(sibling);
       sibling.inert = true;
       sibling.setAttribute('aria-hidden', 'true');
     }
     branch = branch.parentElement;
     if (branch === document.body) break;
   }
-  return snapshots;
+  return elements;
+}
+
+function canTabTo(element: HTMLElement): boolean {
+  if (element.tabIndex < 0 || element.matches(':disabled, input[type="hidden"]')) return false;
+  for (let ancestor: HTMLElement | null = element; ancestor; ancestor = ancestor.parentElement) {
+    if (ancestor.hidden || ancestor.inert || ancestor.getAttribute('aria-hidden') === 'true')
+      return false;
+    const style = getComputedStyle(ancestor);
+    if (
+      style.display === 'none' ||
+      style.visibility === 'hidden' ||
+      style.visibility === 'collapse'
+    )
+      return false;
+  }
+  return true;
 }
 
 /** Shared focus, keyboard, background-isolation, and restoration behavior for modal dialogs. */
@@ -59,16 +84,19 @@ export function useModalDialog({
 }: ModalDialogOptions): void {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const closeOnEscapeRef = useRef(closeOnEscape);
+  closeOnEscapeRef.current = closeOnEscape;
 
   useEffect(() => {
     const root = rootRef.current;
     const dialog = dialogRef.current;
     if (!root || !dialog) return;
+    const token = Symbol('modal');
+    modalStack.push(token);
 
     const previousFocus =
       returnFocusRef?.current ??
       (document.activeElement instanceof HTMLElement ? document.activeElement : null);
-    const inertSnapshots = isolateModal(root);
     const activeWithinDialog =
       document.activeElement instanceof HTMLElement && dialog.contains(document.activeElement)
         ? document.activeElement
@@ -76,27 +104,26 @@ export function useModalDialog({
     const focusTarget =
       initialFocusRef?.current ??
       activeWithinDialog ??
-      dialog.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
+      [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].find(canTabTo) ??
       dialog;
     focusTarget.focus();
     if (focusTarget instanceof HTMLInputElement || focusTarget instanceof HTMLTextAreaElement) {
       focusTarget.select();
     }
+    const inertSnapshots = isolateModal(root);
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || modalStack[modalStack.length - 1] !== token) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        if (closeOnEscape) onCloseRef.current();
+        if (closeOnEscapeRef.current) onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab') return;
 
       const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
-        (element) =>
-          !element.hidden &&
-          element.getAttribute('aria-hidden') !== 'true' &&
-          element.getAttribute('aria-disabled') !== 'true',
+        canTabTo,
       );
       if (focusable.length === 0) {
         event.preventDefault();
@@ -107,7 +134,9 @@ export function useModalDialog({
       const last = focusable[focusable.length - 1]!;
       if (
         event.shiftKey &&
-        (document.activeElement === first || !dialog.contains(document.activeElement))
+        (document.activeElement === first ||
+          document.activeElement === dialog ||
+          !dialog.contains(document.activeElement))
       ) {
         event.preventDefault();
         last.focus();
@@ -120,15 +149,23 @@ export function useModalDialog({
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown, true);
+    // Let controls and portaled popovers consume Escape before the enclosing
+    // dialog. Capture-phase dismissal discards the entire dialog's draft.
+    window.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown, true);
-      for (const snapshot of inertSnapshots) {
-        snapshot.element.inert = snapshot.inert;
-        if (snapshot.ariaHidden === null) snapshot.element.removeAttribute('aria-hidden');
-        else snapshot.element.setAttribute('aria-hidden', snapshot.ariaHidden);
+      window.removeEventListener('keydown', handleKeyDown);
+      const wasTopmost = modalStack[modalStack.length - 1] === token;
+      modalStack.splice(modalStack.indexOf(token), 1);
+      for (const element of inertSnapshots) {
+        const snapshot = inertOwners.get(element);
+        if (!snapshot || --snapshot.count > 0) continue;
+        element.inert = snapshot.inert;
+        if (snapshot.ariaHidden === null) element.removeAttribute('aria-hidden');
+        else element.setAttribute('aria-hidden', snapshot.ariaHidden);
+        inertOwners.delete(element);
       }
-      if (previousFocus?.isConnected) previousFocus.focus();
+      if (wasTopmost && previousFocus?.isConnected && !previousFocus.closest('[inert]'))
+        previousFocus.focus();
     };
-  }, [closeOnEscape, dialogRef, initialFocusRef, returnFocusRef, rootRef]);
+  }, [dialogRef, initialFocusRef, returnFocusRef, rootRef]);
 }
