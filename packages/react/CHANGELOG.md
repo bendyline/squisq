@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.11.24](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.23...@bendyline/squisq-react@2.11.24) (2026-10-13)
+
+### Bug Fixes
+
+* Fix useAudioSync play/load race conditions ([#84](https://github.com/bendyline/squisq/issues/84)) ([bc3f85c](https://github.com/bendyline/squisq/commit/bc3f85c2c2da55c073121748c1e58bac22fc25fb))
+
 ## @bendyline/squisq-react [2.11.23](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.22...@bendyline/squisq-react@2.11.23) (2026-10-13)
 
 ### Bug Fixes
