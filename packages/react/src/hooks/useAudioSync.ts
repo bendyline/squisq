@@ -14,6 +14,16 @@
  * In `synthetic` mode there is no audio element to follow, so a caller that
  * has no segments passes `syntheticDuration` — the document's own timeline
  * length — and the same segment machinery drives a timer instead.
+ *
+ * Each segment is downloaded whole and attached as a blob URL, so a segment is
+ * only playable once its download finishes. A `play()` that arrives earlier (a
+ * listener pressing Play right away, or right after seeking into another
+ * segment) is recorded as intent and started by the load path on `canplay`.
+ * Playing the element immediately would either start an element with no
+ * source, whose pending play the attaching `load()` aborts, or start the
+ * previous segment. An `AbortError` from `play()` therefore means "superseded",
+ * never "unavailable". The next segment is downloaded shortly before the
+ * current one ends, so chapter boundaries do not stall on a fresh download.
  */
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -37,6 +47,26 @@ export type AudioSyncMode = 'media' | 'synthetic';
 const SEEK_COMPLETION_TIMEOUT_MS = 15_000;
 
 const UNLOADABLE_MESSAGE = 'Audio could not be loaded. Check that the media file is available.';
+const PLAYBACK_FAILED_MESSAGE =
+  'Audio playback failed. Check that the media file is supported and available.';
+
+/**
+ * How far before the end of a segment the next one starts downloading. A
+ * narration segment is around a megabyte, which takes well over ten seconds
+ * on a slow mobile connection; one segment ahead keeps memory bounded.
+ */
+const NEXT_SEGMENT_WARM_LEAD_SECONDS = 30;
+
+/**
+ * Whether a rejected `play()` leaves the media usable. `NotAllowedError`
+ * (autoplay policy) and `AbortError` (a newer `load()` or `pause()` superseded
+ * the request) say nothing about the media itself; anything else is a real
+ * playback failure.
+ */
+function isBenignPlayRejection(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.name === 'NotAllowedError' || error.name === 'AbortError';
+}
 
 function resolveAudioUrl(src: string, basePath: string): string {
   // Preserve absolute/protocol-relative/data/blob URLs. Prefixing an absolute
@@ -103,6 +133,16 @@ export function useAudioSync(
   // skip the load, and seek inside the wrong file.
   const boundSource = useRef<{ key: string; url: string } | null>(null);
 
+  // The segment whose download is in flight on its way to the element. While
+  // it is set and not yet bound, `play()` records intent instead of playing.
+  // Cleared when that load binds or fails, so a failed segment falls back to
+  // a direct `play()` attempt rather than waiting forever.
+  const loadingSegment = useRef<string | null>(null);
+
+  // The next segment already asked for during this segment's playback, so the
+  // look-ahead download starts once rather than on every `timeupdate`.
+  const warmedNextSegment = useRef<string | null>(null);
+
   // `seekTo` and `play` are awaited across state commits, so a caller can still
   // hold a callback captured before the segment changed (`restart` awaits
   // `seekTo` and then calls the `play` from that same render). Reading the live
@@ -126,6 +166,8 @@ export function useAudioSync(
     // The previous track's blob URLs are revoked by the cleanup below, so any
     // binding to them is stale — a new track reusing a segment name must load.
     boundSource.current = null;
+    loadingSegment.current = null;
+    warmedNextSegment.current = null;
     setCurrentTime(0);
     setCurrentSegment(0);
     setIsPlaying(false);
@@ -215,6 +257,8 @@ export function useAudioSync(
 
   // Scope requests and blob URLs to the active track. Loading is deliberately
   // demand-driven below: large narrations must not fetch every segment at once.
+  // Only the active segment loads up front, plus the next one as playback
+  // nears the end of the active one (see `handleTimeUpdate`).
   useEffect(() => {
     if (!enabled || !audioTrack?.segments) return;
 
@@ -247,6 +291,9 @@ export function useAudioSync(
     if (!enabled || mode === 'synthetic') return;
     const audio = audioRef.current;
     if (!audio) return;
+    // A new active segment (including one revisited after a seek) gets its own
+    // look-ahead; the download itself is deduplicated by `preloadAudio`.
+    warmedNextSegment.current = null;
 
     const handleTimeUpdate = () => {
       // In fallback mode the <audio> element is NOT the clock — there's no real
@@ -260,6 +307,20 @@ export function useAudioSync(
       const segmentStart = segmentStarts.current[currentSegment] || 0;
       const overallTime = segmentStart + audio.currentTime;
       setCurrentTime(overallTime);
+
+      // Download the next segment before this one ends, so the auto-advance
+      // finds it already in hand instead of pausing on a fresh download.
+      const active = audioTrack?.segments[currentSegment];
+      const next = audioTrack?.segments[currentSegment + 1];
+      if (
+        active &&
+        next &&
+        warmedNextSegment.current !== next.src &&
+        active.duration - audio.currentTime <= NEXT_SEGMENT_WARM_LEAD_SECONDS
+      ) {
+        warmedNextSegment.current = next.src;
+        void preloadAudio(next.src);
+      }
     };
 
     const handlePlay = () => {
@@ -314,7 +375,16 @@ export function useAudioSync(
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
     };
-  }, [audioRef, currentSegment, audioTrack, enabled, mode]);
+  }, [audioRef, currentSegment, audioTrack, enabled, mode, preloadAudio]);
+
+  // Whether the element is attached to this segment's loaded source. Both the
+  // segment key and the assigned URL must match: the key alone would go stale
+  // if the element's src were swapped elsewhere, and the URL alone cannot
+  // distinguish two segments that resolve to the same file.
+  const isBoundTo = useCallback((audio: HTMLAudioElement, segmentKey: string): boolean => {
+    const bound = boundSource.current;
+    return !!audio.src && bound?.key === segmentKey && bound.url === audio.src;
+  }, []);
 
   // Load new segment when currentSegment changes
   useEffect(() => {
@@ -338,26 +408,28 @@ export function useAudioSync(
       }
 
       if (shouldPlayAfterLoad.current) {
-        audio.play().catch((error: unknown) => {
-          setIsPlaying(false);
-          if (!(error instanceof Error && error.name === 'NotAllowedError')) {
-            setIsAvailable(false);
-            setUnavailableMessage(
-              'Audio playback failed. Check that the media file is supported and available.',
-            );
-          }
-        });
+        audio.play().then(
+          () => {
+            setIsAvailable(true);
+            setUnavailableMessage(undefined);
+          },
+          (error: unknown) => {
+            // A pause or another load that superseded this start leaves the
+            // state with whoever superseded it.
+            if (error instanceof Error && error.name === 'AbortError') return;
+            setIsPlaying(false);
+            if (!isBenignPlayRejection(error)) {
+              setIsAvailable(false);
+              setUnavailableMessage(PLAYBACK_FAILED_MESSAGE);
+            }
+          },
+        );
         shouldPlayAfterLoad.current = false;
       }
     };
 
     // Check if we're already on this source (avoid unnecessary reload).
-    // Both the segment key and the assigned URL must match: the key alone would
-    // go stale if the element's src were swapped elsewhere, and the URL alone
-    // cannot distinguish two segments that resolve to the same file.
-    const currentSrc = audio.src;
-    const bound = boundSource.current;
-    const isSameSource = !!currentSrc && bound?.key === segment.src && bound.url === currentSrc;
+    const isSameSource = isBoundTo(audio, segment.src);
 
     let cancelled = false;
     let handleCanPlay: (() => void) | null = null;
@@ -365,8 +437,11 @@ export function useAudioSync(
     if (!isSameSource) {
       // Need to load new source - use preloaded blob URL
       const loadAndPlay = async () => {
+        loadingSegment.current = segment.src;
         const blobUrl = await preloadAudio(segment.src);
+        // A cancelled run leaves the marker to the run that replaced it.
         if (cancelled) return;
+        loadingSegment.current = null;
 
         if (!blobUrl) {
           // Policy-blocked or failed fetch: there is no source to hand the
@@ -406,6 +481,10 @@ export function useAudioSync(
         // one, and the comparison above is against that resolved form.
         boundSource.current = { key: segment.src, url: audio.src };
         audio.load();
+        // load() pauses a playing element without firing `pause`. Unless this
+        // load was asked to resume (auto-advance, a seek while playing, or a
+        // play() that arrived during the download), playback has stopped.
+        if (!shouldPlayAfterLoad.current) setIsPlaying(false);
 
         // If audio is already ready (blob is instant), canplay might not fire
         // Check after a microtask to see if it's ready
@@ -420,6 +499,7 @@ export function useAudioSync(
       void loadAndPlay();
     } else {
       // Same source - apply seek directly
+      if (loadingSegment.current === segment.src) loadingSegment.current = null;
       applyPendingSeek();
     }
 
@@ -427,7 +507,7 @@ export function useAudioSync(
       cancelled = true;
       if (handleCanPlay) audio.removeEventListener('canplay', handleCanPlay);
     };
-  }, [audioRef, currentSegment, audioTrack, preloadAudio, enabled, mode]);
+  }, [audioRef, currentSegment, audioTrack, preloadAudio, enabled, mode, isBoundTo]);
 
   const seekTo = useCallback(
     async (time: number): Promise<void> => {
@@ -468,6 +548,12 @@ export function useAudioSync(
         // Store pending seek time - will be applied after segment loads
         pendingSeekTime.current = clampedTime;
         shouldPlayAfterLoad.current = wasPlaying;
+        // Mark the target as loading now rather than when the load effect
+        // runs, so a play() in between waits for it instead of starting the
+        // segment being left.
+        if (mode === 'media' && enabled) {
+          loadingSegment.current = audioTrack.segments[segmentIndex].src;
+        }
         const completion = new Promise<void>((resolve) => {
           pendingSeekCompletion.current?.();
           // Resolve (never reject) so callers such as `restart` — which awaits
@@ -500,7 +586,7 @@ export function useAudioSync(
         setCurrentTime(clampedTime);
       }
     },
-    [audioRef, audioTrack, isPlaying, mode, totalDuration],
+    [audioRef, audioTrack, enabled, isPlaying, mode, totalDuration],
   );
 
   // Declared after `seekTo` because replaying an ended track must route through
@@ -523,26 +609,48 @@ export function useAudioSync(
         // `restart`, which has always been correct for exactly this reason.
         await seekTo(0);
       }
+
+      // The active segment is still downloading: record the intent and let the
+      // load path start playback on `canplay` (see the file header).
+      const segment = audioTrack?.segments[currentSegmentRef.current];
+      if (segment && loadingSegment.current === segment.src && !isBoundTo(audio, segment.src)) {
+        shouldPlayAfterLoad.current = true;
+        setIsPlaying(true);
+        if (!audio.getAttribute('src')) {
+          // Nothing is attached yet, so this cannot start anything audible.
+          // Calling play() inside the listener's gesture lets engines with
+          // per-element gesture rules (WebKit) allow the deferred start; the
+          // attaching load() aborts it by design.
+          audio.play().catch(() => {});
+        }
+        return;
+      }
+
       try {
         await audio.play();
         fallbackMode.current = false;
         setIsAvailable(true);
         setUnavailableMessage(undefined);
-      } catch (error) {
+      } catch (error: unknown) {
         fallbackMode.current = false;
+        // A newer load() or pause() superseded this request. The media is fine,
+        // and a load asked to resume will start playback itself.
+        if (error instanceof Error && error.name === 'AbortError') {
+          if (!shouldPlayAfterLoad.current) setIsPlaying(false);
+          return;
+        }
         setIsPlaying(false);
-        const name = error instanceof Error ? error.name : '';
-        if (name !== 'NotAllowedError') {
+        if (!isBenignPlayRejection(error)) {
           setIsAvailable(false);
-          setUnavailableMessage(
-            'Audio playback failed. Check that the media file is supported and available.',
-          );
+          setUnavailableMessage(PLAYBACK_FAILED_MESSAGE);
         }
       }
     }
-  }, [audioRef, isEnded, mode, seekTo]);
+  }, [audioRef, audioTrack, isEnded, isBoundTo, mode, seekTo]);
 
   const pause = useCallback(() => {
+    // Cancel a start still waiting on a download as well as live playback.
+    shouldPlayAfterLoad.current = false;
     const audio = audioRef.current;
     if (audio) {
       audio.pause();
