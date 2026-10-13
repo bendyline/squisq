@@ -600,6 +600,8 @@ describe('useAudioSync play before the segment is ready', () => {
       void result.current.play();
     });
     expect(result.current.isPlaying).toBe(true);
+    // The controls show the loading ring until sound actually starts.
+    expect(result.current.isBuffering).toBe(true);
 
     await act(() => downloads.release('a.mp3'));
     await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
@@ -609,6 +611,34 @@ describe('useAudioSync play before the segment is ready', () => {
     expect(result.current.isAvailable).toBe(true);
     expect(result.current.unavailableMessage).toBeUndefined();
     expect(result.current.isPlaying).toBe(true);
+    expect(result.current.isBuffering).toBe(true);
+
+    act(() => audio.dispatchEvent(new Event('playing')));
+    expect(result.current.isBuffering).toBe(false);
+  });
+
+  it('reports buffering during a mid-segment stall and never while paused', async () => {
+    const audio = createAudioElement();
+    mockSegmentFetches();
+    vi.spyOn(audio, 'play').mockResolvedValue(undefined);
+    const { result } = renderHook(() => useAudioSync({ current: audio }, track));
+    await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
+    expect(result.current.isBuffering).toBe(false);
+
+    await act(() => result.current.play());
+    act(() => {
+      audio.dispatchEvent(new Event('play'));
+      audio.dispatchEvent(new Event('playing'));
+    });
+    expect(result.current.isBuffering).toBe(false);
+
+    act(() => audio.dispatchEvent(new Event('waiting')));
+    expect(result.current.isBuffering).toBe(true);
+    act(() => audio.dispatchEvent(new Event('playing')));
+    expect(result.current.isBuffering).toBe(false);
+
+    act(() => audio.dispatchEvent(new Event('pause')));
+    expect(result.current.isBuffering).toBe(false);
   });
 
   it('does not start playback after the download if the listener paused while waiting', async () => {
@@ -629,6 +659,7 @@ describe('useAudioSync play before the segment is ready', () => {
 
     expect(plays).not.toContain('blob:a.mp3');
     expect(result.current.isPlaying).toBe(false);
+    expect(result.current.isBuffering).toBe(false);
     expect(result.current.isAvailable).toBe(true);
   });
 

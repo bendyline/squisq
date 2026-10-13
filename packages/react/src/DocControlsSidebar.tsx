@@ -15,11 +15,13 @@
  * Related Files:
  * - DocPlayerWithSidebar.tsx -- Wrapper that composes player + sidebar
  * - DocPlayer.tsx -- Core player (renders with showScrubber=true)
+ * - PlayPauseIcon.tsx -- Shared play/pause glyph, with the loading ring
  * - types.ts -- PlaybackState/PlaybackActions interfaces
  */
 
 import type { PlaybackState, PlaybackActions } from './types';
 import { formatTime } from './types';
+import { PlayPauseIcon } from './PlayPauseIcon';
 
 interface DocControlsSidebarProps {
   state: PlaybackState;
@@ -46,16 +48,10 @@ export function DocControlsSidebar({ state, actions }: DocControlsSidebarProps) 
         className="sidebar-ctrl-btn sidebar-play-btn"
         onClick={actions.toggle}
         aria-label={state.isPlaying ? 'Pause' : 'Play'}
+        aria-busy={state.isPlaying && state.isBuffering ? true : undefined}
+        title={state.isPlaying && state.isBuffering ? 'Loading audio…' : undefined}
       >
-        {state.isPlaying ? (
-          <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-          </svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        )}
+        <PlayPauseIcon isPlaying={state.isPlaying} isBuffering={state.isBuffering} size={22} />
       </button>
 
       {/* Time display -- stacked current / total */}

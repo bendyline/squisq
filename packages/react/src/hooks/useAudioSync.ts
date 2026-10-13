@@ -109,6 +109,10 @@ export function useAudioSync(
   const [totalDuration, setTotalDuration] = useState(0);
   const [isAvailable, setIsAvailable] = useState(true);
   const [unavailableMessage, setUnavailableMessage] = useState<string | undefined>();
+  // Whether the element is actually producing sound (`playing` fired and no
+  // pause, stall or reload since). `isPlaying` reflects the listener's intent,
+  // so the gap between the two is the time spent buffering.
+  const [isAudioFlowing, setIsAudioFlowing] = useState(false);
 
   // Calculate segment start times
   const segmentStarts = useRef<number[]>([]);
@@ -175,6 +179,7 @@ export function useAudioSync(
     setIsAudioReady(false);
     setIsAvailable(true);
     setUnavailableMessage(undefined);
+    setIsAudioFlowing(false);
 
     if (!enabled || !audioTrack?.segments) {
       segmentStarts.current = [];
@@ -333,10 +338,17 @@ export function useAudioSync(
       // clock and the scrubber after a seek/resume.
       setIsPlaying(true);
     };
-    const handlePause = () => setIsPlaying(false);
+    const handlePause = () => {
+      setIsPlaying(false);
+      setIsAudioFlowing(false);
+    };
+    const handlePlaying = () => setIsAudioFlowing(true);
+    // A mid-segment stall: still playing in intent, but no sound until data arrives.
+    const handleWaiting = () => setIsAudioFlowing(false);
     const handleError = () => {
       setIsAudioReady(true);
       setIsPlaying(false);
+      setIsAudioFlowing(false);
       setIsAvailable(false);
       setUnavailableMessage(UNLOADABLE_MESSAGE);
       // A source that errors will never reach `canplay`, so any seek awaiting
@@ -364,6 +376,8 @@ export function useAudioSync(
 
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('play', handlePlay);
+    audio.addEventListener('playing', handlePlaying);
+    audio.addEventListener('waiting', handleWaiting);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('ended', handleEnded);
     audio.addEventListener('error', handleError);
@@ -371,6 +385,8 @@ export function useAudioSync(
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('play', handlePlay);
+      audio.removeEventListener('playing', handlePlaying);
+      audio.removeEventListener('waiting', handleWaiting);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('ended', handleEnded);
       audio.removeEventListener('error', handleError);
@@ -484,6 +500,7 @@ export function useAudioSync(
         // load() pauses a playing element without firing `pause`. Unless this
         // load was asked to resume (auto-advance, a seek while playing, or a
         // play() that arrived during the download), playback has stopped.
+        setIsAudioFlowing(false);
         if (!shouldPlayAfterLoad.current) setIsPlaying(false);
 
         // If audio is already ready (blob is instant), canplay might not fire
@@ -731,6 +748,7 @@ export function useAudioSync(
     totalDuration,
     isEnded,
     isReady: isAudioReady,
+    isBuffering: mode === 'media' && isPlaying && !isAudioFlowing,
     isAvailable,
     unavailableMessage,
     // Actions

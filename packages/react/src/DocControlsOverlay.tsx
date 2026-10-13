@@ -12,10 +12,12 @@
  * Related Files:
  * - DocPlayer.tsx -- Parent component
  * - DocProgressBar.tsx -- Progress bar sub-component
+ * - PlayPauseIcon.tsx -- Shared play/pause glyph, with the loading ring
  * - types.ts -- Shared type definitions
  */
 
 import { DocProgressBar } from './DocProgressBar';
+import { PlayPauseIcon } from './PlayPauseIcon';
 import type { PlaybackState, PlaybackActions, BlockMarker } from './types';
 import { formatTime } from './types';
 import type { Block } from '@bendyline/squisq/schemas';
@@ -90,16 +92,10 @@ export function DocControlsOverlay({
           height: '40px',
         }}
         aria-label={state.isPlaying ? 'Pause' : 'Play'}
+        aria-busy={state.isPlaying && state.isBuffering ? true : undefined}
+        title={state.isPlaying && state.isBuffering ? 'Loading audio…' : undefined}
       >
-        {state.isPlaying ? (
-          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-          </svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-            <path d="M8 5v14l11-7z" />
-          </svg>
-        )}
+        <PlayPauseIcon isPlaying={state.isPlaying} isBuffering={state.isBuffering} size={20} />
       </button>
 
       {/* Time display */}
