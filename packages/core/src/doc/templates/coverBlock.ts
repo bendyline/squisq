@@ -26,7 +26,7 @@ import {
 } from '../utils/themeUtils.js';
 import { relativeLuminance, withAlpha } from '../../schemas/colorUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
-import { estimateTextHeight } from './captionUtils.js';
+import { estimateProseLineCount, estimateTextHeight } from './captionUtils.js';
 import type { CoverSlideTemplate } from '../coverSlideSettings.js';
 import { bigText } from './bigText.js';
 import { imageWithCaption } from './imageWithCaption.js';
@@ -61,6 +61,8 @@ const COVER_TITLE_BASE_PX = 120;
 const COVER_TITLE_COMFORTABLE_CHARS = 26;
 /** Readability floor so very long titles never shrink to nothing. */
 const COVER_TITLE_MIN_BASE_PX = 62;
+/** Space kept below a hero cover's title block, as a percent of frame height. */
+const COVER_HERO_BOTTOM_MARGIN_PCT = 6;
 
 /**
  * Compute the base cover-title font size for a given title, shrinking long
@@ -165,14 +167,29 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
   // layer's default line height) so it can never cut through a wrapped title
   // the way a fixed slot did; with a subtitle it stops halfway to the
   // subtitle's top edge when the two are closer than the preferred gap.
+  // The height counts explicit `\n` breaks too (a title such as a short link
+  // may arrive pre-broken), and the title layer is a box with `shrinkToFit`,
+  // so the renderer centres the wrapped block on its anchor exactly as this
+  // estimate assumes instead of hanging extra lines below it.
   const titleYPct = subtitle ? parseFloat(layout.primaryY) : 50;
   const maxWidthPx = (parseFloat(layout.maxTextWidth) / 100) * viewport.width;
-  const titleH = estimateTextHeight(title, titleFontSize, maxWidthPx, 1.4);
+  const titleH = Math.max(
+    estimateTextHeight(title, titleFontSize, maxWidthPx, 1.4),
+    estimateProseLineCount(title, titleFontSize, maxWidthPx) * titleFontSize * 1.4,
+  );
   const px = (v: number) => (v / viewport.height) * 100;
+  const subH = subtitle ? estimateTextHeight(subtitle, subtitleFontSize, maxWidthPx, 1.5) : 0;
   const titleBottomPct = titleYPct + px(titleH / 2);
   let accentYPct = titleBottomPct + px(40);
+
+  // Over a hero the title sits low, in the scrim's opaque band: 75%, or 70%
+  // above a subtitle at 82%. A title of several lines lifts its anchor just
+  // enough that the centred block ends above the frame's bottom margin (or
+  // the subtitle's top edge) rather than running off the frame.
+  const heroTitleBasePct = subtitle ? 70 : 75;
+  const heroTitleLimitPct = subtitle ? 82 - px(subH / 2) : 100 - COVER_HERO_BOTTOM_MARGIN_PCT;
+  const heroTitleYPct = Math.min(heroTitleBasePct, heroTitleLimitPct - px(titleH / 2));
   if (subtitle) {
-    const subH = estimateTextHeight(subtitle, subtitleFontSize, maxWidthPx, 1.5);
     const subtitleTopPct = parseFloat(layout.secondaryY) - px(subH / 2);
     accentYPct = Math.max(
       titleBottomPct,
@@ -281,13 +298,15 @@ export function coverBlock(input: CoverBlockInput, context: TemplateContext): La
         color: theme.colors.text,
         textAlign: 'center',
         shadow: !standardLightCover,
+        shrinkToFit: true,
       },
     },
     position: {
       x: '50%',
-      y: heroSrc ? (subtitle ? '70%' : '75%') : `${titleYPct}%`,
+      y: heroSrc ? `${Math.round(heroTitleYPct * 100) / 100}%` : `${titleYPct}%`,
       anchor: 'center',
       width: layout.maxTextWidth,
+      height: `${Math.round(px(titleH) * 100) / 100}%`,
     },
     // No animation delay - shown immediately at rest. Word-by-word reveal is
     // a profile opt-in (off by default: the cover doubles as the poster).

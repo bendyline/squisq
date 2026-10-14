@@ -92,3 +92,34 @@ describe('Social caption layout', () => {
     expect(overlayStyle(container, 'social-caption-overlay').bottom).toBe('16%');
   });
 });
+
+// The last chunk used to stay up for the rest of the video, so a silent
+// closing card carried the narration's final words.
+describe('Social caption hold', () => {
+  // Two four-word sentences make two chunks that break at the pause.
+  const twoSentences: CaptionTrack = {
+    version: 1,
+    phrases: [
+      { text: 'Penguins are going nowhere.', startTime: 0, endTime: 3, audioSegment: 0 },
+      { text: 'Neither are the islanders.', startTime: 6, endTime: 8, audioSegment: 0 },
+    ],
+  };
+  const wordsAt = (currentTime: number): string[] => {
+    const { container } = render(
+      <CaptionOverlay captions={twoSentences} currentTime={currentTime} captionStyle="social" />,
+    );
+    return [...container.querySelectorAll('.social-caption-overlay__word')].map(
+      (w) => w.textContent?.trim() ?? '',
+    );
+  };
+
+  it('keeps the chunk just finished up through a short pause', () => {
+    expect(wordsAt(3.5).join(' ')).toMatch(/nowhere/i);
+    expect(wordsAt(8.5).join(' ')).toMatch(/islanders/i);
+  });
+
+  it('clears the frame during a long pause and after the narration ends', () => {
+    expect(wordsAt(4.5)).toEqual([]);
+    expect(wordsAt(10)).toEqual([]);
+  });
+});

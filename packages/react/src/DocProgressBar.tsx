@@ -11,6 +11,10 @@
  * transition is a small bead inside the track, clickable but skipped by Tab.
  * Each carries `data-marker="chapter" | "slide"` for host styling and tests.
  *
+ * The progress fill and the chapter rings use the player accent, a CSS custom
+ * property (`--squisq-player-accent`, default a mid blue) so a host can match
+ * the controls to its own palette without overriding inline styles.
+ *
  * Extracted from DocPlayer to enable reuse across different control layouts
  * (overlay, sidebar, bottom). When used in sidebar/bottom layouts, this
  * component renders at the bottom of the video while other controls are
@@ -26,6 +30,9 @@ import { useRef, useState, useCallback } from 'react';
 import type { PlaybackState, PlaybackActions, BlockMarker } from './types';
 import { formatTime } from './types';
 import type { Block } from '@bendyline/squisq/schemas';
+
+/** The progress fill and chapter-ring color; hosts set `--squisq-player-accent`. */
+const PLAYER_ACCENT = 'var(--squisq-player-accent, #5b9bd5)';
 
 interface DocProgressBarProps {
   state: PlaybackState;
@@ -175,7 +182,7 @@ export function DocProgressBar({
           left: 0,
           width: `${playProgress * 100}%`,
           height: '6px',
-          background: '#5b9bd5',
+          background: PLAYER_ACCENT,
           borderRadius: '3px',
         }}
       />
@@ -209,7 +216,7 @@ export function DocProgressBar({
                     height: '14px',
                     padding: 0,
                     backgroundColor: active ? '#ffffff' : 'rgba(255,255,255,0.75)',
-                    border: '2px solid #5b9bd5',
+                    border: `2px solid ${PLAYER_ACCENT}`,
                     boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
                     zIndex: 3,
                   }

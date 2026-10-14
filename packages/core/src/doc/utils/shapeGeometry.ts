@@ -411,6 +411,12 @@ export interface ClipBox {
   cy: number;
   rx: number;
   ry: number;
+  /**
+   * Corner radius of the drawn outline (a pill is `ry`). Corner ports sit on
+   * the rounded corner instead of the bounding-box corner, which on a pill is
+   * empty space beyond the curve. Omitted → square corners.
+   */
+  radius?: number;
 }
 
 export type ConnectorPort =
@@ -446,21 +452,27 @@ export function clipEndpoints(
   return { start: clipPoint(a, b), end: clipPoint(b, a) };
 }
 
-/** The stable connector ports exposed around a shape/card box. */
+/**
+ * The stable connector ports exposed around a shape/card box. With a corner
+ * `radius`, each corner port moves to the 45° point of its rounded corner,
+ * inset by `r·(1 − √½)` on both axes, so an edge meets the drawn outline.
+ */
 export function snapPoints(box: ClipBox): ConnectorSnapPoint[] {
   const left = box.cx - box.rx;
   const right = box.cx + box.rx;
   const top = box.cy - box.ry;
   const bottom = box.cy + box.ry;
+  const radius = Math.max(0, Math.min(box.radius ?? 0, box.rx, box.ry));
+  const inset = radius * (1 - Math.SQRT1_2);
   return [
     { port: 'top', x: box.cx, y: top },
     { port: 'right', x: right, y: box.cy },
     { port: 'bottom', x: box.cx, y: bottom },
     { port: 'left', x: left, y: box.cy },
-    { port: 'top-left', x: left, y: top },
-    { port: 'top-right', x: right, y: top },
-    { port: 'bottom-right', x: right, y: bottom },
-    { port: 'bottom-left', x: left, y: bottom },
+    { port: 'top-left', x: left + inset, y: top + inset },
+    { port: 'top-right', x: right - inset, y: top + inset },
+    { port: 'bottom-right', x: right - inset, y: bottom - inset },
+    { port: 'bottom-left', x: left + inset, y: bottom - inset },
   ];
 }
 

@@ -240,6 +240,43 @@ describe('coverBlock title-only', () => {
     const title = findLayer(layers, 'cover-title');
     expect(title!.position.y).toBe('50%');
   });
+
+  // A pre-broken title ("example.com/\nsome-long-slug") hung its second line
+  // below the 75% anchor and off the bottom of a landscape frame.
+  it('centres a multi-line hero title and keeps it inside the frame', () => {
+    for (const [context, height] of [
+      [landscapeContext, 1080],
+      [portraitContext, 1920],
+    ] as const) {
+      const layers = coverBlock(
+        { heroSrc: 'img.jpg', title: 'example.com/\nfalkland-\nislands' },
+        context,
+      );
+      const title = findText(layers, 'cover-title')!;
+      expect(title.content.style.shrinkToFit).toBe(true);
+      const y = parseFloat(String(title.position.y));
+      const boxPct = parseFloat(String(title.position.height));
+      const threeLinesPct = ((3 * title.content.style.fontSize * 1.4) / height) * 100;
+      expect(boxPct).toBeGreaterThanOrEqual(threeLinesPct - 0.01);
+      expect(y).toBeLessThanOrEqual(75);
+      expect(y + boxPct / 2).toBeLessThanOrEqual(94 + 0.01);
+    }
+  });
+
+  it('keeps a multi-line hero title above its subtitle', () => {
+    const layers = coverBlock(
+      { heroSrc: 'img.jpg', title: 'example.com/\nfalkland-islands', subtitle: 'Gateway' },
+      landscapeContext,
+    );
+    const title = findText(layers, 'cover-title')!;
+    const subtitle = findText(layers, 'cover-subtitle')!;
+    const titleBottom =
+      parseFloat(String(title.position.y)) + parseFloat(String(title.position.height)) / 2;
+    const subtitleTop =
+      parseFloat(String(subtitle.position.y)) -
+      ((subtitle.content.style.fontSize * 1.5) / 2 / 1080) * 100;
+    expect(titleBottom).toBeLessThanOrEqual(subtitleTop + 0.01);
+  });
 });
 
 // ── Viewport scaling ────────────────────────────────────────────────
