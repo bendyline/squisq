@@ -94,6 +94,32 @@ describe('clipEndpoints', () => {
   });
 });
 
+describe('snapPoints with rounded corners', () => {
+  it('moves corner ports onto the rounded outline and leaves side ports alone', () => {
+    // A pill 200 x 64: corner radius 32, so the corner ports sit on the end caps.
+    const pill = { cx: 100, cy: 32, rx: 100, ry: 32, radius: 32 };
+    const ports = Object.fromEntries(snapPoints(pill).map((p) => [p.port, p]));
+    const inset = 32 * (1 - Math.SQRT1_2);
+    expect(ports['top-right'].x).toBeCloseTo(200 - inset);
+    expect(ports['top-right'].y).toBeCloseTo(inset);
+    expect(ports['bottom-left'].x).toBeCloseTo(inset);
+    expect(ports['bottom-left'].y).toBeCloseTo(64 - inset);
+    expect(ports.right).toMatchObject({ x: 200, y: 32 });
+    // Each corner port lies on its cap circle (centre 168,32 for the right end).
+    const dx = ports['top-right'].x - 168;
+    const dy = ports['top-right'].y - 32;
+    expect(Math.hypot(dx, dy)).toBeCloseTo(32);
+  });
+
+  it('keeps square corners without a radius and clamps an oversized one', () => {
+    const square = snapPoints({ cx: 0, cy: 0, rx: 10, ry: 5 });
+    expect(square.find((p) => p.port === 'top-left')).toMatchObject({ x: -10, y: -5 });
+    const clamped = snapPoints({ cx: 0, cy: 0, rx: 10, ry: 5, radius: 99 });
+    const inset = 5 * (1 - Math.SQRT1_2);
+    expect(clamped.find((p) => p.port === 'top-left')!.x).toBeCloseTo(-10 + inset);
+  });
+});
+
 describe('snapEndpoints', () => {
   const a = { cx: 50, cy: 50, rx: 30, ry: 20 };
   const b = { cx: 180, cy: 50, rx: 30, ry: 20 };

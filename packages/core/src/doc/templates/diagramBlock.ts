@@ -625,10 +625,20 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
 
   // Position lookup by id for edge routing (containers included — edges may
   // attach to them, e.g. a through-border split from a parsed fence).
-  const positions = new Map<string, { cx: number; cy: number; rx: number; ry: number }>();
+  // Each box carries the corner radius its card is drawn with, so connectors
+  // that leave from a corner port meet the outline: on a pill the
+  // bounding-box corner is empty space beyond the rounded end.
+  const positions = new Map<string, { cx: number; cy: number; rx: number; ry: number; radius: number }>();
   for (const node of resolved.nodes) {
     const t = transform(node);
-    positions.set(node.id, { cx: t.x + t.w / 2, cy: t.y + t.h / 2, rx: t.w / 2, ry: t.h / 2 });
+    positions.set(node.id, {
+      cx: t.x + t.w / 2,
+      cy: t.y + t.h / 2,
+      rx: t.w / 2,
+      ry: t.h / 2,
+      // Matches the drawing below: containers always 10, leaf cards pill or 10.
+      radius: !node.isContainer && input.nodeShape === 'pill' ? t.h / 2 : 10,
+    });
   }
 
   // Edge styling (applies to all edges; direction comes per-edge).

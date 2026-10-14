@@ -57,6 +57,13 @@ const TARGET_CHUNK_SIZE = 4;
 const MIN_CHUNK_SIZE = 2;
 const MAX_CHUNK_SIZE = 6;
 
+/**
+ * How long a chunk stays up after its last word, in seconds. Bridges the
+ * pauses between sentences without flicker, but clears the frame for silent
+ * stretches — a long pause, or a closing card after the narration ends.
+ */
+export const SOCIAL_CAPTION_HOLD_SECONDS = 1;
+
 /** A timed word derived from phrase data. */
 interface TimedWord {
   text: string;
@@ -190,20 +197,17 @@ export function SocialCaptionOverlay({
     }
   }
 
-  // If between chunks (gap), show the nearest chunk
+  // Between chunks (a gap) or past the last one: keep the chunk we just left
+  // up for a moment (feels more natural than blinking off), then clear.
   if (!activeChunk) {
-    for (let i = 0; i < chunks.length - 1; i++) {
-      if (currentTime >= chunks[i].endTime && currentTime < chunks[i + 1].startTime) {
-        // In a gap — show the chunk we just left (feels more natural)
-        activeChunk = chunks[i];
-        activeWordIndex = activeChunk.words.length - 1;
+    for (let i = chunks.length - 1; i >= 0; i--) {
+      if (currentTime >= chunks[i].endTime) {
+        if (currentTime < chunks[i].endTime + SOCIAL_CAPTION_HOLD_SECONDS) {
+          activeChunk = chunks[i];
+          activeWordIndex = activeChunk.words.length - 1;
+        }
         break;
       }
-    }
-    // Past all chunks
-    if (!activeChunk && chunks.length > 0 && currentTime >= chunks[chunks.length - 1].startTime) {
-      activeChunk = chunks[chunks.length - 1];
-      activeWordIndex = activeChunk.words.length - 1;
     }
   }
 
