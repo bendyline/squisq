@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.11.20](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.19...@bendyline/squisq@2.11.20) (2026-10-14)
+
+### Bug Fixes
+
+* Use CSS accent token in DocProgressBar ([#85](https://github.com/bendyline/squisq/issues/85)) ([e449de9](https://github.com/bendyline/squisq/commit/e449de9e36b5f581fbe3c518e0f658a48c57fc4b)), closes [#5b9bd5](https://github.com/bendyline/squisq/issues/5b9bd5)
+
 ## @bendyline/squisq [2.11.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.18...@bendyline/squisq@2.11.19) (2026-10-11)
 
 ### Bug Fixes
