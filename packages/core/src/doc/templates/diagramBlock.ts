@@ -628,7 +628,10 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
   // Each box carries the corner radius its card is drawn with, so connectors
   // that leave from a corner port meet the outline: on a pill the
   // bounding-box corner is empty space beyond the rounded end.
-  const positions = new Map<string, { cx: number; cy: number; rx: number; ry: number; radius: number }>();
+  const positions = new Map<
+    string,
+    { cx: number; cy: number; rx: number; ry: number; radius: number }
+  >();
   for (const node of resolved.nodes) {
     const t = transform(node);
     positions.set(node.id, {
