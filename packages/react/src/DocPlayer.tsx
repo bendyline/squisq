@@ -1,3 +1,4 @@
+import { useBuildNavigation } from './hooks/useBuildNavigation';
 /**
  * DocPlayer Component
  *
@@ -185,6 +186,7 @@ function DocPlayerContent({
   basePath = '.',
   renderMode = false,
   animationsEnabled = true,
+  buildsEnabled = true,
   autoPlay = false,
   loop = false,
   onEnded,
@@ -1067,9 +1069,26 @@ function DocPlayerContent({
   // Map segment indices to human-readable titles (from sectionHeader blocks)
   const segmentTitleMap = useMemo(() => buildSegmentTitleMap(doc), [doc]);
 
+  const buildNav = useBuildNavigation(
+    currentBlock,
+    buildsEnabled && isSlideshowMode && !renderMode && !showCoverBlock,
+    animationsEnabled,
+  );
+
+  const {
+    enter: enterBuild,
+    next: nextBuild,
+    previous: previousBuild,
+    showAll: showAllBuilds,
+  } = buildNav;
+  const isBuilding = buildNav.cursor.progress < 1;
+
   // Build shared playback state for extracted controls
   const playbackState: PlaybackState = useMemo(
     () => ({
+      buildStep: buildNav.cursor.revealed,
+      buildCount: buildNav.count,
+      isBuilding,
       isPlaying,
       isBuffering,
       currentTime,
@@ -1093,6 +1112,9 @@ function DocPlayerContent({
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- doc.audio.segments is stable within a given doc
     [
+      buildNav.cursor.revealed,
+      buildNav.count,
+      isBuilding,
       isPlaying,
       isBuffering,
       currentTime,
@@ -1144,6 +1166,7 @@ function DocPlayerContent({
         if (slideshowHasCover && slideshowCoverVisible) {
           const target = expandedBlocks[0];
           if (target) {
+            enterBuild(target);
             setSlideshowCoverVisible(false);
             seekTo(target.startTime);
             pause();
@@ -1153,6 +1176,7 @@ function DocPlayerContent({
         if (currentBlockIndex < expandedBlocks.length - 1) {
           const target = expandedBlocks[currentBlockIndex + 1];
           if (target) {
+            enterBuild(target);
             setSlideshowCoverVisible(false);
             seekTo(target.startTime);
             pause();
@@ -1169,6 +1193,7 @@ function DocPlayerContent({
         if (currentBlockIndex > 0) {
           const target = expandedBlocks[currentBlockIndex - 1];
           if (target) {
+            enterBuild(target, true);
             setSlideshowCoverVisible(false);
             seekTo(target.startTime);
             pause();
@@ -1185,6 +1210,7 @@ function DocPlayerContent({
           }
           const target = expandedBlocks[index - 1];
           if (target) {
+            enterBuild(target);
             setSlideshowCoverVisible(false);
             seekTo(target.startTime);
             pause();
@@ -1194,13 +1220,36 @@ function DocPlayerContent({
         if (index >= 0 && index < expandedBlocks.length) {
           const target = expandedBlocks[index];
           if (target) {
+            enterBuild(target);
             seekTo(target.startTime);
             pause();
           }
         }
       },
     }),
-    [currentBlockIndex, expandedBlocks, seekTo, pause, slideshowHasCover, slideshowCoverVisible],
+    [
+      currentBlockIndex,
+      expandedBlocks,
+      seekTo,
+      pause,
+      slideshowHasCover,
+      slideshowCoverVisible,
+      enterBuild,
+    ],
+  );
+
+  const stepNavActions = useMemo(
+    () => ({
+      ...slideNavActions,
+      nextStep: () => {
+        if (!nextBuild()) slideNavActions.nextSlide();
+      },
+      prevStep: () => {
+        if (!previousBuild()) slideNavActions.prevSlide();
+      },
+      showAllBuilds: showAllBuilds,
+    }),
+    [slideNavActions, nextBuild, previousBuild, showAllBuilds],
   );
 
   // Drag-to-swipe navigation for slideshow mode. Inert unless in slideshow mode,
@@ -1215,18 +1264,23 @@ function DocPlayerContent({
     [expandedBlocks, slideshowHasCover, suppressOutgoingForNextBlock],
   );
   const handleSwipeNext = useCallback(() => {
+    if (nextBuild()) return;
     armContextFreeSwipeEntry(slideshowSlideIndex + 1);
     slideNavActions.nextSlide();
-  }, [armContextFreeSwipeEntry, slideshowSlideIndex, slideNavActions]);
+  }, [armContextFreeSwipeEntry, slideshowSlideIndex, slideNavActions, nextBuild]);
   const handleSwipePrev = useCallback(() => {
+    if (previousBuild()) return;
     armContextFreeSwipeEntry(slideshowSlideIndex - 1);
     slideNavActions.prevSlide();
-  }, [armContextFreeSwipeEntry, slideshowSlideIndex, slideNavActions]);
+  }, [armContextFreeSwipeEntry, slideshowSlideIndex, slideNavActions, previousBuild]);
   const swipe = useSlideSwipe({
     enabled: swipeEnabled,
     containerRef,
-    canGoNext: slideshowSlideIndex < slideshowTotalSlides - 1,
-    canGoPrev: slideshowSlideIndex > 0,
+    canGoNext:
+      slideshowSlideIndex < slideshowTotalSlides - 1 ||
+      buildNav.cursor.revealed < buildNav.count ||
+      buildNav.cursor.progress < 1,
+    canGoPrev: slideshowSlideIndex > 0 || buildNav.cursor.revealed > 0,
     onNext: handleSwipeNext,
     onPrev: handleSwipePrev,
   });
@@ -1240,8 +1294,22 @@ function DocPlayerContent({
   // Fires every time playbackActions change so the external sidebar always holds
   // fresh function references (toggle closes over isPlaying, so it changes often).
   useEffect(() => {
-    onControlsReady?.({ play: playWithTimelineMedia, pause, ...playbackActions });
-  }, [playWithTimelineMedia, pause, playbackActions, onControlsReady]);
+    onControlsReady?.({
+      play: playWithTimelineMedia,
+      pause,
+      ...playbackActions,
+      nextBuild: stepNavActions.nextStep,
+      previousBuild: stepNavActions.prevStep,
+      showAllBuilds: showAllBuilds,
+    });
+  }, [
+    playWithTimelineMedia,
+    pause,
+    playbackActions,
+    onControlsReady,
+    stepNavActions,
+    showAllBuilds,
+  ]);
 
   // Extract display title from a block (handles both template and expanded blocks)
   const getBlockTitle = useCallback((block: Block): string => {
@@ -1373,11 +1441,11 @@ function DocPlayerContent({
           case 'ArrowDown':
           case ' ':
             e.preventDefault();
-            slideNavActions.nextSlide();
+            stepNavActions.nextStep();
             break;
           case 'ArrowLeft':
             e.preventDefault();
-            slideNavActions.prevSlide();
+            stepNavActions.prevStep();
             break;
           case 'ArrowUp':
             e.preventDefault();
@@ -1417,6 +1485,7 @@ function DocPlayerContent({
       toggleWithTimelineMedia,
       seekTo,
       slideNavActions,
+      stepNavActions,
       onFullscreenToggle,
     ],
   );
@@ -1577,6 +1646,8 @@ function DocPlayerContent({
           // DOM / skip entrance animations mid-transition.
           <div key={previousBlock.id} className="doc-player__block doc-player__block--previous">
             <BlockRenderer
+              respectReducedMotion={!renderMode}
+              buildPlayback={buildsEnabled ? 'timed' : 'all'}
               block={previousBlock}
               // The exiting block keeps its own clock: its count-ups and
               // keyframes must hold their final state through the crossfade
@@ -1625,6 +1696,10 @@ function DocPlayerContent({
           >
             <BlockRenderer
               block={currentBlock}
+              respectReducedMotion={!renderMode}
+              buildPlayback={
+                !buildsEnabled ? 'all' : isSlideshowMode && !renderMode ? buildNav.cursor : 'timed'
+              }
               blockTime={blockTime}
               basePath={basePath}
               isEntering={animationsEnabled && isEntering}
@@ -1834,7 +1909,7 @@ function DocPlayerContent({
       {!renderMode && isSlideshowMode && showControls && (
         <DocControlsSlideshow
           state={playbackState}
-          slideNav={slideNavActions}
+          slideNav={stepNavActions}
           slides={slideshowPickerItems}
           pickerOpen={isSlideshowPickerOpen}
           onPickerOpenChange={setIsSlideshowPickerOpen}

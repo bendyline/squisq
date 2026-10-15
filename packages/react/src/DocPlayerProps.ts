@@ -32,6 +32,8 @@ export interface DocPlayerProps {
   renderMode?: boolean;
   /** Render slide transitions and per-layer animations (default: true). */
   animationsEnabled?: boolean;
+  /** False shows every build step. Disabling motion alone preserves reveal order. */
+  buildsEnabled?: boolean;
   /** Receives the instance-scoped render API, and `null` on cleanup. */
   onRenderAPIReady?: (api: SquisqRenderAPI | null) => void;
   /**

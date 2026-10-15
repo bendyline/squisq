@@ -1,3 +1,4 @@
+import type { BuildSpec, BuildTiming } from './Build.js';
 /**
  * Block Templates Schema
  *
@@ -89,6 +90,10 @@ export interface AccentImage {
  * Base properties shared by all template blocks.
  */
 interface BaseTemplateBlock {
+  build?: BuildSpec;
+  buildTiming?: BuildTiming;
+  /** Projection-only source range for exact narration alignment. */
+  buildSource?: { text: string; charStart: number };
   /** Compiled presentation timing is authoritative; pacing must not merge or split it. */
   timelineLocked?: boolean;
   /** Unique block ID */

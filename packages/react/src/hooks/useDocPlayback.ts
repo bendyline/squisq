@@ -1,3 +1,4 @@
+import { resolveDocBuildTiming } from '@bendyline/squisq/doc';
 /**
  * useDocPlayback Hook
  *
@@ -169,7 +170,7 @@ export function useDocPlayback(
         // resolve through the user's design.
         customTemplates: script.customTemplates,
       });
-      return expanded;
+      return resolveDocBuildTiming(script, expanded);
     }
 
     // All raw blocks — used as-is except for the theme's default transition
@@ -178,19 +179,7 @@ export function useDocPlayback(
       const transition = resolveBlockTransition(block, resolvedTheme, index);
       return transition !== block.transition ? { ...block, transition } : block;
     });
-  }, [
-    script?.blocks,
-    script?.audio?.segments,
-    script?.persistentLayers,
-    script?.customTemplates,
-    script?.motion,
-    script?.frontmatter,
-    motionOverride,
-    mediaAspectRatios,
-    viewport,
-    theme,
-    useAudioSegmentTiming,
-  ]);
+  }, [script, motionOverride, mediaAspectRatios, viewport, theme, useAudioSegmentTiming]);
 
   // Find current block based on time
   const currentBlock = useMemo(() => getBlockAtTime(blocks, currentTime), [blocks, currentTime]);

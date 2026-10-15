@@ -6,7 +6,14 @@
  * Handles positioning, animations, and transitions.
  */
 
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { BuildCursor } from '@bendyline/squisq/schemas';
+import {
+  blockBuildSteps,
+  buildCursorAtTime,
+  resolveBuildTimeline,
+  buildTargetState,
+} from '@bendyline/squisq/doc';
 import type { Block, Layer, Theme, Transition } from '@bendyline/squisq/schemas';
 import { resolveTransitionDuration } from '@bendyline/squisq/schemas';
 import { isGeometryBoundTemplate } from '@bendyline/squisq/doc';
@@ -144,6 +151,10 @@ export interface ViewportDimensions {
 }
 
 interface BlockRendererProps {
+  /** Static consumers default to all content. Players opt into a timed or manual cursor. */
+  buildPlayback?: 'all' | 'timed' | BuildCursor;
+  /** Export hosts use false so system preferences cannot change captured frames. */
+  respectReducedMotion?: boolean;
   /** The block to render */
   block: Block;
   /** Current time relative to block start (seconds) */
@@ -184,6 +195,8 @@ interface BlockRendererProps {
 
 export function BlockRenderer({
   block,
+  buildPlayback = 'all',
+  respectReducedMotion = true,
   blockTime,
   basePath,
   isEntering = false,
@@ -216,6 +229,64 @@ export function BlockRenderer({
   const clipId = `vb-clip-${instanceId}-${block.id}`;
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [textScale, setTextScale] = useState(1);
+  const steps = useMemo(() => blockBuildSteps(block), [block]);
+  const timeline = useMemo(
+    () =>
+      block.build
+        ? resolveBuildTimeline(steps, block.build, block.duration, block.buildTiming)
+        : undefined,
+    [steps, block.build, block.duration, block.buildTiming],
+  );
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    if (!respectReducedMotion) {
+      setReducedMotion(false);
+      return;
+    }
+    const query = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    if (!query) return;
+    const update = () => setReducedMotion(query.matches);
+    update();
+    query.addEventListener?.('change', update);
+    return () => query.removeEventListener?.('change', update);
+  }, [respectReducedMotion]);
+  useLayoutEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const cursor =
+      buildPlayback === 'all' || !timeline
+        ? { revealed: steps.length, progress: 1 }
+        : buildPlayback === 'timed'
+          ? buildCursorAtTime(timeline, blockTime)
+          : buildPlayback;
+    svg.dataset.buildRevealed = String(cursor.revealed);
+    svg.dataset.buildCount = String(steps.length);
+    for (const target of svg.querySelectorAll<HTMLElement>('[data-squisq-build-step]')) {
+      const index = Number(target.dataset.squisqBuildStep);
+      if (!Number.isInteger(index) || index < 0 || index >= steps.length || !block.build) {
+        target.style.visibility = 'visible';
+        target.style.opacity = '1';
+        target.style.transform = '';
+        target.style.pointerEvents = '';
+        target.removeAttribute('aria-hidden');
+        target.removeAttribute('inert');
+        continue;
+      }
+      const state = buildTargetState(
+        index,
+        steps,
+        cursor,
+        buildPlayback === 'all' ? { ...block.build, previous: 'keep' } : block.build,
+        animationsEnabled && !reducedMotion,
+      );
+      target.style.visibility = state.hidden ? 'hidden' : 'visible';
+      target.style.opacity = String(state.opacity);
+      target.style.transform = `translate(${state.x}px, ${state.y}px)`;
+      target.style.pointerEvents = state.hidden ? 'none' : '';
+      target.setAttribute('aria-hidden', String(state.hidden));
+      target.toggleAttribute('inert', state.hidden);
+    }
+  }, [block.build, steps, timeline, blockTime, buildPlayback, animationsEnabled, reducedMotion]);
   // Charts, timelines and diagrams position their labels against drawn
   // geometry; growing that text would detach it from the marks it labels.
   const growText =

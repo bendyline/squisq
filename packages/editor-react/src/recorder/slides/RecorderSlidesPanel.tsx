@@ -1,3 +1,5 @@
+import { useBuildNavigation } from '@bendyline/squisq-react';
+import { blockBuildSteps, buildSourceText } from '@bendyline/squisq/doc';
 /**
  * RecorderSlidesPanel — the recorder dialog's right column in slides mode.
  *
@@ -18,7 +20,7 @@
  * grows past the viewport and the whole column starts scrolling instead.
  */
 
-import { useCallback, type CSSProperties, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, type CSSProperties, type KeyboardEvent } from 'react';
 import type { MediaProvider, ViewportConfig } from '@bendyline/squisq/schemas';
 import { BlockThumbnail } from '../../TimelineBlockPreview.js';
 import { Icon } from '../../Icon.js';
@@ -26,6 +28,7 @@ import { clampSlideIndex, slideStepForKey } from '../slidesModePolicy.js';
 import type { RecorderSlide } from './slideDeck.js';
 
 export interface RecorderSlidesPanelProps {
+  onBuildShown?: (blockId: string, step: number, sourceText: string) => void;
   slides: RecorderSlide[];
   /** Active slide index — controlled by the host. */
   index: number;
@@ -131,13 +134,29 @@ export function RecorderSlidesPanel({
   mediaProvider = null,
   recording = false,
   shownBlockIds,
+  onBuildShown,
 }: RecorderSlidesPanelProps) {
   const count = slides.length;
   const active = slides[clampSlideIndex(index, count)];
 
+  const builds = useBuildNavigation(active?.visual, true, true);
+  const { next: nextBuild, previous: previousBuild, enter: enterBuild } = builds;
+  const sourceText = active?.visual ? buildSourceText(blockBuildSteps(active.visual)) : '';
+  useEffect(() => {
+    if (!active || !onBuildShown) return;
+    for (let step = 0; step < builds.cursor.revealed; step++)
+      onBuildShown(active.blockId, step, sourceText);
+  }, [active, builds.cursor.revealed, sourceText, recording, onBuildShown]);
+
   const step = useCallback(
-    (delta: number) => onIndexChange(clampSlideIndex(index + delta, count)),
-    [index, count, onIndexChange],
+    (delta: number) => {
+      if (delta > 0 ? nextBuild() : previousBuild()) return;
+      const next = clampSlideIndex(index + delta, count);
+      if (next === index) return;
+      enterBuild(slides[next]?.visual, delta < 0);
+      onIndexChange(next);
+    },
+    [index, count, onIndexChange, nextBuild, previousBuild, enterBuild, slides],
   );
 
   /**
@@ -177,6 +196,7 @@ export function RecorderSlidesPanel({
       <div style={headerStyle}>
         <span style={counterStyle} role="status">
           Slide {index + 1} of {count}
+          {builds.count > 0 ? ` · Build ${builds.cursor.revealed} of ${builds.count}` : ''}
         </span>
         <span style={dotsStyle} aria-hidden="true">
           {slides.map((slide, i) => (
@@ -200,7 +220,7 @@ export function RecorderSlidesPanel({
           type="button"
           style={navButtonStyle}
           onClick={() => step(-1)}
-          disabled={index <= 0}
+          disabled={index <= 0 && builds.cursor.revealed === 0}
           aria-label="Previous slide"
         >
           <Icon icon="fa-solid fa-chevron-left" />
@@ -209,7 +229,11 @@ export function RecorderSlidesPanel({
           type="button"
           style={navButtonStyle}
           onClick={() => step(1)}
-          disabled={index >= count - 1}
+          disabled={
+            index >= count - 1 &&
+            builds.cursor.revealed >= builds.count &&
+            builds.cursor.progress >= 1
+          }
           aria-label="Next slide"
         >
           <Icon icon="fa-solid fa-chevron-right" />
@@ -229,6 +253,7 @@ export function RecorderSlidesPanel({
           {active.visual ? (
             <BlockThumbnail
               visual={active.visual}
+              buildPlayback={builds.cursor}
               viewport={viewport}
               basePath={basePath}
               mediaProvider={mediaProvider}

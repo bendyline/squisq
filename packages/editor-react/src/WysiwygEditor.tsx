@@ -54,6 +54,8 @@ import { InlineIcon } from './InlineIcon';
 import { ImageWithMediaProvider } from './ImageNodeView';
 import { TiptapVideo } from './tiptap/TiptapVideo';
 import { TiptapAudio } from './tiptap/TiptapAudio';
+import { DocumentTray } from './documentTray/DocumentTray';
+import { DocumentTrayExtension, DOCUMENT_TRAY_KEY } from './documentTray/DocumentTrayExtension';
 import { TemplateBadgePopover, TEMPLATE_NAMES } from './TemplatePicker';
 import { BlockPropertiesPopover } from './BlockPropertiesPopover';
 import {
@@ -452,6 +454,7 @@ export function WysiwygEditor({
       ImageWithMediaProvider.configure({ inline: false }),
       TiptapVideo,
       TiptapAudio,
+      DocumentTrayExtension.configure({ enabled: layoutMode === 'document' }),
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
@@ -935,6 +938,11 @@ export function WysiwygEditor({
     return out as CSSProperties;
   }, [activeTheme, themeInheritance]);
 
+  useEffect(() => {
+    if (!editor || editor.isDestroyed) return;
+    editor.view.dispatch(editor.state.tr.setMeta(DOCUMENT_TRAY_KEY, layoutMode === 'document'));
+  }, [editor, layoutMode]);
+
   return (
     <CustomTemplateProvider docTemplates={docTemplates} onDocTemplatesChange={onDocTemplatesChange}>
       <div
@@ -951,6 +959,7 @@ export function WysiwygEditor({
         data-theme-inheritance={themeInheritance}
         ref={containerRef}
       >
+        {editor && layoutMode === 'document' && <DocumentTray editor={editor} />}
         <EditorContent editor={editor} style={{ height: '100%' }} />
         {badgeMenu && (
           <TemplateBadgePopover

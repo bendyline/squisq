@@ -96,6 +96,9 @@ export type CaptionMode = 'off' | 'standard' | 'social';
 
 /** Slide navigation actions for slideshow display mode */
 export interface SlideNavActions {
+  nextStep?: () => void;
+  prevStep?: () => void;
+  showAllBuilds?: () => void;
   /** Navigate to the next slide */
   nextSlide: () => void;
   /** Navigate to the previous slide */
@@ -106,6 +109,10 @@ export interface SlideNavActions {
 
 /** Playback state exposed to external control components */
 export interface PlaybackState {
+  buildStep?: number;
+  buildCount?: number;
+  /** True while the newest build step is entering. */
+  isBuilding?: boolean;
   isPlaying: boolean;
   /** Playback was requested but audio has not started yet (see AudioState.isBuffering). */
   isBuffering?: boolean;
@@ -137,6 +144,9 @@ export interface PlaybackState {
 
 /** Playback actions exposed to external control components */
 export interface PlaybackActions {
+  nextBuild?: () => void;
+  previousBuild?: () => void;
+  showAllBuilds?: () => void;
   toggle: () => void;
   restart: () => void;
   seekTo: (time: number) => void;

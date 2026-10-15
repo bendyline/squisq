@@ -1,3 +1,4 @@
+import { recordBuildAdvance, type BuildAdvance } from '../schemas/Build.js';
 /**
  * Narration timing sidecar v3 — the extended `<audio>.timing.json`.
  *
@@ -34,6 +35,8 @@ export interface NarrationTimingBlock {
 }
 
 export interface NarrationTimingJsonV3 {
+  /** Optional first-show build observations, source guarded. */
+  builds?: readonly BuildAdvance[];
   version: 3;
   /** EXACTLY the NarrationScript.sourceText of the take. */
   sourceText: string;
@@ -232,7 +235,28 @@ export function parseNarrationTimingJson(
       cursor = block.startSec;
     }
 
+    let builds: readonly BuildAdvance[] = [];
+    if (Array.isArray(raw.builds))
+      for (const item of raw.builds) {
+        if (!item || typeof item !== 'object') continue;
+        const event = item as Record<string, unknown>;
+        if (
+          typeof event.blockId === 'string' &&
+          typeof event.sourceText === 'string' &&
+          typeof event.step === 'number' &&
+          finiteNonNegative(event.time) &&
+          event.time <= raw.duration
+        ) {
+          builds = recordBuildAdvance(builds, {
+            blockId: event.blockId,
+            sourceText: event.sourceText,
+            step: event.step,
+            time: event.time,
+          });
+        }
+      }
     return {
+      ...(builds.length ? { builds } : {}),
       version: 3,
       sourceText: raw.sourceText,
       duration: raw.duration,

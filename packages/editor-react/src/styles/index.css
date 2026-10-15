@@ -11,6 +11,7 @@
 @import './template-picker.css';
 @import './template-gallery.css';
 @import './editor.css';
+@import './document-tray.css';
 @import './code-context.css';
 @import './folder-view.css';
 @import '../jsonEditor/json-editor.css';

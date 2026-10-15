@@ -520,6 +520,10 @@ function RichTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
     // to inline or the block paragraph drops below an inside marker.
     `.${cls} ul,.${cls} ol{margin:0 0 .7em;padding-left:1.2em;list-style-position:${listStylePosition}}` +
     `.${cls} li{margin:0}` +
+    `.${cls} li[data-squisq-build-item]{list-style:none}` +
+    `.${cls} [data-squisq-build-row]{display:flex;gap:.35em}` +
+    `.${cls} [data-squisq-build-row]>span{flex:0 0 1.4em;text-align:right;margin-left:-1.75em}` +
+    `.${cls} [data-squisq-build-row]>div{min-width:0;flex:1}` +
     `.${cls} li>p{display:inline;margin:0}` +
     // Content slides can contain a table alongside prose, so they cannot use
     // the dedicated TableLayer. The generated wrapper gives the table its own

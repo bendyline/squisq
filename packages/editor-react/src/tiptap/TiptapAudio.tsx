@@ -14,6 +14,7 @@ import { usePlaybackSrc } from '../mediaEdit/usePlaybackSrc';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import { useResolvedMediaSrc } from './useResolvedMediaSrc.js';
+import { isDocumentTrayDecoration } from '../documentTray/DocumentTrayExtension';
 
 export interface TiptapAudioOptions {
   HTMLAttributes: Record<string, unknown>;
@@ -33,8 +34,15 @@ declare module '@tiptap/core' {
   }
 }
 
-function AudioNodeView({ node }: NodeViewProps) {
-  const { src, controls, editFx } = node.attrs as {
+/** Shared player for the inline node and the document tray. */
+export function AudioMedia({
+  attrs,
+  readOnly = false,
+}: {
+  attrs: Record<string, unknown>;
+  readOnly?: boolean;
+}) {
+  const { src, controls, editFx } = attrs as {
     src: string;
     controls: boolean;
     editFx: string | null;
@@ -44,8 +52,7 @@ function AudioNodeView({ node }: NodeViewProps) {
   const resolvedSrc = useResolvedMediaSrc(playbackSrc);
 
   return (
-    <NodeViewWrapper
-      as="span"
+    <span
       className="squisq-inline-audio-player"
       data-drag-handle
       draggable
@@ -53,9 +60,21 @@ function AudioNodeView({ node }: NodeViewProps) {
       data-squisq-media-kind="audio"
     >
       <audio src={resolvedSrc || undefined} controls={controls} preload="metadata" />
-      <span className="squisq-audio-node-toolbar" contentEditable={false}>
-        <MediaEditButton src={src} kind="audio" fx={editFx} />
-      </span>
+      {!readOnly && (
+        <span className="squisq-audio-node-toolbar" contentEditable={false}>
+          <MediaEditButton src={src} kind="audio" fx={editFx} />
+        </span>
+      )}
+    </span>
+  );
+}
+
+function AudioNodeView({ node, decorations, editor }: NodeViewProps) {
+  return (
+    <NodeViewWrapper>
+      {!isDocumentTrayDecoration(decorations) && (
+        <AudioMedia attrs={node.attrs} readOnly={!editor.isEditable} />
+      )}
     </NodeViewWrapper>
   );
 }

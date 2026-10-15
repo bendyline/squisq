@@ -1,0 +1,131 @@
+/* Source nodes stay in ProseMirror for serialization/history, while their
+   players are mounted only in expanded tray panels. */
+.squisq-wysiwyg-editor .squisq-document-tray-source {
+  display: none !important;
+}
+
+.squisq-document-tray {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  color: var(--squisq-text);
+  background: var(--squisq-surface-subtle);
+  border-bottom: 1px solid var(--squisq-border);
+  font: 13px/1.4 var(--squisq-ux-font, system-ui, sans-serif);
+}
+
+.squisq-document-tray-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.squisq-document-tray-hint {
+  color: var(--squisq-text-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.squisq-document-tray-items {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: start;
+  gap: 8px;
+}
+
+.squisq-document-tray-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.squisq-document-tray-item[data-expanded] {
+  width: 100%;
+}
+
+.squisq-document-tray-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 12px;
+  border: 1px solid var(--squisq-border);
+  border-radius: 18px;
+  background: var(--squisq-surface);
+  color: var(--squisq-text-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+.squisq-document-tray-pill:hover {
+  background: var(--squisq-surface-hover);
+}
+
+.squisq-document-tray-pill[aria-expanded='true'] {
+  background: var(--squisq-accent-soft);
+  border-color: var(--squisq-accent-border);
+  color: var(--squisq-accent-strong);
+}
+
+.squisq-document-tray-pill:focus-visible,
+.squisq-document-tray-detail button:focus-visible {
+  outline: 2px solid var(--squisq-accent);
+  outline-offset: 2px;
+}
+
+.squisq-document-tray-pill-label,
+.squisq-document-tray-detail > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-document-tray-chevron {
+  flex-shrink: 0;
+}
+
+.squisq-document-tray-panel {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--squisq-border);
+  border-radius: 8px;
+  background: var(--squisq-surface);
+}
+
+.squisq-document-tray-panel audio,
+.squisq-document-tray-panel video {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+}
+
+.squisq-document-tray-panel .squisq-video-placement-toolbar {
+  flex-wrap: wrap;
+}
+
+.squisq-document-tray-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  color: var(--squisq-text-muted);
+  font-size: 11px;
+}
+
+.squisq-document-tray-detail button {
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 4px;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--squisq-danger-strong);
+  font: inherit;
+  cursor: pointer;
+}
+
+.squisq-document-tray-detail button:hover {
+  background: var(--squisq-danger-soft);
+}

@@ -84,6 +84,8 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     previous = Math.min(duration, Math.max(previous, time));
     return previous;
   });
+  const authoredBlocks = flattenRenderableBlocks(doc.blocks);
+  const buildHints = parsePresentationHints(doc.frontmatter?.[PRESENTATION_HINTS_KEY]);
   const blocks: Block[] = [];
   checked.beats.forEach((beat, index) => {
     const start = starts[index]!;
@@ -92,7 +94,11 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     const source = script.blocks.find(
       (block) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
     );
+    const build =
+      buildHints?.blocks.find((hint) => hint.blockId === source?.blockId)?.build ??
+      authoredBlocks.find((block) => block.id === source?.blockId)?.build;
     const base = {
+      ...(build ? { build } : {}),
       id: beat.id,
       duration: end - start,
       startTime: start,

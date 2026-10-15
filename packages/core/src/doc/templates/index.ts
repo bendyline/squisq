@@ -1,3 +1,4 @@
+import { hasBlockBuilds } from '../builds.js';
 /**
  * Block Template Registry
  *
@@ -240,6 +241,11 @@ function materializeScheduledBlock(
         ...(materialized.layers.length > 0 ? { layers: materialized.layers } : {}),
         transition: sourceBlock.transition,
         template: sourceBlock.template,
+        build: sourceBlock.build,
+        buildTiming: sourceBlock.buildTiming,
+        buildSource: sourceBlock.buildSource,
+        sourceBlockId: sourceBlock.sourceBlockId,
+        sourceCharOffset: sourceBlock.sourceCharOffset,
       }
     : {
         ...cloneData(sourceBlock as Block),
@@ -264,8 +270,8 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
     customTemplates,
     failureMode = 'fallback',
     onDiagnostic,
-    splitLongBlocks = true,
-    mergeShortBlocks = true,
+    splitLongBlocks: requestedSplit = true,
+    mergeShortBlocks: requestedMerge = true,
     motion,
   } = opts;
   const totalBlocks = blocks.length;
@@ -308,6 +314,12 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
       return expandedBlock;
     });
   }
+
+  // A build carries pacing inside a slide. Splitting/merging its segment
+  // would replay or erase authored steps; retain its resolved slide sequence.
+  const containsBuilds = blocks.some(hasBlockBuilds);
+  const splitLongBlocks = requestedSplit && !containsBuilds;
+  const mergeShortBlocks = requestedMerge && !containsBuilds;
 
   // Group blocks by their audioSegment index
   const blocksBySegment = new Map<number, { block: DocBlock; originalIndex: number }[]>();

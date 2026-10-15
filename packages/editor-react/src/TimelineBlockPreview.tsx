@@ -7,11 +7,12 @@
  */
 
 import { memo } from 'react';
-import type { Block, ViewportConfig, MediaProvider } from '@bendyline/squisq/schemas';
+import type { Block, ViewportConfig, MediaProvider, BuildCursor } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { BlockRenderer, MediaContext } from '@bendyline/squisq-react';
 
 export interface BlockThumbnailProps {
+  buildPlayback?: 'all' | BuildCursor;
   /** A block already resolved via `resolveBlockVisual`. */
   visual: Block;
   viewport?: ViewportConfig;
@@ -25,13 +26,20 @@ export interface BlockThumbnailProps {
  */
 export const BlockThumbnail = memo(function BlockThumbnail({
   visual,
+  buildPlayback = 'all',
   viewport = VIEWPORT_PRESETS.landscape,
   basePath = '/',
   mediaProvider = null,
 }: BlockThumbnailProps) {
   return (
     <MediaContext.Provider value={mediaProvider}>
-      <BlockRenderer block={visual} blockTime={0} basePath={basePath} viewport={viewport} />
+      <BlockRenderer
+        buildPlayback={buildPlayback}
+        block={visual}
+        blockTime={0}
+        basePath={basePath}
+        viewport={viewport}
+      />
     </MediaContext.Provider>
   );
 });

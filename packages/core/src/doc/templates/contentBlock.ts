@@ -1,3 +1,4 @@
+import { planContentBuilds } from '../builds.js';
 /**
  * Content-first template.
  *
@@ -71,7 +72,8 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
   const title = input.title ?? context.block?.title ?? '';
   const markdown = bodyNodes(context);
   const body = completeBodyText(markdown);
-  const bodyHtml = renderMarkdownBlocksHtml(markdown);
+  const builds = planContentBuilds(markdown, input.build ?? context.block?.build);
+  const bodyHtml = renderMarkdownBlocksHtml(markdown, builds);
   const layers: Layer[] = [createBackgroundLayer('bg', theme.colors.background)];
 
   if (title) {
@@ -100,6 +102,7 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
       id: 'body',
       content: {
         text: body,
+        ...(builds.steps.length ? { buildSteps: builds.steps } : {}),
         ...(bodyHtml ? { html: bodyHtml } : {}),
         style: {
           fontSize: bodyFontSize(body, context),

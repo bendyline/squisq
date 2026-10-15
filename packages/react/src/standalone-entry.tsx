@@ -124,6 +124,7 @@ export interface MountOptions {
    * Timed media continues to play when disabled.
    */
   animationsEnabled?: boolean;
+  buildsEnabled?: boolean;
   /** Caption style: 'standard' or 'social'. Omit or set to undefined for no captions. */
   captionStyle?: 'standard' | 'social';
   /** Caption placement over the frame; omit for the style's classic spot. */
@@ -329,6 +330,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
     viewport,
     motion,
     animationsEnabled = true,
+    buildsEnabled = true,
     captionStyle,
     captionPosition,
     globalKeyboardShortcuts = true,
@@ -421,6 +423,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       showControls: !renderMode,
       renderMode,
       animationsEnabled,
+      buildsEnabled,
       theme,
       motion,
       videoPresentation,

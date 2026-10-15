@@ -63,8 +63,11 @@ export function DocControlsSlideshow({
     totalBlocks,
     totalSlideNumber,
   } = state;
-  const isFirst = currentBlockIndex <= 0;
-  const isLast = currentBlockIndex >= totalBlocks - 1;
+  const isFirst = currentBlockIndex <= 0 && !(state.buildStep && state.buildStep > 0);
+  const isLast =
+    currentBlockIndex >= totalBlocks - 1 &&
+    (state.buildStep ?? 0) >= (state.buildCount ?? 0) &&
+    !state.isBuilding;
   const counterText =
     totalBlocks > 0
       ? (currentSlideLabel ??
@@ -167,11 +170,11 @@ export function DocControlsSlideshow({
       <button
         onClick={(e) => {
           e.stopPropagation();
-          slideNav.prevSlide();
+          (slideNav.prevStep ?? slideNav.prevSlide)();
         }}
         disabled={isFirst}
         data-testid="slide-prev"
-        aria-label="Previous slide"
+        aria-label={state.buildCount ? 'Previous build or slide' : 'Previous slide'}
         title="Previous slide"
         style={{
           background: 'none',
@@ -322,15 +325,42 @@ export function DocControlsSlideshow({
         </div>
       )}
 
+      {!!state.buildCount && (
+        <>
+          <span role="status" style={{ color: 'inherit', fontSize: 12 }}>
+            Build {state.buildStep ?? 0} of {state.buildCount}
+          </span>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              slideNav.showAllBuilds?.();
+            }}
+            aria-label="Show all build steps"
+            style={{
+              background: 'none',
+              color: 'inherit',
+              border: '1px solid currentColor',
+              borderRadius: 4,
+              padding: '4px 8px',
+              cursor: 'pointer',
+              font: 'inherit',
+              fontSize: 12,
+            }}
+          >
+            Show all
+          </button>
+        </>
+      )}
       {/* Next button */}
       <button
         onClick={(e) => {
           e.stopPropagation();
-          slideNav.nextSlide();
+          (slideNav.nextStep ?? slideNav.nextSlide)();
         }}
         disabled={isLast}
         data-testid="slide-next"
-        aria-label="Next slide"
+        aria-label={state.buildCount ? 'Next build or slide' : 'Next slide'}
         title="Next slide"
         style={{
           background: 'none',

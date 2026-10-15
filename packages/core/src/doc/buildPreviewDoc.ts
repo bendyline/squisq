@@ -1,3 +1,4 @@
+import { buildNarrationScript } from '../narration/script.js';
 import { applySavedPresentation } from '../transform/presentationCompiler.js';
 /**
  * buildPreviewDoc — Converts a markdown-derived Doc into a player-ready Doc
@@ -18,7 +19,7 @@ import { applySavedPresentation } from '../transform/presentationCompiler.js';
 
 import { coerceTemplateParams } from './templates/inputDescriptors.js';
 import { deriveTemplateInputs } from './templateInputs.js';
-import { flattenRenderableBlocks } from './markdownToDoc.js';
+import { flattenRenderableBlocks, getBlockBodyText } from './markdownToDoc.js';
 import { hasTemplate } from './templates/index.js';
 import { isContainerTemplate } from './templates/templateNames.js';
 import { KNOWN_BLOCK_META_KEYS } from '../markdown/annotationCoercion.js';
@@ -417,11 +418,16 @@ function resolveDocumentTitle(doc: Doc, provided?: string): string {
 }
 
 export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc {
+  const sourceDoc = doc;
   doc = applySavedPresentation(doc);
   if (doc.presentationApplied) options = { ...options, interleaveImages: false };
   // Container templates (`diagram`, `drawing`) render their children as
   // nodes/shapes, so those children must not also become preview slides.
   const flat = flattenRenderableBlocks(doc.blocks);
+  const buildScript = flat.some((block) => block.build && block.build.mode !== 'off')
+    ? buildNarrationScript(sourceDoc)
+    : undefined;
+  const sourceBlocks = buildScript ? flattenRenderableBlocks(sourceDoc.blocks) : [];
   const allImages = collectAllDocImages(doc.blocks);
   const usedImageSrcs = new Set<string>();
   // Names of user-defined templates carried by the doc — passed into
@@ -440,6 +446,18 @@ export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc
     const block = flat[i];
     const blockImages = extractBlockImages(block.contents);
     const slide = blockToSlide(block, i, knownTemplates, documentTitle);
+    const range = buildScript?.blocks.find(
+      (range) => range.blockId === (block.sourceBlockId ?? block.id),
+    );
+    if (range && buildScript && block.build) {
+      const sourceBlock = sourceBlocks.find((source) => source.id === range.blockId);
+      const body = sourceBlock ? getBlockBodyText(sourceBlock) : '';
+      const charStart = body ? range.charEnd - body.length : range.charStart;
+      slide.buildSource = {
+        text: buildScript.sourceText.slice(charStart, range.charEnd),
+        charStart,
+      };
+    }
 
     if (block.summaryMode) {
       // Summary slides already retain all scoped features. The canonical
@@ -516,6 +534,7 @@ export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc
     // Preview preparation should replace only the slide/timing projection.
     ...doc,
     duration: t,
+    ...(buildScript ? { buildSourceText: doc.buildSourceText ?? buildScript.sourceText } : {}),
     blocks: slides as unknown as Block[],
     audio,
   };
