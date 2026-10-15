@@ -4,7 +4,8 @@ import { switchView } from './view-tabs';
 
 /**
  * Insert → Image/Media: one picker for images, video and audio. Video and
- * audio land as inline players (the recorder's `<video>` / `<audio>` tags);
+ * audio use the recorder's `<video>` / `<audio>` tags: leading media goes in
+ * the document tray, while media after body content stays an inline player;
  * an animated GIF stays an image in the markdown but renders with play/pause
  * controls, and loses the image editor's Edit affordance (which would save a
  * single still frame back over the animation).
@@ -26,6 +27,7 @@ type PickedFile = { name: string; mimeType: string; buffer: Buffer };
 /** Pick `file` through an Insert-menu item's native file chooser. */
 async function pickThroughInsert(page: Page, item: 'Image/Media' | 'File', file: PickedFile) {
   await page.locator('.tiptap.ProseMirror').click();
+  await page.keyboard.press('ControlOrMeta+End');
   await page.getByRole('button', { name: 'Insert', exact: true }).click();
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('menuitem', { name: item, exact: true }).click();
@@ -93,37 +95,61 @@ test('the Insert menu offers Image/Media and File', async ({ page }) => {
   await expect(page.getByRole('menuitem', { name: 'File', exact: true })).toBeVisible();
 });
 
-test('a video inserts as an inline player', async ({ page }) => {
-  await loadSample(page, 'e2e-tiny');
-  await insertMedia(page, {
+for (const media of [
+  {
+    kind: 'video',
+    label: 'Video: demo-clip.mp4',
     name: 'demo-clip.mp4',
     mimeType: 'video/mp4',
-    buffer: Buffer.from('not really an mp4'),
-  });
-  const video = page.locator('.tiptap .squisq-video-node video');
-  await expect(video).toHaveCount(1);
-  await expect(video).toHaveAttribute('controls', '');
-
-  await expect(async () => {
-    expect(await markdownSource(page)).toMatch(
-      /<video src="[^"]*demo-clip\.mp4" controls width="480">/,
-    );
-  }).toPass({ timeout: 5_000 });
-});
-
-test('an audio file inserts as an inline player', async ({ page }) => {
-  await loadSample(page, 'e2e-tiny');
-  await insertMedia(page, {
+    markdown: /<video src="[^"]*demo-clip\.mp4" controls width="480">/,
+  },
+  {
+    kind: 'audio',
+    label: 'Audio: take.mp3',
     name: 'take.mp3',
     mimeType: 'audio/mpeg',
-    buffer: Buffer.from('not really an mp3'),
-  });
-  await expect(page.locator('.tiptap .squisq-inline-audio-player audio')).toHaveCount(1);
+    markdown: /<audio src="[^"]*take\.mp3" controls>/,
+  },
+] as const) {
+  for (const placement of ['document tray', 'body'] as const) {
+    test(`${media.kind} file insertion in the ${placement}`, async ({ page }) => {
+      const inTray = placement === 'document tray';
+      // Tiny has only a title; the two-section GIF fixture has body prose.
+      await loadSample(page, inTray ? 'e2e-tiny' : 'e2e-gif');
+      await insertMedia(page, {
+        name: media.name,
+        mimeType: media.mimeType,
+        buffer: Buffer.from('placeholder media bytes'),
+      });
+      const tray = page.getByRole('region', { name: 'Document tray', exact: true });
+      const inlinePlayer = page.locator(`.tiptap ${media.kind}`);
+      const player = inTray ? tray.locator(media.kind) : inlinePlayer;
+      const pill = tray.getByRole('button', { name: media.label, exact: true });
+      if (inTray) {
+        await expect(pill).toHaveAttribute('aria-expanded', 'false');
+        await expect(player).toHaveCount(0);
+        await expect(inlinePlayer).toHaveCount(0);
+        await pill.click();
+        await expect(pill).toHaveAttribute('aria-expanded', 'true');
+      } else {
+        await expect(tray).toHaveCount(0);
+      }
+      await expect(player).toHaveCount(1);
+      await expect(player).toBeVisible();
+      await expect(player).toHaveAttribute('controls', '');
+      if (inTray) {
+        await expect(inlinePlayer).toHaveCount(0);
+        await pill.click();
+        await expect(pill).toHaveAttribute('aria-expanded', 'false');
+        await expect(player).toHaveCount(0);
+      }
 
-  await expect(async () => {
-    expect(await markdownSource(page)).toMatch(/<audio src="[^"]*take\.mp3" controls>/);
-  }).toPass({ timeout: 5_000 });
-});
+      await expect(async () => {
+        expect(await markdownSource(page)).toMatch(media.markdown);
+      }).toPass({ timeout: 5_000 });
+    });
+  }
+}
 
 test('an animated GIF stays an image and gains play/pause controls', async ({ page }) => {
   await loadSample(page, 'e2e-tiny');
