@@ -26,6 +26,17 @@ const BIG_TEXT_LINE_HEIGHT = 1.05;
 /** Fraction of the frame the display text may span — the rest is padding. */
 const BIG_TEXT_WIDTH_FRACTION = 0.92;
 const BIG_TEXT_HEIGHT_FRACTION = 0.86;
+
+/**
+ * The band each placement fits the title into (fractions of the frame):
+ * centre `y` and height. `center` is the whole padded frame; `upper` and
+ * `lower` are the top and bottom halves, short of the edges.
+ */
+const BIG_TEXT_BANDS: Record<'center' | 'upper' | 'lower', { y: number; height: number }> = {
+  center: { y: 0.5, height: BIG_TEXT_HEIGHT_FRACTION },
+  upper: { y: 0.3, height: 0.44 },
+  lower: { y: 0.7, height: 0.44 },
+};
 /**
  * Average glyph width as a fraction of font size for bold UPPERCASE display
  * type. Deliberately generous (uppercase runs wide): overestimating glyph
@@ -57,9 +68,13 @@ function wrappedLineCount(wordLengths: readonly number[], charsPerLine: number):
  * frame's padded box — width-capped so the longest word stays on one line,
  * then binary-searched against the wrapped block's height.
  */
-export function fitBigTextSize(title: string, viewport: ViewportConfig): number {
+export function fitBigTextSize(
+  title: string,
+  viewport: ViewportConfig,
+  heightFraction: number = BIG_TEXT_HEIGHT_FRACTION,
+): number {
   const availWidth = viewport.width * BIG_TEXT_WIDTH_FRACTION;
-  const availHeight = viewport.height * BIG_TEXT_HEIGHT_FRACTION;
+  const availHeight = viewport.height * heightFraction;
   const wordLengths = title
     .trim()
     .split(/\s+/)
@@ -91,9 +106,9 @@ export function fitBigTextSize(title: string, viewport: ViewportConfig): number 
 }
 
 /** Radial contrast bloom centered behind the title, tinted from `background`. */
-function bigTextBloom(background: string): string {
+function bigTextBloom(background: string, centerY = 0.5): string {
   return (
-    `radial-gradient(ellipse at 50% 50%, ${withAlpha(background, 0.92)} 0%, ` +
+    `radial-gradient(ellipse at 50% ${Math.round(centerY * 100)}%, ${withAlpha(background, 0.92)} 0%, ` +
     `${withAlpha(background, 0.78)} 38%, ${withAlpha(background, 0.32)} 66%, ` +
     `${withAlpha(background, 0)} 88%)`
   );
@@ -102,10 +117,11 @@ function bigTextBloom(background: string): string {
 export function bigText(input: BigTextInput, context: TemplateContext): Layer[] {
   const { title = '', imageSrc, imageAlt, ambientMotion } = input;
   const { theme, viewport } = context;
+  const band = BIG_TEXT_BANDS[input.placement ?? 'center'] ?? BIG_TEXT_BANDS.center;
 
   const treatment = themedImageTreatment(context, input.imageTreatment);
   const displayTitle = title.toUpperCase();
-  const titleFontSize = fitBigTextSize(displayTitle, viewport);
+  const titleFontSize = fitBigTextSize(displayTitle, viewport, band.height);
 
   const layers: Layer[] = [];
 
@@ -135,7 +151,7 @@ export function bigText(input: BigTextInput, context: TemplateContext): Layer[] 
         id: 'bigtext-bloom',
         content: {
           shape: 'rect',
-          fill: bigTextBloom(theme.colors.background),
+          fill: bigTextBloom(theme.colors.background, band.y),
         },
         position: { x: 0, y: 0, width: '100%', height: '100%' },
       },
@@ -158,7 +174,7 @@ export function bigText(input: BigTextInput, context: TemplateContext): Layer[] 
         id: 'bigtext-tint',
         content: {
           shape: 'rect',
-          fill: `radial-gradient(ellipse at 50% 50%, ${withAlpha(theme.colors.primary, 0.38)} 0%, ${withAlpha(theme.colors.primary, 0.14)} 48%, ${withAlpha(theme.colors.primary, 0)} 78%)`,
+          fill: `radial-gradient(ellipse at 50% ${Math.round(band.y * 100)}%, ${withAlpha(theme.colors.primary, 0.38)} 0%, ${withAlpha(theme.colors.primary, 0.14)} 48%, ${withAlpha(theme.colors.primary, 0)} 78%)`,
         },
         position: { x: 0, y: 0, width: '100%', height: '100%' },
       },
@@ -189,10 +205,10 @@ export function bigText(input: BigTextInput, context: TemplateContext): Layer[] 
     },
     position: {
       x: '50%',
-      y: '50%',
+      y: `${band.y * 100}%`,
       anchor: 'center',
       width: `${BIG_TEXT_WIDTH_FRACTION * 100}%`,
-      height: `${BIG_TEXT_HEIGHT_FRACTION * 100}%`,
+      height: `${band.height * 100}%`,
     },
     animation: motionEntrance(context, { type: 'fadeIn', duration: 1 }),
   });

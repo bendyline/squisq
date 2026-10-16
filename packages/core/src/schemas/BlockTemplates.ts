@@ -193,6 +193,12 @@ export interface BigTextInput extends BaseTemplateBlock {
   imageAlt?: string;
   /** Ambient motion for the background image. */
   ambientMotion?: 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight';
+  /**
+   * Where the title sits (default `center`, the whole frame). `upper` and
+   * `lower` fit it into the top or bottom half instead — `upper` keeps a
+   * vertical video's title clear of captions burned into the lower band.
+   */
+  placement?: 'center' | 'upper' | 'lower';
 }
 
 /**
