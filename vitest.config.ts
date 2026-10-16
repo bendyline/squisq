@@ -19,5 +19,12 @@ export default defineConfig({
       'tests/corpus/**',
     ],
     setupFiles: ['./vitest.setup.ts'],
+    // Vitest forks one worker per core (minus one) and talks to each over an
+    // IPC pipe. On a many-core Windows machine that load can make a pipe write
+    // fail with a quota/resource error libuv reports as `write UNKNOWN`; Vitest
+    // then drops that worker's test file and fails the run with "Worker forks
+    // emitted error". Halving the workers relieves that pressure; a CLI
+    // `--maxWorkers` still wins.
+    maxWorkers: process.platform === 'win32' ? '50%' : undefined,
   },
 });
