@@ -25,6 +25,7 @@ Third-party components remain under their respective license terms.
 | @tiptap/react                     | 2.27.3               | MIT                           | https://github.com/ueberdosis/tiptap          |
 | @tiptap/starter-kit               | 2.27.3               | MIT                           | https://github.com/ueberdosis/tiptap          |
 | @tiptap/suggestion                | 2.27.3               | MIT                           | https://github.com/ueberdosis/tiptap          |
+| lucide-react                      | 1.52.0               | ISC                           | https://github.com/lucide-icons/lucide        |
 | mermaid                           | 11.17.2              | MIT                           | https://github.com/mermaid-js/mermaid         |
 | type-fest                         | 4.41.0               | MIT OR CC0-1.0                | https://github.com/sindresorhus/type-fest     |
 | @monaco-editor/react _(bundled)_  | 4.7.0                | MIT                           | https://github.com/suren-atoyan/monaco-react  |
