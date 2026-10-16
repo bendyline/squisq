@@ -81,19 +81,20 @@ for free.
 
 ### Surfaces
 
-| Token                     | Use                                                                                               |
-| ------------------------- | ------------------------------------------------------------------------------------------------- |
-| `--squisq-bg`             | The shell's own canvas                                                                            |
-| `--squisq-surface`        | The face of a panel, menu or card                                                                 |
-| `--squisq-surface-subtle` | A faint tint above the surface                                                                    |
-| `--squisq-surface-sunken` | Pressed into a surface — wells, tracks, code blocks                                               |
-| `--squisq-surface-hover`  | Hover step                                                                                        |
-| `--squisq-surface-raised` | Pressed/active step                                                                               |
-| `--squisq-input-bg`       | Text inputs and selects                                                                           |
-| `--squisq-row-hover`      | List and table row hover                                                                          |
-| `--squisq-desk-bg`        | The "desk" the editing page floats on — WYSIWYG backing, block card, preview gutter, outline pane |
-| `--squisq-desk-rail`      | The timeline rail, which sits _back_ from the desk                                                |
-| `--squisq-desk-border`    | Edges between desk surfaces                                                                       |
+| Token                      | Use                                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `--squisq-bg`              | The shell's own canvas                                                                            |
+| `--squisq-surface`         | The face of a panel, menu or card                                                                 |
+| `--squisq-surface-subtle`  | A faint tint above the surface                                                                    |
+| `--squisq-surface-sunken`  | Pressed into a surface — wells, tracks, code blocks                                               |
+| `--squisq-surface-hover`   | Hover step                                                                                        |
+| `--squisq-surface-raised`  | Pressed/active step                                                                               |
+| `--squisq-surface-overlay` | Menus, popovers, modals and tooltips that float over the chrome (defaults to `--squisq-surface`)  |
+| `--squisq-input-bg`        | Text inputs and selects                                                                           |
+| `--squisq-row-hover`       | List and table row hover                                                                          |
+| `--squisq-desk-bg`         | The "desk" the editing page floats on — WYSIWYG backing, block card, preview gutter, outline pane |
+| `--squisq-desk-rail`       | The timeline rail, which sits _back_ from the desk                                                |
+| `--squisq-desk-border`     | Edges between desk surfaces                                                                       |
 
 ### Lines
 

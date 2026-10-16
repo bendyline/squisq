@@ -19,6 +19,8 @@ import {
 } from 'react';
 import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { inferDocumentTitle } from '@bendyline/squisq/markdown';
+import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { useEditorContext } from '../EditorContext';
 import { Icon } from '../Icon';
 import { usePreviewSettings } from '../PreviewControls';
@@ -32,7 +34,8 @@ interface PresentationModeContextValue {
   availableTargets: readonly PresentationTarget[];
   fullscreenSupported: boolean;
   selectTarget: (target: PresentationTarget) => void;
-  start: () => Promise<void>;
+  /** Present to `target`, or to the selected destination when omitted. */
+  start: (target?: PresentationTarget) => Promise<void>;
   stop: () => Promise<void>;
 }
 
@@ -176,10 +179,13 @@ function preparePopupDocument(
   return root;
 }
 
-function presentationTitle(docTitle: unknown): string {
-  return typeof docTitle === 'string' && docTitle.trim()
-    ? `${docTitle.trim()} - Presentation`
-    : 'Squisq Presentation';
+/**
+ * The audience window's title: the document's own title (frontmatter, else
+ * its top heading), never the engine's name -- hosts ship their own brand.
+ */
+export function presentationTitle(markdownDoc: MarkdownDocument | null): string {
+  const title = markdownDoc ? inferDocumentTitle(markdownDoc) : undefined;
+  return title ? `${title} - Presentation` : 'Presentation';
 }
 
 export function PresentationModeProvider({
@@ -188,7 +194,7 @@ export function PresentationModeProvider({
   allowWindow = true,
   allowFullscreen = true,
 }: PresentationModeProviderProps) {
-  const { activeView, colorScheme, doc } = useEditorContext();
+  const { activeView, colorScheme, markdownDoc } = useEditorContext();
   const { activeTheme } = usePreviewSettings();
   const popupNameId = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const [selectedTarget, setSelectedTarget] = useState<PresentationTarget>('control');
@@ -269,93 +275,99 @@ export function PresentationModeProvider({
     setActiveTarget(null);
   }, [releasePopup, rootRef]);
 
-  const start = useCallback(async () => {
-    setError(null);
-    const root = rootRef.current;
-    if (!root) return;
-    const activeElement = root.ownerDocument.activeElement;
-    returnFocusRef.current = activeElement instanceof HTMLElement ? activeElement : null;
+  const start = useCallback(
+    async (requestedTarget?: PresentationTarget) => {
+      const target = requestedTarget ?? selectedTarget;
+      if (!availableTargets.includes(target)) return;
+      setError(null);
+      const root = rootRef.current;
+      if (!root) return;
+      const activeElement = root.ownerDocument.activeElement;
+      returnFocusRef.current = activeElement instanceof HTMLElement ? activeElement : null;
 
-    if (selectedTarget === 'control') {
-      setActiveTarget('control');
-      return;
-    }
-
-    if (selectedTarget === 'fullscreen') {
-      if (!allowFullscreen) return;
-      if (typeof root.requestFullscreen !== 'function') {
-        setError('Full screen is unavailable here.');
+      if (target === 'control') {
+        setActiveTarget('control');
         return;
       }
-      try {
-        // Keep this call directly in the user-initiated click path: hosts
-        // reject fullscreen requests after the activation has been yielded.
-        // Hiding navigation asks Chromium (including Electron) for the complete
-        // OS display instead of a browser-chrome-constrained presentation.
-        await root.requestFullscreen({ navigationUI: 'hide' });
-        setActiveTarget('fullscreen');
-      } catch {
-        setError('Could not enter full screen.');
+
+      if (target === 'fullscreen') {
+        if (!allowFullscreen) return;
+        if (typeof root.requestFullscreen !== 'function') {
+          setError('Full screen is unavailable here.');
+          return;
+        }
+        try {
+          // Keep this call directly in the user-initiated click path: hosts
+          // reject fullscreen requests after the activation has been yielded.
+          // Hiding navigation asks Chromium (including Electron) for the complete
+          // OS display instead of a browser-chrome-constrained presentation.
+          await root.requestFullscreen({ navigationUI: 'hide' });
+          setActiveTarget('fullscreen');
+        } catch {
+          setError('Could not enter full screen.');
+        }
+        return;
       }
-      return;
-    }
 
-    if (!allowWindow) return;
+      if (!allowWindow) return;
 
-    let popup: Window | null = null;
-    try {
-      const screenWidth = window.screen?.availWidth || POPUP_WIDTH;
-      const screenHeight = window.screen?.availHeight || POPUP_HEIGHT;
-      const width = Math.min(POPUP_WIDTH, Math.max(640, Math.round(screenWidth * 0.9)));
-      const height = Math.min(POPUP_HEIGHT, Math.max(480, Math.round(screenHeight * 0.9)));
-      popup = window.open(
-        '',
-        `squisq-presentation-${popupNameId}`,
-        `popup=yes,width=${width},height=${height}`,
-      );
-      if (!popup) throw new Error('Popup blocked');
-      const nextRoot = preparePopupDocument(
-        popup,
-        root,
-        presentationTitle(doc?.frontmatter?.title),
-        colorScheme,
-        activeTheme.colors.background,
-      );
-      popupRef.current = popup;
-      setPopupRoot(nextRoot);
-      setActiveTarget('window');
+      let popup: Window | null = null;
+      try {
+        const screenWidth = window.screen?.availWidth || POPUP_WIDTH;
+        const screenHeight = window.screen?.availHeight || POPUP_HEIGHT;
+        const width = Math.min(POPUP_WIDTH, Math.max(640, Math.round(screenWidth * 0.9)));
+        const height = Math.min(POPUP_HEIGHT, Math.max(480, Math.round(screenHeight * 0.9)));
+        popup = window.open(
+          '',
+          `squisq-presentation-${popupNameId}`,
+          `popup=yes,width=${width},height=${height}`,
+        );
+        if (!popup) throw new Error('Popup blocked');
+        const nextRoot = preparePopupDocument(
+          popup,
+          root,
+          presentationTitle(markdownDoc),
+          colorScheme,
+          activeTheme.colors.background,
+        );
+        popupRef.current = popup;
+        setPopupRoot(nextRoot);
+        setActiveTarget('window');
 
-      const handlePageHide = () => releasePopup(false);
-      const handlePopupKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') releasePopup(true);
-      };
-      popup.addEventListener('pagehide', handlePageHide);
-      popup.document.addEventListener('keydown', handlePopupKeyDown);
-      const closedPoll = window.setInterval(() => {
-        if (popup?.closed) releasePopup(false);
-      }, 500);
-      popupCleanupRef.current = () => {
-        popup?.removeEventListener('pagehide', handlePageHide);
-        popup?.document.removeEventListener('keydown', handlePopupKeyDown);
-        window.clearInterval(closedPoll);
-      };
-      popup.focus();
-    } catch {
-      if (popupRef.current) releasePopup(true);
-      else if (popup && !popup.closed) popup.close();
-      setError('The presentation window was blocked. Allow pop-ups and try again.');
-    }
-  }, [
-    allowFullscreen,
-    allowWindow,
-    activeTheme.colors.background,
-    colorScheme,
-    doc?.frontmatter?.title,
-    popupNameId,
-    releasePopup,
-    rootRef,
-    selectedTarget,
-  ]);
+        const handlePageHide = () => releasePopup(false);
+        const handlePopupKeyDown = (event: KeyboardEvent) => {
+          if (event.key === 'Escape') releasePopup(true);
+        };
+        popup.addEventListener('pagehide', handlePageHide);
+        popup.document.addEventListener('keydown', handlePopupKeyDown);
+        const closedPoll = window.setInterval(() => {
+          if (popup?.closed) releasePopup(false);
+        }, 500);
+        popupCleanupRef.current = () => {
+          popup?.removeEventListener('pagehide', handlePageHide);
+          popup?.document.removeEventListener('keydown', handlePopupKeyDown);
+          window.clearInterval(closedPoll);
+        };
+        popup.focus();
+      } catch {
+        if (popupRef.current) releasePopup(true);
+        else if (popup && !popup.closed) popup.close();
+        setError('The presentation window was blocked. Allow pop-ups and try again.');
+      }
+    },
+    [
+      allowFullscreen,
+      allowWindow,
+      activeTheme.colors.background,
+      availableTargets,
+      colorScheme,
+      markdownDoc,
+      popupNameId,
+      releasePopup,
+      rootRef,
+      selectedTarget,
+    ],
+  );
 
   const selectTarget = useCallback(
     (target: PresentationTarget) => {
@@ -742,8 +754,15 @@ export function PresentationModeControl() {
                     tabIndex={isSelected ? 0 : -1}
                     disabled={disabled}
                     onClick={() => {
+                      // Choosing a destination presents there now -- a menu
+                      // that only re-aimed the split button read as a dead
+                      // click. It also stays the button's destination.
+                      // Focus returns to the trigger first so leaving the
+                      // presentation lands back on it.
+                      const alreadyThere = activeTarget === option.target;
                       selectTarget(option.target);
                       closeMenu(true);
+                      if (!alreadyThere) void start(option.target);
                     }}
                   >
                     <span

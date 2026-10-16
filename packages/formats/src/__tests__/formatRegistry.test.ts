@@ -145,7 +145,10 @@ describe('built-in capability consistency', () => {
         expect(def.id, `unexpected export failure for "${def.id}": ${message}`).toBe('xlsx');
         expect(message).toMatch(/not yet implemented/i);
       }
-    });
+      // Each converter is lazily imported on its first exportDoc call, so this
+      // test pays the cold module load (pdf-lib + fontkit for pdf). That is
+      // ~200ms alone but can exceed the 5s default under a loaded coverage run.
+    }, 30_000);
   }
 
   it('csv export warns when the document has multiple tables', async () => {

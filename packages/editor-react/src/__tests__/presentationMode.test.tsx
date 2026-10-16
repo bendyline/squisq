@@ -6,9 +6,11 @@ import { useRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { EditorProvider } from '../EditorContext';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 import {
   PresentationModeControl,
   PresentationModeProvider,
+  presentationTitle,
 } from '../presentation/PresentationMode';
 import { PreviewSettingsProvider } from '../PreviewControls';
 
@@ -36,12 +38,33 @@ function Harness({
   );
 }
 
-function renderHarness(props?: { allowWindow?: boolean; allowFullscreen?: boolean }) {
+function renderHarness(
+  props?: { allowWindow?: boolean; allowFullscreen?: boolean },
+  markdown = '# Presentation',
+) {
   return render(
-    <EditorProvider initialMarkdown="# Presentation" initialView="preview">
+    <EditorProvider initialMarkdown={markdown} initialView="preview">
       <Harness {...props} />
     </EditorProvider>,
   );
+}
+
+function fakePopup(popupDocument: Document) {
+  const popupEvents = new EventTarget();
+  let closed = false;
+  const popup = {
+    document: popupDocument,
+    get closed() {
+      return closed;
+    },
+    close: vi.fn(() => {
+      closed = true;
+    }),
+    focus: vi.fn(),
+    addEventListener: popupEvents.addEventListener.bind(popupEvents),
+    removeEventListener: popupEvents.removeEventListener.bind(popupEvents),
+  } as unknown as Window;
+  return { popup, popupEvents };
 }
 
 afterEach(() => {
@@ -59,7 +82,8 @@ describe('PresentationModeControl', () => {
     expect(screen.queryByText('Full screen')).toBeNull();
   });
 
-  it('chooses the launch behavior from an accessible radio menu', () => {
+  it('chooses the destination from an accessible radio menu and presents there', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
     renderHarness();
 
     expect(screen.getByRole('button', { name: 'Present: Fill canvas' })).toBeTruthy();
@@ -93,8 +117,25 @@ describe('PresentationModeControl', () => {
     const reopenedMenu = screen.getByRole('menu', { name: 'Presentation options' });
 
     fireEvent.click(within(reopenedMenu).getByRole('menuitemradio', { name: /New window/ }));
+    // Choosing a destination presents there at once (here the pop-up is
+    // blocked) and keeps it as the launch button's destination.
+    expect(open).toHaveBeenCalledOnce();
     expect(screen.getByRole('button', { name: 'Present: New window' })).toBeTruthy();
     expect(screen.queryByRole('menu', { name: 'Presentation options' })).toBeNull();
+  });
+
+  it('presents in the canvas as soon as Fill canvas is chosen', () => {
+    vi.spyOn(window, 'open').mockReturnValue(null);
+    renderHarness();
+    const shell = screen.getByTestId('shell');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /New window/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: /Fill canvas/ }));
+
+    expect(shell.getAttribute('data-presentation-mode')).toBe('control');
+    expect(screen.getByRole('button', { name: 'Exit presentation mode' })).toBeTruthy();
   });
 
   it('fills the host canvas and exits on Escape', async () => {
@@ -144,7 +185,6 @@ describe('PresentationModeControl', () => {
       fireEvent.click(
         screen.getByRole('menuitemradio', { name: /Full screen.*Use the entire OS screen/ }),
       );
-      fireEvent.click(screen.getByRole('button', { name: 'Present: Full screen' }));
 
       const shell = screen.getByTestId('shell');
       await waitFor(() => expect(requestFullscreen).toHaveBeenCalledWith({ navigationUI: 'hide' }));
@@ -198,7 +238,6 @@ describe('PresentationModeControl', () => {
       requestedRoot = screen.getByTestId('shell');
       fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
       fireEvent.click(screen.getByRole('menuitemradio', { name: /Full screen/ }));
-      fireEvent.click(screen.getByRole('button', { name: 'Present: Full screen' }));
       await waitFor(() =>
         expect(screen.getByTestId('shell').getAttribute('data-presentation-mode')).toBe(
           'fullscreen',
@@ -265,7 +304,6 @@ describe('PresentationModeControl', () => {
       requestedRoot = screen.getByTestId('shell');
       fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
       fireEvent.click(screen.getByRole('menuitemradio', { name: /Full screen/ }));
-      fireEvent.click(screen.getByRole('button', { name: 'Present: Full screen' }));
       await waitFor(() =>
         expect(screen.getByTestId('shell').getAttribute('data-presentation-mode')).toBe(
           'fullscreen',
@@ -295,29 +333,17 @@ describe('PresentationModeControl', () => {
 
   it('opens a same-origin audience window and cleans up when it closes', async () => {
     const popupDocument = document.implementation.createHTMLDocument('');
-    const popupEvents = new EventTarget();
-    let closed = false;
-    const popup = {
-      document: popupDocument,
-      get closed() {
-        return closed;
-      },
-      close: vi.fn(() => {
-        closed = true;
-      }),
-      focus: vi.fn(),
-      addEventListener: popupEvents.addEventListener.bind(popupEvents),
-      removeEventListener: popupEvents.removeEventListener.bind(popupEvents),
-    } as unknown as Window;
+    const { popup, popupEvents } = fakePopup(popupDocument);
     vi.spyOn(window, 'open').mockReturnValue(popup);
 
-    renderHarness();
+    renderHarness(undefined, '# Quarterly review\n\nNumbers.');
     fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: /New window/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Present: New window' }));
 
     const shell = screen.getByTestId('shell');
     await waitFor(() => expect(shell.getAttribute('data-presentation-mode')).toBe('window'));
+    // The window carries the document's title, never the engine's name.
+    expect(popupDocument.title).toBe('Quarterly review - Presentation');
     const popupRoot = popupDocument.querySelector<HTMLElement>('#squisq-presentation-root');
     expect(popupRoot).toBeTruthy();
     expect(popupRoot?.classList.contains('squisq-editor-shell')).toBe(true);
@@ -346,7 +372,6 @@ describe('PresentationModeControl', () => {
     renderHarness();
     fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: /New window/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Present: New window' }));
 
     await waitFor(() =>
       expect(screen.getByRole('alert').textContent).toContain('presentation window was blocked'),
@@ -377,7 +402,6 @@ describe('PresentationModeControl', () => {
     renderHarness();
     fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: /New window/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Present: New window' }));
 
     await waitFor(() =>
       expect(screen.getByRole('alert').textContent).toContain('presentation window was blocked'),
@@ -385,5 +409,21 @@ describe('PresentationModeControl', () => {
     expect(screen.getByTestId('shell').hasAttribute('data-presentation-mode')).toBe(false);
     expect(popup.close).toHaveBeenCalledOnce();
     expect(popupDocument.querySelector('[aria-label="Exit presentation mode"]')).toBeNull();
+  });
+});
+
+describe('presentationTitle', () => {
+  it('prefers the frontmatter title, then the top heading', () => {
+    expect(presentationTitle(parseMarkdown('---\ntitle: Board deck\n---\n\n# Agenda'))).toBe(
+      'Board deck - Presentation',
+    );
+    expect(presentationTitle(parseMarkdown('## Intro\n\n# Launch plan'))).toBe(
+      'Launch plan - Presentation',
+    );
+  });
+
+  it('falls back to a plain name without the engine brand', () => {
+    expect(presentationTitle(parseMarkdown('Just prose.'))).toBe('Presentation');
+    expect(presentationTitle(null)).toBe('Presentation');
   });
 });

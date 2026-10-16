@@ -56,13 +56,18 @@
      `--squisq-bg` is the shell's own canvas. `--squisq-surface` is the
      face of a panel/menu/card floating on it. `-sunken` is pressed into
      a surface (wells, tracks, code blocks); `-hover` and `-raised` are
-     the two interaction steps above it. */
+     the two interaction steps above it. `-overlay` is the face of anything
+     that floats OVER the chrome — menus, popovers, modals, tooltips,
+     palettes. It defaults to `--squisq-surface`; a host whose panes are
+     tinted can lift it so a menu never reads darker than what it opens
+     over. */
   --squisq-bg: #f5f5f5;
   --squisq-surface: #ffffff;
   --squisq-surface-subtle: #f9fafb;
   --squisq-surface-sunken: #f3f4f6;
   --squisq-surface-hover: #f3f4f6;
   --squisq-surface-raised: #e5e7eb;
+  --squisq-surface-overlay: var(--squisq-surface);
   --squisq-input-bg: #ffffff;
   --squisq-row-hover: #f3f4f6;
 
@@ -228,6 +233,7 @@
   --squisq-surface-sunken: #111827;
   --squisq-surface-hover: #374151;
   --squisq-surface-raised: #4b5563;
+  --squisq-surface-overlay: var(--squisq-surface);
   --squisq-input-bg: #374151;
   --squisq-row-hover: #374151;
   --squisq-desk-bg: #0f1219;
