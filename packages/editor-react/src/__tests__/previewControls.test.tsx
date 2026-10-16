@@ -818,6 +818,33 @@ describe('PreviewToolbarControls', () => {
     }
   });
 
+  it('shows Captions in Video mode but not in the hand-stepped Slideshow', () => {
+    const originalResizeObserver = globalThis.ResizeObserver;
+    class ResizeObserverStub implements ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+
+    globalThis.ResizeObserver = ResizeObserverStub;
+    try {
+      // The player shows no timed captions while slides are stepped by hand,
+      // so a Slideshow captions toggle would do nothing visible.
+      renderPreviewToolbar('# Hello');
+      expect(screen.queryByText('Captions:')).toBeNull();
+
+      cleanup();
+      renderPreviewToolbar('---\ndisplay-mode: video\n---\n\n# Hello');
+      expect(screen.getAllByText('Captions:').length).toBeGreaterThan(0);
+    } finally {
+      if (originalResizeObserver) {
+        globalThis.ResizeObserver = originalResizeObserver;
+      } else {
+        Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      }
+    }
+  });
+
   it('presents transforms as summarization without implying the source is changed', () => {
     const originalResizeObserver = globalThis.ResizeObserver;
     class ResizeObserverStub implements ResizeObserver {

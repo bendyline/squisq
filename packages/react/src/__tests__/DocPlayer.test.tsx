@@ -1420,3 +1420,72 @@ describe('DocPlayer caption sizing', () => {
     }
   });
 });
+
+describe('DocPlayer captions follow a running clock', () => {
+  // Phrases as markdownToDoc writes them: a long sentence split at a comma.
+  const captionedSlides = (): Doc => ({
+    ...docWithThreeSlides(),
+    captions: {
+      version: 1,
+      phrases: [
+        { text: 'Opening line.', startTime: 0, endTime: 5, audioSegment: 0 },
+        {
+          text: 'Choose the Web app to start writing in your browser,',
+          startTime: 5,
+          endTime: 7.5,
+          audioSegment: 0,
+        },
+        { text: 'or Desktop for everyday work.', startTime: 7.5, endTime: 10, audioSegment: 0 },
+        { text: 'Closing line.', startTime: 10, endTime: 15, audioSegment: 0 },
+      ],
+    },
+  });
+  const captionText = (container: HTMLElement) =>
+    container.querySelector('.caption-overlay span')?.textContent ?? null;
+
+  it('shows no caption on a slideshow slide stepped to by hand', () => {
+    // The clock sits at the slide's start, so the caption used to freeze on
+    // the first half of the sentence for as long as the slide was up.
+    const { container } = render(
+      <DocPlayer
+        doc={captionedSlides()}
+        displayMode="slideshow"
+        audioController={controller({ currentTime: 5, totalDuration: 15 })}
+      />,
+    );
+    expect(captionText(container)).toBeNull();
+  });
+
+  it('still shows the timed caption on a paused video', () => {
+    const { container } = render(
+      <DocPlayer
+        doc={captionedSlides()}
+        audioController={controller({ currentTime: 8, totalDuration: 15 })}
+      />,
+    );
+    expect(captionText(container)).toBe('or Desktop for everyday work.');
+  });
+
+  it('shows timed captions while a slideshow is playing', () => {
+    const { container } = render(
+      <DocPlayer
+        doc={captionedSlides()}
+        displayMode="slideshow"
+        audioController={controller({ currentTime: 8, totalDuration: 15, isPlaying: true })}
+      />,
+    );
+    expect(captionText(container)).toBe('or Desktop for everyday work.');
+  });
+
+  it('keeps captions in rendered frames, so exported video is unchanged', () => {
+    const { container } = render(
+      <DocPlayer
+        doc={captionedSlides()}
+        displayMode="slideshow"
+        renderMode
+        audioController={controller({ currentTime: 8, totalDuration: 15 })}
+      />,
+    );
+    expect(captionText(container)).toBe('or Desktop for everyday work.');
+  });
+});
