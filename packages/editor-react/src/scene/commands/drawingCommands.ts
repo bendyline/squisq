@@ -24,6 +24,7 @@ import {
   getDiagramSectionEnd,
   renameNode,
 } from '../../diagram/diagramCommands';
+import { nodeAtOrNull } from '../nodeAtOrNull';
 
 /** Renaming a shape = replacing its heading text (same op as a diagram node). */
 export { renameNode as renameShape };
@@ -72,7 +73,7 @@ export function addShape(
   params: Record<string, string>,
   label = '',
 ): boolean {
-  const parent = editor.state.doc.nodeAt(parentPos);
+  const parent = nodeAtOrNull(editor.state.doc, parentPos);
   if (!parent || parent.type.name !== 'heading') return false;
   const childDepth = childDepthFor(editor, parentPos, parent);
   const insertPos = getDiagramSectionEnd(editor, parentPos);
@@ -260,7 +261,7 @@ function updateChildParams(
   return editor
     .chain()
     .command(({ tr }) => {
-      if (!tr.doc.nodeAt(target.pos)) return false;
+      if (!nodeAtOrNull(tr.doc, target.pos)) return false;
       tr.setNodeAttribute(target.pos, 'dataTemplateParams', tParams.length > 0 ? tParams : null);
       return true;
     })
@@ -270,7 +271,7 @@ function updateChildParams(
 /** Heading section range `[start, end)` — the heading plus its body content. */
 function headingRange(editor: Editor, pos: number): [number, number] {
   const { state } = editor;
-  const node = state.doc.nodeAt(pos);
+  const node = nodeAtOrNull(state.doc, pos);
   if (!node) return [pos, pos];
   let cursor = pos + node.nodeSize;
   const docSize = state.doc.content.size;

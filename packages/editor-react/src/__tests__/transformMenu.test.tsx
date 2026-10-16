@@ -124,7 +124,7 @@ describe('TransformMenu', () => {
       screen
         .getByText('Clean up formatting')
         .closest('button')
-        ?.querySelector('.fa-wand-magic-sparkles'),
+        ?.querySelector('svg.squisq-icon.lucide-wand-sparkles'),
     ).toBeTruthy();
     expect(screen.getByText('Wrap at width').closest('button')?.getAttribute('aria-current')).toBe(
       'true',

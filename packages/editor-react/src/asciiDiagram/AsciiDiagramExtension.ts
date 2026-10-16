@@ -30,7 +30,7 @@ import type { Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { Editor } from '@tiptap/react';
-import { createRoot, type Root } from 'react-dom/client';
+import { mountWidgetRoot, type WidgetRoot } from '../widgetRoot';
 import { createElement } from 'react';
 import {
   detectAsciiDiagram,
@@ -138,7 +138,7 @@ export function toggleAsciiSource(editor: Editor, blockId: string): void {
 // ---------------------------------------------------------------------------
 
 interface WidgetRootRef {
-  root: Root;
+  root: WidgetRoot;
 }
 
 function buildDecorations(
@@ -169,8 +169,9 @@ function buildDecorations(
           // input, IME composition, clipboard — from reaching ProseMirror and
           // being replayed at the document selection.
           containFenceWidgetEvents(container);
-          const root = createRoot(container);
-          root.render(
+          const root = mountWidgetRoot(
+            container,
+            'diagram',
             createElement(AsciiDiagramWidget, {
               editor,
               blockId,
@@ -189,7 +190,7 @@ function buildDecorations(
             const ref = (dom as HTMLElement & { __squisqAsciiRoot?: WidgetRootRef })
               .__squisqAsciiRoot;
             // Defer so React isn't unmounted mid-render.
-            if (ref) setTimeout(() => ref.root.unmount(), 0);
+            if (ref) ref.root.unmount();
           },
           side: 1,
           ignoreSelection: true,

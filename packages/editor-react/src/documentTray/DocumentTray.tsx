@@ -1,6 +1,7 @@
 import { useCallback, useId, useState, useSyncExternalStore } from 'react';
 import type { Editor } from '@tiptap/core';
 import { videoEmbedIframeAttributes } from '@bendyline/squisq/markdown';
+import { Icon } from '../Icon';
 import { AudioMedia } from '../tiptap/TiptapAudio';
 import { VideoMedia } from '../tiptap/TiptapVideo';
 import { DOCUMENT_TRAY_KEY, type DocumentTrayItem } from './DocumentTrayExtension';
@@ -54,10 +55,7 @@ function TrayItem({ item, editor }: { item: DocumentTrayItem; editor: Editor }) 
         title={item.src}
         onClick={() => setExpanded((value) => !value)}
       >
-        <i
-          className={`fa-solid ${item.kind === 'audio' ? 'fa-volume-high' : 'fa-film'}`}
-          aria-hidden="true"
-        />
+        <Icon icon={`fa-solid ${item.kind === 'audio' ? 'fa-volume-high' : 'fa-film'}`} />
         <span className="squisq-document-tray-pill-label">{label}</span>
         <span className="squisq-document-tray-chevron" aria-hidden="true">
           {expanded ? '▴' : '▾'}

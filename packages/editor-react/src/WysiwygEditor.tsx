@@ -312,6 +312,8 @@ export function WysiwygEditor({
   // from EMPTY_PROMPTS. Re-renders don't reshuffle.
   const resolvedPlaceholder = useMemo(() => placeholder ?? pickEmptyPrompt(), [placeholder]);
   const isExternalUpdate = useRef(false);
+  /** An external source is queued for Tiptap but not yet applied. */
+  const externalApplyPendingRef = useRef(false);
   const lastSourceRef = useRef(editorSource);
   const sourceLayoutRef = useRef(layoutMode);
   // React may commit several rapid editor updates one at a time. Remember
@@ -465,7 +467,11 @@ export function WysiwygEditor({
     ],
     content: markdownToTiptap(initialDisplayBodyRef.current),
     onUpdate: ({ editor: ed }) => {
-      if (isExternalUpdate.current) return;
+      // While an external source waits to be applied, Tiptap still holds the
+      // previous one, and the source channel already points at the incoming
+      // source's range (the next block, in block layouts). Serializing now
+      // would splice the old content into the wrong range.
+      if (isExternalUpdate.current || externalApplyPendingRef.current) return;
       // Keep the source channel synchronous with Tiptap. Structural actions
       // such as block navigation/addition may run in the very next browser
       // event; deferring this write lets a stale callback serialize the newly
@@ -805,7 +811,8 @@ export function WysiwygEditor({
   // path reloads the card with the newly selected block's slice.
   useEffect(() => {
     if (!editor) return;
-    const layoutChanged = sourceLayoutRef.current !== layoutMode;
+    const previousLayout = sourceLayoutRef.current;
+    const layoutChanged = previousLayout !== layoutMode;
     sourceLayoutRef.current = layoutMode;
     const pendingIndex = pendingLocalSourcesRef.current.lastIndexOf(editorSource);
     if (pendingIndex >= 0) {
@@ -828,50 +835,79 @@ export function WysiwygEditor({
       lastSourceRef.current = editorSource;
       return;
     }
-    isExternalUpdate.current = true;
-    const { body, frontmatter } = stripFrontmatter(editorSource);
-    pendingLocalSourcesRef.current = [];
-    frontmatterRef.current = frontmatter;
-    // Re-detect the wrap convention on every external ingest (echoes of our
-    // own writes were dropped above, so a manual Wrap/Unwrap transform or a
-    // Source-view edit updates the convention we persist with).
-    let displayBody = body;
-    if (wrapPolicyEnabled) {
-      const ingest = ingestForWrite(body);
-      wrapStateRef.current = ingest.state;
-      displayBody = ingest.displayBody;
-    } else {
-      wrapStateRef.current = null;
-    }
-    const content = markdownToTiptap(displayBody);
-    // Frontmatter belongs to the whole document, not the selected slice.
-    // Changing a root-node attribute makes ProseMirror rebuild every node
-    // view, even with a minimal content diff. Keep it stable in scoped
-    // layouts; onUpdate emits only the bound channel's frontmatter there.
-    const storedFrontmatter =
-      layoutMode === 'document'
-        ? frontmatter
-        : String(editor.state.doc.attrs.sourceFrontmatter ?? '');
-    if (layoutMode === 'document' || layoutChanged) {
-      // Replace only what changed: unchanged nodes keep their widgets, the
-      // caret and scroll survive, and the update is one undo step.
-      // Entering a block/timeline layout also keeps the active block's media
-      // mounted instead of restarting it when the surrounding blocks leave.
-      replaceDocumentMinimal(editor, content, storedFrontmatter);
-    } else {
-      // Navigation within block/timeline layouts swaps in another block's
-      // slice; a diff against the previous block gains nothing.
-      editor
-        .chain()
-        .setContent(content)
-        .command(({ tr }) => {
-          tr.setDocAttribute('sourceFrontmatter', storedFrontmatter);
-          return true;
-        })
-        .run();
-    }
-    lastSourceRef.current = editorSource;
-    isExternalUpdate.current = false;
+    // Apply outside React's commit. Content that creates a React node view
+    // (image, audio, video) makes Tiptap's renderer call flushSync, which React
+    // refuses inside an effect ("flushSync was called from inside a lifecycle
+    // method") and so cannot render the view with the document. A microtask
+    // runs before the next browser event and before paint.
+    const applyExternalSource = (target: NonNullable<typeof editor>): void => {
+      isExternalUpdate.current = true;
+      const { body, frontmatter } = stripFrontmatter(editorSource);
+      pendingLocalSourcesRef.current = [];
+      frontmatterRef.current = frontmatter;
+      // Re-detect the wrap convention on every external ingest (echoes of our
+      // own writes were dropped above, so a manual Wrap/Unwrap transform or a
+      // Source-view edit updates the convention we persist with).
+      let displayBody = body;
+      if (wrapPolicyEnabled) {
+        const ingest = ingestForWrite(body);
+        wrapStateRef.current = ingest.state;
+        displayBody = ingest.displayBody;
+      } else {
+        wrapStateRef.current = null;
+      }
+      const content = markdownToTiptap(displayBody);
+      // Frontmatter belongs to the whole document, not the selected slice.
+      // Changing a root-node attribute makes ProseMirror rebuild every node
+      // view, even with a minimal content diff. Keep it stable in scoped
+      // layouts; onUpdate emits only the bound channel's frontmatter there.
+      const storedFrontmatter =
+        layoutMode === 'document'
+          ? frontmatter
+          : String(target.state.doc.attrs.sourceFrontmatter ?? '');
+      if (layoutMode === 'document' || layoutChanged) {
+        // Replace only what changed: unchanged nodes keep their widgets, the
+        // caret and scroll survive, and the update is one undo step.
+        // Entering a block/timeline layout also keeps the active block's media
+        // mounted instead of restarting it when the surrounding blocks leave.
+        replaceDocumentMinimal(target, content, storedFrontmatter);
+      } else {
+        // Navigation within block/timeline layouts swaps in another block's
+        // slice; a diff against the previous block gains nothing.
+        target
+          .chain()
+          .setContent(content)
+          .command(({ tr }) => {
+            tr.setDocAttribute('sourceFrontmatter', storedFrontmatter);
+            return true;
+          })
+          .run();
+      }
+      lastSourceRef.current = editorSource;
+      isExternalUpdate.current = false;
+    };
+
+    // Apply outside React's commit. Content that creates a React node view
+    // (image, audio, video) makes Tiptap's renderer call flushSync, which React
+    // refuses inside an effect ("flushSync was called from inside a lifecycle
+    // method") and so cannot render the view with the document. A microtask
+    // runs before the next browser event and before paint.
+    externalApplyPendingRef.current = true;
+    let settled = false;
+    queueMicrotask(() => {
+      if (settled) return;
+      settled = true;
+      externalApplyPendingRef.current = false;
+      if (!editor.isDestroyed) applyExternalSource(editor);
+    });
+    return () => {
+      if (settled) return;
+      // Superseded before it ran: the next run compares against the state this
+      // one never applied, including the layout it would have changed from.
+      settled = true;
+      externalApplyPendingRef.current = false;
+      sourceLayoutRef.current = previousLayout;
+    };
   }, [editorSource, editor, wrapPolicyEnabled, layoutMode]);
 
   // Match the WYSIWYG editor's appearance to the active Squisq theme when one

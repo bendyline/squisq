@@ -1,0 +1,10 @@
+/* Fallback shown in place of an embedded widget (diagram, drawing, tree,
+ * timeline, …) that failed to render. See widgetRoot.ts. */
+.squisq-widget-error {
+  margin: 0.5em 0;
+  padding: 0.75em 1em;
+  border: 1px dashed var(--squisq-border);
+  border-radius: 6px;
+  color: var(--squisq-text-muted);
+  font-size: 0.875em;
+}

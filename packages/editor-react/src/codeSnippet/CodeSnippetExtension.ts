@@ -13,7 +13,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Editor } from '@tiptap/react';
 import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { createElement } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { mountWidgetRoot, type WidgetRoot } from '../widgetRoot';
 import { CodeSnippetWidget } from './CodeSnippetWidget';
 import { CODE_SNIPPET_FOCUS_INSERTED_META } from './codeSnippetFocus';
 import { codeSnippetFenceLanguageToken, isCodeSnippetFenceLanguage } from './codeSnippetLanguages';
@@ -70,7 +70,7 @@ export function findCodeSnippetBlockPos(editor: Editor, blockId: string): number
 }
 
 interface WidgetRootRef {
-  root: Root;
+  root: WidgetRoot;
 }
 
 function buildDecorations(
@@ -100,8 +100,9 @@ function buildDecorations(
           container.contentEditable = 'false';
           container.addEventListener('mousedown', (event) => event.stopPropagation());
           container.addEventListener('keydown', (event) => event.stopPropagation());
-          const root = createRoot(container);
-          root.render(
+          const root = mountWidgetRoot(
+            container,
+            'code snippet',
             createElement(CodeSnippetWidget, {
               editor,
               blockId,
@@ -119,7 +120,7 @@ function buildDecorations(
           destroy: (dom) => {
             const ref = (dom as HTMLElement & { __squisqCodeSnippetRoot?: WidgetRootRef })
               .__squisqCodeSnippetRoot;
-            if (ref) setTimeout(() => ref.root.unmount(), 0);
+            if (ref) ref.root.unmount();
           },
           ignoreSelection: true,
           key: `squisq-code-snippet-${entry.id}`,

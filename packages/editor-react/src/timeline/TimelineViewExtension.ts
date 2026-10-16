@@ -11,7 +11,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Editor } from '@tiptap/react';
 import { createElement } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { mountWidgetRoot, type WidgetRoot } from '../widgetRoot';
 import {
   detectAsciiTimeline,
   isEligibleAsciiTimelineFenceLang,
@@ -90,7 +90,7 @@ export function findTimelineBlockPos(editor: Editor, blockId: string): number | 
 }
 
 interface TimelineWidgetHost extends HTMLElement {
-  __squisqTimelineRoot?: Root;
+  __squisqTimelineRoot?: WidgetRoot;
 }
 
 function buildDecorations(
@@ -120,15 +120,18 @@ function buildDecorations(
           // the React root so browser/IME `beforeinput` events cannot also be
           // interpreted as text insertion at the document selection.
           containFenceWidgetEvents(container);
-          const root = createRoot(container);
-          root.render(createElement(TimelineEditorWidget, { editor, blockId: entry.id }));
+          const root = mountWidgetRoot(
+            container,
+            'timeline',
+            createElement(TimelineEditorWidget, { editor, blockId: entry.id }),
+          );
           container.__squisqTimelineRoot = root;
           return container;
         },
         {
           destroy: (dom) => {
             const root = (dom as TimelineWidgetHost).__squisqTimelineRoot;
-            if (root) setTimeout(() => root.unmount(), 0);
+            if (root) root.unmount();
           },
           side: 1,
           ignoreSelection: true,

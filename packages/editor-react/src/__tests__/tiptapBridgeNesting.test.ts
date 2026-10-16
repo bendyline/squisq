@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import TaskList from '@tiptap/extension-task-list';
+import TaskItem from '@tiptap/extension-task-item';
 import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 import { LinkWithTitle } from '../WysiwygEditor';
@@ -846,5 +848,74 @@ describe('a document using every repaired construct is editor-stable', () => {
     const editor2 = new Editor({ extensions: [StarterKit], content: markdownToTiptap(once) });
     expect(tiptapToMarkdown(editor2.getHTML())).toBe(once);
     editor2.destroy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Blocks inside a blockquote
+// ---------------------------------------------------------------------------
+
+describe('a blockquote keeps the blocks inside it', () => {
+  // TaskItem's `nested` mirrors WysiwygEditor; without the task extensions
+  // ProseMirror would drop task lists before the bridge ever saw them.
+  const extensions = [StarterKit, TaskList, TaskItem.configure({ nested: true })];
+
+  it('does not fuse a task list and its following paragraph into one line', () => {
+    // The shape Insert → Task List leaves inside a quote. Every block was
+    // read as inline text and joined: `> Task 1Task 2DocBlocks`.
+    const html =
+      '<blockquote><p></p><ul data-type="taskList">' +
+      '<li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p>Task 1</p></div></li>' +
+      '<li data-type="taskItem" data-checked="true"><label><input type="checkbox" checked="checked"><span></span></label><div><p>Task 2</p></div></li>' +
+      '</ul><p>DocBlocks</p></blockquote>';
+
+    expect(tiptapToMarkdown(html)).toBe('>\n> - [ ] Task 1\n> - [x] Task 2\n>\n> DocBlocks\n');
+  });
+
+  it('keeps a bullet list inside a quote', () => {
+    expect(
+      tiptapToMarkdown(
+        '<blockquote><ul><li><p>One</p></li><li><p>Two</p></li></ul><p>After</p></blockquote>',
+      ),
+    ).toBe('> - One\n> - Two\n>\n> After\n');
+  });
+
+  it('does not end the outer quote at a nested quote', () => {
+    expect(
+      tiptapToMarkdown(
+        '<blockquote><p>outer</p><blockquote><p>inner</p></blockquote><p>tail</p></blockquote>',
+      ),
+    ).toBe('> outer\n> > inner\n>\n> tail\n');
+  });
+
+  it.each([
+    ['task list then paragraph', '>\n> - [ ] Task 1\n> - [x] Task 2\n>\n> DocBlocks'],
+    ['bullet list', '> - One\n> - Two'],
+    ['ordered list then paragraph', '> 1. first\n> 2. second\n>\n> after'],
+    ['nested list', '> - parent\n>   - child\n> - second'],
+    ['code block', '> ```js\n> const x = 1;\n> ```'],
+    ['nested quote', '> outer\n> > inner\n>\n> tail'],
+    ['empty paragraph after a list', '> - a\n>\n>\n> b'],
+    ['paragraphs only (unchanged convention)', '> first\n>\n> second'],
+  ])('is byte-identical for: %s', (_name, md) => {
+    expect(roundTrip(md)).toBe(md + '\n');
+  });
+
+  it.each([
+    ['list then paragraph', '> - a\n> - b\n>\n> after'],
+    ['task list', '> - [ ] one\n> - [x] two'],
+    ['code block', '> ```js\n> x\n> ```'],
+    ['nested quote', '> > inner'],
+  ])('agrees with core for: %s', (_name, md) => {
+    expect(structure(roundTrip(md))).toBe(structure(md));
+  });
+
+  it('survives Tiptap normalizing the quote', () => {
+    const md = '>\n> - [ ] Task 1\n> - [x] Task 2\n>\n> DocBlocks';
+    const editor = new Editor({ extensions, content: markdownToTiptap(md) });
+    const html = editor.getHTML();
+    expect(html).toContain('data-type="taskList"');
+    expect(tiptapToMarkdown(html)).toBe(md + '\n');
+    editor.destroy();
   });
 });

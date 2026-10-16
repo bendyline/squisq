@@ -188,7 +188,7 @@ export interface EditorShellProps {
   minHeight?: string;
   /** See `minHeight`. Upper bound of the auto-grow range. */
   maxHeight?: string;
-  /** Optional MediaProvider for the Files panel. When set (even to null), a Files toggle appears in the toolbar. */
+  /** Optional MediaProvider for the Attachments panel. When set (even to null), an Attachments toggle appears in the toolbar. */
   mediaProvider?: MediaProvider | null;
   /**
    * Processed-audio render manager for media-edit recipes (denoise,
@@ -249,7 +249,7 @@ export interface EditorShellProps {
   /** Show the Files toggle in the toolbar. Defaults to true when mediaProvider is passed. */
   showFilesToggle?: boolean;
   /**
-   * Open the Files panel when its accessory bin becomes non-empty. The user
+   * Open the Attachments panel when its accessory bin becomes non-empty. The user
    * can still close it normally; it opens again only when the visible count
    * changes. Defaults to false.
    */
@@ -267,7 +267,7 @@ export interface EditorShellProps {
    */
   showInsertControls?: boolean;
   /**
-   * Whether the Files panel offers browser downloads for its binary entries.
+   * Whether the Attachments panel offers browser downloads for its binary entries.
    * Defaults to true. Pass false to remove the built-in download affordance.
    */
   allowBinaryDownloads?: boolean;
@@ -1204,7 +1204,7 @@ function EditorShellInner({
   const [timelineCompositionVisible, setTimelineCompositionVisible] = useState(false);
   const timelinePreviewCount = Number(timelineVideoVisible) + Number(timelineCompositionVisible);
   const [showFiles, setShowFiles] = useState(false);
-  /** Sidecar path the Files panel should highlight (data card "Show in Files"). */
+  /** Sidecar path the Attachments panel should highlight (data card "Show in Attachments"). */
   const [filesFocusPath, setFilesFocusPath] = useState<string | null>(null);
   const [mediaRefreshKey, setMediaRefreshKey] = useState(0);
   const [mediaCount, setMediaCount] = useState(0);
@@ -1333,7 +1333,7 @@ function EditorShellInner({
 
   const handleMediaUploaded = useCallback(
     (relativePath: string, name: string, mimeType: string) => {
-      // A data file uploaded through the Files panel becomes a reference
+      // A data file uploaded through the Attachments panel becomes a reference
       // block, not a bare attachment link.
       if (classifyFile({ name, type: mimeType }) === 'data') {
         insertDataRef(relativePath, name);

@@ -92,11 +92,11 @@ const BLOCK_META_KEYS = new Set<string>(Object.keys(KNOWN_BLOCK_META_KEYS));
 export interface ToolbarProps {
   /** Additional class name */
   className?: string;
-  /** Whether the Files panel is currently shown */
+  /** Whether the Attachments panel is currently shown */
   showFiles?: boolean;
   /** Number of files currently available through the MediaProvider. */
   fileCount?: number;
-  /** Toggle the Files panel. When provided, a "Files" button appears in the toolbar. */
+  /** Toggle the Attachments panel. When provided, an "Attachments" button appears in the toolbar. */
   onToggleFiles?: () => void;
   /** Content rendered at the left edge of the toolbar, before the view tabs. */
   slotLeft?: ReactNode;
@@ -2404,7 +2404,7 @@ export function Toolbar({
                     }}
                   >
                     <span className="squisq-toolbar-overflow-icon">
-                      <Icon icon="fa-solid fa-shapes" />
+                      <Icon icon="layout-template" />
                     </span>
                     <span>Custom layouts</span>
                   </button>
@@ -2418,7 +2418,7 @@ export function Toolbar({
                     }}
                   >
                     <span className="squisq-toolbar-overflow-icon">
-                      <Icon icon="fa-solid fa-file-lines" />
+                      <Icon icon="file-cog" />
                     </span>
                     <span>Document settings</span>
                   </button>
@@ -2436,7 +2436,7 @@ export function Toolbar({
                       <Icon icon="fa-solid fa-paperclip" />
                     </span>
                     <span>
-                      {showFiles ? 'Hide' : 'Show'} Files panel
+                      {showFiles ? 'Hide' : 'Show'} attachments
                       {resolvedFileCount > 0 ? ` (${fileCountLabel(resolvedFileCount)})` : ''}
                     </span>
                   </button>
@@ -2582,7 +2582,7 @@ export function Toolbar({
           data-tooltip="Custom layouts"
           aria-label="Custom layouts"
         >
-          <Icon icon="fa-solid fa-shapes" />
+          <Icon icon="layout-template" />
         </button>
       )}
       {showDocumentChrome && activeView === 'raw' && <TransformMenu />}
@@ -2596,18 +2596,21 @@ export function Toolbar({
           data-tooltip="Document settings"
           aria-label="Document settings"
         >
-          <Icon icon="fa-solid fa-file-lines" />
+          <Icon icon="file-cog" />
         </button>
       )}
-      {/* Files toggle — visible when callback is provided */}
+      {/* Attachments toggle — visible when callback is provided. Named
+          "Attachments", not "Files", because a host shell usually has a Files
+          pane of its own (the workspace), and these are the files attached to
+          this one document. */}
       {onToggleFiles && (
         <button
           className={`squisq-toolbar-button squisq-toolbar-files-toggle${showFiles ? ' squisq-toolbar-button--active' : ''}${collapsed.has('files') ? ' squisq-toolbar-button--overflowed' : ''}`}
           data-toolbar-item="files"
           onClick={onToggleFiles}
-          data-tooltip={`${showFiles ? 'Hide' : 'Show'} Files panel${resolvedFileCount > 0 ? ` (${fileCountLabel(resolvedFileCount)})` : ''}`}
+          data-tooltip={`${showFiles ? 'Hide' : 'Show'} attachments${resolvedFileCount > 0 ? ` (${fileCountLabel(resolvedFileCount)})` : ''}`}
           aria-pressed={showFiles}
-          aria-label={`Toggle Files panel${resolvedFileCount > 0 ? `, ${fileCountLabel(resolvedFileCount)}` : ''}`}
+          aria-label={`Attachments${resolvedFileCount > 0 ? `, ${fileCountLabel(resolvedFileCount)}` : ''}`}
         >
           <Icon icon="fa-solid fa-paperclip" />
           {resolvedFileCount > 0 && (

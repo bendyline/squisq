@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Icon } from './Icon';
 
 /**
  * One entry in a {@link FolderView} — a file or subfolder. Host-defined
@@ -67,10 +68,7 @@ export function FolderView({
   return (
     <div className="squisq-folder-view" data-theme={theme} style={{ height }}>
       <div className="squisq-folder-view-header">
-        <i
-          className="fa-regular fa-folder-open squisq-folder-view-header-icon"
-          aria-hidden="true"
-        />
+        <Icon icon="fa-regular fa-folder-open" className="squisq-folder-view-header-icon" />
         <span className="squisq-folder-view-title">{name}</span>
         <span className="squisq-folder-view-count">
           {entries.length} {entries.length === 1 ? 'item' : 'items'}
@@ -92,9 +90,9 @@ export function FolderView({
                   <span className="squisq-folder-view-item-icon">{iconFor(entry)}</span>
                   <span className="squisq-folder-view-item-name">{entry.name}</span>
                   {entry.isDirectory && (
-                    <i
-                      className="fa-solid fa-chevron-right squisq-folder-view-item-chevron"
-                      aria-hidden="true"
+                    <Icon
+                      icon="fa-solid fa-chevron-right"
+                      className="squisq-folder-view-item-chevron"
                     />
                   )}
                 </button>
@@ -106,11 +104,11 @@ export function FolderView({
 
       <div className="squisq-folder-view-actions">
         <button type="button" className="squisq-folder-view-new" onClick={onNewDocument}>
-          <i className="fa-solid fa-plus" aria-hidden="true" /> New document
+          <Icon icon="fa-solid fa-plus" /> New document
         </button>
         {onNewFolder && (
           <button type="button" className="squisq-folder-view-new-folder" onClick={onNewFolder}>
-            <i className="fa-regular fa-folder" aria-hidden="true" /> New folder
+            <Icon icon="fa-regular fa-folder" /> New folder
           </button>
         )}
       </div>
@@ -122,10 +120,10 @@ const IMAGE_RE = /\.(png|jpe?g|gif|svg|webp|bmp|avif)$/i;
 
 function defaultIconFor(entry: FolderEntry): ReactNode {
   if (entry.isDirectory) {
-    return <i className="fa-regular fa-folder fa-fw" aria-hidden="true" />;
+    return <Icon icon="fa-regular fa-folder fa-fw" />;
   }
   if (IMAGE_RE.test(entry.name)) {
-    return <i className="fa-regular fa-file-image fa-fw" aria-hidden="true" />;
+    return <Icon icon="fa-regular fa-file-image fa-fw" />;
   }
-  return <i className="fa-regular fa-file-lines fa-fw" aria-hidden="true" />;
+  return <Icon icon="fa-regular fa-file-lines fa-fw" />;
 }

@@ -30,7 +30,7 @@ import type { Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { Editor } from '@tiptap/react';
-import { createRoot, type Root } from 'react-dom/client';
+import { mountWidgetRoot, type WidgetRoot } from '../widgetRoot';
 import { createElement } from 'react';
 import type { Theme } from '@bendyline/squisq/schemas';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
@@ -85,7 +85,7 @@ export function replaceHostFenceText(editor: Editor, blockId: string, next: stri
 }
 
 interface WidgetRootRef {
-  root: Root;
+  root: WidgetRoot;
 }
 
 function buildDecorations(
@@ -115,8 +115,9 @@ function buildDecorations(
           // edit/composition/clipboard stream so ProseMirror can't replay
           // it at the document selection.
           containFenceWidgetEvents(container);
-          const root = createRoot(container);
-          root.render(
+          const root = mountWidgetRoot(
+            container,
+            'embedded block',
             createElement(HostFenceWidget, {
               editor,
               blockId,
@@ -133,7 +134,7 @@ function buildDecorations(
           destroy: (dom) => {
             const ref = (dom as HTMLElement & { __squisqHostFenceRoot?: WidgetRootRef })
               .__squisqHostFenceRoot;
-            if (ref) setTimeout(() => ref.root.unmount(), 0);
+            if (ref) ref.root.unmount();
           },
           side: 1,
           ignoreSelection: true,

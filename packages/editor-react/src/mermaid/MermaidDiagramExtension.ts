@@ -13,7 +13,7 @@ import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Editor } from '@tiptap/react';
 import { createElement } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { mountWidgetRoot, type WidgetRoot } from '../widgetRoot';
 import { MermaidDiagramWidget } from './MermaidDiagramWidget';
 import { containFenceWidgetEvents } from '../fenceWidgets/fenceWidgetHost';
 import { mapFenceEntries, type FenceBlockEntry } from '../fenceWidgets/fenceRegistry';
@@ -64,7 +64,7 @@ export function toggleMermaidSource(editor: Editor, blockId: string): void {
 }
 
 interface WidgetRootRef {
-  root: Root;
+  root: WidgetRoot;
 }
 
 function buildDecorations(
@@ -96,8 +96,9 @@ function buildDecorations(
           // The canvas mounts inline rename fields; contain their whole
           // edit/composition/clipboard stream so it never reaches ProseMirror.
           containFenceWidgetEvents(container);
-          const root = createRoot(container);
-          root.render(
+          const root = mountWidgetRoot(
+            container,
+            'Mermaid diagram',
             createElement(MermaidDiagramWidget, {
               editor,
               blockId,
@@ -113,7 +114,7 @@ function buildDecorations(
           destroy: (dom) => {
             const ref = (dom as HTMLElement & { __squisqMermaidRoot?: WidgetRootRef })
               .__squisqMermaidRoot;
-            if (ref) setTimeout(() => ref.root.unmount(), 0);
+            if (ref) ref.root.unmount();
           },
           ignoreSelection: true,
           key: `squisq-mermaid-${entry.id}`,

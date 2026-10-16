@@ -538,7 +538,7 @@
   box-shadow: 0 0 0 1px var(--squisq-focus-ring);
 }
 
-.squisq-find-field > i {
+.squisq-find-field > :is(i, .squisq-icon) {
   margin-left: 8px;
   color: var(--squisq-text-muted);
   font-size: 11px;
@@ -806,23 +806,24 @@
   z-index: 1;
 }
 
-/* Font Awesome glyphs sit a touch larger than the 13px text labels so
-   icon buttons read at a comfortable weight against H1–H6 etc. Glyphs and
-   the heading buttons' text glyphs share the muted icon color at rest. */
-.squisq-toolbar-button > i {
+/* Glyphs sit a touch larger than the 13px text labels so icon buttons read
+   at a comfortable weight against H1–H6 etc. Glyphs and the heading
+   buttons' text glyphs share the muted icon color at rest. `i` is the Font
+   Awesome fallback; `.squisq-icon` is the Lucide outline (see Icon.tsx). */
+.squisq-toolbar-button > :is(i, .squisq-icon) {
   font-size: 15px;
   line-height: 1;
 }
 
-.squisq-toolbar-button > i,
+.squisq-toolbar-button > :is(i, .squisq-icon),
 .squisq-toolbar-button > .squisq-toolbar-text-glyph {
   color: var(--squisq-toolbar-icon);
 }
 
 /* On hover / active, glyphs follow the button's color so the existing
    hover and toggled-on feedback still applies. */
-.squisq-toolbar-button:hover > i,
-.squisq-toolbar-button--active > i,
+.squisq-toolbar-button:hover > :is(i, .squisq-icon),
+.squisq-toolbar-button--active > :is(i, .squisq-icon),
 .squisq-toolbar-button:hover > .squisq-toolbar-text-glyph,
 .squisq-toolbar-button--active > .squisq-toolbar-text-glyph {
   color: inherit;
@@ -1044,7 +1045,7 @@
   padding: 2px 8px 0;
 }
 
-.squisq-dictation-button[aria-busy='true'] > i {
+.squisq-dictation-button[aria-busy='true'] > :is(i, .squisq-icon) {
   animation: squisq-dictation-pulse 1.2s ease-in-out infinite;
 }
 
@@ -1164,7 +1165,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .squisq-dictation-interim::before,
-  .squisq-dictation-button[aria-busy='true'] > i {
+  .squisq-dictation-button[aria-busy='true'] > :is(i, .squisq-icon) {
     animation: none;
   }
 

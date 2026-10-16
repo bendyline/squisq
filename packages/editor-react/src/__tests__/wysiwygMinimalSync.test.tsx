@@ -10,7 +10,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { Editor } from '@tiptap/react';
 import { TextSelection } from '@tiptap/pm/state';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { EditorProvider, useEditorContext } from '../EditorContext';
 import type { EditorContextValue } from '../EditorContext';
 import { WysiwygEditor } from '../WysiwygEditor';
@@ -261,5 +261,32 @@ describe('Write view source edits', () => {
     await waitFor(() =>
       expect(live.ctx.markdownSource).toMatch(/Second paragraph\.\n\n### Layout/),
     );
+  });
+});
+
+describe('external sources that create React node views', () => {
+  it('apply outside React commit, so no flushSync lands inside an effect', async () => {
+    // An image is a React node view; creating one makes Tiptap's renderer call
+    // flushSync. Applied inside the sync effect, React refused it with
+    // "flushSync was called from inside a lifecycle method".
+    const { ctx, editor } = await mountWrite();
+    const error = vi.spyOn(console, 'error');
+    try {
+      act(() => {
+        ctx.setMarkdownSource(DOC + '\n![Probe](probe.png)\n');
+      });
+      await waitFor(() => {
+        let images = 0;
+        editor.state.doc.descendants((node) => {
+          if (node.type.name === 'image') images++;
+        });
+        expect(images).toBe(1);
+      });
+      expect(
+        error.mock.calls.some((call) => String(call[0]).includes('flushSync was called')),
+      ).toBe(false);
+    } finally {
+      error.mockRestore();
+    }
   });
 });

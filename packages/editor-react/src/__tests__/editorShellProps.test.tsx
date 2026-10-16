@@ -540,18 +540,18 @@ describe('<EditorShell> hostMode', () => {
 });
 
 describe('<EditorShell> Files badge', () => {
-  it('opens the recorder dialog from the Files panel Record button', async () => {
+  it('opens the recorder dialog from the Attachments panel Record button', async () => {
     render(
       <EditorShell initialMarkdown="# hi" initialView="raw" mediaProvider={mediaProviderWith(0)} />,
     );
 
-    fireEvent.click(await screen.findByLabelText('Toggle Files panel'));
+    fireEvent.click(await screen.findByLabelText('Attachments'));
     fireEvent.click(await screen.findByRole('button', { name: 'Record media' }));
 
     expect(screen.getByRole('dialog', { name: 'Record media' })).toBeTruthy();
   });
 
-  it('hides the Files panel Record button when the host disables recording', async () => {
+  it('hides the Attachments panel Record button when the host disables recording', async () => {
     render(
       <EditorShell
         initialMarkdown="# hi"
@@ -561,12 +561,12 @@ describe('<EditorShell> Files badge', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByLabelText('Toggle Files panel'));
+    fireEvent.click(await screen.findByLabelText('Attachments'));
 
     expect(screen.queryByRole('button', { name: 'Record media' })).toBeNull();
   });
 
-  it('hides Files panel download actions when the host disables binary downloads', async () => {
+  it('hides Attachments panel download actions when the host disables binary downloads', async () => {
     render(
       <EditorShell
         initialMarkdown="# hi"
@@ -576,7 +576,7 @@ describe('<EditorShell> Files badge', () => {
       />,
     );
 
-    fireEvent.click(await screen.findByLabelText('Toggle Files panel, 1 file'));
+    fireEvent.click(await screen.findByLabelText('Attachments, 1 file'));
 
     expect(await screen.findByText('file-1.png')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Download file-1.png' })).toBeNull();
@@ -588,7 +588,7 @@ describe('<EditorShell> Files badge', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle Files panel, 3 files')).toBeTruthy();
+      expect(screen.getByLabelText('Attachments, 3 files')).toBeTruthy();
     });
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('3');
   });
@@ -604,9 +604,7 @@ describe('<EditorShell> Files badge', () => {
     );
 
     expect(await screen.findByText('file-1.png')).toBeTruthy();
-    expect(screen.getByLabelText('Toggle Files panel, 1 file').getAttribute('aria-pressed')).toBe(
-      'true',
-    );
+    expect(screen.getByLabelText('Attachments, 1 file').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('compacts large visible counts while keeping the full count in the label', async () => {
@@ -619,7 +617,7 @@ describe('<EditorShell> Files badge', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle Files panel, 120 files')).toBeTruthy();
+      expect(screen.getByLabelText('Attachments, 120 files')).toBeTruthy();
     });
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('99+');
   });
@@ -634,17 +632,17 @@ describe('<EditorShell> Files badge', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle Files panel')).toBeTruthy();
+      expect(screen.getByLabelText('Attachments')).toBeTruthy();
     });
-    fireEvent.click(screen.getByLabelText('Toggle Files panel'));
+    fireEvent.click(screen.getByLabelText('Attachments'));
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle Files panel, 1 file')).toBeTruthy();
+      expect(screen.getByLabelText('Attachments, 1 file')).toBeTruthy();
     });
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('1');
   });
 
-  it('hides internal metadata and version entries from the Files panel and its count', async () => {
+  it('hides internal metadata and version entries from the Attachments panel and its count', async () => {
     const { provider } = mutableMediaProviderWith([
       { name: '.gitignore', mimeType: 'text/plain', size: 11 },
       { name: 'notes_files/.gitignore', mimeType: 'text/plain', size: 11 },
@@ -666,14 +664,14 @@ describe('<EditorShell> Files badge', () => {
     render(<EditorShell initialMarkdown="# hi" initialView="raw" mediaProvider={provider} />);
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle Files panel, 1 file')).toBeTruthy();
+      expect(screen.getByLabelText('Attachments, 1 file')).toBeTruthy();
     });
-    fireEvent.click(screen.getByLabelText('Toggle Files panel, 1 file'));
+    fireEvent.click(screen.getByLabelText('Attachments, 1 file'));
 
     expect(await screen.findByText('hero.png')).toBeTruthy();
     expect(screen.queryByText('.gitignore')).toBeNull();
     expect(screen.queryByText('state.json')).toBeNull();
-    expect(screen.getByText('Files (1)')).toBeTruthy();
+    expect(screen.getByText('Attachments (1)')).toBeTruthy();
   });
 
   it('removes a media file and matching markdown refs from the files context menu', async () => {
@@ -703,10 +701,10 @@ describe('<EditorShell> Files badge', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle Files panel, 1 file')).toBeTruthy();
+      expect(screen.getByLabelText('Attachments, 1 file')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByLabelText('Toggle Files panel, 1 file'));
+    fireEvent.click(screen.getByLabelText('Attachments, 1 file'));
     const item = (await screen.findByText('pasted.png')).closest('.squisq-media-bin-item');
     expect(item).toBeTruthy();
 
@@ -747,9 +745,9 @@ describe('<EditorShell> Files badge', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle Files panel, 2 files')).toBeTruthy();
+      expect(screen.getByLabelText('Attachments, 2 files')).toBeTruthy();
     });
-    fireEvent.click(screen.getByLabelText('Toggle Files panel, 2 files'));
+    fireEvent.click(screen.getByLabelText('Attachments, 2 files'));
 
     await screen.findByText('used.png');
     await screen.findByText('unused.png');
@@ -774,7 +772,7 @@ describe('<Toolbar> Files badge', () => {
     );
 
     const documentSettings = screen.getByRole('button', { name: 'Document settings' });
-    const files = screen.getByRole('button', { name: 'Toggle Files panel' });
+    const files = screen.getByRole('button', { name: 'Attachments' });
     expect(documentSettings.nextElementSibling).toBe(files);
   });
 
@@ -791,7 +789,7 @@ describe('<Toolbar> Files badge', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle Files panel, 2 files')).toBeTruthy();
+      expect(screen.getByLabelText('Attachments, 2 files')).toBeTruthy();
     });
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('2');
   });
@@ -813,7 +811,7 @@ describe('<Toolbar> Files badge', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Toggle Files panel, 1 file')).toBeTruthy();
+      expect(screen.getByLabelText('Attachments, 1 file')).toBeTruthy();
     });
     expect(container.querySelector('.squisq-toolbar-files-badge')?.textContent).toBe('1');
   });

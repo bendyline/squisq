@@ -32,5 +32,6 @@
 @import './ascii-timeline.css';
 @import './context-menu.css';
 @import './proofing.css';
+@import './widget-error.css';
 @import '../scene/scene.css';
 @import '../customTemplates/designer.css';

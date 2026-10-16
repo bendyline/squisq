@@ -46,6 +46,34 @@ function contentsToPlainText(contents: MarkdownBlockNode[]): string {
   return contents.map((node) => extractPlainText(node)).join('\n');
 }
 
+/** Content nodes the extractors read. Everything else is not a sentence. */
+const PROSE_NODE_TYPES = new Set(['paragraph', 'blockquote', 'heading']);
+
+/**
+ * `stripped` with every non-prose node -- a list, table, code block -- blanked
+ * to spaces: same length and offsets, so positions still index `stripped`,
+ * but nothing there can be read as a sentence. Extraction used to stitch a
+ * list's items and a table's cells into one "fact" ("First item Second item
+ * A B 1 2") and turn the whole section into a fact card without its heading.
+ *
+ * Each node's text is located in document order; one that cannot be found
+ * (stripMarkdown can rewrite text across node boundaries) is left as is.
+ */
+function maskNonProse(stripped: string, contents: MarkdownBlockNode[]): string {
+  let masked = stripped;
+  let cursor = 0;
+  for (const node of contents) {
+    const text = stripMarkdown(extractPlainText(node));
+    if (!text) continue;
+    const at = stripped.indexOf(text, cursor);
+    if (at < 0) continue;
+    cursor = at + text.length;
+    if (PROSE_NODE_TYPES.has(node.type)) continue;
+    masked = masked.slice(0, at) + text.replace(/\S/g, ' ') + masked.slice(cursor);
+  }
+  return masked;
+}
+
 /**
  * Recursively walk a markdown node tree and collect all images.
  */
@@ -165,8 +193,13 @@ export function analyzeFlatBlocks(flat: Block[], options?: ExtractionOptions): A
     const stripped = stripMarkdown(plainText);
     const bodyWordCount = stripped.split(/\s+/).filter((w) => w.length > 0).length;
 
-    // Run content extraction
-    const extraction = extractContent(stripped, options);
+    // Run content extraction over the prose only.
+    const extraction = extractContent(
+      block.contents && block.contents.length > 0
+        ? maskNonProse(stripped, block.contents)
+        : stripped,
+      options,
+    );
 
     // Extract images from markdown contents
     const images = extractBlockImages(block, results.length);

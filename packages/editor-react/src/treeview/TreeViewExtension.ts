@@ -18,7 +18,7 @@ import type { Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { Editor } from '@tiptap/react';
-import { createRoot, type Root } from 'react-dom/client';
+import { mountWidgetRoot, type WidgetRoot } from '../widgetRoot';
 import { createElement } from 'react';
 import {
   detectTree,
@@ -97,7 +97,7 @@ export function findTreeBlockPos(editor: Editor, blockId: string): number | null
 }
 
 interface WidgetRootRef {
-  root: Root;
+  root: WidgetRoot;
 }
 
 function buildDecorations(doc: PMNode, entries: TreeBlockEntry[], editor: Editor): DecorationSet {
@@ -121,8 +121,9 @@ function buildDecorations(doc: PMNode, entries: TreeBlockEntry[], editor: Editor
           // decoration; contain their whole edit/composition/clipboard stream
           // so ProseMirror cannot replay it at the document selection.
           containFenceWidgetEvents(container);
-          const root = createRoot(container);
-          root.render(
+          const root = mountWidgetRoot(
+            container,
+            'tree',
             createElement(TreeOutlineWidget, {
               editor,
               blockId,
@@ -139,7 +140,7 @@ function buildDecorations(doc: PMNode, entries: TreeBlockEntry[], editor: Editor
           destroy: (dom) => {
             const ref = (dom as HTMLElement & { __squisqTreeRoot?: WidgetRootRef })
               .__squisqTreeRoot;
-            if (ref) setTimeout(() => ref.root.unmount(), 0);
+            if (ref) ref.root.unmount();
           },
           side: 1,
           ignoreSelection: true,

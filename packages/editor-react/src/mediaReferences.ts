@@ -27,7 +27,7 @@ const MEDIA_REFERENCE_PARAM_KEYS = new Set([
 const HTML_MEDIA_ATTRS = ['src', 'href', 'poster'] as const;
 
 /**
- * Collect media references from the document source. Used by the Files panel
+ * Collect media references from the document source. Used by the Attachments panel
  * to distinguish stored files that are actually referenced by the document
  * from files that only exist in the bin.
  */

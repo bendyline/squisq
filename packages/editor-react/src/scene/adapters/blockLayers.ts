@@ -30,6 +30,7 @@ import {
   serializePandocAttributes,
   type HeadingAttributes,
 } from '@bendyline/squisq/markdown';
+import { nodeAtOrNull } from '../nodeAtOrNull';
 
 const LAYERS_PARAM = 'layers';
 
@@ -50,7 +51,7 @@ export function writeLayersToHeading(
   return editor
     .chain()
     .command(({ tr }) => {
-      const node = tr.doc.nodeAt(headingPos);
+      const node = nodeAtOrNull(tr.doc, headingPos);
       if (!node || node.type.name !== 'heading') return false;
       const attrs = getHeadingAttrs(node);
       const params = { ...(attrs.params ?? {}) };
@@ -140,7 +141,7 @@ export function updateLayer(
   layerId: string,
   transform: (current: Layer | undefined) => Layer | null,
 ): boolean {
-  const node = editor.state.doc.nodeAt(headingPos);
+  const node = nodeAtOrNull(editor.state.doc, headingPos);
   if (!node) return false;
   const layers = readLayersFromHeading(node);
   const idx = layers.findIndex((l) => l.id === layerId);

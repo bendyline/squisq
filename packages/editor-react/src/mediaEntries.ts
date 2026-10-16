@@ -6,7 +6,7 @@ function pathSegments(path: string): string[] {
   return path.split(/[\\/]+/).filter(Boolean);
 }
 
-/** Files managed by the container but intentionally omitted from the Files panel. */
+/** Files managed by the container but intentionally omitted from the Attachments panel. */
 export function isVisibleMediaEntry(entry: MediaEntry): boolean {
   const segments = pathSegments(entry.name);
   const lowerSegments = segments.map((segment) => segment.toLowerCase());
@@ -25,7 +25,7 @@ export function isVisibleMediaEntry(entry: MediaEntry): boolean {
   return !isImageEditState;
 }
 
-/** Return the entries that should participate in the Files panel and its count. */
+/** Return the entries that should participate in the Attachments panel and its count. */
 export function filterVisibleMediaEntries(entries: readonly MediaEntry[]): MediaEntry[] {
   return entries.filter(isVisibleMediaEntry);
 }
