@@ -149,3 +149,45 @@ describe('bigText cover appearances', () => {
     );
   });
 });
+
+// A vertical video burns captions into its lower band; a centred two-line
+// title ran into a three-row caption.
+describe('bigText placement', () => {
+  const portrait = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.portrait);
+
+  it('fits the title into the upper half, with the bloom behind it', () => {
+    const layers = bigText(
+      {
+        ...base,
+        template: 'bigText',
+        title: 'Falkland Islands',
+        imageSrc: 'p.jpg',
+        placement: 'upper',
+      },
+      portrait,
+    );
+    const title = layers.find((l) => l.id === 'bigtext-title') as TextLayer;
+    expect(title.position.y).toBe('30%');
+    expect(title.position.height).toBe('44%');
+    const bottom = 30 + 44 / 2;
+    expect(bottom).toBeLessThanOrEqual(52);
+    const bloom = layers.find((l) => l.id === 'bigtext-bloom') as ShapeLayer;
+    expect(String(bloom.content.fill)).toContain('ellipse at 50% 30%');
+  });
+
+  it('keeps the default centred, and sizes the title to its band', () => {
+    const centred = bigText(
+      { ...base, template: 'bigText', title: 'Falkland Islands' },
+      portrait,
+    ).find((l) => l.id === 'bigtext-title') as TextLayer;
+    expect(centred.position.y).toBe('50%');
+    const upper = bigText(
+      { ...base, template: 'bigText', title: 'Falkland Islands', placement: 'upper' },
+      portrait,
+    ).find((l) => l.id === 'bigtext-title') as TextLayer;
+    expect(upper.content.style.fontSize).toBeLessThanOrEqual(centred.content.style.fontSize);
+    expect(fitBigTextSize('FALKLAND ISLANDS', VIEWPORT_PRESETS.portrait, 0.44)).toBeLessThanOrEqual(
+      fitBigTextSize('FALKLAND ISLANDS', VIEWPORT_PRESETS.portrait),
+    );
+  });
+});

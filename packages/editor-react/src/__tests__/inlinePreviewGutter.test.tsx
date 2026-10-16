@@ -90,4 +90,19 @@ describe('InlinePreviewGutter', () => {
       expect(rendered.querySelector('td')?.textContent).toBe('Alpha');
     });
   });
+
+  it('coerces authored params into the structured inputs a template takes', async () => {
+    // twoColumn renders nothing unless `left`/`right` are `{ label, sublabel }`
+    // objects; authors write them as "label|sublabel" strings.
+    const md =
+      '## Choose an app {[twoColumn header="Same Markdown" left="Web|In a browser." right="Desktop|In your folders."]}';
+
+    const { container } = renderGutter(md);
+
+    await screen.findByTestId('inline-preview-gutter');
+    const card = container.querySelector('.squisq-inline-preview-card-svg');
+    expect(card?.textContent).toContain('Same Markdown');
+    expect(card?.textContent).toContain('Web');
+    expect(card?.textContent).toContain('In your folders.');
+  });
 });
