@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.12.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.20...@bendyline/squisq@2.12.0) (2026-10-16)
+
+### Features
+
+* Add progressive builds and document tray UX ([#86](https://github.com/bendyline/squisq/issues/86)) ([d5abc62](https://github.com/bendyline/squisq/commit/d5abc62218ad1b995d5dc7974a473825c986de85))
+
 ## @bendyline/squisq [2.11.20](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.19...@bendyline/squisq@2.11.20) (2026-10-14)
 
 ### Bug Fixes

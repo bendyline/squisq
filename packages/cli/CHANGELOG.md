@@ -1,3 +1,16 @@
+## @bendyline/squisq-cli [2.9.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.8.22...@bendyline/squisq-cli@2.9.0) (2026-10-16)
+
+### Features
+
+* Add progressive builds and document tray UX ([#86](https://github.com/bendyline/squisq/issues/86)) ([d5abc62](https://github.com/bendyline/squisq/commit/d5abc62218ad1b995d5dc7974a473825c986de85))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.12.0
+* **@bendyline/squisq-formats:** upgraded to 2.7.0
+* **@bendyline/squisq-video:** upgraded to 2.4.0
+
 ## @bendyline/squisq-cli [2.8.22](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.8.21...@bendyline/squisq-cli@2.8.22) (2026-10-14)
 
 

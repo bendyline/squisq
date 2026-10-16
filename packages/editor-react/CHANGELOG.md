@@ -1,3 +1,18 @@
+## @bendyline/squisq-editor-react [2.12.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.11.27...@bendyline/squisq-editor-react@2.12.0) (2026-10-16)
+
+### Features
+
+* Add progressive builds and document tray UX ([#86](https://github.com/bendyline/squisq/issues/86)) ([d5abc62](https://github.com/bendyline/squisq/commit/d5abc62218ad1b995d5dc7974a473825c986de85))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.12.0
+* **@bendyline/squisq-formats:** upgraded to 2.7.0
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.23
+* **@bendyline/squisq-react:** upgraded to 2.12.0
+* **@bendyline/squisq-video-react:** upgraded to 2.5.0
+
 ## @bendyline/squisq-editor-react [2.11.27](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.11.26...@bendyline/squisq-editor-react@2.11.27) (2026-10-14)
 
 
