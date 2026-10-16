@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.12.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.0...@bendyline/squisq@2.12.1) (2026-10-16)
+
+### Bug Fixes
+
+* Perf fixes for long docs ([#88](https://github.com/bendyline/squisq/issues/88)) ([1e0c10a](https://github.com/bendyline/squisq/commit/1e0c10a691b9c393a77ad51b2f7e358d6defb6c0))
+
 ## @bendyline/squisq [2.12.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.11.20...@bendyline/squisq@2.12.0) (2026-10-16)
 
 ### Features
