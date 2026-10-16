@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.12.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.0...@bendyline/squisq-react@2.12.1) (2026-10-16)
+
+### Bug Fixes
+
+* Styling updates ([#87](https://github.com/bendyline/squisq/issues/87)) ([bee33e0](https://github.com/bendyline/squisq/commit/bee33e0f52b86069bde32734942af1210a998cab))
+
 ## @bendyline/squisq-react [2.12.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.11.25...@bendyline/squisq-react@2.12.0) (2026-10-16)
 
 ### Features
