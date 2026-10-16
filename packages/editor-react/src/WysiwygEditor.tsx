@@ -389,6 +389,14 @@ export function WysiwygEditor({
       initialDisplayBodyRef.current = body;
     }
   }
+  // Tiptap reads `content` only when it creates the editor, but the options
+  // object passed to useEditor is rebuilt on every render. Converting the body
+  // inline re-ran markdownToTiptap over the whole mount-time document on every
+  // keystroke (~17 ms per key on a 12,000-word document), so convert it once.
+  const initialContentRef = useRef<string | undefined>(undefined);
+  if (initialContentRef.current === undefined) {
+    initialContentRef.current = markdownToTiptap(initialDisplayBodyRef.current);
+  }
   // Stash the latest submit callback so the editor's handleKeyDown (bound
   // once at creation) always sees the current value.
   const submitOnEnterRef = useRef(submitOnEnter);
@@ -465,7 +473,7 @@ export function WysiwygEditor({
       ReviewExtension,
       DictationExtension,
     ],
-    content: markdownToTiptap(initialDisplayBodyRef.current),
+    content: initialContentRef.current,
     onUpdate: ({ editor: ed }) => {
       // While an external source waits to be applied, Tiptap still holds the
       // previous one, and the source channel already points at the incoming

@@ -41,7 +41,18 @@ export function findBlockSliceAtLine(
   source: string,
   lineNumber: number,
 ): MarkdownBlockNode[] | null {
-  const doc = parseMarkdown(source);
+  return findBlockSliceAtLineInDoc(parseMarkdown(source), lineNumber);
+}
+
+/**
+ * {@link findBlockSliceAtLine} over an already-parsed document. Callers that
+ * re-run on every keystroke should pass the context's debounced `markdownDoc`
+ * rather than re-parse the whole source each time.
+ */
+export function findBlockSliceAtLineInDoc(
+  doc: MarkdownDocument,
+  lineNumber: number,
+): MarkdownBlockNode[] | null {
   for (const node of doc.children) {
     if (node.type !== 'heading') continue;
     const pos = node.position;
@@ -62,7 +73,14 @@ export function findBlockSliceByHeadingIndex(
   source: string,
   headingIndex: number,
 ): MarkdownBlockNode[] | null {
-  const doc = parseMarkdown(source);
+  return findBlockSliceByHeadingIndexInDoc(parseMarkdown(source), headingIndex);
+}
+
+/** {@link findBlockSliceByHeadingIndex} over an already-parsed document. */
+export function findBlockSliceByHeadingIndexInDoc(
+  doc: MarkdownDocument,
+  headingIndex: number,
+): MarkdownBlockNode[] | null {
   let seen = 0;
   for (const node of doc.children) {
     if (node.type !== 'heading') continue;

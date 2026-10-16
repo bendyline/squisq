@@ -29,7 +29,7 @@ export interface BlockNavigator {
   editorSource: string;
   /** What the bound editor writes through: splices back into the full source (block mode). */
   setEditorSource: (s: string) => void;
-  /** Number of navigable blocks in the current source. */
+  /** Number of navigable blocks in the current source; 0 while disabled. */
   blockCount: number;
   /** Index of the active block (clamped into range). */
   activeBlockKey: number;
@@ -55,13 +55,18 @@ export interface BlockNavigator {
 export interface UseBlockNavigatorOptions {
   /**
    * When false (the default), the channel passes through to the full source
-   * and navigation is inert. Hosts flip this on to enter block-at-a-time mode.
+   * and navigation is inert: the source is not sliced, so `blockCount` is 0
+   * and `activeBlockStartLine` is null. Hosts flip this on to enter
+   * block-at-a-time mode.
    */
   enabled?: boolean;
 }
 
 /** Heading inserted by {@link BlockNavigator.addBlock}. */
 const NEW_BLOCK_MARKDOWN = '## New section\n\n';
+
+/** Stable "no blocks" result while the navigator is disabled. */
+const NO_SLICES: BlockSlice[] = [];
 
 export function useBlockNavigator(
   source: string,
@@ -72,7 +77,13 @@ export function useBlockNavigator(
 
   // Slices are derived straight from the live `source`, not from any
   // debounced parse, so they're always consistent with what we splice into.
-  const slices = useMemo<BlockSlice[]>(() => getBlockSlices(source), [source]);
+  // That makes them a full parse per keystroke, so they're only computed when
+  // the navigator is on: in document mode nothing reads them, and the parse
+  // alone cost ~110 ms per key on a 12,000-word document.
+  const slices = useMemo<BlockSlice[]>(
+    () => (enabled ? getBlockSlices(source) : NO_SLICES),
+    [enabled, source],
+  );
   const blockCount = slices.length;
 
   const [rawKey, setRawKey] = useState(0);

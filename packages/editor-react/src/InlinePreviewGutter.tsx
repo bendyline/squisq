@@ -32,6 +32,7 @@ import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import {
   flattenBlocks,
   materializeBlockLayers,
+  coerceTemplateParams,
   DEFAULT_THEME,
   deriveTemplateInputs,
   type MaterializeBlockLayersOptions,
@@ -355,8 +356,12 @@ export function InlinePreviewGutter({
         // Forward it before authored params/overrides so document-mode cards
         // render the same CSV/XLSX data as block and full-preview modes.
         ...block.templateData,
-        ...annotation.params,
-        ...block.templateOverrides,
+        // Authored `{[…]}` params are raw strings. Coerce them per the
+        // template's input descriptors, as the full preview does, or a
+        // template with structured inputs renders nothing — twoColumn needs
+        // `left="Web|Start in a browser"` as `{ label, sublabel }`.
+        ...coerceTemplateParams(template, { ...annotation.params, ...block.templateOverrides })
+          .input,
       };
 
       const ctx: MaterializeBlockLayersOptions = {

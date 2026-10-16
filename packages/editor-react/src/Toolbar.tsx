@@ -51,7 +51,7 @@ import {
   type TransitionFields,
 } from './headingTransition';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
-import { findBlockSliceAtLine, findBlockSliceByHeadingIndex } from './blockSlice';
+import { findBlockSliceAtLineInDoc, findBlockSliceByHeadingIndexInDoc } from './blockSlice';
 import { LinkDialog } from './LinkDialog';
 import { DocumentSettingsDialog } from './DocumentSettingsDialog';
 import { EmojiPicker, EMOJI_PICKER_WIDTH, EMOJI_PICKER_MAX_HEIGHT } from './EmojiPicker';
@@ -251,6 +251,7 @@ export function Toolbar({
   const {
     activeView,
     markdownSource,
+    markdownDoc,
     doc,
     setMarkdownSource,
     tiptapEditor,
@@ -1792,21 +1793,24 @@ export function Toolbar({
 
   const currentTemplate = isWysiwyg ? wysiwygTemplate : isRawView ? rawTemplate : null;
 
-  // Compute recommended templates for the active block. Heading slice
-  // comes from markdownSource — raw view supplies the cursor line,
-  // WYSIWYG supplies the heading index.
+  // Compute recommended templates for the active block. The heading slice
+  // comes from the context's debounced `markdownDoc`, never a fresh parse of
+  // `markdownSource`: this memo re-runs on every keystroke while the caret is
+  // in a heading, and a full parse there cost ~110 ms per key on a
+  // 12,000-word document. Raw view supplies the cursor line, WYSIWYG the
+  // heading index.
   const recommendedTemplates = useMemo(() => {
-    if (currentTemplate === null) return undefined;
+    if (currentTemplate === null || !markdownDoc) return undefined;
     let slice = null;
     if (isRawView && rawHeadingLine !== null) {
-      slice = findBlockSliceAtLine(markdownSource, rawHeadingLine);
+      slice = findBlockSliceAtLineInDoc(markdownDoc, rawHeadingLine);
     } else if (isWysiwyg && wysiwygHeadingIndex !== null) {
-      slice = findBlockSliceByHeadingIndex(markdownSource, wysiwygHeadingIndex);
+      slice = findBlockSliceByHeadingIndexInDoc(markdownDoc, wysiwygHeadingIndex);
     }
     if (slice === null) return undefined;
     const profile = profileBlockContents(slice);
     return recommendTemplatesForBlock(profile, TEMPLATE_NAMES).recommended;
-  }, [currentTemplate, isRawView, isWysiwyg, rawHeadingLine, wysiwygHeadingIndex, markdownSource]);
+  }, [currentTemplate, isRawView, isWysiwyg, rawHeadingLine, wysiwygHeadingIndex, markdownDoc]);
 
   const templatePreviewBlock = useMemo(() => {
     if (!doc || currentTemplate === null) return null;
