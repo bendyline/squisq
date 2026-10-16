@@ -3016,7 +3016,7 @@ interface EditorShellProps {
   minHeight?: string; // set min+max → auto-grow mode
   maxHeight?: string;
   // Content container & media
-  mediaProvider?: MediaProvider | null; // enables the Files panel
+  mediaProvider?: MediaProvider | null; // enables the Attachments panel
   workspaceContainer?: ContentContainer | null; // doc folder: audio map, versions, siblings, sidecars
   showFilesToggle?: boolean; // default: true when mediaProvider was passed
   allowBinaryDownloads?: boolean; // default true; hides Files-panel download actions when false

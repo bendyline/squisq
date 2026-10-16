@@ -204,6 +204,10 @@ describe('coerceAnnotationValues', () => {
 describe('KNOWN_BLOCK_META_KEYS', () => {
   it('lists the expected typed keys', () => {
     expect(Object.keys(KNOWN_BLOCK_META_KEYS).sort()).toEqual([
+      'build',
+      'buildDuration',
+      'buildEffect',
+      'buildPrevious',
       'connectsTo',
       'duration',
       'startTime',

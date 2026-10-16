@@ -71,6 +71,8 @@ export interface RenderHtmlOptions {
    * Defaults to true. Embedded/timed media and document timing are unaffected.
    */
   animationsEnabled?: boolean;
+  /** False captures the completed build state. */
+  buildsEnabled?: boolean;
 
   /**
    * Player rendition mounted in the capture page (default 'slideshow').
@@ -189,6 +191,7 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
     pipShape,
     pipPosition,
     animationsEnabled = true,
+    buildsEnabled = true,
     displayMode = 'slideshow',
     dashboard,
   } = options;
@@ -220,6 +223,7 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
     // portrait/custom renders from falling back to the landscape preset.
     `    viewport: ${JSON.stringify({ width, height })}`,
     `    animationsEnabled: ${JSON.stringify(animationsEnabled)}`,
+    `    buildsEnabled: ${JSON.stringify(buildsEnabled)}`,
     captionStyle ? `    captionStyle: ${JSON.stringify(captionStyle)}` : null,
     theme ? `    theme: ${escapeForScript(JSON.stringify(theme))}` : null,
     motion != null ? `    motion: ${escapeForScript(JSON.stringify(motion))}` : null,

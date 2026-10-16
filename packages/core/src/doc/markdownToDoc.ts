@@ -210,6 +210,7 @@ function createIdGenerator() {
  * block) can override values supplied by the squiggly `{[…]}` annotation.
  */
 function applyBlockMeta(block: Block, m: CoercedBlockMeta): void {
+  if (m.build) block.build = m.build;
   if (m.x != null) block.x = m.x;
   if (m.y != null) block.y = m.y;
   if (m.startTime != null) block.startTime = m.startTime;

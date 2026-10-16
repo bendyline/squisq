@@ -357,6 +357,12 @@ export async function applyNarrationTiming(
         src: clip.src,
         startTime: clip.startAt,
         duration: playedDuration,
+        builds: timing.builds?.flatMap((event) => {
+          const time = timeMap ? timeMap.snapSourceToPlayed(event.time) : event.time;
+          return time >= 0 && time <= playedDuration
+            ? [{ ...event, time: clip.startAt + time }]
+            : [];
+        }),
         bookmarks: timing.bookmarks.flatMap((bookmark) => {
           const time = timeMap ? timeMap.sourceToPlayed(bookmark.time) : bookmark.time;
           return time !== null && time >= 0 && time <= playedDuration

@@ -11,6 +11,7 @@
 @import './template-picker.css';
 @import './template-gallery.css';
 @import './editor.css';
+@import './document-tray.css';
 @import './code-context.css';
 @import './folder-view.css';
 @import '../jsonEditor/json-editor.css';
@@ -31,5 +32,6 @@
 @import './ascii-timeline.css';
 @import './context-menu.css';
 @import './proofing.css';
+@import './widget-error.css';
 @import '../scene/scene.css';
 @import '../customTemplates/designer.css';

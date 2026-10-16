@@ -44,7 +44,7 @@ export interface MediaBinProps {
   /** Fired whenever the panel scans media and knows the current entry count. */
   onCountChange?: (count: number) => void;
   /**
-   * Opens the host's media recorder. When provided, the Files header shows a
+   * Opens the host's media recorder. When provided, the Attachments header shows a
    * compact Record button beside Upload.
    */
   onRecord?: () => void;
@@ -58,7 +58,7 @@ export interface MediaBinProps {
   allowBinaryDownloads?: boolean;
   /**
    * Relative path of an entry to highlight and scroll into view — how the
-   * data card's "Show in Files" lands on the file it names.
+   * data card's "Show in Attachments" lands on the file it names.
    */
   highlightPath?: string | null;
 }
@@ -446,7 +446,7 @@ export function MediaBin({
       {/* Header */}
       <div className="squisq-media-bin-header">
         <span className="squisq-media-bin-title">
-          Files {entries.length > 0 && `(${entries.length})`}
+          Attachments {entries.length > 0 && `(${entries.length})`}
         </span>
 
         <div className="squisq-media-bin-actions">
@@ -583,7 +583,7 @@ export function MediaBin({
         <div className="squisq-media-bin-drop-target" aria-hidden="true">
           <span className="squisq-media-bin-drop-target-icon">+</span>
           <strong>Drop images here</strong>
-          <span>Add to Files</span>
+          <span>Attach to this document</span>
         </div>
       )}
 

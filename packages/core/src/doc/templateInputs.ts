@@ -1,3 +1,4 @@
+import type { ContentBuildPlan } from './builds.js';
 /**
  * Template input derivation — build a template's required inputs from a
  * block's heading + markdown body.
@@ -201,7 +202,10 @@ function renderInlineHtml(nodes: MarkdownInlineNode[]): string {
  * layer renderer sanitizes this projection again, but generated HTML should
  * still be safe before it reaches that boundary.
  */
-export function renderMarkdownBlocksHtml(nodes: readonly MarkdownBlockNode[]): string {
+export function renderMarkdownBlocksHtml(
+  nodes: readonly MarkdownBlockNode[],
+  builds?: ContentBuildPlan,
+): string {
   const renderBlocks = (blocks: readonly MarkdownBlockNode[]): string =>
     blocks
       .map((node, index) => {
@@ -212,7 +216,9 @@ export function renderMarkdownBlocksHtml(nodes: readonly MarkdownBlockNode[]): s
         const sourceGap = '<div data-squisq-source-gap aria-hidden="true"><br></div>'.repeat(
           extraBlankLines,
         );
-        return `${sourceGap}${renderBlock(node)}`;
+        const html = renderBlock(node);
+        const step = builds?.targets.get(node);
+        return `${sourceGap}${step === undefined ? html : `<div data-squisq-build-step="${step}">${html}</div>`}`;
       })
       .join('');
 
@@ -220,10 +226,40 @@ export function renderMarkdownBlocksHtml(nodes: readonly MarkdownBlockNode[]): s
     const tag = node.ordered ? 'ol' : 'ul';
     const start = node.ordered && node.start != null ? ` start="${node.start}"` : '';
     const items = node.children
-      .map((item) => {
+      .map((item, index) => {
         const taskMarker =
           item.checked == null ? '' : `<span>${item.checked ? '[x]' : '[ ]'} </span>`;
-        return `<li>${taskMarker}${renderBlocks(item.children)}</li>`;
+        const step = builds?.targets.get(item);
+        if (step === undefined) return `<li>${taskMarker}${renderBlocks(item.children)}</li>`;
+        const marker =
+          item.checked == null
+            ? node.ordered
+              ? `${(node.start ?? 1) + index}.`
+              : '•'
+            : item.checked
+              ? '[x]'
+              : '[ ]';
+        // A list item can resume its prose after a nested list. Keep those runs
+        // in source order, but give every run the same reveal step.
+        let first = true;
+        let own: MarkdownBlockNode[] = [];
+        const fragments: string[] = [];
+        const flush = () => {
+          if (!first && !own.length) return;
+          fragments.push(
+            `<div data-squisq-build-step="${step}" data-squisq-build-row><span aria-hidden="true">${first ? marker : ''}</span><div>${renderBlocks(own)}</div></div>`,
+          );
+          first = false;
+          own = [];
+        };
+        for (const child of item.children) {
+          if (child.type === 'list') {
+            flush();
+            fragments.push(renderList(child));
+          } else own.push(child);
+        }
+        flush();
+        return `<li data-squisq-build-item>${fragments.join('')}</li>`;
       })
       .join('');
     return `<${tag}${start}>${items}</${tag}>`;

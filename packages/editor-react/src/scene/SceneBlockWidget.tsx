@@ -20,7 +20,8 @@ import { Scene } from './Scene';
 import { useLayoutAdapter } from './adapters/LayoutAdapter';
 import { useDrawingAdapter, type ConnectorStyleInput } from './adapters/DrawingAdapter';
 import type { SceneCommand, SceneEdge } from './commands/SceneCommand';
-import { findSceneHeadingPos } from './SceneBlockExtension';
+import { findSceneHeadingPos, getHeadingKey } from './SceneBlockExtension';
+import { nodeAtOrNull } from './nodeAtOrNull';
 import { shapeIdFromLayerId } from './layers/shapeLayers';
 import { ShapePalette } from './ShapePalette';
 import { ScenePropsBar } from './ScenePropsBar';
@@ -55,28 +56,64 @@ const LINE_STYLES = ['solid', 'dashed', 'dotted'];
 const lineStyleOf = (dasharray: string | undefined): string =>
   dasharray === '8 6' ? 'dashed' : dasharray === '2 6' ? 'dotted' : 'solid';
 
-export function SceneBlockWidget({
-  editor,
-  headingKey,
-  fallbackParentPos,
-  mode,
-  host,
-  textChannel,
-}: SceneBlockWidgetProps) {
-  const [parentPos, setParentPos] = useState<number>(
-    () => findSceneHeadingPos(editor, headingKey, mode) ?? fallbackParentPos,
+/**
+ * The heading's live position, or null once it is gone. `hint` (the position
+ * it was last seen at) is checked first; the key embeds the position, so a
+ * heading that moved is a different widget and also resolves to null.
+ */
+function resolveSceneHeadingPos(
+  editor: Editor,
+  headingKey: string,
+  mode: SceneBlockMode,
+  hint: number,
+): number | null {
+  const node = nodeAtOrNull(editor.state.doc, hint);
+  if (
+    node?.type.name === 'heading' &&
+    (node.attrs as { dataTemplate?: string }).dataTemplate === mode &&
+    getHeadingKey(node, hint) === headingKey
+  ) {
+    return hint;
+  }
+  return findSceneHeadingPos(editor, headingKey, mode);
+}
+
+/**
+ * Mounts the canvas only while its heading exists. ProseMirror destroys a
+ * replaced widget's DOM at once but its React root a tick later, and a
+ * transaction in between used to re-render the canvas against the heading's
+ * old position: past the end of a shrunken document (entering block-at-a-time,
+ * deleting a large selection) that threw `Position N outside of fragment`.
+ */
+export function SceneBlockWidget(props: SceneBlockWidgetProps) {
+  const { editor, headingKey, fallbackParentPos, mode } = props;
+  const [parentPos, setParentPos] = useState<number | null>(() =>
+    resolveSceneHeadingPos(editor, headingKey, mode, fallbackParentPos),
   );
   useEffect(() => {
-    const onUpdate = () => {
-      const next = findSceneHeadingPos(editor, headingKey, mode);
-      if (next != null && next !== parentPos) setParentPos(next);
-    };
+    const onUpdate = () =>
+      setParentPos((current) =>
+        resolveSceneHeadingPos(editor, headingKey, mode, current ?? fallbackParentPos),
+      );
     editor.on('transaction', onUpdate);
+    // A transaction may have landed between the first render and this effect.
+    onUpdate();
     return () => {
       editor.off('transaction', onUpdate);
     };
-  }, [editor, headingKey, mode, parentPos]);
+  }, [editor, headingKey, mode, fallbackParentPos]);
 
+  if (parentPos == null) return null;
+  return <SceneBlockCanvas {...props} parentPos={parentPos} />;
+}
+
+function SceneBlockCanvas({
+  editor,
+  parentPos,
+  mode,
+  host,
+  textChannel,
+}: SceneBlockWidgetProps & { parentPos: number }) {
   const layout = useLayoutAdapter(editor, parentPos);
   const drawing = useDrawingAdapter(editor, parentPos);
   const isDrawing = mode === 'drawing';

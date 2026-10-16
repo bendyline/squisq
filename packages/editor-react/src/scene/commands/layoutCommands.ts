@@ -24,6 +24,7 @@ import {
   quoteAttrValue,
 } from '@bendyline/squisq/markdown';
 import { listDiagramChildren } from '../../diagram/diagramCommands';
+import { nodeAtOrNull } from '../nodeAtOrNull';
 
 export interface LayoutChild {
   /** Heading node start position (absolute). */
@@ -73,7 +74,7 @@ export function addLayoutLayer(
   params: Record<string, string>,
   bodyHtml = '',
 ): boolean {
-  const parent = editor.state.doc.nodeAt(parentPos);
+  const parent = nodeAtOrNull(editor.state.doc, parentPos);
   if (!parent || parent.type.name !== 'heading') return false;
   const childDepth = childDepthFor(editor, parentPos, parent);
   const insertPos = layoutInsertPos(editor, parentPos);
@@ -159,7 +160,7 @@ export function setLayoutText(
   return editor
     .chain()
     .command(({ tr, state }) => {
-      if (!tr.doc.nodeAt(target.pos)) return false;
+      if (!nodeAtOrNull(tr.doc, target.pos)) return false;
       const body = bodyHtml.trim() ? htmlToBody(state.schema, bodyHtml) : Fragment.empty;
       tr.replaceWith(bodyStart, bodyEnd, body);
       return true;
@@ -200,7 +201,7 @@ function updateChildParams(
   return editor
     .chain()
     .command(({ tr }) => {
-      if (!tr.doc.nodeAt(target.pos)) return false;
+      if (!nodeAtOrNull(tr.doc, target.pos)) return false;
       tr.setNodeAttribute(target.pos, 'dataTemplateParams', tParams.length > 0 ? tParams : null);
       return true;
     })
@@ -217,7 +218,7 @@ function updateChildParams(
  */
 function headingRange(editor: Editor, pos: number): [number, number] {
   const { state } = editor;
-  const node = state.doc.nodeAt(pos);
+  const node = nodeAtOrNull(state.doc, pos);
   if (!node) return [pos, pos];
   let cursor = pos + node.nodeSize;
   const docSize = state.doc.content.size;

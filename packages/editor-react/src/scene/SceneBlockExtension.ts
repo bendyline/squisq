@@ -15,7 +15,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { EditorState } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
-import { createRoot, type Root } from 'react-dom/client';
+import { mountWidgetRoot, type WidgetRoot } from '../widgetRoot';
 import { createElement } from 'react';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { parsePandocAttrTokens } from '@bendyline/squisq/markdown';
@@ -80,7 +80,7 @@ const TEMPLATE_MODE: Record<string, SceneBlockMode> = {
 
 interface SceneRoot {
   el: HTMLElement;
-  root: Root;
+  root: WidgetRoot;
 }
 
 function buildDecorations(
@@ -109,8 +109,9 @@ function buildDecorations(
           container.addEventListener('mousedown', (e) => e.stopPropagation());
           container.addEventListener('keydown', (e) => e.stopPropagation());
 
-          const root = createRoot(container);
-          root.render(
+          const root = mountWidgetRoot(
+            container,
+            mode,
             createElement(SceneBlockWidget, {
               editor,
               headingKey,
@@ -130,7 +131,7 @@ function buildDecorations(
         {
           destroy: (dom) => {
             const ref = (dom as HTMLElement & { __squisqSceneRoot?: SceneRoot }).__squisqSceneRoot;
-            if (ref) setTimeout(() => ref.root.unmount(), 0);
+            if (ref) ref.root.unmount();
           },
           side: 1,
           ignoreSelection: true,

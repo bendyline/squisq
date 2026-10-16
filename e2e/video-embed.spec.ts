@@ -5,9 +5,10 @@ import { selectUseMode, switchView } from './view-tabs';
 /**
  * Hosted-video embeds: a top-level paragraph that is only a link (or bare
  * URL, or a provider `<iframe>` line) to a YouTube/Vimeo/… page plays inline.
- * The Write view mounts the player above the paragraph, Insert → Online Video
- * writes that paragraph, Page mode renders the player, and the sandboxed
- * Document preview (no scripts, so no player) shows a linked poster.
+ * The Write view mounts body players above their paragraphs and leading media
+ * in the document tray. Insert → Online Video writes that paragraph, Page mode
+ * renders the player, and the sandboxed Document preview (no scripts, so no
+ * player) shows a linked poster.
  *
  * Provider requests are aborted: the suite checks what Squisq renders, never
  * the providers' availability.
@@ -57,48 +58,71 @@ test('the Write view plays standalone video links above their captions', async (
   await expect(page.locator('.squisq-video-embed-host-convert')).toHaveCount(1);
 });
 
-test('Insert → Online Video writes a link paragraph that plays', async ({ page }) => {
-  await loadSample(page, 'e2e-tiny');
-  const contentSecurityPolicy = await page
-    .locator('meta[http-equiv="Content-Security-Policy"]')
-    .getAttribute('content');
-  for (const playerOrigin of [
-    'https://www.youtube-nocookie.com',
-    'https://player.vimeo.com',
-    'https://www.loom.com',
-    'https://www.dailymotion.com',
-    'https://fast.wistia.net',
-  ]) {
-    expect(contentSecurityPolicy).toContain(playerOrigin);
-  }
+for (const placement of ['document tray', 'body'] as const) {
+  test(`Insert → Online Video writes a link paragraph that plays in the ${placement}`, async ({
+    page,
+  }) => {
+    const inTray = placement === 'document tray';
+    await loadSample(page, inTray ? 'e2e-tiny' : 'e2e-gif');
+    const contentSecurityPolicy = await page
+      .locator('meta[http-equiv="Content-Security-Policy"]')
+      .getAttribute('content');
+    for (const playerOrigin of [
+      'https://www.youtube-nocookie.com',
+      'https://player.vimeo.com',
+      'https://www.loom.com',
+      'https://www.dailymotion.com',
+      'https://fast.wistia.net',
+    ]) {
+      expect(contentSecurityPolicy).toContain(playerOrigin);
+    }
 
-  await page.locator('.tiptap.ProseMirror').click();
-  await page.keyboard.press('ControlOrMeta+End');
-  await page.getByRole('button', { name: 'Insert', exact: true }).click();
-  await page
-    .getByRole('menuitem', { name: 'Online Video (YouTube, Vimeo, etc.)', exact: true })
-    .click();
+    await page.locator('.tiptap.ProseMirror').click();
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.getByRole('button', { name: 'Insert', exact: true }).click();
+    await page
+      .getByRole('menuitem', { name: 'Online Video (YouTube, Vimeo, etc.)', exact: true })
+      .click();
 
-  const dialog = page.getByTestId('video-embed-dialog');
-  await expect(dialog.getByRole('button', { name: 'Insert' })).toBeDisabled();
-  await dialog
-    .getByLabel(/^Video link or embed code/)
-    .fill('https://youtu.be/aqz-KE-bpKQ?si=share&t=30');
-  await expect(dialog).toContainText('YouTube video · starts at 0:30');
-  await expect(dialog.locator('iframe')).toHaveAttribute('src', `${BUNNY_EMBED}?start=30`);
-  await dialog.getByLabel('Title (optional)').fill('Big Buck Bunny');
-  await dialog.getByRole('button', { name: 'Insert' }).click();
-  await expect(dialog).toHaveCount(0);
+    const dialog = page.getByTestId('video-embed-dialog');
+    await expect(dialog.getByRole('button', { name: 'Insert' })).toBeDisabled();
+    await dialog
+      .getByLabel(/^Video link or embed code/)
+      .fill('https://youtu.be/aqz-KE-bpKQ?si=share&t=30');
+    await expect(dialog).toContainText('YouTube video · starts at 0:30');
+    await expect(dialog.locator('iframe')).toHaveAttribute('src', `${BUNNY_EMBED}?start=30`);
+    await dialog.getByLabel('Title (optional)').fill('Big Buck Bunny');
+    await dialog.getByRole('button', { name: 'Insert' }).click();
+    await expect(dialog).toHaveCount(0);
 
-  await expect(
-    page.locator('.tiptap.ProseMirror .squisq-video-embed-host iframe').last(),
-  ).toHaveAttribute('src', `${BUNNY_EMBED}?start=30`);
-  await expect(async () => {
-    expect(await markdownSource(page)).toContain(
-      '[Big Buck Bunny](https://www.youtube.com/watch?v=aqz-KE-bpKQ&t=30s)',
-    );
-  }).toPass({ timeout: 5_000 });
-});
+    const tray = page.getByRole('region', { name: 'Document tray', exact: true });
+    const inlinePlayer = page.locator('.tiptap.ProseMirror .squisq-video-embed-host iframe');
+    const player = inTray ? tray.locator('iframe') : inlinePlayer;
+    const pill = tray.getByRole('button', { name: 'Video: Big Buck Bunny', exact: true });
+    if (inTray) {
+      await expect(pill).toHaveAttribute('aria-expanded', 'false');
+      await expect(player).toHaveCount(0);
+      await expect(inlinePlayer).toHaveCount(0);
+      await pill.click();
+      await expect(pill).toHaveAttribute('aria-expanded', 'true');
+    } else {
+      await expect(tray).toHaveCount(0);
+    }
+    await expect(player).toHaveCount(1);
+    await expect(player).toHaveAttribute('src', `${BUNNY_EMBED}?start=30`);
+    if (inTray) {
+      await expect(inlinePlayer).toHaveCount(0);
+      await pill.click();
+      await expect(pill).toHaveAttribute('aria-expanded', 'false');
+      await expect(player).toHaveCount(0);
+    }
+    await expect(async () => {
+      expect(await markdownSource(page)).toContain(
+        '[Big Buck Bunny](https://www.youtube.com/watch?v=aqz-KE-bpKQ&t=30s)',
+      );
+    }).toPass({ timeout: 5_000 });
+  });
+}
 
 test('Page mode renders players; the sandboxed Document preview shows posters', async ({
   page,

@@ -1,3 +1,5 @@
+import { readHeadingBuild, setHeadingBuild } from './headingBuild';
+import type { BuildSpec } from '@bendyline/squisq/schemas';
 /**
  * BlockPropertiesPopover
  *
@@ -97,6 +99,20 @@ export function BlockPropertiesPopover({
     onChange(next);
   };
 
+  const build = readHeadingBuild(inner, templateInner);
+  const onBuild = (next?: BuildSpec) => {
+    const updated = setHeadingBuild(inner, templateInner, next);
+    setInner(updated.blockAttrsInner);
+    setTemplateInner(updated.templateParams);
+    onAnnotationChange(updated);
+  };
+  const selectStyle: React.CSSProperties = {
+    color: 'var(--squisq-text)',
+    background: 'var(--squisq-input-bg)',
+    border: '1px solid var(--squisq-border)',
+    padding: '4px 6px',
+    minWidth: 0,
+  };
   const transition = readBlockAttrsTransition(inner, templateInner);
   const duration = readBlockAttrsValue(inner, 'duration');
   const startTime = readBlockAttrsValue(inner, 'startTime');
@@ -130,6 +146,81 @@ export function BlockPropertiesPopover({
         />
       </div>
 
+      <div className="squisq-block-props-row">
+        <label className="squisq-block-props-label" htmlFor={`${panelId}-build`}>
+          Build
+        </label>
+        <select
+          id={`${panelId}-build`}
+          style={selectStyle}
+          value={build?.mode ?? ''}
+          onChange={(e) =>
+            onBuild(
+              e.target.value ? { ...build, mode: e.target.value as BuildSpec['mode'] } : undefined,
+            )
+          }
+        >
+          <option value="">Default</option>
+          <option value="off">Show all</option>
+          <option value="items">Each list item</option>
+          <option value="branches">Each list branch</option>
+          <option value="chunks">Each content chunk</option>
+        </select>
+      </div>
+      {build && build.mode !== 'off' && (
+        <>
+          <div className="squisq-block-props-row">
+            <label className="squisq-block-props-label" htmlFor={`${panelId}-effect`}>
+              Entrance
+            </label>
+            <select
+              id={`${panelId}-effect`}
+              style={selectStyle}
+              value={build.effect ?? 'fadeInUp'}
+              onChange={(e) => onBuild({ ...build, effect: e.target.value as BuildSpec['effect'] })}
+            >
+              <option value="appear">Appear</option>
+              <option value="fadeIn">Fade</option>
+              <option value="fadeInUp">Rise</option>
+              <option value="slideIn">Fly in</option>
+            </select>
+          </div>
+          <div className="squisq-block-props-row">
+            <span className="squisq-block-props-label">Build time</span>
+            <NumberField
+              value={build.duration === undefined ? '' : String(build.duration)}
+              placeholder="0.4"
+              unit="sec"
+              ariaLabel="Build entrance duration in seconds"
+              onChange={(value) => {
+                const seconds = Number(value);
+                if (!value || (Number.isFinite(seconds) && seconds >= 0))
+                  onBuild({ ...build, duration: value ? seconds : undefined });
+              }}
+            />
+          </div>
+          <div className="squisq-block-props-row">
+            <label className="squisq-block-props-label" htmlFor={`${panelId}-previous`}>
+              Earlier items
+            </label>
+            <select
+              id={`${panelId}-previous`}
+              style={selectStyle}
+              value={build.previous ?? 'keep'}
+              onChange={(e) =>
+                onBuild({ ...build, previous: e.target.value as BuildSpec['previous'] })
+              }
+            >
+              <option value="keep">Keep visible</option>
+              <option value="dim">Dim</option>
+            </select>
+          </div>
+          <p style={{ color: 'var(--squisq-text-muted)', fontSize: 12 }}>
+            Preview builds with the slide arrow controls. Video follows narration or estimated
+            reading time.
+          </p>
+        </>
+      )}
       <div className="squisq-block-props-row">
         <span className="squisq-block-props-label">Duration</span>
         <NumberField

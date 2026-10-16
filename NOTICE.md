@@ -111,6 +111,7 @@ IronCalc engine.
 | @tiptap/react                  | 2.27.3    | MIT                           | https://tiptap.dev                           |
 | @tiptap/starter-kit            | 2.27.3    | MIT                           | https://tiptap.dev                           |
 | @tiptap/suggestion             | 2.27.3    | MIT                           | https://tiptap.dev                           |
+| lucide-react                   | 1.52.0    | ISC                           | https://github.com/lucide-icons/lucide       |
 | mermaid                        | 11.17.2   | MIT                           | https://github.com/mermaid-js/mermaid        |
 | type-fest                      | 4.41.0    | MIT OR CC0-1.0                | https://github.com/sindresorhus/type-fest    |
 | harper.js _(peer, optional)_   | ^2.7.0    | Apache-2.0                    | https://github.com/automattic/harper         |

@@ -1,3 +1,4 @@
+import { recordBuildAdvance, type BuildAdvance } from '@bendyline/squisq/schemas';
 /**
  * RecorderModal — configure-and-capture dialog for browser-based audio,
  * camera, and screen recording.
@@ -855,6 +856,19 @@ export function RecorderModal({
   const slidesAvailable = slideDeck.length > 0;
   const slidesCaptureTimings = Boolean(slides?.captureTimings && slides?.doc);
   const [slideIndex, setSlideIndex] = useState(0);
+  const [buildLog, setBuildLog] = useState<readonly BuildAdvance[]>([]);
+  const buildLogRef = useRef(buildLog);
+  buildLogRef.current = buildLog;
+  const handleBuildShown = useCallback(
+    (blockId: string, step: number, sourceText: string) => {
+      const elapsed = recorder.getElapsedMs();
+      if (elapsed !== null)
+        setBuildLog((log) =>
+          recordBuildAdvance(log, { blockId, step, sourceText, time: elapsed / 1000 }),
+        );
+    },
+    [recorder],
+  );
   const [advanceLog, setAdvanceLog] = useState<SlideAdvanceLog>(EMPTY_ADVANCE_LOG);
   const [applySlideTimings, setApplySlideTimings] = useState(true);
   // The index is read from an event handler that fires during a take, so it
@@ -899,6 +913,7 @@ export function RecorderModal({
   const slideDeckKey = slideDeck.map((slide) => slide.blockId).join('\x00');
   useEffect(() => {
     setAdvanceLog(EMPTY_ADVANCE_LOG);
+    setBuildLog([]);
     setSlideIndex(0);
   }, [slidesOn, slideDeckKey]);
 
@@ -1194,6 +1209,7 @@ export function RecorderModal({
       setCountingIn(false);
       if (!rolled) return;
     }
+    setBuildLog([]);
     recorder.start();
     // Seed the log with whatever slide is already on screen, at t=0. Without
     // this the first block would have no observation and would collapse to a
@@ -1230,7 +1246,10 @@ export function RecorderModal({
       const log = advanceLogRef.current;
       if (log.length === 0) return null;
 
-      const timing = buildAdvanceTimingJson(doc, log, durationSec);
+      const timing = {
+        ...buildAdvanceTimingJson(doc, log, durationSec),
+        builds: buildLogRef.current,
+      };
       const encoded = encodeNarrationTimingJson(timing);
       const sidecarPath = timingPathFor(mediaRelativePath);
       // Prefer the container so the sidecar lands at the exact path the
@@ -1490,7 +1509,10 @@ export function RecorderModal({
     const duration = recorder.durationMs / 1000;
     const encoded =
       slidesOn && slidesCaptureTimings && applySlideTimings && slides?.doc && advanceLog.length > 0
-        ? encodeNarrationTimingJson(buildAdvanceTimingJson(slides.doc, advanceLog, duration))
+        ? encodeNarrationTimingJson({
+            ...buildAdvanceTimingJson(slides.doc, advanceLog, duration),
+            builds: buildLog,
+          })
         : source === 'mic'
           ? encodeTimingJson(buildTimingJson(sourceText, duration))
           : null;
@@ -1507,6 +1529,7 @@ export function RecorderModal({
     narrationRecording,
     canSave,
     recorder.durationMs,
+    buildLog,
     slidesOn,
     slidesCaptureTimings,
     applySlideTimings,
@@ -2263,6 +2286,7 @@ export function RecorderModal({
                 slides={slideDeck}
                 index={slideIndex}
                 onIndexChange={handleSlideIndexChange}
+                onBuildShown={handleBuildShown}
                 viewport={slidesViewport}
                 basePath={slides?.basePath}
                 mediaProvider={slides?.mediaProvider ?? mediaProvider}

@@ -49,6 +49,7 @@ import {
 } from '../commands/drawingCommands';
 import type { LayoutAdapterResult } from './LayoutAdapter';
 import type { SceneEdge as SceneEdgeType } from '../commands/SceneCommand';
+import { nodeAtOrNull } from '../nodeAtOrNull';
 
 export interface DrawingAdapterOptions {
   /** Default stroke color for new shapes/paths. */
@@ -101,7 +102,7 @@ export function useDrawingAdapter(
   }, [editor]);
 
   // ── Read: child headings → shapes + connectors ────────────────
-  const node = editor.state.doc.nodeAt(headingPos);
+  const node = nodeAtOrNull(editor.state.doc, headingPos);
   const children = node ? listDrawingChildren(editor, headingPos) : [];
   const blocks: Block[] = children.map((c) => ({
     id: c.id,

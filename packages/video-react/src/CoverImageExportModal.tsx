@@ -160,6 +160,7 @@ export function CoverImageExportModal({
           width,
           height,
           animationsEnabled: false,
+          buildsEnabled: false,
           theme,
           mediaProvider: mediaProvider ?? undefined,
           showCoverSlide: true,

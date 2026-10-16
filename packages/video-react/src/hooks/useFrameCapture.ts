@@ -1780,6 +1780,7 @@ export function useFrameCapture(): FrameCaptureHandle {
         basePath: '.',
         renderMode: true,
         animationsEnabled,
+        buildsEnabled: renderOptions.buildsEnabled,
         showControls: false,
         autoPlay: false,
         forceViewport: { width, height, name: 'export' },

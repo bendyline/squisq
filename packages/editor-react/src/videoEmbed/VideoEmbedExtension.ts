@@ -28,6 +28,7 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { videoEmbedIframeAttributes, type BlockVideoEmbed } from '@bendyline/squisq/markdown';
 import { mapFenceEntries, type FenceBlockEntry } from '../fenceWidgets/fenceRegistry';
 import { videoEmbedOfParagraph, videoEmbedParagraphNode } from './videoEmbedParagraph';
+import { DOCUMENT_TRAY_KEY } from '../documentTray/DocumentTrayExtension';
 
 export type VideoEmbedBlockEntry = FenceBlockEntry;
 
@@ -105,9 +106,11 @@ function buildDecorations(
   doc: PMNode,
   entries: VideoEmbedBlockEntry[],
   view: () => EditorView | null,
+  state: EditorState,
 ): DecorationSet {
   const decos: Decoration[] = [];
   for (const entry of entries) {
+    if (DOCUMENT_TRAY_KEY.getState(state)?.items.some((item) => item.pos === entry.pos)) continue;
     const node = doc.nodeAt(entry.pos);
     const video = node ? videoEmbedOfParagraph(node) : null;
     if (!node || !video) continue;
@@ -162,11 +165,12 @@ function applyState(
   prev: VideoEmbedPluginState,
   doc: PMNode,
   view: () => EditorView | null,
+  state: EditorState,
 ): VideoEmbedPluginState {
-  if (!tr.docChanged) return prev;
+  if (!tr.docChanged && tr.getMeta(DOCUMENT_TRAY_KEY) === undefined) return prev;
   const mapped = mapFenceEntries(tr, prev.entries, doc, 'paragraph');
   const { entries, seq } = collectEntries(doc, mapped, prev.seq);
-  return { entries, seq, decorations: buildDecorations(doc, entries, view) };
+  return { entries, seq, decorations: buildDecorations(doc, entries, view, state) };
 }
 
 export const VideoEmbedExtension = Extension.create<VideoEmbedExtensionOptions>({
@@ -188,9 +192,10 @@ export const VideoEmbedExtension = Extension.create<VideoEmbedExtensionOptions>(
         state: {
           init: (_config, state) => {
             const { entries, seq } = collectEntries(state.doc, null, 0);
-            return { entries, seq, decorations: buildDecorations(state.doc, entries, view) };
+            return { entries, seq, decorations: buildDecorations(state.doc, entries, view, state) };
           },
-          apply: (tr, prev, _oldState, newState) => applyState(tr, prev, newState.doc, view),
+          apply: (tr, prev, _oldState, newState) =>
+            applyState(tr, prev, newState.doc, view, newState),
         },
         props: {
           decorations(state) {

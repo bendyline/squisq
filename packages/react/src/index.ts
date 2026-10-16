@@ -127,3 +127,5 @@ export type {
   JsonFormFenceAction,
   JsonFormFenceRendererOptions,
 } from './jsonView/index.js';
+
+export { useBuildNavigation } from './hooks/useBuildNavigation';

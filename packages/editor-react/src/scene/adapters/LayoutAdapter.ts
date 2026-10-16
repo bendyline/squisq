@@ -33,6 +33,7 @@ import {
   setLayoutText,
   removeLayoutLayer,
 } from '../commands/layoutCommands';
+import { nodeAtOrNull } from '../nodeAtOrNull';
 
 export interface LayoutAdapterResult {
   /** Layers to pass to `<Scene layers={...} />`. */
@@ -77,7 +78,7 @@ export function useLayoutAdapter(
   }, [editor]);
 
   // ── Read: child headings → layers ──────────────────────────────
-  const node = editor.state.doc.nodeAt(headingPos);
+  const node = nodeAtOrNull(editor.state.doc, headingPos);
   const children = node ? listLayoutChildren(editor, headingPos) : [];
   const blocks: Block[] = children.map((c) => ({
     id: c.id,
@@ -104,7 +105,7 @@ export function useLayoutAdapter(
   const migratedRef = useRef(false);
   useEffect(() => {
     if (migratedRef.current) return;
-    const n = editor.state.doc.nodeAt(headingPos);
+    const n = nodeAtOrNull(editor.state.doc, headingPos);
     if (!n) return;
     if (listLayoutChildren(editor, headingPos).length > 0) {
       migratedRef.current = true;

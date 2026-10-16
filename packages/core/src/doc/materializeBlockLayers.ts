@@ -1,3 +1,4 @@
+import { blockBuildSteps, hasBlockBuilds } from './builds.js';
 /**
  * Canonical block-to-layer materialization contract.
  *
@@ -88,6 +89,7 @@ export type LayerMaterializationFailureMode = 'fallback' | 'empty';
 
 /** A structured, inspectable explanation for a template render failure. */
 export type LayerMaterializationDiagnostic =
+  | { code: 'unsupported-build'; template: string; message: string }
   | {
       code: 'unknown-template';
       template: string;
@@ -261,6 +263,15 @@ export function materializeBlockLayersWithRuntime(
         runtime.expandedPersistentLayers,
       ),
       source: 'template',
+      ...(hasBlockBuilds(block) && blockBuildSteps({ build: block.build, layers }).length === 0
+        ? {
+            diagnostic: {
+              code: 'unsupported-build' as const,
+              template: block.template,
+              message: 'This block has no supported build targets; all content remains visible.',
+            },
+          }
+        : {}),
     };
   }
 

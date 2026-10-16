@@ -1,3 +1,4 @@
+import { readHeadingBuild } from './headingBuild';
 /**
  * blockProperties
  *
@@ -64,6 +65,8 @@ export function summarizeBlockProps(
   templateParams: string | null | undefined,
 ): string {
   const parts: string[] = [];
+  const build = readHeadingBuild(blockAttrs ?? null, templateParams ?? null);
+  if (build && build.mode !== 'off') parts.push(`Build ${build.mode}`);
 
   const transition = readBlockAttrsTransition(blockAttrs, templateParams);
   if (transition.type) {

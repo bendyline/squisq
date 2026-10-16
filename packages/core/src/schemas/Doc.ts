@@ -1,3 +1,4 @@
+import type { BuildSpec, BuildStep, BuildTiming, BuildAdvance } from './Build.js';
 /**
  * Doc Schema
  *
@@ -85,6 +86,8 @@ export interface DocDiagnostic {
  * A complete visual doc for an article.
  */
 export interface Doc {
+  /** Canonical pre-projection script used to validate build timing anchors. */
+  buildSourceText?: string;
   /** Projection-only source/timing metadata from the document narration take. */
   presentationNarration?: {
     sourceText: string;
@@ -92,6 +95,7 @@ export interface Doc {
     startTime: number;
     duration: number;
     bookmarks: AudioBookmark[];
+    builds?: BuildAdvance[];
   };
   /** Projection-only guard: never compile an accepted plan twice. */
   presentationApplied?: boolean;
@@ -239,6 +243,12 @@ export interface PromotedBodyAnnotation {
 }
 
 export interface Block {
+  /** Optional progressive content reveal. */
+  build?: BuildSpec;
+  /** Projection-only timing, guarded against edits by the chunk text. */
+  buildTiming?: BuildTiming;
+  /** Projection-only source range for exact narration alignment. */
+  buildSource?: { text: string; charStart: number };
   /** Unique identifier for this block.
    *  Defaults to a slug derived from the heading text. May be overridden by
    *  a Pandoc-style `{#custom-id}` attribute on the heading. */
@@ -512,6 +522,8 @@ export interface TextLayer extends BaseLayer {
      * `@bendyline/squisq-react`.
      */
     html?: string;
+    /** Semantic steps targeted by generated data-squisq-build-step fragments. */
+    buildSteps?: BuildStep[];
     /** Text styling */
     style: TextStyle;
   };

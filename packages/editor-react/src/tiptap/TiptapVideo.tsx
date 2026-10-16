@@ -24,6 +24,7 @@ import type {
   VideoPlacement,
 } from '@bendyline/squisq/schemas';
 import { useResolvedMediaSrc } from './useResolvedMediaSrc.js';
+import { isDocumentTrayDecoration } from '../documentTray/DocumentTrayExtension';
 
 export interface TiptapVideoOptions {
   HTMLAttributes: Record<string, unknown>;
@@ -67,7 +68,18 @@ function normalizeLockToBlock(value: unknown): boolean {
   return value !== false && value !== 'false' && value !== 0 && value !== '0';
 }
 
-function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
+/** Shared player/placement controls for the inline node and the document tray. */
+export function VideoMedia({
+  attrs,
+  updateAttributes,
+  selected = false,
+  readOnly = false,
+}: {
+  attrs: Record<string, unknown>;
+  updateAttributes?: (attrs: Record<string, unknown>) => void;
+  selected?: boolean;
+  readOnly?: boolean;
+}) {
   const {
     src,
     width,
@@ -77,7 +89,7 @@ function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
     placement: rawPlacement,
     lockToBlock: rawLockToBlock,
     editFx,
-  } = node.attrs as {
+  } = attrs as {
     src: string;
     width: string | number | null;
     height: string | number | null;
@@ -105,14 +117,13 @@ function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
   };
 
   return (
-    <NodeViewWrapper
-      as="div"
+    <div
       className={`${audioOnly ? 'squisq-inline-audio-player squisq-video-node--audio-only' : 'squisq-inline-video-player'} squisq-video-node${selected ? ' squisq-video-node--selected' : ''}`}
       data-video-placement={placement}
       data-squisq-media-src={src}
       data-squisq-media-kind="video"
     >
-      {!audioOnly && (
+      {!audioOnly && !readOnly && (
         <div
           className="squisq-video-placement-toolbar"
           role="toolbar"
@@ -120,20 +131,21 @@ function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
           contentEditable={false}
         >
           <span className="squisq-video-placement-label">Video</span>
-          {PLACEMENT_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className="squisq-video-placement-button"
-              aria-pressed={placement === option.value}
-              title={option.title}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => updateAttributes({ placement: option.value })}
-            >
-              {option.label}
-            </button>
-          ))}
-          {placement !== 'content' && (
+          {updateAttributes &&
+            PLACEMENT_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className="squisq-video-placement-button"
+                aria-pressed={placement === option.value}
+                title={option.title}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => updateAttributes({ placement: option.value })}
+              >
+                {option.label}
+              </button>
+            ))}
+          {updateAttributes && placement !== 'content' && (
             <button
               type="button"
               className="squisq-video-placement-button squisq-video-placement-button--lock"
@@ -158,7 +170,7 @@ function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
           />
         </div>
       )}
-      {audioOnly && (
+      {audioOnly && !readOnly && (
         <div className="squisq-audio-node-toolbar" contentEditable={false}>
           <MediaEditButton src={src} kind="video" fx={editFx} />
         </div>
@@ -185,6 +197,21 @@ function VideoNodeView({ node, updateAttributes, selected }: NodeViewProps) {
           width={width ?? undefined}
           height={height ?? undefined}
           onLoadedMetadata={handleLoadedMetadata}
+        />
+      )}
+    </div>
+  );
+}
+
+function VideoNodeView({ node, decorations, editor, updateAttributes, selected }: NodeViewProps) {
+  return (
+    <NodeViewWrapper>
+      {!isDocumentTrayDecoration(decorations) && (
+        <VideoMedia
+          attrs={node.attrs}
+          updateAttributes={updateAttributes}
+          selected={selected}
+          readOnly={!editor.isEditable}
         />
       )}
     </NodeViewWrapper>

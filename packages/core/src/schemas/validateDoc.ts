@@ -1,3 +1,4 @@
+import { parseBuildSpec } from './Build.js';
 /**
  * Runtime validation for the canonical {@link Doc} JSON shape.
  *
@@ -94,6 +95,8 @@ function validateBlocks(values: unknown[], path: string, issues: DocSchemaIssue[
     optionalFiniteNumber(block, 'sourceCharOffset', `${blockPath}.sourceCharOffset`, issues, {
       min: 0,
     });
+    if (block.build !== undefined && !parseBuildSpec(block.build))
+      add(issues, `${blockPath}.build`, 'must be a valid build specification', block.build);
     optionalString(block, 'template', `${blockPath}.template`, issues);
     optionalString(block, 'title', `${blockPath}.title`, issues);
     optionalBoolean(block, 'autoTemplate', `${blockPath}.autoTemplate`, issues);

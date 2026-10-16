@@ -125,6 +125,7 @@
     "@tiptap/react": "2.27.3",
     "@tiptap/starter-kit": "2.27.3",
     "@tiptap/suggestion": "2.27.3",
+    "lucide-react": "1.52.0",
     "mermaid": "11.17.2",
     "type-fest": "4.41.0"
   },

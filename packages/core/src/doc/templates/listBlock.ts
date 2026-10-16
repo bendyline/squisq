@@ -1,3 +1,5 @@
+import { contentBlock } from './contentBlock.js';
+import type { MarkdownBlockNode } from '../../markdown/types.js';
 /**
  * List Block Template
  *
@@ -123,13 +125,70 @@ function measureListHeightPx(
 
 export function listBlock(input: ListBlockInput, context: TemplateContext): Layer[] {
   const { title } = input;
+  const items: string[] = Array.isArray(input.items) ? input.items : [];
+  const build = input.build ?? context.block?.build;
+  if (build && build.mode !== 'off') {
+    // Keep the full hierarchy in one flowing rich-text layout; fragments own
+    // their markers and text, so revealing a child cannot reflow its parent.
+    const rich = extractRichListItems(context.block?.contents);
+    const matches = rich.length === items.length && rich.every((item, i) => item.text === items[i]);
+    const contents: MarkdownBlockNode[] = matches
+      ? (context.block?.contents ?? [])
+      : [
+          {
+            type: 'list',
+            ordered: input.ordered !== false,
+            children: items.map((text) => ({
+              type: 'listItem',
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+            })),
+          },
+        ];
+    const layers = contentBlock(
+      { ...input, template: 'content', title: input.title ?? '', build },
+      {
+        ...context,
+        block: {
+          id: input.id,
+          duration: input.duration,
+          startTime: 0,
+          audioSegment: input.audioSegment,
+          ...context.block,
+          summaryMode: undefined,
+          contents,
+          build,
+        },
+      },
+    );
+    const accent = accentForViewport(input.accentImage, context.viewport);
+    if (accent) {
+      const layout = getAccentLayout(accent.position);
+      layers.splice(
+        1,
+        0,
+        ...createAccentLayers(
+          accent,
+          input.id,
+          themedImageTreatment(context, input.imageTreatment),
+        ),
+      );
+      for (const layer of layers) {
+        if (layer.type !== 'text' || (layer.id !== 'title' && layer.id !== 'body')) continue;
+        layer.position.x = `${parseFloat(layout.textCenterX) - parseFloat(layout.textWidth) / 2}%`;
+        layer.position.width = layout.textWidth;
+        layer.position.y = adjustY(String(layer.position.y), layout);
+        if (layer.id === 'body' && accent.position === 'bottom-strip')
+          layer.position.height = `${72 - ACCENT_STRIP_SIZE}%`;
+      }
+    }
+    return layers;
+  }
   const accentImage = accentForViewport(input.accentImage, context.viewport);
   // `items` is required by the schema, but malformed / partially-authored
   // blocks (e.g. someone wrote `template: list` with no items yet) reach
   // this code path during live preview. Treat missing/non-array as empty
   // so we render the title-and-background frame instead of blowing up
   // every keystroke with a TypeError.
-  const items: string[] = Array.isArray(input.items) ? input.items : [];
   // Unordered Markdown lists render bullets; ordered (and legacy unflagged)
   // inputs keep the `1.` markers.
   const ordered = input.ordered !== false;

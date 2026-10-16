@@ -625,7 +625,11 @@ async function loadPdfDocument(data: Uint8Array, signal?: AbortSignal): Promise<
   await applyWorkerConfig(pdfjsLib);
 
   const loadingTask = pdfjsLib.getDocument({
-    data,
+    // A copy: pdf.js TRANSFERS the typed array it is given to its worker,
+    // which detaches the buffer underneath it. Handing it the caller's own
+    // bytes emptied them -- a host that saved the original PDF after
+    // converting it wrote nothing.
+    data: data.slice(),
     isEvalSupported: false,
     useSystemFonts: true,
   });

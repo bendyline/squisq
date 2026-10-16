@@ -174,6 +174,7 @@ export interface HeadingAttributes {
   params?: Record<string, string>;
   /** Typed values for known block-meta keys (coerced from `params`). */
   blockMeta?: {
+    build?: import('../schemas/Build.js').BuildSpec;
     x?: number;
     y?: number;
     startTime?: number;

@@ -1,3 +1,4 @@
+import { BUILD_MODES, BUILD_EFFECTS, BUILD_PREVIOUS, type BuildSpec } from '../schemas/Build.js';
 /**
  * Heading-attribute value coercion.
  *
@@ -29,6 +30,10 @@ import {
  * in `markdownToDoc.ts`.
  */
 export const KNOWN_BLOCK_META_KEYS = {
+  build: 'build',
+  buildEffect: 'buildEffect',
+  buildDuration: 'time',
+  buildPrevious: 'buildPrevious',
   x: 'number',
   y: 'number',
   startTime: 'time',
@@ -66,6 +71,18 @@ export interface BlockMetaKeyDescriptor {
  * authoring case), then timeline timing, then diagram geometry/links.
  */
 export const BLOCK_META_KEY_DESCRIPTORS: readonly BlockMetaKeyDescriptor[] = [
+  { key: 'build', description: 'Progressive reveal grouping', values: BUILD_MODES },
+  { key: 'buildEffect', description: 'Build entrance effect', values: BUILD_EFFECTS },
+  {
+    key: 'buildDuration',
+    description: 'Build entrance duration',
+    valueHint: 'seconds — e.g. 0.4, 400ms',
+  },
+  {
+    key: 'buildPrevious',
+    description: 'Appearance of previous build steps',
+    values: BUILD_PREVIOUS,
+  },
   {
     key: 'transition',
     description: 'Block-to-block transition effect',
@@ -113,6 +130,7 @@ export const BLOCK_META_KEY_DESCRIPTORS: readonly BlockMetaKeyDescriptor[] = [
  * `HeadingAttributes.blockMeta` in `types.ts`.
  */
 export interface CoercedBlockMeta {
+  build?: BuildSpec;
   x?: number;
   y?: number;
   startTime?: number;
@@ -142,6 +160,7 @@ export function coerceAnnotationValues(params: Record<string, string>): CoerceRe
   const blockMeta: CoercedBlockMeta = {};
   const metadata: Record<string, string> = {};
   const warnings: string[] = [];
+  const build: Partial<BuildSpec> = {};
   let transitionType: TransitionType | null = null;
   let transitionDuration: number | undefined;
   let transitionDirection: TransitionDirection | undefined;
@@ -163,11 +182,22 @@ export function coerceAnnotationValues(params: Record<string, string>): CoerceRe
       const s = parseTimeSeconds(raw);
       if (s == null) {
         warnings.push(`Invalid time for "${key}": ${JSON.stringify(raw)}`);
+      } else if (key === 'buildDuration') {
+        if (s < 0) warnings.push('Build duration must be non-negative.');
+        else build.duration = s;
       } else if (key === 'transitionDuration') {
         transitionDuration = s;
       } else {
         (blockMeta as Record<string, unknown>)[key] = s;
       }
+    } else if (kind === 'build' || kind === 'buildEffect' || kind === 'buildPrevious') {
+      const values: readonly string[] =
+        kind === 'build' ? BUILD_MODES : kind === 'buildEffect' ? BUILD_EFFECTS : BUILD_PREVIOUS;
+      if (!values.includes(raw))
+        warnings.push(`Invalid value for "${key}": ${JSON.stringify(raw)}`);
+      else if (kind === 'build') build.mode = raw as BuildSpec['mode'];
+      else if (kind === 'buildEffect') build.effect = raw as BuildSpec['effect'];
+      else build.previous = raw as BuildSpec['previous'];
     } else if (kind === 'connectionList') {
       const { list, warning } = parseConnectionList(raw);
       if (warning) warnings.push(`"${key}": ${warning}`);
@@ -188,6 +218,8 @@ export function coerceAnnotationValues(params: Record<string, string>): CoerceRe
       }
     }
   }
+
+  if (build.mode) blockMeta.build = { ...build, mode: build.mode };
 
   if (transitionType) {
     blockMeta.transition = {

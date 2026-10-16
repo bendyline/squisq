@@ -30,5 +30,12 @@ export default defineConfig({
     exclude: ['**/node_modules/**'],
     // Each test file owns its own dist scan; parallelizing across
     // files is fine.
+    //
+    // Nearly every test here cold-imports one or more built bundles,
+    // and parallel files contend for those imports — a single
+    // `import()` of a large entry routinely takes 3-5s on a busy
+    // machine. vitest's 5s default turns that load time into spurious
+    // timeouts, so the whole tier gets a load-bound budget instead.
+    testTimeout: 30_000,
   },
 });

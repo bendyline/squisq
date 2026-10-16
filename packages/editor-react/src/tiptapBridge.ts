@@ -20,6 +20,13 @@ import {
 import { mediaEditHtmlAttribute } from '@bendyline/squisq/mediaEdit';
 import { mediaEditKeysFor } from './tiptap/mediaEditAttributes';
 import { needsAngleDestination, unwrapLinkDestination } from './markdownDestination';
+import {
+  isQuoteLine,
+  quoteBodyToHtml,
+  quoteBodyToMarkdown,
+  quoteLineContent,
+  type QuoteConverters,
+} from './markdownQuote';
 
 /** Marks a backslash-escaped character; see `MarkdownEscape.ts`. */
 export const MARKDOWN_ESCAPE_ATTR = 'data-md-escape';
@@ -261,6 +268,15 @@ function joinWrappedCodeSpans(lines: string[]): string[] {
 function leavesCodeSpanOpen(text: string): boolean {
   return text.replace(RE_INLINE_CODE, '').includes(BACKTICK);
 }
+
+/** Quote bodies convert their nested blocks back through the bridge. */
+const QUOTE_CONVERTERS: QuoteConverters = {
+  markdownToHtml: (markdown) => markdownToTiptap(markdown),
+  inlineToHtml: (text) => inlineToHtml(text),
+  htmlToMarkdown: (html) => tiptapToMarkdown(html),
+  htmlToInline: (html) => htmlToInline(html),
+  matchBalancedTag: (html, start, tag) => matchBalancedTag(html, start, tag),
+};
 
 /**
  * Convert raw markdown source to Tiptap-consumable HTML content.
@@ -628,11 +644,7 @@ export function markdownToTiptap(markdown: string): string {
         i++;
         quoteLines.push(quoteLineContent(lines[i]));
       }
-      pushBlock(
-        `<blockquote>${quoteLines
-          .map((quoteLine) => (quoteLine ? `<p>${inlineToHtml(quoteLine)}</p>` : '<p></p>'))
-          .join('')}</blockquote>`,
-      );
+      pushBlock(`<blockquote>${quoteBodyToHtml(quoteLines, QUOTE_CONVERTERS)}</blockquote>`);
       continue;
     }
 
@@ -852,25 +864,14 @@ export function tiptapToMarkdown(html: string): string {
       continue;
     }
 
-    // Blockquote
-    const bqMatch = remaining.match(/^<blockquote>(.*?)<\/blockquote>/s);
+    // Blockquote. Balanced, not a lazy `(.*?)</blockquote>`: a nested quote's
+    // close tag would end the outer one early.
+    const bqMatch = /^<blockquote\b/.test(remaining)
+      ? matchBalancedTag(remaining, 0, 'blockquote')
+      : null;
     if (bqMatch) {
-      const paragraphs = bqMatch[1]
-        .split(/<\/p>\s*<p[^>]*>/i)
-        .map((paragraph) => paragraph.replace(/^<p[^>]*>/i, '').replace(/<\/p>\s*$/i, ''));
-      for (const paragraph of paragraphs) {
-        const inline = htmlToInline(paragraph);
-        // An empty quote paragraph is the separator `markdownToTiptap` read
-        // from a bare `>`; write it back the same way.
-        if (!inline.trim()) {
-          lines.push('>');
-          continue;
-        }
-        for (const quoteLine of inline.split('\n')) {
-          lines.push('> ' + quoteLine);
-        }
-      }
-      const next = remaining.slice(bqMatch[0].length);
+      lines.push(...quoteBodyToMarkdown(bqMatch.inner, QUOTE_CONVERTERS));
+      const next = remaining.slice(bqMatch.end);
       // Older bridge output and direct Tiptap edits can still leave adjacent
       // blockquote nodes. Keep those nodes adjacent when serializing;
       // inserting the normal block separator here turns one quote into two
@@ -1318,15 +1319,6 @@ function stripCodeIndent(line: string): string {
  * markdown spellings produce the SAME heading node, so annotation handling
  * must not depend on which one the author used.
  */
-/** A blockquote line: `> text`, or a bare `>` separating quote paragraphs. */
-function isQuoteLine(line: string): boolean {
-  return line.startsWith('> ') || line.trimEnd() === '>';
-}
-
-function quoteLineContent(line: string): string {
-  return line.trimEnd() === '>' ? '' : line.slice(2);
-}
-
 /**
  * The line without its trailing hard-break marker (two or more spaces, or an
  * unescaped backslash), or null when it ends in neither. `\\` at the end is

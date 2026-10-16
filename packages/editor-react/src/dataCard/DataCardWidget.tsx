@@ -474,7 +474,7 @@ export function DataCardWidget({
             className="squisq-data-card-action"
             onClick={() => onOpenFiles(href)}
           >
-            Show in Files
+            Show in Attachments
           </button>
         )}
       </div>

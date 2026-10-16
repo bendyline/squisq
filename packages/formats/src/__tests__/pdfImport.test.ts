@@ -92,6 +92,21 @@ describe('pdfToMarkdownDoc', () => {
     expect(md.children.length).toBe(0);
   }, 60_000);
 
+  it("leaves the caller's bytes intact", async () => {
+    // pdf.js transfers the typed array it parses to its worker, detaching the
+    // buffer. Passing the caller's bytes straight through emptied them, so a
+    // host saving the original PDF after the import wrote zero bytes.
+    const bytes = await buildSimplePdf([{ text: 'Keep me', x: 72, y: 700, fontSize: 11 }]);
+    const length = bytes.byteLength;
+    const asArrayBuffer = bytes.slice().buffer;
+
+    await pdfToMarkdownDoc(bytes);
+    await pdfToContainer(asArrayBuffer);
+
+    expect(bytes.byteLength).toBe(length);
+    expect(asArrayBuffer.byteLength).toBe(length);
+  }, 60_000);
+
   it('imports a single paragraph', async () => {
     const buffer = await buildSimplePdf([{ text: 'Hello World', x: 72, y: 700, fontSize: 11 }]);
     const md = await pdfToMarkdownDoc(buffer);

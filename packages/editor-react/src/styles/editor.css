@@ -23,6 +23,27 @@
   background: var(--squisq-surface);
 }
 
+/* Form controls take the chrome face. Browsers give <button>, <input>,
+   <select> and <textarea> a UA font of their own (Arial in Chromium on
+   Windows), so a label inside a button — the view tabs, the H1–H3 glyphs,
+   the block picker — rendered in a different sans from the chrome around
+   it. Zero specificity, so any rule that names a font still wins. Scoped to
+   Squisq-owned subtrees, which include the menus and dialogs that portal to
+   <body>, so a host page's own controls are left alone. */
+:where(.squisq-editor-shell, [class*='squisq-']) :where(button, input, select, textarea) {
+  font-family: inherit;
+}
+
+/* Chrome glyphs (see Icon.tsx): Lucide outlines sized from the parent's
+   font-size, as the webfont glyphs were. Slightly over 1em because Lucide
+   draws inside a 2px margin on its 24px grid. */
+.squisq-icon {
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+  vertical-align: -0.2em;
+}
+
 .squisq-editor-header {
   border-bottom: 1px solid var(--squisq-border-subtle);
   background: var(--squisq-surface-subtle);
@@ -507,9 +528,10 @@
   min-height: 100%;
   /* When the WYSIWYG container is set to inherit theme colors (View menu →
      "Theme styling: Fonts & colors"), --squisq-theme-bg / --squisq-theme-text
-     are populated from the active Squisq theme. Otherwise the editor falls
-     back to its default light surface. */
-  color: var(--squisq-theme-text, #1f2937);
+     are populated from the active Squisq theme. Otherwise the page falls
+     back to the chrome's own surface and ink, so a host that retones the
+     chrome palette retones the unthemed page with it. */
+  color: var(--squisq-theme-text, var(--squisq-text));
   background: var(--squisq-theme-bg, var(--squisq-surface));
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.12);
   /* Body font follows the active squisq theme when one is selected; otherwise
@@ -523,7 +545,7 @@
      mode) inherits a near-white color into the editor. Without this
      `caret-color: auto` follows the inherited `color`, which can end up
      white-on-white in the WYSIWYG surface. */
-  caret-color: var(--squisq-theme-text, #1f2937);
+  caret-color: var(--squisq-theme-text, var(--squisq-text));
   /* Custom I-beam mouse cursor so the pointer stays visible on the
      editor's white surface even when the OS is configured to render
      cursors in white (Windows lets users do this). The SVG draws a
@@ -994,7 +1016,7 @@
 
 /* Font Awesome glyph segments (captions: cc / social) — size the webfont
    glyph to sit level with the SVG aspect-ratio icons. */
-.squisq-preview-seg-btn--icon > i {
+.squisq-preview-seg-btn--icon > :is(i, .squisq-icon) {
   font-size: 15px;
   line-height: 1;
 }
@@ -6664,7 +6686,7 @@ button.squisq-view-menu-radio-row:focus-visible {
   stroke-linejoin: round;
 }
 
-.squisq-transform-menu-action-icon > i {
+.squisq-transform-menu-action-icon > :is(i, .squisq-icon) {
   line-height: 1;
 }
 

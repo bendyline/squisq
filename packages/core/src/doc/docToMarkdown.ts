@@ -1,3 +1,5 @@
+import { BUILD_PARAM_KEYS, buildSpecParams } from '../schemas/Build.js';
+import { getPinnedBlockMeta } from './markdownToDoc.js';
 /**
  * Doc → Markdown Conversion
  *
@@ -108,6 +110,7 @@ export function docToMarkdown(doc: Doc, options: DocToMarkdownOptions = {}): Mar
   }
 
   function emitBlock(block: Block): void {
+    block = reconcileBuildMetadata(block);
     // A promoted body tag is round-tripped lazily: while the block is unedited
     // it stays in the BODY (heading emitted verbatim/unannotated); once edited,
     // it moves onto the heading via the normal `ensureAnnotation` path.
@@ -449,5 +452,43 @@ function removeTransitionParams(
   return {
     ...attrs,
     ...(Object.keys(params).length > 0 ? { params } : { params: undefined }),
+  };
+}
+
+/** Reconcile edited typed build intent while retaining untouched author spelling. */
+function reconcileBuildMetadata(block: Block): Block {
+  const before = getPinnedBlockMeta(block).build;
+  if (
+    paramsEqual(
+      before ? buildSpecParams(before) : {},
+      block.build ? buildSpecParams(block.build) : {},
+    )
+  )
+    return block;
+  const params = { ...block.templateOverrides };
+  for (const key of BUILD_PARAM_KEYS) delete params[key];
+  if (block.build) Object.assign(params, buildSpecParams(block.build));
+  const heading = block.sourceHeading;
+  const attrs = heading?.attributes;
+  const attrParams = { ...attrs?.params };
+  const blockMeta = { ...attrs?.blockMeta };
+  for (const key of BUILD_PARAM_KEYS) delete attrParams[key];
+  delete blockMeta.build;
+  if (block.build) blockMeta.build = block.build;
+  return {
+    ...block,
+    templateOverrides: Object.keys(params).length ? params : undefined,
+    ...(heading
+      ? {
+          sourceHeading: {
+            ...heading,
+            attributes: {
+              ...attrs,
+              params: Object.keys(attrParams).length ? attrParams : undefined,
+              blockMeta,
+            },
+          },
+        }
+      : {}),
   };
 }

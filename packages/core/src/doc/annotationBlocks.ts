@@ -45,6 +45,7 @@ export interface TemplateBlockExtraction {
  * honors the same block-meta keys a heading `{[…]}` annotation would.
  */
 function applyBlockMeta(block: Block, m: CoercedBlockMeta): void {
+  if (m.build) block.build = m.build;
   if (m.x != null) block.x = m.x;
   if (m.y != null) block.y = m.y;
   if (m.startTime != null) block.startTime = m.startTime;

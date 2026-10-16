@@ -1,3 +1,4 @@
+export * from './Build.js';
 export * from './Types.js';
 export * from './Doc.js';
 export * from './validateDoc.js';

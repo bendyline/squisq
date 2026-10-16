@@ -1,3 +1,4 @@
+import { parseBuildSpec, type BuildSpec } from '../schemas/Build.js';
 /** Durable author intent. Generated slides and their source offsets are never saved here. */
 import type { Doc } from '../schemas/Doc.js';
 import { buildNarrationScript } from '../narration/script.js';
@@ -5,6 +6,7 @@ import { PRESENTATION_LAYOUTS, type PresentationLayout } from './presentationPla
 export const PRESENTATION_HINTS_KEY = 'squisq-presentation-hints';
 export const DYNAMIC_PRESENTATION_STYLE = 'dynamic-slides';
 export interface PresentationBlockHint {
+  build?: BuildSpec;
   blockId: string;
   layout?: PresentationLayout;
   inbetweens?: boolean;
@@ -68,7 +70,7 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
   for (const entry of value.blocks) {
     if (
       !record(entry) ||
-      !exact(entry, ['blockId'], ['layout', 'inbetweens', 'wording', 'ai']) ||
+      !exact(entry, ['blockId'], ['layout', 'inbetweens', 'wording', 'ai', 'build']) ||
       !text(entry.blockId, 1024) ||
       ids.has(entry.blockId) ||
       (entry.layout !== undefined &&
@@ -77,6 +79,11 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
     )
       return null;
     const hint: PresentationBlockHint = { blockId: entry.blockId };
+    if (entry.build !== undefined) {
+      const build = parseBuildSpec(entry.build);
+      if (!build) return null;
+      hint.build = build;
+    }
     if (entry.layout !== undefined) hint.layout = entry.layout as PresentationLayout;
     if (entry.inbetweens !== undefined) hint.inbetweens = entry.inbetweens as boolean;
     if (entry.ai !== undefined) {
