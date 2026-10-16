@@ -156,7 +156,16 @@ describe('bigText placement', () => {
   const portrait = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.portrait);
 
   it('fits the title into the upper half, with the bloom behind it', () => {
-    const layers = bigText({ ...base, template: 'bigText', title: 'Falkland Islands', imageSrc: 'p.jpg', placement: 'upper' }, portrait);
+    const layers = bigText(
+      {
+        ...base,
+        template: 'bigText',
+        title: 'Falkland Islands',
+        imageSrc: 'p.jpg',
+        placement: 'upper',
+      },
+      portrait,
+    );
     const title = layers.find((l) => l.id === 'bigtext-title') as TextLayer;
     expect(title.position.y).toBe('30%');
     expect(title.position.height).toBe('44%');
@@ -167,9 +176,15 @@ describe('bigText placement', () => {
   });
 
   it('keeps the default centred, and sizes the title to its band', () => {
-    const centred = bigText({ ...base, template: 'bigText', title: 'Falkland Islands' }, portrait).find((l) => l.id === 'bigtext-title') as TextLayer;
+    const centred = bigText(
+      { ...base, template: 'bigText', title: 'Falkland Islands' },
+      portrait,
+    ).find((l) => l.id === 'bigtext-title') as TextLayer;
     expect(centred.position.y).toBe('50%');
-    const upper = bigText({ ...base, template: 'bigText', title: 'Falkland Islands', placement: 'upper' }, portrait).find((l) => l.id === 'bigtext-title') as TextLayer;
+    const upper = bigText(
+      { ...base, template: 'bigText', title: 'Falkland Islands', placement: 'upper' },
+      portrait,
+    ).find((l) => l.id === 'bigtext-title') as TextLayer;
     expect(upper.content.style.fontSize).toBeLessThanOrEqual(centred.content.style.fontSize);
     expect(fitBigTextSize('FALKLAND ISLANDS', VIEWPORT_PRESETS.portrait, 0.44)).toBeLessThanOrEqual(
       fitBigTextSize('FALKLAND ISLANDS', VIEWPORT_PRESETS.portrait),
