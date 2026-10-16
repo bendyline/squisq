@@ -130,7 +130,6 @@ describe('PreviewPanel presentation audience', () => {
     await waitFor(() => expect(screen.getByTestId('mock-doc-player')).toBeTruthy());
     fireEvent.click(screen.getByRole('button', { name: 'Presentation options' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: /New window/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Present: New window' }));
 
     await waitFor(() => {
       const audience = popupDocument.querySelector<HTMLElement>(

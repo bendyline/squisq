@@ -291,15 +291,18 @@ const modalStyle: CSSProperties = {
   border: '1px solid var(--squisq-recorder-border)',
   borderRadius: 0,
   padding: '24px 28px',
+  boxSizing: 'border-box',
   width: 'min(560px, calc(100vw - 48px))',
-  maxHeight: 'calc(100vh - 48px)',
+  maxHeight: 'calc(100dvh - 48px)',
   overflowY: 'auto',
+  overscrollBehaviorY: 'contain',
   boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
   fontFamily: 'system-ui, -apple-system, sans-serif',
   color: 'var(--squisq-recorder-text)',
 };
 
 const titleStyle: CSSProperties = {
+  flexShrink: 0,
   margin: '0 0 16px 0',
   fontSize: 18,
   fontWeight: 600,
@@ -509,8 +512,7 @@ const recordingStatusStyle: CSSProperties = {
 const modalExpandedStyle: CSSProperties = {
   ...modalStyle,
   width: 'calc(100vw - 48px)',
-  height: 'calc(100vh - 48px)',
-  maxHeight: 'none',
+  height: 'calc(100dvh - 48px)',
   overflowY: 'hidden',
   display: 'flex',
   flexDirection: 'column',
@@ -526,6 +528,7 @@ const bodyRowStyle: CSSProperties = {
 const leftColStyle: CSSProperties = {
   flex: '0 0 min(420px, 38vw)',
   overflowY: 'auto',
+  overscrollBehaviorY: 'contain',
   minHeight: 0,
   paddingRight: 4,
 };
@@ -545,6 +548,12 @@ const checkboxRowStyle: CSSProperties = {
   gap: 6,
   marginBottom: 12,
   fontSize: 13,
+};
+
+const modeTogglesStyle: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  columnGap: 20,
 };
 
 const meterLevelStyle: CSSProperties = {
@@ -1731,47 +1740,49 @@ export function RecorderModal({
                 : captureSummary(micOn, cameraOn, screenOn, includeSystemAudio)}
             </p>
 
-            {narrationAvailable && (
-              <label style={checkboxRowStyle}>
-                <input
-                  type="checkbox"
-                  style={{ accentColor: 'var(--squisq-recorder-accent)' }}
-                  checked={narrationOn}
-                  onChange={(e) =>
-                    setPanelMode(panelModeAfterToggle(panelMode, 'narration', e.target.checked))
-                  }
-                  disabled={narrationToggleDisabled}
-                  title={
-                    narrationToggleDisabled
-                      ? narrationRecording
-                        ? 'Finish or discard the narration take first'
-                        : 'Save or discard this recording before switching modes'
-                      : undefined
-                  }
-                />
-                Show narration mode
-              </label>
-            )}
+            <div style={modeTogglesStyle}>
+              {narrationAvailable && (
+                <label style={checkboxRowStyle}>
+                  <input
+                    type="checkbox"
+                    style={{ accentColor: 'var(--squisq-recorder-accent)' }}
+                    checked={narrationOn}
+                    onChange={(e) =>
+                      setPanelMode(panelModeAfterToggle(panelMode, 'narration', e.target.checked))
+                    }
+                    disabled={narrationToggleDisabled}
+                    title={
+                      narrationToggleDisabled
+                        ? narrationRecording
+                          ? 'Finish or discard the narration take first'
+                          : 'Save or discard this recording before switching modes'
+                        : undefined
+                    }
+                  />
+                  Show narration mode
+                </label>
+              )}
 
-            {slidesAvailable && (
-              <label style={checkboxRowStyle}>
-                <input
-                  type="checkbox"
-                  style={{ accentColor: 'var(--squisq-recorder-accent)' }}
-                  checked={slidesOn}
-                  onChange={(e) =>
-                    setPanelMode(panelModeAfterToggle(panelMode, 'slides', e.target.checked))
-                  }
-                  disabled={narrationToggleDisabled}
-                  title={
-                    narrationToggleDisabled
-                      ? 'Save or discard this recording before switching modes'
-                      : undefined
-                  }
-                />
-                Show slides mode
-              </label>
-            )}
+              {slidesAvailable && (
+                <label style={checkboxRowStyle}>
+                  <input
+                    type="checkbox"
+                    style={{ accentColor: 'var(--squisq-recorder-accent)' }}
+                    checked={slidesOn}
+                    onChange={(e) =>
+                      setPanelMode(panelModeAfterToggle(panelMode, 'slides', e.target.checked))
+                    }
+                    disabled={narrationToggleDisabled}
+                    title={
+                      narrationToggleDisabled
+                        ? 'Save or discard this recording before switching modes'
+                        : undefined
+                    }
+                  />
+                  Show slides mode
+                </label>
+              )}
+            </div>
 
             {/* Promoted out of Advanced settings: which mic / which camera is
             an everyday choice, but only on a machine that actually has more

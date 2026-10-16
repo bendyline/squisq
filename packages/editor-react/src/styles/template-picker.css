@@ -17,7 +17,7 @@
   margin: 0 -8px 4px;
   padding: 12px 14px 10px;
   color: var(--squisq-text-strong);
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   border-bottom: 1px solid var(--squisq-border-subtle);
 }
 
@@ -122,7 +122,7 @@
 
 .squisq-mermaid-type-menu[data-theme='dark'] .squisq-mermaid-type-menu-heading {
   color: var(--squisq-text-strong);
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   border-bottom-color: var(--squisq-border-subtle);
 }
 .squisq-mermaid-type-menu[data-theme='dark'] .squisq-mermaid-type-card {

@@ -1352,7 +1352,9 @@ const CONTROL_KEYS: ControlKey[] = [
  * Controls that apply to the active display mode. Page (`linear`) is a
  * variable-height HTML rendition: the aspect-ratio format switch only
  * affects embedded canvas sections (which default sensibly) and captions
- * never applied, so both are hidden there. Dashboard is a static canvas
+ * never applied, so both are hidden there. Captions are hidden in Slideshow
+ * too: slides are stepped by hand with no running clock, so the player shows
+ * no timed captions there (they apply in Video). Dashboard is a static canvas
  * with no clock, captions, or managed cover — it shows the format switch,
  * its own layout picker, theme, and summarize. Cover, Theme, and Summarize
  * remain live in every other mode.
@@ -1373,6 +1375,9 @@ function controlKeysForMode(displayMode: string, hasVideoMedia: boolean): Contro
   }
   if (displayMode === 'linear') {
     return keys.filter((key) => key !== 'format' && key !== 'captions');
+  }
+  if (displayMode === 'slideshow') {
+    return keys.filter((key) => key !== 'captions');
   }
   return keys;
 }

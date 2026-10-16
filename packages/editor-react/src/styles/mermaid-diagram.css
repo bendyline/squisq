@@ -148,7 +148,7 @@
   padding: 3px;
   border: 1px solid var(--squisq-border);
   border-radius: 7px;
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   box-shadow: 0 4px 14px rgba(15, 23, 42, 0.2);
   transform: translate(-50%, calc(-100% - 8px));
 }
@@ -252,7 +252,7 @@
   padding: 8px;
   border: 1px solid var(--squisq-border);
   border-radius: 8px;
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   color: var(--squisq-text);
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
 }

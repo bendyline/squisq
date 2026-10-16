@@ -210,7 +210,7 @@
 .squisq-proof-menu {
   min-width: 200px;
   max-width: 320px;
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   border: 1px solid var(--squisq-border);
   border-radius: 8px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
@@ -266,7 +266,7 @@
 
 .squisq-proof-tooltip {
   max-width: 320px;
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   border: 1px solid var(--squisq-border);
   border-radius: 8px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
@@ -440,7 +440,7 @@
 }
 
 .squisq-proof-menu[data-theme='dark'] {
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   border-color: var(--squisq-border);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
 }
@@ -459,7 +459,7 @@
   background: var(--squisq-surface-hover);
 }
 .squisq-proof-tooltip[data-theme='dark'] {
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   border-color: var(--squisq-border);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
   color: var(--squisq-text-soft);

@@ -1012,6 +1012,12 @@ function DocPlayerContent({
 
   // Derive captionsEnabled and active style from the mode
   const captionsEnabled = captionMode !== 'off';
+  // Captions follow a running clock: playback, a paused video mid-way, or
+  // frame capture. A slideshow is stepped by hand -- its clock sits at each
+  // slide's start -- so a timed caption there froze on the slide's first
+  // phrase, often half a sentence ending in a comma, and repeated text the
+  // slide already shows.
+  const captionClockRunning = renderMode || isPlaying || (!isSlideshowMode && currentTime > 0);
   const activeCaptionStyle: CaptionStyle = captionMode === 'social' ? 'social' : 'standard';
 
   const setCaptionsEnabled = useCallback(
@@ -1722,7 +1728,7 @@ function DocPlayerContent({
           <CaptionOverlay
             captions={doc.captions}
             currentTime={currentTime}
-            enabled={captionsEnabled && (renderMode || isPlaying || currentTime > 0)}
+            enabled={captionsEnabled && captionClockRunning}
             // Standard captions scale with the frame like the social style
             // does — a fixed 16px is a whisker on a 1080 basis (broadcast
             // lower-thirds sit around 2.6% of height).
@@ -1802,7 +1808,7 @@ function DocPlayerContent({
             {hasCaptions &&
               (() => {
                 const debugPhrase = getCaptionAtTime(doc.captions!, currentTime);
-                const debugEnabled = captionsEnabled && (isPlaying || currentTime > 0);
+                const debugEnabled = captionsEnabled && captionClockRunning;
                 return (
                   <Fragment>
                     <div>

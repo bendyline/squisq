@@ -44,8 +44,8 @@ test.describe('presentation mode', () => {
 
     const shell = page.locator('.squisq-editor-shell[data-host-mode="document"]');
     await page.getByRole('button', { name: 'Presentation options' }).click();
+    // Choosing a destination presents there at once — no second launch click.
     await page.getByRole('menuitemradio', { name: /^Full screen/ }).click();
-    await page.getByRole('button', { name: 'Present: Full screen', exact: true }).click();
 
     await expect(shell).toHaveAttribute('data-presentation-mode', 'fullscreen');
     await expect

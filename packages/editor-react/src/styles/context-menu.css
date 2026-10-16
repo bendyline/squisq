@@ -6,7 +6,7 @@
   padding: 4px;
   border: 1px solid var(--squisq-border);
   border-radius: 8px;
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   box-shadow: var(--squisq-shadow-lg);
   color: var(--squisq-text);
   font-family: var(--squisq-ux-font, system-ui, sans-serif);

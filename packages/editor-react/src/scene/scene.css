@@ -444,7 +444,7 @@
   overflow: hidden;
   border: 1px solid var(--squisq-border);
   border-radius: 6px;
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   color: var(--squisq-text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
@@ -605,7 +605,7 @@
   max-height: 420px;
   display: flex;
   flex-direction: column;
-  background: var(--squisq-surface);
+  background: var(--squisq-surface-overlay);
   color: var(--squisq-text);
   border: 1px solid var(--squisq-border-subtle);
   border-radius: 8px;
