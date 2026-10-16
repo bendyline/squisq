@@ -60,7 +60,7 @@
   "dependencies": {
     "@bendyline/squisq": "2.12.1",
     "@bendyline/squisq-formats": "2.7.2",
-    "@bendyline/squisq-video": "2.4.1",
+    "@bendyline/squisq-video": "2.4.0",
     "commander": "12.1.0",
     "playwright-core": "1.63.0"
   },
