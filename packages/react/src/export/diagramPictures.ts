@@ -23,7 +23,7 @@ import {
   markdownToDoc,
   materializeBlockLayers,
 } from '@bendyline/squisq/doc';
-import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { parseMarkdown, parseSvgIsland, svgIslandDataUrl } from '@bendyline/squisq/markdown';
 import { BlockRenderer } from '../BlockRenderer.js';
 import { renderMermaidSvgForExport } from '../mermaid/mermaidRuntime.js';
 
@@ -47,7 +47,7 @@ export interface DiagramPictureOptions {
 
 /** The diagram description `@bendyline/squisq-formats/diagrams` passes. */
 export interface DiagramToPicture {
-  kind: 'mermaid' | 'diagram' | 'timeline' | 'tree' | 'container';
+  kind: 'mermaid' | 'diagram' | 'timeline' | 'tree' | 'container' | 'svg';
   markdown: string;
   source: string;
 }
@@ -80,7 +80,7 @@ export async function svgToPng(
   height: number,
   options: DiagramPictureOptions = {},
 ): Promise<DiagramPicturePng> {
-  const { scale, background } = settings(options);
+  const { scale } = settings(options);
   const pixelWidth = Math.max(1, Math.round(width * scale));
   const pixelHeight = Math.max(1, Math.round(height * scale));
   const clone = svg.cloneNode(true) as SVGSVGElement;
@@ -93,6 +93,19 @@ export async function svgToPng(
   const image = new Image();
   image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(xml)}`;
   await image.decode();
+  return imageToPng(image, width, height, options);
+}
+
+/** Paint a decoded `image` at `width` × `height` CSS pixels and read back PNG bytes. */
+async function imageToPng(
+  image: HTMLImageElement,
+  width: number,
+  height: number,
+  options: DiagramPictureOptions,
+): Promise<DiagramPicturePng> {
+  const { scale, background } = settings(options);
+  const pixelWidth = Math.max(1, Math.round(width * scale));
+  const pixelHeight = Math.max(1, Math.round(height * scale));
   const canvas = document.createElement('canvas');
   canvas.width = pixelWidth;
   canvas.height = pixelHeight;
@@ -152,6 +165,26 @@ export async function renderMermaidPicture(
   svg.append(style);
   const width = Math.min(maxWidth, box.width);
   return svgToPng(svg, width, (box.height * width) / box.width, options);
+}
+
+/**
+ * An SVG island as a PNG: core's sanitized markup (drawn as a still, in the
+ * theme's text color) at its intrinsic size, capped at `maxWidth`. Null when
+ * the fence is not an island.
+ */
+export async function renderSvgIslandPicture(
+  source: string,
+  options: DiagramPictureOptions = {},
+): Promise<DiagramPicturePng | null> {
+  const result = parseSvgIsland(source, { static: true });
+  if (!result.ok) return null;
+  const { theme, maxWidth } = settings(options);
+  const { island } = result;
+  const width = Math.min(maxWidth, island.width);
+  const image = new Image();
+  image.src = svgIslandDataUrl(island, { color: theme.colors.text });
+  await image.decode();
+  return imageToPng(image, width, (island.height * width) / island.width, options);
 }
 
 /** A file-tree fence as monospace text lines, exactly as written. */
@@ -297,6 +330,8 @@ export function createDiagramPictureRenderer(
         return renderMermaidPicture(diagram.source, options);
       case 'tree':
         return renderTreePicture(diagram.source, options);
+      case 'svg':
+        return renderSvgIslandPicture(diagram.source, options);
       default:
         return renderSquisqDiagramPicture(diagram.markdown, options);
     }

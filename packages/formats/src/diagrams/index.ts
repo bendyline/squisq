@@ -65,6 +65,9 @@ const DEFAULT_KINDS: readonly ExportDiagramKind[] = [
   'container',
 ];
 
+/** Every kind, `svg` included — for exporters with no vector picture of their own (PDF). */
+export const EXPORT_DIAGRAM_KINDS: readonly ExportDiagramKind[] = [...DEFAULT_KINDS, 'svg'];
+
 export interface ExportDiagram {
   readonly kind: ExportDiagramKind;
   /**

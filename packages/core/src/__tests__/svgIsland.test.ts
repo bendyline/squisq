@@ -96,7 +96,7 @@ describe('well-formed input', () => {
     expect(markup).toContain('xlink:href="#dot"');
     expect(markup).toContain('href="#dot"');
     expect(markup).toContain('fill="url(#pattern)"');
-    expect(markup).toContain("clip-path=\"url( '#clip' )\"");
+    expect(markup).toContain('clip-path="url( \'#clip\' )"');
     asXml(markup);
   });
 
@@ -117,7 +117,7 @@ describe('well-formed input', () => {
 
   it('accepts an XML prolog, comments and a DOCTYPE with an internal subset', () => {
     const result = parseSvgIsland(
-      '﻿<?xml version="1.0" encoding="utf-8"?>\n<!-- Generator: Adobe Illustrator -->\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [\n  <!ENTITY ns_svg "http://www.w3.org/2000/svg">\n]>\n<svg xmlns="&ns_svg;" width="100pt" height="50pt"><rect width="10" height="10"/></svg>\n<!-- trailing -->\n',
+      '\uFEFF<?xml version="1.0" encoding="utf-8"?>\n<!-- Generator: Adobe Illustrator -->\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd" [\n  <!ENTITY ns_svg "http://www.w3.org/2000/svg">\n]>\n<svg xmlns="&ns_svg;" width="100pt" height="50pt"><rect width="10" height="10"/></svg>\n<!-- trailing -->\n',
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -195,7 +195,8 @@ describe('rejected input', () => {
   });
 
   it('caps <use> fan-out (a "billion laughs" of shapes)', () => {
-    let defs = '<g id="l0"><rect/><rect/><rect/><rect/><rect/><rect/><rect/><rect/><rect/><rect/></g>';
+    let defs =
+      '<g id="l0"><rect/><rect/><rect/><rect/><rect/><rect/><rect/><rect/><rect/><rect/></g>';
     for (let i = 1; i <= 6; i++) {
       defs += `<g id="l${i}">${`<use href="#l${i - 1}"/>`.repeat(10)}</g>`;
     }
@@ -234,12 +235,14 @@ describe('hostile corpus', () => {
     'animate href':
       '<svg><a><animate attributeName="href" values="javascript:alert(1)"/></a><animate attributeName="xlink:href" to="javascript:alert(1)"/></svg>',
     'set href': '<svg><set attributeName="HREF" to="javascript:alert(1)"/></svg>',
-    'animate external url': '<svg><rect><set attributeName="fill" to="url(https://evil/x#p)"/></rect></svg>',
+    'animate external url':
+      '<svg><rect><set attributeName="fill" to="url(https://evil/x#p)"/></rect></svg>',
     'prefixed namespace href':
       '<svg xmlns:foo="http://www.w3.org/1999/xlink"><use foo:href="javascript:alert(1)"/></svg>',
     'xml base': '<svg xml:base="https://evil/"><use href="#a"/></svg>',
     'external url attribute': '<svg><rect fill="url(https://evil/x.svg#p)"/></svg>',
-    'css escape': '<svg><rect fill="u\\72 l(https://evil/x)"/><rect style="fill: \\75 rl(https://evil)"/></svg>',
+    'css escape':
+      '<svg><rect fill="u\\72 l(https://evil/x)"/><rect style="fill: \\75 rl(https://evil)"/></svg>',
     'style import': '<svg><style>@import url("https://evil/x.css"); .a{fill:red}</style></svg>',
     'style font-face':
       '<svg><style>@font-face { font-family: x; src: url(https://evil/f.woff) }</style></svg>',
@@ -247,7 +250,8 @@ describe('hostile corpus', () => {
     'style comment smuggle': '<svg><style>.a { fill: u/**/rl(https://evil/x) }</style></svg>',
     'style attribute url': '<svg><rect style="fill:url(https://evil/x)"/></svg>',
     'style expression': '<svg><rect style="width: expression(alert(1))"/></svg>',
-    'html breakout in style': '<svg><style></style><style>x</style><iframe src=javascript:alert(1)></svg>',
+    'html breakout in style':
+      '<svg><style></style><style>x</style><iframe src=javascript:alert(1)></svg>',
     comments: '<svg><!-- a -- b --><rect/></svg>',
   };
 

@@ -33,6 +33,7 @@ import type {
 } from '../../schemas/BlockTemplates.js';
 import type { MarkdownCodeBlock } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
+import { isSvgIslandLang, parseSvgIsland } from '../../markdown/svgIsland.js';
 import { resolveSupplementalMediaLayout } from '../richMediaLayout.js';
 import { extractEmbeddedVideos, extractImages, isPictureFence } from '../templateInputs.js';
 import {
@@ -148,7 +149,7 @@ function unconsumedMedia(block: Block | undefined): {
     seen.add(image.src);
     return true;
   });
-  const mermaid = contents.filter(
+  const pictures = contents.filter(
     (node): node is MarkdownCodeBlock =>
       node.type === 'code' && isPictureFence(node) && node.value.trim().length > 0,
   );
@@ -157,7 +158,11 @@ function unconsumedMedia(block: Block | undefined): {
       image.width && image.height ? image.width / image.height : undefined,
     ),
     ...videos.map(() => 16 / 9),
-    ...mermaid.map(() => 16 / 9),
+    // An SVG island knows its shape; a Mermaid diagram does not until drawn.
+    ...pictures.map((fence) => {
+      const island = isSvgIslandLang(fence.lang) ? parseSvgIsland(fence.value) : null;
+      return island?.ok ? island.island.aspectRatio : 16 / 9;
+    }),
   ];
   return { count: aspectRatios.length, aspectRatios };
 }

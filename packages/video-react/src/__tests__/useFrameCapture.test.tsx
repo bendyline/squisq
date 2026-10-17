@@ -50,6 +50,7 @@ vi.mock('react-dom/client', () => ({ createRoot: frameCaptureMocks.createRoot })
 vi.mock('@bendyline/squisq-react', () => ({
   DocPlayer: 'mock-doc-player',
   MediaContext: { Provider: 'mock-media-provider' },
+  decodeSvgImages: async () => undefined,
 }));
 vi.mock('html2canvas', () => ({ default: frameCaptureMocks.html2canvas }));
 

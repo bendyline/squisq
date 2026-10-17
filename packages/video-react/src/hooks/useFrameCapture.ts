@@ -17,7 +17,7 @@ import type { Doc, MediaCrop, MediaProvider } from '@bendyline/squisq/schemas';
 import { parseMediaCrop } from '@bendyline/squisq/mediaEdit';
 import { resolveDashboardStyleId } from '@bendyline/squisq/doc';
 import type { RenderHtmlOptions } from '@bendyline/squisq-video';
-import { DocPlayer, MediaContext } from '@bendyline/squisq-react';
+import { DocPlayer, MediaContext, decodeSvgImages } from '@bendyline/squisq-react';
 import type { SquisqRenderAPI, CaptionMode, CaptionStyle } from '@bendyline/squisq-react';
 import {
   CaptureVideoFrameRegistry,
@@ -197,6 +197,8 @@ export async function waitForCaptureAssets(
       decodedImages.add(image);
     }),
   );
+  // SVG `<image>` elements (SVG islands, contain-fit image layers) too.
+  await decodeSvgImages(captureRoot);
 }
 
 function waitForCaptureVideoState(

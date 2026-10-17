@@ -1,0 +1,74 @@
+/* SVG islands (```svg fences) in the Write view. The fence is hidden; the
+ * widget shows the island as a picture (core's sanitized markup, as an
+ * image) and, on demand, its source in a Monaco inset. */
+
+.squisq-wysiwyg-editor pre.squisq-svg-island-fence-hidden {
+  display: none;
+}
+
+.squisq-svg-island-widget-host {
+  margin: 0.75rem 0 1.25rem;
+}
+
+.squisq-svg-island-preview {
+  padding: 0.5rem 0;
+}
+
+.squisq-svg-island-preview .squisq-md-svg,
+.squisq-svg-island-preview .squisq-md-svg-error {
+  margin: 0;
+}
+
+.squisq-svg-island-picture > img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.squisq-md-svg-error-note {
+  margin: 0;
+  color: var(--squisq-text-muted);
+  font-size: 0.85em;
+}
+
+.squisq-svg-island-source {
+  box-sizing: border-box;
+  display: flex;
+  margin-top: 0.5rem;
+  overflow: hidden;
+  resize: vertical;
+  border: 1px solid var(--squisq-border);
+  border-radius: 8px;
+  background: var(--squisq-surface);
+}
+
+.squisq-svg-island-removed {
+  margin: 0.4rem 0 0;
+  color: var(--squisq-text-muted);
+  font-size: 0.8rem;
+}
+
+.squisq-svg-island-max {
+  align-items: center;
+  justify-content: center;
+}
+
+.squisq-svg-island-max-picture {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.squisq-svg-island-max-picture .squisq-md-svg {
+  margin: 0;
+}
+
+.squisq-svg-island-max-picture img {
+  width: min(100%, 1200px);
+  max-height: 80vh;
+  object-fit: contain;
+}

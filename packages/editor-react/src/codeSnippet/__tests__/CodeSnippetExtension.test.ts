@@ -44,11 +44,12 @@ describe('CodeSnippetExtension', () => {
     expect(entriesOf(editor)).toHaveLength(2);
   });
 
-  it('does not steal plain, Mermaid, diagram, tree, or timeline fences', () => {
+  it('does not steal plain, Mermaid, SVG, diagram, tree, or timeline fences', () => {
     const editor = makeEditor(
       [
         '```text\nplain\n```',
         '```mermaid\nflowchart LR\n  a --> b\n```',
+        '```svg\n<svg viewBox="0 0 1 1"/>\n```',
         '```diagram\n+---+\n| A |\n+---+\n```',
         '```tree\nsrc/\n└── index.ts\n```',
         '```timeline\nMilestones: ● Start ─►\n```',

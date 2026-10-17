@@ -37,6 +37,8 @@ import { RepairableDiagramExtension } from './asciiDiagram/RepairableDiagramExte
 import { applyRepairCommand } from './asciiDiagram/asciiDiagramCommands';
 import { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste';
 import { MermaidDiagramExtension } from './mermaid/MermaidDiagramExtension';
+import { SvgIslandExtension } from './svgIsland/SvgIslandExtension';
+import { shouldPasteAsSvgFence } from './svgIsland/svgPaste';
 import { createMermaidThemeStore, type MermaidThemeStore } from './mermaid/mermaidThemeStore';
 import { CodeSnippetExtension } from './codeSnippet/CodeSnippetExtension';
 import { HostFenceExtension } from './fenceWidgets/HostFenceExtension';
@@ -427,6 +429,7 @@ export function WysiwygEditor({
       BlockTagActivityExtension,
       AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
       MermaidDiagramExtension.configure({ themeStore: mermaidThemeStore }),
+      SvgIslandExtension.configure({ renderers: () => fenceRenderersRef.current ?? undefined }),
       CodeSnippetExtension.configure({
         reservedLanguages: fenceRendererLangs(fenceRenderers ?? undefined),
         onCopyCode: () => onCopyCodeRef.current,
@@ -568,6 +571,21 @@ export function WysiwygEditor({
         if (pasteVideoEmbedCode(view, text)) {
           event.preventDefault();
           return true;
+        }
+
+        // Raw SVG markup → a ```svg fence (an SVG island), not a paragraph
+        // of literal tags. Inside a code block, a paste stays text.
+        if (!view.state.selection.$from.parent.type.spec.code && shouldPasteAsSvgFence(text)) {
+          const codeBlockType = view.state.schema.nodes.codeBlock;
+          if (codeBlockType) {
+            event.preventDefault();
+            view.dispatch(
+              view.state.tr.replaceSelectionWith(
+                codeBlockType.create({ language: 'svg' }, view.state.schema.text(text.trim())),
+              ),
+            );
+            return true;
+          }
         }
 
         // Bare (unfenced) ASCII diagram art → verbatim into a fresh code

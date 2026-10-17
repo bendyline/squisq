@@ -3172,6 +3172,27 @@
   background: color-mix(in srgb, currentcolor 4%, transparent);
 }
 
+/* SVG islands show at their intrinsic size, never wider than the column. */
+.squisq-md-svg {
+  margin: 1.25rem 0;
+}
+
+.squisq-md-svg > img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.squisq-md-svg-error {
+  margin: 1em 0;
+}
+
+.squisq-md-svg-error-note {
+  margin: 0 0 0.4em;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
 /* Opt-in fenced-code copy affordance. The button stays deliberately quiet
    until the code frame is hovered or the control receives keyboard focus. */
 .squisq-md-code-frame {

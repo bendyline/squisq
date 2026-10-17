@@ -1,16 +1,17 @@
 /** Monaco inset mounted in place of an ordinary language-tagged code fence. */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import MonacoEditor, { type OnChange, type OnMount } from '@monaco-editor/react';
+import type { OnMount } from '@monaco-editor/react';
 import type { Editor } from '@tiptap/react';
 import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { Icon } from '../Icon';
-import { useMonacoLoader } from '../useMonacoLoader';
 import { replaceCodeSnippetText } from './codeSnippetCommands';
 import { useCodeSnippetData } from './codeSnippetData';
 import { focusCodeSnippetAtEnd } from './codeSnippetFocus';
 import { codeSnippetFenceLanguageToken } from './codeSnippetLanguages';
-import { CODE_SNIPPET_LINE_HEIGHT, codeSnippetAutoHeight } from './codeSnippetSizing';
+import { codeSnippetAutoHeight } from './codeSnippetSizing';
+import { FenceMonacoEditor } from './FenceMonacoEditor';
+import { useEditorEditable, useHostColorScheme } from './fenceEditorHooks';
 
 // A block id is stable only within one Tiptap editor. Old decoration roots
 // unmount asynchronously, so two editor generations can briefly overlap.
@@ -35,50 +36,6 @@ export interface CodeSnippetWidgetProps {
    * nothing, the button falls back to `navigator.clipboard`.
    */
   onCopyCode?: () => CodeBlockCopyHandler | undefined;
-}
-
-function schemeFromHost(host: HTMLElement | null | undefined): 'light' | 'dark' {
-  return host?.closest<HTMLElement>('[data-theme]')?.dataset.theme === 'dark' ? 'dark' : 'light';
-}
-
-/**
- * Resolve the color scheme from the widget's host element, or `null` when the
- * host is detached from the document.
- *
- * `null` matters because Monaco's theme is page-global: every mounted
- * `<MonacoEditor>` re-applies its own `theme` prop to every editor on the
- * page. ProseMirror can rebuild widget decorations during a view-mode switch,
- * producing a widget whose DOM is torn down again within milliseconds — but
- * whose React root still renders once. By then the host tree is detached, so
- * `closest('[data-theme]')` finds nothing and the scheme would fall back to
- * `'light'`, restyling the Source editor that just mounted dark. A `null`
- * scheme tells the widget to keep its placeholder and never mount Monaco.
- *
- * A host that was merely rendered a frame before its editor view attached
- * flips to a real scheme on the follow-up check; a teardown zombie never
- * does. A missing host (`undefined`/`null`) keeps the historical light
- * default so host-less mounts still render.
- */
-function useHostColorScheme(host: HTMLElement | null | undefined): 'light' | 'dark' | null {
-  const [scheme, setScheme] = useState<'light' | 'dark' | null>(() =>
-    host != null && !host.isConnected ? null : schemeFromHost(host),
-  );
-  useEffect(() => {
-    if (host != null && !host.isConnected) {
-      setScheme(null);
-      const raf = requestAnimationFrame(() => {
-        if (host.isConnected) setScheme(schemeFromHost(host));
-      });
-      return () => cancelAnimationFrame(raf);
-    }
-    const themedAncestor = host?.closest<HTMLElement>('[data-theme]');
-    setScheme(schemeFromHost(host));
-    if (!themedAncestor || typeof MutationObserver === 'undefined') return;
-    const observer = new MutationObserver(() => setScheme(schemeFromHost(host)));
-    observer.observe(themedAncestor, { attributes: true, attributeFilter: ['data-theme'] });
-    return () => observer.disconnect();
-  }, [host]);
-  return scheme;
 }
 
 type CopyStatus = 'idle' | 'copied' | 'failed';
@@ -109,19 +66,6 @@ async function writeSnippetToClipboard(
   }
   await navigator.clipboard.writeText(source);
 }
-function useEditorEditable(editor: Editor): boolean {
-  const [editable, setEditable] = useState(editor.isEditable);
-  useEffect(() => {
-    const sync = () => setEditable(editor.isEditable);
-    editor.on('update', sync);
-    editor.on('transaction', sync);
-    return () => {
-      editor.off('update', sync);
-      editor.off('transaction', sync);
-    };
-  }, [editor]);
-  return editable;
-}
 
 export function CodeSnippetWidget({
   editor,
@@ -131,7 +75,6 @@ export function CodeSnippetWidget({
   onCopyCode,
 }: CodeSnippetWidgetProps) {
   const data = useCodeSnippetData(editor, blockId);
-  const { ready } = useMonacoLoader(data?.monacoLanguage);
   const colorScheme = useHostColorScheme(host);
   const editable = useEditorEditable(editor);
   const [modelInstanceId] = useState(allocateCodeSnippetModelInstanceId);
@@ -162,10 +105,10 @@ export function CodeSnippetWidget({
     copyResetTimer.current = setTimeout(() => setCopyStatus('idle'), 1600);
   }, [onCopyCode]);
 
-  const handleChange: OnChange = useCallback(
-    (value) => {
+  const handleChange = useCallback(
+    (value: string) => {
       if (!editable) return;
-      replaceCodeSnippetText(editor, blockId, value ?? '');
+      replaceCodeSnippetText(editor, blockId, value);
     },
     [blockId, editable, editor],
   );
@@ -208,35 +151,16 @@ export function CodeSnippetWidget({
           <span>{COPY_LABELS[copyStatus]}</span>
         </button>
       </div>
-      <div className="squisq-code-snippet-editor" aria-label={`${data.label} code editor`}>
-        {ready && colorScheme !== null ? (
-          <MonacoEditor
-            path={`inmemory://squisq/code-snippet/${modelInstanceId}/${blockId}.${modelSuffix || 'txt'}`}
-            language={data.monacoLanguage}
-            theme={colorScheme === 'dark' ? 'vs-dark' : 'vs'}
-            value={data.source}
-            onChange={handleChange}
-            onMount={handleMount}
-            options={{
-              automaticLayout: true,
-              contextmenu: true,
-              folding: true,
-              fontSize: 13,
-              lineHeight: CODE_SNIPPET_LINE_HEIGHT,
-              lineNumbers: 'on',
-              minimap: { enabled: false },
-              padding: { top: 10, bottom: 10 },
-              readOnly: !editable,
-              renderLineHighlight: 'line',
-              scrollBeyondLastLine: false,
-              tabSize: 2,
-              wordWrap: 'off',
-            }}
-          />
-        ) : (
-          <div className="squisq-code-snippet-loading">Loading code editor…</div>
-        )}
-      </div>
+      <FenceMonacoEditor
+        modelPath={`inmemory://squisq/code-snippet/${modelInstanceId}/${blockId}.${modelSuffix || 'txt'}`}
+        language={data.monacoLanguage}
+        source={data.source}
+        editable={editable}
+        colorScheme={colorScheme}
+        onChange={handleChange}
+        onMount={handleMount}
+        ariaLabel={`${data.label} code editor`}
+      />
     </div>
   );
 }

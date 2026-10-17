@@ -43,6 +43,7 @@ import type {
 } from '@bendyline/squisq/markdown';
 import {
   findBlockVideoEmbed,
+  isSvgIslandLang,
   readFrontmatterThemeId,
   type BlockVideoEmbed,
 } from '@bendyline/squisq/markdown';
@@ -55,6 +56,8 @@ import { stripHtmlTags } from '../shared/text.js';
 import { normalizeOoxmlHex } from '../shared/ooxmlColor.js';
 import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
 import { buildWordVideoRun, wordVideoSize } from './videoEmbed.js';
+import { buildWordSvgIslandParagraph } from './svgIsland.js';
+import { docHasSvgIslands, svgIslandImage } from '../shared/svgIslands.js';
 import {
   fontAwesomeFace,
   fontAwesomeFaces,
@@ -150,6 +153,16 @@ export interface DocxExportOptions {
   >;
   /** Permit carefully validated relative hyperlink targets. Default: false. */
   allowRelativeHyperlinks?: boolean;
+  /**
+   * PNG renderings of SVG islands (```svg fences), keyed by the fence source
+   * as written (trimmed) — the `svg` map from `rasterizeDiagrams` with
+   * `kinds: ['svg']`. Word draws an island's SVG; the PNG is what older
+   * readers show. Without one, a generated stand-in is used.
+   */
+  svgIslandFallbacks?: Map<
+    string,
+    { data: ArrayBuffer | Uint8Array; width: number; height: number }
+  >;
 }
 
 /**
@@ -178,6 +191,7 @@ export async function markdownDocToDocx(
   if ([...stories.body, ...stories.header, ...stories.footer].some(isVideoBlock)) {
     ctx.videoPosters = await import('../shared/videoPoster.js');
   }
+  if (docHasSvgIslands(doc)) ctx.svgIslandPosters = await import('../shared/svgIslandPoster.js');
   ctx.setRelationshipSource('document');
   const bodyXml = convertBlocks(stories.body, ctx);
   ctx.setRelationshipSource('header');
@@ -296,6 +310,11 @@ class ExportContext {
   readonly iconFamilies = new Set<IconFamily>();
   /** Poster + embed-code helpers, loaded only when the document has a video. */
   videoPosters: typeof import('../shared/videoPoster.js') | null = null;
+  /** Stand-in PNGs for SVG islands, loaded only when the document has one. */
+  svgIslandPosters: typeof import('../shared/svgIslandPoster.js') | null = null;
+  readonly svgIslandFallbacks: DocxExportOptions['svgIslandFallbacks'];
+  /** The theme's text color (CSS), which an island's `currentColor` becomes. */
+  readonly islandColor: string | undefined;
 
   private nextDocPrId = 1;
 
@@ -306,6 +325,7 @@ class ExportContext {
     let themeBodyColor: string | undefined;
     let themeMutedColor: string | undefined;
     let themeBackgroundColor: string | undefined;
+    let themeTextColor: string | undefined;
 
     if (options.themeId) {
       const theme: Theme = resolveThemeForDoc(doc, options.themeId, options.themeRegistry);
@@ -327,6 +347,7 @@ class ExportContext {
       themeBodyColor = normalizeOoxmlHex(theme.colors?.text);
       themeMutedColor = normalizeOoxmlHex(theme.colors?.textMuted);
       themeBackgroundColor = normalizeOoxmlHex(theme.colors?.background);
+      themeTextColor = theme.colors?.text;
     }
 
     this.font = options.defaultFont ?? themeFont ?? DEFAULT_FONT;
@@ -339,6 +360,8 @@ class ExportContext {
     this.mutedColor = themeMutedColor;
     this.backgroundColor = themeBackgroundColor;
     this.resolvedImages = options.images ?? new Map();
+    this.svgIslandFallbacks = options.svgIslandFallbacks;
+    this.islandColor = themeTextColor;
     this.allowRelativeHyperlinks = options.allowRelativeHyperlinks ?? false;
     this.signal = options.signal;
   }
@@ -541,7 +564,7 @@ function convertBlock(node: MarkdownBlockNode, ctx: ExportContext, listDepth: nu
     case 'list':
       return convertList(node, ctx, listDepth);
     case 'code':
-      return convertCodeBlock(node);
+      return (isSvgIslandLang(node.lang) && convertSvgIsland(node, ctx)) || convertCodeBlock(node);
     case 'table':
       return convertTable(node, ctx);
     case 'thematicBreak':
@@ -649,6 +672,32 @@ function convertListItem(
     }
   }
   return parts.join('');
+}
+
+/**
+ * A ```svg fence as an inline picture: the sanitized SVG with a PNG
+ * fallback. Empty string (export the fence as code) when the fence is not a
+ * usable island or no fallback PNG could be made.
+ */
+function convertSvgIsland(node: MarkdownCodeBlock, ctx: ExportContext): string {
+  const image = svgIslandImage(node.value, { color: ctx.islandColor });
+  if (!image) return '';
+  const host = ctx.svgIslandFallbacks?.get(node.value.trim());
+  const fallback =
+    host && host.width > 0 && host.height > 0
+      ? host.data
+      : ctx.svgIslandPosters?.svgIslandPosterPng(image.width / image.height)?.data;
+  if (!fallback) return '';
+  const png = ctx.addImage(fallback, 'image/png', `image${ctx.images.length + 1}.png`);
+  const svg = ctx.addImage(image.data, 'image/svg+xml', `image${ctx.images.length + 1}.svg`);
+  return buildWordSvgIslandParagraph({
+    pngRelId: png.relId,
+    svgRelId: svg.relId,
+    docPrId: png.docPrId,
+    width: image.width,
+    height: image.height,
+    alt: image.alt,
+  });
 }
 
 function convertCodeBlock(node: MarkdownCodeBlock): string {

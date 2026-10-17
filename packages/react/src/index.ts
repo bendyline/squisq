@@ -39,6 +39,9 @@ export { InlineAudioPlayer } from './InlineAudioPlayer.js';
 export type { InlineAudioPlayerProps } from './InlineAudioPlayer.js';
 export { VideoEmbedFrame } from './VideoEmbedFrame.js';
 export type { VideoEmbedFrameProps } from './VideoEmbedFrame.js';
+export { SvgIslandImage } from './svgIsland/SvgIslandImage.js';
+export type { SvgIslandImageProps } from './svgIsland/SvgIslandImage.js';
+export { decodeSvgImages } from './utils/decodeSvgImages.js';
 export { AnimatedImageControls } from './animatedImage/AnimatedImageControls.js';
 export type { AnimatedImageControlsProps } from './animatedImage/AnimatedImageControls.js';
 export { useAnimatedImage } from './animatedImage/useAnimatedImage.js';
@@ -61,6 +64,7 @@ export type {
 export { TreeLayer } from './layers/TreeLayer.js';
 export { MapLayer } from './layers/MapLayer.js';
 export { MermaidLayer } from './layers/MermaidLayer.js';
+export { SvgLayer } from './layers/SvgLayer.js';
 
 // Timed media clips (block.media + doc.documentMedia playback)
 export { MediaClipLayer } from './MediaClipLayer.js';

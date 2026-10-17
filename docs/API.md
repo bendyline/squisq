@@ -1107,6 +1107,51 @@ function matchTrailingTemplateAnnotation(text: string): TrailingAnnotationMatch 
 function parseTimeSeconds(value: string): number | null; // "02:15", "1500ms", "8"
 ```
 
+#### SVG islands
+
+A fenced code block tagged `svg` renders as a picture everywhere Squisq
+renders markdown — the read view, Page mode, the Write view, slides, and
+exports. Tag a fence `xml` to show SVG markup as code instead.
+
+```ts
+function isSvgIslandLang(lang: string | null | undefined): boolean;
+function parseSvgIsland(source: string, options?: { static?: boolean }): SvgIslandResult;
+function svgIslandMarkup(island: SvgIsland, options?: SvgIslandMarkupOptions): string;
+function svgIslandDataUrl(island: SvgIsland, options?: SvgIslandMarkupOptions): string;
+
+type SvgIslandResult =
+  | { ok: true; island: SvgIsland; diagnostics: readonly SvgIslandDiagnostic[] }
+  | {
+      ok: false;
+      reason: 'empty' | 'not-svg' | 'too-large' | 'too-deep' | 'parse';
+      message: string;
+    };
+
+interface SvgIsland {
+  markup: string; // sanitized, standalone SVG — never the author's bytes
+  width: number; // intrinsic size in CSS pixels
+  height: number;
+  aspectRatio: number;
+  title?: string; // root aria-label, else its first <title>
+}
+
+interface SvgIslandMarkupOptions {
+  color?: string; // what currentColor resolves to
+  replaceCurrentColor?: boolean; // substitute it outright (Office, EPUB readers)
+}
+```
+
+`parseSvgIsland` keeps an allowlist of SVG elements and attributes and only
+references inside the island (`#id`, `url(#id)`, raster `data:` images);
+scripts, event handlers, links, `<foreignObject>`, external references and
+CSS that could fetch are removed, and the result is re-serialized. Show an
+island only through `svgIslandDataUrl` — as an `<img>` or SVG `<image>` —
+where browsers run no script and load nothing. `static: true` draws a still
+(frozen animations keep their end state).
+
+**Host note:** islands render as `data:image/svg+xml` images, so a host
+Content-Security-Policy needs `img-src data:` (the dev site's already has it).
+
 ---
 
 ### Subpath: Timing

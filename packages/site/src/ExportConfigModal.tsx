@@ -541,9 +541,13 @@ export function ExportConfigModal({
         case 'docx': {
           const { markdownDocToDocx } = await import('@bendyline/squisq-formats/docx');
           const pictured = await pictureDiagrams(mdDoc);
+          // SVG islands go in as vector art; their pictures are only the
+          // PNG fallback Word stores beside it.
+          const { svg } = await pictureDiagrams(mdDoc, ['svg']);
           const buf = await markdownDocToDocx(pictured.markdownDoc, {
             themeId: exportThemeId,
             images: pictured.images,
+            svgIslandFallbacks: svg,
           });
           downloadBlob(
             new Blob([buf], {
@@ -566,12 +570,13 @@ export function ExportConfigModal({
             themeId,
           });
           // Drawings, timelines and ASCII diagrams export as native shapes;
-          // Mermaid needs a picture.
-          const { mermaid } = await pictureDiagrams(mdDoc, ['mermaid']);
+          // Mermaid needs a picture, and an SVG island's picture is the PNG
+          // fallback stored beside its vector art.
+          const { mermaid, svg } = await pictureDiagrams(mdDoc, ['mermaid', 'svg']);
           const buf = await docToPptx(exportDoc, {
             themeId: exportThemeId,
             images,
-            diagramImages: mermaid,
+            diagramImages: new Map([...mermaid, ...svg]),
           });
           downloadBlob(
             new Blob([buf], {
@@ -583,7 +588,8 @@ export function ExportConfigModal({
         }
         case 'pdf': {
           const { markdownDocToPdf } = await import('@bendyline/squisq-formats/pdf');
-          const pictured = await pictureDiagrams(mdDoc);
+          // PDF has no vector picture of its own: SVG islands are pictured too.
+          const pictured = await pictureDiagrams(mdDoc, 'all');
           const buf = await markdownDocToPdf(pictured.markdownDoc, {
             themeId: exportThemeId,
             images: pictured.images,

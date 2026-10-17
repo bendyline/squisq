@@ -359,6 +359,27 @@ export {
 } from './asciiDiagram/asciiDiagramOps.js';
 export { shouldPasteAsAsciiFence } from './asciiDiagram/asciiPaste.js';
 
+// SVG islands — every explicit `svg` fence shows as a picture of core's
+// sanitized markup, with a Source view (Monaco) editing the fence body.
+export {
+  SvgIslandExtension,
+  SVG_ISLAND_KEY,
+  findSvgIslandBlockPos,
+  isSvgIslandNode,
+  isSvgIslandSourceVisible,
+  replaceSvgIslandText,
+  toggleSvgIslandSource,
+} from './svgIsland/SvgIslandExtension.js';
+export type {
+  SvgIslandBlockEntry,
+  SvgIslandExtensionOptions,
+  SvgIslandPluginState,
+} from './svgIsland/SvgIslandExtension.js';
+export { SvgIslandWidget } from './svgIsland/SvgIslandWidget.js';
+export { describeSvgIslandRemovals } from './svgIsland/svgIslandRemovals.js';
+export type { SvgIslandWidgetProps } from './svgIsland/SvgIslandWidget.js';
+export { shouldPasteAsSvgFence } from './svgIsland/svgPaste.js';
+
 // Complex diagram editor — every explicit `mermaid` fence is rendered through
 // Mermaid's public renderer inside the shared diagram chrome. Flowcharts add
 // source-backed node/edge gestures and the full Mermaid shape catalog; every

@@ -29,9 +29,12 @@ describe('code snippet languages', () => {
       'tree',
       'timeline',
       'mermaid',
+      'svg',
     ]) {
       expect(isCodeSnippetFenceLanguage(language), language).toBe(false);
     }
+    // Markup shown as code still gets the inset.
+    expect(isCodeSnippetFenceLanguage('xml')).toBe(true);
     expect(isCodeSnippetFenceLanguage('typescript')).toBe(true);
     expect(isCodeSnippetFenceLanguage('kusto')).toBe(true);
   });

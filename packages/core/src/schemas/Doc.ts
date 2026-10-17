@@ -446,7 +446,8 @@ export type Layer =
   | VideoEmbedLayer
   | TableLayer
   | TreeLayer
-  | MermaidLayer;
+  | MermaidLayer
+  | SvgLayer;
 
 interface BaseLayer {
   /** Unique identifier for this layer */
@@ -871,6 +872,26 @@ export interface MermaidLayer extends BaseLayer {
     foreground?: string;
     /** Inner panel padding in pixels. */
     padding?: number;
+  };
+}
+
+/**
+ * SVG island layer — an authored ```svg code fence drawn as a picture.
+ *
+ * The layer carries the fence's RAW source, never sanitized markup: every
+ * renderer re-runs core's `parseSvgIsland` and shows only its output, as an
+ * image. A hand-written Doc cannot slip markup past the sanitizer by putting
+ * it on a layer (the same rule `VideoEmbedLayer` follows for player URLs).
+ */
+export interface SvgLayer extends BaseLayer {
+  type: 'svg';
+  content: {
+    /** Complete fence body (`<svg …>…</svg>`), excluding the fence delimiters. */
+    source: string;
+    /** Text alternative; defaults to the island's own title. */
+    alt?: string;
+    /** The surrounding text color, which the island's `currentColor` follows. */
+    color?: string;
   };
 }
 

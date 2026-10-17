@@ -28,6 +28,7 @@ import type {
 import { materializeDashboard, resolveThemeForDoc, VIEWPORT_PRESETS } from '@bendyline/squisq/doc';
 import type { SquisqRenderAPI } from './types';
 import { BlockRenderer } from './BlockRenderer';
+import { decodeSvgImages } from './utils/decodeSvgImages';
 
 export interface DashboardViewProps {
   doc: Doc;
@@ -79,6 +80,7 @@ async function waitForDashboardAssets(root: HTMLElement): Promise<void> {
       });
     }),
   );
+  await decodeSvgImages(root);
   // Two frames so the committed paint includes the decoded images.
   await new Promise<void>((resolve) => {
     if (typeof requestAnimationFrame === 'function') {
@@ -279,6 +281,7 @@ export function DashboardView({
               // A hosted video plays on demand, so an interactive dashboard
               // can host its player; a captured image gets a still.
               videoEmbeds={renderMode ? 'placeholder' : 'player'}
+              staticMedia={renderMode}
             />
             {cell.frame && cell.frame.overlayLayers.length > 0 && (
               // Borders and accents ride above the block: a template that

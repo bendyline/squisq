@@ -39,6 +39,7 @@
  */
 
 import { fromHtml } from 'hast-util-from-html';
+import { SVG_ISLAND_LIMITS } from './svgIslandLimits.js';
 import type { MarkdownNode } from './types.js';
 
 // ============================================
@@ -99,14 +100,7 @@ export interface SvgIslandMarkupOptions {
   replaceCurrentColor?: boolean;
 }
 
-/** Hard limits; a fence past any of them renders as code. */
-export const SVG_ISLAND_LIMITS = Object.freeze({
-  maxSourceBytes: 512 * 1024,
-  maxElements: 20_000,
-  maxDepth: 200,
-  /** Elements rendered after `<use>` expansion. */
-  maxExpandedElements: 50_000,
-});
+export { SVG_ISLAND_LIMITS };
 
 // ============================================
 // Fence recognition
@@ -443,8 +437,7 @@ const REMOTE_REF_RE = /[a-z][a-z0-9+.-]*:\/\//i;
 // eslint-disable-next-line no-control-regex
 const XML_INVALID_RE = /[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g;
 const LONE_SURROGATE_RE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
-const SAFE_COLOR_RE =
-  /^(?:#[0-9a-f]{3,8}|(?:rgb|rgba|hsl|hsla)\([\d\s.,%a-z/+-]*\)|[a-z]{3,20})$/i;
+const SAFE_COLOR_RE = /^(?:#[0-9a-f]{3,8}|(?:rgb|rgba|hsl|hsla)\([\d\s.,%a-z/+-]*\)|[a-z]{3,20})$/i;
 
 // ============================================
 // Sanitized tree
@@ -620,7 +613,6 @@ interface HastLike {
   children?: HastLike[];
 }
 
-
 /** A frozen animation's end value, to be written onto its parent. */
 interface Freeze {
   name: string;
@@ -640,7 +632,7 @@ interface SanitizeState {
  * Bounded: at most 16 prolog items.
  */
 function stripProlog(source: string): string {
-  let rest = source.replace(/^﻿/, '');
+  let rest = source.replace(/^\uFEFF/, '');
   for (let i = 0; i < 16; i++) {
     rest = rest.trimStart();
     let end = -1;
@@ -857,7 +849,10 @@ function lengthPx(value: string | undefined): number | undefined {
 }
 
 function parseViewBox(value: string | undefined): { width: number; height: number } | undefined {
-  const parts = value?.trim().split(/[\s,]+/).map(Number);
+  const parts = value
+    ?.trim()
+    .split(/[\s,]+/)
+    .map(Number);
   if (!parts || parts.length !== 4 || !parts.every(Number.isFinite)) return undefined;
   const [, , width, height] = parts as [number, number, number, number];
   return width > 0 && height > 0 ? { width, height } : undefined;
@@ -930,7 +925,11 @@ interface SerializeOptions {
   replaceCurrentColor?: boolean;
 }
 
-function serializeElement(element: IslandElement, options: SerializeOptions, root: boolean): string {
+function serializeElement(
+  element: IslandElement,
+  options: SerializeOptions,
+  root: boolean,
+): string {
   const recolor = (value: string): string =>
     options.replaceCurrentColor && options.color
       ? value.replace(/currentcolor/gi, options.color)
@@ -1047,7 +1046,10 @@ const CACHEABLE_SOURCE_LENGTH = 128 * 1024;
  * every materialization pass — slides, dashboard, page, exports — asks again.
  * Never throws.
  */
-export function parseSvgIsland(source: string, options: ParseSvgIslandOptions = {}): SvgIslandResult {
+export function parseSvgIsland(
+  source: string,
+  options: ParseSvgIslandOptions = {},
+): SvgIslandResult {
   if (typeof source !== 'string') return failure('empty', 'The SVG fence is empty.');
   const isStatic = options.static === true;
   if (source.length > CACHEABLE_SOURCE_LENGTH) return parseUncached(source, isStatic);

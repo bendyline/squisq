@@ -28,6 +28,7 @@ import { TableLayer } from './layers/TableLayer';
 import type { TableLayerContentRenderer } from './layers/TableLayer';
 import { TreeLayer } from './layers/TreeLayer';
 import { MermaidLayer } from './layers/MermaidLayer';
+import { SvgLayer } from './layers/SvgLayer';
 import { getTransitionClass } from './utils/animationUtils';
 import { largestFittingTextScale } from './utils/textFit';
 
@@ -191,6 +192,13 @@ interface BlockRendererProps {
    * `placeholder` poster with no remote thumbnail, for frame capture.
    */
   videoEmbeds?: VideoEmbedMode;
+  /**
+   * Draw media that animates on its own wall clock — SVG islands' SMIL and
+   * CSS animation — as a still. Set for frame capture, where such motion
+   * would make frames nondeterministic. Reduced motion and
+   * `animationsEnabled={false}` imply it.
+   */
+  staticMedia?: boolean;
 }
 
 export function BlockRenderer({
@@ -210,6 +218,7 @@ export function BlockRenderer({
   tableContentRenderer,
   growTextToFit = false,
   videoEmbeds = 'poster',
+  staticMedia = false,
 }: BlockRendererProps) {
   // Build transition class and inline style for dynamic duration
   let transitionClass = '';
@@ -382,6 +391,7 @@ export function BlockRenderer({
             tableContentRenderer={tableContentRenderer}
             textScale={textScale}
             videoEmbeds={videoEmbeds}
+            staticMedia={staticMedia || reducedMotion || !animationsEnabled}
           />
         ))}
       </g>
@@ -402,6 +412,7 @@ interface LayerRendererProps {
   tableContentRenderer?: TableLayerContentRenderer;
   textScale: number;
   videoEmbeds: VideoEmbedMode;
+  staticMedia: boolean;
 }
 
 /**
@@ -420,6 +431,7 @@ function LayerRenderer({
   tableContentRenderer,
   textScale,
   videoEmbeds,
+  staticMedia,
 }: LayerRendererProps) {
   // Render policy must not mutate caller-owned Docs. A shallow copy is enough:
   // every layer renderer reads animation only from the base layer field.
@@ -491,6 +503,15 @@ function LayerRenderer({
           viewport={viewport}
           blockTime={blockTime}
           theme={theme}
+        />
+      );
+    case 'svg':
+      return (
+        <SvgLayer
+          layer={renderedLayer}
+          viewport={viewport}
+          blockTime={blockTime}
+          isStatic={staticMedia}
         />
       );
     default:

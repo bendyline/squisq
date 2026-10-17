@@ -148,12 +148,7 @@ export async function markdownDocToEpub(
 
   // Generate theme CSS — honor an explicit themeId, else the doc's frontmatter
   // theme (`squisq-theme` / legacy), mirroring the other export formats.
-  const css = generateStylesheet(
-    themeId,
-    doc,
-    options.themeRegistry,
-    embeddedIconFonts,
-  );
+  const css = generateStylesheet(themeId, doc, options.themeRegistry, embeddedIconFonts);
 
   // Build the ZIP
   const zip = new JSZip();

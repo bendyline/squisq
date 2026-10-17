@@ -46,6 +46,7 @@ import { VideoEmbedFrame } from './VideoEmbedFrame.js';
 import { AnimatedImageControls } from './animatedImage/AnimatedImageControls.js';
 import { useAnimatedImage } from './animatedImage/useAnimatedImage.js';
 import { MermaidDiagram } from './mermaid/MermaidDiagram.js';
+import { SvgIslandImage } from './svgIsland/SvgIslandImage.js';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -534,6 +535,15 @@ function renderBlock(
             className="squisq-md-mermaid"
             ariaLabel="Mermaid diagram"
             theme={ctx.theme}
+          />
+        );
+      }
+      if (fenceLang === 'svg') {
+        return (
+          <SvgIslandImage
+            key={key}
+            source={node.value}
+            fallback={<CodeBlock value={node.value} language={node.lang} ctx={ctx} />}
           />
         );
       }
