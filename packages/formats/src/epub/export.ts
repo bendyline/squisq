@@ -39,6 +39,7 @@ import type {
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 import { FootnoteIndex, footnoteIds } from '../shared/footnotes.js';
+import { svgIslandsAsImages } from '../shared/svgIslands.js';
 import { escapeXml } from '../ooxml/xmlUtils.js';
 import { inferMimeType, extractFilename } from '../html/imageUtils.js';
 import { extractPlainText } from '../shared/text.js';
@@ -95,10 +96,17 @@ export interface EpubExportOptions {
  * (provided via `options.images`) are embedded in the archive.
  */
 export async function markdownDocToEpub(
-  doc: MarkdownDocument,
+  sourceDoc: MarkdownDocument,
   options: EpubExportOptions = {},
 ): Promise<ArrayBuffer> {
   options.signal?.throwIfAborted();
+  // SVG islands ship as image files like any other picture: each usable
+  // ```svg fence becomes an image of core's sanitized re-serialization.
+  const themeId = options.themeId ?? readFrontmatterThemeId(sourceDoc.frontmatter);
+  const islandColor = themeId
+    ? resolveThemeForDoc(sourceDoc, themeId, options.themeRegistry).colors.text
+    : undefined;
+  const { doc, images: islandImages } = svgIslandsAsImages(sourceDoc, { color: islandColor });
   const fmTitle = doc.frontmatter?.title;
   const fmAuthor = doc.frontmatter?.author;
   const title = options.title ?? (typeof fmTitle === 'string' ? fmTitle : 'Untitled');
@@ -125,11 +133,11 @@ export async function markdownDocToEpub(
   const imageEntries = collectDocImages(doc.children);
   const resolvedImages = new Map<string, { data: ArrayBuffer; mime: string; filename: string }>();
   const usedImageNames = new Set<string>();
-  if (options.images) {
+  if (options.images || islandImages.size > 0) {
     let imageIndex = 0;
     for (const src of imageEntries) {
       if ((imageIndex++ & 63) === 0) options.signal?.throwIfAborted();
-      const data = options.images.get(src);
+      const data = islandImages.get(src)?.data ?? options.images?.get(src);
       if (data) {
         const filename = uniqueFilename(safeArchiveBasename(src, 'image'), usedImageNames);
         usedImageNames.add(filename);
@@ -141,7 +149,7 @@ export async function markdownDocToEpub(
   // Generate theme CSS — honor an explicit themeId, else the doc's frontmatter
   // theme (`squisq-theme` / legacy), mirroring the other export formats.
   const css = generateStylesheet(
-    options.themeId ?? readFrontmatterThemeId(doc.frontmatter),
+    themeId,
     doc,
     options.themeRegistry,
     embeddedIconFonts,
