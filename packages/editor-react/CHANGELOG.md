@@ -1,3 +1,16 @@
+## @bendyline/squisq-editor-react [2.12.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.1...@bendyline/squisq-editor-react@2.12.2) (2026-10-17)
+
+### Bug Fixes
+
+* Bump package deps and stabilize Vitest ([#89](https://github.com/bendyline/squisq/issues/89)) ([27762bd](https://github.com/bendyline/squisq/commit/27762bd80ea7b04a328076b85c50bf1497f7cbc0))
+* Perf fixes for long docs ([#88](https://github.com/bendyline/squisq/issues/88)) ([1e0c10a](https://github.com/bendyline/squisq/commit/1e0c10a691b9c393a77ad51b2f7e358d6defb6c0))
+
+
+### Dependencies
+
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.24
+* **@bendyline/squisq-video-react:** upgraded to 2.5.2
+
 ## @bendyline/squisq-editor-react [2.12.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.1...@bendyline/squisq-editor-react@2.12.2) (2026-10-16)
 
 ### Bug Fixes

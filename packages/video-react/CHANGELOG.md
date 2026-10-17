@@ -1,3 +1,14 @@
+## @bendyline/squisq-video-react [2.5.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.5.1...@bendyline/squisq-video-react@2.5.2) (2026-10-17)
+
+### Bug Fixes
+
+* Bump package deps and stabilize Vitest ([#89](https://github.com/bendyline/squisq/issues/89)) ([27762bd](https://github.com/bendyline/squisq/commit/27762bd80ea7b04a328076b85c50bf1497f7cbc0))
+
+
+### Dependencies
+
+* **@bendyline/squisq-video:** upgraded to 2.4.1
+
 ## @bendyline/squisq-video-react [2.5.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.5.0...@bendyline/squisq-video-react@2.5.1) (2026-10-16)
 
 

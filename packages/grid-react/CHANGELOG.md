@@ -1,3 +1,9 @@
+## @bendyline/squisq-grid-react [2.11.24](https://github.com/bendyline/squisq/compare/@bendyline/squisq-grid-react@2.11.23...@bendyline/squisq-grid-react@2.11.24) (2026-10-17)
+
+### Bug Fixes
+
+* Bump package deps and stabilize Vitest ([#89](https://github.com/bendyline/squisq/issues/89)) ([27762bd](https://github.com/bendyline/squisq/commit/27762bd80ea7b04a328076b85c50bf1497f7cbc0))
+
 ## @bendyline/squisq-grid-react [2.11.23](https://github.com/bendyline/squisq/compare/@bendyline/squisq-grid-react@2.11.22...@bendyline/squisq-grid-react@2.11.23) (2026-10-16)
 
 

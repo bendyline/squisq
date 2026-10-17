@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-grid-react",
-  "version": "2.11.23",
+  "version": "2.11.24",
   "description": "Virtualized data grid for squisq data sidecars: columnar worker store, TableQueryProvider, and a TanStack-Virtual React renderer",
   "license": "MIT",
   "author": "Bendyline",
