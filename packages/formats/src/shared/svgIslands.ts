@@ -10,9 +10,11 @@
  */
 
 import {
+  isSvgImageSource,
   isSvgIslandLang,
   parseSvgIsland,
   svgIslandMarkup,
+  svgSourceFromBytes,
   type MarkdownCodeBlock,
   type MarkdownDocument,
   type MarkdownImage,
@@ -39,6 +41,13 @@ export interface SvgIslandImageOptions {
 /** Alt text for an island that names nothing itself. */
 export const SVG_ISLAND_FALLBACK_ALT = 'Illustration';
 
+/** Bytes in a buffer of this realm (see {@link svgIslandImage}). */
+function ownBuffer(encoded: Uint8Array): ArrayBuffer {
+  const bytes = new Uint8Array(encoded.length);
+  bytes.set(encoded);
+  return bytes.buffer;
+}
+
 /** The island in a fence body as SVG bytes, or null when it is not one. */
 export function svgIslandImage(
   source: string,
@@ -47,15 +56,15 @@ export function svgIslandImage(
   const result = parseSvgIsland(source);
   if (!result.ok) return null;
   const { island } = result;
-  const encoded = new TextEncoder().encode(
-    svgIslandMarkup(island, { color: options.color, replaceCurrentColor: true }),
-  );
   // Copy into a buffer of this realm: some hosts (jsdom) hand TextEncoder's
   // output from another realm, and zip writers check `instanceof ArrayBuffer`.
-  const bytes = new Uint8Array(encoded.length);
-  bytes.set(encoded);
+  const data = ownBuffer(
+    new TextEncoder().encode(
+      svgIslandMarkup(island, { color: options.color, replaceCurrentColor: true }),
+    ),
+  );
   return {
-    data: bytes.buffer,
+    data,
     contentType: 'image/svg+xml',
     width: island.width,
     height: island.height,
@@ -122,4 +131,37 @@ export function svgIslandsAsImages(
   if (!docHasSvgIslands(doc)) return { doc, images };
   const children = replace(doc.children);
   return { doc: children === doc.children ? doc : { ...doc, children }, images };
+}
+
+// ============================================
+// Attached SVG image files
+// ============================================
+//
+// An attached `.svg` (`![logo](logo.svg)`) is an island whose source is a
+// file. Exporters write core's re-serialization of it — sized, scripts and
+// external references removed — and never the file's own bytes. It keeps its
+// own colors (no `currentColor` substitution): it is a standalone image.
+
+/** Whether an image entry is SVG, by its path or its content type. */
+export function isSvgImageEntry(path: string, contentType?: string | null): boolean {
+  return isSvgImageSource(path) || /^image\/svg\+xml\b/i.test(contentType ?? '');
+}
+
+/** An attached SVG file as an image part, or null when it is not a usable SVG. */
+export function svgImageFromBytes(data: ArrayBuffer | Uint8Array): SvgIslandImage | null {
+  return svgIslandImage(svgSourceFromBytes(data));
+}
+
+/**
+ * The bytes an exporter writes for an image file: core's sanitized
+ * re-serialization for an SVG (null — leave it out — when the file is not a
+ * usable SVG), the bytes unchanged for anything else.
+ */
+export function exportImageBytes(
+  path: string,
+  data: ArrayBuffer,
+  contentType?: string | null,
+): ArrayBuffer | null {
+  if (!isSvgImageEntry(path, contentType)) return data;
+  return svgImageFromBytes(data)?.data ?? null;
 }

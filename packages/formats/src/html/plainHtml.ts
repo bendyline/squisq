@@ -20,6 +20,7 @@ import {
   parseSvgIsland,
   sanitizeHtmlNodes,
   svgIslandDataUrl,
+  svgSourceFromDataUrl,
   sanitizeUrl,
   videoEmbedFromIframe,
   videoEmbedIframeAttributes,
@@ -814,7 +815,7 @@ function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): str
     case 'image': {
       const original = node.url ?? '';
       const resolved = ctx?.images?.get(original) ?? original;
-      const safeSrc = sanitizeUrl(resolved, 'media');
+      const safeSrc = sanitizeUrl(resolved, 'media') ?? svgDataImageToHtmlSrc(resolved);
       if (!safeSrc) return escapeHtml(node.alt ?? '');
       return `<img src="${escapeAttr(safeSrc)}" alt="${escapeAttr(node.alt ?? '')}" />`;
     }
@@ -1032,6 +1033,17 @@ const VIDEO_EMBED_CSS = `  .squisq-video-embed { display: block; max-width: 720p
   .squisq-video-embed-play::after { content: ''; position: absolute; left: 26px; top: 12px; border-style: solid; border-width: 10px 0 10px 16px; border-color: transparent transparent transparent #fff; }
   .squisq-video-embed-provider { position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 0.8em; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
   .squisq-video-embed-caption { margin-top: 0.4em; font-size: 0.875em; opacity: 0.8; }`;
+
+/**
+ * An SVG image inlined as a `data:` URL (an attachment, in a single-file
+ * export): core's sanitized re-serialization of it, or null — show the alt
+ * text — when it is not a usable SVG.
+ */
+function svgDataImageToHtmlSrc(url: string): string | null {
+  const source = svgSourceFromDataUrl(url);
+  const result = source === null ? null : parseSvgIsland(source);
+  return result?.ok ? svgIslandDataUrl(result.island) : null;
+}
 
 /**
  * A ```svg fence as a picture: core's sanitized re-serialization as a data

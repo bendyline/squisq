@@ -61,7 +61,10 @@ function traceFromTake(
   return { samples };
 }
 
-describe('alignNarration', () => {
+// Every case runs the full DSP + DTW pass over a ~30 s, 48 kHz take: ~0.1 s
+// each in isolation, but coverage instrumentation plus a saturated full-suite
+// run slows that by well over 10×, past the 5 s default.
+describe('alignNarration', { timeout: 30_000 }, () => {
   const take = takeFromScript(script, 150, SR, 21);
 
   it('clean take without a trace: median error < 0.25 s, p95 < 1 s', () => {

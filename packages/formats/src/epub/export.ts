@@ -39,7 +39,7 @@ import type {
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 import { FootnoteIndex, footnoteIds } from '../shared/footnotes.js';
-import { svgIslandsAsImages } from '../shared/svgIslands.js';
+import { exportImageBytes, svgIslandsAsImages } from '../shared/svgIslands.js';
 import { escapeXml } from '../ooxml/xmlUtils.js';
 import { inferMimeType, extractFilename } from '../html/imageUtils.js';
 import { extractPlainText } from '../shared/text.js';
@@ -137,7 +137,10 @@ export async function markdownDocToEpub(
     let imageIndex = 0;
     for (const src of imageEntries) {
       if ((imageIndex++ & 63) === 0) options.signal?.throwIfAborted();
-      const data = islandImages.get(src)?.data ?? options.images?.get(src);
+      // An attached SVG ships as core's sanitized re-serialization (left out,
+      // so the reader shows its alt text, when it is not a usable SVG).
+      const attached = options.images?.get(src);
+      const data = islandImages.get(src)?.data ?? (attached && exportImageBytes(src, attached));
       if (data) {
         const filename = uniqueFilename(safeArchiveBasename(src, 'image'), usedImageNames);
         usedImageNames.add(filename);

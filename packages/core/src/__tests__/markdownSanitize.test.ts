@@ -5,6 +5,7 @@ import {
   parseHtmlToNodes,
   sanitizeHtmlNodes,
   sanitizeUrl,
+  stringifyHtmlNodes,
 } from '../markdown/index';
 import type { HtmlElement, HtmlNode } from '../markdown/index';
 
@@ -83,6 +84,45 @@ describe('markdown HTML sanitization', () => {
 
     expect(strong.tagName).toBe('strong');
     expect(strong.children).toEqual([{ type: 'htmlText', value: 'kept' }]);
+  });
+});
+
+describe('HTML serialization after sanitizing', () => {
+  const roundTrip = (html: string) => stringifyHtmlNodes(sanitizeHtmlNodes(parseHtmlToNodes(html)));
+
+  it('keeps escaped markup as text — it never becomes an element on the way out', () => {
+    // Parsing decodes `&lt;` to `<`; writing that text back verbatim would turn
+    // a code fence's escaped `<img onerror>` into a live element after the
+    // sanitizer had passed it as text.
+    const out = roundTrip('<pre><code>&lt;img src=x onerror=alert(1)&gt;</code></pre>');
+    expect(out).toBe('<pre><code>&lt;img src=x onerror=alert(1)&gt;</code></pre>');
+    expect(parseHtmlToNodes(out)).toEqual([
+      expect.objectContaining({
+        tagName: 'pre',
+        children: [
+          expect.objectContaining({
+            tagName: 'code',
+            children: [{ type: 'htmlText', value: '<img src=x onerror=alert(1)>' }],
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it('round-trips entities in text', () => {
+    expect(roundTrip('<p>a &amp; b &lt;c&gt;</p>')).toBe('<p>a &amp; b &lt;c&gt;</p>');
+  });
+
+  it('leaves raw-text element content unescaped', () => {
+    expect(stringifyHtmlNodes(parseHtmlToNodes('<style>a > b { color: red }</style>'))).toBe(
+      '<style>a > b { color: red }</style>',
+    );
+  });
+
+  it('escapes the raw text it falls back to when HTML cannot be parsed', () => {
+    expect(stringifyHtmlNodes([{ type: 'htmlText', value: '<script>x</script>' }])).toBe(
+      '&lt;script&gt;x&lt;/script&gt;',
+    );
   });
 });
 

@@ -20,6 +20,7 @@ import { parseMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
 import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { markdownDocToPlainHtml } from './plainHtml.js';
+import { exportImageBytes } from '../shared/svgIslands.js';
 
 // ── Public Types ───────────────────────────────────────────────────
 
@@ -332,7 +333,9 @@ async function readImagesForDoc(
     const cleanAuthored = authored.replace(/[#?].*$/, '');
     const resolved = resolveRelative(docDir, cleanAuthored);
     if (resolved === null) continue;
-    const data = await readBinary(resolved);
+    const read = await readBinary(resolved);
+    // An SVG ships as core's sanitized re-serialization, never as written.
+    const data = read && exportImageBytes(resolved, read);
     if (!data) continue;
     out.set(authored, { data, zipPath: resolved });
   }

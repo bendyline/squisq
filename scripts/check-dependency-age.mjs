@@ -106,6 +106,20 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 const EXCEPTIONS = [];
 
+/**
+ * Our own packages are never held — the same exemption `.npmrc` gives npm
+ * (`min-release-age-exclude[]=@bendyline/*`). The cooldown waits out someone
+ * ELSE's compromised release; ours publish from this repo's release workflow,
+ * and blocking a consumer on our own release from yesterday protects nothing.
+ *
+ * Inside this repo they should never be registry-resolved at all: they are
+ * workspace links. A registry copy of a workspace package means a dependency
+ * pin drifted from the workspace's version, which the report names as such
+ * (and `tests/workspace-pins.test.ts` fails on) instead of as a cooldown issue.
+ */
+const FIRST_PARTY_SCOPES = ['@bendyline/'];
+const isFirstParty = (name) => FIRST_PARTY_SCOPES.some((scope) => name.startsWith(scope));
+
 /** Cache of `name@version` to ISO publish time. Publish times are immutable. */
 const CACHE_PATH = path.join(REPO_ROOT, 'node_modules', '.cache', 'squisq', 'dependency-age.json');
 
@@ -238,12 +252,15 @@ function isRegistryTarball(resolved, registryUrl) {
  * node_modules paths that install it (so a violation can name its dependents).
  *
  * Workspace links and bundled deps are skipped — they are not separately
- * published artifacts. Anything else that resolves to something OTHER than a
- * registry tarball is surfaced instead of dropped: "we cannot date it" is a
- * finding, not a silent pass.
+ * published artifacts. First-party packages are set aside (see
+ * FIRST_PARTY_SCOPES), and the ones that shadow a workspace of this same
+ * lockfile are returned as `shadowed`. Anything else that resolves to something
+ * OTHER than a registry tarball is surfaced instead of dropped: "we cannot date
+ * it" is a finding, not a silent pass.
  *
  * @returns {{ versions: Map<string, { name: string, version: string, paths: string[] }>,
- *             unresolvable: { path: string, resolved: string }[] }}
+ *             unresolvable: { path: string, resolved: string }[],
+ *             shadowed: { name: string, version: string, paths: string[] }[] }}
  */
 function collectLockVersions(lockJson, registryUrl) {
   const packages = lockJson.packages;
@@ -255,12 +272,15 @@ function collectLockVersions(lockJson, registryUrl) {
   }
 
   const versions = new Map();
+  const firstParty = new Map();
+  const workspaceNames = new Set();
   const unresolvable = [];
   const marker = 'node_modules/';
 
   for (const [pkgPath, entry] of Object.entries(packages)) {
     if (!pkgPath) continue; // the root project itself
     if (!entry || entry.link) continue; // workspace symlink
+    if (!pkgPath.includes(marker) && entry.name) workspaceNames.add(entry.name);
     if (!entry.version) continue; // bare workspace declaration
     if (entry.inBundle) continue; // ships inside another package's tarball
 
@@ -273,13 +293,15 @@ function collectLockVersions(lockJson, registryUrl) {
       continue;
     }
 
+    const bucket = isFirstParty(name) ? firstParty : versions;
     const key = `${name}@${entry.version}`;
-    const existing = versions.get(key);
+    const existing = bucket.get(key);
     if (existing) existing.paths.push(pkgPath);
-    else versions.set(key, { name, version: entry.version, paths: [pkgPath] });
+    else bucket.set(key, { name, version: entry.version, paths: [pkgPath] });
   }
 
-  return { versions, unresolvable };
+  const shadowed = [...firstParty.values()].filter((entry) => workspaceNames.has(entry.name));
+  return { versions, unresolvable, shadowed };
 }
 
 function readWorkingLockfile(lockPath) {
@@ -477,6 +499,26 @@ function printHumanReport(report) {
     }
   }
 
+  if (report.shadowedWorkspaces.length > 0) {
+    warn(
+      `${report.shadowedWorkspaces.length} of this repo's own workspace package(s) resolve from ` +
+        'the registry instead of the workspace (first-party, so not cooldown-checked):',
+    );
+    for (const item of report.shadowedWorkspaces) {
+      console.error(`    ${item.name}@${item.version}`);
+      console.error(describeDependents(item));
+    }
+    console.error(
+      `    ${paint(DIM, "A dependency pin no longer matches that workspace's version, so npm installed")}`,
+    );
+    console.error(
+      `    ${paint(DIM, 'the published package over the local source. Make the pin and the version')}`,
+    );
+    console.error(
+      `    ${paint(DIM, 'agree, then re-run `npm run install:safe` (tests/workspace-pins.test.ts).')}`,
+    );
+  }
+
   if (report.undatable.length > 0) {
     console.error('');
     console.error(
@@ -635,6 +677,7 @@ async function main() {
     exempted,
     stale,
     unresolvable: head.unresolvable,
+    shadowedWorkspaces: head.shadowed,
     youngest: dated[0] || null,
     recent: dated.slice(0, 10),
   };

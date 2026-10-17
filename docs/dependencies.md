@@ -60,6 +60,17 @@ get reported, unpublished, or superseded within hours to a couple of days.
 Waiting a week means the ecosystem has already had a look at anything we
 install. It costs nothing but latency.
 
+**Our own `@bendyline/*` packages are never held** — by npm
+(`.npmrc` `min-release-age-exclude[]=@bendyline/*`) or by the gate script
+(`FIRST_PARTY_SCOPES`). In this repo they should not come from the registry at
+all: each is a workspace link, which npm only uses while every pin of it equals
+its version. If a release bumps a version without publishing it, the dependents
+end up pinning a different version, and `npm install` nests the PUBLISHED
+package under them (`packages/cli/node_modules/@bendyline/…`), so they build
+against stale code. The gate warns about such a copy, and
+`tests/workspace-pins.test.ts` fails on it. Fix the pin or the version so the
+two agree, delete the nested lockfile entries, then re-run `npm run install:safe`.
+
 ### Running it
 
 ```bash

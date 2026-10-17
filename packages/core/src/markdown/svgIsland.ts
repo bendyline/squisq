@@ -117,6 +117,51 @@ export function isSvgIslandFence(node: MarkdownNode): boolean {
 }
 
 // ============================================
+// SVG image files
+// ============================================
+//
+// An attached `.svg` (`![logo](logo.svg)`) is the same thing as an island
+// whose source lives in a file: every renderer and exporter reads its bytes
+// and shows core's re-serialization, never the file as written.
+
+/**
+ * Whether an image reference names SVG: a `.svg` path (query and fragment
+ * ignored) or an SVG `data:` URL.
+ */
+export function isSvgImageSource(src: string | null | undefined): boolean {
+  const trimmed = src?.trim();
+  if (!trimmed) return false;
+  if (/^data:image\/svg\+xml[;,]/i.test(trimmed)) return true;
+  return /\.svg$/i.test(trimmed.split(/[?#]/, 1)[0]!);
+}
+
+/** An SVG file's text: UTF-8, with a leading byte-order mark dropped. */
+export function svgSourceFromBytes(bytes: ArrayBuffer | Uint8Array): string {
+  return new TextDecoder('utf-8').decode(bytes).replace(/^\uFEFF/, '');
+}
+
+/**
+ * The SVG text inside a `data:image/svg+xml` URL (base64 or percent-encoded),
+ * or null when `url` is not one or does not decode.
+ */
+export function svgSourceFromDataUrl(url: string): string | null {
+  const match = /^data:image\/svg\+xml((?:;[^,]*)?),([\s\S]*)$/i.exec(url.trim());
+  if (!match) return null;
+  const [, params, payload] = match;
+  try {
+    if (/;base64/i.test(params ?? '')) {
+      const binary = atob(payload!.replace(/\s+/g, ''));
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return svgSourceFromBytes(bytes);
+    }
+    return decodeURIComponent(payload!);
+  } catch {
+    return null;
+  }
+}
+
+// ============================================
 // Allowlists
 // ============================================
 

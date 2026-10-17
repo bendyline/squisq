@@ -1149,8 +1149,23 @@ island only through `svgIslandDataUrl` — as an `<img>` or SVG `<image>` —
 where browsers run no script and load nothing. `static: true` draws a still
 (frozen animations keep their end state).
 
-**Host note:** islands render as `data:image/svg+xml` images, so a host
-Content-Security-Policy needs `img-src data:` (the dev site's already has it).
+An attached SVG image (`![logo](logo.svg)`) is treated as an island whose
+source is a file: every renderer and exporter reads its bytes and shows
+core's re-serialization, never the file as written.
+
+```ts
+function isSvgImageSource(src: string | null | undefined): boolean; // .svg path or SVG data: URL
+function svgSourceFromBytes(bytes: ArrayBuffer | Uint8Array): string;
+function svgSourceFromDataUrl(url: string): string | null;
+```
+
+In React, `useMediaUrl` does this for you; `sanitizedSvgImageUrl(url)` and
+`useSanitizedSvgImage(url, isSvg)` (from `@bendyline/squisq-react`) are the
+building blocks for surfaces that resolve media themselves.
+
+**Host note:** islands and attached SVGs render as `data:image/svg+xml`
+images, so a host Content-Security-Policy needs `img-src data:` (the dev
+site's already has it).
 
 ---
 

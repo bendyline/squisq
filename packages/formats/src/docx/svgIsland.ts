@@ -1,5 +1,5 @@
 /**
- * SVG islands (```svg fences) in Word.
+ * SVG islands (```svg fences and attached `.svg` images) in Word.
  *
  * An island exports as an inline picture the way Word 2016+ writes an
  * inserted SVG (see `shared/officeSvgBlip.ts`): a PNG blip — the host's
@@ -31,8 +31,8 @@ export interface WordSvgIslandParts {
   alt: string;
 }
 
-/** A paragraph holding the island as an inline picture at its intrinsic size. */
-export function buildWordSvgIslandParagraph(parts: WordSvgIslandParts): string {
+/** The island as an inline picture run, at its intrinsic size (fitted to the page). */
+export function buildWordSvgIslandRun(parts: WordSvgIslandParts): string {
   let cx = (parts.width / 96) * EMU_PER_INCH;
   let cy = (parts.height / 96) * EMU_PER_INCH;
   const scale = Math.min(1, MAX_WIDTH_EMU / cx, MAX_HEIGHT_EMU / cy);
@@ -40,7 +40,7 @@ export function buildWordSvgIslandParagraph(parts: WordSvgIslandParts): string {
   cy = Math.max(1, Math.round(cy * scale));
   const alt = escapeXml(parts.alt);
   return (
-    `<w:p><w:r><w:drawing>` +
+    `<w:r><w:drawing>` +
     `<wp:inline distT="0" distB="0" distL="0" distR="0">` +
     `<wp:extent cx="${cx}" cy="${cy}"/>` +
     `<wp:docPr id="${parts.docPrId}" name="${alt}" descr="${alt}"/>` +
@@ -61,6 +61,6 @@ export function buildWordSvgIslandParagraph(parts: WordSvgIslandParts): string {
     `</a:graphicData>` +
     `</a:graphic>` +
     `</wp:inline>` +
-    `</w:drawing></w:r></w:p>`
+    `</w:drawing></w:r>`
   );
 }

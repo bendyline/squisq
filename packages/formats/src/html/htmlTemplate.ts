@@ -13,6 +13,7 @@
 import type { Doc, Layer, Block, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
 import { arrayBufferToBase64DataUrl, inferMimeType } from './imageUtils.js';
+import { exportImageBytes } from '../shared/svgIslands.js';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -310,7 +311,9 @@ function buildInlineImageMaps(images: Map<string, ArrayBuffer> | undefined): {
       continue;
     }
     canonicalKeyFor.set(buffer, path);
-    imageMap[path] = arrayBufferToBase64DataUrl(buffer, inferMimeType(path));
+    // An SVG ships as core's sanitized re-serialization, never as written.
+    const bytes = exportImageBytes(path, buffer);
+    if (bytes) imageMap[path] = arrayBufferToBase64DataUrl(bytes, inferMimeType(path));
   }
   return { imageMap, imageAliases };
 }

@@ -11,10 +11,11 @@
  * no browser to draw with.
  */
 
-import type { MermaidLayer, SvgLayer } from '@bendyline/squisq/schemas';
+import type { ImageLayer, MermaidLayer, SvgLayer } from '@bendyline/squisq/schemas';
+import { svgSourceFromBytes } from '@bendyline/squisq/markdown';
 import { escapeXml } from '../ooxml/xmlUtils.js';
 import { blipXml } from '../shared/officeSvgBlip.js';
-import { svgIslandImage } from '../shared/svgIslands.js';
+import { svgImageFromBytes, svgIslandImage, type SvgIslandImage } from '../shared/svgIslands.js';
 
 /** An area on the slide, in EMU. */
 export interface EmuRect {
@@ -34,6 +35,8 @@ export interface PictureSlideContext {
   allocShapeId(): number;
   /** Host rasterizations of Mermaid diagrams and SVG islands, by trimmed source. */
   diagramImages?: Map<string, HostPicture>;
+  /** Image files by the path a layer names them by. */
+  images?: Map<string, ArrayBuffer>;
   /** Stand-in PNGs for SVG islands, loaded only when the deck has one. */
   svgIslandPosters: typeof import('../shared/svgIslandPoster.js') | null;
 }
@@ -132,15 +135,50 @@ export function svgIslandPictureShapes(
 ): string[] | null {
   const image = svgIslandImage(layer.content.source, { color: layer.content.color });
   if (!image) return null;
-  const hostPicture = ctx.diagramImages?.get(layer.content.source.trim());
+  return svgPictureShapes(image, layer.content.source, area, ctx, layer.content.alt ?? image.alt);
+}
+
+/**
+ * An image layer showing an attached `.svg`: the same vector picture with a
+ * PNG fallback, fitted inside the layer's area (stretched for `fill`); null
+ * when the file was not supplied or is not a usable SVG.
+ */
+export function svgImagePictureShapes(
+  layer: ImageLayer,
+  area: EmuRect,
+  ctx: PictureSlideContext,
+): string[] | null {
+  const data = ctx.images?.get(layer.content.src);
+  const image = data ? svgImageFromBytes(data) : null;
+  if (!data || !image) return null;
+  const alt = layer.content.alt || image.alt;
+  return svgPictureShapes(
+    image,
+    svgSourceFromBytes(data),
+    area,
+    ctx,
+    alt,
+    layer.content.fit === 'fill',
+  );
+}
+
+/** The SVG part over its PNG fallback (host rendering of `source`, else a stand-in). */
+function svgPictureShapes(
+  image: SvgIslandImage,
+  source: string,
+  area: EmuRect,
+  ctx: PictureSlideContext,
+  alt: string,
+  stretch = false,
+): string[] | null {
+  const hostPicture = ctx.diagramImages?.get(source.trim());
   const fallback = usablePicture(hostPicture)
     ? arrayBufferOf(hostPicture.data)
     : ctx.svgIslandPosters?.svgIslandPosterPng(image.width / image.height)?.data;
   if (!fallback) return null;
-  const alt = layer.content.alt ?? image.alt;
   const relId = ctx.addImage('svg-island.png', fallback, alt);
   const svgRelId = ctx.addImage('svg-island.svg', image.data, alt);
-  const rect = fitCentered(area, image.width, image.height);
+  const rect = stretch ? area : fitCentered(area, image.width, image.height);
   return [
     buildImageShape(
       { relId, alt },

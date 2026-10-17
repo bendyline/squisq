@@ -40,6 +40,12 @@ export type { InlineAudioPlayerProps } from './InlineAudioPlayer.js';
 export { VideoEmbedFrame } from './VideoEmbedFrame.js';
 export type { VideoEmbedFrameProps } from './VideoEmbedFrame.js';
 export { SvgIslandImage } from './svgIsland/SvgIslandImage.js';
+export {
+  sanitizedSvgImageUrl,
+  isLocalSvgUrl,
+  useSanitizedSvgImage,
+} from './svgIsland/svgImageUrl.js';
+export type { SanitizedSvgImageOptions } from './svgIsland/svgImageUrl.js';
 export type { SvgIslandImageProps } from './svgIsland/SvgIslandImage.js';
 export { decodeSvgImages } from './utils/decodeSvgImages.js';
 export { AnimatedImageControls } from './animatedImage/AnimatedImageControls.js';

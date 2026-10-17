@@ -179,9 +179,21 @@ function escapeHtmlAttr(value: string): string {
 }
 
 /**
+ * Escape text content. Parsing DECODES entities (`&lt;img&gt;` becomes the
+ * text `<img>`), so writing a text node back verbatim would turn escaped text
+ * into live markup — after the sanitizer has already passed it as text.
+ */
+function escapeHtmlText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Elements whose content the parser keeps as raw text (no entity decoding). */
+const RAW_TEXT_ELEMENTS = new Set(['script', 'style']);
+
+/**
  * Serialize an HtmlNode back to an HTML string.
  */
-function stringifyNode(node: HtmlNode): string {
+function stringifyNode(node: HtmlNode, rawText = false): string {
   switch (node.type) {
     case 'htmlElement': {
       const attrs = Object.entries(node.attributes)
@@ -191,11 +203,12 @@ function stringifyNode(node: HtmlNode): string {
 
       if (node.selfClosing) return open;
 
-      const inner = node.children.map(stringifyNode).join('');
+      const raw = RAW_TEXT_ELEMENTS.has(node.tagName.toLowerCase());
+      const inner = node.children.map((child) => stringifyNode(child, raw)).join('');
       return `${open}${inner}</${node.tagName}>`;
     }
     case 'htmlText':
-      return node.value;
+      return rawText ? node.value : escapeHtmlText(node.value);
     case 'htmlComment':
       return `<!--${node.value}-->`;
   }
@@ -208,5 +221,5 @@ function stringifyNode(node: HtmlNode): string {
  * @returns HTML string
  */
 export function stringifyHtmlNodes(nodes: HtmlNode[]): string {
-  return nodes.map(stringifyNode).join('');
+  return nodes.map((node) => stringifyNode(node)).join('');
 }

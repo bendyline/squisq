@@ -40,14 +40,8 @@ export function rewriteMarkdownReferences(
       ) {
         changed = true;
         const alt = node.tagName === 'img' ? node.attributes.alt : undefined;
-        return alt
-          ? [
-              {
-                type: 'htmlText',
-                value: alt.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
-              },
-            ]
-          : [];
+        // A text node holds decoded text; `stringifyHtmlNodes` escapes it.
+        return alt ? [{ type: 'htmlText', value: alt }] : [];
       }
       const child = html(node.children);
       changed ||= child.changed;

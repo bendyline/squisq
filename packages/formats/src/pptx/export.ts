@@ -73,7 +73,11 @@ import type {
   MarkdownImage,
   MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
-import { parseVideoEmbedUrl, readFrontmatterThemeId } from '@bendyline/squisq/markdown';
+import {
+  isSvgImageSource,
+  parseVideoEmbedUrl,
+  readFrontmatterThemeId,
+} from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
 import { RelIdAllocator } from '../ooxml/relIds.js';
@@ -81,6 +85,7 @@ import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
 import {
   buildImageShape,
   mermaidPictureShapes,
+  svgImagePictureShapes,
   svgIslandPictureShapes,
   type EmuRect,
 } from './pictureLayers.js';
@@ -352,7 +357,11 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
   const hasLayer = (type: string) =>
     slideBlocks.some((b) => b.layers?.some((l) => l.type === type));
   const videoPosters = hasLayer('videoEmbed') ? await import('../shared/videoPoster.js') : null;
-  const svgIslandPosters = hasLayer('svg') ? await import('../shared/svgIslandPoster.js') : null;
+  const hasSvgImage = slideBlocks.some((b) =>
+    b.layers?.some((l) => l.type === 'image' && isSvgImageSource(l.content.src)),
+  );
+  const svgIslandPosters =
+    hasLayer('svg') || hasSvgImage ? await import('../shared/svgIslandPoster.js') : null;
 
   const slideXmls: string[] = [];
   const slideContexts: SlideContext[] = [];
@@ -794,7 +803,13 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
     case 'shape':
       return [buildLayerShape(layer, ctx.allocShapeId())];
     case 'image': {
-      const data = ctx.images?.get(layer.content.src);
+      // An attached SVG is never embedded as written: core's sanitized SVG
+      // over a PNG, or the placeholder below.
+      const svg = isSvgImageSource(layer.content.src);
+      const area = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
+      const picture = svg ? svgImagePictureShapes(layer, area, ctx) : null;
+      if (picture) return picture;
+      const data = svg ? undefined : ctx.images?.get(layer.content.src);
       if (data) {
         const image = ctx.addImage(layer.content.src, data, layer.content.alt);
         const rect = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
@@ -861,7 +876,7 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
     }
     case 'video': {
       const poster = layer.content.posterSrc;
-      const data = poster ? ctx.images?.get(poster) : undefined;
+      const data = poster && !isSvgImageSource(poster) ? ctx.images?.get(poster) : undefined;
       if (poster && data) {
         const relId = ctx.addImage(poster, data, layer.content.alt);
         const embedded = ctx.embeddedImages.find((candidate) => candidate.relId === relId)!;
@@ -1805,7 +1820,9 @@ function convertParagraph(node: MarkdownParagraph, ctx: SlideContext): string {
   // If paragraph is just an image and we have the data, embed it as a shape
   const soloImage = isImageOnlyParagraph(node);
   if (soloImage && ctx.images) {
-    const data = ctx.images.get(soloImage.url);
+    // An SVG file is never embedded as written (this fallback path has no
+    // vector picture; it prints the placeholder instead).
+    const data = isSvgImageSource(soloImage.url) ? undefined : ctx.images.get(soloImage.url);
     if (data) {
       ctx.addImage(soloImage.url, data, soloImage.alt || '');
       return ''; // Image will be rendered as a p:pic shape, not inline text
@@ -2066,7 +2083,7 @@ function makeHyperlinkRun(text: string, rId: string, format: InlineFormat): stri
 function convertImage(node: MarkdownImage, format: InlineFormat, ctx: SlideContext): string {
   // For inline images (not image-only paragraphs), try to embed
   if (ctx.images) {
-    const data = ctx.images.get(node.url);
+    const data = isSvgImageSource(node.url) ? undefined : ctx.images.get(node.url);
     if (data) {
       // Register for rendering as a shape; return empty text
       ctx.addImage(node.url, data, node.alt || '');

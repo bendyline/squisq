@@ -447,6 +447,7 @@ function LayerRenderer({
           viewport={viewport}
           blockTime={blockTime}
           animationsEnabled={animationsEnabled}
+          isStatic={staticMedia}
         />
       );
     case 'text':

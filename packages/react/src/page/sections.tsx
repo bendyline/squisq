@@ -14,6 +14,7 @@ import { MarkdownRenderer } from '../MarkdownRenderer';
 import { InlineVideoPlayer } from '../InlineVideoPlayer';
 import { VideoEmbedFrame } from '../VideoEmbedFrame';
 import { useMediaUrl } from '../hooks/MediaContext';
+import { svgDataImageSrc } from '../svgIsland/svgImageUrl';
 import { usePageView } from './PageViewContext';
 
 // ── Shared bits ────────────────────────────────────────────────────
@@ -35,7 +36,7 @@ function PageImg({
   className?: string;
 }) {
   const { basePath } = usePageView();
-  const safeSrc = sanitizeUrl(media.src, 'media');
+  const safeSrc = sanitizeUrl(media.src, 'media') ?? svgDataImageSrc(media.src);
   const resolved = useMediaUrl(safeSrc ?? '', basePath);
   if (!safeSrc) return null;
   return (

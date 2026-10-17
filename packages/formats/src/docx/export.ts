@@ -45,6 +45,7 @@ import {
   findBlockVideoEmbed,
   isSvgIslandLang,
   readFrontmatterThemeId,
+  svgSourceFromBytes,
   type BlockVideoEmbed,
 } from '@bendyline/squisq/markdown';
 
@@ -56,8 +57,14 @@ import { stripHtmlTags } from '../shared/text.js';
 import { normalizeOoxmlHex } from '../shared/ooxmlColor.js';
 import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
 import { buildWordVideoRun, wordVideoSize } from './videoEmbed.js';
-import { buildWordSvgIslandParagraph } from './svgIsland.js';
-import { docHasSvgIslands, svgIslandImage } from '../shared/svgIslands.js';
+import { buildWordSvgIslandRun } from './svgIsland.js';
+import {
+  docHasSvgIslands,
+  isSvgImageEntry,
+  svgImageFromBytes,
+  svgIslandImage,
+  type SvgIslandImage,
+} from '../shared/svgIslands.js';
 import {
   fontAwesomeFace,
   fontAwesomeFaces,
@@ -191,7 +198,12 @@ export async function markdownDocToDocx(
   if ([...stories.body, ...stories.header, ...stories.footer].some(isVideoBlock)) {
     ctx.videoPosters = await import('../shared/videoPoster.js');
   }
-  if (docHasSvgIslands(doc)) ctx.svgIslandPosters = await import('../shared/svgIslandPoster.js');
+  const hasSvgImages = [...(options.images ?? [])].some(([url, image]) =>
+    isSvgImageEntry(url, image.contentType),
+  );
+  if (docHasSvgIslands(doc) || hasSvgImages) {
+    ctx.svgIslandPosters = await import('../shared/svgIslandPoster.js');
+  }
   ctx.setRelationshipSource('document');
   const bodyXml = convertBlocks(stories.body, ctx);
   ctx.setRelationshipSource('header');
@@ -681,8 +693,22 @@ function convertListItem(
  */
 function convertSvgIsland(node: MarkdownCodeBlock, ctx: ExportContext): string {
   const image = svgIslandImage(node.value, { color: ctx.islandColor });
-  if (!image) return '';
-  const host = ctx.svgIslandFallbacks?.get(node.value.trim());
+  const run = image ? svgPictureRun(image, node.value, ctx) : '';
+  return run ? `<w:p>${run}</w:p>` : '';
+}
+
+/**
+ * An SVG — an island or an attached `.svg` image — as an inline picture run:
+ * its sanitized SVG part over the required PNG (the host's rendering of
+ * `source`, else a generated stand-in). '' when no PNG can be made.
+ */
+function svgPictureRun(
+  image: SvgIslandImage,
+  source: string,
+  ctx: ExportContext,
+  display: { width?: number; height?: number; alt?: string } = {},
+): string {
+  const host = ctx.svgIslandFallbacks?.get(source.trim());
   const fallback =
     host && host.width > 0 && host.height > 0
       ? host.data
@@ -690,13 +716,14 @@ function convertSvgIsland(node: MarkdownCodeBlock, ctx: ExportContext): string {
   if (!fallback) return '';
   const png = ctx.addImage(fallback, 'image/png', `image${ctx.images.length + 1}.png`);
   const svg = ctx.addImage(image.data, 'image/svg+xml', `image${ctx.images.length + 1}.svg`);
-  return buildWordSvgIslandParagraph({
+  const sized = Boolean(display.width && display.height);
+  return buildWordSvgIslandRun({
     pngRelId: png.relId,
     svgRelId: svg.relId,
     docPrId: png.docPrId,
-    width: image.width,
-    height: image.height,
-    alt: image.alt,
+    width: sized ? display.width! : image.width,
+    height: sized ? display.height! : image.height,
+    alt: display.alt || image.alt,
   });
 }
 
@@ -973,6 +1000,19 @@ function convertImage(node: MarkdownImage, ctx: ExportContext): string {
     // No resolved data — emit placeholder text
     const alt = node.alt || node.url;
     return makeRun(`[Image: ${alt}]`, { italic: true });
+  }
+
+  // An attached SVG goes in like an island: core's sanitized SVG over a PNG.
+  if (isSvgImageEntry(node.url, imageEntry.contentType)) {
+    const image = svgImageFromBytes(imageEntry.data);
+    const run =
+      image &&
+      svgPictureRun(image, svgSourceFromBytes(imageEntry.data), ctx, {
+        width: imageEntry.width,
+        height: imageEntry.height,
+        alt: node.alt,
+      });
+    return run || makeRun(`[Image: ${node.alt || node.url}]`, { italic: true });
   }
 
   const { data, contentType } = imageEntry;

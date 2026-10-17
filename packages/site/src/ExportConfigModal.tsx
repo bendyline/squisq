@@ -20,7 +20,7 @@ import type { ContentContainer } from '@bendyline/squisq/storage';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-react';
 import { collectAudioForHtmlExport, collectImagesForHtmlExport } from './exportHelpers';
-import { pictureDiagrams } from './exportDiagrams';
+import { attachmentImages, pictureDiagrams, pictureSvgAttachments } from './exportDiagrams';
 import { slugifyTitle } from './exportFilename';
 import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
 import {
@@ -541,13 +541,15 @@ export function ExportConfigModal({
         case 'docx': {
           const { markdownDocToDocx } = await import('@bendyline/squisq-formats/docx');
           const pictured = await pictureDiagrams(mdDoc);
-          // SVG islands go in as vector art; their pictures are only the
-          // PNG fallback Word stores beside it.
+          // SVG islands and attached SVGs go in as vector art; their pictures
+          // are only the PNG fallback Word stores beside it.
           const { svg } = await pictureDiagrams(mdDoc, ['svg']);
+          const attachments = await collectImagesByName();
+          const svgAttachments = await pictureSvgAttachments(attachments);
           const buf = await markdownDocToDocx(pictured.markdownDoc, {
             themeId: exportThemeId,
-            images: pictured.images,
-            svgIslandFallbacks: svg,
+            images: new Map([...(await attachmentImages(attachments)), ...pictured.images]),
+            svgIslandFallbacks: new Map([...svg, ...svgAttachments]),
           });
           downloadBlob(
             new Blob([buf], {
@@ -573,10 +575,11 @@ export function ExportConfigModal({
           // Mermaid needs a picture, and an SVG island's picture is the PNG
           // fallback stored beside its vector art.
           const { mermaid, svg } = await pictureDiagrams(mdDoc, ['mermaid', 'svg']);
+          const svgAttachments = await pictureSvgAttachments(images);
           const buf = await docToPptx(exportDoc, {
             themeId: exportThemeId,
             images,
-            diagramImages: new Map([...mermaid, ...svg]),
+            diagramImages: new Map([...mermaid, ...svg, ...svgAttachments]),
           });
           downloadBlob(
             new Blob([buf], {
@@ -588,11 +591,17 @@ export function ExportConfigModal({
         }
         case 'pdf': {
           const { markdownDocToPdf } = await import('@bendyline/squisq-formats/pdf');
-          // PDF has no vector picture of its own: SVG islands are pictured too.
+          // PDF has no vector picture of its own: SVG islands are pictured
+          // too, and attached SVGs are replaced by their PNG.
           const pictured = await pictureDiagrams(mdDoc, 'all');
+          const attachments = await collectImagesByName();
+          const pdfAttachments = await attachmentImages(
+            attachments,
+            await pictureSvgAttachments(attachments),
+          );
           const buf = await markdownDocToPdf(pictured.markdownDoc, {
             themeId: exportThemeId,
-            images: pictured.images,
+            images: new Map([...pdfAttachments, ...pictured.images]),
           });
           downloadBlob(new Blob([buf], { type: 'application/pdf' }), `${filenameStem}.pdf`);
           break;

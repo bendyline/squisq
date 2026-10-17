@@ -18,10 +18,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { isSvgImageSource, parseMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
-import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
+import { sanitizedSvgImageUrl, type CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 import { collectInlineFontAwesomeCss } from './utils/collectInlineFontAwesomeCss';
 
@@ -141,7 +141,9 @@ export function PlainHtmlPreview({
         const lookup = recovered ?? ref;
         try {
           const url = await mediaProvider.resolveUrl(lookup);
-          return [ref, url] as const;
+          // An SVG goes in as core's sanitized re-serialization ('' — its alt
+          // text — when the file is not a usable SVG).
+          return [ref, isSvgImageSource(lookup) ? await sanitizedSvgImageUrl(url) : url] as const;
         } catch {
           return [ref, ref] as const;
         }

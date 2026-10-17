@@ -8,6 +8,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MediaProvider, MediaEntry } from '@bendyline/squisq/schemas';
+import { isSvgImageSource } from '@bendyline/squisq/markdown';
+import { sanitizedSvgImageUrl } from '@bendyline/squisq-react';
 import { ownsContextMenuProps } from './EditorContextMenu';
 import { SQUISQ_MEDIA_MIME, buildSquisqMediaReference } from './mediaDragMime';
 import { filterVisibleMediaEntries } from './mediaEntries';
@@ -113,6 +115,16 @@ function dataTransferMayContainImage(dataTransfer: DataTransfer): boolean {
   return Array.from(dataTransfer.files).some(isImageFile);
 }
 
+/**
+ * A thumbnail URL for an image entry. An SVG shows as core's sanitized
+ * re-serialization of the file, like everywhere else it renders; a file that
+ * is not a usable SVG gets no thumbnail.
+ */
+async function resolveThumbnailUrl(provider: MediaProvider, name: string): Promise<string> {
+  const url = await provider.resolveUrl(name);
+  return isSvgImageSource(name) ? sanitizedSvgImageUrl(url) : url;
+}
+
 function sortMediaEntries(entries: MediaEntry[]): MediaEntry[] {
   return entries.sort((a, b) => {
     const aImg = isImageMime(a.mimeType) ? 0 : 1;
@@ -188,7 +200,7 @@ export function MediaBin({
       for (const entry of list) {
         if (isImageMime(entry.mimeType)) {
           try {
-            urls[entry.name] = await provider.resolveUrl(entry.name);
+            urls[entry.name] = await resolveThumbnailUrl(provider, entry.name);
           } catch {
             // skip failed resolve
           }
@@ -249,7 +261,7 @@ export function MediaBin({
         for (const entry of list) {
           if (isImageMime(entry.mimeType)) {
             try {
-              urls[entry.name] = await mediaProvider!.resolveUrl(entry.name);
+              urls[entry.name] = await resolveThumbnailUrl(mediaProvider!, entry.name);
             } catch {
               // skip failed resolve
             }

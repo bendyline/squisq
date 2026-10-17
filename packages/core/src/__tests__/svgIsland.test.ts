@@ -8,11 +8,14 @@
 import { describe, it, expect } from 'vitest';
 import {
   SVG_ISLAND_LIMITS,
+  isSvgImageSource,
   isSvgIslandFence,
   isSvgIslandLang,
   parseSvgIsland,
   svgIslandDataUrl,
   svgIslandMarkup,
+  svgSourceFromBytes,
+  svgSourceFromDataUrl,
   type SvgIsland,
 } from '../markdown/svgIsland.js';
 
@@ -359,5 +362,58 @@ describe('markup and data URLs', () => {
     const source = '<svg viewBox="0 0 2 1"/>';
     expect(parseSvgIsland(source)).toBe(parseSvgIsland(source));
     expect(parseSvgIsland(source)).not.toBe(parseSvgIsland(source, { static: true }));
+  });
+});
+
+describe('SVG image files', () => {
+  it('recognizes SVG image references by path or data URL', () => {
+    for (const src of [
+      'logo.svg',
+      'img/Logo.SVG',
+      'a.svg?v=2',
+      'a.svg#frag',
+      'data:image/svg+xml;base64,PHN2Zy8+',
+      'data:image/svg+xml,%3Csvg/%3E',
+    ]) {
+      expect(isSvgImageSource(src), src).toBe(true);
+    }
+    for (const src of [
+      'logo.png',
+      'svg.png',
+      'logo.svgz',
+      'data:image/png;base64,AA==',
+      '',
+      null,
+      undefined,
+    ]) {
+      expect(isSvgImageSource(src), String(src)).toBe(false);
+    }
+  });
+
+  it('decodes file bytes, dropping a byte-order mark', () => {
+    const bytes = new TextEncoder().encode('\uFEFF<svg>Größe</svg>');
+    expect(svgSourceFromBytes(bytes)).toBe('<svg>Größe</svg>');
+  });
+
+  it('reads base64 and percent-encoded SVG data URLs', () => {
+    const svg = '<svg viewBox="0 0 1 1"><text>✓ ok</text></svg>';
+    const base64 = btoa(String.fromCharCode(...new TextEncoder().encode(svg)));
+    expect(svgSourceFromDataUrl(`data:image/svg+xml;base64,${base64}`)).toBe(svg);
+    expect(
+      svgSourceFromDataUrl(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`),
+    ).toBe(svg);
+    expect(svgSourceFromDataUrl('data:image/png;base64,AA==')).toBeNull();
+    expect(svgSourceFromDataUrl('data:image/svg+xml,%E0%A4%A')).toBeNull();
+  });
+
+  it('an attached file goes through the same sanitizer as a fence', () => {
+    const file = new TextEncoder().encode(
+      '<svg viewBox="0 0 4 2" onload="alert(1)"><script>x</script><rect width="4" height="2"/></svg>',
+    );
+    const result = parseSvgIsland(svgSourceFromBytes(file));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expectInert(result.island.markup);
+    expect([result.island.width, result.island.height]).toEqual([4, 2]);
   });
 });
