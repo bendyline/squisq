@@ -24,12 +24,14 @@ import type {
   MarkdownCodeBlock,
   MarkdownInlineNode,
   MarkdownList,
+  MarkdownNode,
   MarkdownTable,
 } from '../markdown/types.js';
 import { parseTimeSeconds } from '../markdown/annotationCoercion.js';
 import { mediaKindForUrl } from '../markdown/mediaReference.js';
 import { sanitizeUrl } from '../markdown/sanitize.js';
 import { extractPlainText } from '../markdown/utils.js';
+import { isSvgIslandLang } from '../markdown/svgIsland.js';
 import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
 import {
@@ -102,13 +104,25 @@ export function extractHostedVideos(
 }
 
 /**
+ * A fence whose language makes it a picture rather than code: ```mermaid (a
+ * diagram) or ```svg (an SVG island). Decided by the language alone, so a
+ * fence that fails to render is still never read as prose — narration,
+ * captions and reading time must not speak diagram source or SVG markup.
+ */
+export function isPictureFence(node: MarkdownNode): boolean {
+  if (node.type !== 'code') return false;
+  return node.lang?.trim().toLowerCase() === 'mermaid' || isSvgIslandLang(node.lang);
+}
+
+/**
  * Body nodes that render as their own visual layer rather than as prose: a
- * Mermaid fence (a diagram) and a hosted-video paragraph (a player, via
- * `appendRichContentLayers`). Repeating them as body text would print the
- * diagram source or the video's link under the very thing they became.
+ * picture fence ({@link isPictureFence}) and a hosted-video paragraph (a
+ * player, via `appendRichContentLayers`). Repeating them as body text would
+ * print the diagram source or the video's link under the very thing they
+ * became.
  */
 export function isMaterializedMediaNode(node: MarkdownBlockNode): boolean {
-  if (node.type === 'code') return node.lang?.trim().toLowerCase() === 'mermaid';
+  if (node.type === 'code') return isPictureFence(node);
   return findBlockVideoEmbed(node) !== null;
 }
 

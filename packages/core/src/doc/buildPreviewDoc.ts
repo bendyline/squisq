@@ -18,7 +18,7 @@ import { applySavedPresentation } from '../transform/presentationCompiler.js';
  */
 
 import { coerceTemplateParams } from './templates/inputDescriptors.js';
-import { deriveTemplateInputs } from './templateInputs.js';
+import { deriveTemplateInputs, isPictureFence } from './templateInputs.js';
 import { flattenRenderableBlocks, getBlockBodyText } from './markdownToDoc.js';
 import { hasTemplate } from './templates/index.js';
 import { isContainerTemplate } from './templates/templateNames.js';
@@ -54,9 +54,10 @@ function extractBodyText(contents: MarkdownBlockNode[] | undefined): string {
   if (!contents || contents.length === 0) return '';
   const parts: string[] = [];
   for (const node of contents) {
-    // Mermaid fences are visual source, not narrative copy. They stay on the
-    // slide as `contents` and materialize into Mermaid layers downstream.
-    if (node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid') continue;
+    // Picture fences (mermaid, svg) are visual source, not narrative copy.
+    // They stay on the slide as `contents` and materialize into their own
+    // layers downstream.
+    if (isPictureFence(node)) continue;
     parts.push(extractRichText(node));
   }
   return parts.join('\n').trim();

@@ -17,6 +17,7 @@ import type { DocBlock, TemplateContext } from '../../schemas/BlockTemplates.js'
 import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
 import { extractPlainText } from '../../markdown/utils.js';
+import { isPictureFence } from '../templateInputs.js';
 
 /** Cap body text so a long section doesn't overflow the card. */
 const MAX_BODY_CHARS = 600;
@@ -116,6 +117,7 @@ export function fallbackBlockLayers(
 function extractBodyText(block: Block): string {
   if (!block.contents || block.contents.length === 0) return '';
   const text = block.contents
+    .filter((node) => !isPictureFence(node))
     .map((node) => extractPlainText(node))
     .join('\n')
     .trim();

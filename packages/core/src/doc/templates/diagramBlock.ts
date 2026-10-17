@@ -34,7 +34,7 @@ import type {
 import type { MarkdownCodeBlock } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
 import { resolveSupplementalMediaLayout } from '../richMediaLayout.js';
-import { extractEmbeddedVideos, extractImages } from '../templateInputs.js';
+import { extractEmbeddedVideos, extractImages, isPictureFence } from '../templateInputs.js';
 import {
   resolveColorScheme,
   getThemeFont,
@@ -150,9 +150,7 @@ function unconsumedMedia(block: Block | undefined): {
   });
   const mermaid = contents.filter(
     (node): node is MarkdownCodeBlock =>
-      node.type === 'code' &&
-      node.lang?.trim().toLowerCase() === 'mermaid' &&
-      node.value.trim().length > 0,
+      node.type === 'code' && isPictureFence(node) && node.value.trim().length > 0,
   );
   const aspectRatios: (number | undefined)[] = [
     ...images.map((image) =>

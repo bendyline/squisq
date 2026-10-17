@@ -4,7 +4,7 @@ import type { TemplateBlock } from '../schemas/BlockTemplates.js';
 import type { HtmlNode, MarkdownBlockNode, MarkdownNode } from '../markdown/types.js';
 import { extractPlainText, getChildren } from '../markdown/utils.js';
 import { stringifyHtmlNodes } from '../markdown/htmlParse.js';
-import { deriveTemplateInputs } from '../doc/templateInputs.js';
+import { deriveTemplateInputs, isPictureFence } from '../doc/templateInputs.js';
 import { isAsciiDiagramFence } from '../doc/asciiDiagram/detect.js';
 import { isTreeFence } from '../doc/treeview/detect.js';
 import { isAsciiTimelineFence } from '../doc/asciiTimeline/detect.js';
@@ -87,7 +87,7 @@ export function extractFeatureContents(
   const visit = (node: MarkdownNode): void => {
     if (node.type === 'code') {
       if (
-        node.lang?.trim().toLowerCase() === 'mermaid' ||
+        isPictureFence(node) ||
         isAsciiDiagramFence(node) ||
         isTreeFence(node) ||
         isAsciiTimelineFence(node) ||

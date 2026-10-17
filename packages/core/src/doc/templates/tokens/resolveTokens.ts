@@ -51,6 +51,7 @@ import type { Block, Layer, ImageLayer } from '../../../schemas/Doc.js';
 import type { CustomTemplateLayer } from '../../../schemas/CustomTemplates.js';
 import type { MarkdownBlockNode, MarkdownNode } from '../../../markdown/types.js';
 import { extractPlainText, walkMarkdownTree } from '../../../markdown/utils.js';
+import { isPictureFence } from '../../templateInputs.js';
 
 interface ImageRef {
   url: string;
@@ -151,6 +152,7 @@ export function collectListItems(block: Block): string[] {
 function getBlockBodyText(block: Block): string {
   if (!block.contents) return '';
   return (block.contents as MarkdownBlockNode[])
+    .filter((node) => !isPictureFence(node))
     .map((node) => extractPlainText(node).trim())
     .filter((s) => s.length > 0)
     .join(' ');

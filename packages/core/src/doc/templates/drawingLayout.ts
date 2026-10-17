@@ -21,6 +21,7 @@
 
 import type { Block, MarkerStyle } from '../../schemas/Doc.js';
 import { extractPlainText } from '../../markdown/utils.js';
+import { isPictureFence } from '../templateInputs.js';
 import { lineStyleDasharray, type ConnectorRouting } from '../utils/shapeGeometry.js';
 
 /**
@@ -533,6 +534,7 @@ function connectorSemantics(
 function bodyText(block: Block): string {
   if (!block.contents || block.contents.length === 0) return '';
   return block.contents
+    .filter((node) => !isPictureFence(node))
     .map((node) => extractPlainText(node))
     .join(' ')
     .trim();
