@@ -26,6 +26,7 @@ const LANGUAGE_ALIASES: Readonly<Record<string, string>> = {
   py: 'python',
   rb: 'ruby',
   sh: 'shell',
+  svg: 'xml',
   text: 'plaintext',
   txt: 'plaintext',
   ts: 'typescript',

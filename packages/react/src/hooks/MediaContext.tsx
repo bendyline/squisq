@@ -13,13 +13,15 @@
  *   </MediaContext.Provider>
  */
 
-import { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, useMemo } from 'react';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import {
   DEFAULT_INTERACTIVE_RESOURCE_POLICY,
   isResourceUrlAllowed,
+  isSvgImageSource,
   type ResourcePolicy,
 } from '@bendyline/squisq/markdown';
+import { useSanitizedSvgImage } from '../svgIsland/svgImageUrl.js';
 
 /**
  * React context holding the current MediaProvider (or null if none provided).
@@ -47,16 +49,29 @@ export function useMediaProvider(): MediaProvider | null {
   return useContext(MediaContext);
 }
 
+export interface UseMediaUrlOptions {
+  /** For an SVG image: draw a still (no SMIL/CSS animation), for capture. */
+  staticSvg?: boolean;
+}
+
 /**
  * Hook to resolve a media URL via the MediaProvider (if available),
  * falling back to basePath-based resolution.
  *
  * Returns the resolved URL string. Updates when the provider or path changes.
  *
+ * An SVG image (`logo.svg`, or an SVG `data:` URL) resolves to core's
+ * sanitized re-serialization of it — never the file as written — exactly as
+ * an SVG island is shown; see `sanitizedSvgImageUrl`.
+ *
  * @param relativePath - Relative media path from the document (e.g., 'hero.jpg')
  * @param basePath - Fallback base path for URL construction
  */
-export function useMediaUrl(relativePath: string, basePath: string): string {
+export function useMediaUrl(
+  relativePath: string,
+  basePath: string,
+  options: UseMediaUrlOptions = {},
+): string {
   const provider = useMediaProvider();
   const resourcePolicy = useResourcePolicy();
 
@@ -65,6 +80,15 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
   // undefined while the user is still authoring the block. Treat that
   // as an empty string rather than crashing the whole React tree.
   const safePath = typeof relativePath === 'string' ? relativePath : '';
+  const isSvg = isSvgImageSource(safePath);
+  // An SVG `data:` URL is refused as media, but here it is only ever INPUT to
+  // the sanitizer below — what renders is core's own data URL.
+  const allowed = useCallback(
+    (url: string): boolean =>
+      isResourceUrlAllowed(url, resourcePolicy) ||
+      (isSvg && /^data:image\/svg\+xml[;,]/i.test(url)),
+    [resourcePolicy, isSvg],
+  );
 
   // For absolute/http URLs, skip resolution entirely
   const isAbsolute = !safePath || /^(?:[a-z][a-z0-9+.-]*:|\/\/|\/)/i.test(safePath);
@@ -72,8 +96,8 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
   // Memoize fallback to avoid recalculating on every render
   const fallback = useMemo(() => {
     const candidate = isAbsolute ? safePath : `${basePath.replace(/\/$/, '')}/${safePath}`;
-    return isResourceUrlAllowed(candidate, resourcePolicy) ? candidate : '';
-  }, [isAbsolute, safePath, basePath, resourcePolicy]);
+    return allowed(candidate) ? candidate : '';
+  }, [isAbsolute, safePath, basePath, allowed]);
 
   // Fast path: no provider or absolute URL — return synchronously, skip effect entirely
   const needsProvider = !isAbsolute && !!provider;
@@ -101,7 +125,7 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
             path: safePath,
             provider,
             policy: resourcePolicy,
-            url: isResourceUrlAllowed(resolved, resourcePolicy) ? resolved : '',
+            url: allowed(resolved) ? resolved : '',
           });
         }
       },
@@ -116,15 +140,16 @@ export function useMediaUrl(relativePath: string, basePath: string): string {
     return () => {
       cancelled = true;
     };
-  }, [needsProvider, provider, safePath, fallback, resourcePolicy]);
+  }, [needsProvider, provider, safePath, fallback, resourcePolicy, allowed]);
 
   // When provider is not needed, return fallback directly to avoid
   // the one-frame delay from the initial useState → useEffect cycle
-  return !needsProvider
+  const url = !needsProvider
     ? fallback
     : resolved?.path === safePath &&
         resolved.provider === provider &&
         resolved.policy === resourcePolicy
       ? resolved.url
       : '';
+  return useSanitizedSvgImage(url, isSvg, { static: options.staticSvg === true }) ?? '';
 }

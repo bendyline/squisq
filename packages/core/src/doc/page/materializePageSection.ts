@@ -32,7 +32,7 @@ import { defaultPageStyle } from '../../schemas/pageStyleDefaults.js';
 import { extractPlainText } from '../../markdown/utils.js';
 import { findBlockVideoEmbed, parseVideoEmbedUrl } from '../../markdown/videoEmbed.js';
 import type { MarkdownBlockNode } from '../../markdown/types.js';
-import { extractBodyPlainText } from '../templateInputs.js';
+import { extractBodyPlainText, isPictureFence } from '../templateInputs.js';
 import { isContainerTemplate } from '../templates/templateNames.js';
 import { isTemplatedPageBlock, resolvePageBlock } from './resolvePageBlock.js';
 import { sectionExtractors, type PageSectionDraft } from './sectionExtractors.js';
@@ -201,13 +201,9 @@ interface DraftResult {
   diagnostic?: PageSectionDiagnostic;
 }
 
-function isMermaidFence(node: MarkdownBlockNode): boolean {
-  return node.type === 'code' && node.lang?.trim().toLowerCase() === 'mermaid';
-}
-
-/** A fence some renderer claims as a widget: mermaid, or a host-registered lang. */
+/** A fence some renderer claims as a widget: a picture fence, or a host-registered lang. */
 function isWidgetFence(node: MarkdownBlockNode, widgetFenceLangs?: readonly string[]): boolean {
-  if (isMermaidFence(node)) return true;
+  if (isPictureFence(node)) return true;
   if (!widgetFenceLangs || widgetFenceLangs.length === 0) return false;
   if (node.type !== 'code') return false;
   const lang = node.lang?.trim().toLowerCase();
@@ -263,9 +259,15 @@ function unconsumedRichContent(
     const video = findBlockVideoEmbed(node);
     return video !== null && video.embed.watchUrl !== playedVideo;
   };
+  // A canvas embed renders its block through `materializeBlockLayers`, which
+  // already draws that block's picture fences as layers — keeping them here
+  // too would show each diagram twice.
+  const canvasContents = media?.type === 'canvas' ? (media.block as Block).contents : undefined;
+  const drawnByCanvas = (node: MarkdownBlockNode): boolean =>
+    isPictureFence(node) && canvasContents?.includes(node) === true;
   const markdown = block.contents.filter(
     (node) =>
-      isWidgetFence(node, widgetFenceLangs) ||
+      (isWidgetFence(node, widgetFenceLangs) && !drawnByCanvas(node)) ||
       (!templateHasMedia && markdownNodeContainsMedia(node)) ||
       isUnplayedVideo(node),
   );

@@ -24,7 +24,12 @@ import Image from '@tiptap/extension-image';
 import { mergeAttributes, type Attributes } from '@tiptap/core';
 import { DOMSerializer } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
-import { AnimatedImageControls, useAnimatedImage } from '@bendyline/squisq-react';
+import {
+  AnimatedImageControls,
+  useAnimatedImage,
+  useSanitizedSvgImage,
+} from '@bendyline/squisq-react';
+import { isSvgImageSource } from '@bendyline/squisq/markdown';
 import { useEditorContext } from './EditorContext';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 
@@ -75,8 +80,14 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
     resolution.revision === mediaRevision
       ? resolution
       : null;
-  const resolvedSrc = isUploading ? '' : needsResolution ? (currentResolution?.url ?? '') : src;
-  const resolutionFailed = needsResolution && currentResolution?.url === null;
+  const loadedSrc = isUploading ? '' : needsResolution ? (currentResolution?.url ?? '') : src;
+  // An SVG shows as core's sanitized, sized re-serialization of the file —
+  // the way an SVG island does — never the file as written.
+  const isSvg = isSvgImageSource(resolveAs ?? src);
+  const sanitizedSvg = useSanitizedSvgImage(loadedSrc, isSvg);
+  const resolvedSrc = sanitizedSvg ?? '';
+  const resolutionFailed =
+    (needsResolution && currentResolution?.url === null) || sanitizedSvg === null;
 
   useEffect(() => {
     if (isUploading || !mediaProvider || !resolveAs) return;
@@ -110,12 +121,14 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
   //    can read+write it back),
   //  - a media provider is wired (the modal resolves the URL through it), and
   //  - the image is not animated: the editor saves one still frame back over
-  //    the original path, which would silently destroy the animation.
+  //    the original path, which would silently destroy the animation, and
+  //  - the image is not SVG, which the raster editor cannot save back.
   const canEdit =
     isEditable &&
     isRelative &&
     mediaProvider !== null &&
     !playback.animated &&
+    !isSvg &&
     !isUploading &&
     !failed;
   const showAffordance = canEdit && (selected || hovered);

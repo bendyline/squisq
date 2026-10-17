@@ -38,6 +38,7 @@ export const SAMPLE_LABELS: Record<string, string> = {
   'e2e-tasklist': 'E2E tasklist',
   'teleprompter-demo': 'Teleprompter (Narrate mode)',
   'video-embeds': 'Video embeds (YouTube, Vimeo…)',
+  'svg-islands': 'SVG islands',
   'flashcards-demo': 'Flashcards & quiz',
 };
 
@@ -79,6 +80,7 @@ export const SAMPLE_GROUPS: SampleGroup[] = [
       'tree-gallery',
       'tree-project-scaffold',
       'drawing-org-chart',
+      'svg-islands',
       'diagram-legacy-headings',
       'diagram-broken',
     ],
@@ -181,6 +183,73 @@ End.
   // display-mode) with varied-length spoken prose -- short punchy lines and
   // one long paragraph -- to exercise voice pacing, plus a list so list-item
   // pauses show up. ~200 words keeps the script scrollable but quick to read.
+  'svg-islands': `# SVG islands
+
+Put SVG markup in a code fence tagged \`svg\` and it shows as a picture -- in the document, on its slide, and in exports. Tag the fence \`xml\` to show the markup as code instead. Pasting raw \`<svg>\` markup into the Write view makes an island for you.
+
+## An icon that follows the theme
+
+Shapes filled with \`currentColor\` take the text color around them, so this badge reads on light and dark themes alike.
+
+\`\`\`svg
+<svg viewBox="0 0 132 40">
+  <title>Status: online</title>
+  <rect x="2" y="2" width="128" height="36" rx="18" fill="none" stroke="currentColor" stroke-width="3"/>
+  <circle cx="22" cy="20" r="8" fill="currentColor"/>
+  <text x="40" y="26" font-family="system-ui, sans-serif" font-size="16" fill="currentColor">Online</text>
+</svg>
+\`\`\`
+
+## Gradients and styles
+
+\`\`\`svg
+<svg viewBox="0 0 400 160">
+  <title>Sunrise over the hills</title>
+  <style>.sun { fill: url(#glow); } .hill { fill: #2f6f4f; } .far { fill: #4f8f6f; }</style>
+  <defs>
+    <radialGradient id="glow"><stop offset="0" stop-color="#ffe29a"/><stop offset="1" stop-color="#ff8a3d"/></radialGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7cc4ff"/><stop offset="1" stop-color="#fff1d6"/></linearGradient>
+  </defs>
+  <rect width="400" height="160" fill="url(#sky)"/>
+  <circle class="sun" cx="200" cy="118" r="48"/>
+  <path class="far" d="M0 160 Q120 96 240 136 T400 112 V160 Z"/>
+  <path class="hill" d="M0 160 Q90 120 180 150 T400 140 V160 Z"/>
+</svg>
+\`\`\`
+
+## Animation
+
+It plays in the document; slides and video exports capture it as a still.
+
+\`\`\`svg
+<svg viewBox="0 0 100 100" width="96" height="96">
+  <title>Loading</title>
+  <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-opacity="0.2" stroke-width="10"/>
+  <path d="M50 10 a40 40 0 0 1 40 40" fill="none" stroke="currentColor" stroke-width="10" stroke-linecap="round">
+    <animateTransform attributeName="transform" type="rotate" from="0 50 50" to="360 50 50" dur="1s" repeatCount="indefinite"/>
+  </path>
+</svg>
+\`\`\`
+
+## Markup shown as code
+
+\`\`\`xml
+<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+\`\`\`
+
+## What never renders
+
+Scripts, event handlers, links, embedded HTML and anything that would load from the network are removed -- this island keeps only its square.
+
+\`\`\`svg
+<svg viewBox="0 0 100 100" onload="alert('nope')">
+  <script>alert('nope')</script>
+  <foreignObject width="100" height="100"><div>embedded HTML</div></foreignObject>
+  <image href="https://example.com/tracker.png" width="1" height="1"/>
+  <a href="javascript:alert('nope')"><rect x="25" y="25" width="50" height="50" fill="currentColor"/></a>
+</svg>
+\`\`\`
+`,
   'video-embeds': `# Video embeds
 
 Put a YouTube, Vimeo, Loom, Dailymotion or Wistia link on a line of its own and it plays right in the document -- and on its slide in the slideshow. Word exports get a playable online video; anywhere that doesn't know the convention -- GitHub, PDF -- it is still just a link. Insert -> Online Video does this for you, and pasting a video's embed code works too.

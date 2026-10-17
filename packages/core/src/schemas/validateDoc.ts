@@ -8,6 +8,7 @@ import { parseBuildSpec } from './Build.js';
  */
 
 import type { Doc } from './Doc.js';
+import { SVG_ISLAND_LIMITS } from '../markdown/svgIslandLimits.js';
 
 export interface DocSchemaIssue {
   /** JavaScript-style path to the invalid value. */
@@ -29,6 +30,7 @@ const LAYER_TYPES = new Set([
   'table',
   'tree',
   'mermaid',
+  'svg',
 ]);
 
 /** Return every structural problem found in a prospective Doc value. */
@@ -209,6 +211,15 @@ function validateLayerContent(
     case 'mermaid':
       requiredString(content, 'source', `${path}.source`, issues);
       break;
+    case 'svg': {
+      const source = requiredString(content, 'source', `${path}.source`, issues);
+      if (source !== undefined && source.length > SVG_ISLAND_LIMITS.maxSourceBytes) {
+        add(issues, `${path}.source`, 'is larger than an SVG island may be', source.length);
+      }
+      optionalString(content, 'alt', `${path}.alt`, issues);
+      optionalString(content, 'color', `${path}.color`, issues);
+      break;
+    }
   }
 }
 

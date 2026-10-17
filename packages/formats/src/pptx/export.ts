@@ -73,11 +73,22 @@ import type {
   MarkdownImage,
   MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
-import { parseVideoEmbedUrl, readFrontmatterThemeId } from '@bendyline/squisq/markdown';
+import {
+  isSvgImageSource,
+  parseVideoEmbedUrl,
+  readFrontmatterThemeId,
+} from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
 import { RelIdAllocator } from '../ooxml/relIds.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
+import {
+  buildImageShape,
+  mermaidPictureShapes,
+  svgImagePictureShapes,
+  svgIslandPictureShapes,
+  type EmuRect,
+} from './pictureLayers.js';
 import { inferMimeType } from '../html/imageUtils.js';
 import { stripHtmlTags, extractPlainText } from '../shared/text.js';
 import { toOoxmlHex } from '../shared/ooxmlColor.js';
@@ -342,12 +353,15 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
     slideBlocks.push({ id: 'empty-slide', startTime: 0, duration: 0, audioSegment: 0, layers: [] });
   }
 
-  // Only a deck with a hosted video loads the poster/PNG encoder.
-  const videoPosters = slideBlocks.some((block) =>
-    block.layers?.some((layer) => layer.type === 'videoEmbed'),
-  )
-    ? await import('../shared/videoPoster.js')
-    : null;
+  // Only a deck with a hosted video or an SVG island loads a poster/PNG encoder.
+  const hasLayer = (type: string) =>
+    slideBlocks.some((b) => b.layers?.some((l) => l.type === type));
+  const videoPosters = hasLayer('videoEmbed') ? await import('../shared/videoPoster.js') : null;
+  const hasSvgImage = slideBlocks.some((b) =>
+    b.layers?.some((l) => l.type === 'image' && isSvgImageSource(l.content.src)),
+  );
+  const svgIslandPosters =
+    hasLayer('svg') || hasSvgImage ? await import('../shared/svgIslandPoster.js') : null;
 
   const slideXmls: string[] = [];
   const slideContexts: SlideContext[] = [];
@@ -362,6 +376,7 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
     );
     ctx.diagramImages = effectiveOptions.diagramImages;
     ctx.videoPosters = videoPosters;
+    ctx.svgIslandPosters = svgIslandPosters;
     slideXmls.push(buildLayerSlideXml(slideBlocks[index], ctx));
     slideContexts.push(ctx);
   }
@@ -555,6 +570,8 @@ class SlideContext {
   diagramImages: PptxExportOptions['diagramImages'];
   /** Poster helpers for hosted videos, loaded only when the deck has one. */
   videoPosters: typeof import('../shared/videoPoster.js') | null = null;
+  /** Stand-in PNGs for SVG islands, loaded only when the deck has one. */
+  svgIslandPosters: typeof import('../shared/svgIslandPoster.js') | null = null;
   readonly slideIndex: number;
   readonly embeddedImages: EmbeddedImage[] = [];
   private nextShapeId = 4; // 1=group, 2=title, 3=body
@@ -786,7 +803,13 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
     case 'shape':
       return [buildLayerShape(layer, ctx.allocShapeId())];
     case 'image': {
-      const data = ctx.images?.get(layer.content.src);
+      // An attached SVG is never embedded as written: core's sanitized SVG
+      // over a PNG, or the placeholder below.
+      const svg = isSvgImageSource(layer.content.src);
+      const area = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
+      const picture = svg ? svgImagePictureShapes(layer, area, ctx) : null;
+      if (picture) return picture;
+      const data = svg ? undefined : ctx.images?.get(layer.content.src);
       if (data) {
         const image = ctx.addImage(layer.content.src, data, layer.content.alt);
         const rect = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
@@ -853,7 +876,7 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
     }
     case 'video': {
       const poster = layer.content.posterSrc;
-      const data = poster ? ctx.images?.get(poster) : undefined;
+      const data = poster && !isSvgImageSource(poster) ? ctx.images?.get(poster) : undefined;
       if (poster && data) {
         const relId = ctx.addImage(poster, data, layer.content.alt);
         const embedded = ctx.embeddedImages.find((candidate) => candidate.relId === relId)!;
@@ -915,60 +938,34 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
       ];
     }
     case 'mermaid': {
-      const picture = ctx.diagramImages?.get(layer.content.source.trim());
-      if (picture && picture.width > 0 && picture.height > 0) {
-        const data =
-          picture.data instanceof Uint8Array
-            ? (picture.data.buffer.slice(
-                picture.data.byteOffset,
-                picture.data.byteOffset + picture.data.byteLength,
-              ) as ArrayBuffer)
-            : picture.data;
-        const relId = ctx.addImage(
-          `diagram-${ctx.embeddedImages.length + 1}.png`,
-          data,
-          mermaidTitle(layer.content.source),
-        );
-        const embedded = ctx.embeddedImages.find((candidate) => candidate.relId === relId)!;
-        // Fit inside the layer's area, keeping the picture's shape, centered.
-        const area = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
-        const scale = Math.min(area.width / picture.width, area.height / picture.height);
-        const width = Math.round(picture.width * scale);
-        const height = Math.round(picture.height * scale);
-        return [
-          buildImageShape(
-            embedded,
+      const area = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
+      const picture = mermaidPictureShapes(layer, area, ctx);
+      return (
+        picture ?? [
+          buildLayerTextShape(
+            textLayerForPlaceholder(layer.position, layer.content.source, ctx),
             ctx.allocShapeId(),
-            area.x + Math.round((area.width - width) / 2),
-            area.y + Math.round((area.height - height) / 2),
-            width,
-            height,
           ),
-        ];
-      }
-      return [
-        buildLayerTextShape(
-          textLayerForPlaceholder(layer.position, layer.content.source, ctx),
-          ctx.allocShapeId(),
-        ),
-      ];
+        ]
+      );
+    }
+    case 'svg': {
+      const area = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
+      const picture = svgIslandPictureShapes(layer, area, ctx);
+      const label = layer.content.alt ?? 'SVG illustration';
+      return (
+        picture ?? [
+          buildLayerTextShape(
+            textLayerForPlaceholder(layer.position, `[${label}]`, ctx),
+            ctx.allocShapeId(),
+          ),
+        ]
+      );
     }
   }
 }
 
-/** A Mermaid diagram's `accTitle`, for a picture's name; "Diagram" without one. */
-function mermaidTitle(source: string): string {
-  return /^\s*accTitle\s*:\s*(.+?)\s*$/mu.exec(source)?.[1] ?? 'Diagram';
-}
-
 interface LayerRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-interface EmuRect {
   x: number;
   y: number;
   width: number;
@@ -1750,41 +1747,6 @@ function buildBodyShapeCustom(
   );
 }
 
-function buildImageShape(
-  img: EmbeddedImage,
-  shapeId: number,
-  left: number,
-  top: number,
-  maxWidth: number,
-  maxHeight: number,
-  /** Relationship id of a click hyperlink (a hosted video's page). */
-  hyperlinkRelId?: string | null,
-): string {
-  const name = escapeXml(img.alt || 'Picture');
-  const descr = img.alt ? ` descr="${escapeXml(img.alt)}"` : '';
-  const link = hyperlinkRelId ? `<a:hlinkClick r:id="${hyperlinkRelId}"/>` : '';
-  return (
-    `<p:pic>` +
-    `<p:nvPicPr>` +
-    (link
-      ? `<p:cNvPr id="${shapeId}" name="${name}"${descr}>${link}</p:cNvPr>`
-      : `<p:cNvPr id="${shapeId}" name="${name}"${descr}/>`) +
-    `<p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>` +
-    `<p:nvPr/>` +
-    `</p:nvPicPr>` +
-    `<p:blipFill>` +
-    `<a:blip r:embed="${img.relId}"/>` +
-    `<a:stretch><a:fillRect/></a:stretch>` +
-    `</p:blipFill>` +
-    `<p:spPr>` +
-    `<a:xfrm><a:off x="${left}" y="${top}"/>` +
-    `<a:ext cx="${maxWidth}" cy="${maxHeight}"/></a:xfrm>` +
-    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
-    `</p:spPr>` +
-    `</p:pic>`
-  );
-}
-
 // ============================================
 // Block Conversion (Markdown -> DrawingML paragraphs)
 // ============================================
@@ -1858,7 +1820,9 @@ function convertParagraph(node: MarkdownParagraph, ctx: SlideContext): string {
   // If paragraph is just an image and we have the data, embed it as a shape
   const soloImage = isImageOnlyParagraph(node);
   if (soloImage && ctx.images) {
-    const data = ctx.images.get(soloImage.url);
+    // An SVG file is never embedded as written (this fallback path has no
+    // vector picture; it prints the placeholder instead).
+    const data = isSvgImageSource(soloImage.url) ? undefined : ctx.images.get(soloImage.url);
     if (data) {
       ctx.addImage(soloImage.url, data, soloImage.alt || '');
       return ''; // Image will be rendered as a p:pic shape, not inline text
@@ -2119,7 +2083,7 @@ function makeHyperlinkRun(text: string, rId: string, format: InlineFormat): stri
 function convertImage(node: MarkdownImage, format: InlineFormat, ctx: SlideContext): string {
   // For inline images (not image-only paragraphs), try to embed
   if (ctx.images) {
-    const data = ctx.images.get(node.url);
+    const data = isSvgImageSource(node.url) ? undefined : ctx.images.get(node.url);
     if (data) {
       // Register for rendering as a shape; return empty text
       ctx.addImage(node.url, data, node.alt || '');

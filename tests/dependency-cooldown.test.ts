@@ -94,6 +94,7 @@ describe('dependency cooldown gate', () => {
     exempted: { name: string; version: string; reason: string }[];
     stale: { name: string; version: string }[];
     unresolvable: { path: string; resolved: string }[];
+    shadowedWorkspaces: { name: string; version: string; paths: string[] }[];
   }
 
   /**
@@ -240,6 +241,64 @@ describe('dependency cooldown gate', () => {
     const { status, report } = await audit(lockPath);
     expect(status).toBe(0);
     expect(report.checked).toBe(1);
+  });
+
+  it('never holds our own @bendyline packages, however fresh', async () => {
+    // A consumer's lockfile (no squisq workspaces in it) pinning yesterday's
+    // release of ours: the .npmrc min-release-age-exclude policy, enforced here too.
+    packuments = {
+      '@bendyline/squisq': { '2.0.0': daysAgo(0.5) },
+      '@bendyline/squisq-formats': { '1.0.0': daysAgo(0.5) },
+      real: { '1.0.0': daysAgo(50) },
+    };
+    const lockPath = writeLockfile({
+      'node_modules/@bendyline/squisq': dep('@bendyline/squisq', '2.0.0'),
+      'node_modules/@bendyline/squisq-formats': dep('@bendyline/squisq-formats', '1.0.0'),
+      'node_modules/real': dep('real', '1.0.0'),
+    });
+
+    const { status, report } = await audit(lockPath);
+    expect(status).toBe(0);
+    expect(report.checked).toBe(1);
+    expect(report.tooYoung).toEqual([]);
+    expect(report.shadowedWorkspaces).toEqual([]);
+  });
+
+  it('reports a registry copy of a workspace package as drift, not a cooldown failure', async () => {
+    // A pin that no longer matches the workspace version makes npm install the
+    // published package beside the link (packages/cli/node_modules/...).
+    packuments = { '@bendyline/squisq-formats': { '1.0.0': daysAgo(0.5) } };
+    const lockPath = writeLockfile({
+      'packages/formats': { name: '@bendyline/squisq-formats', version: '1.0.1' },
+      'node_modules/@bendyline/squisq-formats': { resolved: 'packages/formats', link: true },
+      'packages/cli/node_modules/@bendyline/squisq-formats': dep(
+        '@bendyline/squisq-formats',
+        '1.0.0',
+      ),
+    });
+
+    const { status, report } = await audit(lockPath);
+    expect(status).toBe(0);
+    expect(report.tooYoung).toEqual([]);
+    expect(report.shadowedWorkspaces).toEqual([
+      {
+        name: '@bendyline/squisq-formats',
+        version: '1.0.0',
+        paths: ['packages/cli/node_modules/@bendyline/squisq-formats'],
+      },
+    ]);
+
+    const human = await run([
+      '--all',
+      '--no-cache',
+      '--lockfile',
+      lockPath,
+      '--registry',
+      registryUrl,
+    ]);
+    expect(human.status).toBe(0);
+    expect(human.stderr).toContain('resolve from the registry instead of the workspace');
+    expect(human.stderr).not.toContain('error:');
   });
 
   it('surfaces non-registry resolutions instead of dropping them', async () => {

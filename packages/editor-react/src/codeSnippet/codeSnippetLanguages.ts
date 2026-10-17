@@ -158,7 +158,11 @@ const BY_FENCE_LANGUAGE: ReadonlyMap<string, CodeSnippetLanguage> = new Map(
   CODE_SNIPPET_LANGUAGES.map((language) => [language.fenceLanguage, language]),
 );
 
-/** Languages owned by the diagram/tree/timeline editors or their auto-detection gates. */
+/**
+ * Languages owned by the diagram/tree/timeline editors or their auto-detection
+ * gates, and by the Mermaid and SVG-island widgets (which show their source in
+ * their own Source view).
+ */
 const SPECIAL_FENCE_LANGUAGES = new Set([
   'text',
   'txt',
@@ -169,6 +173,7 @@ const SPECIAL_FENCE_LANGUAGES = new Set([
   'tree',
   'timeline',
   'mermaid',
+  'svg',
 ]);
 
 /**

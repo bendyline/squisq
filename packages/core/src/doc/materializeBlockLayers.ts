@@ -14,6 +14,7 @@ import type {
   Layer,
   MermaidLayer,
   ShapeLayer,
+  SvgLayer,
   VideoEmbedLayer,
   VideoLayer,
 } from '../schemas/Doc.js';
@@ -48,6 +49,7 @@ import {
   extractImages,
 } from './templateInputs.js';
 import { parseVideoEmbedUrl } from '../markdown/videoEmbed.js';
+import { isSvgIslandLang, parseSvgIsland } from '../markdown/svgIsland.js';
 import {
   placeLayersInRect,
   resolveSupplementalMediaLayout,
@@ -321,6 +323,24 @@ function mermaidSources(block: Block): string[] {
     .filter((source) => source.trim().length > 0);
 }
 
+/**
+ * ```svg fences (SVG islands). A fence that does not sanitize to an island
+ * still becomes a layer, so the slide shows the renderer's "couldn't render"
+ * notice instead of silently dropping what the author wrote.
+ */
+function svgIslandSources(block: Block): string[] {
+  return (block.contents ?? [])
+    .filter((node): node is MarkdownCodeBlock => node.type === 'code' && isSvgIslandLang(node.lang))
+    .map((node) => node.value)
+    .filter((source) => source.trim().length > 0);
+}
+
+/** An island's own aspect ratio, from its viewBox or size. */
+function svgIslandAspectRatio(source: string): number {
+  const result = parseSvgIsland(source);
+  return result.ok ? result.island.aspectRatio : 16 / 9;
+}
+
 type RichMediaItem =
   | { kind: 'image'; src: string; alt: string; aspectRatio?: number }
   | {
@@ -335,6 +355,7 @@ type RichMediaItem =
     }
   | { kind: 'videoEmbed'; url: string; title: string | null; aspectRatio: number }
   | { kind: 'mermaid'; source: string; aspectRatio: number }
+  | { kind: 'svg'; source: string; aspectRatio: number }
   | {
       kind: 'spatial';
       template: 'diagram' | 'tree' | 'timeline';
@@ -409,6 +430,11 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
       .filter((layer): layer is MermaidLayer => layer.type === 'mermaid')
       .map((layer) => layer.content.source),
   );
+  const existingSvg = new Set(
+    layers
+      .filter((layer): layer is SvgLayer => layer.type === 'svg')
+      .map((layer) => layer.content.source),
+  );
   // A template that already plays a hosted video (videoWithCaption) may name it
   // by any URL form; compare canonical page URLs.
   const existingEmbeds = new Set(
@@ -427,6 +453,7 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
     return true;
   });
   const sources = mermaidSources(block).filter((source) => !existingMermaid.has(source));
+  const islands = svgIslandSources(block).filter((source) => !existingSvg.has(source));
   const hosted = extractHostedVideos(block.contents).filter(
     (video) => !existingEmbeds.has(video.url),
   );
@@ -455,6 +482,11 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
       aspectRatio: video.aspectRatio,
     })),
     ...sources.map((source): RichMediaItem => ({ kind: 'mermaid', source, aspectRatio: 16 / 9 })),
+    ...islands.map((source): RichMediaItem => ({
+      kind: 'svg',
+      source,
+      aspectRatio: svgIslandAspectRatio(source),
+    })),
     ...embeddedSpatialMedia(block),
   ];
 }
@@ -567,6 +599,16 @@ function richMediaLayers(
       },
     ];
   }
+  if (item.kind === 'svg') {
+    return [
+      {
+        id: `${block.id}-svg-${kindIndex}`,
+        type: 'svg',
+        position,
+        content: { source: item.source, color: theme.colors.text },
+      },
+    ];
+  }
 
   const localViewport: ViewportConfig = {
     width: position.width,
@@ -628,8 +670,8 @@ function applyEmbeddedVideoTiming(layers: Layer[], block: Block): Layer[] {
 }
 
 /**
- * Promote unconsumed images, videos (clips and hosted players), and rich
- * diagram fences through one layout path.
+ * Promote unconsumed images, videos (clips and hosted players), rich diagram
+ * fences and SVG islands through one layout path.
  */
 function appendRichContentLayers(
   layers: Layer[],
@@ -674,6 +716,7 @@ function appendRichContentLayers(
     video: 0,
     videoEmbed: 0,
     mermaid: 0,
+    svg: 0,
     spatial: 0,
   };
   const mediaLayers = items.flatMap((item, index) => {

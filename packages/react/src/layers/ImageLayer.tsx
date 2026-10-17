@@ -22,6 +22,8 @@ interface ImageLayerProps {
   blockTime: number;
   /** Whether authored and responsive image motion should run. */
   animationsEnabled?: boolean;
+  /** Draw an SVG image as a still (no animation inside it), for capture. */
+  isStatic?: boolean;
 }
 
 export function ImageLayer({
@@ -30,6 +32,7 @@ export function ImageLayer({
   viewport,
   blockTime,
   animationsEnabled = true,
+  isStatic = false,
 }: ImageLayerProps) {
   const { content, position, animation } = layer;
 
@@ -45,7 +48,7 @@ export function ImageLayer({
   const finalY = y + offset.y;
 
   // Resolve image URL via MediaProvider (if available), falling back to basePath
-  const src = useMediaUrl(content.src, basePath);
+  const src = useMediaUrl(content.src, basePath, { staticSvg: isStatic });
 
   // Get animation styles
   const animStyle = getAnimationStyle(animation, blockTime);

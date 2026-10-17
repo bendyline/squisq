@@ -21,6 +21,7 @@
 @import './diagram.css';
 @import './ascii-diagram.css';
 @import './mermaid-diagram.css';
+@import './svg-island.css';
 @import './code-snippet.css';
 @import './tree-view.css';
 @import './host-fence.css';

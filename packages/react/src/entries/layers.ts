@@ -11,3 +11,4 @@ export type {
 export { TreeLayer } from '../layers/TreeLayer.js';
 export { MapLayer } from '../layers/MapLayer.js';
 export { MermaidLayer } from '../layers/MermaidLayer.js';
+export { SvgLayer } from '../layers/SvgLayer.js';

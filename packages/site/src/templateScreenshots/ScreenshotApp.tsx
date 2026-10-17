@@ -225,6 +225,7 @@ export function ScreenshotApp() {
           basePath="/"
           viewport={TEMPLATE_SCREENSHOT_VIEWPORT}
           isPlaying={false}
+          staticMedia
         />
       </section>
     </main>

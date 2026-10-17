@@ -14,7 +14,11 @@
  * - ASCII-art ```diagram, ```tree, and ```timeline fences (also unlabeled or
  *   `text` fences whose content the detectors accept);
  * - heading blocks with a container template — `{[drawing]}`, `{[layout]}`,
- *   `{[diagram]}` — together with every child heading they own.
+ *   `{[diagram]}` — together with every child heading they own;
+ * - ```svg fences (SVG islands) — but only when `kinds` asks for `svg`: DOCX
+ *   and PPTX embed an island natively as vector art, so by default it is
+ *   left in place. Ask for it to picture islands for PDF, or to get the
+ *   `svg` map of PNG fallbacks the Office exporters place beside the vector.
  *
  * `docToPptx` keeps drawings, timelines and ASCII diagrams as native shapes;
  * for it, use the returned `mermaid` map as its `diagramImages` option.
@@ -29,7 +33,12 @@ import type {
   MarkdownNode,
   MarkdownParagraph,
 } from '@bendyline/squisq/markdown';
-import { extractPlainText, stringifyMarkdown } from '@bendyline/squisq/markdown';
+import {
+  extractPlainText,
+  isSvgIslandLang,
+  parseSvgIsland,
+  stringifyMarkdown,
+} from '@bendyline/squisq/markdown';
 import {
   detectAsciiDiagram,
   detectAsciiTimeline,
@@ -45,7 +54,19 @@ import {
 } from '@bendyline/squisq/doc';
 
 /** What kind of diagram a picture is wanted for. */
-export type ExportDiagramKind = 'mermaid' | 'diagram' | 'timeline' | 'tree' | 'container';
+export type ExportDiagramKind = 'mermaid' | 'diagram' | 'timeline' | 'tree' | 'container' | 'svg';
+
+/** The kinds pictured when `kinds` is not given: everything but `svg`. */
+const DEFAULT_KINDS: readonly ExportDiagramKind[] = [
+  'mermaid',
+  'diagram',
+  'timeline',
+  'tree',
+  'container',
+];
+
+/** Every kind, `svg` included — for exporters with no vector picture of their own (PDF). */
+export const EXPORT_DIAGRAM_KINDS: readonly ExportDiagramKind[] = [...DEFAULT_KINDS, 'svg'];
 
 export interface ExportDiagram {
   readonly kind: ExportDiagramKind;
@@ -75,7 +96,7 @@ export type DiagramRasterizer = (diagram: ExportDiagram) => Promise<DiagramPictu
 
 export interface RasterizeDiagramsOptions {
   signal?: AbortSignal;
-  /** Limit the kinds pictured. Default: all of them. */
+  /** The kinds to picture. Default: all of them except `svg` (see above). */
   kinds?: readonly ExportDiagramKind[];
   /** Prefix for the image URLs written into the document. Default: `diagram`. */
   urlPrefix?: string;
@@ -96,6 +117,11 @@ export interface RasterizedDiagrams {
   >;
   /** Pictures of Mermaid diagrams keyed by trimmed source, for `docToPptx`'s `diagramImages`. */
   readonly mermaid: Map<string, DiagramPicture>;
+  /**
+   * Pictures of SVG islands keyed by trimmed source: the PNG fallbacks for
+   * DOCX's `svgIslandFallbacks` and PPTX's `diagramImages`.
+   */
+  readonly svg: Map<string, DiagramPicture>;
 }
 
 const KIND_NAMES: Readonly<Record<ExportDiagramKind, string>> = {
@@ -104,12 +130,15 @@ const KIND_NAMES: Readonly<Record<ExportDiagramKind, string>> = {
   timeline: 'Timeline',
   tree: 'Tree',
   container: 'Diagram',
+  svg: 'Illustration',
 };
 
 /** The diagram kind of a fence, or null for ordinary code. */
 export function fenceDiagramKind(node: MarkdownCodeBlock): ExportDiagramKind | null {
   const lang = node.lang ?? null;
   if ((lang ?? '').trim().toLowerCase() === 'mermaid') return 'mermaid';
+  // An svg fence that is not a usable island stays code, as in the player.
+  if (isSvgIslandLang(lang)) return parseSvgIsland(node.value).ok ? 'svg' : null;
   // Same order the player uses (materializeBlockLayers' embedded media).
   if (isEligibleAsciiFenceLang(lang)) {
     const detection = detectAsciiDiagram(node.value, { explicit: isExplicitDiagramLang(lang) });
@@ -138,6 +167,16 @@ function mermaidAlt(source: string): string {
   const title = /^\s*accTitle\s*:\s*(.+?)\s*$/mu.exec(source)?.[1] ?? '';
   const description = /^\s*accDescr\s*:\s*(.+?)\s*$/mu.exec(source)?.[1] ?? '';
   return [title, description].filter(Boolean).join('. ');
+}
+
+/** A fence's own text alternative, or ''. */
+function fenceAlt(kind: ExportDiagramKind, source: string): string {
+  if (kind === 'mermaid') return mermaidAlt(source);
+  if (kind === 'svg') {
+    const result = parseSvgIsland(source);
+    return (result.ok && result.island.title) || '';
+  }
+  return '';
 }
 
 function fenceMarkdown(node: MarkdownCodeBlock): string {
@@ -171,7 +210,7 @@ function findInDocument(doc: MarkdownDocument): FoundDiagram[] {
               markdown: fenceMarkdown(fence),
               source: fence.value,
               template: '',
-              alt: (kind === 'mermaid' ? mermaidAlt(fence.value) : '') || KIND_NAMES[kind],
+              alt: fenceAlt(kind, fence.value) || KIND_NAMES[kind],
             },
           });
         }
@@ -274,7 +313,7 @@ export async function rasterizeDiagrams(
   render: DiagramRasterizer,
   options: RasterizeDiagramsOptions = {},
 ): Promise<RasterizedDiagrams> {
-  const kinds = options.kinds ? new Set(options.kinds) : null;
+  const kinds = new Set(options.kinds ?? DEFAULT_KINDS);
   const prefix = options.urlPrefix ?? 'diagram';
   // Never reuse a name the document already gives one of its own images.
   const taken = imageUrls(doc.children, new Set());
@@ -288,12 +327,13 @@ export async function rasterizeDiagrams(
   };
   const images: RasterizedDiagrams['images'] = new Map();
   const mermaid = new Map<string, DiagramPicture>();
+  const svg = new Map<string, DiagramPicture>();
   const fenceReplacements = new Map<MarkdownCodeBlock, MarkdownParagraph>();
   const containerReplacements: { start: number; end: number; nodes: MarkdownBlockNode[] }[] = [];
 
   for (const entry of findInDocument(doc)) {
     options.signal?.throwIfAborted();
-    if (kinds && !kinds.has(entry.diagram.kind)) continue;
+    if (!kinds.has(entry.diagram.kind)) continue;
     let picture: DiagramPicture | null = null;
     try {
       picture = await render(entry.diagram);
@@ -314,6 +354,7 @@ export async function rasterizeDiagrams(
       height: picture.height,
     });
     if (entry.diagram.kind === 'mermaid') mermaid.set(entry.diagram.source.trim(), picture);
+    if (entry.diagram.kind === 'svg') svg.set(entry.diagram.source.trim(), picture);
     const paragraph = imageParagraph(url, entry.diagram.alt);
     if (entry.fence) {
       fenceReplacements.set(entry.fence, paragraph);
@@ -347,5 +388,6 @@ export async function rasterizeDiagrams(
     markdownDoc: children === doc.children ? doc : { ...doc, children },
     images,
     mermaid,
+    svg,
   };
 }

@@ -43,7 +43,6 @@ import type {
 } from '../markdown/types.js';
 import { mediaKindForUrl } from '../markdown/mediaReference.js';
 import { extractPlainText, readFrontmatterThemeId } from '../markdown/utils.js';
-import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { coerceAnnotationValues, type CoercedBlockMeta } from '../markdown/annotationCoercion.js';
 import { estimateReadingTime } from '../timing/readingTime.js';
 import {
@@ -58,7 +57,11 @@ import { extractTemplateBlocksFromContents } from './annotationBlocks.js';
 import { detectPromotableBodyAnnotation } from './promoteBodyAnnotation.js';
 import type { ParsedAnnotation } from './standaloneAnnotation.js';
 import { profileBlockContents, pickAutoTemplate } from '../recommend/templates.js';
-import { autoTemplatePreservesContent, deriveTemplateInputs } from './templateInputs.js';
+import {
+  autoTemplatePreservesContent,
+  deriveTemplateInputs,
+  isMaterializedMediaNode,
+} from './templateInputs.js';
 import { isEligibleAsciiFenceLang } from './asciiDiagram/detect.js';
 import { parseAsciiDiagram } from './asciiDiagram/parse.js';
 import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
@@ -1013,11 +1016,12 @@ export function getBlockBodyText(block: Block): string {
     (tmpl === 'tree' && block.templateData !== undefined && 'items' in block.templateData);
   // Join with newlines to preserve paragraph/list-item boundaries.
   // splitIntoPhrases uses these newlines as natural split points.
-  // A hosted-video paragraph is a player, not prose: captioning or reading
-  // aloud `https://youtu.be/…` (or the link's title) says nothing.
+  // A hosted-video paragraph is a player and a mermaid/svg fence is a
+  // picture, not prose: captioning or reading aloud `https://youtu.be/…`,
+  // `flowchart LR` or `<path d="…">` says nothing.
   return block.contents
     .filter((node) => !(consumedFence && node.type === 'code'))
-    .filter((node) => findBlockVideoEmbed(node) === null)
+    .filter((node) => !isMaterializedMediaNode(node))
     .map((node) => extractPlainText(node))
     .join('\n')
     .trim();

@@ -27,6 +27,7 @@ import type {
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import type { Block, Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { generateExternalHtml } from './htmlTemplate.js';
+import { exportImageBytes } from '../shared/svgIslands.js';
 import {
   collectLinkRefs,
   isBundledDataAssetPath,
@@ -164,7 +165,9 @@ export async function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Prom
       const clean = authored.replace(/[#?].*$/, '');
       const resolvedImg = resolveRelative(docDir, clean);
       if (resolvedImg === null) continue;
-      const data = await readBinary(resolvedImg);
+      const read = await readBinary(resolvedImg);
+      // An SVG ships as core's sanitized re-serialization, never as written.
+      const data = read && exportImageBytes(resolvedImg, read);
       if (!data) continue;
       const safe = sanitizeZipPath(resolvedImg);
       if (!safe) continue;

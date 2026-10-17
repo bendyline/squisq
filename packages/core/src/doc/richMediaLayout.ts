@@ -683,7 +683,8 @@ export function resolveSupplementalMediaLayout(
       layer.type === 'video' ||
       layer.type === 'videoEmbed' ||
       layer.type === 'map' ||
-      layer.type === 'mermaid',
+      layer.type === 'mermaid' ||
+      layer.type === 'svg',
   );
   // A feature template without a primary image still owns its feature cell.
   // Embedded videos and diagrams fill that cell instead of an extra-media inset.

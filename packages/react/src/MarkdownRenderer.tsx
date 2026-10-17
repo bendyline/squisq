@@ -46,6 +46,8 @@ import { VideoEmbedFrame } from './VideoEmbedFrame.js';
 import { AnimatedImageControls } from './animatedImage/AnimatedImageControls.js';
 import { useAnimatedImage } from './animatedImage/useAnimatedImage.js';
 import { MermaidDiagram } from './mermaid/MermaidDiagram.js';
+import { SvgIslandImage } from './svgIsland/SvgIslandImage.js';
+import { svgDataImageSrc } from './svgIsland/svgImageUrl.js';
 
 // ── Props ──────────────────────────────────────────────────────────
 
@@ -537,6 +539,15 @@ function renderBlock(
           />
         );
       }
+      if (fenceLang === 'svg') {
+        return (
+          <SvgIslandImage
+            key={key}
+            source={node.value}
+            fallback={<CodeBlock value={node.value} language={node.lang} ctx={ctx} />}
+          />
+        );
+      }
       return <CodeBlock key={key} value={node.value} language={node.lang} ctx={ctx} />;
     }
 
@@ -709,7 +720,7 @@ function renderBlocks(
  * is a bare <img> as before.
  */
 function MdImage({ src, alt, title }: { src: string; alt: string; title?: string }) {
-  const safeSrc = sanitizeUrl(src, 'media');
+  const safeSrc = sanitizeUrl(src, 'media') ?? svgDataImageSrc(src);
   const resolved = useMediaUrl(safeSrc ?? '', '.');
   const imageRef = useRef<HTMLImageElement>(null);
   const playback = useAnimatedImage(safeSrc ?? '', resolved);

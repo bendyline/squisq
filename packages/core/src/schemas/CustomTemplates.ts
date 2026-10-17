@@ -135,6 +135,9 @@ export interface CustomTemplateValidationResult {
   template?: CustomTemplateDefinition;
 }
 
+// `videoEmbed` and `svg` are deliberately absent: both carry content that
+// renderers only accept after core re-derives it from authored markdown, and a
+// custom template's frontmatter layers are not that.
 const LAYER_TYPES = new Set([
   'image',
   'text',

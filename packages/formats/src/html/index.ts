@@ -37,6 +37,7 @@ import {
   type HtmlExportOptions,
 } from './htmlTemplate.js';
 import { extractFilename } from './imageUtils.js';
+import { exportImageBytes } from '../shared/svgIslands.js';
 
 // ── Public Types ───────────────────────────────────────────────────
 
@@ -189,7 +190,10 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
         );
         continue;
       }
-      zip.file(zipPath, buffer);
+      // An SVG ships as core's sanitized re-serialization, never as written.
+      const bytes = exportImageBytes(originalPath, buffer);
+      if (!bytes) continue;
+      zip.file(zipPath, bytes);
       imagePathMap[originalPath] = zipPath;
     }
   }

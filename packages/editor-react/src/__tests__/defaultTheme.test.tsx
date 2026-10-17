@@ -245,7 +245,9 @@ describe('toolbar theme picker with a host default', () => {
 
       fireEvent.click(within(openPicker()).getByRole('option', { name: 'Default (Warm Earth)' }));
       await waitFor(() => expect(source()).not.toContain('squisq-theme'));
-      expect(probe().getAttribute('data-active')).toBe('warm-earth');
+      // The source updates at once; the active theme follows the debounced
+      // reparse of the doc's frontmatter.
+      await waitFor(() => expect(probe().getAttribute('data-active')).toBe('warm-earth'));
     }),
   );
 

@@ -156,6 +156,28 @@ export type {
   VideoEmbedProviderInfo,
   BlockVideoEmbed,
 } from './videoEmbed.js';
+
+// SVG islands: a ```svg fence renders as a picture — only ever core's
+// sanitized re-serialization, shown as an image.
+export {
+  SVG_ISLAND_LIMITS,
+  isSvgIslandLang,
+  isSvgIslandFence,
+  isSvgImageSource,
+  svgSourceFromBytes,
+  svgSourceFromDataUrl,
+  parseSvgIsland,
+  svgIslandMarkup,
+  svgIslandDataUrl,
+} from './svgIsland.js';
+export type {
+  SvgIsland,
+  SvgIslandResult,
+  SvgIslandDiagnostic,
+  SvgIslandFailureReason,
+  ParseSvgIslandOptions,
+  SvgIslandMarkupOptions,
+} from './svgIsland.js';
 export {
   DEFAULT_MARKDOWN_SAFETY_LIMITS,
   MarkdownLimitError,
