@@ -15,6 +15,7 @@ import {
   extractImages,
   extractListItems,
   extractTableFromContents,
+  isPictureFence,
   materializeBlockLayers,
   type MaterializeBlockLayersOptions,
 } from '@bendyline/squisq/doc';
@@ -224,10 +225,7 @@ function buildTemplatePreviewInputs(
         extractImages(contents, 1).length > 0 ||
         extractEmbeddedVideos(contents, 1).length > 0 ||
         (contents ?? []).some(
-          (node) =>
-            node.type === 'code' &&
-            node.lang?.trim().toLowerCase() === 'mermaid' &&
-            !!node.value.trim(),
+          (node) => node.type === 'code' && isPictureFence(node) && !!node.value.trim(),
         ) ||
         ['diagram', 'tree', 'timeline'].some(
           (template) =>

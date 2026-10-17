@@ -35,6 +35,7 @@ import {
   coerceTemplateParams,
   DEFAULT_THEME,
   deriveTemplateInputs,
+  extractBodyPlainText,
   type MaterializeBlockLayersOptions,
 } from '@bendyline/squisq/doc';
 import { extractPlainText, getChildren } from '@bendyline/squisq/markdown';
@@ -59,14 +60,6 @@ function isAnnotated(block: Block): boolean {
   const annotation = block.sourceHeading?.templateAnnotation;
   if (!annotation) return false;
   return !!annotation.template;
-}
-
-function extractBodyPlainText(contents?: MarkdownBlockNode[]): string {
-  if (!contents || contents.length === 0) return '';
-  return contents
-    .map((n) => extractPlainText(n))
-    .join('\n')
-    .trim();
 }
 
 function extractListItems(contents?: MarkdownBlockNode[]): string[] {

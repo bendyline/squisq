@@ -19,6 +19,7 @@
 
 import type { Layer, ShapeLayer, TextLayer, PathLayer, ImageLayer } from '../../schemas/Doc.js';
 import { extractPlainText } from '../../markdown/utils.js';
+import { isPictureFence } from '../templateInputs.js';
 import { normalizeShapeKind } from './drawingLayout.js';
 import { shapePath } from '../utils/shapeGeometry.js';
 
@@ -233,6 +234,7 @@ function numParam(params: Record<string, string>, key: string): number | undefin
 function bodyText(block: LayoutChildBlock): string {
   if (!block.contents || block.contents.length === 0) return '';
   return block.contents
+    .filter((node) => !isPictureFence(node))
     .map((node) => extractPlainText(node))
     .join('\n')
     .trim();

@@ -16,7 +16,10 @@
 
 import {
   findBlockVideoEmbed,
+  isSvgIslandLang,
+  parseSvgIsland,
   sanitizeHtmlNodes,
+  svgIslandDataUrl,
   sanitizeUrl,
   videoEmbedFromIframe,
   videoEmbedIframeAttributes,
@@ -124,6 +127,8 @@ interface RenderCtx {
   links?: Map<string, string>;
   htmlPolicy: HtmlPolicy;
   videoEmbeds?: 'player' | 'poster';
+  /** The theme's text color, which an SVG island's `currentColor` follows. */
+  textColor?: string;
   /**
    * Footnote numbering for the document being rendered. Undefined for the
    * fragment helpers that render a node with no document around it — a
@@ -171,7 +176,14 @@ export function markdownDocToPlainHtml(
     options.theme ??
     (resolveId ? resolveThemeForDoc(doc, resolveId, options.themeRegistry) : undefined);
   const footnotes = new FootnoteIndex(doc);
-  const ctx: RenderCtx = { images, links, htmlPolicy, footnotes, videoEmbeds };
+  const ctx: RenderCtx = {
+    images,
+    links,
+    htmlPolicy,
+    footnotes,
+    videoEmbeds,
+    textColor: theme?.colors.text,
+  };
   const body = renderTopLevel(doc.children, ctx) + renderFootnotesSection(footnotes, ctx);
   const fontsLink = theme && externalResources === 'allow' ? renderFontsLink(theme) : '';
   // Resolve how to load FontAwesome — only when the doc actually uses
@@ -195,7 +207,8 @@ export function markdownDocToPlainHtml(
   // break back into HTML. This is a final output-boundary defense in addition
   // to theme validation and font-family quoting.
   const videoCss = docUsesVideoEmbeds(doc, htmlPolicy) ? `\n${VIDEO_EMBED_CSS}` : '';
-  const safeCss = escapeStyleText(`${themedCss}\n${FEATURE_CSS}${videoCss}`);
+  const svgCss = docUsesSvgIslands(doc) ? `\n${SVG_ISLAND_CSS}` : '';
+  const safeCss = escapeStyleText(`${themedCss}\n${FEATURE_CSS}${videoCss}${svgCss}`);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -261,6 +274,17 @@ function docUsesVideoEmbeds(doc: MarkdownDocument, htmlPolicy: HtmlPolicy): bool
   return doc.children.some(
     (node) => (node.type === 'paragraph' && findBlockVideoEmbed(node) !== null) || visit(node),
   );
+}
+
+/** Whether any ```svg fence, at any depth, is in the document. */
+function docUsesSvgIslands(doc: MarkdownDocument): boolean {
+  const visit = (node: unknown): boolean => {
+    if (!node || typeof node !== 'object') return false;
+    const n = node as { type?: string; lang?: string | null; children?: unknown[] };
+    if (n.type === 'code') return isSvgIslandLang(n.lang);
+    return Array.isArray(n.children) && n.children.some(visit);
+  };
+  return visit(doc);
 }
 
 // ── Top-level walk with feature-section grouping ───────────────────
@@ -761,6 +785,10 @@ function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): str
     case 'inlineCode':
       return `<code>${escapeHtml(node.value ?? '')}</code>`;
     case 'code': {
+      if (isSvgIslandLang(node.lang)) {
+        const island = svgIslandToHtml(node.value ?? '', ctx);
+        if (island) return island;
+      }
       const lang = node.lang ? ` class="language-${escapeAttr(node.lang)}"` : '';
       return `<pre class="squisq-code-block"><code${lang}>${escapeHtml(node.value ?? '')}</code></pre>`;
     }
@@ -1004,6 +1032,27 @@ const VIDEO_EMBED_CSS = `  .squisq-video-embed { display: block; max-width: 720p
   .squisq-video-embed-play::after { content: ''; position: absolute; left: 26px; top: 12px; border-style: solid; border-width: 10px 0 10px 16px; border-color: transparent transparent transparent #fff; }
   .squisq-video-embed-provider { position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 0.8em; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
   .squisq-video-embed-caption { margin-top: 0.4em; font-size: 0.875em; opacity: 0.8; }`;
+
+/**
+ * A ```svg fence as a picture: core's sanitized re-serialization as a data
+ * URL in an `<img>` — never the author's markup inline. Null (render the
+ * fence as code) when the markup is not a usable island.
+ */
+function svgIslandToHtml(source: string, ctx: RenderCtx | undefined): string | null {
+  const result = parseSvgIsland(source);
+  if (!result.ok) return null;
+  const { island } = result;
+  const src = svgIslandDataUrl(island, { color: ctx?.textColor });
+  return (
+    `<figure class="squisq-svg-island"><img src="${escapeAttr(src)}"` +
+    ` alt="${escapeAttr(island.title ?? 'Illustration')}"` +
+    ` width="${island.width}" height="${island.height}"></figure>`
+  );
+}
+
+/** Intrinsic size, never wider than the column. */
+const SVG_ISLAND_CSS = `  .squisq-svg-island { margin: 1.25em 0; }
+  .squisq-svg-island img { display: block; max-width: 100%; height: auto; }`;
 
 // ── Escaping ───────────────────────────────────────────────────────
 

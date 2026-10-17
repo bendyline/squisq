@@ -30,6 +30,7 @@ import {
   isExplicitTimelineLang,
 } from '../doc/asciiTimeline/detect.js';
 import { detectTree, isEligibleTreeFenceLang, isExplicitTreeLang } from '../doc/treeview/detect.js';
+import { isPictureFence } from '../doc/templateInputs.js';
 import { matchNumberHighlight } from './numberHighlight.js';
 
 export interface BlockContentProfile {
@@ -137,7 +138,9 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     if (findNodesByType(node, 'blockquote').length > 0) hasBlockquote = true;
     if (findNodesByType(node, 'list').length > 0) hasList = true;
     if (findNodesByType(node, 'table').length > 0) hasTable = true;
-    plainParts.push(extractPlainText(node));
+    // A mermaid/svg fence is a picture: its source is not the block's words
+    // (a gantt chart's dates must not make it look like a dated event).
+    if (!isPictureFence(node)) plainParts.push(extractPlainText(node));
   }
 
   // HTML embeds: <img>, <video>, <iframe src=…video host>
