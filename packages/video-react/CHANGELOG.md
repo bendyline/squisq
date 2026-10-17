@@ -1,3 +1,16 @@
+## @bendyline/squisq-video-react [2.5.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.5.2...@bendyline/squisq-video-react@2.5.3) (2026-10-17)
+
+### Bug Fixes
+
+* Treat SVG fences as picture blocks ([#90](https://github.com/bendyline/squisq/issues/90)) ([88d4ad1](https://github.com/bendyline/squisq/commit/88d4ad1222fadcd9fbffc76234111a6a090b13ac))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.12.2
+* **@bendyline/squisq-video:** upgraded to 2.4.2
+* **@bendyline/squisq-react:** upgraded to 2.12.3
+
 ## @bendyline/squisq-video-react [2.5.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.5.1...@bendyline/squisq-video-react@2.5.2) (2026-10-17)
 
 ### Bug Fixes

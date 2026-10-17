@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.12.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.1...@bendyline/squisq@2.12.2) (2026-10-17)
+
+### Bug Fixes
+
+* Treat SVG fences as picture blocks ([#90](https://github.com/bendyline/squisq/issues/90)) ([88d4ad1](https://github.com/bendyline/squisq/commit/88d4ad1222fadcd9fbffc76234111a6a090b13ac))
+
 ## @bendyline/squisq [2.12.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.0...@bendyline/squisq@2.12.1) (2026-10-16)
 
 ### Bug Fixes
