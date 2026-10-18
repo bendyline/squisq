@@ -62,6 +62,14 @@ import { fitWithin, readImageDimensions } from '../shared/images.js';
 
 import { WinAnsiTracker } from './winAnsi.js';
 import {
+  PdfTextRuns,
+  embedUnicodeFaces,
+  loadBundledUnicodeFonts,
+  needsUnicodeFont,
+  type PdfUnicodeFonts,
+  type UnicodeFace,
+} from './unicodeText.js';
+import {
   collectInlineIconFamilies,
   fontAwesomeFaces,
   fontAwesomeGlyph,
@@ -152,6 +160,14 @@ export interface PdfExportOptions {
    * `ConversionResult.warnings` instead.
    */
   onWarning?: (message: string) => void;
+  /**
+   * Fonts that draw what the standard PDF fonts cannot encode — Greek,
+   * Cyrillic, Vietnamese, arrows, math, box drawing, symbols. Default: the
+   * bundled DejaVu Sans faces, embedded (subset) only in a document that has
+   * such text. Pass your own faces to cover other scripts, or `false` to keep
+   * the standard fonts alone and replace those characters.
+   */
+  unicodeFonts?: PdfUnicodeFonts | false;
 }
 
 /**
@@ -178,7 +194,7 @@ export async function markdownDocToPdf(
 
   // Report unencodable-character substitution ONCE for the whole export,
   // rather than per character (a CJK document would emit thousands).
-  const warning = ctx.text.warning();
+  const warning = ctx.text.warning({ unicodeFont: ctx.unicodeFont });
   if (warning) {
     if (options.onWarning) options.onWarning(warning);
     else console.warn(warning);
@@ -246,12 +262,21 @@ interface ExportContext {
     link: RgbColor;
   };
   /**
-   * WinAnsi safety net. EVERY string handed to pdf-lib — whether to draw it or
-   * merely to measure it — must go through `ctx.text.clean()`, both because
-   * pdf-lib throws on unencodable code points and because measuring the raw
-   * string while drawing the sanitized one would desynchronize layout.
+   * WinAnsi safety net and substitution tally. EVERY string handed to pdf-lib —
+   * whether to draw it or merely to measure it — must go through `ctx.runs`
+   * (which cleans with this), both because pdf-lib throws on unencodable code
+   * points and because measuring the raw string while drawing the sanitized one
+   * would desynchronize layout.
    */
   text: WinAnsiTracker;
+  /**
+   * Splits text into runs with the font that draws each one — the standard
+   * font, or the embedded Unicode face for what WinAnsi cannot encode. Text is
+   * drawn and measured through this, which cleans it with `text` as it goes.
+   */
+  runs: PdfTextRuns;
+  /** Whether a Unicode font is embedded for this document. */
+  unicodeFont: boolean;
   signal?: AbortSignal;
   /** Embedded images by markdown URL, with their display size in CSS pixels. */
   images: Map<string, EmbeddedPdfImage>;
@@ -319,6 +344,18 @@ async function createExportContext(
     pdfDoc.embedFont(StandardFonts.Courier),
     pdfDoc.embedFont(StandardFonts.CourierBold),
   ]);
+  let unicodeFaces: Map<PDFFont, UnicodeFace> = new Map();
+  if (options.unicodeFonts !== false && needsUnicodeFont(doc)) {
+    const faces = options.unicodeFonts ?? (await loadBundledUnicodeFonts());
+    unicodeFaces = await embedUnicodeFaces(pdfDoc, faces, {
+      regular,
+      bold,
+      italic,
+      boldItalic,
+      mono,
+      monoBold,
+    });
+  }
   const icons: Partial<Record<IconFamily, PDFFont>> = {};
   const iconFamilies = collectInlineIconFamilies(doc);
   if (iconFamilies.size > 0) {
@@ -356,6 +393,7 @@ async function createExportContext(
     }
   }
 
+  const text = new WinAnsiTracker();
   return {
     pdfDoc,
     fonts: { regular, bold, italic, boldItalic, mono, monoBold, icons },
@@ -369,7 +407,9 @@ async function createExportContext(
     bottomY: margin,
     colors: { text: colorText, heading: colorHeading, link: colorLink },
     footnotes: new FootnoteIndex(doc),
-    text: new WinAnsiTracker(),
+    text,
+    runs: new PdfTextRuns(text, unicodeFaces),
+    unicodeFont: unicodeFaces.size > 0,
     signal: options.signal,
     images: new Map(),
   };
@@ -452,15 +492,17 @@ function flattenInlines(
             : ctx.fonts.mono
           : pickFont(ctx, state.bold, state.italic);
         const baseSize = state.code ? CODE_FONT_SIZE : ctx.fontSize;
-        spans.push({
-          text: ctx.text.clean((node as MarkdownText).value),
-          font,
-          fontSize: state.vertAlign ? baseSize * VERT_ALIGN_SCALE : baseSize,
-          color: state.code ? COLOR_CODE_TEXT : (state.color ?? ctx.colors.text),
-          link: state.link,
-          strikethrough: state.strikethrough,
-          ...(state.vertAlign ? { baselineShift: vertAlignShift(state.vertAlign, baseSize) } : {}),
-        });
+        spans.push(
+          ...textSpans(ctx, (node as MarkdownText).value, font, {
+            fontSize: state.vertAlign ? baseSize * VERT_ALIGN_SCALE : baseSize,
+            color: state.code ? COLOR_CODE_TEXT : (state.color ?? ctx.colors.text),
+            link: state.link,
+            strikethrough: state.strikethrough,
+            ...(state.vertAlign
+              ? { baselineShift: vertAlignShift(state.vertAlign, baseSize) }
+              : {}),
+          }),
+        );
         break;
       }
 
@@ -496,13 +538,13 @@ function flattenInlines(
         break;
 
       case 'inlineCode': {
-        spans.push({
-          text: ctx.text.clean((node as MarkdownInlineCode).value),
-          font: ctx.fonts.mono,
-          fontSize: CODE_FONT_SIZE,
-          color: COLOR_CODE_TEXT,
-          link: state.link,
-        });
+        spans.push(
+          ...textSpans(ctx, (node as MarkdownInlineCode).value, ctx.fonts.mono, {
+            fontSize: CODE_FONT_SIZE,
+            color: COLOR_CODE_TEXT,
+            link: state.link,
+          }),
+        );
         break;
       }
 
@@ -521,12 +563,12 @@ function flattenInlines(
 
       case 'image': {
         const imgNode = node as MarkdownImage;
-        spans.push({
-          text: ctx.text.clean(imgNode.alt ? `[Image: ${imgNode.alt}]` : '[Image]'),
-          font: ctx.fonts.italic,
-          fontSize: ctx.fontSize,
-          color: COLOR_BLOCKQUOTE_TEXT,
-        });
+        spans.push(
+          ...textSpans(ctx, imgNode.alt ? `[Image: ${imgNode.alt}]` : '[Image]', ctx.fonts.italic, {
+            fontSize: ctx.fontSize,
+            color: COLOR_BLOCKQUOTE_TEXT,
+          }),
+        );
         break;
       }
 
@@ -544,14 +586,14 @@ function flattenInlines(
             strikethrough: state.strikethrough,
           });
         } else {
-          spans.push({
-            text: ctx.text.clean(`{[${iconNode.token}]}`),
-            font: pickFont(ctx, state.bold, state.italic),
-            fontSize: ctx.fontSize,
-            color: state.color ?? ctx.colors.text,
-            link: state.link,
-            strikethrough: state.strikethrough,
-          });
+          spans.push(
+            ...textSpans(ctx, `{[${iconNode.token}]}`, pickFont(ctx, state.bold, state.italic), {
+              fontSize: ctx.fontSize,
+              color: state.color ?? ctx.colors.text,
+              link: state.link,
+              strikethrough: state.strikethrough,
+            }),
+          );
         }
         break;
       }
@@ -573,23 +615,23 @@ function flattenInlines(
       case 'htmlInline': {
         const html = (node as MarkdownInlineHtml).rawHtml;
         if (html) {
-          spans.push({
-            text: ctx.text.clean(html),
-            font: ctx.fonts.mono,
-            fontSize: CODE_FONT_SIZE,
-            color: COLOR_CODE_TEXT,
-          });
+          spans.push(
+            ...textSpans(ctx, html, ctx.fonts.mono, {
+              fontSize: CODE_FONT_SIZE,
+              color: COLOR_CODE_TEXT,
+            }),
+          );
         }
         break;
       }
 
       case 'inlineMath':
-        spans.push({
-          text: ctx.text.clean((node as MarkdownInlineMath).value),
-          font: ctx.fonts.mono,
-          fontSize: CODE_FONT_SIZE,
-          color: COLOR_CODE_TEXT,
-        });
+        spans.push(
+          ...textSpans(ctx, (node as MarkdownInlineMath).value, ctx.fonts.mono, {
+            fontSize: CODE_FONT_SIZE,
+            color: COLOR_CODE_TEXT,
+          }),
+        );
         break;
 
       case 'footnoteReference': {
@@ -600,13 +642,13 @@ function flattenInlines(
         const marker = ctx.footnotes
           ? String(ctx.footnotes.cite(ref.identifier).number)
           : (ref.label ?? ref.identifier);
-        spans.push({
-          text: ctx.text.clean(marker),
-          font: ctx.fonts.regular,
-          fontSize: ctx.fontSize * VERT_ALIGN_SCALE,
-          color: ctx.colors.link,
-          baselineShift: vertAlignShift('superscript', ctx.fontSize),
-        });
+        spans.push(
+          ...textSpans(ctx, marker, ctx.fonts.regular, {
+            fontSize: ctx.fontSize * VERT_ALIGN_SCALE,
+            color: ctx.colors.link,
+            baselineShift: vertAlignShift('superscript', ctx.fontSize),
+          }),
+        );
         break;
       }
 
@@ -616,12 +658,12 @@ function flattenInlines(
         if (fallback.children) {
           spans.push(...flattenInlines(fallback.children, ctx, state));
         } else if (fallback.value) {
-          spans.push({
-            text: ctx.text.clean(fallback.value),
-            font: pickFont(ctx, state.bold, state.italic),
-            fontSize: ctx.fontSize,
-            color: state.color ?? ctx.colors.text,
-          });
+          spans.push(
+            ...textSpans(ctx, fallback.value, pickFont(ctx, state.bold, state.italic), {
+              fontSize: ctx.fontSize,
+              color: state.color ?? ctx.colors.text,
+            }),
+          );
         }
         break;
       }
@@ -629,6 +671,43 @@ function flattenInlines(
   }
 
   return spans;
+}
+
+/**
+ * The spans for one stretch of text: one per run `ctx.runs` splits it into,
+ * each in the font that draws it, all sharing the rest of the styling.
+ */
+function textSpans(
+  ctx: ExportContext,
+  text: string,
+  font: PDFFont,
+  style: Omit<TextSpan, 'text' | 'font'>,
+): TextSpan[] {
+  return ctx.runs.split(text, font).map((run) => ({ ...style, text: run.text, font: run.font }));
+}
+
+/**
+ * Draw one line of text with its baseline at `at.y`, switching to the Unicode
+ * face wherever `ctx.runs` says a run needs it.
+ */
+function drawTextLine(
+  ctx: ExportContext,
+  text: string,
+  font: PDFFont,
+  at: { x: number; y: number; size: number; color: RgbColor },
+): void {
+  let x = at.x;
+  for (const run of ctx.runs.split(text, font)) {
+    if (run.text.length === 0) continue;
+    ctx.page.drawText(run.text, {
+      x,
+      y: at.y,
+      size: at.size,
+      font: run.font,
+      color: rgb(at.color.r, at.color.g, at.color.b),
+    });
+    x += run.font.widthOfTextAtSize(run.text, at.size);
+  }
 }
 
 function pickFont(ctx: ExportContext, bold: boolean, italic: boolean): PDFFont {
@@ -1048,7 +1127,7 @@ function renderCodeBlock(node: MarkdownCodeBlock, ctx: ExportContext, extraInden
   const _w = ctx.contentWidth - extraIndent;
   // Split BEFORE sanitizing: the sanitizer maps a newline to a space, which
   // would flatten the fence into one line if applied to the whole value.
-  const lines = node.value.split('\n').map((line) => ctx.text.clean(line));
+  const lines = node.value.split('\n');
   const lineH = CODE_FONT_SIZE * LINE_HEIGHT_FACTOR;
   const totalHeight = lines.length * lineH + 12; // 12 = vertical padding
 
@@ -1063,12 +1142,11 @@ function renderCodeBlock(node: MarkdownCodeBlock, ctx: ExportContext, extraInden
   for (const line of lines) {
     ensureSpace(ctx, lineH);
     if (line.length > 0) {
-      ctx.page.drawText(line, {
+      drawTextLine(ctx, line, ctx.fonts.mono, {
         x: x0 + 8,
         y: ctx.y - CODE_FONT_SIZE,
         size: CODE_FONT_SIZE,
-        font: ctx.fonts.mono,
-        color: rgb(COLOR_CODE_TEXT.r, COLOR_CODE_TEXT.g, COLOR_CODE_TEXT.b),
+        color: COLOR_CODE_TEXT,
       });
     }
     ctx.y -= lineH;
@@ -1224,18 +1302,17 @@ function renderHtmlBlock(node: MarkdownHtmlBlock, ctx: ExportContext, extraInden
   if (!node.rawHtml) return;
   // Render raw HTML as monospace text (best effort). Split before sanitizing
   // so line structure survives — see renderCodeBlock.
-  const lines = node.rawHtml.split('\n').map((line) => ctx.text.clean(line));
+  const lines = node.rawHtml.split('\n');
   const x0 = ctx.margin + extraIndent;
   for (const line of lines) {
     if (line.trim().length === 0) continue;
     const lineH = CODE_FONT_SIZE * LINE_HEIGHT_FACTOR;
     ensureSpace(ctx, lineH);
-    ctx.page.drawText(line, {
+    drawTextLine(ctx, line, ctx.fonts.mono, {
       x: x0,
       y: ctx.y - CODE_FONT_SIZE,
       size: CODE_FONT_SIZE,
-      font: ctx.fonts.mono,
-      color: rgb(COLOR_CODE_TEXT.r, COLOR_CODE_TEXT.g, COLOR_CODE_TEXT.b),
+      color: COLOR_CODE_TEXT,
     });
     ctx.y -= lineH;
   }
@@ -1247,18 +1324,17 @@ function renderHtmlBlock(node: MarkdownHtmlBlock, ctx: ExportContext, extraInden
 function renderMathBlock(node: MarkdownMathBlock, ctx: ExportContext, extraIndent: number): void {
   // Render LaTeX source in monospace as fallback. Split before sanitizing so
   // line structure survives — see renderCodeBlock.
-  const lines = node.value.split('\n').map((line) => ctx.text.clean(line));
+  const lines = node.value.split('\n');
   const x0 = ctx.margin + extraIndent;
   for (const line of lines) {
     const lineH = CODE_FONT_SIZE * LINE_HEIGHT_FACTOR;
     ensureSpace(ctx, lineH);
     if (line.length > 0) {
-      ctx.page.drawText(line, {
+      drawTextLine(ctx, line, ctx.fonts.mono, {
         x: x0,
         y: ctx.y - CODE_FONT_SIZE,
         size: CODE_FONT_SIZE,
-        font: ctx.fonts.mono,
-        color: rgb(COLOR_CODE_TEXT.r, COLOR_CODE_TEXT.g, COLOR_CODE_TEXT.b),
+        color: COLOR_CODE_TEXT,
       });
     }
     ctx.y -= lineH;
@@ -1275,16 +1351,15 @@ function renderFootnoteDefinition(
 ): void {
   // Draw the reader-facing number, matching the marker in the prose.
   const number = ctx.footnotes?.numberFor(node.identifier);
-  const label = ctx.text.clean(number !== undefined ? `${number}.` : `[${node.identifier}]`);
+  const label = number !== undefined ? `${number}.` : `[${node.identifier}]`;
   const lineH = ctx.fontSize * LINE_HEIGHT_FACTOR;
   ensureSpace(ctx, lineH);
 
-  ctx.page.drawText(label, {
+  drawTextLine(ctx, label, ctx.fonts.bold, {
     x: ctx.margin + extraIndent,
     y: ctx.y - ctx.fontSize * 0.75,
     size: ctx.fontSize * 0.75,
-    font: ctx.fonts.bold,
-    color: rgb(ctx.colors.link.r, ctx.colors.link.g, ctx.colors.link.b),
+    color: ctx.colors.link,
   });
 
   // Render children indented
@@ -1332,12 +1407,11 @@ function renderFallbackBlock(
   } else if (fallback.value && typeof fallback.value === 'string') {
     const lineH = ctx.fontSize * LINE_HEIGHT_FACTOR;
     ensureSpace(ctx, lineH);
-    ctx.page.drawText(ctx.text.clean(fallback.value), {
+    drawTextLine(ctx, fallback.value, ctx.fonts.regular, {
       x: ctx.margin + extraIndent,
       y: ctx.y - ctx.fontSize,
       size: ctx.fontSize,
-      font: ctx.fonts.regular,
-      color: rgb(ctx.colors.text.r, ctx.colors.text.g, ctx.colors.text.b),
+      color: ctx.colors.text,
     });
     ctx.y -= lineH + PARAGRAPH_SPACING;
   }

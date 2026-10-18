@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
@@ -70,6 +70,68 @@ describe('FlashcardView', () => {
     const footer = container.querySelector('.squisq-flashcards__footer');
     expect(cardViewport.classList.contains('squisq-flashcards__card')).toBe(true);
     expect(cardViewport.nextElementSibling).toBe(footer);
+  });
+
+  it('puts every control in one toolbar above the card when compact', () => {
+    const { container } = render(
+      <FlashcardView
+        density="compact"
+        doc={doc('---\ntitle: Web facts\n---\n\n## What is HTTP 418?\n\nI am a teapot.\n')}
+      />,
+    );
+    const root = container.querySelector('.squisq-flashcards')!;
+    expect(root.classList.contains('squisq-flashcards--compact')).toBe(true);
+
+    const header = container.querySelector('.squisq-flashcards__header')!;
+    for (const name of ['Shuffle', 'Restart', 'Previous', 'Reveal answer']) {
+      expect(header.contains(screen.getByRole('button', { name }))).toBe(true);
+    }
+    expect(header.textContent).toContain('Web facts');
+    expect(header.textContent).toContain('Card 1 of 1');
+    expect(screen.queryByText('Flashcards')).toBeNull();
+    expect(container.querySelector('.squisq-flashcards__footer')).toBeNull();
+    expect(container.querySelector('.squisq-flashcards__shortcut-hint')).toBeNull();
+    // The shortcut hint line is gone, so the buttons carry the shortcuts.
+    const reveal = screen.getByRole('button', { name: 'Reveal answer' });
+    expect(reveal.getAttribute('aria-keyshortcuts')).toBe('Space ArrowRight');
+    expect(reveal.getAttribute('title')).toBe('Reveal answer (Space or →)');
+
+    fireEvent.click(reveal);
+    expect(screen.getByText('I am a teapot.')).toBeTruthy();
+    expect(header.contains(screen.getByRole('button', { name: 'Got it' }))).toBe(true);
+  });
+
+  it('scrolls a revealed answer below the fold into view, never past its start', () => {
+    // jsdom has no layout: place the card viewport at 0–300 and the answer by test.
+    let answerRect = { top: 0, bottom: 0 };
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        const box = this.classList.contains('squisq-flashcards__card')
+          ? { top: 0, bottom: 300 }
+          : this.classList.contains('squisq-flashcards__answer')
+            ? answerRect
+            : { top: 0, bottom: 0 };
+        return DOMRect.fromRect({ y: box.top, height: box.bottom - box.top });
+      });
+    try {
+      render(<FlashcardView doc={doc('## One\n\nAnswer one.\n\n## Two\n\nAnswer two.\n')} />);
+      const card = screen.getByRole('main', { name: 'Scrollable flashcard content' });
+
+      // Its end is 120px below the fold: scroll just that far.
+      answerRect = { top: 200, bottom: 420 };
+      fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));
+      expect(card.scrollTop).toBe(120);
+
+      // Taller than the card: stop with its start just inside the top.
+      fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
+      expect(card.scrollTop).toBe(0);
+      answerRect = { top: 250, bottom: 900 };
+      fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));
+      expect(card.scrollTop).toBe(238);
+    } finally {
+      rectSpy.mockRestore();
+    }
   });
 
   it('renders an ASCII diagram through the existing visual template pipeline', () => {

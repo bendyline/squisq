@@ -46,6 +46,12 @@ export interface FlashcardViewProps {
   fenceRenderers?: FenceRendererMap;
   /** Viewport used to materialize diagrams and other spatial content. */
   viewport?: ViewportConfig;
+  /**
+   * `compact` puts the title, position, and every control in one toolbar
+   * above a card with smaller type — for a deck embedded in a dialog or
+   * panel rather than given a page of its own. Default: 'comfortable'.
+   */
+  density?: 'comfortable' | 'compact';
   className?: string;
 }
 
@@ -223,6 +229,10 @@ function ChoiceContent(props: Omit<FaceContentProps, 'face'> & { choice: Flashca
   return <FaceContent {...props} face={props.choice.content} />;
 }
 
+/** What a reveal adds to the card, in document order. */
+const REVEALED_PARTS =
+  '.squisq-flashcards__answer, .squisq-flashcards__feedback, .squisq-flashcards__explanation';
+
 function isInteractiveTarget(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
@@ -241,8 +251,14 @@ export function FlashcardView({
   onCopyCode,
   fenceRenderers,
   viewport = VIEWPORT_PRESETS.landscape,
+  density = 'comfortable',
   className,
 }: FlashcardViewProps) {
+  const compact = density === 'compact';
+  const rootClassName =
+    'squisq-flashcards' +
+    (compact ? ' squisq-flashcards--compact' : '') +
+    (className ? ` ${className}` : '');
   const activeTheme = useMemo(() => theme ?? resolveThemeForDoc(doc), [doc, theme]);
   const deck = useMemo(() => materializeFlashcards(doc, { source }), [doc, source]);
   const [shuffleEnabled, setShuffleEnabled] = useState(initialShuffle);
@@ -293,6 +309,21 @@ export function FlashcardView({
   useEffect(() => {
     if (cardViewportRef.current) cardViewportRef.current.scrollTop = 0;
   }, [cardIndex, retryIds]);
+
+  // A revealed answer can land below the fold — under a long question or a
+  // quiz's choices. Scroll just far enough to show it, never past its start,
+  // so as much of the question as fits stays in view.
+  useEffect(() => {
+    const viewport = cardViewportRef.current;
+    if (!revealed || !viewport) return;
+    const revealedParts = viewport.querySelectorAll<HTMLElement>(REVEALED_PARTS);
+    if (revealedParts.length === 0) return;
+    const bounds = viewport.getBoundingClientRect();
+    const first = revealedParts[0].getBoundingClientRect();
+    const last = revealedParts[revealedParts.length - 1].getBoundingClientRect();
+    const delta = Math.min(last.bottom - bounds.bottom, first.top - bounds.top - 12);
+    if (delta > 0) viewport.scrollTop += delta;
+  }, [revealed, cardIndex, retryIds]);
 
   const revealAnswer = useCallback(() => {
     if (!currentCard) return;
@@ -417,7 +448,7 @@ export function FlashcardView({
   if (deck.cards.length === 0) {
     return (
       <div
-        className={`squisq-flashcards squisq-flashcards--empty${className ? ` ${className}` : ''}`}
+        className={`${rootClassName} squisq-flashcards--empty`}
         style={rootStyle}
         role="region"
         aria-label="Flashcards"
@@ -442,7 +473,7 @@ export function FlashcardView({
   if (finished) {
     return (
       <div
-        className={`squisq-flashcards${className ? ` ${className}` : ''}`}
+        className={rootClassName}
         style={rootStyle}
         role="region"
         aria-label="Flashcard session summary"
@@ -486,10 +517,82 @@ export function FlashcardView({
     ? shuffled(currentCard.choices, `${currentCard.id}:${sessionSeed}`)
     : [];
   const selectedChoice = choices.find((choice) => choice.id === selectedChoiceId);
+  const position = `Card ${cardIndex + 1} of ${sessionCards.length}`;
+  const nextLabel = revealed
+    ? cardIndex === sessionCards.length - 1
+      ? 'Finish'
+      : 'Next card'
+    : 'Reveal answer';
+
+  const tools = (
+    <div className="squisq-flashcards__tools">
+      <button
+        type="button"
+        className="squisq-flashcards__tool"
+        aria-pressed={shuffleEnabled}
+        onClick={() => {
+          setShuffleEnabled((enabled) => !enabled);
+          restart();
+        }}
+      >
+        Shuffle
+      </button>
+      <button type="button" className="squisq-flashcards__tool" onClick={restart}>
+        Restart
+      </button>
+    </div>
+  );
+
+  // A compact deck has no room for the shortcut hint line, so its buttons
+  // carry the shortcuts as tooltips instead.
+  const navigation = (
+    <>
+      <button
+        type="button"
+        className="squisq-flashcards__button"
+        disabled={cardIndex === 0 && !revealed}
+        onClick={previousCard}
+        aria-keyshortcuts="ArrowLeft"
+        title={compact ? 'Previous (←)' : undefined}
+      >
+        Previous
+      </button>
+      <div className="squisq-flashcards__primary-actions">
+        {revealed && currentCard.kind === 'basic' ? (
+          <>
+            <button
+              type="button"
+              className="squisq-flashcards__button"
+              onClick={() => rate('again')}
+            >
+              Again
+            </button>
+            <button
+              type="button"
+              className="squisq-flashcards__button squisq-flashcards__button--primary"
+              onClick={() => rate('got-it')}
+            >
+              Got it
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="squisq-flashcards__button squisq-flashcards__button--primary"
+            onClick={nextCard}
+            aria-keyshortcuts="Space ArrowRight"
+            title={compact ? `${nextLabel} (Space or →)` : undefined}
+          >
+            {nextLabel}
+          </button>
+        )}
+      </div>
+    </>
+  );
 
   return (
     <div
-      className={`squisq-flashcards${className ? ` ${className}` : ''}`}
+      className={rootClassName}
       style={rootStyle}
       role="region"
       aria-label="Flashcards"
@@ -498,33 +601,26 @@ export function FlashcardView({
     >
       <header className="squisq-flashcards__header">
         <div className="squisq-flashcards__deck-copy">
-          <span className="squisq-flashcards__eyebrow">Flashcards</span>
-          {deck.title && <h1>{deck.title}</h1>}
+          {!compact && <span className="squisq-flashcards__eyebrow">Flashcards</span>}
+          {deck.title && <h1 title={compact ? deck.title : undefined}>{deck.title}</h1>}
+          {compact && <span className="squisq-flashcards__position">{position}</span>}
         </div>
-        <div className="squisq-flashcards__tools">
-          <button
-            type="button"
-            className="squisq-flashcards__tool"
-            aria-pressed={shuffleEnabled}
-            onClick={() => {
-              setShuffleEnabled((enabled) => !enabled);
-              restart();
-            }}
-          >
-            Shuffle
-          </button>
-          <button type="button" className="squisq-flashcards__tool" onClick={restart}>
-            Restart
-          </button>
-        </div>
+        {compact ? (
+          <div className="squisq-flashcards__controls">
+            {tools}
+            <div className="squisq-flashcards__navigation">{navigation}</div>
+          </div>
+        ) : (
+          tools
+        )}
       </header>
 
-      <div className="squisq-flashcards__progress-row">
-        <span>
-          Card {cardIndex + 1} of {sessionCards.length}
-        </span>
-        <span>{revealed ? 'Answer revealed' : 'Question'}</span>
-      </div>
+      {!compact && (
+        <div className="squisq-flashcards__progress-row">
+          <span>{position}</span>
+          <span>{revealed ? 'Answer revealed' : 'Question'}</span>
+        </div>
+      )}
       <div className="squisq-flashcards__progress" aria-hidden="true">
         <span
           style={{ width: `${((cardIndex + (revealed ? 1 : 0)) / sessionCards.length) * 100}%` }}
@@ -561,6 +657,7 @@ export function FlashcardView({
                   className="squisq-flashcards__choice"
                   data-choice-status={status}
                   aria-pressed={selected}
+                  aria-keyshortcuts={index < 9 ? String(index + 1) : undefined}
                   disabled={revealed}
                   onClick={() => choose(choice)}
                 >
@@ -611,52 +708,15 @@ export function FlashcardView({
         )}
       </main>
 
-      <footer className="squisq-flashcards__footer">
-        <button
-          type="button"
-          className="squisq-flashcards__button"
-          disabled={cardIndex === 0 && !revealed}
-          onClick={previousCard}
-        >
-          Previous
-        </button>
-        <div className="squisq-flashcards__primary-actions">
-          {revealed && currentCard.kind === 'basic' ? (
-            <>
-              <button
-                type="button"
-                className="squisq-flashcards__button"
-                onClick={() => rate('again')}
-              >
-                Again
-              </button>
-              <button
-                type="button"
-                className="squisq-flashcards__button squisq-flashcards__button--primary"
-                onClick={() => rate('got-it')}
-              >
-                Got it
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="squisq-flashcards__button squisq-flashcards__button--primary"
-              onClick={nextCard}
-            >
-              {revealed
-                ? cardIndex === sessionCards.length - 1
-                  ? 'Finish'
-                  : 'Next card'
-                : 'Reveal answer'}
-            </button>
-          )}
-        </div>
-      </footer>
-      <p className="squisq-flashcards__shortcut-hint">
-        Use ← and → to navigate, Space to reveal
-        {currentCard.kind === 'multiple-choice' ? ', or 1–9 to answer' : ''}.
-      </p>
+      {!compact && (
+        <>
+          <footer className="squisq-flashcards__footer">{navigation}</footer>
+          <p className="squisq-flashcards__shortcut-hint">
+            Use ← and → to navigate, Space to reveal
+            {currentCard.kind === 'multiple-choice' ? ', or 1–9 to answer' : ''}.
+          </p>
+        </>
+      )}
     </div>
   );
 }
