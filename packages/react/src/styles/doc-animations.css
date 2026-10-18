@@ -388,6 +388,191 @@
   }
 }
 
+/* Compact density: one toolbar row — title, position, and every control —
+   above the card, with smaller type and padding, so a deck embedded in a
+   dialog or panel spends its height on the card. Flex-wrap rather than the
+   viewport query below handles a narrow host. */
+.squisq-flashcards--compact {
+  min-height: 260px;
+  padding: clamp(10px, 2vw, 18px);
+}
+
+/* The host already sized the deck; a page-width cap would only add gutters. */
+.squisq-flashcards--compact .squisq-flashcards__header,
+.squisq-flashcards--compact .squisq-flashcards__progress,
+.squisq-flashcards--compact .squisq-flashcards__card,
+.squisq-flashcards--compact .squisq-flashcards__summary,
+.squisq-flashcards--compact .squisq-flashcards__empty-card {
+  width: 100%;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__header {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 10px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__deck-copy {
+  display: grid;
+  flex: 1 1 220px;
+  gap: 2px;
+  min-width: 0;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__deck-copy h1 {
+  margin: 0;
+  overflow: hidden;
+  font: 700 16px/1.25 var(--squisq-flashcards-title-font);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-flashcards__position {
+  color: var(--squisq-flashcards-muted);
+  font-size: 12px;
+}
+
+.squisq-flashcards__controls,
+.squisq-flashcards__navigation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.squisq-flashcards__controls {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  column-gap: 16px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__tools,
+.squisq-flashcards--compact .squisq-flashcards__primary-actions {
+  width: auto;
+  gap: 6px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__tool,
+.squisq-flashcards--compact .squisq-flashcards__button {
+  min-height: 32px;
+  padding: 6px 13px;
+  font-size: 13px;
+}
+
+/* Deck tools read quieter than the card controls beside them. */
+.squisq-flashcards--compact .squisq-flashcards__tool:not([aria-pressed='true']) {
+  border-color: transparent;
+  background: transparent;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__tool:not([aria-pressed='true']):hover {
+  border-color: color-mix(in srgb, var(--squisq-flashcards-text) 22%, transparent);
+}
+
+.squisq-flashcards--compact .squisq-flashcards__progress {
+  height: 3px;
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__card,
+.squisq-flashcards--compact .squisq-flashcards__summary,
+.squisq-flashcards--compact .squisq-flashcards__empty-card {
+  padding: clamp(14px, 2.5vw, 26px);
+  box-shadow: 0 10px 28px color-mix(in srgb, #000 18%, transparent);
+}
+
+.squisq-flashcards--compact .squisq-flashcards__label {
+  margin-bottom: 10px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__content-block + .squisq-flashcards__content-block {
+  margin-top: 14px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__content-title {
+  font-size: clamp(18px, 2vw, 24px);
+  line-height: 1.2;
+}
+
+.squisq-flashcards--compact
+  .squisq-flashcards__content-block
+  .squisq-flashcards__content-block
+  .squisq-flashcards__content-title {
+  font-size: clamp(16px, 1.6vw, 19px);
+}
+
+.squisq-flashcards--compact .squisq-md {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.squisq-flashcards--compact .squisq-md img,
+.squisq-flashcards--compact .squisq-md video {
+  max-height: 32vh;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__canvas {
+  margin-top: 12px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__answer,
+.squisq-flashcards--compact .squisq-flashcards__explanation,
+.squisq-flashcards--compact .squisq-flashcards__feedback {
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__answer-label {
+  margin-bottom: 8px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__choices {
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__choice {
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 14px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__choice-key {
+  width: 26px;
+  height: 26px;
+  font-size: 13px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__choice .squisq-flashcards__content-title {
+  font-size: 15px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__feedback > strong {
+  font-size: 17px;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__correct-answer > span {
+  margin: 8px 0 6px;
+}
+
+/* The summary sits centered in the deck rather than pushed down a page. */
+.squisq-flashcards--compact .squisq-flashcards__summary,
+.squisq-flashcards--compact .squisq-flashcards__empty-card {
+  margin-block: auto;
+}
+
+.squisq-flashcards--compact .squisq-flashcards__summary h2,
+.squisq-flashcards--compact .squisq-flashcards__empty-card h2 {
+  font-size: clamp(19px, 2.2vw, 24px);
+}
+
+.squisq-flashcards--compact .squisq-flashcards__summary-actions {
+  margin-top: 16px;
+}
+
 @media (max-width: 640px) {
   .squisq-flashcards__header,
   .squisq-flashcards__footer {

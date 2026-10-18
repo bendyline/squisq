@@ -846,7 +846,11 @@ remaining children to choices. The first choice is correct unless a choice
 uses `{correct=true}`.
 
 `FlashcardView` keeps the active card body in its own scroll viewport so the
-progress row and Previous/Reveal/Again/Got it controls remain fixed. Visual
+progress row and Previous/Reveal/Again/Got it controls remain fixed.
+`density="compact"` is for a deck embedded in a dialog or panel: the title
+shrinks to one line, the position and every control share a single toolbar
+above the card, the shortcut hint becomes button tooltips, and the card's type
+and padding tighten so a revealed answer fits below its question. Visual
 templates—including automatically detected ASCII diagrams, trees, timelines,
 charts, drawings, layouts, maps, and document custom templates—are resolved
 through the same `resolvePageBlock` + `materializeBlockLayers` pipeline used by
@@ -2067,6 +2071,7 @@ interface FlashcardViewProps {
   onCopyCode?: CodeBlockCopyHandler;
   fenceRenderers?: FenceRendererMap;
   viewport?: ViewportConfig; // rich visual materialization; default landscape
+  density?: 'comfortable' | 'compact'; // default comfortable
   className?: string;
 }
 // The canvas is width-driven by default. Its width is
