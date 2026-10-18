@@ -449,6 +449,20 @@ describe('markdownDocToPdf with characters outside WinAnsi', () => {
 
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('character(s)');
+    // The bundled Unicode font draws the Cyrillic and arrows; only CJK and
+    // emoji are left to replace.
+    expect(warnings[0]).toContain('CJK and emoji');
+    expect(warnings[0]).not.toMatch(/"[ЖЕё→]"/u);
+  });
+
+  it('names the missing Unicode font when the caller turns it off', async () => {
+    const warnings: string[] = [];
+    await markdownDocToPdf(nastyDoc(), {
+      unicodeFonts: false,
+      onWarning: (m) => warnings.push(m),
+    });
+
+    expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('embedded Unicode font');
   });
 

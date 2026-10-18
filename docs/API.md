@@ -2532,7 +2532,11 @@ interface DocxImportOptions {
 
 **Import:** `@bendyline/squisq-formats/pdf`
 
-Export uses pdf-lib (standard 14 fonts — `themeId` affects colors only).
+Export uses pdf-lib (standard 14 fonts — `themeId` affects colors only). Text
+those fonts cannot encode — Greek, Cyrillic, Vietnamese, arrows, math, box
+drawing, symbols — is drawn with an embedded Unicode font: the bundled DejaVu
+Sans faces, loaded and subset only for a document that needs them. CJK and
+emoji are still replaced and reported once through `onWarning`.
 Import uses pdfjs-dist with heuristic structure detection (headings by font
 size relative to `bodyFontSize`, plus the `detect*` flags below) — results are
 best-effort. `pdfToMarkdownDoc` is text-only; `pdfToContainer` additionally
@@ -2569,6 +2573,16 @@ interface PdfExportOptions {
   defaultFontSize?: number; // default 11
   themeId?: string; // colours only (pdf-lib standard fonts)
   themeRegistry?: ThemeRegistry;
+  onWarning?: (message: string) => void; // default console.warn
+  // Faces for text the standard fonts cannot encode. Default: bundled DejaVu
+  // Sans (regular, bold, mono); `false` keeps the standard fonts alone.
+  unicodeFonts?:
+    | {
+        regular: Uint8Array | ArrayBuffer;
+        bold?: Uint8Array | ArrayBuffer;
+        mono?: Uint8Array | ArrayBuffer;
+      }
+    | false;
 }
 interface PdfImportOptions {
   bodyFontSize?: number;

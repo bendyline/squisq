@@ -748,6 +748,60 @@ Deploy with {[github]} or chat on {[fa-brands:discord]}.
 - Unresolved tokens are left as literal text (so you _can_ write `{[sic]}` in
   prose), and `squisq validate` flags them so typos don't silently ship.
 
+## Picture fences
+
+Some fence languages render as a picture rather than as code. They are body
+blocks, so they need no annotation and can sit anywhere text can:
+
+- ` ```mermaid ` — a [Mermaid](https://mermaid.js.org) diagram: flowcharts,
+  sequence, state and class diagrams, Gantt charts, pie and xy charts.
+- ` ```timeline ` — an ASCII timeline of dated events.
+- ` ```tree ` — a file or outline tree.
+- ` ```diagram ` — an ASCII box-and-line diagram.
+- ` ```svg ` — an **SVG island**: your own SVG, drawn as a picture.
+
+Timeline, tree and diagram art is also recognized inside `text`, `txt`,
+`plaintext` and untagged fences. A picture fence is never read as prose:
+narration, captions and reading time skip it.
+
+```svg
+<svg viewBox="0 0 120 60">
+  <title>Two linked boxes</title>
+  <rect x="4" y="14" width="40" height="32" rx="6" fill="currentColor" fill-opacity="0.15" stroke="currentColor"/>
+  <rect x="76" y="14" width="40" height="32" rx="6" fill="none" stroke="currentColor"/>
+  <path d="M44 30H76" stroke="currentColor" stroke-width="2"/>
+</svg>
+```
+
+How an SVG island behaves:
+
+- **Only the fence language matters.** ` ```svg ` is a picture; ` ```xml `,
+  ` ```html ` and untagged fences show the same markup as code. Raw `<svg>` HTML
+  outside a fence is removed when the document is shown — always fence it.
+- **It is sanitized, then shown as an image.** One `<svg>` root and nothing
+  beside it. Shapes, text, gradients, patterns, clip paths, masks, markers,
+  filters and SMIL animation are kept; `script`, `foreignObject`, unknown
+  elements and `on…` handlers are removed. Links may only point inside the
+  picture (`href="#id"`, `url(#id)`), and an `<image>` may only embed a base64
+  PNG, JPEG, GIF or WebP. `@import` and `@font-face` are dropped, so text uses
+  system fonts — write `font-family="sans-serif"` and keep labels short.
+- **Theme it with `currentColor`.** It takes the surrounding text color — on
+  screen, on dark slides, and in Word and EPUB exports. Fixed colors stay fixed,
+  and an image cannot see the page's CSS variables or dark mode.
+- **Name it.** The root's `aria-label`, else its first `<title>`, is the
+  picture's alt text.
+- **Size it with a `viewBox`** (or `width`/`height`); the default is 300×150.
+- **Limits:** 512 KiB of source, 20,000 elements, nesting 200 deep, and 50,000
+  elements once `<use>` references are expanded. A fence past a limit, or one
+  that does not parse, shows as code with a "Couldn't render this SVG" note (a
+  dashed placeholder on slides).
+- **Exports:** Word and PowerPoint embed it as vector art with a PNG fallback;
+  HTML and EPUB carry it as an image; PDF needs the host to rasterize it.
+
+An attached `![Alt](figure.svg)` image is sanitized the same way but keeps its
+own colors. Prefer a fence for anything that should follow the theme, and an
+attached file for large artwork reused across documents.
+
 ## Drawings
 
 A `{[drawing]}` block is a container: each direct child heading is one shape on a

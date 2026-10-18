@@ -175,6 +175,18 @@ const WHITESPACE_LIKE: ReadonlySet<number> = new Set([
   0x200d, 0x2060, 0xfeff,
 ]);
 
+/** Control, format, line, paragraph and space separators. */
+const INVISIBLE_OR_SPACE = /^[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}]$/u;
+
+/**
+ * Whether `codePoint` is a control, format or space character. These are
+ * never drawn as glyphs — the sanitizer turns them into spaces or drops them —
+ * even where an embedded Unicode font has something to draw for them.
+ */
+export function isInvisibleOrSpace(codePoint: number): boolean {
+  return WHITESPACE_LIKE.has(codePoint) || INVISIBLE_OR_SPACE.test(String.fromCodePoint(codePoint));
+}
+
 const MAX_SAMPLES = 5;
 
 /** Pure ASCII needs no work at all — the overwhelmingly common case. */
@@ -264,9 +276,20 @@ export class WinAnsiTracker {
     return this.count;
   }
 
-  /** One-shot summary for the export, or undefined when nothing was lost. */
-  warning(): string | undefined {
+  /**
+   * One-shot summary for the export, or undefined when nothing was lost.
+   * `unicodeFont` says an embedded Unicode font already drew what it could, so
+   * what remains is beyond it too (CJK and emoji, with the bundled faces).
+   */
+  warning(options: { unicodeFont?: boolean } = {}): string | undefined {
     if (this.count === 0) return undefined;
+    if (options.unicodeFont) {
+      return (
+        `PDF export replaced ${this.count} character(s) that its fonts cannot draw ` +
+        `(${this.samples.join(', ')}). Scripts such as CJK and emoji are not ` +
+        `available in PDF export.`
+      );
+    }
     return (
       `PDF export replaced ${this.count} character(s) that the standard PDF fonts ` +
       `cannot encode (${this.samples.join(', ')}). ` +

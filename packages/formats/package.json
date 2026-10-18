@@ -120,7 +120,7 @@
     }
   },
   "scripts": {
-    "build": "tsup && node ../../scripts/generate-bundle-licenses.mjs . @fortawesome/fontawesome-free && node ../../scripts/remove-empty-chunks.mjs dist",
+    "build": "tsup && node ../../scripts/generate-bundle-licenses.mjs . @fortawesome/fontawesome-free dejavu-fonts-ttf && node ../../scripts/remove-empty-chunks.mjs dist",
     "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },
@@ -143,6 +143,7 @@
   },
   "devDependencies": {
     "@fortawesome/fontawesome-free": "7.3.1",
+    "dejavu-fonts-ttf": "2.37.3",
     "hyparquet": "1.31.2",
     "hyparquet-writer": "0.16.10",
     "tsup": "8.5.1",

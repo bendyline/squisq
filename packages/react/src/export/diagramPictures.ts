@@ -14,6 +14,7 @@
  */
 
 import { createElement } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import type { Block, Layer, Theme } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
@@ -241,10 +242,32 @@ function withExportFont(layer: Layer): Layer {
   };
 }
 
-async function settle(): Promise<void> {
+/** How long a picture may keep changing before it is captured as it stands. */
+const SETTLE_TIMEOUT_MS = 1000;
+
+/**
+ * Wait until `host` stops changing: fonts loaded, then a frame and a task with
+ * no DOM mutation, so effects that lay the diagram out have run. Animation
+ * frames alone prove nothing about React — two can fire within a millisecond
+ * while the host app is busy — which is why the render is committed with
+ * `flushSync` before this runs.
+ */
+async function settle(host: HTMLElement): Promise<void> {
   await document.fonts?.ready;
-  for (let frame = 0; frame < 2; frame++) {
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  let changed = true;
+  const observer = new MutationObserver(() => {
+    changed = true;
+  });
+  observer.observe(host, { subtree: true, childList: true, attributes: true, characterData: true });
+  const deadline = Date.now() + SETTLE_TIMEOUT_MS;
+  try {
+    while (changed && Date.now() < deadline) {
+      changed = false;
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+  } finally {
+    observer.disconnect();
   }
 }
 
@@ -282,19 +305,25 @@ export async function renderSquisqDiagramPicture(
       audioSegment: 0,
       layers: kept,
     };
-    root.render(
-      createElement(BlockRenderer, {
-        block: pictureBlock,
-        blockTime: 0,
-        basePath: '',
-        viewport,
-        animationsEnabled: false,
-        theme,
-      }),
-    );
-    await settle();
+    // A concurrent root commits from React's scheduler, which a busy host app
+    // can delay past any fixed wait; commit now so the SVG is there to measure.
+    flushSync(() => {
+      root.render(
+        createElement(BlockRenderer, {
+          block: pictureBlock,
+          blockTime: 0,
+          basePath: '',
+          viewport,
+          animationsEnabled: false,
+          theme,
+        }),
+      );
+    });
+    await settle(host);
     const svg = host.querySelector<SVGSVGElement>('svg.block-svg');
-    if (!svg) return null;
+    // Rendered synchronously above, so a missing SVG is a real failure: throw,
+    // so the export reports it, rather than quietly keeping the diagram as text.
+    if (!svg) throw new Error('The diagram rendered no SVG.');
     const box = svg.getBBox();
     if (box.width <= 0 || box.height <= 0) return null;
     const x = box.x - PADDING;
