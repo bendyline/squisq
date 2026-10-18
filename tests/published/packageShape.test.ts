@@ -51,8 +51,10 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // Leave roughly 15% headroom for normal runtime and declaration growth.
   '@bendyline/squisq': 750_000,
   // Includes the three Font Awesome OpenType faces embedded for portable
-  // DOCX/PDF/PPTX/EPUB inline-icon export.
-  '@bendyline/squisq-formats': 700_000,
+  // DOCX/PDF/PPTX/EPUB inline-icon export (~477 KB packed), plus the PDF
+  // writer's DejaVu Sans regular/bold/mono Unicode fallback (~1.16 MB packed,
+  // its own dynamically imported chunk). Packs to ~1.82 MB in total.
+  '@bendyline/squisq-formats': 2_000_000,
   // Ships the ESM entries plus the light and full standalone players, and each
   // again as an embeddable string (`standalone-source`, and the Mermaid-bearing
   // `standalone-source/full`, ~1.4 MB packed on its own) — so anything the
