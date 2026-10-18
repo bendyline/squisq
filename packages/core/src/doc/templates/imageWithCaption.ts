@@ -18,7 +18,7 @@ import {
   motionEntrance,
 } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
-import { cleanCaption } from './captionUtils.js';
+import { CAPTION_BASELINE_SHIFT_EM, cleanCaption } from './captionUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 
 export function imageWithCaption(input: ImageWithCaptionInput, context: TemplateContext): Layer[] {
@@ -176,6 +176,8 @@ export function imageWithCaption(input: ImageWithCaptionInput, context: Template
           textAlign: 'center',
           shadow: shouldUseShadow(context),
           lineHeight: 1.18,
+          // Capitals read as centred on the band (CAPTION_BASELINE_SHIFT_EM)
+          baselineShift: CAPTION_BASELINE_SHIFT_EM,
           maxLines: 2,
           // A two-line caption centres on the band instead of hanging its
           // second line below it (the block centres on the anchor).

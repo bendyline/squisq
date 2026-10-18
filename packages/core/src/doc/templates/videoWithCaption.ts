@@ -25,7 +25,7 @@ import type { Layer } from '../../schemas/Doc.js';
 import type { VideoWithCaptionInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
 import { withAlpha } from '../../schemas/colorUtils.js';
-import { cleanCaption, createBackgroundLayer } from './captionUtils.js';
+import { CAPTION_BASELINE_SHIFT_EM, cleanCaption, createBackgroundLayer } from './captionUtils.js';
 import { isVideoEmbedUrl } from '../../markdown/videoEmbed.js';
 
 export function videoWithCaption(input: VideoWithCaptionInput, context: TemplateContext): Layer[] {
@@ -138,6 +138,8 @@ export function videoWithCaption(input: VideoWithCaptionInput, context: Template
           textAlign: 'center',
           shadow: shouldUseShadow(context),
           lineHeight: 1.18,
+          // Capitals read as centred on the band (CAPTION_BASELINE_SHIFT_EM)
+          baselineShift: CAPTION_BASELINE_SHIFT_EM,
           maxLines: 2,
         },
       },

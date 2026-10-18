@@ -11,6 +11,15 @@ import type { Layer } from '../../schemas/Doc.js';
 const TRAILING_PUNCT_RE = /[.;:!?]+$/;
 
 /**
+ * `TextStyle.baselineShift` for caption text on a band, in em of the rendered type:
+ * vertically centred text aligns its lowercase middle on the band's centre, which
+ * leaves the capitals of a mixed-case caption visibly high (measured in a 1080p
+ * render: PT Serif caps 6.5 px above the middle of the 107 px band). Dropping the
+ * text ~3.5 px there (0.07 em moved it 4.5 px) reads as centred.
+ */
+export const CAPTION_BASELINE_SHIFT_EM = 0.055;
+
+/**
  * Strip trailing punctuation from a caption string.
  * Image captions on blocks look cleaner without terminal periods,
  * semicolons, or other sentence-ending punctuation.

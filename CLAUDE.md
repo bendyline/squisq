@@ -248,7 +248,8 @@ squisq/
                             #   render API (seekTo resolves when assets settle) for image capture
         MarkdownRenderer.tsx # AST-to-React renderer
         CaptionOverlay.tsx
-        SocialCaptionOverlay.tsx
+        SocialCaptionOverlay.tsx # Reels-style captions: at most two rows, chunks never span audio segments
+        socialCaptionLayout.ts # chunking + measured per-character width estimate behind it
         DocProgressBar.tsx
         DocControls*.tsx    # Overlay, Bottom, Sidebar, Slideshow variants
         DocPlayerWithSidebar.tsx

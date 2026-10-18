@@ -187,6 +187,58 @@ describe('TextLayer', () => {
     expect(fitGroup?.style.transform).toBe('scale(1.5)');
     expect(fitGroup?.style.transformOrigin).toBe('100px 200px');
   });
+
+  // Centred text aligns its lowercase middle on the anchor, so a caption's
+  // capitals sat high on its band; baselineShift drops the drawn text, in em.
+  it('shifts plain text down by baselineShift em without moving its anchor', () => {
+    const caption = (baselineShift?: number): TextLayerType => ({
+      id: 'caption',
+      type: 'text',
+      content: {
+        text: 'An American territory',
+        style: {
+          fontSize: 50,
+          color: '#fff',
+          lineHeight: 1.18,
+          ...(baselineShift ? { baselineShift } : {}),
+        },
+      },
+      position: { x: '50%', y: '74%', anchor: 'center', width: '78%' },
+    });
+    const firstDy = (layer: TextLayerType): number => {
+      const { container } = render(
+        <svg>
+          <TextLayer layer={layer} viewport={viewport} blockTime={0} />
+        </svg>,
+      );
+      const text = container.querySelector('text')!;
+      expect(text.getAttribute('y')).toBe(String(1080 * 0.74));
+      return Number(container.querySelector('tspan')!.getAttribute('dy'));
+    };
+    expect(firstDy(caption())).toBe(0);
+    expect(firstDy(caption(0.07))).toBeCloseTo(3.5, 5);
+  });
+
+  it('shifts rich text down by baselineShift em of its own size', () => {
+    const layer: TextLayerType = {
+      id: 'rich',
+      type: 'text',
+      content: {
+        text: 'Raw',
+        html: '<strong>Raw</strong>',
+        style: { fontSize: 34, color: '#fff', baselineShift: 0.07 },
+      },
+      position: { x: 100, y: 200, width: 900, height: 80 },
+    };
+    const { container } = render(
+      <svg>
+        <TextLayer layer={layer} viewport={viewport} blockTime={0} />
+      </svg>,
+    );
+    const content = container.querySelector<HTMLElement>('[data-squisq-text-content="true"]')!;
+    expect(content.style.position).toBe('relative');
+    expect(content.style.top).toBe('0.07em');
+  });
 });
 
 describe('TextLayer motion', () => {

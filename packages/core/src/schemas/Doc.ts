@@ -964,6 +964,13 @@ export interface TextStyle {
    * vertical baseline is derived from `position.anchor` (legacy behavior).
    */
   verticalAlign?: 'top' | 'middle' | 'bottom';
+  /**
+   * Shift the drawn text down by this many em of its rendered size (negative
+   * shifts it up), without moving the layer's box. For optical centering:
+   * vertically centred text aligns its lowercase middle on the anchor, so
+   * capitals in a mixed-case line sit visibly high; ~0.07 balances them.
+   */
+  baselineShift?: number;
   /** Line height multiplier */
   lineHeight?: number;
   /** Add drop shadow for readability over images */

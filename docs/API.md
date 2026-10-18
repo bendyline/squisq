@@ -249,6 +249,7 @@ interface TextStyle {
   color: string;
   textAlign?: 'left' | 'center' | 'right';
   verticalAlign?: 'top' | 'middle' | 'bottom';
+  baselineShift?: number; // em: drops the drawn text (optical centering), box unchanged
   lineHeight?: number;
   shadow?: boolean;
   background?: string;
@@ -2002,7 +2003,7 @@ interface BlockRendererProps {
 | `CanvasSection`         | Responsive SVG embed for spatial sections (diagram/tree/map/…).                                                                                                                                        |
 | `MarkdownRenderer`      | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                                                      |
 | `CaptionOverlay`        | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                                                      |
-| `SocialCaptionOverlay`  | Large centered TikTok/Reels-style word-by-word captions.                                                                                                                                               |
+| `SocialCaptionOverlay`  | Large centered TikTok/Reels-style word-by-word captions, at most two rows.                                                                                                                             |
 | `DocProgressBar`        | Block progress indicator with seek.                                                                                                                                                                    |
 | `DocControlsOverlay`    | Floating play/pause + prev/next over the player.                                                                                                                                                       |
 | `DocControlsBottom`     | Bottom bar with progress + counter.                                                                                                                                                                    |

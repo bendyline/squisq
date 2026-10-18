@@ -12,6 +12,7 @@ import type { TemplateBlock } from '../schemas/BlockTemplates';
 import type { Block, Layer, TextLayer } from '../schemas/Doc';
 import type { RuntimeTemplateRegistry } from '../doc/templates/index';
 import { materializeBlockLayersWithRuntime } from '../doc/materializeBlockLayers';
+import { CAPTION_BASELINE_SHIFT_EM } from '../doc/templates/captionUtils';
 import { materializeLayers } from './materializeTestUtils';
 import { markdownToDoc } from '../doc/markdownToDoc';
 import { parseMarkdown } from '../markdown/parse';
@@ -544,6 +545,11 @@ describe('canonical template materialization', () => {
     expect(videoCaption!.content.style.maxLines).toBe(2);
     expect(imageCaption!.position.y).toBe('74%');
     expect(videoCaption!.position.y).toBe('74%');
+    // Anchored on the band's centre; the drawn text drops a hair so capitals read as centred.
+    expect(imageCaption!.content.style.baselineShift).toBe(CAPTION_BASELINE_SHIFT_EM);
+    expect(videoCaption!.content.style.baselineShift).toBe(CAPTION_BASELINE_SHIFT_EM);
+    expect(CAPTION_BASELINE_SHIFT_EM).toBeGreaterThan(0);
+    expect(CAPTION_BASELINE_SHIFT_EM).toBeLessThan(0.15);
     expect(imageCaption!.position.width).toBe('78%');
     expect(videoCaption!.position.width).toBe('78%');
     expect(imageBand!.position.y).toBe('69%');

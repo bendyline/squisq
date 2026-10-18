@@ -174,7 +174,12 @@ function IconTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
         >
           <div
             data-squisq-text-content="true"
-            style={{ width: '100%', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+            style={{
+              width: '100%',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              ...baselineShiftStyle(style.baselineShift),
+            }}
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </div>
@@ -265,6 +270,9 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
   const shrinkToFit = style.shrinkToFit === true;
   const centerBlock = shrinkToFit && dominantBaseline === 'middle';
   const firstLineDy = centerBlock ? -((lines.length - 1) / 2) * lineHeightPx : 0;
+  // style.baselineShift is in em; user units here are the font's own px, so it
+  // follows textScale and the fit transform like the glyphs do.
+  const baselineShiftPx = (style.baselineShift ?? 0) * style.fontSize;
   const textRef = useRef<SVGTextElement | null>(null);
   const [fit, setFit] = useState<{ scale: number; cx: number; cy: number } | null>(null);
   const linesKey = lines.join('\n');
@@ -420,7 +428,7 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
           transform={fitTransform}
         >
           {lines.map((line, i) => (
-            <tspan key={i} x={x} dy={i === 0 ? firstLineDy : lineHeightPx}>
+            <tspan key={i} x={x} dy={i === 0 ? firstLineDy + baselineShiftPx : lineHeightPx}>
               {renderLine(line)} {/* Non-breaking space for empty lines */}
             </tspan>
           ))}
@@ -580,6 +588,7 @@ function RichTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
               color: style.color,
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
+              ...baselineShiftStyle(style.baselineShift),
             }}
             dangerouslySetInnerHTML={{ __html: safeHtml }}
           />
@@ -646,6 +655,11 @@ function getTextAnchor(align?: 'left' | 'center' | 'right', anchor?: string): st
   if (anchor?.includes('right')) return 'end';
   if (anchor === 'center') return 'middle';
   return 'start';
+}
+
+/** `TextStyle.baselineShift` for HTML text: em of the element's own (scaled) font size. */
+function baselineShiftStyle(shift: number | undefined): Record<string, string> {
+  return shift ? { position: 'relative', top: `${shift}em` } : {};
 }
 
 /**
