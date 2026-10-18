@@ -846,8 +846,12 @@ remaining children to choices. The first choice is correct unless a choice
 uses `{correct=true}`.
 
 `FlashcardView` keeps the active card body in its own scroll viewport so the
-progress row and Previous/Reveal/Again/Got it controls remain fixed.
-`density="compact"` is for a deck embedded in a dialog or panel: the title
+Previous/Reveal/Again/Next controls remain fixed. The deck spends no rows on
+chrome beyond its title: the position and progress bar sit beside Previous,
+and the shortcuts are button tooltips. When the deck's own box is landscape
+(at least 1.2× wider than tall and 860px wide), Previous moves into a rail to
+the card's left and the card actions into one on its right, so the card keeps
+the height. `density="compact"` is for a deck embedded in a dialog or panel: the title
 shrinks to one line, the position and every control share a single toolbar
 above the card, the shortcut hint becomes button tooltips, and the card's type
 and padding tighten so a revealed answer fits below its question. Visual
