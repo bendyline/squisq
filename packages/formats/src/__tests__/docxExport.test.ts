@@ -698,3 +698,17 @@ describe('DOCX relationship ID allocation', () => {
     expect(headerRels.filter((r) => r.getAttribute('Type') === REL_TYPE_HYPERLINK)).toHaveLength(1);
   });
 });
+
+describe('DOCX export — images resized in the editor', () => {
+  it('embeds an <img> the editor wrote at the size it was given', async () => {
+    // The editor saves a resized image as raw HTML; it used to export as nothing.
+    const doc = parseMarkdown('Before.\n\n<img alt="Shot" src="shot.png" width="192">\n\nAfter.');
+    const zip = await exportAndParse(doc, {
+      images: new Map([['shot.png', { data: TINY_PNG, contentType: 'image/png' }]]),
+    });
+    const xml = await zip.file('word/document.xml')!.async('text');
+    // 192 CSS px = 2 in = 1828800 EMU; the 1×1 picture keeps its square shape.
+    expect(xml).toContain('<wp:extent cx="1828800" cy="1828800"/>');
+    expect(xml).toContain('descr="Shot"');
+  });
+});

@@ -102,3 +102,37 @@ export function fitWithin(
   const scale = Math.min(1, maxWidth / width, maxHeight / height);
   return { width: width * scale, height: height * scale };
 }
+
+/** The display size an author gave an image (a resized `<img width height>`). */
+interface AuthoredSize {
+  width?: number;
+  height?: number;
+}
+
+/**
+ * ` width="…" height="…"` for the sides an author sized, else `''`. The
+ * values are parsed numbers, so they need no escaping.
+ */
+export function imageSizeAttributes(image: AuthoredSize): string {
+  return (
+    (image.width !== undefined ? ` width="${image.width}"` : '') +
+    (image.height !== undefined ? ` height="${image.height}"` : '')
+  );
+}
+
+/**
+ * The display size, in CSS pixels, an author gave an image, with a side they
+ * left out completed from the picture's own proportions. Undefined when they
+ * set no size, or set one side of a picture whose proportions are unknown.
+ */
+export function authoredImageSize(
+  image: AuthoredSize,
+  intrinsic: { width: number; height: number } | null | undefined,
+): { width: number; height: number } | undefined {
+  const { width, height } = image;
+  if (width !== undefined && height !== undefined) return { width, height };
+  if (!intrinsic || intrinsic.width <= 0 || intrinsic.height <= 0) return undefined;
+  if (width !== undefined) return { width, height: (width * intrinsic.height) / intrinsic.width };
+  if (height !== undefined) return { width: (height * intrinsic.width) / intrinsic.height, height };
+  return undefined;
+}

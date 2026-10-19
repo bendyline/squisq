@@ -202,6 +202,18 @@ describe('MarkdownRenderer', () => {
     expect(img.alt).toBe('A cat');
   });
 
+  it('draws an image resized in the editor at the size it was given', () => {
+    const { container } = render(
+      <MarkdownRenderer
+        nodes={parseNodes('<img alt="Shot" src="/shot.png" width="246" height="280">')}
+      />,
+    );
+    const img = container.querySelector('img.squisq-md-image') as HTMLImageElement;
+    expect(img.alt).toBe('Shot');
+    expect(img.getAttribute('width')).toBe('246');
+    expect(img.getAttribute('height')).toBe('280');
+  });
+
   it('plays a video or a recording referenced with image syntax', async () => {
     const provider: MediaProvider = {
       ...mediaProviderWith('clips/plane.mp4'),
@@ -475,14 +487,23 @@ describe('MarkdownRenderer', () => {
   });
 
   it('blocks executable URLs under the trusted policy', () => {
+    // The class keeps the <img> raw HTML, so the walker's URL policy applies.
     const { container } = render(
       <MarkdownRenderer
-        nodes={parseNodes('<a href="javascript:alert(1)">bad</a><img src="javascript:x">')}
+        nodes={parseNodes(
+          '<a href="javascript:alert(1)">bad</a><img class="x" src="javascript:x">',
+        )}
         htmlPolicy="trusted"
       />,
     );
     expect(container.querySelector('a')?.getAttribute('href')).toBeNull();
     expect(container.querySelector('img')?.getAttribute('src')).toBeNull();
+    // A plain <img> reads as an image node, which the media policy drops
+    // just as it drops ![x](javascript:x).
+    const plain = render(
+      <MarkdownRenderer nodes={parseNodes('<img src="javascript:x">')} htmlPolicy="trusted" />,
+    );
+    expect(plain.container.querySelector('img')).toBeNull();
   });
 
   // Host-affecting tags (style/script/…) must never reach the document.

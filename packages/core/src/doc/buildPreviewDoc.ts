@@ -103,15 +103,20 @@ function extractBlockImages(contents: MarkdownBlockNode[] | undefined): Extracte
   }
 
   function walk(node: MarkdownNode): void {
-    if ('type' in node && node.type === 'image' && 'url' in node) {
-      const img = node as { url: string; alt?: string };
-      if (img.url) {
-        images.push({ src: img.url, alt: img.alt ?? '' });
+    if (node.type === 'image') {
+      // A resized image parses with the size it was given in the editor.
+      if (node.url) {
+        images.push({
+          src: node.url,
+          alt: node.alt ?? '',
+          ...(node.width !== undefined ? { width: node.width } : {}),
+          ...(node.height !== undefined ? { height: node.height } : {}),
+        });
       }
     }
-    // Resized images round-trip as raw HTML. Pick them up so feature
-    // and slideshow previews show the actual image rather than a blank
-    // placeholder.
+    // An `<img>` that carries more than a plain image (a class, a style)
+    // stays raw HTML. Pick it up so feature and slideshow previews show the
+    // actual image rather than a blank placeholder.
     if ('type' in node && (node.type === 'htmlBlock' || node.type === 'htmlInline')) {
       const html = node as unknown as { htmlChildren?: unknown[] };
       for (const child of html.htmlChildren ?? []) walkHtml(child);

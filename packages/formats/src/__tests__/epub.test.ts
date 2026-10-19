@@ -299,6 +299,20 @@ describe('markdownDocToEpub', () => {
       expect(ch).toContain('alt="Photo"');
     });
 
+    it('keeps the size an image was given in the editor', async () => {
+      const imgData = new Uint8Array([0xff, 0xd8]).buffer;
+      const doc = makeDoc([
+        heading(1, 'Test'),
+        {
+          type: 'paragraph',
+          children: [{ type: 'image', url: 'photo.jpg', alt: 'Photo', width: 246, height: 280 }],
+        },
+      ]);
+      const zip = await exportAndUnzip(doc, { images: new Map([['photo.jpg', imgData]]) });
+      const ch = await zip.file('OEBPS/chapters/chapter-001.xhtml')!.async('string');
+      expect(ch).toContain('<img src="../images/photo.jpg" alt="Photo" width="246" height="280"/>');
+    });
+
     it('lists images in the OPF manifest', async () => {
       const imgData = new Uint8Array([0x89]).buffer;
       const doc = makeDoc([heading(1, 'Test'), imageParagraph('Pic', 'pic.png')]);

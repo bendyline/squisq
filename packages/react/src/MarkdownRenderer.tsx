@@ -380,7 +380,14 @@ function renderInline(
           );
         }
         return (
-          <MdImage key={key} src={node.url} alt={node.alt ?? ''} title={node.title ?? undefined} />
+          <MdImage
+            key={key}
+            src={node.url}
+            alt={node.alt ?? ''}
+            title={node.title ?? undefined}
+            width={node.width}
+            height={node.height}
+          />
         );
       }
 
@@ -719,14 +726,36 @@ function renderBlocks(
  * wrapper so an animated one can carry play/pause controls; everything else
  * is a bare <img> as before.
  */
-function MdImage({ src, alt, title }: { src: string; alt: string; title?: string }) {
+function MdImage({
+  src,
+  alt,
+  title,
+  width,
+  height,
+}: {
+  src: string;
+  alt: string;
+  title?: string;
+  /** The size a resized image was given in the editor, in CSS pixels. */
+  width?: number;
+  height?: number;
+}) {
   const safeSrc = sanitizeUrl(src, 'media') ?? svgDataImageSrc(src);
   const resolved = useMediaUrl(safeSrc ?? '', '.');
   const imageRef = useRef<HTMLImageElement>(null);
   const playback = useAnimatedImage(safeSrc ?? '', resolved);
   if (!safeSrc) return null;
   if (!mayBeAnimatedImage(safeSrc)) {
-    return <img className="squisq-md-image" src={resolved} alt={alt} title={title} />;
+    return (
+      <img
+        className="squisq-md-image"
+        src={resolved}
+        alt={alt}
+        title={title}
+        width={width}
+        height={height}
+      />
+    );
   }
   return (
     <span
@@ -740,6 +769,8 @@ function MdImage({ src, alt, title }: { src: string; alt: string; title?: string
         src={playback.displaySrc}
         alt={alt}
         title={title}
+        width={width}
+        height={height}
         // Block inside the wrapper so no baseline gap stretches the paused still.
         style={{ display: 'block', maxWidth: '100%' }}
       />

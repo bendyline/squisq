@@ -29,6 +29,7 @@ import {
   type MarkdownNode,
   type HtmlNode,
   type MarkdownBlockNode,
+  type MarkdownImage,
   type VideoEmbed,
   readFrontmatterThemeId,
 } from '@bendyline/squisq/markdown';
@@ -36,6 +37,7 @@ import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { resolveFontFamily, buildGoogleFontsUrl } from '@bendyline/squisq/schemas';
 import { resolveThemeForDoc } from '@bendyline/squisq/doc';
 import { FootnoteIndex, footnoteIds } from '../shared/footnotes.js';
+import { imageSizeAttributes } from '../shared/images.js';
 
 // ── Public Types ───────────────────────────────────────────────────
 
@@ -474,7 +476,8 @@ function takeFirstImage(nodes: MarkdownNode[]): {
  * a paragraph that contains only the image (with optional whitespace),
  * we drop the whole paragraph; if there's surrounding text, we strip
  * the image from the paragraph's inline children and keep the rest.
- * For raw `<img>` html blocks we drop the block entirely.
+ * For an `<img>` that stays raw HTML (one with a class or style) we drop
+ * the block entirely.
  */
 function extractFirstImageFromBlock(
   block: MarkdownNode,
@@ -489,7 +492,7 @@ function extractFirstImageFromBlock(
         typeof (k as { url?: unknown }).url === 'string',
     );
     if (imgIdx >= 0) {
-      const img = kids[imgIdx] as { url: string; alt?: string };
+      const img = kids[imgIdx] as MarkdownImage;
       const remainingKids = [...kids.slice(0, imgIdx), ...kids.slice(imgIdx + 1)].filter(
         (k) => !isBlankInline(k),
       );
@@ -498,7 +501,8 @@ function extractFirstImageFromBlock(
           ? null
           : ({ ...(b as object), children: remainingKids } as MarkdownNode);
       return {
-        image: { src: img.url, alt: img.alt ?? '' },
+        // A resized image parses with the size it was given in the editor.
+        image: { src: img.url, alt: img.alt ?? '', width: img.width, height: img.height },
         replacement,
       };
     }
@@ -817,7 +821,7 @@ function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): str
       const resolved = ctx?.images?.get(original) ?? original;
       const safeSrc = sanitizeUrl(resolved, 'media') ?? svgDataImageToHtmlSrc(resolved);
       if (!safeSrc) return escapeHtml(node.alt ?? '');
-      return `<img src="${escapeAttr(safeSrc)}" alt="${escapeAttr(node.alt ?? '')}" />`;
+      return `<img src="${escapeAttr(safeSrc)}" alt="${escapeAttr(node.alt ?? '')}"${imageSizeAttributes(node)} />`;
     }
     case 'thematicBreak':
       return '<hr />';

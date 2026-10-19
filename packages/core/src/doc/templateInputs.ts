@@ -426,7 +426,13 @@ export function extractImages(
     if (n.type === 'image' && typeof n.url === 'string' && n.url) {
       // A clip or recording in image syntax is not a picture for an image slot.
       if (!mediaKindForUrl(n.url)) {
-        found.push({ src: n.url, alt: typeof n.alt === 'string' ? n.alt : '' });
+        found.push({
+          src: n.url,
+          alt: typeof n.alt === 'string' ? n.alt : '',
+          // A resized image parses with the size it was given in the editor.
+          ...(typeof n.width === 'number' ? { width: n.width } : {}),
+          ...(typeof n.height === 'number' ? { height: n.height } : {}),
+        });
       }
       return;
     }

@@ -505,6 +505,11 @@ export interface MarkdownLink extends MarkdownNodeBase {
 
 /**
  * An image ![alt](url "title").
+ *
+ * A lone HTML `<img>` that carries nothing beyond `src`, `alt`, `title`,
+ * `width` and `height` parses to this node too. The WYSIWYG editor writes a
+ * resized image that way, because `![alt](url)` has no size syntax, so every
+ * consumer sees one kind of image either way.
  */
 export interface MarkdownImage extends MarkdownNodeBase {
   type: 'image';
@@ -514,6 +519,17 @@ export interface MarkdownImage extends MarkdownNodeBase {
   alt?: string;
   /** Optional title */
   title?: string | null;
+  /** Display width in CSS pixels, from `<img width>`. */
+  width?: number;
+  /** Display height in CSS pixels, from `<img height>`. */
+  height?: number;
+  /**
+   * The `<img>` tag this image was written as. Serialization reuses it
+   * verbatim while it still describes the node, writes a fresh `<img>` when
+   * the URL, alt, title or size has changed, and writes `<img>` (never
+   * `![alt](url)`) whenever the node has a size.
+   */
+  rawHtml?: string;
 }
 
 /**
@@ -716,7 +732,10 @@ export interface ParseOptions {
   math?: boolean;
   /** Enable directive extensions (:::container, ::leaf, :text). Default: true */
   directive?: boolean;
-  /** Parse raw HTML into HtmlNode sub-DOM trees. Default: true */
+  /**
+   * Parse raw HTML into HtmlNode sub-DOM trees, and read a lone plain `<img>`
+   * as an image node. Default: true. When false, all HTML stays raw.
+   */
   parseHtml?: boolean;
   /** Enable YAML frontmatter parsing (--- blocks at top of document). Default: true */
   frontmatter?: boolean;

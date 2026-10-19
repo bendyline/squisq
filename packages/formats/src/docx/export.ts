@@ -52,7 +52,7 @@ import {
 import { createPackage } from '../ooxml/writer.js';
 import { RelIdAllocator } from '../ooxml/relIds.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
-import { fitWithin, readImageDimensions } from '../shared/images.js';
+import { authoredImageSize, fitWithin, readImageDimensions } from '../shared/images.js';
 import { stripHtmlTags } from '../shared/text.js';
 import { normalizeOoxmlHex } from '../shared/ooxmlColor.js';
 import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
@@ -1020,11 +1020,13 @@ function convertImage(node: MarkdownImage, ctx: ExportContext): string {
   const filename = `image${ctx.images.length + 1}.${ext}`;
   const { relId, docPrId } = ctx.addImage(data, contentType, filename);
 
-  // Display size: the caller's, else the image header's; fall back to 5×3 in.
-  const dims =
+  // Display size: the author's resize in the editor, else the caller's, else
+  // the image header's; fall back to 5×3 in.
+  const natural =
     imageEntry.width && imageEntry.height
       ? { width: imageEntry.width, height: imageEntry.height }
       : readImageDimensions(data);
+  const dims = authoredImageSize(node, natural) ?? natural;
   const EMU_PER_INCH = 914400;
   // Fit the 6 in content width and keep a tall image (a long diagram) on
   // one page: 8 in leaves room for the line above it on Letter and A4.

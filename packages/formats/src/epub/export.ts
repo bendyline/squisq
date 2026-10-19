@@ -42,6 +42,7 @@ import { FootnoteIndex, footnoteIds } from '../shared/footnotes.js';
 import { exportImageBytes, svgIslandsAsImages } from '../shared/svgIslands.js';
 import { escapeXml } from '../ooxml/xmlUtils.js';
 import { inferMimeType, extractFilename } from '../html/imageUtils.js';
+import { imageSizeAttributes } from '../shared/images.js';
 import { extractPlainText } from '../shared/text.js';
 import {
   collectInlineIconFamilies,
@@ -711,7 +712,7 @@ function inlineToXhtml(node: MarkdownInlineNode, ctx: EpubRenderCtx): string {
       const safeSrc = resolved ? `../images/${resolved.filename}` : sanitizeUrl(node.url, 'media');
       if (!safeSrc) return alt;
       const src = escapeXml(safeSrc);
-      return `<img src="${src}" alt="${alt}"/>`;
+      return `<img src="${src}" alt="${alt}"${imageSizeAttributes(node)}/>`;
     }
 
     case 'break':

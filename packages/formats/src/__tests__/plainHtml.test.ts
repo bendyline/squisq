@@ -442,6 +442,11 @@ describe('markdownDocToPlainHtml', () => {
   });
 
   describe('image sizing', () => {
+    it('writes an image resized in the editor at the size it was given', () => {
+      const html = render('Before <img alt="Shot" src="shot.png" width="246" height="280"> after.');
+      expect(html).toMatch(/<img src="shot\.png" alt="Shot" width="246" height="280" \/>/);
+    });
+
     it('lets explicit width/height attributes survive without CSS overriding them', () => {
       // The WYSIWYG editor writes width/height after a resize. The CSS
       // must not force `width: auto` or `height: auto` on imgs that

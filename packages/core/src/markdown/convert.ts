@@ -21,7 +21,9 @@ import type {
   HeadingTemplateAnnotation,
   HeadingAttributes,
   MarkdownHeading,
+  MarkdownImage,
   MarkdownInlineIcon,
+  HtmlNode,
 } from './types.js';
 import { parseHtmlToNodes } from './htmlParse.js';
 import { resolveIcon } from '../icons/resolve.js';
@@ -119,6 +121,87 @@ function mdastPosField(
   pos?: MarkdownSourcePosition,
 ): { position: MdastPosition } | Record<string, never> {
   return pos ? { position: toMdastPosition(pos) } : {};
+}
+
+// ============================================
+// HTML <img> ⇄ image nodes
+// ============================================
+
+/**
+ * What an `<img>` may carry and still be a plain image node. Anything else
+ * (class, style, srcset, data-*) keeps the tag as raw HTML, so no attribute
+ * is ever dropped.
+ */
+const PLAIN_IMAGE_ATTRIBUTES = new Set(['src', 'alt', 'title', 'width', 'height']);
+
+/** An HTML pixel size such as `246`; null for `50%`, `auto` or `246px`. */
+function htmlPixels(value: string | undefined): number | undefined | null {
+  if (value === undefined) return undefined;
+  const size = value.trim();
+  return /^\d+(?:\.\d+)?$/.test(size) && Number(size) > 0 ? Number(size) : null;
+}
+
+/**
+ * The image a lone, plain `<img>` describes, or null when the HTML is
+ * anything more. The WYSIWYG editor writes a resized image this way because
+ * `![alt](url)` has no size syntax; reading it as an image node means every
+ * consumer — slides, exports, reference rewrites — sees the same picture.
+ */
+function imageFromHtml(rawHtml: string, htmlChildren: HtmlNode[]): MarkdownImage | null {
+  const nodes = htmlChildren.filter((node) => node.type !== 'htmlText' || node.value.trim());
+  const img = nodes.length === 1 ? nodes[0] : undefined;
+  if (img?.type !== 'htmlElement' || img.tagName !== 'img' || img.children.length) return null;
+  const { src, alt, title } = img.attributes;
+  if (!src || Object.keys(img.attributes).some((name) => !PLAIN_IMAGE_ATTRIBUTES.has(name)))
+    return null;
+  const width = htmlPixels(img.attributes.width);
+  const height = htmlPixels(img.attributes.height);
+  if (width === null || height === null) return null;
+  return {
+    type: 'image',
+    url: src,
+    ...(alt !== undefined ? { alt } : {}),
+    ...(title !== undefined ? { title } : {}),
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+    rawHtml,
+  };
+}
+
+function sameImage(a: MarkdownImage, b: MarkdownImage): boolean {
+  return (
+    a.url === b.url &&
+    (a.alt ?? '') === (b.alt ?? '') &&
+    (a.title ?? null) === (b.title ?? null) &&
+    a.width === b.width &&
+    a.height === b.height
+  );
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * An image as the `<img>` tag it was written as, while that tag still
+ * describes it; otherwise a fresh tag in the editor's attribute order.
+ */
+function imageToHtml(node: MarkdownImage): string {
+  if (node.rawHtml !== undefined) {
+    const written = imageFromHtml(node.rawHtml, parseHtmlToNodes(node.rawHtml));
+    if (written && sameImage(written, node)) return node.rawHtml;
+  }
+  const attribute = (name: string, value: string | number | null | undefined) =>
+    value === undefined || value === null ? '' : ` ${name}="${escapeHtmlAttribute(String(value))}"`;
+  return (
+    `<img${attribute('alt', node.alt ?? '')}${attribute('src', node.url)}` +
+    `${attribute('width', node.width)}${attribute('height', node.height)}` +
+    `${attribute('title', node.title)}>`
+  );
 }
 
 // ============================================
@@ -495,7 +578,51 @@ function convertInlineChildren(
   // be whole BEFORE extraction or the annotation is silently lost.
   const repaired = recombineDirectiveTokens(mentioned);
   const split = applyIconSplit ? splitInlineIcons(repaired) : repaired;
-  return foldPairedInlineHtml(split);
+  return foldPairedInlineHtml(parseHtml ? foldLoneInlineImages(split) : split);
+}
+
+/** Elements that never take a closing tag, so they open no inline scope. */
+const VOID_HTML_ELEMENTS = new Set([
+  'area',
+  'base',
+  'br',
+  'col',
+  'embed',
+  'hr',
+  'img',
+  'input',
+  'link',
+  'meta',
+  'source',
+  'track',
+  'wbr',
+]);
+
+/**
+ * Read each inline `<img>` that stands on its own as an image node. micromark
+ * hands inline HTML back one tag at a time, so `<picture><source><img></picture>`
+ * arrives as four siblings; an `<img>` inside an element left open by an
+ * earlier sibling belongs to that element and stays raw HTML.
+ */
+function foldLoneInlineImages(nodes: MarkdownInlineNode[]): MarkdownInlineNode[] {
+  if (!nodes.some((n) => n.type === 'htmlInline')) return nodes;
+  let open = 0;
+  return nodes.map((node) => {
+    if (node.type !== 'htmlInline') return node;
+    const tag = /^<(\/?)([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*?(\/?)>$/.exec(node.rawHtml.trim());
+    if (!tag) return node;
+    const [, closing, name, selfClosing] = tag;
+    if (closing) {
+      open = Math.max(0, open - 1);
+      return node;
+    }
+    if (!VOID_HTML_ELEMENTS.has(name!.toLowerCase()) && !selfClosing) {
+      open++;
+      return node;
+    }
+    const image = open === 0 ? imageFromHtml(node.rawHtml, node.htmlChildren) : null;
+    return image ? { ...image, ...posField(node.position) } : node;
+  });
 }
 
 /**
@@ -901,13 +1028,16 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
         ...posField(pos),
       };
 
-    case 'html':
-      return {
-        type: 'htmlBlock',
-        rawHtml: node.value ?? '',
-        htmlChildren: parseHtml ? parseHtmlToNodes(node.value ?? '') : [],
-        ...posField(pos),
-      };
+    case 'html': {
+      const rawHtml = node.value ?? '';
+      const htmlChildren = parseHtml ? parseHtmlToNodes(rawHtml) : [];
+      // A lone `<img>` on its own line is the same picture a paragraph
+      // holding `![alt](url)` is.
+      const image = parseHtml ? imageFromHtml(rawHtml, htmlChildren) : null;
+      if (image)
+        return { type: 'paragraph', children: [{ ...image, ...posField(pos) }], ...posField(pos) };
+      return { type: 'htmlBlock', rawHtml, htmlChildren, ...posField(pos) };
+    }
 
     case 'math':
       return {
@@ -1428,6 +1558,10 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
       };
 
     case 'image':
+      // `![alt](url)` cannot carry a size, so a sized image (or one written
+      // as `<img>`) goes back out as an `<img>` tag.
+      if (node.rawHtml !== undefined || node.width !== undefined || node.height !== undefined)
+        return { type: 'html', value: imageToHtml(node), ...mdastPosField(node.position) };
       return {
         type: 'image',
         url: node.url,
