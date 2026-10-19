@@ -58,7 +58,7 @@ import type {
 } from '@bendyline/squisq/markdown';
 import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 import { FootnoteIndex } from '../shared/footnotes.js';
-import { fitWithin, readImageDimensions } from '../shared/images.js';
+import { authoredImageSize, fitWithin, readImageDimensions } from '../shared/images.js';
 
 import { WinAnsiTracker } from './winAnsi.js';
 import {
@@ -1003,9 +1003,11 @@ function renderImageParagraph(
       drawSpans(note, ctx, width, x0);
       continue;
     }
+    // The size the author resized the picture to in the editor, else its own.
+    const display = authoredImageSize(imageNode, embedded) ?? embedded;
     const size = fitWithin(
-      embedded.width * POINTS_PER_CSS_PIXEL,
-      embedded.height * POINTS_PER_CSS_PIXEL,
+      display.width * POINTS_PER_CSS_PIXEL,
+      display.height * POINTS_PER_CSS_PIXEL,
       width,
       maxHeight,
     );

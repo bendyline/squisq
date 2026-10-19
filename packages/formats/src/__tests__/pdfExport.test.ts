@@ -6,7 +6,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { PDFDocument } from 'pdf-lib';
+import { PDFArray, PDFDocument, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type {
   MarkdownDocument,
   MarkdownHeading,
@@ -490,5 +491,34 @@ describe('markdownDocToPdf with characters outside WinAnsi', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('PDF export — images resized in the editor', () => {
+  /** A real 1×1 PNG, so pdf-lib can embed it. */
+  const PNG = Uint8Array.from(
+    atob(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+    ),
+    (c) => c.charCodeAt(0),
+  );
+
+  it('draws an <img> the editor wrote at the size it was given', async () => {
+    // The editor saves a resized image as raw HTML; it used to print as code.
+    const pdf = await exportAndLoad(
+      parseMarkdown('Before.\n\n<img alt="Shot" src="shot.png" width="192">\n\nAfter.'),
+      { images: new Map([['shot.png', { data: PNG, contentType: 'image/png' }]]) },
+    );
+    const page = pdf.getPages()[0]!;
+    const contents = page.node.Contents();
+    const streams = contents instanceof PDFArray ? contents.asArray() : [contents];
+    const operators = streams
+      .map((ref) => pdf.context.lookup(ref))
+      .map((stream) =>
+        new TextDecoder().decode(decodePDFRawStream(stream as PDFRawStream).decode()),
+      )
+      .join('\n');
+    // 192 CSS px is 144 pt; the 1×1 picture keeps its square shape.
+    expect(operators).toMatch(/\b144 0 0 144 [\d.]+ [\d.]+ cm\b/);
   });
 });

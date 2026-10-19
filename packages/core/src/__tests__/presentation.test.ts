@@ -221,13 +221,23 @@ describe('dynamic slide summarization', () => {
   it('inserts supporting visuals at word cues without lengthening the narration, and honors per-section opt-out', async () => {
     const text = source.replace(
       'First organize your points. Then add diagrams. Finally share your presentation.',
-      'First organize all your ideas into a clear sequence of points. Then add diagrams to explain how the different pieces fit together. Finally share your presentation.',
+      'Good slides start from a plan you can follow. First organize all your ideas into a clear sequence of points. Then add diagrams to explain how the different pieces fit together. Finally share your presentation.',
     );
     const { doc } = await narrated(text);
     const hints = defaultPresentationHints();
     const plain = createPresentationPlan(doc, { ...hints, inbetweens: false });
     const plan = createPresentationPlan(doc, hints);
     expect(plan.beats.length).toBeGreaterThan(plain.beats.length);
+    // The introduction leads in; the diagram then shows only the ordered steps.
+    expect(plan.beats[1]).toMatchObject({
+      layout: 'statement',
+      headline: 'Make it visual',
+      points: ['Good slides start from a plan you can follow.'],
+    });
+    expect(plan.beats[2]!.layout).toBe('steps');
+    expect(plan.beats[2]!.points).toHaveLength(3);
+    expect(plan.beats[2]!.points[0]).toMatch(/^First organize/);
+    expect(plain.beats[1]!.layout).toBe('steps');
     const projected = compilePresentationPlan(doc, plan);
     expect(projected.duration).toBe(doc.presentationNarration!.duration);
     for (const [index, block] of projected.blocks.entries()) {
@@ -241,6 +251,70 @@ describe('dynamic slide summarization', () => {
     }
     hints.blocks.push({ blockId: presentationSections(doc)[1].blockId, inbetweens: false });
     expect(createPresentationPlan(doc, hints).beats.length).toBe(plain.beats.length);
+  });
+  it('never shows a headline again as its body, or the same slide twice in a row', () => {
+    const doc = parse(
+      [
+        '# Northwind',
+        '![Northwind logo](images/logo.png)',
+        'Northwind builds careful software for people who plan their week. Our goal is simple and steady. ' +
+          'One of our core beliefs is that private tools should run on the hardware you already own, and we design every feature around that idea. ' +
+          'While many products depend on remote services that change without notice, Northwind ships tools that keep working offline for years. ' +
+          'By relying on local storage and the steady growth of laptop processors, we think anyone can keep their planning private and fast.',
+        '## Planner',
+        'The planner is a multi-step workflow tool that breaks large projects into small daily tasks, and it keeps every task on your own machine without an account.',
+        '## Editor',
+        'The editor turns notes into documents, slides, and videos from one Markdown file. ' +
+          'It keeps your words as plain text so they stay portable between apps. ' +
+          'Fun fact: this overview was drafted in the editor itself on an ordinary laptop.',
+        // A pasted, resized image is saved as raw HTML, not ![alt](url).
+        '<img alt="Editor screenshot" src="images/editor.png" width="246" height="280">',
+      ].join('\n\n'),
+    );
+    const plan = createPresentationPlan(doc);
+    const sections = presentationSections(doc);
+    // A section heading may title a sentence that names it; a sentence-length
+    // headline must not reappear as the body underneath it.
+    const stem = (text: string) => text.replace(/…$/u, '').toLowerCase();
+    const echoes = (point: string, headline: string) =>
+      stem(headline).length > 20 &&
+      (stem(point).startsWith(stem(headline)) || stem(headline).startsWith(stem(point)));
+    for (const beat of plan.beats)
+      for (const point of beat.points) expect(echoes(point, beat.headline)).toBe(false);
+    for (const [index, beat] of plan.beats.entries()) {
+      const next = plan.beats[index + 1];
+      if (next) expect([next.headline, next.points]).not.toEqual([beat.headline, beat.points]);
+    }
+    // A complete sentence that fits on a slide is not cut off mid-thought.
+    expect(plan.beats.flatMap((beat) => beat.points)).toContain(
+      'By relying on local storage and the steady growth of laptop processors, we think anyone can keep their planning private and fast.',
+    );
+    // "multi-step" is not a sequence of steps.
+    expect(plan.beats.some((beat) => beat.layout === 'steps')).toBe(false);
+    // Each image appears once, inside the section that contains it.
+    const pictured = plan.beats.filter((beat) => beat.imageSrc);
+    expect(pictured.map((beat) => beat.imageSrc)).toEqual(['images/logo.png', 'images/editor.png']);
+    for (const beat of pictured) {
+      const owner = sections.find(
+        (section) =>
+          beat.sourceStart >= section.sourceStart && beat.sourceStart < section.sourceEnd,
+      )!;
+      expect(beat.imageSrc).toBe(
+        owner.heading === 'Northwind' ? 'images/logo.png' : 'images/editor.png',
+      );
+    }
+    // The compiler accepts the HTML image as a document image.
+    expect(compilePresentationPlan(doc, plan).blocks.map((block) => block.template)).toContain(
+      'imageWithCaption',
+    );
+    const headless = createPresentationPlan(
+      parse(
+        'Plain notes can still become slides without any headings at all. They read best when each slide adds something new to the story.',
+      ),
+    );
+    expect(headless.beats.length).toBeGreaterThan(0);
+    for (const beat of headless.beats)
+      for (const point of beat.points) expect(echoes(point, beat.headline)).toBe(false);
   });
   it('leaves dynamic mode when an explicit different transform is selected', () => {
     const doc = dynamic(sky);
