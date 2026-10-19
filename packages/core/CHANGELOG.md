@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.12.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.3...@bendyline/squisq@2.12.4) (2026-10-19)
+
+### Bug Fixes
+
+* Content parsing improvements ([#94](https://github.com/bendyline/squisq/issues/94)) ([655ce8e](https://github.com/bendyline/squisq/commit/655ce8effea9ce3ffd070863444edc619eeb10a1))
+
 ## @bendyline/squisq [2.12.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.2...@bendyline/squisq@2.12.3) (2026-10-19)
 
 ### Bug Fixes
