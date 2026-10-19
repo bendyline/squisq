@@ -1,3 +1,9 @@
+## @bendyline/squisq-editor-react [2.12.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.4...@bendyline/squisq-editor-react@2.12.5) (2026-10-19)
+
+### Bug Fixes
+
+* Preserve rich table cells and responsive designer ([#93](https://github.com/bendyline/squisq/issues/93)) ([d8aa7a2](https://github.com/bendyline/squisq/commit/d8aa7a2632f7cdf5cd6061bd4f2f58f73f2662e5))
+
 ## @bendyline/squisq-editor-react [2.12.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.3...@bendyline/squisq-editor-react@2.12.4) (2026-10-19)
 
 
