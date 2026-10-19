@@ -1,3 +1,15 @@
+## @bendyline/squisq-react [2.12.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.3...@bendyline/squisq-react@2.12.4) (2026-10-19)
+
+### Bug Fixes
+
+* Diagram and unicode work ([#91](https://github.com/bendyline/squisq/issues/91)) ([123df5a](https://github.com/bendyline/squisq/commit/123df5a12d198c2be2864214c2a0195c679b5c3b))
+* Tighten flashcard layout and controls ([#92](https://github.com/bendyline/squisq/issues/92)) ([e2226e8](https://github.com/bendyline/squisq/commit/e2226e80d7cefda4dad539ce266e23c041cff681))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.12.3
+
 ## @bendyline/squisq-react [2.12.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.2...@bendyline/squisq-react@2.12.3) (2026-10-17)
 
 ### Bug Fixes

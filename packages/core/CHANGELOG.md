@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.12.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.2...@bendyline/squisq@2.12.3) (2026-10-19)
+
+### Bug Fixes
+
+* Tighten flashcard layout and controls ([#92](https://github.com/bendyline/squisq/issues/92)) ([e2226e8](https://github.com/bendyline/squisq/commit/e2226e80d7cefda4dad539ce266e23c041cff681))
+
 ## @bendyline/squisq [2.12.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.1...@bendyline/squisq@2.12.2) (2026-10-17)
 
 ### Bug Fixes
