@@ -690,3 +690,91 @@
   min-width: 0;
   display: flex;
 }
+
+/* The manager and standalone designer are independent embedded surfaces.
+   Query their available space, including split windows and narrow hosts. */
+.squisq-layout-manager-panel {
+  container-type: inline-size;
+  container-name: layout-manager;
+  max-width: 100%;
+}
+
+.squisq-template-designer-panel {
+  min-width: 0;
+  container-type: inline-size;
+  container-name: layout-designer;
+}
+
+@container layout-manager (max-width: 760px) {
+  .squisq-layout-manager-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .squisq-layout-manager-sidebar {
+    box-sizing: border-box;
+    width: 100%;
+    max-height: 180px;
+    flex-shrink: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--squisq-layout-border);
+  }
+
+  .squisq-layout-manager-main {
+    flex: 1 0 auto;
+    min-height: 600px;
+  }
+
+  .squisq-template-designer-panel--embedded {
+    height: auto;
+  }
+}
+
+@container layout-designer (max-width: 680px) {
+  .squisq-template-designer-meta {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .squisq-template-designer-field,
+  .squisq-template-designer-field input {
+    min-width: 0;
+  }
+
+  .squisq-template-designer-field input,
+  .squisq-template-designer-btn {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  .squisq-template-designer-body {
+    flex-direction: column;
+    flex: 1 0 auto;
+  }
+
+  .squisq-template-designer-palette {
+    box-sizing: border-box;
+    width: 100%;
+    max-height: 160px;
+    border-right: 0;
+    border-bottom: 1px solid var(--squisq-layout-border);
+  }
+
+  .squisq-template-designer-stage {
+    min-height: 260px;
+    height: 320px;
+    flex: none;
+    box-sizing: border-box;
+  }
+
+  .squisq-template-designer-footer {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .squisq-template-designer-footer-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}

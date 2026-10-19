@@ -16,6 +16,9 @@ import {
   matchTrailingTemplateAnnotation,
   matchTrailingPandocAttr,
   tokenizeAttrTokens,
+  parseHtmlToNodes,
+  sanitizeHtmlNodes,
+  stringifyHtmlNodes,
 } from '@bendyline/squisq/markdown';
 import { mediaEditHtmlAttribute } from '@bendyline/squisq/mediaEdit';
 import { mediaEditKeysFor } from './tiptap/mediaEditAttributes';
@@ -489,7 +492,7 @@ export function markdownToTiptap(markdown: string): string {
       .map((cell, i) => {
         const align = alignments[i];
         const style = align ? ` style="text-align: ${align}"` : '';
-        return `<th${style}>${inlineToHtml(cell)}</th>`;
+        return `<th${style}>${tableCellToHtml(cell)}</th>`;
       })
       .join('');
 
@@ -502,7 +505,7 @@ export function markdownToTiptap(markdown: string): string {
           .map((cell, i) => {
             const align = alignments[i];
             const style = align ? ` style="text-align: ${align}"` : '';
-            return `<td${style}>${inlineToHtml(cell)}</td>`;
+            return `<td${style}>${tableCellToHtml(cell)}</td>`;
           })
           .join('');
         return `<tr>${tdHtml}</tr>`;
@@ -2083,7 +2086,29 @@ function htmlToInline(html: string): string {
  * next parse. Inline HTML is portable GFM here and Tiptap understands it on
  * re-entry, so keep the complete row on one line with a literal `<br>`.
  */
+const RICH_TABLE_CELL = /^<div data-squisq-table-cell="">([\s\S]*)<\/div>$/;
+
+/** GFM permits HTML in cells. Only our explicit rich-cell envelope enters
+ * this path, and the shared sanitizer runs again on untrusted source input.
+ * Simple cells retain readable Markdown and the existing <br> convention.
+ */
+function tableCellToHtml(cell: string): string {
+  const rich = RICH_TABLE_CELL.exec(cell);
+  return rich
+    ? stringifyHtmlNodes(sanitizeHtmlNodes(parseHtmlToNodes(rich[1])))
+    : inlineToHtml(cell);
+}
+
 function htmlToTableCell(html: string): string {
+  if (/<(?:ul|ol|blockquote|h[1-6]|pre|div)\b/i.test(html)) {
+    // Tiptap regenerates checkbox chrome from taskItem attributes. Keeping
+    // its label/input markup would duplicate it on each Write/Source toggle.
+    const content = html.replace(/<label\b[^>]*>[\s\S]*?<\/label>/gi, '');
+    const safe = stringifyHtmlNodes(sanitizeHtmlNodes(parseHtmlToNodes(content)));
+    // A pipe or physical line break would end the GFM cell/row. Entities
+    // retain their exact text when the HTML is parsed on re-entry.
+    return `<div data-squisq-table-cell="">${safe.replace(/\|/g, '&#124;').replace(/\r/g, '&#13;').replace(/\n/g, '&#10;')}</div>`;
+  }
   // A TableCell contains `block+` in ProseMirror, so pressing Enter or
   // pasting multiline spreadsheet text produces sibling `<p>` nodes. Merely
   // stripping those tags fuses their text (`Location: ...Population: ...`).
