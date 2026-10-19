@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -233,6 +234,21 @@ function ChoiceContent(props: Omit<FaceContentProps, 'face'> & { choice: Flashca
 const REVEALED_PARTS =
   '.squisq-flashcards__answer, .squisq-flashcards__feedback, .squisq-flashcards__explanation';
 
+/** Narrowest deck that fits both button rails beside a readable card. */
+const SIDE_RAILS_MIN_WIDTH = 860;
+
+/**
+ * Whether a deck of this size is landscape enough to carry its buttons in
+ * rails beside the card. Rails enter at the player's landscape ratio (1.2,
+ * as in useViewportOrientation) but leave only below 1.1: in a host that
+ * sizes the deck to its content, the narrower card wraps taller, and that
+ * must not flip the layout straight back.
+ */
+function wantsSideRails(width: number, height: number, current: boolean): boolean {
+  if (width < SIDE_RAILS_MIN_WIDTH || height <= 0) return false;
+  return width / height >= (current ? 1.1 : 1.2);
+}
+
 function isInteractiveTarget(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
@@ -269,6 +285,8 @@ export function FlashcardView({
   const [ratings, setRatings] = useState<Record<string, CardRating>>({});
   const [retryIds, setRetryIds] = useState<string[] | null>(null);
   const cardViewportRef = useRef<HTMLElement>(null);
+  const [deckElement, setDeckElement] = useState<HTMLDivElement | null>(null);
+  const [sideRails, setSideRails] = useState(false);
 
   const orderedCards = useMemo(
     () =>
@@ -324,6 +342,23 @@ export function FlashcardView({
     const delta = Math.min(last.bottom - bounds.bottom, first.top - bounds.top - 12);
     if (delta > 0) viewport.scrollTop += delta;
   }, [revealed, cardIndex, retryIds]);
+
+  // Height is what a landscape deck runs short of, so its buttons move into
+  // rails beside the card instead of a row beneath it. Measured on the
+  // deck's own box, which is often a pane rather than the window. Compact
+  // decks keep every control in their toolbar.
+  useLayoutEffect(() => {
+    if (compact || !deckElement) return;
+    const measure = () => {
+      const { width, height } = deckElement.getBoundingClientRect();
+      setSideRails((current) => wantsSideRails(width, height, current));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(deckElement);
+    return () => observer.disconnect();
+  }, [compact, deckElement]);
 
   const revealAnswer = useCallback(() => {
     if (!currentCard) return;
@@ -518,11 +553,9 @@ export function FlashcardView({
     : [];
   const selectedChoice = choices.find((choice) => choice.id === selectedChoiceId);
   const position = `Card ${cardIndex + 1} of ${sessionCards.length}`;
-  const nextLabel = revealed
-    ? cardIndex === sessionCards.length - 1
-      ? 'Finish'
-      : 'Next card'
-    : 'Reveal answer';
+  const lastCard = cardIndex === sessionCards.length - 1;
+  const nextLabel = revealed ? (lastCard ? 'Finish' : 'Next card') : 'Reveal';
+  const railsActive = sideRails && !compact;
 
   const tools = (
     <div className="squisq-flashcards__tools">
@@ -543,56 +576,70 @@ export function FlashcardView({
     </div>
   );
 
-  // A compact deck has no room for the shortcut hint line, so its buttons
-  // carry the shortcuts as tooltips instead.
-  const navigation = (
-    <>
-      <button
-        type="button"
-        className="squisq-flashcards__button"
-        disabled={cardIndex === 0 && !revealed}
-        onClick={previousCard}
-        aria-keyshortcuts="ArrowLeft"
-        title={compact ? 'Previous (←)' : undefined}
-      >
-        Previous
-      </button>
-      <div className="squisq-flashcards__primary-actions">
-        {revealed && currentCard.kind === 'basic' ? (
-          <>
-            <button
-              type="button"
-              className="squisq-flashcards__button"
-              onClick={() => rate('again')}
-            >
-              Again
-            </button>
-            <button
-              type="button"
-              className="squisq-flashcards__button squisq-flashcards__button--primary"
-              onClick={() => rate('got-it')}
-            >
-              Got it
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="squisq-flashcards__button squisq-flashcards__button--primary"
-            onClick={nextCard}
-            aria-keyshortcuts="Space ArrowRight"
-            title={compact ? `${nextLabel} (Space or →)` : undefined}
-          >
-            {nextLabel}
-          </button>
-        )}
-      </div>
-    </>
+  // There is no shortcut hint line, so the buttons carry the shortcuts as
+  // tooltips.
+  const previousButton = (
+    <button
+      type="button"
+      className="squisq-flashcards__button"
+      disabled={cardIndex === 0 && !revealed}
+      onClick={previousCard}
+      aria-keyshortcuts="ArrowLeft"
+      title="Previous (←)"
+    >
+      Previous
+    </button>
+  );
+  const progressBar = (
+    <div className="squisq-flashcards__progress" aria-hidden="true">
+      <span
+        style={{ width: `${((cardIndex + (revealed ? 1 : 0)) / sessionCards.length) * 100}%` }}
+      />
+    </div>
+  );
+  const ratingButtons = [
+    <button
+      key="again"
+      type="button"
+      className="squisq-flashcards__button"
+      onClick={() => rate('again')}
+    >
+      Again
+    </button>,
+    <button
+      key="got-it"
+      type="button"
+      className="squisq-flashcards__button squisq-flashcards__button--primary"
+      onClick={() => rate('got-it')}
+    >
+      {lastCard ? 'Finish' : 'Next'}
+    </button>,
+  ];
+  // A row ends on the primary action; a rail starts with it. Reordered in
+  // the DOM rather than by CSS so Tab follows what the eye sees.
+  if (railsActive) ratingButtons.reverse();
+  const primaryActions = (
+    <div className="squisq-flashcards__primary-actions">
+      {revealed && currentCard.kind === 'basic' ? (
+        ratingButtons
+      ) : (
+        <button
+          type="button"
+          className="squisq-flashcards__button squisq-flashcards__button--primary"
+          onClick={nextCard}
+          aria-keyshortcuts="Space ArrowRight"
+          title={`${nextLabel} (Space or →)`}
+        >
+          {nextLabel}
+        </button>
+      )}
+    </div>
   );
 
   return (
     <div
-      className={rootClassName}
+      ref={setDeckElement}
+      className={rootClassName + (railsActive ? ' squisq-flashcards--side-rails' : '')}
       style={rootStyle}
       role="region"
       aria-label="Flashcards"
@@ -601,31 +648,23 @@ export function FlashcardView({
     >
       <header className="squisq-flashcards__header">
         <div className="squisq-flashcards__deck-copy">
-          {!compact && <span className="squisq-flashcards__eyebrow">Flashcards</span>}
           {deck.title && <h1 title={compact ? deck.title : undefined}>{deck.title}</h1>}
           {compact && <span className="squisq-flashcards__position">{position}</span>}
         </div>
         {compact ? (
           <div className="squisq-flashcards__controls">
             {tools}
-            <div className="squisq-flashcards__navigation">{navigation}</div>
+            <div className="squisq-flashcards__navigation">
+              {previousButton}
+              {primaryActions}
+            </div>
           </div>
         ) : (
           tools
         )}
       </header>
 
-      {!compact && (
-        <div className="squisq-flashcards__progress-row">
-          <span>{position}</span>
-          <span>{revealed ? 'Answer revealed' : 'Question'}</span>
-        </div>
-      )}
-      <div className="squisq-flashcards__progress" aria-hidden="true">
-        <span
-          style={{ width: `${((cardIndex + (revealed ? 1 : 0)) / sessionCards.length) * 100}%` }}
-        />
-      </div>
+      {compact && progressBar}
 
       <main
         ref={cardViewportRef}
@@ -672,8 +711,9 @@ export function FlashcardView({
         )}
 
         {revealed && currentCard.kind === 'basic' && (
+          // The rule above the answer marks it; aria-label names it for
+          // assistive tech without spending a visible line on an eyebrow.
           <section className="squisq-flashcards__answer" aria-label="Answer">
-            <span className="squisq-flashcards__answer-label">Answer</span>
             <FaceContent {...faceProps} face={currentCard.back} />
           </section>
         )}
@@ -708,14 +748,21 @@ export function FlashcardView({
         )}
       </main>
 
+      {/* A comfortable deck reads its position and progress beside Previous
+          rather than spending a row above the card on them; a compact one
+          shows them under the title. Side rails split these two groups to
+          either side of the card. */}
       {!compact && (
-        <>
-          <footer className="squisq-flashcards__footer">{navigation}</footer>
-          <p className="squisq-flashcards__shortcut-hint">
-            Use ← and → to navigate, Space to reveal
-            {currentCard.kind === 'multiple-choice' ? ', or 1–9 to answer' : ''}.
-          </p>
-        </>
+        <footer className="squisq-flashcards__footer">
+          <div className="squisq-flashcards__back">
+            {previousButton}
+            <div className="squisq-flashcards__progress-group">
+              <span className="squisq-flashcards__position">{position}</span>
+              {progressBar}
+            </div>
+          </div>
+          {primaryActions}
+        </footer>
       )}
     </div>
   );

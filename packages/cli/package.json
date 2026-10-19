@@ -65,6 +65,7 @@
     "playwright-core": "1.63.0"
   },
   "devDependencies": {
+    "@bendyline/squisq-react": "2.12.3",
     "@types/chai": "5.2.3",
     "@types/mocha": "10.0.10",
     "chai": "5.3.3",
