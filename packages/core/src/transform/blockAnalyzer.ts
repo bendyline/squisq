@@ -7,11 +7,12 @@
  */
 
 import type { Block } from '../schemas/Doc.js';
-import type { MarkdownBlockNode, MarkdownNode } from '../markdown/types.js';
+import type { MarkdownBlockNode } from '../markdown/types.js';
 import type { ExtractedElement, ExtractionOptions } from '../generate/contentExtractor.js';
 import type { TransformImage } from './types.js';
 import { extractContent, stripMarkdown } from '../generate/contentExtractor.js';
-import { extractPlainText, getChildren } from '../markdown/utils.js';
+import { extractPlainText } from '../markdown/utils.js';
+import { extractImages } from '../doc/templateInputs.js';
 
 /** An image found in a block's markdown contents. */
 export interface BlockImage {
@@ -75,38 +76,15 @@ function maskNonProse(stripped: string, contents: MarkdownBlockNode[]): string {
 }
 
 /**
- * Recursively walk a markdown node tree and collect all images.
- */
-function collectImages(node: MarkdownNode): Array<{ src: string; alt: string }> {
-  const results: Array<{ src: string; alt: string }> = [];
-
-  if ('type' in node && node.type === 'image' && 'url' in node) {
-    const img = node as { url: string; alt?: string };
-    if (img.url) {
-      results.push({ src: img.url, alt: img.alt ?? '' });
-    }
-  }
-
-  for (const child of getChildren(node)) {
-    results.push(...collectImages(child));
-  }
-
-  return results;
-}
-
-/**
- * Extract images from a block's markdown contents.
+ * Extract images from a block's markdown contents: `![alt](url)` and the
+ * raw HTML `<img>` the WYSIWYG editor writes for a resized image.
  */
 function extractBlockImages(block: Block, blockIndex: number): BlockImage[] {
-  if (!block.contents || block.contents.length === 0) return [];
-
-  const images: BlockImage[] = [];
-  for (const node of block.contents) {
-    for (const img of collectImages(node)) {
-      images.push({ ...img, sourceBlockIndex: blockIndex });
-    }
-  }
-  return images;
+  return extractImages(block.contents).map(({ src, alt }) => ({
+    src,
+    alt,
+    sourceBlockIndex: blockIndex,
+  }));
 }
 
 /**
@@ -119,14 +97,10 @@ export function extractDocImages(blocks: Block[]): TransformImage[] {
 
   function walk(blockList: Block[]): void {
     for (const block of blockList) {
-      if (block.contents) {
-        for (const node of block.contents) {
-          for (const img of collectImages(node)) {
-            if (!seen.has(img.src)) {
-              seen.add(img.src);
-              images.push({ src: img.src, alt: img.alt });
-            }
-          }
+      for (const img of extractImages(block.contents)) {
+        if (!seen.has(img.src)) {
+          seen.add(img.src);
+          images.push({ src: img.src, alt: img.alt });
         }
       }
       if (block.children) {

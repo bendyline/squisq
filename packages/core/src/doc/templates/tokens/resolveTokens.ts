@@ -49,9 +49,9 @@
 
 import type { Block, Layer, ImageLayer } from '../../../schemas/Doc.js';
 import type { CustomTemplateLayer } from '../../../schemas/CustomTemplates.js';
-import type { MarkdownBlockNode, MarkdownNode } from '../../../markdown/types.js';
+import type { MarkdownBlockNode } from '../../../markdown/types.js';
 import { extractPlainText, walkMarkdownTree } from '../../../markdown/utils.js';
-import { isPictureFence } from '../../templateInputs.js';
+import { extractImages, isPictureFence } from '../../templateInputs.js';
 
 interface ImageRef {
   url: string;
@@ -88,31 +88,15 @@ const ESCAPED_OPEN = ' ESC_OPEN ';
 const ESCAPED_CLOSE = ' ESC_CLOSE ';
 
 /**
- * Walk the block's body content collecting every `image` node in
- * document order — including inline images nested inside paragraphs,
- * list items, etc. `findNodesByType` only knows the block-node union;
- * we use the more permissive `walkMarkdownTree` so inline image nodes
- * (`type: 'image'`, an inline type) are also picked up.
+ * The block's body images in document order — inline `![alt](url)` nodes
+ * and raw HTML `<img>` tags alike, since the WYSIWYG editor writes a
+ * resized image as `<img src width>`.
  *
  * Returns an empty array when the block has no `contents` or none of
  * the contents contain images.
  */
 function collectImages(block: Block): ImageRef[] {
-  if (!block.contents) return [];
-  const out: ImageRef[] = [];
-  const visit = (node: MarkdownNode): void => {
-    if (node.type === 'image') {
-      const img = node as MarkdownNode & { url?: string; alt?: string };
-      out.push({ url: img.url ?? '', alt: img.alt ?? '' });
-    }
-  };
-  for (const node of block.contents as MarkdownBlockNode[]) {
-    walkMarkdownTree(node, (n) => {
-      visit(n);
-      return;
-    });
-  }
-  return out;
+  return extractImages(block.contents).map((image) => ({ url: image.src, alt: image.alt }));
 }
 
 /**

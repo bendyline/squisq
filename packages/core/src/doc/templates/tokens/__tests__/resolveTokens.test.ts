@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { resolveTokens, collectListItems } from '../resolveTokens';
+import { parseMarkdown } from '../../../../markdown/index.js';
 import type { Block, TextLayer, ImageLayer } from '../../../../schemas/Doc.js';
 import type { CustomTemplateLayer } from '../../../../schemas/CustomTemplates.js';
 
@@ -151,6 +152,21 @@ describe('resolveTokens — ImageLayer', () => {
     );
     expect(layers).toHaveLength(1);
     expect((layers[0] as ImageLayer).content.src).toBe('/hero.png');
+  });
+
+  it('fills {image:N} from a resized image the editor wrote as raw HTML <img>', () => {
+    const contents = parseMarkdown(
+      'Intro.\n\n<img alt="Resized" src="/resized.png" width="246" height="280">\n\n![Second](/second.png)',
+    ).children;
+    const layers = resolveTokens(
+      [imageLayer('a', '{image:0}', '{image:0}'), imageLayer('b', '{image:1}')],
+      block({ contents }),
+    );
+    expect((layers[0] as ImageLayer).content).toMatchObject({
+      src: '/resized.png',
+      alt: 'Resized',
+    });
+    expect((layers[1] as ImageLayer).content.src).toBe('/second.png');
   });
 
   it('drops the layer entirely when the requested image index is out of range', () => {
