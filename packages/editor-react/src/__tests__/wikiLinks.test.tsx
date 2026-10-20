@@ -104,7 +104,7 @@ describe('wiki editor', () => {
   });
   it('round-trips an atomic node without escaping names or changing code', () => {
     const source =
-      'See [[my_notes]] and [[reference/A & B|Café & **literal** \"label\"]]. `[[code]]`';
+      'See [[my_notes]] and [[reference/A & B|Café & **literal** "label"]]. `[[code]]`';
     const editor = new Editor({
       extensions: [StarterKit, WikiLink.extend({ addNodeView: undefined })],
       content: markdownToTiptap(source),

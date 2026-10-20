@@ -1,5 +1,7 @@
 /** Demand-driven Monaco language registration for Squisq editor surfaces. */
 
+// This module is part of the lazy /monaco entry, which already exports the API.
+import * as monaco from 'monaco-editor/esm/vs/editor/editor.api.js';
 import { registerJsonLanguage, registerJsoncLanguage } from './monacoJsonc.js';
 import {
   normalizedMonacoLanguageRequests,
@@ -55,7 +57,6 @@ const SERVICE_LOADERS: Readonly<Record<string, LanguageLoader>> = {
 const languagePromises = new Map<string, Promise<void>>();
 
 async function registerLightweightJson(language: 'json' | 'jsonc'): Promise<void> {
-  const monaco = await import('monaco-editor/esm/vs/editor/editor.api.js');
   if (language === 'json') registerJsonLanguage(monaco);
   else registerJsoncLanguage(monaco);
 }

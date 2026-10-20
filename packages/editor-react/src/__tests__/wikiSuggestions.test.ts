@@ -69,17 +69,19 @@ describe('wiki completion lifecycle', () => {
     });
     try {
       editor.commands.focus('end');
-      await waitFor(() => expect(pending.at(-1)?.query).toBe('a'));
+      await waitFor(() => expect(pending[pending.length - 1]?.query).toBe('a'));
       editor.commands.insertContent('b');
-      await waitFor(() => expect(pending.at(-1)?.query).toBe('ab'));
-      pending.at(-1)!.resolve([]);
+      await waitFor(() => expect(pending[pending.length - 1]?.query).toBe('ab'));
+      pending[pending.length - 1]!.resolve([]);
       pending[0].resolve([{ target: 'a', label: 'Old article', kind: 'article' }]);
       await Promise.resolve();
       expect(document.querySelector('.squisq-wiki-suggestions')).toBeNull();
       editor.commands.insertContent('c');
-      await waitFor(() => expect(pending.at(-1)?.query).toBe('abc'));
+      await waitFor(() => expect(pending[pending.length - 1]?.query).toBe('abc'));
       editor.destroy();
-      pending.at(-1)!.resolve([{ target: 'abc', label: 'Destroyed article', kind: 'article' }]);
+      pending[pending.length - 1]!.resolve([
+        { target: 'abc', label: 'Destroyed article', kind: 'article' },
+      ]);
       await Promise.resolve();
       expect(document.querySelector('.squisq-wiki-suggestions')).toBeNull();
       expect(support.open).not.toHaveBeenCalled();

@@ -8,8 +8,12 @@
  * methods are present.
  */
 
-import type { ContentContainer } from '@bendyline/squisq/storage';
-import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import { MemoryContentContainer, type ContentContainer } from '@bendyline/squisq/storage';
+import {
+  parseMarkdown,
+  stringifyMarkdown,
+  type MarkdownDocument,
+} from '@bendyline/squisq/markdown';
 import type { Block, Doc } from '@bendyline/squisq/schemas';
 import { isDataFilePath } from '@bendyline/squisq/doc';
 import { ConversionError } from './errors.js';
@@ -162,7 +166,6 @@ async function snapshotContainerWithDocument(
   input: NormalizedInput,
   signal?: AbortSignal,
 ): Promise<ContentContainer> {
-  const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
   const snapshot = new MemoryContentContainer();
   const entries = await input.container.listFiles();
   for (let index = 0; index < entries.length; index++) {
@@ -171,7 +174,6 @@ async function snapshotContainerWithDocument(
     const data = await input.container.readFile(entry.path);
     if (data) await snapshot.writeFile(entry.path, new Uint8Array(data), entry.mimeType);
   }
-  const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
   const documentPath = (await input.container.getDocumentPath()) ?? 'index.md';
   await snapshot.writeDocument(stringifyMarkdown(await markdownOf(input)), documentPath);
   return snapshot;
@@ -218,7 +220,6 @@ export function defaultFormats(): FormatDefinition[] {
     mimeType: MIME.md,
     extensions: ['.md', '.markdown'],
     async importDoc(data, options): Promise<MarkdownDocument> {
-      const { parseMarkdown } = await import('@bendyline/squisq/markdown');
       const raw = optionsFor(options, 'md').parse ?? {};
       return parseMarkdown(new TextDecoder().decode(data), {
         ...raw,
@@ -227,7 +228,6 @@ export function defaultFormats(): FormatDefinition[] {
       });
     },
     async exportDoc(input, options): Promise<ConversionResult> {
-      const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
       const raw = optionsFor(options, 'md').stringify ?? {};
       const text = stringifyMarkdown(await markdownOf(input), {
         ...raw,

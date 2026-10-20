@@ -7,8 +7,13 @@
  * an optional transform, then hands off to the target format's exporter.
  */
 
-import type { MarkdownDocument } from '@bendyline/squisq/markdown';
-import type { ContentContainer } from '@bendyline/squisq/storage';
+import {
+  assertMarkdownDocumentWithinLimits,
+  parseMarkdown,
+  stringifyMarkdown,
+  type MarkdownDocument,
+} from '@bendyline/squisq/markdown';
+import { MemoryContentContainer, type ContentContainer } from '@bendyline/squisq/storage';
 import type { TransformStyleInput, TransformStyleRegistry } from '@bendyline/squisq/transform';
 import { ConversionError } from './errors.js';
 import { defaultRegistry } from './registry.js';
@@ -225,7 +230,6 @@ async function normalizeBytes(
   }
 
   const { markdownToDoc } = await import('@bendyline/squisq/doc');
-  const { parseMarkdown, stringifyMarkdown } = await import('@bendyline/squisq/markdown');
 
   const warnings: string[] = [];
   let markdownDoc: MarkdownDocument;
@@ -240,13 +244,11 @@ async function normalizeBytes(
   } else {
     // importDoc is guaranteed present by the guard above.
     markdownDoc = await fromDef.importDoc!(buffer, options);
-    const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
     const mem = new MemoryContentContainer();
     await mem.writeDocument(stringifyMarkdown(markdownDoc, stringifyOptions(options)));
     container = mem;
   }
 
-  const { assertMarkdownDocumentWithinLimits } = await import('@bendyline/squisq/markdown');
   assertMarkdownDocumentWithinLimits(
     markdownDoc,
     markdownLimitsFromConversion(options.limits),
@@ -268,15 +270,11 @@ async function normalizeMarkdown(
   options: ConvertOptions,
 ): Promise<Normalized> {
   const { markdownToDoc } = await import('@bendyline/squisq/doc');
-  const { parseMarkdown } = await import('@bendyline/squisq/markdown');
-
-  const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
 
   const markdownDoc =
     typeof source.markdown === 'string'
       ? parseMarkdown(source.markdown, parseOptions(options))
       : source.markdown;
-  const { assertMarkdownDocumentWithinLimits } = await import('@bendyline/squisq/markdown');
   assertMarkdownDocumentWithinLimits(
     markdownDoc,
     markdownLimitsFromConversion(options.limits),
@@ -287,7 +285,6 @@ async function normalizeMarkdown(
   if (!container) {
     // Seed a fresh container with the document so container-backed exports
     // (dbk) and media resolution have the markdown to serialize.
-    const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
     const mem = new MemoryContentContainer();
     await mem.writeDocument(stringifyMarkdown(markdownDoc, stringifyOptions(options)));
     container = mem;
@@ -307,9 +304,7 @@ async function normalizeDoc(
   assertDocWithinConversionLimits(source.doc, options.limits, options.signal);
   let container = source.container;
   if (!container) {
-    const { MemoryContentContainer } = await import('@bendyline/squisq/storage');
     const { docToMarkdown } = await import('@bendyline/squisq/doc');
-    const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
     const mem = new MemoryContentContainer();
     await mem.writeDocument(
       stringifyMarkdown(docToMarkdown(source.doc), stringifyOptions(options)),

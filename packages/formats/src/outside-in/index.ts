@@ -18,6 +18,7 @@
 
 import {
   parseFrontmatter,
+  parseMarkdown,
   setFrontmatterValues,
   splitFrontmatterBlock,
   stringifyMarkdown,
@@ -171,7 +172,6 @@ async function importMarkdownDocument(
     const container = await definition.importContainer(data, options);
     const imported = await container.readDocument();
     if (imported !== null) {
-      const { parseMarkdown } = await import('@bendyline/squisq/markdown');
       return { markdownDoc: parseMarkdown(imported), container };
     }
     if (definition.importDoc) {

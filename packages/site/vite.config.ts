@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { Connect, Plugin } from 'vite';
 import { SQUISQ_DEV_PORT, SQUISQ_E2E_PORT } from '../../scripts/portUtils.ts';
+import { rnnoiseWasmPlugin } from './build/rnnoiseWasmPlugin.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -200,7 +201,13 @@ function harperCorePlugin(): Plugin {
 
 export default defineConfig({
   base: process.env.VITE_BASE || '/',
-  plugins: [react(), sampleContentPlugin(), ffmpegCorePlugin(), harperCorePlugin()],
+  plugins: [
+    react(),
+    sampleContentPlugin(),
+    ffmpegCorePlugin(),
+    harperCorePlugin(),
+    rnnoiseWasmPlugin(),
+  ],
   resolve: {
     // The editor package's CSS is bundled into dist/ only by its one-shot
     // build. Its tsup dev watchers rebuild JS and declarations, so resolving
@@ -261,6 +268,7 @@ export default defineConfig({
   // chunks the worker needs.
   worker: {
     format: 'es',
+    plugins: () => [rnnoiseWasmPlugin()],
   },
   build: {
     // The site targets modern ESM browsers. Vite's module-preload polyfill
