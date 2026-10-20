@@ -1,3 +1,9 @@
+## @bendyline/squisq-formats [2.7.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.7.4...@bendyline/squisq-formats@2.7.5) (2026-10-20)
+
+### Bug Fixes
+
+* Skip noise-filter layers in PPTX export ([#96](https://github.com/bendyline/squisq/issues/96)) ([d72d83c](https://github.com/bendyline/squisq/commit/d72d83c0e2f1719d8ce75f2e4bd10570fce28bba))
+
 ## @bendyline/squisq-formats [2.7.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.7.3...@bendyline/squisq-formats@2.7.4) (2026-10-19)
 
 ### Bug Fixes
