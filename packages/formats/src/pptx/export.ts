@@ -801,6 +801,10 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
     case 'text':
       return [buildLayerTextShape(layer, ctx.allocShapeId(), textBottom)];
     case 'shape':
+      // SVG noise replaces the shape's paint with translucent film grain.
+      // DrawingML cannot reproduce that filter: exporting its unfiltered
+      // base fill would cover the slide with an opaque rectangle.
+      if (layer.content.filter?.type === 'noise') return [];
       return [buildLayerShape(layer, ctx.allocShapeId())];
     case 'image': {
       // An attached SVG is never embedded as written: core's sanitized SVG
