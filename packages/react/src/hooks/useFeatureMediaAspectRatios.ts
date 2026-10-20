@@ -135,8 +135,10 @@ export function useFeatureMediaAspectRatios(
         if (!absolute && provider) {
           try {
             url = await provider.resolveUrl(source);
+            if (!url || url === source) return;
           } catch {
-            /* use fallback */
+            // A failed workspace lookup is not a public URL to probe.
+            return;
           }
         }
         if (!current || !isResourceUrlAllowed(url, policy)) return;

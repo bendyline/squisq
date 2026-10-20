@@ -8,6 +8,7 @@
  */
 
 import { MemoryContentContainer, type ContentContainer } from '@bendyline/squisq/storage';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 
 export interface GeneratedSample {
   label: string;
@@ -121,10 +122,7 @@ async function buildCsvLarge(): Promise<{ markdown: string; container: ContentCo
 
 /** A real XLSX with live formulas — the calc-engine demo. */
 async function buildXlsxFormulas(): Promise<{ markdown: string; container: ContentContainer }> {
-  const [{ markdownDocToXlsx, patchXlsxCellValues }, { parseMarkdown }] = await Promise.all([
-    import('@bendyline/squisq-formats/xlsx'),
-    import('@bendyline/squisq/markdown'),
-  ]);
+  const { markdownDocToXlsx, patchXlsxCellValues } = await import('@bendyline/squisq-formats/xlsx');
 
   // Values first (anchored → numerics export as real numbers)…
   const seed = [

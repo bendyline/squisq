@@ -22,7 +22,8 @@
  * costs nothing until a file is actually picked.
  */
 
-import type { ContentContainer } from '@bendyline/squisq/storage';
+import { MemoryContentContainer, type ContentContainer } from '@bendyline/squisq/storage';
+import { stringifyMarkdown } from '@bendyline/squisq/markdown';
 import { ensurePdfWorker } from './pdfWorker';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -129,11 +130,8 @@ export async function importDocumentFile(
   if (ext === 'parquet') {
     const buffer = await readFileBytes(file);
     report('converting', 'Parquet');
-    const [{ planDataSidecar, sidecarReferenceMarkdown }, { MemoryContentContainer }] =
-      await Promise.all([
-        import('@bendyline/squisq-formats/data'),
-        import('@bendyline/squisq/storage'),
-      ]);
+    const { planDataSidecar, sidecarReferenceMarkdown } =
+      await import('@bendyline/squisq-formats/data');
     const plan = planDataSidecar(file.name, 'data.parquet');
     const container = new MemoryContentContainer();
     const markdown = sidecarReferenceMarkdown(plan);
@@ -182,7 +180,6 @@ export async function importDocumentFile(
   // importDoc is guaranteed present by the capability guard above.
   const markdownDoc = await definition.importDoc!(buffer, importOptions);
   report('finishing', formatLabel);
-  const { stringifyMarkdown } = await import('@bendyline/squisq/markdown');
   return { markdown: stringifyMarkdown(markdownDoc), container: null, formatLabel };
 }
 

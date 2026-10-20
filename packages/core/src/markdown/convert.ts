@@ -25,6 +25,7 @@ import type {
   MarkdownInlineIcon,
   HtmlNode,
 } from './types.js';
+import { parseWikiLink } from './wikiLinks.js';
 import { parseHtmlToNodes } from './htmlParse.js';
 import { resolveIcon } from '../icons/resolve.js';
 import { isReservedAnnotationToken } from '../doc/templates/templateNames.js';
@@ -1190,6 +1191,19 @@ function convertInlineNode(node: MdastNode, parseHtml: boolean): MarkdownInlineN
         ...posField(pos),
       };
 
+    case 'wikiLink': {
+      const wiki = parseWikiLink(node.value ?? '');
+      if (!wiki) return { type: 'text', value: node.value ?? '', ...posField(pos) };
+      return {
+        type: 'link',
+        wikiTarget: wiki.target,
+        ...(wiki.label !== undefined ? { wikiLabel: wiki.label } : {}),
+        url: '',
+        children: [{ type: 'text', value: wiki.label ?? wiki.target }],
+        ...posField(pos),
+      };
+    }
+
     case 'link':
       return {
         type: 'link',
@@ -1549,6 +1563,12 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
       };
 
     case 'link':
+      if (node.wikiTarget !== undefined)
+        return {
+          type: 'wikiLink',
+          value: node.wikiTarget + (node.wikiLabel !== undefined ? `|${node.wikiLabel}` : ''),
+          ...mdastPosField(node.position),
+        };
       return {
         type: 'link',
         url: node.url,

@@ -18,7 +18,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { isSvgImageSource, parseMarkdown } from '@bendyline/squisq/markdown';
+import {
+  isSvgImageSource,
+  parseMarkdown,
+  resolveWikiLinks,
+  type WikiLinkSupport,
+} from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { sanitizedSvgImageUrl, type CodeBlockCopyHandler } from '@bendyline/squisq-react';
@@ -44,6 +49,8 @@ function loadRenderFn(): Promise<RenderFn> {
 export interface PlainHtmlPreviewProps {
   /** Raw markdown source. */
   markdown: string;
+  /** Optional article resolver for a connected document workspace. */
+  wikiLinks?: WikiLinkSupport | null;
   /** Document title — populates the iframe's `<title>`. */
   title?: string;
   /**
@@ -94,6 +101,7 @@ const IFRAME_STYLE: CSSProperties = {
 
 export function PlainHtmlPreview({
   markdown,
+  wikiLinks,
   title,
   images,
   mediaProvider,
@@ -117,7 +125,34 @@ export function PlainHtmlPreview({
     },
     [onFrameChange],
   );
-  const mdDoc = useMemo<MarkdownDocument>(() => parseMarkdown(markdown), [markdown]);
+  const parsedDoc = useMemo<MarkdownDocument>(() => parseMarkdown(markdown), [markdown]);
+  const [wikiProjection, setWikiProjection] = useState<{
+    source: MarkdownDocument;
+    support: WikiLinkSupport;
+    doc: MarkdownDocument;
+  } | null>(null);
+  const mdDoc =
+    wikiProjection?.source === parsedDoc && wikiProjection.support === wikiLinks
+      ? wikiProjection.doc
+      : parsedDoc;
+  useEffect(() => {
+    if (!wikiLinks) return;
+    let cancelled = false;
+    void resolveWikiLinks(parsedDoc, (target) =>
+      wikiLinks.resolve ? wikiLinks.resolve(target) : wikiLinks.exists(target),
+    ).then(
+      (doc) => {
+        if (!cancelled && doc !== parsedDoc)
+          setWikiProjection({ source: parsedDoc, support: wikiLinks, doc });
+      },
+      () => {
+        /* Unresolved articles retain their plain-text fallback. */
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [parsedDoc, wikiLinks]);
 
   // Resolve any relative image URLs the doc references. Blob URLs are
   // cheap once cached, so re-resolving on every keystroke is fine —

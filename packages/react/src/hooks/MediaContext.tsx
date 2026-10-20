@@ -55,8 +55,9 @@ export interface UseMediaUrlOptions {
 }
 
 /**
- * Hook to resolve a media URL via the MediaProvider (if available),
- * falling back to basePath-based resolution.
+ * Hook to resolve a media URL via the MediaProvider (if available).
+ * Only provider-less paths use basePath-based resolution; a failed workspace
+ * lookup stays unresolved instead of requesting the same path from the page origin.
  *
  * Returns the resolved URL string. Updates when the provider or path changes.
  *
@@ -125,22 +126,22 @@ export function useMediaUrl(
             path: safePath,
             provider,
             policy: resourcePolicy,
-            url: allowed(resolved) ? resolved : '',
+            // Providers return the original path when the asset is absent.
+            url: resolved !== safePath && allowed(resolved) ? resolved : '',
           });
         }
       },
       () => {
-        // Resolution failures should be non-fatal and must not become
-        // unhandled promise rejections in rendering surfaces.
-        if (!cancelled)
-          setResolved({ path: safePath, provider, policy: resourcePolicy, url: fallback });
+        // The provider owns relative workspace paths. A missing or unreadable
+        // asset must not become an unrelated request against the page origin.
+        if (!cancelled) setResolved({ path: safePath, provider, policy: resourcePolicy, url: '' });
       },
     );
 
     return () => {
       cancelled = true;
     };
-  }, [needsProvider, provider, safePath, fallback, resourcePolicy, allowed]);
+  }, [needsProvider, provider, safePath, resourcePolicy, allowed]);
 
   // When provider is not needed, return fallback directly to avoid
   // the one-frame delay from the initial useState → useEffect cycle

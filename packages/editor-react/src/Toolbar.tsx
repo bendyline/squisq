@@ -18,7 +18,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { IRange } from 'monaco-editor';
+import type { IRange, editor as MonacoEditor } from 'monaco-editor';
+import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { Block } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { DEFAULT_THEME, flattenBlocks } from '@bendyline/squisq/doc';
@@ -53,6 +54,15 @@ import {
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceAtLineInDoc, findBlockSliceByHeadingIndexInDoc } from './blockSlice';
 import { LinkDialog } from './LinkDialog';
+import {
+  selectedWikiLink,
+  sourceWikiLink,
+  wikiLinkAtElement,
+  wikiEditSource,
+  type WikiLinkEdit,
+} from './wikiLinkEditing';
+import { WikiLinkMenuItems } from './WikiLinkMenuItems';
+import { useEditorContextMenuAvailable } from './EditorContextMenu';
 import { DocumentSettingsDialog } from './DocumentSettingsDialog';
 import { EmojiPicker, EMOJI_PICKER_WIDTH, EMOJI_PICKER_MAX_HEIGHT } from './EmojiPicker';
 import { CustomLayoutManager } from './customTemplates/CustomLayoutManager';
@@ -151,7 +161,7 @@ import {
   TASK_LIST_MARKDOWN,
   buttonIcon,
 } from './toolbar/toolbarButtons';
-import { chooseCollapsedItems, type CollapseGroup } from './toolbar/toolbarCollapse';
+import { useToolbarCollapse } from './toolbar/useToolbarCollapse';
 
 import {
   blockConversionRange,
@@ -312,10 +322,16 @@ export function Toolbar({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const contextMenuAvailable = useEditorContextMenuAvailable();
+
   // Link dialog — shared by WYSIWYG and Raw views.
   const [linkDialog, setLinkDialog] = useState<{
     mode: 'insert' | 'update';
     target: 'wysiwyg' | 'raw';
+    wiki?: WikiLinkEdit;
+    wikiEditor?: TiptapEditor;
+    wikiSource?: string;
+    wikiModel?: MonacoEditor.ITextModel;
     initialText: string;
     initialUrl: string;
     /** For target='raw': the range to replace when editing an existing
@@ -472,23 +488,7 @@ export function Toolbar({
     setChartTypeMenuAnchor(null);
   }, []);
 
-  // ── Overflow detection ────────────────────────────────
-  const actionsRef = useRef<HTMLDivElement>(null);
-  // '|'-joined ids (see toolbar/toolbarCollapse.ts) of the buttons and
-  // document chrome currently collapsed into the ··· menu. Stored as a string
-  // so identical measurements bail out of re-rendering.
-  const [collapsedKey, setCollapsedKey] = useState('');
-  // '|'-joined data-contextual ids of the contextual groups (template /
-  // transition pickers, table controls) that don't fit in the actions row.
-  const [clippedContextualKey, setClippedContextualKey] = useState('');
-  // Collapsed items are `display: none`, so their widths are remembered from
-  // the last time they were laid out — every item starts out displayed.
-  const itemWidthsRef = useRef(new Map<string, number>());
-  // Whether each chrome item shares the actions lane's row. Only a rowmate
-  // gives the lane width back when it collapses; on a wrapped toolbar the
-  // others are left alone.
-  const chromeOnLaneRowRef = useRef(new Map<string, boolean>());
-  const collapsedCountRef = useRef(0);
+  // ── Overflow menu ─────────────────────────────────────
   const [showOverflow, setShowOverflow] = useState(false);
   const overflowRef = useRef<HTMLDivElement>(null);
   const overflowMenuRef = useRef<HTMLDivElement>(null);
@@ -556,145 +556,10 @@ export function Toolbar({
     activeView !== 'preview' &&
     !isCodeMode &&
     (showFormattingControls || showInsertControls);
-  const collapsed = new Set(actionsLaneShown && collapsedKey ? collapsedKey.split('|') : []);
-  const clippedContextual = new Set(
-    actionsLaneShown && clippedContextualKey ? clippedContextualKey.split('|') : [],
+  const { actionsRef, collapsed, clippedContextual } = useToolbarCollapse(
+    activeView,
+    actionsLaneShown,
   );
-
-  useEffect(() => {
-    const container = actionsRef.current;
-    if (!container) return;
-    const toolbar = container.parentElement;
-    const widths = itemWidthsRef.current;
-    const onLaneRow = chromeOnLaneRowRef.current;
-
-    const gapOf = (element: Element | null | undefined): number =>
-      element ? Number.parseFloat(getComputedStyle(element).columnGap) || 0 : 0;
-    const isDisplayed = (element: HTMLElement): boolean =>
-      !element.classList.contains('squisq-toolbar-button--overflowed') &&
-      !element.closest('.squisq-toolbar-group--collapsed');
-    const remember = (id: string, element: HTMLElement): DOMRect => {
-      const rect = element.getBoundingClientRect();
-      if (rect.width > 0) widths.set(id, rect.width);
-      return rect;
-    };
-
-    const measure = () => {
-      const laneRect = container.getBoundingClientRect();
-
-      // The lane's groups, in layout order. Collapsed buttons stay in the DOM
-      // (display: none), so the structure is always complete.
-      const groups: CollapseGroup[] = [];
-      container.querySelectorAll<HTMLElement>(':scope > .squisq-toolbar-group').forEach((group) => {
-        const contextual = group.dataset.contextual;
-        if (contextual) {
-          // Clipped contextual groups are only visibility: hidden, so they
-          // still measure.
-          remember(`contextual:${contextual}`, group);
-          groups.push({ items: [`contextual:${contextual}`], separated: false });
-          return;
-        }
-        const items: string[] = [];
-        group.querySelectorAll<HTMLElement>(':scope > [data-toolbar-item]').forEach((item) => {
-          const id = item.dataset.toolbarItem!;
-          items.push(id);
-          if (isDisplayed(item)) remember(id, item);
-        });
-        if (items.length > 0) groups.push({ items, separated: true });
-      });
-
-      const separator = container.querySelector<HTMLElement>(
-        ':scope > .squisq-toolbar-group:not(.squisq-toolbar-contextual):not(.squisq-toolbar-group--collapsed) > .squisq-toolbar-separator',
-      );
-      if (separator) {
-        const style = getComputedStyle(separator);
-        const width =
-          separator.getBoundingClientRect().width +
-          (Number.parseFloat(style.marginLeft) || 0) +
-          (Number.parseFloat(style.marginRight) || 0);
-        if (width > 0) widths.set('separator', width);
-      }
-
-      // Everything the lane, the collapsible chrome and the ··· trigger share.
-      const rowGap = gapOf(toolbar);
-      let budget = laneRect.width;
-      const chrome: string[] = [];
-      toolbar?.querySelectorAll<HTMLElement>(':scope > [data-toolbar-item]').forEach((item) => {
-        const id = item.dataset.toolbarItem!;
-        if (isDisplayed(item)) {
-          const rect = remember(id, item);
-          if (rect.width > 0 && rect.height > 0) {
-            onLaneRow.set(id, rect.top < laneRect.bottom && rect.bottom > laneRect.top);
-          }
-          if (onLaneRow.get(id)) budget += (widths.get(id) ?? 0) + rowGap;
-        }
-        if (onLaneRow.get(id)) chrome.push(id);
-      });
-      const trigger = toolbar?.querySelector<HTMLElement>(':scope > .squisq-toolbar-overflow');
-      const triggerWidth = trigger?.getBoundingClientRect().width ?? 0;
-      if (triggerWidth > 0) {
-        widths.set('trigger', triggerWidth);
-        budget += triggerWidth + rowGap;
-      }
-
-      const known = [...widths.values()];
-      const fallbackWidth = known.length > 0 ? Math.min(...known) : 32;
-      const layout = {
-        groups,
-        chrome,
-        widthOf: (id: string) => widths.get(id) ?? fallbackWidth,
-        separatorWidth: widths.get('separator') ?? 0,
-        groupGap: gapOf(container.querySelector(':scope > .squisq-toolbar-group')),
-        laneGap: gapOf(container),
-        rowGap,
-        triggerWidth: widths.get('trigger') ?? fallbackWidth,
-        budget,
-      };
-      let next = chooseCollapsedItems(layout);
-      // Restore items only with a little slack to spare, so a row sitting
-      // right at a threshold can't flip back and forth between measurements.
-      if (next.size < collapsedCountRef.current) {
-        next = chooseCollapsedItems({ ...layout, budget: budget - 4 });
-      }
-      collapsedCountRef.current = next.size;
-      const ordered = [...groups.flatMap((group) => group.items), ...chrome].filter((id) =>
-        next.has(id),
-      );
-      setCollapsedKey(ordered.filter((id) => !id.startsWith('contextual:')).join('|'));
-      setClippedContextualKey(
-        ordered
-          .filter((id) => id.startsWith('contextual:'))
-          .map((id) => id.slice('contextual:'.length))
-          .join('|'),
-      );
-    };
-
-    // Observe the row and every group in it: contextual groups mount/unmount
-    // with the cursor context and change width with their value, all without
-    // resizing the flex:1 container itself — a container-only observer would
-    // go stale.
-    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
-    const observeAll = () => {
-      ro?.disconnect();
-      ro?.observe(container);
-      container
-        .querySelectorAll<HTMLElement>(':scope > .squisq-toolbar-group')
-        .forEach((group) => ro?.observe(group));
-    };
-    const mo = new MutationObserver(() => {
-      observeAll();
-      measure();
-    });
-    mo.observe(container, { childList: true });
-    if (!ro) window.addEventListener('resize', measure);
-    observeAll();
-    measure();
-    return () => {
-      ro?.disconnect();
-      if (!ro) window.removeEventListener('resize', measure);
-      mo.disconnect();
-    };
-  }, [activeView, actionsLaneShown]);
 
   // Close overflow menu on outside click. Clicks inside the template
   // gallery / transition flyout portals count as inside: those popovers are
@@ -834,6 +699,19 @@ export function Toolbar({
           chain.setHorizontalRule().run();
           break;
         case 'link': {
+          const wiki = selectedWikiLink(tiptapEditor);
+          if (wiki) {
+            setLinkDialog({
+              mode: 'update',
+              target: 'wysiwyg',
+              wiki,
+              wikiEditor: tiptapEditor,
+              initialText: wiki.label ?? '',
+              initialUrl: wiki.target,
+              rawRange: null,
+            });
+            break;
+          }
           const isActive = tiptapEditor.isActive('link');
           let initialText = '';
           let initialUrl = '';
@@ -1006,6 +884,29 @@ export function Toolbar({
             break;
           }
           case 'link': {
+            const source = model.getValue();
+            const startOffset = model.getOffsetAt(selection.getStartPosition());
+            const wiki = sourceWikiLink(source, startOffset + (selection.isEmpty() ? 0 : 1));
+            if (wiki) {
+              const start = model.getPositionAt(wiki.from);
+              const end = model.getPositionAt(wiki.to);
+              setLinkDialog({
+                mode: 'update',
+                target: 'raw',
+                wiki,
+                wikiSource: source,
+                wikiModel: model,
+                initialText: wiki.label ?? '',
+                initialUrl: wiki.target,
+                rawRange: {
+                  startLineNumber: start.lineNumber,
+                  startColumn: start.column,
+                  endLineNumber: end.lineNumber,
+                  endColumn: end.column,
+                },
+              });
+              return;
+            }
             // Open the LinkDialog instead of inserting literal text. If the
             // cursor sits inside an existing `[text](url)` on this line,
             // prefill from it and replace the whole match on confirm.
@@ -1493,11 +1394,15 @@ export function Toolbar({
       if (!inEditor) return;
       e.preventDefault();
       e.stopPropagation();
+      if (formattingEditor) {
+        const wiki = wikiLinkAtElement(formattingEditor, target);
+        if (wiki) formattingEditor.commands.setNodeSelection(wiki.from);
+      }
       handleAction('link');
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [handleAction]);
+  }, [handleAction, formattingEditor]);
 
   // ── Link dialog confirm ──────────────────────────────
   const handleLinkConfirm = useCallback(
@@ -1505,6 +1410,60 @@ export function Toolbar({
       if (!linkDialog) return;
       const trimmedUrl = url.trim();
       const trimmedText = text.trim();
+
+      if (linkDialog.wiki) {
+        const wiki = linkDialog.wiki;
+        const source = trimmedUrl ? wikiEditSource(trimmedUrl, trimmedText, wiki.inTable) : null;
+        if (trimmedUrl && !source) return;
+        if (linkDialog.target === 'wysiwyg') {
+          const editor = linkDialog.wikiEditor;
+          if (editor && !editor.isDestroyed && editor === formattingEditor && editor.isEditable) {
+            const node =
+              wiki.to <= editor.state.doc.content.size ? editor.state.doc.nodeAt(wiki.from) : null;
+            if (
+              node?.type.name === 'wikiLink' &&
+              node.attrs.target === wiki.target &&
+              (node.attrs.label ?? null) === wiki.label
+            ) {
+              editor
+                .chain()
+                .focus()
+                .insertContentAt(
+                  { from: wiki.from, to: wiki.to },
+                  trimmedUrl
+                    ? {
+                        type: 'wikiLink',
+                        attrs: { ...node.attrs, target: trimmedUrl, label: trimmedText || null },
+                        marks: node.marks.map((mark) => mark.toJSON()),
+                      }
+                    : {
+                        type: 'text',
+                        text: trimmedText || wiki.label || wiki.target,
+                        marks: node.marks.map((mark) => mark.toJSON()),
+                      },
+                )
+                .run();
+            }
+          }
+        } else if (
+          monacoEditor &&
+          linkDialog.rawRange &&
+          monacoEditor.getModel() === linkDialog.wikiModel &&
+          linkDialog.wikiModel?.getValue() === linkDialog.wikiSource
+        ) {
+          monacoEditor.pushUndoStop();
+          monacoEditor.executeEdits('toolbar-wiki-edit', [
+            {
+              range: linkDialog.rawRange,
+              text: source ?? (trimmedText || wiki.label || wiki.target),
+            },
+          ]);
+          monacoEditor.pushUndoStop();
+          monacoEditor.focus();
+        }
+        setLinkDialog(null);
+        return;
+      }
 
       // Target the focused canvas textbox editor when one is active, else
       // the document editor (the dialog was opened from the same target).
@@ -2646,10 +2605,12 @@ export function Toolbar({
         <CustomLayoutManager onClose={() => setShowLayoutManager(false)} />
       )}
 
+      {contextMenuAvailable && <WikiLinkMenuItems onEdit={() => handleAction('link')} />}
       {/* Link insert/edit dialog — shared by WYSIWYG and Raw views. */}
       {linkDialog && (
         <LinkDialog
           mode={linkDialog.mode}
+          kind={linkDialog.wiki ? 'wiki' : 'url'}
           initialText={linkDialog.initialText}
           initialUrl={linkDialog.initialUrl}
           onConfirm={handleLinkConfirm}

@@ -72,6 +72,32 @@ describe('intrinsic feature summary layout', () => {
     expect(images[0].hasAttribute('src')).toBe(false);
   });
 
+  it.each(['missing', 'rejected'])(
+    'does not probe the page origin when a workspace image is %s',
+    async (kind) => {
+      const doc = summary('# Feature\n\n![Feature](missing-feature.png)');
+      const resolveUrl = vi.fn(async (path: string) => {
+        if (kind === 'rejected') throw new Error('unreadable');
+        return path;
+      });
+      const provider = { resolveUrl } as unknown as MediaProvider;
+      const { result } = renderHook(
+        () => useFeatureMediaAspectRatios(doc.blocks, '/media', DEFAULT_THEME),
+        {
+          wrapper: ({ children }) => (
+            <MediaContext.Provider value={provider}>{children}</MediaContext.Provider>
+          ),
+        },
+      );
+      await act(async () => {
+        await resolveUrl.mock.results[0].value.catch(() => undefined);
+      });
+      expect(resolveUrl).toHaveBeenCalledWith('missing-feature.png');
+      expect(images).toHaveLength(0);
+      expect(result.current).toEqual({});
+    },
+  );
+
   it('uses a Mermaid SVG viewBox to give a portrait graph the full-height feature slot', async () => {
     const doc = summary('# Flow\n\n```mermaid\ngraph TD\nA --> B\n```');
     const { result } = renderHook(() => useDocPlayback(doc, 0, { theme: DEFAULT_THEME }));

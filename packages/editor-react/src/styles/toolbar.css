@@ -770,11 +770,8 @@
   background: var(--squisq-surface-raised);
 }
 
-.squisq-toolbar-button--active {
-  background: var(--squisq-accent-soft);
-  color: var(--squisq-accent);
-}
-
+/* Active glyphs are text on a tinted surface, not an accent-filled button. */
+.squisq-toolbar-button--active,
 .squisq-toolbar-button--active:hover {
   background: var(--squisq-accent-soft);
   color: var(--squisq-accent-strong);

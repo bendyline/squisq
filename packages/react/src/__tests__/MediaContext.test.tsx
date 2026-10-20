@@ -46,6 +46,49 @@ describe('useMediaUrl', () => {
       second.reject(new Error('missing'));
       await second.promise.catch(() => undefined);
     });
-    expect(screen.getByTestId('url').textContent).toBe('./second.png');
+    expect(screen.getByTestId('url').textContent).toBe('');
+  });
+
+  it.each(['missing', 'rejected'])(
+    'keeps a %s workspace lookup unresolved instead of using the page origin',
+    async (kind) => {
+      const lookup = deferred<string>();
+      const provider = { resolveUrl: vi.fn(() => lookup.promise) } as unknown as MediaProvider;
+      render(
+        <MediaContext.Provider value={provider}>
+          <Probe path="missing.png" />
+        </MediaContext.Provider>,
+      );
+      expect(screen.getByTestId('url').textContent).toBe('');
+
+      await act(async () => {
+        if (kind === 'rejected') lookup.reject(new Error('unreadable'));
+        else lookup.resolve('missing.png');
+        await lookup.promise.catch(() => undefined);
+      });
+      expect(screen.getByTestId('url').textContent).toBe('');
+    },
+  );
+
+  it('uses the base path when there is no workspace provider', () => {
+    render(<Probe path="public.png" />);
+    expect(screen.getByTestId('url').textContent).toBe('./public.png');
+  });
+
+  it('uses the workspace URL once resolution succeeds', async () => {
+    const lookup = deferred<string>();
+    const provider = { resolveUrl: vi.fn(() => lookup.promise) } as unknown as MediaProvider;
+    render(
+      <MediaContext.Provider value={provider}>
+        <Probe path="photo.png" />
+      </MediaContext.Provider>,
+    );
+    expect(screen.getByTestId('url').textContent).toBe('');
+
+    await act(async () => {
+      lookup.resolve('blob:workspace-photo');
+      await lookup.promise;
+    });
+    expect(screen.getByTestId('url').textContent).toBe('blob:workspace-photo');
   });
 });
