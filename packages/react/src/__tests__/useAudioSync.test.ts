@@ -397,6 +397,50 @@ describe('useAudioSync seeking', () => {
     expect(audio.currentTime).toBeCloseTo(0.5, 5);
   });
 
+  // A scrub drag seeks on every pointer move. The first move past a chapter
+  // boundary switches segments; the moves after it land inside the segment
+  // that is still downloading. They must retarget the pending seek, or the
+  // load applies the first crossing position over the pointer's final one.
+  it('lands where a drag ends when it keeps moving inside a segment still loading', async () => {
+    const audio = createAudioElement();
+    const downloads = holdSegmentFetches();
+    const { result } = renderHook(() => useAudioSync({ current: audio }, threeSegments));
+    await act(() => downloads.release('a.mp3'));
+    await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
+    act(() => audio.dispatchEvent(new Event('canplay')));
+    act(() => {
+      void result.current.seekTo(1.5);
+    });
+    expect(audio.currentTime).toBe(1.5);
+
+    let crossing!: Promise<void>;
+    let retarget!: Promise<void>;
+    act(() => {
+      crossing = result.current.seekTo(4.5);
+    });
+    expect(result.current.currentSegment).toBe(1);
+    act(() => {
+      retarget = result.current.seekTo(2.25);
+    });
+    // The element still holds segment a's source: leave it alone.
+    expect(audio.currentTime).toBe(1.5);
+    expect(result.current.currentTime).toBe(2.25);
+
+    let retargetSettled = false;
+    void retarget.then(() => (retargetSettled = true));
+    await act(() => downloads.release('b.mp3'));
+    await waitFor(() => expect(audio.src).toBe('blob:b.mp3'));
+    expect(retargetSettled).toBe(false);
+    await act(async () => {
+      audio.dispatchEvent(new Event('canplay'));
+      await Promise.all([crossing, retarget]);
+    });
+
+    expect(result.current.currentSegment).toBe(1);
+    expect(audio.currentTime).toBeCloseTo(0.25, 5);
+    expect(result.current.currentTime).toBe(2.25);
+  });
+
   it('clamps an overshooting seek to the end of the last segment', async () => {
     const audio = createAudioElement();
     mockSegmentFetches();

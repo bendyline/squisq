@@ -1,3 +1,7 @@
+/**
+ * Pagination interactions and host-content refresh regressions for PaginatedDocView.
+ * Mock scroll geometry preserves browser navigation semantics in jsdom.
+ */
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, waitFor } from '@testing-library/react';
 import { PaginatedDocView } from '../PaginatedDocView.js';
@@ -90,4 +94,57 @@ describe('PaginatedDocView', () => {
 
     await waitFor(() => expect(container.textContent).toContain('3 / 3'));
   });
+});
+
+describe('PaginatedDocView content refresh', () => {
+  it('keeps the current page when a host refreshes content with the same page keys', async () => {
+    const pages = [
+      { key: 'one', label: 'First', content: 'One' },
+      { key: 'two', label: 'Second', content: 'Two' },
+    ];
+    const { container, getByRole, rerender } = render(
+      <PaginatedDocView pages={pages} focusOnMount={false} />,
+    );
+    const scroller = getByRole('region');
+    configureScroller(container, scroller);
+    fireEvent.click(getByRole('button', { name: 'Next page' }));
+    await waitFor(() => expect(container.textContent).toContain('2 / 2'));
+
+    rerender(
+      <PaginatedDocView
+        pages={pages.map((page) => ({ ...page, content: `${page.content} updated` }))}
+        focusOnMount={false}
+      />,
+    );
+    expect(container.textContent).toContain('Two updated');
+    expect(container.textContent).toContain('2 / 2');
+    expect(scroller.scrollLeft).toBe(100);
+
+    // Async related/gallery pages can be inserted before the selected page.
+    rerender(
+      <PaginatedDocView
+        pages={[{ key: 'late', label: 'Late page', content: 'Loaded later' }, ...pages]}
+        focusOnMount={false}
+      />,
+    );
+    expect(container.textContent).toContain('3 / 3');
+    expect(scroller.scrollLeft).toBe(200);
+  });
+});
+
+it('starts on a late-loading cover before the reader has navigated', () => {
+  const title = { key: 'title', label: 'Title', content: 'Title' };
+  const { container, getByRole, rerender } = render(
+    <PaginatedDocView pages={[title]} focusOnMount={false} />,
+  );
+  const scroller = getByRole('region');
+  configureScroller(container, scroller);
+  rerender(
+    <PaginatedDocView
+      pages={[{ key: 'cover', label: 'Cover', content: 'Cover' }, title]}
+      focusOnMount={false}
+    />,
+  );
+  expect(container.textContent).toContain('1 / 2');
+  expect(scroller.scrollLeft).toBe(0);
 });
