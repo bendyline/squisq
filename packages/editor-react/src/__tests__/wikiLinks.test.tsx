@@ -9,6 +9,7 @@ import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import { WikiLink } from '../WikiLink';
+import { HeadingWithTemplate } from '../TemplateAnnotation';
 import { EditorProvider, useEditorContext } from '../EditorContext';
 import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 
@@ -25,6 +26,28 @@ function PresentationSnapshot() {
   return <output data-testid="wiki-projection">{JSON.stringify({ doc, markdownSource })}</output>;
 }
 describe('wiki editor', () => {
+  it('preserves wiki links inside the heading content wrapper on save and reopen', () => {
+    const source = '# [[reference/blah]]wiki-html and [[reference/other|A & <br> "label"]]';
+    const editor = new Editor({
+      extensions: [
+        StarterKit.configure({ heading: false }),
+        HeadingWithTemplate,
+        WikiLink.extend({ addNodeView: undefined }),
+      ],
+      content: markdownToTiptap(source),
+    });
+    try {
+      expect(editor.getHTML()).toContain('class="squisq-heading-content"');
+      const saved = tiptapToMarkdown(editor.getHTML());
+      expect(saved.trim()).toBe(source);
+      editor.commands.setContent(markdownToTiptap(saved));
+      expect(editor.getHTML()).toContain('data-wiki-link="reference/blah"');
+      expect(editor.getHTML()).toContain('data-wiki-link="reference/other"');
+      expect(tiptapToMarkdown(editor.getHTML())).toBe(saved);
+    } finally {
+      editor.destroy();
+    }
+  });
   it('preserves friendly labels and escaped pipes in table cells', () => {
     const source = '| Link | Text |\n| --- | --- |\n| [[foo\\|Friendly name]] | A\\|B |';
     const editor = new Editor({

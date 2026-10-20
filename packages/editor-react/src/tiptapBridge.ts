@@ -2018,8 +2018,11 @@ class RawHtmlVault {
 function htmlToInline(html: string): string {
   let result = html;
   const vault = new RawHtmlVault();
+  // Wiki atoms serialize their label as escaped text, never child elements.
+  // Match only those leaf spans so a heading's outer content span cannot
+  // consume its first wiki link before the data-wiki-link check runs.
   result = result.replace(
-    /<span\b((?:[^>"']|"[^"]*"|'[^']*')*)>[\s\S]*?<\/span>/gi,
+    /<span\b((?:[^>"']|"[^"]*"|'[^']*')*)>[^<]*<\/span>/gi,
     (full, attrs: string) => {
       const values = new Map(
         [...attrs.matchAll(/([-\w]+)="([^"]*)"/g)].map((match) => [match[1], match[2]]),
