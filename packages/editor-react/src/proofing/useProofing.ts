@@ -36,6 +36,7 @@ import {
 import { setFrontmatterValues } from '@bendyline/squisq/markdown';
 import { PROOF_FRONTMATTER_KEYS } from '@bendyline/squisq/proof';
 import { useEditorContext, type EditorView } from '../EditorContext';
+import { sourceWikiLink } from '../wikiLinkEditing';
 import type { ProofingDocumentRef, ProofingProvider } from './types';
 import {
   clearTiptapProofingDecorations,
@@ -742,7 +743,11 @@ export function useProofing(): ProofingState | null {
       const collection = collectionRef.current;
       if (!collection) return null;
       const index = findingIndexAtPosition(collection, sourceOrderRef.current.length, position);
-      return index === null ? null : (sourceOrderRef.current[index] ?? null);
+      if (index === null) return null;
+      // Wiki links are atomic edit targets: keep their article menu available.
+      const model = editor.getModel();
+      if (model && sourceWikiLink(model.getValue(), model.getOffsetAt(position))) return null;
+      return sourceOrderRef.current[index] ?? null;
     };
     // Capture phase so we win against Monaco's own context-menu listener
     // when (and only when) the click lands on a squiggle.

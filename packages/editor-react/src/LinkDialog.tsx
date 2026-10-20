@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { sanitizeUrl } from '@bendyline/squisq/markdown';
+import { sanitizeUrl, wikiLinkPath, parseWikiLink } from '@bendyline/squisq/markdown';
 import type { DocumentLinkProvider, DocumentLinkCandidate } from './EditorContext';
 import { useModalDialog } from './modal/useModalDialog';
 
@@ -30,6 +30,8 @@ function schemeForMessage(raw: string): string | null {
 export interface LinkDialogProps {
   /** Whether this is a brand-new link (Insert) or an existing one (Update). */
   mode: 'insert' | 'update';
+  /** Wiki articles retain their target and optional friendly name. */
+  kind?: 'url' | 'wiki';
   /** Initial value for the caption field. */
   initialText: string;
   /** Initial value for the URL field. */
@@ -71,6 +73,7 @@ export interface LinkDialogProps {
  */
 export function LinkDialog({
   mode,
+  kind = 'url',
   initialText,
   initialUrl,
   onConfirm,
@@ -91,7 +94,10 @@ export function LinkDialog({
   const dialogRef = useRef<HTMLFormElement>(null);
   const headingId = useId();
   const urlErrorId = useId();
-  const initialFocusRef = initialText ? urlRef : textRef;
+  const textErrorId = useId();
+  const textLabelId = useId();
+  const urlLabelId = useId();
+  const initialFocusRef = kind === 'wiki' ? textRef : initialText ? urlRef : textRef;
   useModalDialog({ rootRef: overlayRef, dialogRef, initialFocusRef, onClose });
 
   // Refresh the document candidate list whenever the user types into
@@ -133,6 +139,10 @@ export function LinkDialog({
   const urlError = useMemo<string | null>(() => {
     const trimmed = url.trim();
     if (!trimmed) return null;
+    if (kind === 'wiki')
+      return wikiLinkPath(trimmed)
+        ? null
+        : 'Use an article name or subfolder/name within this workspace.';
     const allowed = sanitizeUrl(
       trimmed,
       'link',
@@ -143,18 +153,26 @@ export function LinkDialog({
     return scheme
       ? `“${scheme}:” links aren’t supported — they won’t open when the document is viewed or exported. Use https:, mailto:, tel:, an anchor like #section, or a relative path.`
       : 'That URL isn’t supported. Use https:, mailto:, tel:, an anchor like #section, or a relative path.';
-  }, [url, linkSchemes]);
+  }, [url, linkSchemes, kind]);
+  const textError =
+    kind === 'wiki' && text.trim() && !parseWikiLink(`article|${text.trim()}`)
+      ? 'Use a friendly name without brackets, pipes, or line breaks.'
+      : null;
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
+      if (textError) {
+        textRef.current?.focus();
+        return;
+      }
       if (urlError) {
         urlRef.current?.focus();
         return;
       }
       onConfirm(text, url);
     },
-    [text, url, onConfirm, urlError],
+    [text, url, onConfirm, urlError, textError],
   );
 
   const handleBackdropClick = useCallback(
@@ -166,7 +184,7 @@ export function LinkDialog({
 
   const isUpdate = mode === 'update';
   const submitLabel = isUpdate ? 'Update' : 'Insert';
-  const heading = isUpdate ? 'Edit link' : 'Insert link';
+  const heading = kind === 'wiki' ? 'Edit wiki link' : isUpdate ? 'Edit link' : 'Insert link';
 
   const handlePickCandidate = useCallback((candidate: DocumentLinkCandidate) => {
     // Picking a document fills the URL and the caption (when the
@@ -203,7 +221,7 @@ export function LinkDialog({
           </button>
         </div>
         <div className="squisq-link-dialog-body">
-          {documentLinkProvider && (
+          {documentLinkProvider && kind !== 'wiki' && (
             <div className="squisq-link-dialog-tabs" role="tablist">
               <button
                 type="button"
@@ -225,27 +243,43 @@ export function LinkDialog({
               </button>
             </div>
           )}
+          {kind === 'wiki' && (
+            <p>Internal article link. Leave the friendly name empty to show the article name.</p>
+          )}
           <label className="squisq-link-dialog-field">
-            <span className="squisq-link-dialog-label">Text</span>
+            <span id={textLabelId} className="squisq-link-dialog-label">
+              {kind === 'wiki' ? 'Friendly name' : 'Text'}
+            </span>
             <input
               ref={textRef}
+              aria-labelledby={textLabelId}
               type="text"
               className="squisq-link-dialog-input"
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Link caption"
+              placeholder={kind === 'wiki' ? url || 'Use article name' : 'Link caption'}
+              aria-invalid={textError ? true : undefined}
+              aria-describedby={textError ? textErrorId : undefined}
             />
+            {textError && (
+              <span id={textErrorId} className="squisq-link-dialog-error" role="alert">
+                {textError}
+              </span>
+            )}
           </label>
           {tab === 'url' ? (
             <label className="squisq-link-dialog-field">
-              <span className="squisq-link-dialog-label">URL</span>
+              <span id={urlLabelId} className="squisq-link-dialog-label">
+                {kind === 'wiki' ? 'Article target' : 'URL'}
+              </span>
               <input
                 ref={urlRef}
+                aria-labelledby={urlLabelId}
                 type="text"
                 className={`squisq-link-dialog-input${urlError ? ' squisq-link-dialog-input--invalid' : ''}`}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://example.com"
+                placeholder={kind === 'wiki' ? 'reference/article' : 'https://example.com'}
                 spellCheck={false}
                 autoComplete="off"
                 aria-invalid={urlError ? true : undefined}
@@ -322,7 +356,7 @@ export function LinkDialog({
           <button
             type="submit"
             className="squisq-link-dialog-btn squisq-link-dialog-btn--primary"
-            disabled={urlError !== null}
+            disabled={urlError !== null || textError !== null}
           >
             {submitLabel}
           </button>

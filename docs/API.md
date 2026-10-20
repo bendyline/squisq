@@ -4334,3 +4334,10 @@ it; selecting an article inserts a complete wiki link. Arrow keys navigate,
 Enter or Tab accepts, and Escape dismisses. Completion stops after the alias
 separator and is disabled inside code. It never opens or creates articles.
 The editor ignores stale responses and validates target paths before insertion.
+
+Completed wiki links remain editable through Ctrl+K (Cmd+K on macOS) beside
+the link, or the **Edit wiki link** context-menu action. The dialog identifies
+an internal article link and edits **Article target** separately from the optional
+**Friendly name**, preserving `[[target|name]]` in Write and Source. An empty
+friendly name restores `[[target]]`. Targets retain the same workspace-relative
+validation; editing never follows or creates the article.

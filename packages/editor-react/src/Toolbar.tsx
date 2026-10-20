@@ -18,7 +18,8 @@ import {
   useRef,
   useState,
 } from 'react';
-import type { IRange } from 'monaco-editor';
+import type { IRange, editor as MonacoEditor } from 'monaco-editor';
+import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { Block } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { DEFAULT_THEME, flattenBlocks } from '@bendyline/squisq/doc';
@@ -53,6 +54,15 @@ import {
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceAtLineInDoc, findBlockSliceByHeadingIndexInDoc } from './blockSlice';
 import { LinkDialog } from './LinkDialog';
+import {
+  selectedWikiLink,
+  sourceWikiLink,
+  wikiLinkAtElement,
+  wikiEditSource,
+  type WikiLinkEdit,
+} from './wikiLinkEditing';
+import { WikiLinkMenuItems } from './WikiLinkMenuItems';
+import { useEditorContextMenuAvailable } from './EditorContextMenu';
 import { DocumentSettingsDialog } from './DocumentSettingsDialog';
 import { EmojiPicker, EMOJI_PICKER_WIDTH, EMOJI_PICKER_MAX_HEIGHT } from './EmojiPicker';
 import { CustomLayoutManager } from './customTemplates/CustomLayoutManager';
@@ -312,10 +322,16 @@ export function Toolbar({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const contextMenuAvailable = useEditorContextMenuAvailable();
+
   // Link dialog — shared by WYSIWYG and Raw views.
   const [linkDialog, setLinkDialog] = useState<{
     mode: 'insert' | 'update';
     target: 'wysiwyg' | 'raw';
+    wiki?: WikiLinkEdit;
+    wikiEditor?: TiptapEditor;
+    wikiSource?: string;
+    wikiModel?: MonacoEditor.ITextModel;
     initialText: string;
     initialUrl: string;
     /** For target='raw': the range to replace when editing an existing
@@ -834,6 +850,19 @@ export function Toolbar({
           chain.setHorizontalRule().run();
           break;
         case 'link': {
+          const wiki = selectedWikiLink(tiptapEditor);
+          if (wiki) {
+            setLinkDialog({
+              mode: 'update',
+              target: 'wysiwyg',
+              wiki,
+              wikiEditor: tiptapEditor,
+              initialText: wiki.label ?? '',
+              initialUrl: wiki.target,
+              rawRange: null,
+            });
+            break;
+          }
           const isActive = tiptapEditor.isActive('link');
           let initialText = '';
           let initialUrl = '';
@@ -1006,6 +1035,29 @@ export function Toolbar({
             break;
           }
           case 'link': {
+            const source = model.getValue();
+            const startOffset = model.getOffsetAt(selection.getStartPosition());
+            const wiki = sourceWikiLink(source, startOffset + (selection.isEmpty() ? 0 : 1));
+            if (wiki) {
+              const start = model.getPositionAt(wiki.from);
+              const end = model.getPositionAt(wiki.to);
+              setLinkDialog({
+                mode: 'update',
+                target: 'raw',
+                wiki,
+                wikiSource: source,
+                wikiModel: model,
+                initialText: wiki.label ?? '',
+                initialUrl: wiki.target,
+                rawRange: {
+                  startLineNumber: start.lineNumber,
+                  startColumn: start.column,
+                  endLineNumber: end.lineNumber,
+                  endColumn: end.column,
+                },
+              });
+              return;
+            }
             // Open the LinkDialog instead of inserting literal text. If the
             // cursor sits inside an existing `[text](url)` on this line,
             // prefill from it and replace the whole match on confirm.
@@ -1493,11 +1545,15 @@ export function Toolbar({
       if (!inEditor) return;
       e.preventDefault();
       e.stopPropagation();
+      if (formattingEditor) {
+        const wiki = wikiLinkAtElement(formattingEditor, target);
+        if (wiki) formattingEditor.commands.setNodeSelection(wiki.from);
+      }
       handleAction('link');
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [handleAction]);
+  }, [handleAction, formattingEditor]);
 
   // ── Link dialog confirm ──────────────────────────────
   const handleLinkConfirm = useCallback(
@@ -1505,6 +1561,60 @@ export function Toolbar({
       if (!linkDialog) return;
       const trimmedUrl = url.trim();
       const trimmedText = text.trim();
+
+      if (linkDialog.wiki) {
+        const wiki = linkDialog.wiki;
+        const source = trimmedUrl ? wikiEditSource(trimmedUrl, trimmedText, wiki.inTable) : null;
+        if (trimmedUrl && !source) return;
+        if (linkDialog.target === 'wysiwyg') {
+          const editor = linkDialog.wikiEditor;
+          if (editor && !editor.isDestroyed && editor === formattingEditor && editor.isEditable) {
+            const node =
+              wiki.to <= editor.state.doc.content.size ? editor.state.doc.nodeAt(wiki.from) : null;
+            if (
+              node?.type.name === 'wikiLink' &&
+              node.attrs.target === wiki.target &&
+              (node.attrs.label ?? null) === wiki.label
+            ) {
+              editor
+                .chain()
+                .focus()
+                .insertContentAt(
+                  { from: wiki.from, to: wiki.to },
+                  trimmedUrl
+                    ? {
+                        type: 'wikiLink',
+                        attrs: { ...node.attrs, target: trimmedUrl, label: trimmedText || null },
+                        marks: node.marks.map((mark) => mark.toJSON()),
+                      }
+                    : {
+                        type: 'text',
+                        text: trimmedText || wiki.label || wiki.target,
+                        marks: node.marks.map((mark) => mark.toJSON()),
+                      },
+                )
+                .run();
+            }
+          }
+        } else if (
+          monacoEditor &&
+          linkDialog.rawRange &&
+          monacoEditor.getModel() === linkDialog.wikiModel &&
+          linkDialog.wikiModel?.getValue() === linkDialog.wikiSource
+        ) {
+          monacoEditor.pushUndoStop();
+          monacoEditor.executeEdits('toolbar-wiki-edit', [
+            {
+              range: linkDialog.rawRange,
+              text: source ?? (trimmedText || wiki.label || wiki.target),
+            },
+          ]);
+          monacoEditor.pushUndoStop();
+          monacoEditor.focus();
+        }
+        setLinkDialog(null);
+        return;
+      }
 
       // Target the focused canvas textbox editor when one is active, else
       // the document editor (the dialog was opened from the same target).
@@ -2646,10 +2756,12 @@ export function Toolbar({
         <CustomLayoutManager onClose={() => setShowLayoutManager(false)} />
       )}
 
+      {contextMenuAvailable && <WikiLinkMenuItems onEdit={() => handleAction('link')} />}
       {/* Link insert/edit dialog — shared by WYSIWYG and Raw views. */}
       {linkDialog && (
         <LinkDialog
           mode={linkDialog.mode}
+          kind={linkDialog.wiki ? 'wiki' : 'url'}
           initialText={linkDialog.initialText}
           initialUrl={linkDialog.initialUrl}
           onConfirm={handleLinkConfirm}
