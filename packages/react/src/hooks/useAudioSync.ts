@@ -22,7 +22,10 @@
  * Playing the element immediately would either start an element with no
  * source, whose pending play the attaching `load()` aborts, or start the
  * previous segment. An `AbortError` from `play()` therefore means "superseded",
- * never "unavailable". The next segment is downloaded shortly before the
+ * never "unavailable". Seeks are handled the same way: a seek into a segment
+ * that is still loading moves the pending position (a scrub drag keeps
+ * seeking after it crosses a chapter boundary), because the element still
+ * holds the previous segment. The next segment is downloaded shortly before the
  * current one ends, so chapter boundaries do not stall on a fresh download.
  */
 
@@ -120,6 +123,9 @@ export function useAudioSync(
   // Pending seek time (used when switching segments)
   const pendingSeekTime = useRef<number | null>(null);
   const pendingSeekCompletion = useRef<(() => void) | null>(null);
+  // The promise a cross-segment `seekTo` returns, so a seek that retargets it
+  // while the segment is still loading can wait for the same load.
+  const pendingSeekPromise = useRef<Promise<void> | null>(null);
   const shouldPlayAfterLoad = useRef(false);
 
   // Preloaded audio blob URLs (for seeking without range request support)
@@ -588,6 +594,7 @@ export function useAudioSync(
           const timer = setTimeout(settle, SEEK_COMPLETION_TIMEOUT_MS);
           pendingSeekCompletion.current = settle;
         });
+        pendingSeekPromise.current = completion;
         setCurrentSegment(segmentIndex);
         if (mode === 'synthetic') {
           setCurrentTime(clampedTime);
@@ -596,6 +603,14 @@ export function useAudioSync(
           pendingSeekCompletion.current = null;
         }
         await completion;
+      } else if (pendingSeekTime.current !== null && mode === 'media' && enabled) {
+        // The segment is still loading for an earlier cross-segment seek (a
+        // scrub drag that crossed a chapter boundary and kept moving). The
+        // element still holds the previous segment's source, and the load
+        // applies the pending time when it lands, so retarget that instead.
+        pendingSeekTime.current = clampedTime;
+        setCurrentTime(clampedTime);
+        await pendingSeekPromise.current;
       } else {
         // Same segment - seek directly
         const segmentTime = clampedTime - segmentStart;

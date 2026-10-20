@@ -10,6 +10,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -94,6 +95,9 @@ export function PaginatedDocView({
       ),
     }));
   }, [doc, linearViewProps, pages]);
+  // Content updates may create a new pages array without changing the document.
+  // Reconcile structural changes before interaction, preserving the selected key.
+  const pageKeys = JSON.stringify(resolvedPages.map((page) => page.key));
   const lastPage = Math.max(0, resolvedPages.length - 1);
   const [currentPage, setCurrentPage] = useState(() =>
     Math.min(Math.max(0, initialPage), lastPage),
@@ -138,15 +142,30 @@ export function PaginatedDocView({
     [commitPage, einkMode, lastPage],
   );
 
-  useEffect(() => {
+  const previousLayoutRef = useRef<{ keys: string[]; initialPage: number } | null>(null);
+  useLayoutEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
-    const initial = Math.min(Math.max(0, initialPage), lastPage);
+    const keys = JSON.parse(pageKeys) as string[];
+    const previous = previousLayoutRef.current;
+    const selected = pendingPageRef.current ?? currentPage;
+    const preserveSelection =
+      previous &&
+      previous.initialPage === initialPage &&
+      (selected > 0 || pendingPageRef.current !== null);
+    const retained = preserveSelection ? keys.indexOf(previous.keys[selected]) : -1;
+    const requested = preserveSelection ? (retained >= 0 ? retained : selected) : initialPage;
+    const initial = Math.min(Math.max(0, requested), lastPage);
+    previousLayoutRef.current = { keys, initialPage };
     pendingPageRef.current = null;
+    if (pendingPageTimeoutRef.current !== null) {
+      clearTimeout(pendingPageTimeoutRef.current);
+      pendingPageTimeoutRef.current = null;
+    }
     container.scrollLeft = initial * container.clientWidth;
     setCurrentPage(initial);
     if (focusOnMount) container.focus({ preventScroll: true });
-  }, [focusOnMount, initialPage, lastPage, resolvedPages]);
+  }, [focusOnMount, initialPage, lastPage, pageKeys]);
 
   useEffect(
     () => () => {
