@@ -1,3 +1,9 @@
+## @bendyline/squisq-editor-react [2.12.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.9...@bendyline/squisq-editor-react@2.12.10) (2026-10-20)
+
+### Bug Fixes
+
+* Fix wiki links in heading span round-trip ([#98](https://github.com/bendyline/squisq/issues/98)) ([1e58364](https://github.com/bendyline/squisq/commit/1e58364850092f2843fae993d9db96264ae3a006))
+
 ## @bendyline/squisq-editor-react [2.12.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.8...@bendyline/squisq-editor-react@2.12.9) (2026-10-20)
 
 ### Bug Fixes
