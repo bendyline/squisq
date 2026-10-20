@@ -12,6 +12,9 @@ async function load(page: Page, sample = 'hello-world') {
   await waitForAppReady(page);
   await page.locator('select').first().selectOption(sample);
   await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
+  if (sample === 'hello-world') {
+    await expect(page.locator('.tiptap.ProseMirror h1').first()).toContainText('Hello World');
+  }
 }
 
 /**
@@ -77,4 +80,54 @@ test('document mode still uses the inline-preview gutter, not the panel', async 
   await configureView(page, { layout: 'Document', previews: true });
   await expect(page.locator('.squisq-inline-preview-gutter')).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
+});
+
+for (const view of ['Write', 'Source'] as const) {
+  test(`document mode previews untagged blocks in ${view}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    await load(page);
+    if (view === 'Source') await page.getByRole('tab', { name: 'Source', exact: true }).click();
+    await configureView(page, { layout: 'Document', previews: true });
+    const gutter = page.getByTestId('inline-preview-gutter');
+    await expect(gutter).toBeVisible();
+    const cards = gutter.locator('.squisq-inline-preview-card');
+    await expect(cards).toHaveCount(3);
+    for (let index = 0; index < 3; index++) await expect(cards.nth(index)).toBeVisible();
+    await expect(cards.first().locator('.squisq-inline-preview-card-svg')).toContainText(
+      'This is a simple markdown document.',
+    );
+    await configureView(page, { previews: false });
+    await expect(gutter).toHaveCount(0);
+  });
+}
+
+test('document mode previews prose without any headings in Source and Write', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await load(page);
+  await page.getByRole('tab', { name: 'Source', exact: true }).click();
+  const source = page.locator('[data-testid="raw-editor"] textarea.inputarea');
+  await expect(source).toBeVisible();
+  const modifier = await page.evaluate(() =>
+    navigator.userAgent.includes('Macintosh') ? 'Meta' : 'Control',
+  );
+  await source.press(`${modifier}+a`);
+  await page.keyboard.insertText('An introduction without any headings or template tags.');
+  await configureView(page, { layout: 'Document', previews: true });
+  const card = page.getByTestId('inline-preview-gutter').locator('.squisq-inline-preview-card');
+  await expect(card).toHaveCount(1);
+  await expect(card).toBeVisible();
+  await expect(card.locator('.squisq-inline-preview-card-svg')).toContainText(
+    'An introduction without any headings or template tags.',
+  );
+
+  await page.getByRole('tab', { name: 'Write', exact: true }).click();
+  await expect(page.locator('.tiptap.ProseMirror')).toHaveText(
+    'An introduction without any headings or template tags.',
+  );
+  await expect(page.locator('.tiptap.ProseMirror :is(h1,h2,h3,h4,h5,h6)')).toHaveCount(0);
+  await expect(card).toHaveCount(1);
+  await expect(card).toBeVisible();
+  await expect(card.locator('.squisq-inline-preview-card-svg')).toContainText(
+    'An introduction without any headings or template tags.',
+  );
 });

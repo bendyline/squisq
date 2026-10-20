@@ -1,5 +1,5 @@
-import { describe, expect, it, beforeAll } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, beforeAll, vi } from 'vitest';
+import { render, fireEvent, waitFor } from '@testing-library/react';
 import { EditorProvider } from '../EditorContext';
 import { InlinePreviewGutter } from '../InlinePreviewGutter';
 
@@ -43,7 +43,7 @@ function renderWithMatchingDom(markdown: string, headingHtml: string) {
 }
 
 describe('InlinePreviewGutter — all-block bracket lines', () => {
-  it('keeps the whole gutter collapsed when no headings are annotated', () => {
+  it('positions visible cards and bracket lines when no headings are annotated', async () => {
     const md = '# Hello World\n\nBody\n\n## Getting Started\n\nBody\n\n## Tips\n\nBody\n';
     const { container } = renderWithMatchingDom(
       md,
@@ -55,7 +55,52 @@ describe('InlinePreviewGutter — all-block bracket lines', () => {
         '<p>Body</p>',
     );
 
-    expect(container.querySelector('[data-testid="inline-preview-gutter"]')).toBeNull();
+    await waitFor(() => {
+      const cards = container.querySelectorAll<HTMLElement>('.squisq-inline-preview-card');
+      expect(cards.length).toBe(3);
+      expect(Array.from(cards, (card) => card.style.visibility)).toEqual([
+        'visible',
+        'visible',
+        'visible',
+      ]);
+      expect(container.querySelectorAll('.squisq-inline-preview-extent--untagged').length).toBe(3);
+    });
+  });
+
+  it('anchors a heading-less introduction without shifting later headings or click targets', async () => {
+    const { container } = renderWithMatchingDom(
+      'Introductory prose.\n\n# First\n\nFirst body.\n\n## Second\n\nSecond body.\n',
+      '<p>Introductory prose.</p><h1>First</h1><p>First body.</p><h2>Second</h2><p>Second body.</p>',
+    );
+    const surface = container.querySelector('.squisq-wysiwyg-editor')!;
+    const anchors = [
+      surface.firstElementChild!,
+      surface.querySelector('h1')!,
+      surface.querySelector('h2')!,
+    ];
+    const scrolls = anchors.map((anchor) => {
+      const scroll = vi.fn();
+      Object.defineProperty(anchor, 'scrollIntoView', { value: scroll, configurable: true });
+      return scroll;
+    });
+
+    await waitFor(() => {
+      const cards = container.querySelectorAll<HTMLElement>('.squisq-inline-preview-card');
+      expect(cards.length).toBe(3);
+      expect(Array.from(cards, (card) => card.style.visibility)).toEqual([
+        'visible',
+        'visible',
+        'visible',
+      ]);
+    });
+    const cards = container.querySelectorAll('.squisq-inline-preview-card');
+    cards.forEach((card) => fireEvent.click(card));
+    scrolls.forEach((scroll) =>
+      expect(scroll).toHaveBeenCalledExactlyOnceWith({ behavior: 'smooth', block: 'start' }),
+    );
+    expect(cards[0].textContent).toContain('Introductory prose.');
+    expect(cards[1].textContent).toContain('First body.');
+    expect(cards[2].textContent).toContain('Second body.');
   });
 
   it('renders a strong tagged bar for annotated headings + lighter bars for the rest', async () => {
@@ -86,6 +131,3 @@ describe('InlinePreviewGutter — all-block bracket lines', () => {
     expect(untagged.length).toBe(2);
   });
 });
-
-// `screen` import unused but kept to mirror the sibling test file's style.
-void screen;

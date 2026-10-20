@@ -4,17 +4,7 @@ import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { EditorProvider } from '../EditorContext';
 import { InlinePreviewGutter } from '../InlinePreviewGutter';
 
-/**
- * The gutter pulls its data from the EditorContext's parsed Doc. We mount
- * it against a real provider seeded with markdown that contains both an
- * annotated heading (`{[title]}`) and a plain heading. The first
- * should produce a card; the second should be ignored.
- *
- * We deliberately don't snapshot the SVG — the BlockRenderer covers that
- * elsewhere. Here we just assert (a) the gutter mounts, (b) it renders
- * one card per annotated block, and (c) the gutter stays collapsed when
- * there are no annotated blocks.
- */
+/** Exercise preview rendering against the real parser and editor provider. */
 
 function renderGutter(markdown: string) {
   return render(
@@ -25,12 +15,35 @@ function renderGutter(markdown: string) {
 }
 
 describe('InlinePreviewGutter', () => {
-  it('stays collapsed when no blocks are template-annotated', () => {
-    const { container } = renderGutter('# Plain heading\n\nSome body text.\n');
+  it('stays collapsed for an empty document', () => {
+    const { container } = renderGutter('');
     expect(container.querySelector('[data-testid="inline-preview-gutter"]')).toBeNull();
   });
 
-  it('renders one card per template-annotated block', async () => {
+  it.each([
+    ['plain heading', '# Plain heading\n\nSome body text.\n', 'Some body text.', 'content'],
+    [
+      'heading-less prose',
+      'An introduction without a heading.\n',
+      'An introduction without a heading.',
+      'content',
+    ],
+    [
+      'inferred table',
+      '# Results\n\n| Name | Value |\n| --- | --- |\n| Alpha | 100 |\n',
+      'Alpha',
+      'dataTable',
+    ],
+  ])('previews %s without a template tag', async (_name, markdown, body, template) => {
+    const { container } = renderGutter(markdown);
+    await screen.findByTestId('inline-preview-gutter');
+    const cards = container.querySelectorAll('.squisq-inline-preview-card');
+    expect(cards.length).toBe(1);
+    expect(cards[0].getAttribute('data-template')).toBe(template);
+    expect(cards[0].querySelector('.squisq-inline-preview-card-svg')?.textContent).toContain(body);
+  });
+
+  it('renders tagged and untagged blocks together', async () => {
     const md = [
       '# Welcome {[title]}',
       '',
@@ -38,7 +51,7 @@ describe('InlinePreviewGutter', () => {
       '',
       '## Plain heading',
       '',
-      'No template tag — should not produce a card.',
+      'No template tag — still produces a card.',
       '',
       '## Big number {[statHighlight]}',
       '',
@@ -47,16 +60,18 @@ describe('InlinePreviewGutter', () => {
 
     const { container } = renderGutter(md);
 
-    // Two annotated headings → two cards.
+    // Two annotated headings and one ordinary heading → three cards.
     await screen.findByTestId('inline-preview-gutter');
     const cards = container.querySelectorAll('.squisq-inline-preview-card');
-    expect(cards.length).toBe(2);
+    expect(cards.length).toBe(3);
 
     // Template labels are rendered alongside each card.
     const labels = Array.from(
       container.querySelectorAll('.squisq-inline-preview-card-template'),
     ).map((el) => el.textContent);
     // Templates render their human-readable label (via `templateLabel`).
+    expect(labels).toContain('Content');
+    expect(cards[1].textContent).toContain('No template tag — still produces a card.');
     expect(labels).toContain('Title');
     expect(labels).toContain('Stat Highlight');
   });
