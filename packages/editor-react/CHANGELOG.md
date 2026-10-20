@@ -1,3 +1,11 @@
+## @bendyline/squisq-editor-react [2.12.11](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.10...@bendyline/squisq-editor-react@2.12.11) (2026-10-20)
+
+
+### Dependencies
+
+* **@bendyline/squisq-react:** upgraded to 2.12.7
+* **@bendyline/squisq-video-react:** upgraded to 2.5.8
+
 ## @bendyline/squisq-editor-react [2.12.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.9...@bendyline/squisq-editor-react@2.12.10) (2026-10-20)
 
 ### Bug Fixes

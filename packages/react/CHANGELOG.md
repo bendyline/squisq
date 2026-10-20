@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.12.7](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.6...@bendyline/squisq-react@2.12.7) (2026-10-20)
+
+### Bug Fixes
+
+* Keep page selection stable across refreshes ([#99](https://github.com/bendyline/squisq/issues/99)) ([945e09d](https://github.com/bendyline/squisq/commit/945e09de179361c3cc87b377beb93276e9f0e934))
+
 ## @bendyline/squisq-react [2.12.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.5...@bendyline/squisq-react@2.12.6) (2026-10-20)
 
 ### Bug Fixes
