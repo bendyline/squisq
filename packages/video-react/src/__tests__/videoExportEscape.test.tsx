@@ -115,6 +115,37 @@ describe('VideoExportModal Escape', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('places host save options above Save and disables them while saving', async () => {
+    useVideoExportMock.mockReturnValue(exportResult('complete'));
+    let finishSave: (value: boolean) => void = () => {};
+    const saveOutput = () =>
+      new Promise<boolean>((resolve) => {
+        finishSave = resolve;
+      });
+    const { getByRole } = render(
+      <VideoExportModal
+        doc={doc}
+        onClose={onClose}
+        saveOutput={saveOutput}
+        saveOptions={
+          <label>
+            <input type="checkbox" />
+            Open in app after saving
+          </label>
+        }
+      />,
+    );
+    const checkbox = getByRole('checkbox', { name: 'Open in app after saving' });
+    const save = getByRole('button', { name: /mp4/i });
+    expect(checkbox.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(save);
+    expect(checkbox.closest('fieldset')?.disabled).toBe(true);
+    await act(async () => {
+      finishSave(true);
+    });
+    expect(checkbox.closest('fieldset')?.disabled).toBe(false);
+  });
+
   it('keeps ignoring Escape when the save picker was cancelled', async () => {
     useVideoExportMock.mockReturnValue(exportResult('complete'));
     const saveOutput = vi.fn(async () => false);

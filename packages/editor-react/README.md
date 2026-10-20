@@ -95,7 +95,8 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   boundary and `{study=multiple-choice-flashcard}` makes child one the question,
   child two the default correct answer, and remaining children distractors.
 - **Panels** — `outline` (heading outline pane) and `inlinePreview` (per-block
-  SVG preview gutter, `inlinePreviewWidth` default 320).
+  SVG preview gutter, `inlinePreviewWidth` default 320). Block previews include
+  ordinary sections and heading-less introductory text; template tags are optional.
 - **Code & image modes** — pass `fileName` / `language` to get a Monaco-only
   code editor, or `imageSrc` (+ `imageMode: 'edit'`) for the image surface.
   `.jsonc` files, `language="jsonc"`, and fenced `jsonc` snippets use JSON

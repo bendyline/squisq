@@ -3,7 +3,7 @@
  *
  * Shared positioning hook for the editor gutters (`OutlinePanel` and
  * `InlinePreviewGutter`). Each gutter needs to know:
- *   - where every heading sits vertically inside the wrapper
+ *   - where every heading (or heading-less introduction) sits inside the wrapper
  *   - where the editor "page" edges sit horizontally
  *   - how to scroll the editor to a particular heading
  *
@@ -29,7 +29,7 @@ import { flattenBlocks, hasTemplate } from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
 
 export interface HeadingLayoutEntry {
-  /** The block (heading-rooted unit) this entry represents. */
+  /** The block this entry represents, including a heading-less introduction. */
   block: Block;
   /** Heading top, in px relative to the wrapper's top edge. */
   top: number;
@@ -77,17 +77,17 @@ export function useHeadingLayout(refInsideWrapper: RefObject<HTMLElement | null>
     const recompute = () => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        const headings = Array.from(
-          wysiwygContainer.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6'),
-        );
+        const anchors = blockAnchors(flatBlocks, wysiwygContainer);
         const wrapperRect = wrapper.getBoundingClientRect();
         const editorRect = wysiwygContainer.getBoundingClientRect();
         const next: HeadingLayoutEntry[] = [];
         flatBlocks.forEach((block, i) => {
-          const h = headings[i];
+          const h = anchors[i];
           if (!h) return;
           const top = h.getBoundingClientRect().top - wrapperRect.top;
-          const nextH = headings[i + 1];
+          let nextIndex = i + 1;
+          while (nextIndex < anchors.length && !anchors[nextIndex]) nextIndex++;
+          const nextH = anchors[nextIndex];
           const bottom = nextH
             ? nextH.getBoundingClientRect().top - wrapperRect.top
             : editorRect.bottom - wrapperRect.top;
@@ -167,12 +167,12 @@ export function useHeadingLayout(refInsideWrapper: RefObject<HTMLElement | null>
         const layoutInfo = monacoEditor.getLayoutInfo();
         const next: HeadingLayoutEntry[] = [];
         flatBlocks.forEach((block, i) => {
-          const line = block.sourceHeading?.position?.start.line;
+          const line = blockStartLine(block);
           if (typeof line !== 'number') return;
           const lineTop = monacoEditor.getTopForLineNumber(line) - scrollTop + monacoTop;
           // Bottom = next block's top, or the visible bottom of the editor.
           const nextBlock = flatBlocks[i + 1];
-          const nextLine = nextBlock?.sourceHeading?.position?.start.line;
+          const nextLine = nextBlock ? blockStartLine(nextBlock) : undefined;
           const bottom =
             typeof nextLine === 'number'
               ? monacoEditor.getTopForLineNumber(nextLine) - scrollTop + monacoTop
@@ -236,10 +236,10 @@ export function useHeadingLayout(refInsideWrapper: RefObject<HTMLElement | null>
         const wrapper = node ? findWrapper(node) : null;
         const wysiwygContainer = wrapper?.querySelector<HTMLElement>('.squisq-wysiwyg-container');
         if (!wysiwygContainer) return;
-        const headings = wysiwygContainer.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6');
         const index = flatBlocks.findIndex((b) => b.id === block.id);
-        if (index < 0 || index >= headings.length) return;
-        headings[index].scrollIntoView({ behavior: 'smooth', block: 'start' });
+        const anchor = blockAnchors(flatBlocks, wysiwygContainer)[index];
+        if (!anchor) return;
+        anchor.scrollIntoView({ behavior: 'smooth', block: 'start' });
         if (tiptapEditor) {
           try {
             tiptapEditor.chain().focus().run();
@@ -250,7 +250,7 @@ export function useHeadingLayout(refInsideWrapper: RefObject<HTMLElement | null>
         return;
       }
       if (activeView === 'raw' && monacoEditor) {
-        const line = block.sourceHeading?.position?.start.line;
+        const line = blockStartLine(block);
         if (typeof line !== 'number') return;
         monacoEditor.revealLineInCenter(line);
         monacoEditor.setPosition({ lineNumber: line, column: 1 });
@@ -269,6 +269,28 @@ export function useHeadingLayout(refInsideWrapper: RefObject<HTMLElement | null>
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
+
+/** Pair headings only with heading blocks, so a preamble cannot shift them. */
+function blockAnchors(blocks: Block[], container: HTMLElement): (HTMLElement | null)[] {
+  const surface = container.querySelector<HTMLElement>('.squisq-wysiwyg-editor');
+  const headings = (surface ?? container).querySelectorAll<HTMLElement>(
+    ':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6',
+  );
+  let headingIndex = 0;
+  return blocks.map((block, index) => {
+    if (block.sourceHeading) return headings[headingIndex++] ?? null;
+    // Content before the first heading (or the whole heading-less document)
+    // starts at the editor's first element and has no heading to query.
+    if (index === 0 && block.contents?.length) {
+      return (surface ?? container).firstElementChild as HTMLElement | null;
+    }
+    return null;
+  });
+}
+
+function blockStartLine(block: Block): number | undefined {
+  return block.sourceHeading?.position?.start.line ?? block.contents?.[0]?.position?.start.line;
+}
 
 function findWrapper(node: HTMLElement): HTMLElement | null {
   let cur: HTMLElement | null = node.parentElement;

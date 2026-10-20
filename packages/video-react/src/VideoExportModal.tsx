@@ -8,7 +8,7 @@
  * the surface that opened it.
  */
 
-import { useState, useCallback, useEffect, useId, useRef } from 'react';
+import { useState, useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
 import type { Doc } from '@bendyline/squisq/schemas';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { MediaEditRenderManager } from './mediaEdit/mediaEditRenderManager.js';
@@ -59,6 +59,8 @@ export interface VideoExportModalProps {
   saveOutput?: (blob: Blob, filename: string) => boolean | void | Promise<boolean | void>;
   /** Host-aware label for the completed export action. */
   saveActionLabel?: (format: VideoOutputFormat) => string;
+  /** Host controls above the completed export’s Save button; disabled during saving. */
+  saveOptions?: ReactNode;
   /** Called when the modal should close */
   onClose: () => void;
 }
@@ -271,6 +273,7 @@ export function VideoExportModal({
   uiPalette,
   saveOutput,
   saveActionLabel,
+  saveOptions,
   onClose,
 }: VideoExportModalProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -765,6 +768,11 @@ export function VideoExportModal({
               <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 4px 0' }}>
                 Video only{audioSkippedReason ? ` — ${audioSkippedReason}` : ''}
               </p>
+            )}
+            {saveOptions && (
+              <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: '12px 0 0' }}>
+                {saveOptions}
+              </fieldset>
             )}
             <div style={footerStyle}>
               <button style={themedSecondaryButtonStyle} onClick={handleClose}>

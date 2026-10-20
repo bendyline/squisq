@@ -20,13 +20,16 @@ export function resolveBlockVisual(
   block: Block,
   theme: Theme,
   viewport: ViewportConfig,
+  position: Pick<MaterializeBlockLayersOptions, 'blockIndex' | 'totalBlocks'> = {
+    blockIndex: 0,
+    totalBlocks: 1,
+  },
 ): Block | null {
   try {
     const slide = buildPreviewDoc({ ...doc, blocks: [block] }).blocks[0] as DocBlock | undefined;
     if (!slide) return null;
     const ctx: MaterializeBlockLayersOptions = {
-      blockIndex: 0,
-      totalBlocks: 1,
+      ...position,
       theme,
       viewport,
       customTemplates: doc.customTemplates,

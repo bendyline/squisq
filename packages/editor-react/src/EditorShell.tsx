@@ -602,8 +602,8 @@ export interface EditorShellProps {
   onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
   /**
    * Show an inline preview gutter to the right of the WYSIWYG editor.
-   * The gutter renders one small SVG card per template-annotated block in
-   * the document, letting authors see their rendered output without
+   * The gutter renders one small SVG card per block, including blocks without
+   * template tags, letting authors see their rendered output without
    * leaving Edit mode. Auto-hidden via container query when the editor
    * body is narrower than ~720px. Defaults to `false`.
    */
