@@ -9,6 +9,7 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import Editor, { type OnMount, type OnChange, type BeforeMount } from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';
+import { wikiQueryAt, validWikiSuggestions } from './wikiSuggestions';
 import { useEditorContext } from './EditorContext';
 import { getAvailableTemplates } from '@bendyline/squisq/doc';
 import { suggestIcons, resolveIcon, iconGlyph } from '@bendyline/squisq/icons';
@@ -112,8 +113,15 @@ export function RawEditor({
   readOnly = false,
 }: RawEditorProps) {
   const contextMenuOwnedByShell = useEditorContextMenuAvailable();
-  const { editorSource, setEditorSource, setMonacoEditor, language, mentionProvider, doc } =
-    useEditorContext();
+  const {
+    editorSource,
+    setEditorSource,
+    setMonacoEditor,
+    language,
+    mentionProvider,
+    wikiLinks,
+    doc,
+  } = useEditorContext();
   const requestedLanguages = useDocumentMonacoLanguages(language, editorSource);
   const languageServices = !['markdown', 'plaintext'].includes(normalizeMonacoLanguage(language));
   const { monaco: monacoNs, ready: monacoReady } = useMonacoLoader(requestedLanguages, {
@@ -123,6 +131,9 @@ export function RawEditor({
   const fallbackSelection = useRef<{ start: number; end: number } | null>(null);
   const isExternalUpdate = useRef(false);
   const completionDisposable = useRef<monaco.IDisposable | null>(null);
+  const wikiCompletionDisposable = useRef<monaco.IDisposable | null>(null);
+  const wikiLinksRef = useRef(wikiLinks);
+  wikiLinksRef.current = wikiLinks;
   const mentionCompletionDisposable = useRef<monaco.IDisposable | null>(null);
   const iconCompletionDisposable = useRef<monaco.IDisposable | null>(null);
   const attrCompletionDisposable = useRef<monaco.IDisposable | null>(null);
@@ -221,6 +232,8 @@ export function RawEditor({
       // Dispose any previous completion provider (from a prior mount)
       completionDisposable.current?.dispose();
       completionDisposable.current = null;
+      wikiCompletionDisposable.current?.dispose();
+      wikiCompletionDisposable.current = null;
       mentionCompletionDisposable.current?.dispose();
       mentionCompletionDisposable.current = null;
       iconCompletionDisposable.current?.dispose();
@@ -282,6 +295,68 @@ export function RawEditor({
             return { suggestions };
           },
         });
+
+        wikiCompletionDisposable.current = monaco.languages.registerCompletionItemProvider(
+          'markdown',
+          {
+            triggerCharacters: ['[', '/'],
+            async provideCompletionItems(model, position, _context, token) {
+              const provider = wikiLinksRef.current;
+              if (
+                !ownsMonacoModel(editor, model) ||
+                readOnlyRef.current ||
+                !provider?.suggest ||
+                isMarkdownFencedCodeModelLine(model, position.lineNumber)
+              )
+                return { suggestions: [] };
+              const line = model.getLineContent(position.lineNumber);
+              const match = wikiQueryAt(line.slice(0, position.column - 1));
+              if (!match) return { suggestions: [] };
+              const version = model.getVersionId();
+              try {
+                const items = validWikiSuggestions(await provider.suggest(match.query));
+                if (
+                  token.isCancellationRequested ||
+                  model.isDisposed() ||
+                  model.getVersionId() !== version ||
+                  wikiLinksRef.current !== provider
+                )
+                  return { suggestions: [] };
+                const closing = line.slice(position.column - 1).startsWith(']]') ? 2 : 0;
+                const range = new monaco.Range(
+                  position.lineNumber,
+                  match.from + 1,
+                  position.lineNumber,
+                  position.column + closing,
+                );
+                return {
+                  incomplete: true,
+                  suggestions: items.map((item, index) => ({
+                    label: item.label,
+                    kind:
+                      item.kind === 'folder'
+                        ? monaco.languages.CompletionItemKind.Folder
+                        : monaco.languages.CompletionItemKind.File,
+                    insertText: `[[${item.target}${item.kind === 'folder' ? '' : ']]'}`,
+                    filterText: `[[${item.target}`,
+                    range,
+                    sortText: String(index).padStart(2, '0'),
+                    ...(item.kind === 'folder'
+                      ? {
+                          command: {
+                            id: 'editor.action.triggerSuggest',
+                            title: 'Articles in folder',
+                          },
+                        }
+                      : {}),
+                  })),
+                };
+              } catch {
+                return { suggestions: [] };
+              }
+            },
+          },
+        );
 
         // `@mention` completion — queries the shared MentionProvider. Keep
         // this in its own registration so we can dispose it independently
@@ -605,6 +680,8 @@ export function RawEditor({
       setMonacoEditor(null);
       completionDisposable.current?.dispose();
       completionDisposable.current = null;
+      wikiCompletionDisposable.current?.dispose();
+      wikiCompletionDisposable.current = null;
       mentionCompletionDisposable.current?.dispose();
       mentionCompletionDisposable.current = null;
       iconCompletionDisposable.current?.dispose();

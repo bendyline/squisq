@@ -1,10 +1,48 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '../markdown/parse.js';
 import { stringifyMarkdown } from '../markdown/stringify.js';
-import { resolveWikiLinks, wikiLinkPath } from '../markdown/wikiLinks.js';
+import { parseWikiLink, resolveWikiLinks, wikiLinkPath } from '../markdown/wikiLinks.js';
 import { walkMarkdownTree as visit } from '../markdown/utils.js';
 
 describe('wiki articles', () => {
+  it('keeps literal friendly labels separate from their safe targets', async () => {
+    const source = '[[foo|Bar]] [[foo|Café & **literal**]] [[missing|Not yet]]';
+    const calls: string[] = [];
+    const doc = await resolveWikiLinks(parseMarkdown(source), async (target) => {
+      calls.push(target);
+      return target === 'foo' ? 'foo.html' : null;
+    });
+    const links: unknown[] = [];
+    visit(doc, (node) => {
+      if (node.type === 'link')
+        links.push([node.wikiTarget, node.wikiLabel, node.url, node.children]);
+    });
+    expect(links).toEqual([
+      ['foo', 'Bar', 'foo.html', [{ type: 'text', value: 'Bar' }]],
+      ['foo', 'Café & **literal**', 'foo.html', [{ type: 'text', value: 'Café & **literal**' }]],
+      ['missing', 'Not yet', '', [{ type: 'text', value: 'Not yet' }]],
+    ]);
+    expect(calls).toEqual(['foo', 'missing']);
+    expect(stringifyMarkdown(doc).trim()).toBe(source);
+    for (const value of ['../foo|Bar', 'foo|', 'foo| ', 'foo|a|b', 'foo|a[b]']) {
+      expect(parseWikiLink(value), value).toBeNull();
+    }
+  });
+  it('round-trips friendly labels inside Markdown tables', () => {
+    const source = '| Article |\n| --- |\n| [[foo\\|Friendly name]] |\n';
+    const doc = parseMarkdown(source);
+    const labels: string[] = [];
+    visit(doc, (node) => {
+      if (node.type === 'link') labels.push(node.wikiLabel!);
+    });
+    expect(labels).toEqual(['Friendly name']);
+    const reparsed = parseMarkdown(stringifyMarkdown(doc));
+    const again: string[] = [];
+    visit(reparsed, (node) => {
+      if (node.type === 'link') again.push(node.wikiLabel!);
+    });
+    expect(again).toEqual(labels);
+  });
   it('parses literal names and preserves source through serialization', () => {
     const source = '# [[foo]]\n\nSee [[reference/blah]] and [[my_notes]] and [[Café notes.md]].\n';
     expect(stringifyMarkdown(parseMarkdown(source)).trim()).toBe(source.trim());

@@ -4313,12 +4313,24 @@ and `resolveWikiLinks(markdownDocument, lookup)` (a non-mutating presentation
 projection, at most 256 distinct sequential lookups; lookup may return a
 boolean or an encoded host URL/null). Parsing produces a
 `MarkdownLink` with `wikiTarget` and an empty `url`; resolution fills a URL only
-for an existing article. Stringification always preserves `[[target]]`.
+for an existing article. `[[target|label]]` adds a literal friendly name in
+`wikiLabel`; only the target is passed to host lookups or navigation. Stringification
+preserves both parts, escaping the pipe inside Markdown tables.
+`parseWikiLink(value)` validates and separates the target and optional label.
 Without resolution, renderers show the label as plain text. The editor resolves
 its slideshow, Page and Document previews; standalone export callers can
 resolve the AST explicitly when they have article access.
 
 Names are literal, with spaces and Unicode allowed. Parent/absolute paths,
-URLs, percent escapes, backslashes, controls, reserved Windows names, aliases,
+URLs, percent escapes, backslashes, controls, reserved Windows names,
 and fragments are unsupported. Code and escaped brackets retain their normal
 Markdown meaning. Host filesystem containment remains authoritative.
+
+Optional `suggest(query): Promise<readonly WikiLinkSuggestion[]>` enables article
+and folder completion in Write and Source. Return at most 20 entries shaped as
+`{ target, label, kind: 'article' | 'folder' }`, with document-relative targets
+and a trailing `/` for folders. Selecting a folder continues completion inside
+it; selecting an article inserts a complete wiki link. Arrow keys navigate,
+Enter or Tab accepts, and Escape dismisses. Completion stops after the alias
+separator and is disabled inside code. It never opens or creates articles.
+The editor ignores stale responses and validates target paths before insertion.

@@ -1,12 +1,14 @@
 import { Node, InputRule } from '@tiptap/core';
 import { NodeViewWrapper, ReactNodeViewRenderer, type NodeViewProps } from '@tiptap/react';
 import { useEffect, useState } from 'react';
-import { wikiLinkPath } from '@bendyline/squisq/markdown';
+import { wikiLinkPath, parseWikiLink, type WikiLinkSupport } from '@bendyline/squisq/markdown';
+import { wikiSuggestionPlugin } from './wikiSuggestionPlugin';
 import { useEditorContext } from './EditorContext';
 
 function WikiLinkView({ node, editor }: NodeViewProps) {
   const { wikiLinks } = useEditorContext();
   const target = String(node.attrs.target ?? '');
+  const label = typeof node.attrs.label === 'string' ? node.attrs.label : target;
   const [exists, setExists] = useState<boolean | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -49,14 +51,14 @@ function WikiLinkView({ node, editor }: NodeViewProps) {
           type="button"
           data-wiki-missing={exists === false || undefined}
           title={error || `${action}: ${target}`}
-          aria-label={`${action}: ${target}`}
+          aria-label={`${action}: ${label}${label !== target ? ` (${target})` : ''}`}
           disabled={busy || exists === null || (!editor.isEditable && !exists)}
           onClick={() => void open()}
         >
-          {target}
+          {label}
         </button>
       ) : (
-        target
+        label
       )}
       {error && (
         <span role="alert" className="squisq-wiki-error">
@@ -69,13 +71,25 @@ function WikiLinkView({ node, editor }: NodeViewProps) {
 }
 
 /** Atomic inline node: the source remains [[target]] through every edit. */
-export const WikiLink = Node.create({
+export const WikiLink = Node.create<{ getSupport: () => WikiLinkSupport | null }>({
+  addOptions() {
+    return { getSupport: () => null };
+  },
+  addProseMirrorPlugins() {
+    return [wikiSuggestionPlugin(this.editor, this.options.getSupport)];
+  },
   name: 'wikiLink',
   group: 'inline',
   inline: true,
   atom: true,
   addAttributes() {
     return {
+      label: {
+        default: null,
+        parseHTML: (element: HTMLElement) => element.getAttribute('data-wiki-label'),
+        renderHTML: (attrs: Record<string, unknown>) =>
+          typeof attrs.label === 'string' ? { 'data-wiki-label': attrs.label } : {},
+      },
       target: {
         default: '',
         parseHTML: (element: HTMLElement) => element.getAttribute('data-wiki-link'),
@@ -87,26 +101,34 @@ export const WikiLink = Node.create({
     return [
       {
         tag: 'span[data-wiki-link]',
-        getAttrs: (element: HTMLElement) =>
-          wikiLinkPath(element.getAttribute('data-wiki-link') ?? '') ? null : false,
+        getAttrs: (element: HTMLElement) => {
+          const target = element.getAttribute('data-wiki-link') ?? '';
+          const label = element.getAttribute('data-wiki-label');
+          return parseWikiLink(target + (label === null ? '' : `|${label}`)) ? null : false;
+        },
       },
     ];
   },
   renderHTML({ node, HTMLAttributes }) {
-    return ['span', HTMLAttributes, String(node.attrs.target)];
+    return ['span', HTMLAttributes, String(node.attrs.label ?? node.attrs.target)];
   },
   renderText({ node }) {
-    return `[[${String(node.attrs.target)}]]`;
+    return `[[${String(node.attrs.target)}${node.attrs.label !== null ? `|${String(node.attrs.label)}` : ''}]]`;
   },
   addInputRules() {
     return [
       new InputRule({
         find: /\[\[([^[\]\n]+)\]\]$/,
         handler: ({ state, range, match }) => {
-          if (!wikiLinkPath(match[1])) return null;
+          const wiki = parseWikiLink(match[1]);
+          if (!wiki) return null;
           const before = state.doc.textBetween(Math.max(0, range.from - 1), range.from);
           if (before === '\\') return null;
-          state.tr.replaceWith(range.from, range.to, this.type.create({ target: match[1] }));
+          state.tr.replaceWith(
+            range.from,
+            range.to,
+            this.type.create({ target: wiki.target, label: wiki.label ?? null }),
+          );
         },
       }),
     ];

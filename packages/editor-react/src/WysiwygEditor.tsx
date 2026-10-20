@@ -226,6 +226,7 @@ export function WysiwygEditor({
     setTiptapEditor,
     mediaProvider,
     mentionProvider,
+    wikiLinks,
     fenceRenderers,
     onCopyCode,
     blockTagVisibility,
@@ -240,6 +241,8 @@ export function WysiwygEditor({
     linkSchemes,
   } = useEditorContext();
   // Read by the Link extension's href check, which is created once at mount.
+  const wikiLinksRef = useRef(wikiLinks);
+  wikiLinksRef.current = wikiLinks;
   const linkSchemesRef = useRef(linkSchemes);
   linkSchemesRef.current = linkSchemes;
   // The wrap policy only makes sense over the whole document: block/timeline
@@ -472,7 +475,7 @@ export function WysiwygEditor({
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
-      WikiLink,
+      WikiLink.configure({ getSupport: () => wikiLinksRef.current }),
       FindHighlightExtension,
       ProofingExtension,
       ReviewExtension,
@@ -515,6 +518,11 @@ export function WysiwygEditor({
       // normal behavior (Enter = paragraph break, Shift+Enter = soft break).
       handleKeyDown: (view, event) => {
         if (event.key !== 'Enter' || !submitOnEnterRef.current) return false;
+        if (
+          view.dom.hasAttribute('aria-activedescendant') &&
+          view.dom.getAttribute('aria-controls')?.startsWith('squisq-wiki-options-')
+        )
+          return false;
         // Defer Enter to an open mention/suggestion popover so the user
         // can pick the highlighted candidate. ProseMirror plugins fire
         // AFTER editorProps.handleKeyDown, so without this short-circuit
@@ -711,6 +719,19 @@ export function WysiwygEditor({
       },
     },
   });
+
+  // Index updates can finish after the caret's first lookup. Notify the
+  // suggestion plugin even when the document and selection have not changed.
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled && editor && !editor.isDestroyed)
+        editor.view.dispatch(editor.state.tr.setMeta('wikiSupportChanged', true));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editor, wikiLinks]);
 
   // Register / unregister the Tiptap editor instance with the shared context
   useEffect(() => {

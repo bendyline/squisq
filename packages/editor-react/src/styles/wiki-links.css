@@ -23,3 +23,38 @@
   color: var(--squisq-danger);
   font-size: 0.85em;
 }
+
+.squisq-wiki-suggestions {
+  position: fixed;
+  z-index: 10000;
+  min-width: 200px;
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--squisq-border);
+  border-radius: 6px;
+  background: var(--squisq-surface);
+  color: var(--squisq-text);
+  font-family: var(--squisq-ux-font);
+  box-shadow: var(--squisq-shadow-md);
+}
+.squisq-wiki-suggestions button {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 8px 12px;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.squisq-wiki-suggestions button[aria-selected='true'],
+.squisq-wiki-suggestions button:hover {
+  background: var(--squisq-row-hover);
+}
+.squisq-wiki-suggestions button[data-kind='folder'] {
+  font-weight: 600;
+}

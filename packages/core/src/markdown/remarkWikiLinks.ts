@@ -1,5 +1,5 @@
 import type { Processor } from 'unified';
-import { wikiLinkPath } from './wikiLinks.js';
+import { parseWikiLink } from './wikiLinks.js';
 
 type Code = number | null;
 type State = (code: Code) => State | undefined;
@@ -47,13 +47,13 @@ export function remarkWikiLinks(this: Processor): undefined {
               effects.consume(code);
               return close;
             }
-            if (code === null || code < 0 || code === 91 || target.length >= 2048) return nok(code);
+            if (code === null || code < 0 || code === 91 || target.length >= 4097) return nok(code);
             target += String.fromCodePoint(code);
             effects.consume(code);
             return inside;
           }
           function close(code: Code): State | undefined {
-            if (code !== 93 || !wikiLinkPath(target)) return nok(code);
+            if (code !== 93 || !parseWikiLink(target.replace(/\\\|/g, '|'))) return nok(code);
             effects.consume(code);
             effects.exit('wikiLink');
             return ok;
@@ -65,7 +65,13 @@ export function remarkWikiLinks(this: Processor): undefined {
   (data.fromMarkdownExtensions ??= []).push({
     enter: {
       wikiLink(this: CompileContext, token: Token) {
-        this.enter({ type: 'wikiLink', value: this.sliceSerialize(token).slice(2, -2) }, token);
+        this.enter(
+          {
+            type: 'wikiLink',
+            value: this.sliceSerialize(token).slice(2, -2).replace(/\\\|/g, '|'),
+          },
+          token,
+        );
       },
     },
     exit: {
@@ -76,8 +82,11 @@ export function remarkWikiLinks(this: Processor): undefined {
   });
   (data.toMarkdownExtensions ??= []).push({
     handlers: {
-      wikiLink(node: { value: string }) {
-        return `[[${node.value}]]`;
+      wikiLink(node: { value: string }, _parent: unknown, state: { stack: string[] }) {
+        const value = state.stack.includes('tableCell')
+          ? node.value.replace(/\|/g, '\\|')
+          : node.value;
+        return `[[${value}]]`;
       },
     },
   });

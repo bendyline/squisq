@@ -13,7 +13,7 @@
 
 import { resolveIcon } from '@bendyline/squisq/icons';
 import {
-  wikiLinkPath,
+  parseWikiLink,
   matchTrailingTemplateAnnotation,
   matchTrailingPandocAttr,
   tokenizeAttrTokens,
@@ -1417,7 +1417,21 @@ function parseTableCells(line: string): string[] {
   let inner = line.trim();
   if (inner.startsWith('|')) inner = inner.slice(1);
   if (inner.endsWith('|')) inner = inner.slice(0, -1);
-  return inner.split('|').map((cell) => cell.trim());
+  const cells: string[] = [];
+  let cell = '';
+  let slashes = 0;
+  for (const char of inner) {
+    if (char === '|') {
+      if (slashes % 2) cell = cell.slice(0, -1) + '|';
+      else {
+        cells.push(cell.trim());
+        cell = '';
+      }
+    } else cell += char;
+    slashes = char === '\\' ? slashes + 1 : 0;
+  }
+  cells.push(cell.trim());
+  return cells;
 }
 
 /** Parse a GFM separator line into column alignments. */
@@ -1567,8 +1581,20 @@ function inlineToHtml(text: string): string {
   // We run extraction on the RAW text (before escapeHtml) so the
   // captured groups are the literal markdown contents; then we
   // selectively escape the parts of each placeholder that need it.
-  let staged = text.replace(RE_INLINE_CODE, (_m, code) =>
-    stash(`<code>${escapeHtml(code)}</code>`),
+  // Whichever opens first owns its contents: code stays code, and wiki
+  // labels keep backticks, <br>, and emphasis markers as literal words.
+  let staged = text.replace(
+    /`(.+?)`|\[\[([^\u005b\]\n]+)\]\]/g,
+    (full, code: string | undefined, value: string | undefined, offset: number) => {
+      if (code !== undefined) return stash(`<code>${escapeHtml(code)}</code>`);
+      const wiki = parseWikiLink((value ?? '').replace(/\\\|/g, '|'));
+      if (isEscapedMarkdownCharacter(text, offset) || !wiki) return full;
+      const labelAttr =
+        wiki.label !== undefined ? ` data-wiki-label="${escapeHtml(wiki.label)}"` : '';
+      return stash(
+        `<span data-wiki-link="${escapeHtml(wiki.target)}"${labelAttr}>${escapeHtml(wiki.label ?? wiki.target)}</span>`,
+      );
+    },
   );
 
   // Vertical alignment: `<sup>…</sup>` / `<sub>…</sub>`. Stashed (rather than
@@ -1620,13 +1646,6 @@ function inlineToHtml(text: string): string {
     const { url, title } = splitLinkDestination(destination);
     const titleAttr = title === null ? '' : ` title="${escapeHtml(title)}"`;
     return stash(`<a href="${escapeHtml(url)}"${titleAttr}>${inlineToHtml(linkText)}</a>`);
-  });
-
-  // Wiki names are literal. Code, images and standard links are already
-  // protected; escaped openers stay ordinary text.
-  staged = staged.replace(/\[\[([^\u005b\]\n]+)\]\]/g, (full, target: string, offset: number) => {
-    if (isEscapedMarkdownCharacter(staged, offset) || !wikiLinkPath(target)) return full;
-    return stash(`<span data-wiki-link="${escapeHtml(target)}">${escapeHtml(target)}</span>`);
   });
 
   // Escaped punctuation the emphasis pass below does not own (`\$`, `\#`,
@@ -2000,9 +2019,17 @@ function htmlToInline(html: string): string {
   let result = html;
   const vault = new RawHtmlVault();
   result = result.replace(
-    /<span\b[^>]*\bdata-wiki-link="([^"]*)"[^>]*>[\s\S]*?<\/span>/gi,
-    (full, target: string) =>
-      wikiLinkPath(unescapeHtml(target)) ? vault.protect(`[[${target}]]`) : full,
+    /<span\b((?:[^>"']|"[^"]*"|'[^']*')*)>[\s\S]*?<\/span>/gi,
+    (full, attrs: string) => {
+      const values = new Map(
+        [...attrs.matchAll(/([-\w]+)="([^"]*)"/g)].map((match) => [match[1], match[2]]),
+      );
+      const target = values.get('data-wiki-link');
+      if (target === undefined) return full;
+      const label = values.get('data-wiki-label');
+      const value = target + (label !== undefined ? `|${label}` : '');
+      return parseWikiLink(unescapeHtml(value)) ? vault.protect(`[[${value}]]`) : full;
+    },
   );
 
   // Characters the source escaped (see `MarkdownEscape`) get their backslash
@@ -2133,7 +2160,9 @@ function htmlToTableCell(html: string): string {
     .replace(/^\s*<p(?:\s[^>]*)?>/i, '')
     .replace(/<\/p>\s*$/i, '');
 
-  return htmlToInline(withParagraphBreaks).replace(/ {2}\n/g, '<br>');
+  return htmlToInline(withParagraphBreaks)
+    .replace(/ {2}\n/g, '<br>')
+    .replace(/\\*\|/g, (match) => ((match.length - 1) % 2 ? match : `${match.slice(0, -1)}\\|`));
 }
 
 function preserveLeadingSpaces(html: string): string {

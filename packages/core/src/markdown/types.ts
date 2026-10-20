@@ -497,6 +497,8 @@ export interface MarkdownLink extends MarkdownNodeBase {
   type: 'link';
   /** Authored [[target]]. url is empty until the host resolves an existing article. */
   wikiTarget?: string;
+  /** Literal display label from [[target|label]], when explicitly authored. */
+  wikiLabel?: string;
   /** URL target */
   url: string;
   /** Optional title (shown on hover) */

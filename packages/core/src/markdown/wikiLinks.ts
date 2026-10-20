@@ -22,12 +22,37 @@ export function wikiLinkPath(target: string, extension: '.md' | '.html' = '.md')
   return /\.(?:md|html?)$/i.test(target) ? target : `${target}${extension}`;
 }
 
+/** Parse the literal inside [[target|label]]; labels never carry markup. */
+export function parseWikiLink(value: string): { target: string; label?: string } | null {
+  const separator = value.indexOf('|');
+  const target = separator < 0 ? value : value.slice(0, separator);
+  if (!wikiLinkPath(target)) return null;
+  if (separator < 0) return { target };
+  const label = value.slice(separator + 1);
+  if (
+    !label.trim() ||
+    label.length > 2048 ||
+    /[[\]|]/u.test(label) ||
+    [...label].some((ch) => ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127)
+  )
+    return null;
+  return { target, label };
+}
+
+export interface WikiLinkSuggestion {
+  target: string;
+  label: string;
+  kind: 'article' | 'folder';
+}
+
 /** A host owns workspace authority, save ordering, creation and navigation.
  * Targets are document-relative wiki names (without mandatory .md).
  * Resolution must not create anything. A rejected lookup is not absence.
  */
 export interface WikiLinkSupport {
   exists(target: string): Promise<boolean>;
+  /** Bounded suggestions for a literal document-relative path prefix. */
+  suggest?(query: string): Promise<readonly WikiLinkSuggestion[]>;
   /** Optional host URL for formats or public paths beyond the default .md.
    * Return an encoded relative/workspace path, or null for a missing article. */
   resolve?(target: string): Promise<string | null>;
