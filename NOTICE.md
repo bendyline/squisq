@@ -31,19 +31,25 @@ license terms.
 
 ## @bendyline/squisq (core)
 
-| Package             | Version | License    | Repository                                                             |
-| ------------------- | ------- | ---------- | ---------------------------------------------------------------------- |
-| genson-js           | 0.0.8   | Apache-2.0 | https://github.com/aspecto-io/genson-js                                |
-| hast-util-from-html | 2.0.3   | MIT        | https://github.com/syntax-tree/hast-util-from-html                     |
-| localforage         | 1.10.0  | Apache-2.0 | https://github.com/localForage/localForage                             |
-| ngeohash            | 0.6.4   | MIT        | https://github.com/sunng87/node-geohash                                |
-| remark-directive    | 3.0.1   | MIT        | https://github.com/remarkjs/remark-directive                           |
-| remark-frontmatter  | 5.0.0   | MIT        | https://github.com/remarkjs/remark-frontmatter                         |
-| remark-gfm          | 4.0.1   | MIT        | https://github.com/remarkjs/remark-gfm                                 |
-| remark-math         | 6.0.0   | MIT        | https://github.com/remarkjs/remark-math                                |
-| remark-parse        | 11.0.0  | MIT        | https://github.com/remarkjs/remark/tree/main/packages/remark-parse     |
-| remark-stringify    | 11.0.0  | MIT        | https://github.com/remarkjs/remark/tree/main/packages/remark-stringify |
-| unified             | 11.0.5  | MIT        | https://unifiedjs.com                                                  |
+| Package                 | Version   | License    | Repository                                                             |
+| ----------------------- | --------- | ---------- | ---------------------------------------------------------------------- |
+| @bendyline/squisq-graph | workspace | MIT        | (internal)                                                             |
+| genson-js               | 0.0.8     | Apache-2.0 | https://github.com/aspecto-io/genson-js                                |
+| hast-util-from-html     | 2.0.3     | MIT        | https://github.com/syntax-tree/hast-util-from-html                     |
+| localforage             | 1.10.0    | Apache-2.0 | https://github.com/localForage/localForage                             |
+| ngeohash                | 0.6.4     | MIT        | https://github.com/sunng87/node-geohash                                |
+| remark-directive        | 3.0.1     | MIT        | https://github.com/remarkjs/remark-directive                           |
+| remark-frontmatter      | 5.0.0     | MIT        | https://github.com/remarkjs/remark-frontmatter                         |
+| remark-gfm              | 4.0.1     | MIT        | https://github.com/remarkjs/remark-gfm                                 |
+| remark-math             | 6.0.0     | MIT        | https://github.com/remarkjs/remark-math                                |
+| remark-parse            | 11.0.0    | MIT        | https://github.com/remarkjs/remark/tree/main/packages/remark-parse     |
+| remark-stringify        | 11.0.0    | MIT        | https://github.com/remarkjs/remark/tree/main/packages/remark-stringify |
+| unified                 | 11.0.5    | MIT        | https://unifiedjs.com                                                  |
+
+## @bendyline/squisq-graph
+
+No third-party runtime dependencies — the layout engine and its Web Worker
+entry are Squisq-authored (MIT).
 
 ## @bendyline/squisq-calc
 

@@ -12,12 +12,13 @@
 Squisq is an open-source monorepo providing reusable libraries for doc/block
 rendering and spatial utilities. It is designed to be framework-agnostic at the core, with a React component layer on top. It is also designed to be pure JavaScript that can run in a browser or in NodeJS (**it should have no NodeJS-specific dependencies**)
 
-**npm packages** (9 published + 1 dev-only):
+**npm packages** (10 published + 1 dev-only):
 
 - `@bendyline/squisq` — Headless utilities (schemas, themes, templates, spatial math, markdown, storage, versions, jsonForm, icons, image-edit, transform, recommend)
 - `@bendyline/squisq-react` — React component library (DocPlayer, BlockRenderer, layers, hooks, LinearDocView, MarkdownRenderer, JsonView, inline media players, standalone IIFE bundle)
 - `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV import/export; shared OOXML infrastructure; format registry + `convert()`; outside-in rendered-file/companion-Markdown contract via `/outside-in`; ContentContainer ZIP serialization; theme + layout inference from office files via `/infer`)
 - `@bendyline/squisq-grid-react` — Virtualized data grid for sidecar tables (TanStack-Virtual DOM renderer + in-house columnar Web-Worker store implementing core's `TableQueryProvider`; sortable/filterable/editable with per-cell locks + a `FormulaSupport` seam for engine-backed `=formula` editing; the editor's data card mounts it lazily)
+- `@bendyline/squisq-graph` — Graph layout: a compound layered (Sugiyama) layout with orthogonal edge routing, pure TS with zero runtime dependencies, deterministic (ties by input order; `graphSignature` keys caches). Nodes nest in container nodes to any depth; each container is laid out innermost-first so contents never leak, and edges cross borders through shared ports (`portSharing: 'neighbor'` per outside neighbor, or `'container'` one per side). Long edges into one node share bend points and converging channel runs share a track, so fans draw as trees. `integerCoordinates` lays out character grids. `createWorkerLayoutEngine` runs it in a Web Worker (self-contained `/worker` subpath, `workerFactory` override, one request at a time, abort/timeout ends the worker, falls back to the calling thread when no worker can start), protocol-parity-tested via `createLocalLayoutTransport`. Core depends on it: the `diagram` template's auto-placement and `arrangeAsciiDiagram`
 - `@bendyline/squisq-calc` — Spreadsheet calculation: the engine adapter contract (`CalcEngine` — staleness, spill roles, evaluation budgets, cycle policy, Formualizer vocabulary), an Excel formula parser, and the pure-TS in-house evaluator tier (`createInHouseEngine`, ~90 functions incl. the -IFS family, prioritized by the corpus census: INDEX/MATCH/SUM/VLOOKUP/IF dominate real documents). Zero runtime dependencies at the root; the IronCalc wasm backend lives behind the `/ironcalc` SUBPATH (`createIronCalcEngine`; `@ironcalc/wasm` is an OPTIONAL peer via dynamic import — guardrail-tested, and the root entry never references it, so contract+in-house consumers pay zero adapter bytes). Formula EDITING in the data-card grid runs on the in-house tier BEHIND A WEB WORKER by default (`createWorkerCalcEngine` — same contract, protocol-parity-tested via `createLocalCalcTransport`; the worker entry is the self-contained `/worker` subpath, injectable via `workerFactory` for bundler pipelines like Vite `?worker`; spawn failure falls back to the main thread)
 - `@bendyline/squisq-editor-react` — React editor shell (Monaco raw, Tiptap WYSIWYG with Monaco code-fence insets, block preview, toolbar, theme/template pickers, version history, ASCII + Mermaid diagram editors, image editor, JsonEditor) + browser-based audio/camera/screen recording (MediaRecorder + getUserMedia + getDisplayMedia, persists into a `ContentContainer`) + dictation against a host-injected speech recognizer (`speechInput` capability, `/speech` entry)
 - `@bendyline/squisq-video` — Cross-runtime render/timeline/preset helpers, shared GIF palette arguments, and a browser-only ffmpeg.wasm MP4 encoder. Node MP4/GIF export uses the CLI's native FFmpeg path.
@@ -108,6 +109,11 @@ squisq/
                             #   boxless mode, so a rail diagram normalizes into drawn boxes.
                             #   parse(render(d)) is a semantic fixpoint; render is byte-stable
                             #   after one normalization cycle. THE authored diagram format.
+                            #   arrange.ts: arrangeAsciiDiagram re-places boxes with
+                            #   squisq-graph (top-to-bottom by default — the renderer joins
+                            #   boxes side to side only when their rows overlap); every
+                            #   arrangement is rendered + re-parsed and falls back to the other
+                            #   direction, then to the input, rather than lose an edge or label
           treeview/         # ASCII tree codec: detect/parse/render file-tree & outline art in
                             #   code fences (├──/└──/│, ASCII |--/`--/+--, pure indentation,
                             #   bullet-indent; trailing-slash dirs; # / <-- comments) + nested
@@ -257,6 +263,21 @@ squisq/
         InlineAudioPlayer.tsx
         jsonView/           # <JsonView> read-only renderer for JSON values bound to a schema
         standalone-entry.tsx # IIFE bundle entry — used by formats/html and squisq-cli
+    graph/                  # @bendyline/squisq-graph (zero deps; core depends on it)
+      src/
+        types.ts            # LayoutGraph in → LayoutResult out (absolute top-left boxes,
+                            #   orthogonal routes, stats); layout frame is left-to-right and
+                            #   'down' is the same layout transposed
+        layout.ts           # layoutGraph: hierarchy → per-container cycle breaking on lifted
+                            #   edges → border ports + level edges → containers innermost-first
+                            #   → absolute positions → routes stitched across borders
+        internal/           # hierarchy, cycles (weighted greedy FAS), level (blocks + shelf
+                            #   packing), block (layering w/ promotion, shared bend points,
+                            #   ordering, placement, channels, routes), ordering (barycenter +
+                            #   transpose), placement (weighted-median targets + isotonic
+                            #   regression), channels (track assignment; fans share a track)
+        engine.ts           # inline + Web Worker engines (worker/ = protocol, host, entry)
+        path.ts / signature.ts # polylinePath (rounded corners), pointAlongPolyline, graphSignature
     calc/                   # @bendyline/squisq-calc
       src/
         types.ts            # The engine adapter contract (CalcEngine, CalcValue, Staleness,

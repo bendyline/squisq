@@ -36,6 +36,7 @@ export type ExportValue = string | { types?: string; import?: string; default?: 
 
 /** Every public package the monorepo publishes. `site` is private and excluded. */
 const PACKAGE_DIRS = [
+  'graph',
   'core',
   'formats',
   'react',

@@ -131,4 +131,45 @@ describe('computeDiagramLayout', () => {
     const layout = computeDiagramLayout([makeBlock({ id: 'a', x: 0, y: 0, title: 'Alpha' })]);
     expect(layout.nodes[0].label).toBe('Alpha');
   });
+
+  it('lays connected auto-placed nodes out along the flow', () => {
+    const children = [
+      makeBlock({ id: 'save', connectsTo: [] }),
+      makeBlock({ id: 'check', connectsTo: [{ target: 'save' }] }),
+      makeBlock({ id: 'load', connectsTo: [{ target: 'parse' }] }),
+      makeBlock({ id: 'parse', connectsTo: [{ target: 'check' }] }),
+    ];
+    const layout = computeDiagramLayout(children);
+    const at = (id: string) => layout.nodes.find((n) => n.id === id)!;
+    expect(at('load').x).toBeLessThan(at('parse').x);
+    expect(at('parse').x).toBeLessThan(at('check').x);
+    expect(at('check').x).toBeLessThan(at('save').x);
+    // A straight chain sits on one line, a grid pitch apart.
+    expect(new Set(layout.nodes.map((n) => n.y)).size).toBe(1);
+    expect(at('parse').x - at('load').x).toBe(260);
+    expect(layout.nodes.every((n) => !n.pinned && n.x >= 80 && n.y >= 80)).toBe(true);
+    expect(computeDiagramLayout(children)).toEqual(layout);
+
+    const down = computeDiagramLayout(children, { direction: 'down' });
+    const below = (id: string) => down.nodes.find((n) => n.id === id)!;
+    expect(below('load').y).toBeLessThan(below('parse').y);
+    expect(below('parse').y - below('load').y).toBe(140);
+  });
+
+  it('keeps the grid for auto-placed nodes with no connections between them', () => {
+    const layout = computeDiagramLayout([
+      makeBlock({ id: 'a' }),
+      makeBlock({ id: 'b' }),
+      makeBlock({ id: 'c' }),
+      makeBlock({ id: 'd', connectsTo: [{ target: 'pinned' }] }),
+      makeBlock({ id: 'pinned', x: 0, y: 0 }),
+    ]);
+    const auto = layout.nodes.filter((n) => !n.pinned);
+    expect(auto.map((n) => [n.x, n.y])).toEqual([
+      [0, 220],
+      [260, 220],
+      [0, 360],
+      [260, 360],
+    ]);
+  });
 });

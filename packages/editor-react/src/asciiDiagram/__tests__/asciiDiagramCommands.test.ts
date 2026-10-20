@@ -264,6 +264,33 @@ describe('applyAsciiDiagramCommand', () => {
       }),
     ).toBe(false);
   });
+
+  it('autoArrange re-places boxes along the flow in one undoable rewrite', () => {
+    // Beta is drawn above Alpha although the arrow runs Alpha → Beta.
+    const tangled = [
+      '            ┌────────┐',
+      '            │ Beta   │',
+      '            └────────┘',
+      '                 ▲',
+      '┌────────┐       │',
+      '│ Alpha  ├───────┘',
+      '└────────┘',
+    ].join('\n');
+    const editor = makeEditor('```diagram\n' + tangled + '\n```\n');
+    const id = firstBlockId(editor);
+    const before = fenceOf(editor).text;
+    expect(applyAsciiDiagramCommand(editor, id, { kind: 'autoArrange' })).toBe(true);
+    const arranged = parseAsciiDiagram(fenceOf(editor).text);
+    const alpha = arranged.nodes.find((n) => n.id === 'alpha')!;
+    const beta = arranged.nodes.find((n) => n.id === 'beta')!;
+    expect(alpha.row + alpha.hRows).toBeLessThan(beta.row);
+    expect(arranged.edges).toEqual(parseAsciiDiagram(before).edges);
+
+    // Arranging an arranged diagram has nothing left to do.
+    expect(applyAsciiDiagramCommand(editor, id, { kind: 'autoArrange' })).toBe(false);
+    editor.commands.undo();
+    expect(fenceOf(editor).text).toBe(before);
+  });
 });
 
 describe('replaceAsciiFenceText', () => {

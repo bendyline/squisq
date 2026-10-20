@@ -29,6 +29,7 @@ cçç# Squisq API Reference
   - [Table](#subpath-table)
 - [`@bendyline/squisq-react`](#bendylinesquisq-react)
 - [`@bendyline/squisq-grid-react`](#bendylinesquisq-grid-react)
+- [`@bendyline/squisq-graph`](#bendylinesquisq-graph)
 - [`@bendyline/squisq-calc`](#bendylinesquisq-calc)
 - [`@bendyline/squisq-formats`](#bendylinesquisq-formats)
 - [`@bendyline/squisq-editor-react`](#bendylinesquisq-editor-react)
@@ -2370,6 +2371,63 @@ function discardJournal(path: string): void; //   remounts keep edits
 
 ---
 
+## `@bendyline/squisq-graph`
+
+Graph layout: a compound layered layout with orthogonal edge routing. Zero
+runtime dependencies; browser + Node; deterministic (ties broken by input
+order).
+
+**Import:** `@bendyline/squisq-graph` (worker script: `@bendyline/squisq-graph/worker`)
+
+```ts
+interface LayoutGraph {
+  nodes: { id: string; width: number; height: number; parent?: string }[]; // parent → container
+  edges: { id: string; source: string; target: string; weight?: number }[];
+}
+interface LayoutOptions {
+  direction?: 'right' | 'down'; // default 'right'
+  nodeSpacing?: number; // 20 — between neighbors in one layer
+  layerSpacing?: number; // 48 — minimum gap between layers (widened for routing tracks)
+  edgeSpacing?: number; // 8 — between parallel edge runs
+  componentSpacing?: number; // 40 — between unconnected parts
+  containerPadding?: Partial<{ top: number; right: number; bottom: number; left: number }>;
+  aspectRatio?: number; // 1.6 — target when packing unconnected parts
+  orderingSweeps?: number; // 24
+  placementSweeps?: number; // 12
+  portSharing?: 'neighbor' | 'container'; // border ports per outside neighbor, or one per side
+  integerCoordinates?: boolean; // character grids
+}
+function layoutGraph(graph: LayoutGraph, options?: LayoutOptions): LayoutResult;
+//  → { nodes: { id, x, y, width, height, container }[],   // absolute top-left, input order
+//      edges: { id, source, target, points, reversed }[], // axis-aligned, source → target
+//      width, height, stats: { crossings, reversedEdges, dummyNodes, droppedEdges } }
+
+function graphSignature(graph: LayoutGraph, options?: LayoutOptions): string; // cache key
+function polylinePath(points: Point[], options?: { radius?: number; precision?: number }): string;
+function pointAlongPolyline(points: Point[], fraction: number): { x; y; angle };
+function polylineLength(points: Point[]): number;
+
+// Same layout behind a promise; the worker engine spawns lazily, runs one
+// request at a time, ends the worker on abort or timeout (default 20 s), and
+// falls back to the calling thread when no worker can start.
+interface GraphLayoutEngine {
+  readonly mode: 'inline' | 'worker';
+  layout(graph, options?, request?: { signal?: AbortSignal }): Promise<LayoutResult>;
+  dispose(): void;
+}
+function createInlineLayoutEngine(): GraphLayoutEngine;
+function createWorkerLayoutEngine(options?: {
+  workerFactory?: () => Worker; // e.g. Vite: new (await import('…/worker?worker')).default()
+  transport?: () => GraphWorkerTransport; // tests: createLocalLayoutTransport
+  requestTimeoutMs?: number;
+}): GraphLayoutEngine;
+```
+
+Edges a layout cannot draw — unknown endpoints, self-loops, a container linked
+to its own contents — are dropped and counted in `stats.droppedEdges`.
+
+---
+
 ## `@bendyline/squisq-calc`
 
 Spreadsheet calculation: the engine adapter contract, an Excel formula
@@ -3457,7 +3515,9 @@ fence text as the source of truth. The public surface includes
 `DiagramCanvas`, `DiagramCommand`, `DiagramData`, `DiagramNode`, `DiagramEdge`,
 `useAsciiDiagramData`, `asciiDiagramToCanvas`, `applyAsciiDiagramCommand`,
 `replaceAsciiFenceText`, the pure node/edge operations, paste gate, and
-position/source-visibility helpers. The obsolete React Flow-derived
+position/source-visibility helpers. The toolbar's **Arrange** action dispatches
+`{ kind: 'autoArrange', direction? }`, which runs core's `arrangeAsciiDiagram`
+(squisq-graph placement, verified by render + re-parse) as one undo step. The obsolete React Flow-derived
 `DiagramRFNode` / `DiagramRFEdge` names were removed.
 
 Legacy heading-based `{[diagram]}` documents still render through core, but

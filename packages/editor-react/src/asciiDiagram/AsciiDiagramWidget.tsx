@@ -165,6 +165,14 @@ export function AsciiDiagramWidget({
       onClick: () => selectedNodeIds.forEach((id) => dispatch({ kind: 'removeNode', nodeId: id })),
     },
     {
+      id: 'auto-arrange',
+      label: 'Arrange',
+      icon: <Icon icon="fa-solid fa-diagram-project" />,
+      title: 'Arrange nodes so connections flow top to bottom',
+      disabled: view.diagram.nodes.length < 2,
+      onClick: () => dispatch({ kind: 'autoArrange' }),
+    },
+    {
       id: 'ascii-source',
       label: 'Source',
       icon: <Icon icon="fa-solid fa-code" />,
