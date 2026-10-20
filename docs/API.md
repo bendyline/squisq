@@ -158,6 +158,18 @@ interface TextLayer extends BaseLayer {
   content: {
     text: string; // plain-text source of truth (PDF/markdown export, a11y, SVG fallback)
     html?: string; // optional sanitized inline HTML; rendered via <foreignObject>
+    // Optional paragraph structure for native-text exporters (PPTX): list items
+    // with their level/number and marker-free text. `text` is its plain
+    // projection (`• item`, `2. item`, nested items indented two spaces).
+    paragraphs?: Array<{
+      text: string;
+      list?: { ordered: boolean; level: number; number?: number };
+      spaceBefore?: number; // px
+    }>;
+    // Layers sharing a flow id are one text flow split for layout (a list's
+    // marker column + body column). PPTX merges them into one text box with
+    // native bullets and drops the `marker` layers; renderers ignore it.
+    flow?: { id: string; role?: 'marker' };
     style: TextStyle;
   };
 }

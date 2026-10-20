@@ -525,9 +525,60 @@ export interface TextLayer extends BaseLayer {
     html?: string;
     /** Semantic steps targeted by generated data-squisq-build-step fragments. */
     buildSteps?: BuildStep[];
+    /**
+     * Optional paragraph structure, for consumers that write native
+     * paragraphs (PPTX text boxes): which paragraphs are list items, at what
+     * depth, with their text free of the marker. When present, `text` is its
+     * plain projection — each paragraph prefixed with its indent and marker
+     * (`  • item`, `2. item`), joined with `\n` — and must be kept in sync.
+     * Consumers that draw `text` as-is ignore it.
+     */
+    paragraphs?: TextParagraph[];
+    /**
+     * Marks this layer as one piece of a text flow split across layers for
+     * layout — a list drawn as a marker column beside a body column, so the
+     * SVG renderer gets a hanging indent. See {@link TextFlow}.
+     */
+    flow?: TextFlow;
     /** Text styling */
     style: TextStyle;
   };
+}
+
+/** One paragraph of a text layer's structured projection (`TextLayer.content.paragraphs`). */
+export interface TextParagraph {
+  /**
+   * The paragraph's text, with any list marker and indent removed. May hold
+   * `\n` line breaks (they stay inside the paragraph); `''` is a blank line.
+   */
+  text: string;
+  /** Present when the paragraph is a list item. */
+  list?: TextParagraphList;
+  /** Extra space above the paragraph, in canvas px (a list template's item gap). */
+  spaceBefore?: number;
+}
+
+/** List-item facts for a {@link TextParagraph}. */
+export interface TextParagraphList {
+  ordered: boolean;
+  /** Nesting depth; 0 is the top level. */
+  level: number;
+  /** The item's number, for an ordered item. */
+  number?: number;
+}
+
+/**
+ * Ties together text layers that render one flow of text. A consumer that
+ * lays text out natively (PPTX) draws the flow as ONE text box over the
+ * combined area of its layers, from the `paragraphs` of the non-marker
+ * layers in layer order, and drops the `marker` layers, whose job its own
+ * list bullets take over. Every other consumer renders each layer as usual.
+ */
+export interface TextFlow {
+  /** Layers with the same id are one flow; unique within a block. */
+  id: string;
+  /** A layout-only list marker, replaced by native bullets. */
+  role?: 'marker';
 }
 
 /**

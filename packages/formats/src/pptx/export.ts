@@ -36,6 +36,7 @@ import type {
   ShapeLayer,
   TableLayer,
   TextLayer,
+  TextParagraph,
   TextStyle,
   Transition,
   TransitionDirection,
@@ -50,6 +51,7 @@ import {
   expandCoverBlock,
   expandDocBlocks,
   flattenRenderableBlocks,
+  isGeometryBoundTemplate,
   isTemplateBlock,
   resolvePersistentLayers,
   resolveThemeForDoc,
@@ -87,8 +89,25 @@ import {
   mermaidPictureShapes,
   svgImagePictureShapes,
   svgIslandPictureShapes,
-  type EmuRect,
 } from './pictureLayers.js';
+import {
+  EMU_PER_CANVAS_PX,
+  resolveLayerRect,
+  resolvePositionValue,
+  toEmuRect,
+} from './geometry.js';
+import {
+  averageCharEm,
+  blockGapsEm,
+  estimateFlowHeight,
+  estimateSlideTextScale,
+  hasBlockGaps,
+  layerParagraphs,
+  LIST_INDENT_EM,
+  measurableText,
+} from './textFit.js';
+import { listParagraphXml, mergeTextFlows, planListParagraphs } from './textLists.js';
+import type { ListParagraphPlan } from './textLists.js';
 import { inferMimeType } from '../html/imageUtils.js';
 import { stripHtmlTags, extractPlainText } from '../shared/text.js';
 import { toOoxmlHex } from '../shared/ooxmlColor.js';
@@ -141,8 +160,6 @@ import {
   BODY_TOP,
   BODY_WIDTH,
   BODY_HEIGHT,
-  SLIDE_HEIGHT,
-  SLIDE_WIDTH,
 } from './styles.js';
 import {
   buildPresentationXml,
@@ -748,9 +765,15 @@ function buildLayerSlideXml(block: Block, ctx: SlideContext): string {
     `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` + `<p:grpSpPr/>`,
   ];
 
-  const textLayerY = (block.layers ?? [])
-    .filter((layer): layer is TextLayer => layer.type === 'text')
-    .map((layer) => resolvePositionValue(layer.position.y, 1080));
+  // The slideshow grows a slide's text to fill its boxes; export it at the
+  // size the player shows, not the template's base size (see textFit.ts).
+  const textScale = isGeometryBoundTemplate(block.template)
+    ? 1
+    : estimateSlideTextScale(block.layers ?? []);
+  const units = mergeTextFlows(block.layers ?? []);
+  const textLayerY = units
+    .filter(({ layer }) => layer.type === 'text')
+    .map(({ layer }) => resolvePositionValue(layer.position.y, 1080));
 
   for (const layer of block.layers ?? []) {
     if (layer.type !== 'text') continue;
@@ -759,23 +782,41 @@ function buildLayerSlideXml(block: Block, ctx: SlideContext): string {
     }
   }
 
-  for (let index = 0; index < (block.layers?.length ?? 0); index++) {
+  for (let index = 0; index < units.length; index++) {
     if ((index & 31) === 0) ctx.signal?.throwIfAborted();
-    const layer = block.layers![index];
+    const { layer, listIndentPx } = units[index]!;
     const currentY =
       layer.type === 'text' ? resolvePositionValue(layer.position.y, 1080) : undefined;
     const nextTextY =
       currentY === undefined
         ? undefined
         : textLayerY.filter((candidate) => candidate > currentY + 1).sort((a, b) => a - b)[0];
+    const textBottom =
+      nextTextY === undefined || currentY === undefined
+        ? undefined
+        : Math.max(currentY + 1, nextTextY - 8);
     shapes.push(
-      ...convertLayerToShapes(
-        layer,
-        ctx,
-        nextTextY === undefined || currentY === undefined
-          ? undefined
-          : Math.max(currentY + 1, nextTextY - 8),
-      ),
+      ...(layer.type === 'text'
+        ? [
+            buildLayerTextShape(
+              textScale === 1
+                ? layer
+                : {
+                    ...layer,
+                    content: {
+                      ...layer.content,
+                      style: {
+                        ...layer.content.style,
+                        fontSize: layer.content.style.fontSize * textScale,
+                      },
+                    },
+                  },
+              ctx.allocShapeId(),
+              textBottom,
+              listIndentPx,
+            ),
+          ]
+        : convertLayerToShapes(layer, ctx, textBottom)),
     );
   }
 
@@ -969,112 +1010,55 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
   }
 }
 
-interface LayerRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-function resolvePositionValue(value: number | string | undefined, dimension: number): number {
-  if (typeof value === 'number') return value;
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (trimmed.endsWith('%')) {
-      const percent = Number.parseFloat(trimmed);
-      if (Number.isFinite(percent)) return (percent / 100) * dimension;
-    }
-    const numeric = Number.parseFloat(trimmed);
-    if (Number.isFinite(numeric)) return numeric;
-  }
-  return 0;
-}
-
-function resolveLayerRect(
-  position: Position,
-  defaultWidth: number,
-  defaultHeight: number,
-): LayerRect {
-  const width = Math.max(
-    1,
-    position.width != null ? resolvePositionValue(position.width, 1920) : defaultWidth,
-  );
-  const height = Math.max(
-    1,
-    position.height != null ? resolvePositionValue(position.height, 1080) : defaultHeight,
-  );
-  let x = resolvePositionValue(position.x, 1920);
-  let y = resolvePositionValue(position.y, 1080);
-  const anchor = position.anchor ?? 'top-left';
-  if (anchor === 'center') {
-    x -= width / 2;
-    y -= height / 2;
-  } else {
-    if (anchor.endsWith('right')) x -= width;
-    if (anchor.startsWith('bottom')) y -= height;
-  }
-  // BlockRenderer clips the complete layer stack to the 1920x1080 viewBox.
-  // Native PowerPoint shapes are not implicitly clipped, so trim their boxes
-  // to that same canvas instead of letting long text create off-slide content.
-  const clippedX = Math.min(1919, Math.max(0, x));
-  const clippedY = Math.min(1079, Math.max(0, y));
-  const clippedWidth = Math.max(1, Math.min(width - (clippedX - x), 1920 - clippedX));
-  const clippedHeight = Math.max(1, Math.min(height - (clippedY - y), 1080 - clippedY));
-  return { x: clippedX, y: clippedY, width: clippedWidth, height: clippedHeight };
-}
-
-function toEmuRect(rect: LayerRect): EmuRect {
-  return {
-    x: Math.round((rect.x / 1920) * SLIDE_WIDTH),
-    y: Math.round((rect.y / 1080) * SLIDE_HEIGHT),
-    width: Math.max(1, Math.round((rect.width / 1920) * SLIDE_WIDTH)),
-    height: Math.max(1, Math.round((rect.height / 1080) * SLIDE_HEIGHT)),
-  };
-}
-
-function buildLayerTextShape(layer: TextLayer, shapeId: number, maxBottom?: number): string {
+function buildLayerTextShape(
+  layer: TextLayer,
+  shapeId: number,
+  maxBottom?: number,
+  listIndentPx?: number,
+): string {
   const sourceText = layer.content.text ?? '';
-  // One marker occupies roughly one text character once rendered as its glyph.
-  // Measuring the sentinel payload would wildly overestimate the text box;
-  // stripping it entirely would underestimate mixed icon/text lines.
-  const text = splitIconMarkers(sourceText)
-    .map((run) => (run.type === 'text' ? run.text : 'M'))
-    .join('');
+  const text = measurableText(sourceText);
   const style = layer.content.style;
   const padding = style.padding ?? 0;
   const rawLines = text.split('\n');
+  const charEm = averageCharEm(style);
   const estimatedWidth = Math.min(
     1920,
-    Math.max(1, Math.max(...rawLines.map((line) => line.length), 1) * style.fontSize * 0.55),
+    Math.max(
+      1,
+      Math.max(...rawLines.map((line) => line.length), 1) *
+        style.fontSize *
+        // A box sized to the text must not wrap it when Office's face for
+        // the CSS stack runs a little wider than the estimate.
+        Math.max(0.55, charEm * 1.15) +
+        padding * 2,
+    ),
   );
   const boxWidth =
     layer.position.width != null
       ? resolvePositionValue(layer.position.width, 1920)
       : estimatedWidth;
-  // Large one-line display titles are authored to remain on one line in the
-  // SVG player. Office font metrics are wider than the player's lightweight
-  // wrap estimate, so cap those titles before PowerPoint introduces a second
-  // line that collides with the next layer.
+  // Large one-line display titles are authored to stay on one line. Cap them
+  // so the estimated advance fits the box before PowerPoint wraps one into
+  // a second line that collides with the next layer.
   const fittedFontSize =
     rawLines.length === 1 && style.fontSize >= 80 && text.length > 0
-      ? Math.min(style.fontSize, boxWidth / (text.length * 0.78))
+      ? Math.min(style.fontSize, (boxWidth - padding * 2) / (text.length * charEm * 1.05))
       : style.fontSize;
-  const charsPerLine = Math.max(1, Math.floor(boxWidth / Math.max(1, fittedFontSize * 0.58)));
-  const wrappedLineCount = Math.max(
-    1,
-    rawLines.reduce((count, line) => count + Math.max(1, Math.ceil(line.length / charsPerLine)), 0),
+  const blockGaps = hasBlockGaps(layer);
+  const paragraphSource = layerParagraphs(layer);
+  const textWidth = Math.max(1, boxWidth - padding * 2);
+  const flowHeight = (fontSize: number) =>
+    estimateFlowHeight(paragraphSource, { ...style, fontSize }, textWidth, blockGaps);
+  const neededHeight = Math.max(
+    fittedFontSize * (style.lineHeight ?? 1.4),
+    flowHeight(fittedFontSize),
   );
-  // DrawingML's no-autofit text layout needs more vertical room than the
-  // nominal line spacing, especially for substituted serif/display fonts.
-  // Without this font-metric reserve PowerPoint clips the lower half of
-  // large template titles and subtitles at the shape boundary.
-  const officeFontMetricSlack = fittedFontSize * 0.8;
-  const estimatedHeight = Math.max(
-    fittedFontSize * (style.lineHeight ?? 1.4) * wrappedLineCount +
-      officeFontMetricSlack +
-      padding * 2,
-    fittedFontSize + officeFontMetricSlack + padding * 2,
-  );
+  // Office's line metrics are not CSS's: the first line's ascent and the
+  // last line's descent can run past a box sized to the CSS line boxes
+  // alone, which clips the bottom of display type at a no-autofit boundary.
+  const reserve = fittedFontSize * OFFICE_TEXT_RESERVE_EM;
+  const estimatedHeight = neededHeight + reserve + padding * 2;
   const resolvedRect = resolveLayerRect(layer.position, boxWidth, estimatedHeight);
   // Leave a small bottom inset for Office/LibreOffice glyph descenders and
   // antialiasing. The SVG player clips exactly at 1080; rasterizers otherwise
@@ -1085,23 +1069,38 @@ function buildLayerTextShape(layer: TextLayer, shapeId: number, maxBottom?: numb
     y: Math.min(resolvedRect.y, safeBottom - 1),
     height: Math.max(1, Math.min(resolvedRect.height, safeBottom - resolvedRect.y)),
   };
-  const heightScale = Math.min(1, virtualRect.height / estimatedHeight);
-  const renderedFontSize = Math.max(1, fittedFontSize * heightScale * (heightScale < 1 ? 0.9 : 1));
+  // Shrink only text the estimate says overflows by more than the reserve:
+  // the slide's grow scale was chosen so its text fits by this same
+  // estimate, and shrinking it again would undo the match with the player.
+  const availableHeight = Math.max(1, virtualRect.height - padding * 2);
+  const heightScale = neededHeight > availableHeight + reserve ? availableHeight / neededHeight : 1;
+  const renderedFontSize = Math.max(1, fittedFontSize * heightScale * (heightScale < 1 ? 0.95 : 1));
   const renderedStyle =
     renderedFontSize === style.fontSize ? style : { ...style, fontSize: renderedFontSize };
   const rect = toEmuRect(virtualRect);
   const align = style.textAlign === 'center' ? 'ctr' : style.textAlign === 'right' ? 'r' : 'l';
   const vertical =
     style.verticalAlign === 'bottom' ? 'b' : style.verticalAlign === 'middle' ? 'ctr' : 't';
-  const inset = Math.max(0, Math.round((padding / 1920) * SLIDE_WIDTH));
+  const inset = Math.max(0, Math.round(padding * EMU_PER_CANVAS_PX));
   const bodyPr =
     `<a:bodyPr wrap="square" anchor="${vertical}" vertOverflow="clip" horzOverflow="clip"` +
     ` lIns="${inset}" rIns="${inset}" tIns="${inset}" bIns="${inset}">` +
     `<a:noAutofit/></a:bodyPr>`;
-  const paragraphs = sourceText
-    .split('\n')
-    .map((line) => buildLayerTextParagraph(line, renderedStyle, align))
-    .join('');
+  // Rich text spaces its blocks by margins, so it takes the structured path
+  // even without list items; plain text keeps one paragraph per line.
+  const paragraphs =
+    layer.content.paragraphs || blockGaps
+      ? buildStructuredParagraphs(paragraphSource, renderedStyle, align, {
+          // A list with no marker column of its own hangs its bullets by the
+          // player's list indent.
+          indentPx: listIndentPx ?? renderedStyle.fontSize * LIST_INDENT_EM,
+          spacingScale: renderedStyle.fontSize / style.fontSize,
+          blockGaps,
+        })
+      : sourceText
+          .split('\n')
+          .map((line) => buildLayerTextParagraph(line, renderedStyle, align))
+          .join('');
 
   return (
     `<p:sp>` +
@@ -1118,8 +1117,75 @@ function buildLayerTextShape(layer: TextLayer, shapeId: number, maxBottom?: numb
   );
 }
 
-function buildLayerTextParagraph(text: string, style: TextStyle, align: string): string {
-  const size = Math.max(100, Math.round(style.fontSize * 75));
+/**
+ * Hundredths of a point per canvas px. The 1920px canvas spans the slide's
+ * 960pt width, so one canvas px is half a point — for text sizes and
+ * paragraph spacing alike.
+ */
+const TEXT_PX_TO_CENTIPOINTS = 50;
+
+/**
+ * PowerPoint's single line spacing is the font's own line height — about
+ * 1.2em for common faces — where CSS `line-height` is a multiple of the font
+ * size, so a CSS line height maps to `lnSpc` as a fraction of 1.2.
+ */
+const OFFICE_SINGLE_LINE_EM = 1.2;
+
+/** Vertical room, in em, reserved beyond the CSS line boxes (see `buildLayerTextShape`). */
+const OFFICE_TEXT_RESERVE_EM = 0.3;
+
+interface StructuredParagraphOptions {
+  /** Hanging indent of a list paragraph, in canvas px. */
+  indentPx: number;
+  /** Factor on authored `spaceBefore`, matching a shrink of the font. */
+  spacingScale: number;
+  /** Space blocks by the player's rich-text margins instead of blank lines. */
+  blockGaps: boolean;
+}
+
+/**
+ * Native DrawingML paragraphs for a layer's structured `paragraphs`: list
+ * items become real bullets or numbers with a hanging indent (see
+ * textLists.ts), so Office apps treat them as a list. With `blockGaps`, a
+ * run of blank paragraphs becomes space above the next block — the margin
+ * the player's rich text draws there — rather than empty lines.
+ */
+function buildStructuredParagraphs(
+  paragraphs: readonly TextParagraph[],
+  style: TextStyle,
+  align: string,
+  options: StructuredParagraphOptions,
+): string {
+  const plans = planListParagraphs(paragraphs);
+  const gaps = options.blockGaps ? blockGapsEm(paragraphs, style.lineHeight ?? 1.4) : undefined;
+  return paragraphs
+    .map((paragraph, index) => {
+      const gap = gaps?.[index];
+      if (gap === null) return '';
+      return buildLayerTextParagraph(paragraph.text, style, align, {
+        spaceBefore:
+          (gap ?? 0) * style.fontSize + (paragraph.spaceBefore ?? 0) * options.spacingScale,
+        list: plans[index],
+        indentPx: options.indentPx,
+      });
+    })
+    .join('');
+}
+
+interface LayerParagraphOptions {
+  spaceBefore?: number;
+  list?: ListParagraphPlan;
+  /** Hanging indent of a list paragraph, in canvas px. */
+  indentPx?: number;
+}
+
+function buildLayerTextParagraph(
+  text: string,
+  style: TextStyle,
+  align: string,
+  options: LayerParagraphOptions = {},
+): string {
+  const size = Math.max(100, Math.round(style.fontSize * TEXT_PX_TO_CENTIPOINTS));
   const color = parseCssColor(style.color, '000000');
   const typeface = officeTypeface(style.fontFamily, DEFAULT_FONT);
   const textRunProperties = [
@@ -1129,30 +1195,43 @@ function buildLayerTextParagraph(text: string, style: TextStyle, align: string):
     ...(style.fontWeight === 'bold' ? ['b="1"'] : []),
     ...(style.fontStyle === 'italic' ? ['i="1"'] : []),
   ].join(' ');
-  const lineSpacing = Math.max(10000, Math.round((style.lineHeight ?? 1.4) * 100000));
-  const runs = splitIconMarkers(text)
-    .map((run) => {
-      if (run.type === 'text') {
-        if (!run.text) return '';
-        return (
-          `<a:r><a:rPr ${textRunProperties}>${solidColorXml(color)}` +
-          `<a:latin typeface="${escapeXml(typeface)}"/></a:rPr>` +
-          `<a:t>${escapeXml(run.text)}</a:t></a:r>`
-        );
-      }
+  const lineSpacing = Math.max(
+    10000,
+    Math.round(((style.lineHeight ?? 1.4) / OFFICE_SINGLE_LINE_EM) * 100000),
+  );
+  const lineRuns = (line: string): string =>
+    splitIconMarkers(line)
+      .map((run) => {
+        if (run.type === 'text') {
+          if (!run.text) return '';
+          return (
+            `<a:r><a:rPr ${textRunProperties}>${solidColorXml(color)}` +
+            `<a:latin typeface="${escapeXml(typeface)}"/></a:rPr>` +
+            `<a:t>${escapeXml(run.text)}</a:t></a:r>`
+          );
+        }
 
-      const glyph = fontAwesomeGlyph(run.family, run.name);
-      if (!glyph) return '';
-      const iconTypeface = fontAwesomeFace(run.family).typeface;
-      return (
-        `<a:r><a:rPr lang="en-US" dirty="0" sz="${size}">${solidColorXml(color)}` +
-        `<a:latin typeface="${escapeXml(iconTypeface)}"/></a:rPr>` +
-        `<a:t>${escapeXml(glyph)}</a:t></a:r>`
-      );
-    })
-    .join('');
+        const glyph = fontAwesomeGlyph(run.family, run.name);
+        if (!glyph) return '';
+        const iconTypeface = fontAwesomeFace(run.family).typeface;
+        return (
+          `<a:r><a:rPr lang="en-US" dirty="0" sz="${size}">${solidColorXml(color)}` +
+          `<a:latin typeface="${escapeXml(iconTypeface)}"/></a:rPr>` +
+          `<a:t>${escapeXml(glyph)}</a:t></a:r>`
+        );
+      })
+      .join('');
+  // A `\n` inside one paragraph is a line break, not a new paragraph — a
+  // new paragraph would give a list item's second line its own bullet.
+  const runs = text.split('\n').map(lineRuns).join(`<a:br><a:rPr ${textRunProperties}/></a:br>`);
+  const spaceBefore = Math.round((options.spaceBefore ?? 0) * TEXT_PX_TO_CENTIPOINTS);
+  const { attributes, bullet } = options.list
+    ? listParagraphXml(options.list, options.indentPx ?? style.fontSize * LIST_INDENT_EM)
+    : { attributes: '', bullet: '' };
   return (
-    `<a:p><a:pPr algn="${align}"><a:lnSpc><a:spcPct val="${lineSpacing}"/></a:lnSpc></a:pPr>` +
+    `<a:p><a:pPr${attributes} algn="${align}"><a:lnSpc><a:spcPct val="${lineSpacing}"/></a:lnSpc>` +
+    (spaceBefore > 0 ? `<a:spcBef><a:spcPts val="${spaceBefore}"/></a:spcBef>` : '') +
+    `${bullet}</a:pPr>` +
     (runs ||
       `<a:r><a:rPr ${textRunProperties}>${solidColorXml(color)}` +
         `<a:latin typeface="${escapeXml(typeface)}"/></a:rPr><a:t> </a:t></a:r>`) +
@@ -1294,7 +1373,7 @@ function buildPathLayerShapes(layer: PathLayer, ctx: SlideContext): string[] {
   const flipH = x2 < x1 ? ' flipH="1"' : '';
   const flipV = y2 < y1 ? ' flipV="1"' : '';
   const stroke = parseCssColor(layer.content.stroke, 'FFFFFF');
-  const width = Math.max(1, Math.round((layer.content.strokeWidth ?? 2) * 9525));
+  const width = Math.max(1, Math.round((layer.content.strokeWidth ?? 2) * EMU_PER_CANVAS_PX));
   const head = markerXml('headEnd', layer.content.startMarker);
   const tail = markerXml('tailEnd', layer.content.endMarker);
   const dash = dashXml(layer.content.borderStyle, layer.content.dasharray);
@@ -1440,7 +1519,7 @@ function lineXml(
   borderStyle: 'solid' | 'dashed' | 'dotted' | undefined,
 ): string {
   if (!color || !widthPx || widthPx <= 0) return '<a:ln><a:noFill/></a:ln>';
-  const width = Math.max(1, Math.round(widthPx * 9525));
+  const width = Math.max(1, Math.round(widthPx * EMU_PER_CANVAS_PX));
   return `<a:ln w="${width}">${solidColorXml(parseCssColor(color, '000000'))}${dashXml(borderStyle)}</a:ln>`;
 }
 

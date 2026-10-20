@@ -718,3 +718,116 @@ describe('docToPptx markdown-authored parity', () => {
     expect(count).toBe(8);
   });
 });
+
+// ============================================
+// Native lists
+// ============================================
+
+interface ExportedParagraph {
+  shape: string;
+  text: string;
+  bullet: 'char' | 'number' | null;
+  level: number | null;
+  startAt: string | null;
+  size: string | null;
+}
+
+/** Every paragraph of one exported slide, with its shape name and bullet facts. */
+async function slideParagraphs(bytes: ArrayBuffer, index = 1): Promise<ExportedParagraph[]> {
+  const slide = await getPartXml(await openPackage(bytes), `ppt/slides/slide${index}.xml`);
+  return Array.from(slide!.getElementsByTagNameNS(NS_PML, 'sp')).flatMap((shape) => {
+    const name = shape.getElementsByTagNameNS(NS_PML, 'cNvPr')[0]?.getAttribute('name') ?? '';
+    return Array.from(shape.getElementsByTagNameNS(NS_DRAWINGML, 'p'), (paragraph) => {
+      const pPr = paragraph.getElementsByTagNameNS(NS_DRAWINGML, 'pPr')[0];
+      const autoNum = paragraph.getElementsByTagNameNS(NS_DRAWINGML, 'buAutoNum')[0];
+      const char = paragraph.getElementsByTagNameNS(NS_DRAWINGML, 'buChar')[0];
+      return {
+        shape: name,
+        text: Array.from(
+          paragraph.getElementsByTagNameNS(NS_DRAWINGML, 't'),
+          (run) => run.textContent ?? '',
+        ).join(''),
+        bullet: autoNum ? ('number' as const) : char ? ('char' as const) : null,
+        level: pPr?.hasAttribute('lvl') ? Number(pPr.getAttribute('lvl')) : null,
+        startAt: autoNum?.getAttribute('startAt') ?? null,
+        size: paragraph.getElementsByTagNameNS(NS_DRAWINGML, 'rPr')[0]?.getAttribute('sz') ?? null,
+      };
+    });
+  });
+}
+
+describe('docToPptx native lists', () => {
+  it('writes content-body list items as PowerPoint bullets, not bullet characters', async () => {
+    // Regression: the content template's body reached PowerPoint as lines
+    // beginning with a typed `• `, so they were not a list (no hanging
+    // indent, no list formatting) once opened in an Office app.
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '## Local AI driven\n\nAn opening paragraph.\n\n- First\n  - Nested\n- Second\n\n3. Third\n4. Fourth',
+      ),
+      { articleId: 'content-bullets', generateCoverBlock: false },
+    );
+    const body = (await slideParagraphs(await docToPptx(doc, { includeCoverSlide: false }))).filter(
+      (paragraph) => paragraph.shape === 'body',
+    );
+
+    expect(body.map(({ text, bullet, level, startAt }) => [text, bullet, level, startAt])).toEqual([
+      ['An opening paragraph.', null, null, null],
+      [' ', null, null, null],
+      ['First', 'char', 0, null],
+      ['Nested', 'char', 1, null],
+      ['Second', 'char', 0, null],
+      [' ', null, null, null],
+      // Every item of a run that does not start at 1 repeats `startAt`:
+      // PowerPoint starts a new run at any change in numbering attributes.
+      ['Third', 'number', 0, '3'],
+      ['Fourth', 'number', 0, '3'],
+    ]);
+    expect(body.some((paragraph) => /^\s*(•|\d+\.)\s/.test(paragraph.text))).toBe(false);
+  });
+
+  it('exports a list-template slide as one text box with uniform bullets', async () => {
+    // Regression: the list template draws each item as a marker layer beside
+    // a body layer (a hanging indent in SVG). Exported layer by layer that was
+    // a separate shape per marker and per item, and each item shape shrank
+    // its font on its own, so the items came out in different sizes.
+    const doc = markdownToDoc(
+      parseMarkdown(
+        [
+          '## Products {[list]}',
+          '',
+          '- Gezel - multi-agent platform and harness focused on making it easy to use local AI to its fullest. Gezel is a machine-level service that orchestrates agentic workloads, with app, CLI, and API',
+          '- DocBlocks - content editor application that integrates local AI for content editing tasks.',
+          '- Qualla - an attempt to tell more historical stories from all around the world.',
+        ].join('\n'),
+      ),
+      { articleId: 'list-bullets', generateCoverBlock: false },
+    );
+    const paragraphs = await slideParagraphs(await docToPptx(doc, { includeCoverSlide: false }));
+
+    expect(paragraphs.some((paragraph) => /^item-\d+/.test(paragraph.shape))).toBe(false);
+    const items = paragraphs.filter((paragraph) => paragraph.shape === 'list-items');
+    expect(items.map((item) => item.text.split(' - ')[0])).toEqual([
+      'Gezel',
+      'DocBlocks',
+      'Qualla',
+    ]);
+    expect(items.every((item) => item.bullet === 'char' && item.level === 0)).toBe(true);
+    expect(new Set(items.map((item) => item.size)).size).toBe(1);
+  });
+
+  it('numbers an ordered list-template slide with one auto-numbered run', async () => {
+    const doc = markdownToDoc(parseMarkdown('## Steps {[list]}\n\n1. First\n2. Second\n3. Third'), {
+      articleId: 'list-numbers',
+      generateCoverBlock: false,
+    });
+    const items = (
+      await slideParagraphs(await docToPptx(doc, { includeCoverSlide: false }))
+    ).filter((paragraph) => paragraph.shape === 'list-items');
+    expect(items.map(({ text, bullet, startAt }) => [text, bullet, startAt])).toEqual([
+      ['First', 'number', null],
+      ['Second', 'number', null],
+      ['Third', 'number', null],
+    ]);
+  });
+});
