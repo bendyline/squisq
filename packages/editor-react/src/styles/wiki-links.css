@@ -1,0 +1,25 @@
+.squisq-wiki-link button {
+  font: inherit;
+  color: var(--squisq-accent);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.squisq-wiki-link button[data-wiki-missing] {
+  text-decoration-style: dashed;
+}
+.squisq-wiki-link button:disabled {
+  color: inherit;
+  cursor: default;
+  text-decoration: none;
+}
+.squisq-wiki-link button:focus-visible {
+  outline: 2px solid var(--squisq-accent);
+  outline-offset: 2px;
+}
+.squisq-wiki-error {
+  color: var(--squisq-danger);
+  font-size: 0.85em;
+}

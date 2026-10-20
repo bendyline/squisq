@@ -495,6 +495,8 @@ export interface MarkdownInlineCode extends MarkdownNodeBase {
  */
 export interface MarkdownLink extends MarkdownNodeBase {
   type: 'link';
+  /** Authored [[target]]. url is empty until the host resolves an existing article. */
+  wikiTarget?: string;
   /** URL target */
   url: string;
   /** Optional title (shown on hover) */

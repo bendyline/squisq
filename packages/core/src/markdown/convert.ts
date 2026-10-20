@@ -1190,6 +1190,15 @@ function convertInlineNode(node: MdastNode, parseHtml: boolean): MarkdownInlineN
         ...posField(pos),
       };
 
+    case 'wikiLink':
+      return {
+        type: 'link',
+        wikiTarget: node.value ?? '',
+        url: '',
+        children: [{ type: 'text', value: node.value ?? '' }],
+        ...posField(pos),
+      };
+
     case 'link':
       return {
         type: 'link',
@@ -1549,6 +1558,8 @@ function inlineToMdast(node: MarkdownInlineNode): MdastNode {
       };
 
     case 'link':
+      if (node.wikiTarget !== undefined)
+        return { type: 'wikiLink', value: node.wikiTarget, ...mdastPosField(node.position) };
       return {
         type: 'link',
         url: node.url,

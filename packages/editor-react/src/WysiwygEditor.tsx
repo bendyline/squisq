@@ -24,6 +24,7 @@ import TableHeader from '@tiptap/extension-table-header';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Link from '@tiptap/extension-link';
+import { WikiLink } from './WikiLink';
 import Placeholder from '@tiptap/extension-placeholder';
 import { resolveFontFamily, FONT_FALLBACKS, VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { DEFAULT_THEME, flattenBlocks, markdownToDoc } from '@bendyline/squisq/doc';
@@ -471,6 +472,7 @@ export function WysiwygEditor({
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
+      WikiLink,
       FindHighlightExtension,
       ProofingExtension,
       ReviewExtension,

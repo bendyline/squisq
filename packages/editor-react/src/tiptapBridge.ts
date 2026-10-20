@@ -13,6 +13,7 @@
 
 import { resolveIcon } from '@bendyline/squisq/icons';
 import {
+  wikiLinkPath,
   matchTrailingTemplateAnnotation,
   matchTrailingPandocAttr,
   tokenizeAttrTokens,
@@ -1621,6 +1622,13 @@ function inlineToHtml(text: string): string {
     return stash(`<a href="${escapeHtml(url)}"${titleAttr}>${inlineToHtml(linkText)}</a>`);
   });
 
+  // Wiki names are literal. Code, images and standard links are already
+  // protected; escaped openers stay ordinary text.
+  staged = staged.replace(/\[\[([^\u005b\]\n]+)\]\]/g, (full, target: string, offset: number) => {
+    if (isEscapedMarkdownCharacter(staged, offset) || !wikiLinkPath(target)) return full;
+    return stash(`<span data-wiki-link="${escapeHtml(target)}">${escapeHtml(target)}</span>`);
+  });
+
   // Escaped punctuation the emphasis pass below does not own (`\$`, `\#`,
   // `\[` …) becomes a `MarkdownEscape` mark: the Write view shows the bare
   // character and `tiptapToMarkdown` writes the backslash back. Runs after
@@ -1991,6 +1999,11 @@ class RawHtmlVault {
 function htmlToInline(html: string): string {
   let result = html;
   const vault = new RawHtmlVault();
+  result = result.replace(
+    /<span\b[^>]*\bdata-wiki-link="([^"]*)"[^>]*>[\s\S]*?<\/span>/gi,
+    (full, target: string) =>
+      wikiLinkPath(unescapeHtml(target)) ? vault.protect(`[[${target}]]`) : full,
+  );
 
   // Characters the source escaped (see `MarkdownEscape`) get their backslash
   // back. Vaulted so no later pass escapes or strips it again, and kept

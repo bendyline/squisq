@@ -1,3 +1,4 @@
+import type { WikiLinkSupport } from '@bendyline/squisq/markdown';
 /**
  * EditorShell
  *
@@ -508,6 +509,9 @@ export interface EditorShellProps {
    * remote API, …) implement this; the editor stays agnostic.
    */
   documentLinkProvider?: DocumentLinkProvider | null;
+  /** Optional workspace article access. Separate from the media/history container.
+   * Hosts must validate paths, exclusively create files, and flush before opening. */
+  wikiLinks?: WikiLinkSupport | null;
   /**
    * Host fence-renderer registry (`@bendyline/squisq/fence`). Claimed
    * fence languages mount as interactive host widgets in the WYSIWYG
@@ -762,6 +766,7 @@ export function EditorShell({
   proofingIgnoreStore = null,
   speechInput = null,
   documentLinkProvider,
+  wikiLinks,
   fenceRenderers,
   linkSchemes,
   allowRecording = true,
@@ -844,6 +849,7 @@ export function EditorShell({
         proofingIgnoreStore={proofingIgnoreStore}
         speechInput={readOnly ? null : speechInput}
         documentLinkProvider={documentLinkProvider}
+        wikiLinks={wikiLinks}
         fenceRenderers={fenceRenderers}
         onCopyCode={onCopyCode}
         linkSchemes={linkSchemes}

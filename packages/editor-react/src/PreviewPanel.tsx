@@ -77,6 +77,7 @@ export function PreviewPanel({
     isParsing,
     markdownSource,
     mediaRevision,
+    wikiLinks,
     setMarkdownSource,
     bumpMediaRevision,
     allowRecording,
@@ -314,6 +315,7 @@ export function PreviewPanel({
       return (
         <PlainHtmlPreview
           markdown={documentMarkdown}
+          wikiLinks={wikiLinks}
           title={(contentDoc?.frontmatter?.title as string | undefined) ?? undefined}
           mediaProvider={mediaProvider}
           mediaRevision={mediaRevision}

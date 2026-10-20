@@ -6,6 +6,7 @@
  */
 
 import { unified } from 'unified';
+import { remarkWikiLinks } from './remarkWikiLinks.js';
 import remarkStringify from 'remark-stringify';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -340,6 +341,7 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
   if (useDefaults) {
     if (!defaultProcessor) {
       defaultProcessor = unified()
+        .use(remarkWikiLinks)
         .use(remarkGfm)
         .use(remarkMath)
         .use(remarkDirective)
@@ -359,7 +361,7 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
     // Build a custom processor with requested options.
     // unified's .use() chaining changes the generic signature each time,
     // making strict typing impractical — use a widened Processor type.
-    processor = unified();
+    processor = unified().use(remarkWikiLinks);
 
     if (options?.gfm !== false) {
       processor = processor.use(remarkGfm);

@@ -60,6 +60,13 @@ function _getBodyParagraphs(doc: Document): Element[] {
 // ============================================
 
 describe('markdownDocToDocx', () => {
+  it('exports unresolved wiki names as text without empty hyperlink relationships', async () => {
+    const zip = await exportAndParse(parseMarkdown('See [[reference/missing]].'));
+    const xml = await getDocumentXml(zip);
+    expect(xml.getElementsByTagName('w:body')[0].textContent).toContain('reference/missing');
+    expect(xml.getElementsByTagName('w:hyperlink')).toHaveLength(0);
+  });
+
   it('produces a valid zip with required parts', async () => {
     const doc: MarkdownDocument = {
       type: 'document',

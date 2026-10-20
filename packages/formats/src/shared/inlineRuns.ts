@@ -99,6 +99,8 @@ export function inlineNodeToRuns(
     case 'htmlInline':
       return handlers.run(stripHtmlTags(node.rawHtml), format);
     case 'link':
+      if (node.wikiTarget !== undefined && !node.url)
+        return inlineNodesToRuns(node.children, handlers, format);
       return handlers.link(node, format);
     case 'image':
       return handlers.image(node, format);

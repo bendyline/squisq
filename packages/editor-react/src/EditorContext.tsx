@@ -24,7 +24,12 @@ import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 
 export type { FenceRendererMap };
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
-import { parseMarkdown, stringifyMarkdown } from '@bendyline/squisq/markdown';
+import {
+  parseMarkdown,
+  stringifyMarkdown,
+  resolveWikiLinks,
+  type WikiLinkSupport,
+} from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
@@ -574,6 +579,7 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * path link. When unset, the dialog falls back to URL-only.
    */
   documentLinkProvider: DocumentLinkProvider | null;
+  wikiLinks: WikiLinkSupport | null;
   /**
    * Extra link schemes the host intercepts itself (e.g. an app-internal
    * navigation protocol). The link dialog validates against core's
@@ -718,6 +724,7 @@ export interface EditorProviderProps {
    * Omit to fall back to URL-only link insertion.
    */
   documentLinkProvider?: DocumentLinkProvider | null;
+  wikiLinks?: WikiLinkSupport | null;
   /**
    * Host fence-renderer registry (`@bendyline/squisq/fence`). Omit to
    * leave every explicit-language fence to the built-in families.
@@ -891,6 +898,7 @@ export function EditorProvider({
   proofingIgnoreStore = null,
   speechInput = null,
   documentLinkProvider = null,
+  wikiLinks = null,
   fenceRenderers = null,
   onCopyCode,
   linkSchemes,
@@ -1272,6 +1280,43 @@ export function EditorProvider({
       setIsParsing(false);
     }
   }, []);
+
+  // Keep existence out of the authored model. A new source or provider
+  // immediately falls back to the unresolved document until lookup completes.
+  const [wikiProjection, setWikiProjection] = useState<{
+    source: MarkdownDocument;
+    support: WikiLinkSupport;
+    doc: Doc;
+  } | null>(null);
+  const presentationDoc =
+    wikiProjection?.source === markdownDoc && wikiProjection?.support === wikiLinks
+      ? wikiProjection.doc
+      : doc;
+  useEffect(() => {
+    if (!markdownDoc || !wikiLinks) return;
+    let cancelled = false;
+    void resolveWikiLinks(markdownDoc, (target) =>
+      wikiLinks.resolve ? wikiLinks.resolve(target) : wikiLinks.exists(target),
+    ).then(
+      (resolved) => {
+        if (!cancelled && resolved !== markdownDoc)
+          setWikiProjection({
+            source: markdownDoc,
+            support: wikiLinks,
+            doc: markdownToDoc(resolved, {
+              articleId: articleIdRef.current,
+              fileName: fileNameRef.current,
+            }),
+          });
+      },
+      () => {
+        /* An unreadable target remains unlinked; Write shows the lookup error. */
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [markdownDoc, wikiLinks]);
 
   // Parse on source changes with debounce. Skipped in code/image mode —
   // the WYSIWYG/Preview surfaces that consume markdownDoc/doc aren't
@@ -1737,7 +1782,7 @@ export function EditorProvider({
     () => ({
       markdownSource,
       markdownDoc,
-      doc,
+      doc: presentationDoc,
       activeView,
       parseError,
       isParsing,
@@ -1784,6 +1829,7 @@ export function EditorProvider({
       dictation,
       articleId,
       documentLinkProvider,
+      wikiLinks,
       fenceRenderers,
       onCopyCode,
       linkSchemes,
@@ -1826,7 +1872,7 @@ export function EditorProvider({
     [
       markdownSource,
       markdownDoc,
-      doc,
+      presentationDoc,
       activeView,
       parseError,
       isParsing,
@@ -1867,6 +1913,7 @@ export function EditorProvider({
       dictation,
       articleId,
       documentLinkProvider,
+      wikiLinks,
       fenceRenderers,
       onCopyCode,
       linkSchemes,

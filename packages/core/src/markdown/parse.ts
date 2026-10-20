@@ -6,6 +6,7 @@
  */
 
 import { unified } from 'unified';
+import { remarkWikiLinks } from './remarkWikiLinks.js';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -54,6 +55,7 @@ export function parseMarkdown(markdown: string, options?: ParseOptions): Markdow
   if (useDefaults) {
     if (!defaultProcessor) {
       defaultProcessor = unified()
+        .use(remarkWikiLinks)
         .use(remarkParse)
         .use(remarkGfm)
         .use(remarkMath)
@@ -66,7 +68,7 @@ export function parseMarkdown(markdown: string, options?: ParseOptions): Markdow
     // Build a custom processor with requested extensions.
     // unified's .use() chaining changes the generic signature each time,
     // making strict typing impractical — use a widened Processor type.
-    processor = unified().use(remarkParse);
+    processor = unified().use(remarkWikiLinks).use(remarkParse);
 
     if (options?.gfm !== false) {
       processor = processor.use(remarkGfm);

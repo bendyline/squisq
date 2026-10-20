@@ -4287,3 +4287,38 @@ export type { GifDither, VideoQuality, VideoOrientation } from '@bendyline/squis
 ```
 
 `renderDocToMp4` and `renderDocToGif` require Playwright chromium and ffmpeg on PATH.
+
+## Wiki article links
+
+`EditorShell` accepts an optional `wikiLinks: WikiLinkSupport` from
+`@bendyline/squisq/markdown`. It resolves `[[foo]]` to a neighboring `foo.md`
+and `[[reference/blah]]` to a descendant article. Hosts may also resolve HTML
+articles; explicit `.md`, `.html`, and `.htm` names are preserved. This capability is separate
+from `workspaceContainer`: hosts commonly scope that container to media and
+history, rather than neighboring documents.
+
+The host implements `exists(target): Promise<boolean>` and
+`open(target, { create }): Promise<void>`. Optional
+`resolve(target): Promise<string | null>` supplies the encoded public URL
+for an existing article, overriding the default `.md` mapping. A missing
+article returns null. Lookup must never mutate; only a
+Write-mode activation requests creation. The host must validate the target,
+flush the current document, create exclusively, and navigate. Failed reads
+must reject instead of returning false. A host can adapt a `ContentContainer`
+rooted at the document folder, but must use its exclusive-create operation
+and own the save/navigation lifecycle. Do not use an upsert for creation.
+
+Core exposes `wikiLinkPath(target)` (a validated relative `.md` path or null)
+and `resolveWikiLinks(markdownDocument, lookup)` (a non-mutating presentation
+projection, at most 256 distinct sequential lookups; lookup may return a
+boolean or an encoded host URL/null). Parsing produces a
+`MarkdownLink` with `wikiTarget` and an empty `url`; resolution fills a URL only
+for an existing article. Stringification always preserves `[[target]]`.
+Without resolution, renderers show the label as plain text. The editor resolves
+its slideshow, Page and Document previews; standalone export callers can
+resolve the AST explicitly when they have article access.
+
+Names are literal, with spaces and Unicode allowed. Parent/absolute paths,
+URLs, percent escapes, backslashes, controls, reserved Windows names, aliases,
+and fragments are unsupported. Code and escaped brackets retain their normal
+Markdown meaning. Host filesystem containment remains authoritative.

@@ -252,3 +252,5 @@ export { condenseMarkdownSource } from './condenseMarkdown.js';
 
 export { mediaKindForUrl } from './mediaReference.js';
 export type { MediaReferenceKind } from './mediaReference.js';
+
+export { wikiLinkPath, resolveWikiLinks, type WikiLinkSupport } from './wikiLinks.js';

@@ -475,8 +475,10 @@ export function MediaBin({
               aria-haspopup="dialog"
               aria-expanded={isRecorderOpen}
             >
-              <span className="squisq-media-bin-record-dot" aria-hidden="true" />
-              Record
+              <span className="squisq-media-bin-action-icon" aria-hidden="true">
+                <span className="squisq-media-bin-record-dot" />
+              </span>
+              <span>Record</span>
             </button>
           )}
 
@@ -489,7 +491,8 @@ export function MediaBin({
               mediaProvider ? 'Upload files' : 'Load a content zip or select a storage slot first'
             }
           >
-            + Upload
+            <span className="squisq-media-bin-action-icon">+</span>
+            <span>Upload</span>
           </button>
         </div>
       </div>
