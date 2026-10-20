@@ -1,3 +1,14 @@
+## @bendyline/squisq-editor-react [2.12.7](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.6...@bendyline/squisq-editor-react@2.12.7) (2026-10-20)
+
+### Bug Fixes
+
+* Show all blocks in inline preview gutter ([#95](https://github.com/bendyline/squisq/issues/95)) ([c6ef401](https://github.com/bendyline/squisq/commit/c6ef401cfc4c5a3fab1f664a908d7aa056bc65f5))
+
+
+### Dependencies
+
+* **@bendyline/squisq-video-react:** upgraded to 2.5.6
+
 ## @bendyline/squisq-editor-react [2.12.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.5...@bendyline/squisq-editor-react@2.12.6) (2026-10-19)
 
 
