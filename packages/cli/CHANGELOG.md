@@ -1,3 +1,13 @@
+## @bendyline/squisq-cli [2.9.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.7...@bendyline/squisq-cli@2.9.8) (2026-10-20)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.12.5
+* **@bendyline/squisq-formats:** upgraded to 2.7.6
+* **@bendyline/squisq-video:** upgraded to 2.4.5
+* **@bendyline/squisq-react:** upgraded to 2.12.6
+
 ## @bendyline/squisq-cli [2.9.7](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.6...@bendyline/squisq-cli@2.9.7) (2026-10-20)
 
 

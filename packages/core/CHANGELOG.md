@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.12.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.4...@bendyline/squisq@2.12.5) (2026-10-20)
+
+### Bug Fixes
+
+* Add wiki link support across markdown and editor ([#97](https://github.com/bendyline/squisq/issues/97)) ([8ca42ce](https://github.com/bendyline/squisq/commit/8ca42ce6bcac5e5d4c424324ed7528a3139202cc))
+
 ## @bendyline/squisq [2.12.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.3...@bendyline/squisq@2.12.4) (2026-10-19)
 
 ### Bug Fixes

@@ -1,3 +1,18 @@
+## @bendyline/squisq-editor-react [2.12.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.8...@bendyline/squisq-editor-react@2.12.9) (2026-10-20)
+
+### Bug Fixes
+
+* Add wiki link support across markdown and editor ([#97](https://github.com/bendyline/squisq/issues/97)) ([8ca42ce](https://github.com/bendyline/squisq/commit/8ca42ce6bcac5e5d4c424324ed7528a3139202cc))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.12.5
+* **@bendyline/squisq-formats:** upgraded to 2.7.6
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.28
+* **@bendyline/squisq-react:** upgraded to 2.12.6
+* **@bendyline/squisq-video-react:** upgraded to 2.5.7
+
 ## @bendyline/squisq-editor-react [2.12.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.7...@bendyline/squisq-editor-react@2.12.8) (2026-10-20)
 
 

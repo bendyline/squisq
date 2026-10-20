@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.7.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.7.5...@bendyline/squisq-formats@2.7.6) (2026-10-20)
+
+### Bug Fixes
+
+* Add wiki link support across markdown and editor ([#97](https://github.com/bendyline/squisq/issues/97)) ([8ca42ce](https://github.com/bendyline/squisq/commit/8ca42ce6bcac5e5d4c424324ed7528a3139202cc))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.12.5
+
 ## @bendyline/squisq-formats [2.7.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.7.4...@bendyline/squisq-formats@2.7.5) (2026-10-20)
 
 ### Bug Fixes
