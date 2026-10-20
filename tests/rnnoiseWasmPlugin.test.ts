@@ -2,7 +2,7 @@
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'vite';
 import { expect, it, vi } from 'vitest';
 import type { Rnnoise } from '@shiguredo/rnnoise-wasm';
@@ -11,7 +11,8 @@ import { rnnoiseWasmPlugin } from '../packages/site/build/rnnoiseWasmPlugin';
 it.each(['/', '/nested/', './'])(
   'loads the extracted RNNoise WASM on demand with base %s',
   async (base) => {
-    const outDir = await mkdtemp(join(tmpdir(), 'squisq-rnnoise-'));
+    // Exercise the tilde in Windows runner short paths (RUNNER~1) on every OS.
+    const outDir = await mkdtemp(join(tmpdir(), 'squisq-rnnoise-~'));
     try {
       await build({
         configFile: false,
@@ -41,9 +42,13 @@ it.each(['/', '/nested/', './'])(
       // dependency, including the emitted URL and actual WASM initialization.
       vi.stubGlobal('window', {});
       const fetchAsset = vi.fn(async (url: string) => {
-        expect(url).toBe(
-          base === './' ? pathToFileURL(join(outDir, wasmFile!)).href : `${base}${wasmFile}`,
-        );
+        if (base === './') {
+          // Node and the module runner can spell the same tilde as %7E or ~.
+          // Compare the resolved file, keeping absolute deployment URLs exact.
+          expect(fileURLToPath(url)).toBe(join(outDir, wasmFile!));
+        } else {
+          expect(url).toBe(`${base}${wasmFile}`);
+        }
         return new Response(new Uint8Array(wasm), {
           headers: { 'Content-Type': 'application/wasm' },
         });
