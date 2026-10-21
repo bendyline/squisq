@@ -946,6 +946,9 @@ export function tiptapToMarkdown(html: string): string {
               .map((a) => {
                 if (a === 'center') return ':---:';
                 if (a === 'right') return '---:';
+                // `parseAlignments` reads `:---` as explicit left and `---` as
+                // none; write them back the same way.
+                if (a === 'left') return ':---';
                 return '---';
               })
               .join(' | ') +

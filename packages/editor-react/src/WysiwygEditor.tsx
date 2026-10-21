@@ -19,8 +19,7 @@ import type { EditorView as ProseMirrorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
+import { AlignedTableCell, AlignedTableHeader } from './tiptap/alignedTableCells';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Link from '@tiptap/extension-link';
@@ -457,8 +456,8 @@ export function WysiwygEditor({
       SceneBlockExtension.configure({ textChannel: sceneTextChannel }),
       Table.configure({ resizable: true }),
       TableRow,
-      TableCell,
-      TableHeader,
+      AlignedTableCell,
+      AlignedTableHeader,
       TaskList,
       TaskItem.configure({ nested: true }),
       LinkWithTitle.configure({
@@ -482,7 +481,12 @@ export function WysiwygEditor({
       DictationExtension,
     ],
     content: initialContentRef.current,
-    onUpdate: ({ editor: ed }) => {
+    onUpdate: ({ editor: ed, transaction }) => {
+      // `setEditable()`, which the read-only sync below calls on mount, emits
+      // `update` with an empty transaction. Serializing then reported the
+      // editor's normalized Markdown as an edit, and hosts saved a file that
+      // was only opened. Only a changed document is a change to report.
+      if (!transaction.docChanged) return;
       // While an external source waits to be applied, Tiptap still holds the
       // previous one, and the source channel already points at the incoming
       // source's range (the next block, in block layouts). Serializing now
