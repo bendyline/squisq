@@ -11,7 +11,9 @@ test.beforeAll(async () => {
     bundle: true,
     write: false,
     platform: 'browser',
-    format: 'iife',
+    // ESM, not IIFE: the workspace packages are ESM-only and reference
+    // import.meta (squisq-graph's worker spawn), which an IIFE cannot carry.
+    format: 'esm',
     jsx: 'automatic',
   });
   fixtureScript = bundle.outputFiles[0].text;
@@ -27,7 +29,7 @@ test.beforeEach(async ({ page }) => {
     '<!doctype html><html><body style="margin:0"><div id="root"></div></body></html>',
   );
   await page.addStyleTag({ content: playerCss });
-  await page.addScriptTag({ content: fixtureScript });
+  await page.addScriptTag({ content: fixtureScript, type: 'module' });
   await page.getByRole('button', { name: 'Initialize', exact: true }).click();
   await expect(page.locator('#state')).toHaveText('ready');
 });
