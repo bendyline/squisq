@@ -374,7 +374,6 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
           {
             text: itemText,
             list: { ordered, level: 0, ...(ordered ? { number: i + 1 } : {}) },
-            ...(i > 0 ? { spaceBefore: gapPx } : {}),
           },
         ],
         flow: { id: LIST_ITEMS_FLOW },

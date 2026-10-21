@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { markdownToDoc } from '@bendyline/squisq/doc';
+import { resolveTheme } from '@bendyline/squisq/schemas';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { docToPptx } from '../pptx/export';
 import { openPackage, getPartXml } from '../ooxml/reader';
@@ -21,12 +22,20 @@ describe('PPTX grain overlays', () => {
           node.getAttribute('name'),
         );
         expect(names).not.toContain('persistent-grain');
-        expect(names).toContain('bg');
+        // The template's full-slide background is the deck's native
+        // background now, not a shape on the slide in the way of its content.
+        expect(names).not.toContain('bg');
         const text = Array.from(slide!.getElementsByTagNameNS(NS_DRAWINGML, 't'))
           .map((node) => node.textContent)
           .join(' ');
         expect(text).toContain(index === 1 ? 'Opening' : 'Visible slide content.');
       }
+
+      const master = await getPartXml(pkg, 'ppt/slideMasters/slideMaster1.xml');
+      const background = master!.getElementsByTagNameNS(NS_PML, 'bg')[0];
+      expect(
+        background?.getElementsByTagNameNS(NS_DRAWINGML, 'srgbClr')[0]?.getAttribute('val'),
+      ).toBe(resolveTheme(themeId).colors.background.replace('#', '').toUpperCase());
     });
   }
 

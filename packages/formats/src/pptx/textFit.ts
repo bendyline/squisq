@@ -40,21 +40,28 @@ const SERIF_FONT =
   /\b(serif|georgia|times|garamond|playfair|merriweather|lora|baskerville|cambria|palatino|didot|bodoni)\b/;
 
 /**
- * Average advance per character, in em. Set a little above what the
- * player's own renders measure (system sans ≈ 0.44, Georgia Bold ≈ 0.53) so
- * text still fits when Office substitutes a wider face for the CSS stack.
+ * Average advance per character, in em. `office` (the default) sits a
+ * little above what the player's own renders measure, so text still fits
+ * when Office substitutes a wider face for the CSS stack; `browser` is what
+ * the player measures (system sans ≈ 0.44, Georgia Bold ≈ 0.53), for
+ * estimating the grow scale it would pick.
  */
-export function averageCharEm(style: TextStyle): number {
+export function averageCharEm(style: TextStyle, basis: 'office' | 'browser' = 'office'): number {
   const first = resolveFontFamily(style.fontFamily, 'sans-serif')
     .split(',')[0]!
     .trim()
     .replace(/^['"]|['"]$/g, '')
     .toLowerCase();
+  const serif = !first.includes('sans') && SERIF_FONT.test(first);
   const base = MONO_FONT.test(first)
     ? 0.6
-    : !first.includes('sans') && SERIF_FONT.test(first)
-      ? 0.52
-      : 0.48;
+    : basis === 'browser'
+      ? serif
+        ? 0.5
+        : 0.44
+      : serif
+        ? 0.52
+        : 0.48;
   return style.fontWeight === 'bold' ? base * 1.07 : base;
 }
 
@@ -171,6 +178,57 @@ export function estimateFlowHeight(
   return height;
 }
 
+/** Width an HTML text box leaves its content: the box less padding and border. */
+function htmlContentWidth(layer: TextLayer): number {
+  const { position, content } = layer;
+  const { style } = content;
+  const border = style.borderColor && (style.borderWidth ?? 0) > 0 ? style.borderWidth! : 0;
+  const boxWidth =
+    position.width != null ? resolvePositionValue(position.width, CANVAS_WIDTH) : CANVAS_WIDTH;
+  return Math.max(1, boxWidth - ((style.padding ?? 0) + border) * 2);
+}
+
+/**
+ * Content height of a text layer at `scale` times its font size, laid out
+ * the way the player lays it out: HTML text reflows in its box; SVG text
+ * keeps the breaks it was wrapped into at its base size (half an em per
+ * character, the player's `wrapText`) and every line scales. One estimate
+ * serves the grow search, the per-shape shrink and a merged flow's spacing,
+ * so none of them can disagree with another about whether text fits.
+ *
+ * `listIndentPx` is the hanging indent of an SVG flow's list paragraphs —
+ * a merged list's marker column — which its text wraps inside.
+ */
+export function estimateTextHeight(layer: TextLayer, scale: number, listIndentPx = 0): number {
+  const { style } = layer.content;
+  if (isHtmlText(layer)) {
+    return estimateFlowHeight(
+      layerParagraphs(layer),
+      { ...style, fontSize: style.fontSize * scale },
+      htmlContentWidth(layer),
+      hasBlockGaps(layer),
+    );
+  }
+  const boxWidth =
+    layer.position.width != null
+      ? resolvePositionValue(layer.position.width, CANVAS_WIDTH)
+      : undefined;
+  const lineHeight = (style.lineHeight ?? 1.4) * style.fontSize * scale;
+  let lineCount = 0;
+  let spacing = 0;
+  for (const paragraph of layerParagraphs(layer)) {
+    spacing += paragraph.spaceBefore ?? 0;
+    const indent = paragraph.list ? listIndentPx * (paragraph.list.level + 1) : 0;
+    const charsPerLine =
+      boxWidth == null ? undefined : Math.floor((boxWidth - indent) / (style.fontSize * 0.5));
+    for (const line of measurableText(paragraph.text).split('\n')) {
+      lineCount += charsPerLine == null ? 1 : wrapByChars(line, charsPerLine).length;
+    }
+  }
+  if (style.maxLines) lineCount = Math.min(lineCount, style.maxLines);
+  return lineCount * lineHeight + spacing;
+}
+
 interface Rect {
   left: number;
   top: number;
@@ -262,8 +320,10 @@ function svgTarget(layer: TextLayer): FitTarget | null {
   if (style.maxLines && lines.length > style.maxLines) lines = lines.slice(0, style.maxLines);
   const longest = Math.max(...lines.map((line) => line.length));
   if (longest === 0) return null;
-  const width = longest * averageCharEm(style) * style.fontSize;
-  const height = lines.length * (style.lineHeight ?? 1.4) * style.fontSize;
+  // The player measures this width from real glyphs, and PowerPoint wraps
+  // it anyway, so it is estimated at the browser's advance.
+  const width = longest * averageCharEm(style, 'browser') * style.fontSize;
+  const height = estimateTextHeight(layer, 1);
 
   return {
     fits: (scale) =>
@@ -319,13 +379,7 @@ function htmlTarget(layer: TextLayer): FitTarget | null {
     : style.verticalAlign === 'top' || style.verticalAlign === 'bottom'
       ? style.verticalAlign
       : 'middle';
-  const heightAt = (scale: number) =>
-    estimateFlowHeight(
-      paragraphs,
-      { ...style, fontSize: style.fontSize * scale },
-      availableWidth,
-      rich,
-    );
+  const heightAt = (scale: number) => estimateTextHeight(layer, scale);
 
   return {
     fits: (scale) => heightAt(scale) <= availableHeight + FIT_TOLERANCE_PX,

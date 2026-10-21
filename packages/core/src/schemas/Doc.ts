@@ -554,7 +554,7 @@ export interface TextParagraph {
   text: string;
   /** Present when the paragraph is a list item. */
   list?: TextParagraphList;
-  /** Extra space above the paragraph, in canvas px (a list template's item gap). */
+  /** Extra space above the paragraph, in canvas px. */
   spaceBefore?: number;
 }
 

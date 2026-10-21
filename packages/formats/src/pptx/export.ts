@@ -36,13 +36,11 @@ import type {
   ShapeLayer,
   TableLayer,
   TextLayer,
-  TextParagraph,
-  TextStyle,
   Transition,
   TransitionDirection,
   TreeLayerItem,
 } from '@bendyline/squisq/schemas';
-import { resolveFontFamily, VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
+import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import {
   buildPreviewDoc,
@@ -97,17 +95,25 @@ import {
   toEmuRect,
 } from './geometry.js';
 import {
-  averageCharEm,
-  blockGapsEm,
-  estimateFlowHeight,
-  estimateSlideTextScale,
-  hasBlockGaps,
-  layerParagraphs,
-  LIST_INDENT_EM,
-  measurableText,
-} from './textFit.js';
-import { listParagraphXml, mergeTextFlows, planListParagraphs } from './textLists.js';
-import type { ListParagraphPlan } from './textLists.js';
+  buildLayerShape,
+  dashXml,
+  officeTypeface,
+  parseCssColor,
+  solidColorXml,
+} from './drawingXml.js';
+import { planDeckBackdrops, type SlidePlan } from './backdrop.js';
+import { buildLayerTextShape } from './layerText.js';
+import {
+  buildDeckLayoutXml,
+  buildDeckMasterXml,
+  buildDeckThemeXml,
+  colorBackgroundXml,
+  isDarkTheme,
+  paintBackgroundXml,
+  photoBackgroundXml,
+} from './masters.js';
+import { estimateSlideTextScale } from './textFit.js';
+import { mergeTextFlows } from './textLists.js';
 import { inferMimeType } from '../html/imageUtils.js';
 import { stripHtmlTags, extractPlainText } from '../shared/text.js';
 import { toOoxmlHex } from '../shared/ooxmlColor.js';
@@ -380,6 +386,11 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
   const svgIslandPosters =
     hasLayer('svg') || hasSvgImage ? await import('../shared/svgIslandPoster.js') : null;
 
+  // Where each slide's background paint lives — a native background, its
+  // slide layout, or the master — so no full-slide rectangle sits on a slide
+  // in the way of its content (see backdrop.ts).
+  const backdrops = planDeckBackdrops(slideBlocks);
+
   const slideXmls: string[] = [];
   const slideContexts: SlideContext[] = [];
   for (let index = 0; index < slideBlocks.length; index++) {
@@ -394,11 +405,25 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
     ctx.diagramImages = effectiveOptions.diagramImages;
     ctx.videoPosters = videoPosters;
     ctx.svgIslandPosters = svgIslandPosters;
-    slideXmls.push(buildLayerSlideXml(slideBlocks[index], ctx));
+    const plan = backdrops.slides[index]!;
+    ctx.useLayout(plan.layout + 1);
+    slideXmls.push(buildLayerSlideXml(slideBlocks[index], ctx, plan));
     slideContexts.push(ctx);
   }
 
-  return buildPptxPackage(slideXmls, slideContexts, effectiveOptions);
+  return buildPptxPackage(slideXmls, slideContexts, effectiveOptions, {
+    layoutXmls: backdrops.layouts.map(buildDeckLayoutXml),
+    masterXml: (layoutRelIds) =>
+      buildDeckMasterXml({
+        backgroundXml: backdrops.master.base
+          ? paintBackgroundXml(backdrops.master.base)
+          : colorBackgroundXml(style.background),
+        overlays: backdrops.master.overlays,
+        layoutRelIds,
+        dark: isDarkTheme(theme),
+      }),
+    themeXml: buildDeckThemeXml(theme),
+  });
 }
 
 // ============================================
@@ -416,16 +441,6 @@ interface SlideStyle {
   codeFont: string;
   codeColor: string;
   hasTheme: boolean;
-}
-
-/** DrawingML accepts one typeface, not a CSS fallback stack. */
-function officeTypeface(family: Parameters<typeof resolveFontFamily>[0], fallback: string): string {
-  const resolved = resolveFontFamily(family, fallback);
-  const first = resolved
-    .split(',')[0]
-    ?.trim()
-    .replace(/^['"]|['"]$/g, '');
-  return first || fallback;
 }
 
 function resolveSlideStyle(
@@ -624,6 +639,11 @@ class SlideContext {
     return this.relIds.alloc();
   }
 
+  /** Point this slide at slide layout `number` (1-based, as its part is named). */
+  useLayout(number: number): void {
+    this.relationships[0]!.target = `../slideLayouts/slideLayout${number}.xml`;
+  }
+
   allocShapeId(): number {
     return this.nextShapeId++;
   }
@@ -759,23 +779,45 @@ function buildSlideXml(slide: SlideData, ctx: SlideContext): string {
   );
 }
 
-/** Build a slide from the exact materialized layer stack used by DocPlayer. */
-function buildLayerSlideXml(block: Block, ctx: SlideContext): string {
+/**
+ * Build a slide from the exact materialized layer stack used by DocPlayer.
+ * Its background paint is already placed by `plan` (backdrop.ts): the slide
+ * draws only its content, plus a background of its own when its paint
+ * differs from its layout's — a full-bleed photo, chiefly.
+ */
+function buildLayerSlideXml(block: Block, ctx: SlideContext, plan: SlidePlan): string {
   const shapes: string[] = [
     `<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` + `<p:grpSpPr/>`,
   ];
 
+  let layers = plan.content;
+  let bgXml = '';
+  if (plan.base?.type === 'image') {
+    const photo = plan.base;
+    const data = ctx.images?.get(photo.content.src);
+    if (data) {
+      bgXml = photoBackgroundXml(
+        ctx.addImage(photo.content.src, data, photo.content.alt),
+        photo,
+        data,
+      );
+    } else {
+      // No bytes to embed: keep the picture path's labelled placeholder.
+      layers = [photo, ...layers];
+    }
+  } else if (plan.base) {
+    bgXml = paintBackgroundXml(plan.base);
+  }
+
   // The slideshow grows a slide's text to fill its boxes; export it at the
   // size the player shows, not the template's base size (see textFit.ts).
-  const textScale = isGeometryBoundTemplate(block.template)
-    ? 1
-    : estimateSlideTextScale(block.layers ?? []);
-  const units = mergeTextFlows(block.layers ?? []);
+  const textScale = isGeometryBoundTemplate(block.template) ? 1 : estimateSlideTextScale(layers);
+  const units = mergeTextFlows(layers, textScale);
   const textLayerY = units
     .filter(({ layer }) => layer.type === 'text')
     .map(({ layer }) => resolvePositionValue(layer.position.y, 1080));
 
-  for (const layer of block.layers ?? []) {
+  for (const layer of layers) {
     if (layer.type !== 'text') continue;
     for (const run of splitIconMarkers(layer.content.text ?? '')) {
       if (run.type === 'icon') ctx.iconFamilies.add(run.family);
@@ -797,32 +839,11 @@ function buildLayerSlideXml(block: Block, ctx: SlideContext): string {
         : Math.max(currentY + 1, nextTextY - 8);
     shapes.push(
       ...(layer.type === 'text'
-        ? [
-            buildLayerTextShape(
-              textScale === 1
-                ? layer
-                : {
-                    ...layer,
-                    content: {
-                      ...layer.content,
-                      style: {
-                        ...layer.content.style,
-                        fontSize: layer.content.style.fontSize * textScale,
-                      },
-                    },
-                  },
-              ctx.allocShapeId(),
-              textBottom,
-              listIndentPx,
-            ),
-          ]
+        ? [buildLayerTextShape(layer, ctx.allocShapeId(), textBottom, listIndentPx, textScale)]
         : convertLayerToShapes(layer, ctx, textBottom)),
     );
   }
 
-  const bgXml = ctx.style.hasTheme
-    ? `<p:bg><p:bgPr><a:solidFill><a:srgbClr val="${ctx.style.background}"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>`
-    : '';
   const transitionXml = buildTransitionXml(block.transition);
   const extensionAttrs = transitionXml.includes('p14:')
     ? ` xmlns:mc="${NS_MC}" xmlns:p14="${NS_PML_2010}" mc:Ignorable="p14"`
@@ -1010,265 +1031,6 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
   }
 }
 
-function buildLayerTextShape(
-  layer: TextLayer,
-  shapeId: number,
-  maxBottom?: number,
-  listIndentPx?: number,
-): string {
-  const sourceText = layer.content.text ?? '';
-  const text = measurableText(sourceText);
-  const style = layer.content.style;
-  const padding = style.padding ?? 0;
-  const rawLines = text.split('\n');
-  const charEm = averageCharEm(style);
-  const estimatedWidth = Math.min(
-    1920,
-    Math.max(
-      1,
-      Math.max(...rawLines.map((line) => line.length), 1) *
-        style.fontSize *
-        // A box sized to the text must not wrap it when Office's face for
-        // the CSS stack runs a little wider than the estimate.
-        Math.max(0.55, charEm * 1.15) +
-        padding * 2,
-    ),
-  );
-  const boxWidth =
-    layer.position.width != null
-      ? resolvePositionValue(layer.position.width, 1920)
-      : estimatedWidth;
-  // Large one-line display titles are authored to stay on one line. Cap them
-  // so the estimated advance fits the box before PowerPoint wraps one into
-  // a second line that collides with the next layer.
-  const fittedFontSize =
-    rawLines.length === 1 && style.fontSize >= 80 && text.length > 0
-      ? Math.min(style.fontSize, (boxWidth - padding * 2) / (text.length * charEm * 1.05))
-      : style.fontSize;
-  const blockGaps = hasBlockGaps(layer);
-  const paragraphSource = layerParagraphs(layer);
-  const textWidth = Math.max(1, boxWidth - padding * 2);
-  const flowHeight = (fontSize: number) =>
-    estimateFlowHeight(paragraphSource, { ...style, fontSize }, textWidth, blockGaps);
-  const neededHeight = Math.max(
-    fittedFontSize * (style.lineHeight ?? 1.4),
-    flowHeight(fittedFontSize),
-  );
-  // Office's line metrics are not CSS's: the first line's ascent and the
-  // last line's descent can run past a box sized to the CSS line boxes
-  // alone, which clips the bottom of display type at a no-autofit boundary.
-  const reserve = fittedFontSize * OFFICE_TEXT_RESERVE_EM;
-  const estimatedHeight = neededHeight + reserve + padding * 2;
-  const resolvedRect = resolveLayerRect(layer.position, boxWidth, estimatedHeight);
-  // Leave a small bottom inset for Office/LibreOffice glyph descenders and
-  // antialiasing. The SVG player clips exactly at 1080; rasterizers otherwise
-  // report a one-pixel bleed even when the text box itself ends on-canvas.
-  const safeBottom = Math.min(1060, maxBottom ?? 1060);
-  const virtualRect = {
-    ...resolvedRect,
-    y: Math.min(resolvedRect.y, safeBottom - 1),
-    height: Math.max(1, Math.min(resolvedRect.height, safeBottom - resolvedRect.y)),
-  };
-  // Shrink only text the estimate says overflows by more than the reserve:
-  // the slide's grow scale was chosen so its text fits by this same
-  // estimate, and shrinking it again would undo the match with the player.
-  const availableHeight = Math.max(1, virtualRect.height - padding * 2);
-  const heightScale = neededHeight > availableHeight + reserve ? availableHeight / neededHeight : 1;
-  const renderedFontSize = Math.max(1, fittedFontSize * heightScale * (heightScale < 1 ? 0.95 : 1));
-  const renderedStyle =
-    renderedFontSize === style.fontSize ? style : { ...style, fontSize: renderedFontSize };
-  const rect = toEmuRect(virtualRect);
-  const align = style.textAlign === 'center' ? 'ctr' : style.textAlign === 'right' ? 'r' : 'l';
-  const vertical =
-    style.verticalAlign === 'bottom' ? 'b' : style.verticalAlign === 'middle' ? 'ctr' : 't';
-  const inset = Math.max(0, Math.round(padding * EMU_PER_CANVAS_PX));
-  const bodyPr =
-    `<a:bodyPr wrap="square" anchor="${vertical}" vertOverflow="clip" horzOverflow="clip"` +
-    ` lIns="${inset}" rIns="${inset}" tIns="${inset}" bIns="${inset}">` +
-    `<a:noAutofit/></a:bodyPr>`;
-  // Rich text spaces its blocks by margins, so it takes the structured path
-  // even without list items; plain text keeps one paragraph per line.
-  const paragraphs =
-    layer.content.paragraphs || blockGaps
-      ? buildStructuredParagraphs(paragraphSource, renderedStyle, align, {
-          // A list with no marker column of its own hangs its bullets by the
-          // player's list indent.
-          indentPx: listIndentPx ?? renderedStyle.fontSize * LIST_INDENT_EM,
-          spacingScale: renderedStyle.fontSize / style.fontSize,
-          blockGaps,
-        })
-      : sourceText
-          .split('\n')
-          .map((line) => buildLayerTextParagraph(line, renderedStyle, align))
-          .join('');
-
-  return (
-    `<p:sp>` +
-    `<p:nvSpPr><p:cNvPr id="${shapeId}" name="${escapeXml(layer.id)}"/>` +
-    `<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>` +
-    `<p:spPr><a:xfrm><a:off x="${rect.x}" y="${rect.y}"/>` +
-    `<a:ext cx="${rect.width}" cy="${rect.height}"/></a:xfrm>` +
-    `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` +
-    fillXml(style.background, style.backgroundOpacity, style.backgroundGradient) +
-    lineXml(style.borderColor, style.borderWidth, style.borderStyle) +
-    `</p:spPr>` +
-    `<p:txBody>${bodyPr}<a:lstStyle/>${paragraphs}</p:txBody>` +
-    `</p:sp>`
-  );
-}
-
-/**
- * Hundredths of a point per canvas px. The 1920px canvas spans the slide's
- * 960pt width, so one canvas px is half a point — for text sizes and
- * paragraph spacing alike.
- */
-const TEXT_PX_TO_CENTIPOINTS = 50;
-
-/**
- * PowerPoint's single line spacing is the font's own line height — about
- * 1.2em for common faces — where CSS `line-height` is a multiple of the font
- * size, so a CSS line height maps to `lnSpc` as a fraction of 1.2.
- */
-const OFFICE_SINGLE_LINE_EM = 1.2;
-
-/** Vertical room, in em, reserved beyond the CSS line boxes (see `buildLayerTextShape`). */
-const OFFICE_TEXT_RESERVE_EM = 0.3;
-
-interface StructuredParagraphOptions {
-  /** Hanging indent of a list paragraph, in canvas px. */
-  indentPx: number;
-  /** Factor on authored `spaceBefore`, matching a shrink of the font. */
-  spacingScale: number;
-  /** Space blocks by the player's rich-text margins instead of blank lines. */
-  blockGaps: boolean;
-}
-
-/**
- * Native DrawingML paragraphs for a layer's structured `paragraphs`: list
- * items become real bullets or numbers with a hanging indent (see
- * textLists.ts), so Office apps treat them as a list. With `blockGaps`, a
- * run of blank paragraphs becomes space above the next block — the margin
- * the player's rich text draws there — rather than empty lines.
- */
-function buildStructuredParagraphs(
-  paragraphs: readonly TextParagraph[],
-  style: TextStyle,
-  align: string,
-  options: StructuredParagraphOptions,
-): string {
-  const plans = planListParagraphs(paragraphs);
-  const gaps = options.blockGaps ? blockGapsEm(paragraphs, style.lineHeight ?? 1.4) : undefined;
-  return paragraphs
-    .map((paragraph, index) => {
-      const gap = gaps?.[index];
-      if (gap === null) return '';
-      return buildLayerTextParagraph(paragraph.text, style, align, {
-        spaceBefore:
-          (gap ?? 0) * style.fontSize + (paragraph.spaceBefore ?? 0) * options.spacingScale,
-        list: plans[index],
-        indentPx: options.indentPx,
-      });
-    })
-    .join('');
-}
-
-interface LayerParagraphOptions {
-  spaceBefore?: number;
-  list?: ListParagraphPlan;
-  /** Hanging indent of a list paragraph, in canvas px. */
-  indentPx?: number;
-}
-
-function buildLayerTextParagraph(
-  text: string,
-  style: TextStyle,
-  align: string,
-  options: LayerParagraphOptions = {},
-): string {
-  const size = Math.max(100, Math.round(style.fontSize * TEXT_PX_TO_CENTIPOINTS));
-  const color = parseCssColor(style.color, '000000');
-  const typeface = officeTypeface(style.fontFamily, DEFAULT_FONT);
-  const textRunProperties = [
-    `lang="en-US"`,
-    `dirty="0"`,
-    `sz="${size}"`,
-    ...(style.fontWeight === 'bold' ? ['b="1"'] : []),
-    ...(style.fontStyle === 'italic' ? ['i="1"'] : []),
-  ].join(' ');
-  const lineSpacing = Math.max(
-    10000,
-    Math.round(((style.lineHeight ?? 1.4) / OFFICE_SINGLE_LINE_EM) * 100000),
-  );
-  const lineRuns = (line: string): string =>
-    splitIconMarkers(line)
-      .map((run) => {
-        if (run.type === 'text') {
-          if (!run.text) return '';
-          return (
-            `<a:r><a:rPr ${textRunProperties}>${solidColorXml(color)}` +
-            `<a:latin typeface="${escapeXml(typeface)}"/></a:rPr>` +
-            `<a:t>${escapeXml(run.text)}</a:t></a:r>`
-          );
-        }
-
-        const glyph = fontAwesomeGlyph(run.family, run.name);
-        if (!glyph) return '';
-        const iconTypeface = fontAwesomeFace(run.family).typeface;
-        return (
-          `<a:r><a:rPr lang="en-US" dirty="0" sz="${size}">${solidColorXml(color)}` +
-          `<a:latin typeface="${escapeXml(iconTypeface)}"/></a:rPr>` +
-          `<a:t>${escapeXml(glyph)}</a:t></a:r>`
-        );
-      })
-      .join('');
-  // A `\n` inside one paragraph is a line break, not a new paragraph — a
-  // new paragraph would give a list item's second line its own bullet.
-  const runs = text.split('\n').map(lineRuns).join(`<a:br><a:rPr ${textRunProperties}/></a:br>`);
-  const spaceBefore = Math.round((options.spaceBefore ?? 0) * TEXT_PX_TO_CENTIPOINTS);
-  const { attributes, bullet } = options.list
-    ? listParagraphXml(options.list, options.indentPx ?? style.fontSize * LIST_INDENT_EM)
-    : { attributes: '', bullet: '' };
-  return (
-    `<a:p><a:pPr${attributes} algn="${align}"><a:lnSpc><a:spcPct val="${lineSpacing}"/></a:lnSpc>` +
-    (spaceBefore > 0 ? `<a:spcBef><a:spcPts val="${spaceBefore}"/></a:spcBef>` : '') +
-    `${bullet}</a:pPr>` +
-    (runs ||
-      `<a:r><a:rPr ${textRunProperties}>${solidColorXml(color)}` +
-        `<a:latin typeface="${escapeXml(typeface)}"/></a:rPr><a:t> </a:t></a:r>`) +
-    `</a:p>`
-  );
-}
-
-function buildLayerShape(layer: ShapeLayer, shapeId: number): string {
-  const rect = toEmuRect(resolveLayerRect(layer.position, 100, 100));
-  const geometry =
-    layer.content.shape === 'circle'
-      ? 'ellipse'
-      : layer.content.shape === 'line'
-        ? 'line'
-        : layer.content.borderRadius
-          ? 'roundRect'
-          : 'rect';
-  const fill =
-    layer.content.shape === 'line'
-      ? '<a:noFill/>'
-      : fillXml(layer.content.fill, layer.content.fillOpacity, layer.content.gradient);
-  const stroke = lineXml(
-    layer.content.stroke ?? (layer.content.shape === 'line' ? '#ffffff' : undefined),
-    layer.content.strokeWidth ?? (layer.content.shape === 'line' ? 2 : undefined),
-    layer.content.borderStyle,
-  );
-  return (
-    `<p:sp><p:nvSpPr><p:cNvPr id="${shapeId}" name="${escapeXml(layer.id)}"/>` +
-    `<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>` +
-    `<a:xfrm><a:off x="${rect.x}" y="${rect.y}"/><a:ext cx="${rect.width}" cy="${rect.height}"/></a:xfrm>` +
-    `<a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom>` +
-    fill +
-    stroke +
-    `</p:spPr></p:sp>`
-  );
-}
-
 function buildTableLayerShapes(layer: TableLayer, ctx: SlideContext): string[] {
   // A live table layer can scroll through a larger preview window. PPTX has
   // no equivalent nested scroll surface, so preserve the initial slide view:
@@ -1407,126 +1169,6 @@ function textLayerForPlaceholder(position: Position, text: string, ctx: SlideCon
       },
     },
   };
-}
-
-interface ParsedColor {
-  hex: string;
-  alpha: number;
-}
-
-function parseCssColor(color: string | undefined, fallback: string): ParsedColor {
-  if (!color) return { hex: toOoxmlHex(fallback), alpha: 100000 };
-  const trimmed = color.trim();
-  if (trimmed === 'transparent' || trimmed === 'none') return { hex: '000000', alpha: 0 };
-
-  const hexMatch = /^#?([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(trimmed);
-  if (hexMatch) {
-    const raw = hexMatch[1];
-    const expanded =
-      raw.length === 3
-        ? raw
-            .split('')
-            .map((char) => char + char)
-            .join('')
-        : raw;
-    const alpha =
-      expanded.length === 8
-        ? Math.round((Number.parseInt(expanded.slice(6, 8), 16) / 255) * 100000)
-        : 100000;
-    return { hex: expanded.slice(0, 6).toUpperCase(), alpha };
-  }
-
-  const rgbMatch =
-    /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/i.exec(trimmed);
-  if (rgbMatch) {
-    const channel = (value: string): string =>
-      Math.max(0, Math.min(255, Math.round(Number(value))))
-        .toString(16)
-        .padStart(2, '0');
-    const alpha = rgbMatch[4]
-      ? Math.round(Math.max(0, Math.min(1, Number(rgbMatch[4]))) * 100000)
-      : 100000;
-    return {
-      hex: `${channel(rgbMatch[1])}${channel(rgbMatch[2])}${channel(rgbMatch[3])}`.toUpperCase(),
-      alpha,
-    };
-  }
-
-  const named: Record<string, string> = {
-    black: '000000',
-    white: 'FFFFFF',
-    red: 'FF0000',
-    blue: '0000FF',
-    green: '008000',
-    gray: '808080',
-    grey: '808080',
-  };
-  return { hex: named[trimmed.toLowerCase()] ?? toOoxmlHex(fallback), alpha: 100000 };
-}
-
-function solidColorXml(color: ParsedColor): string {
-  const alpha = color.alpha < 100000 ? `<a:alpha val="${color.alpha}"/>` : '';
-  return `<a:solidFill><a:srgbClr val="${color.hex}">${alpha}</a:srgbClr></a:solidFill>`;
-}
-
-function fillXml(
-  fill: string | undefined,
-  opacity: number | undefined,
-  gradient: { from: string; to: string; angle?: number } | undefined,
-): string {
-  if (gradient) return gradientFillXml(gradient.from, gradient.to, gradient.angle ?? 0, opacity);
-  if (!fill || fill === 'none' || fill === 'transparent') return '<a:noFill/>';
-  if (fill.includes('gradient(')) {
-    const colors = fill.match(/#[0-9a-f]{3,8}|rgba?\([^)]*\)/gi) ?? [];
-    if (colors.length >= 2) {
-      const angle = Number.parseFloat(
-        /(?:linear-gradient\()\s*([\d.-]+)deg/i.exec(fill)?.[1] ?? '0',
-      );
-      return gradientFillXml(colors[0]!, colors[colors.length - 1]!, angle, opacity);
-    }
-  }
-  const color = parseCssColor(fill, '000000');
-  if (opacity !== undefined)
-    color.alpha = Math.round(color.alpha * Math.max(0, Math.min(1, opacity)));
-  return solidColorXml(color);
-}
-
-function gradientFillXml(
-  from: string,
-  to: string,
-  angle: number,
-  opacity: number | undefined,
-): string {
-  const first = parseCssColor(from, '000000');
-  const second = parseCssColor(to, first.hex);
-  if (opacity !== undefined) {
-    const factor = Math.max(0, Math.min(1, opacity));
-    first.alpha = Math.round(first.alpha * factor);
-    second.alpha = Math.round(second.alpha * factor);
-  }
-  const ooxmlAngle = Math.round(((((90 - angle) % 360) + 360) % 360) * 60000);
-  return (
-    `<a:gradFill rotWithShape="1"><a:gsLst>` +
-    `<a:gs pos="0"><a:srgbClr val="${first.hex}">${first.alpha < 100000 ? `<a:alpha val="${first.alpha}"/>` : ''}</a:srgbClr></a:gs>` +
-    `<a:gs pos="100000"><a:srgbClr val="${second.hex}">${second.alpha < 100000 ? `<a:alpha val="${second.alpha}"/>` : ''}</a:srgbClr></a:gs>` +
-    `</a:gsLst><a:lin ang="${ooxmlAngle}" scaled="1"/></a:gradFill>`
-  );
-}
-
-function lineXml(
-  color: string | undefined,
-  widthPx: number | undefined,
-  borderStyle: 'solid' | 'dashed' | 'dotted' | undefined,
-): string {
-  if (!color || !widthPx || widthPx <= 0) return '<a:ln><a:noFill/></a:ln>';
-  const width = Math.max(1, Math.round(widthPx * EMU_PER_CANVAS_PX));
-  return `<a:ln w="${width}">${solidColorXml(parseCssColor(color, '000000'))}${dashXml(borderStyle)}</a:ln>`;
-}
-
-function dashXml(style: 'solid' | 'dashed' | 'dotted' | undefined, dasharray?: string): string {
-  if (style === 'dashed' || (dasharray && dasharray !== 'none')) return '<a:prstDash val="dash"/>';
-  if (style === 'dotted') return '<a:prstDash val="dot"/>';
-  return '';
 }
 
 function markerXml(tag: 'headEnd' | 'tailEnd', marker: PathLayer['content']['endMarker']): string {
@@ -2182,10 +1824,27 @@ function convertImage(node: MarkdownImage, format: InlineFormat, ctx: SlideConte
 // Package Assembly
 // ============================================
 
+/** The master, layouts and theme a deck's slides hang off. */
+interface DeckStructure {
+  /** One XML part per slide layout, in `slideLayoutN.xml` order. */
+  layoutXmls: string[];
+  /** The master, given the relationship id of each layout from it. */
+  masterXml: (layoutRelIds: string[]) => string;
+  themeXml: string;
+}
+
+/** The semantic path's structure: one Title and Content layout, Office's theme. */
+const SEMANTIC_DECK_STRUCTURE: DeckStructure = {
+  layoutXmls: [buildSlideLayoutXml('')],
+  masterXml: ([layoutRelId]) => buildSlideMasterXml(layoutRelId!),
+  themeXml: buildThemeXml(),
+};
+
 async function buildPptxPackage(
   slideXmls: string[],
   slideContexts: SlideContext[],
   options: PptxExportOptions,
+  structure: DeckStructure = SEMANTIC_DECK_STRUCTURE,
 ): Promise<ArrayBuffer> {
   const pkg = createPackage();
   const slideCount = slideXmls.length;
@@ -2198,7 +1857,6 @@ async function buildPptxPackage(
   const relIds = new RelIdAllocator();
   const PRESENTATION_PART = 'ppt/presentation.xml';
   const SLIDE_MASTER_PART = 'ppt/slideMasters/slideMaster1.xml';
-  const SLIDE_LAYOUT_PART = 'ppt/slideLayouts/slideLayout1.xml';
 
   const slideRelIds: string[] = [];
   for (let i = 0; i < slideCount; i++) {
@@ -2248,26 +1906,33 @@ async function buildPptxPackage(
     }
   }
 
-  // --- Slide layout ---
-  const layoutMasterRelId = relIds.alloc(SLIDE_LAYOUT_PART);
-  const slideLayoutXml = buildSlideLayoutXml(layoutMasterRelId);
-  pkg.addPart(SLIDE_LAYOUT_PART, slideLayoutXml, CONTENT_TYPE_PPTX_SLIDE_LAYOUT);
-  pkg.addRelationship(SLIDE_LAYOUT_PART, {
-    id: layoutMasterRelId,
-    type: REL_SLIDE_MASTER,
-    target: '../slideMasters/slideMaster1.xml',
+  // --- Slide layouts ---
+  const masterLayoutRelIds: string[] = [];
+  structure.layoutXmls.forEach((layoutXml, index) => {
+    const layoutPart = `ppt/slideLayouts/slideLayout${index + 1}.xml`;
+    const layoutMasterRelId = relIds.alloc(layoutPart);
+    pkg.addPart(layoutPart, layoutXml, CONTENT_TYPE_PPTX_SLIDE_LAYOUT);
+    pkg.addRelationship(layoutPart, {
+      id: layoutMasterRelId,
+      type: REL_SLIDE_MASTER,
+      target: '../slideMasters/slideMaster1.xml',
+    });
+    const masterLayoutRelId = relIds.alloc(SLIDE_MASTER_PART);
+    masterLayoutRelIds.push(masterLayoutRelId);
+    pkg.addRelationship(SLIDE_MASTER_PART, {
+      id: masterLayoutRelId,
+      type: REL_SLIDE_LAYOUT,
+      target: `../slideLayouts/slideLayout${index + 1}.xml`,
+    });
   });
 
   // --- Slide master ---
-  const masterLayoutRelId = relIds.alloc(SLIDE_MASTER_PART);
   const masterThemeRelId = relIds.alloc(SLIDE_MASTER_PART);
-  const slideMasterXml = buildSlideMasterXml(masterLayoutRelId);
-  pkg.addPart(SLIDE_MASTER_PART, slideMasterXml, CONTENT_TYPE_PPTX_SLIDE_MASTER);
-  pkg.addRelationship(SLIDE_MASTER_PART, {
-    id: masterLayoutRelId,
-    type: REL_SLIDE_LAYOUT,
-    target: '../slideLayouts/slideLayout1.xml',
-  });
+  pkg.addPart(
+    SLIDE_MASTER_PART,
+    structure.masterXml(masterLayoutRelIds),
+    CONTENT_TYPE_PPTX_SLIDE_MASTER,
+  );
   pkg.addRelationship(SLIDE_MASTER_PART, {
     id: masterThemeRelId,
     type: REL_THEME,
@@ -2275,8 +1940,7 @@ async function buildPptxPackage(
   });
 
   // --- Theme ---
-  const themeXml = buildThemeXml();
-  pkg.addPart('ppt/theme/theme1.xml', themeXml, CONTENT_TYPE_PPTX_THEME);
+  pkg.addPart('ppt/theme/theme1.xml', structure.themeXml, CONTENT_TYPE_PPTX_THEME);
 
   // --- Root relationship ---
   pkg.addRelationship('', {

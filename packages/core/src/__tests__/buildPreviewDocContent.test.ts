@@ -223,10 +223,6 @@ An opening paragraph.
       { ordered: true, level: 0, number: 1 },
       { ordered: true, level: 0, number: 2 },
     ]);
-    // The item gap rides the paragraph after the first, so one merged text
-    // box keeps the template's spacing.
-    expect(items[0]!.content.paragraphs?.[0]?.spaceBefore).toBeUndefined();
-    expect(items[1]!.content.paragraphs?.[0]?.spaceBefore).toBeGreaterThan(0);
   });
 
   it('preserves prose-separated lists as complete content instead of a stat extraction', () => {

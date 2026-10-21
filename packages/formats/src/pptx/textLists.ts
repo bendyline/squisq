@@ -12,6 +12,7 @@
 
 import type { Layer, TextLayer, TextParagraph } from '@bendyline/squisq/schemas';
 import { EMU_PER_CANVAS_PX, resolveLayerRect } from './geometry.js';
+import { estimateTextHeight } from './textFit.js';
 
 /** One layer of a slide's stack, after its text flows are merged. */
 export interface SlideLayerUnit {
@@ -26,8 +27,14 @@ export interface SlideLayerUnit {
  * and the marker layers drop out; the marker column's width becomes the
  * bullets' hanging indent. A flow whose layers carry no `paragraphs` is left
  * as it is.
+ *
+ * Each body after the first starts where the player draws it: the space
+ * above it is the gap between its box and the previous body's text at the
+ * slide's `textScale`. The player grows each item inside its own box at a
+ * fixed position, so growth eats into the gaps — a merged box that kept the
+ * authored gaps would need more room than the list has.
  */
-export function mergeTextFlows(layers: readonly Layer[]): SlideLayerUnit[] {
+export function mergeTextFlows(layers: readonly Layer[], textScale = 1): SlideLayerUnit[] {
   const flows = new Map<string, TextLayer[]>();
   for (const layer of layers) {
     if (layer.type !== 'text' || !layer.content.flow) continue;
@@ -63,6 +70,17 @@ export function mergeTextFlows(layers: readonly Layer[]): SlideLayerUnit[] {
     const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
     const first = bodies[0]!;
     const indent = rects[members.indexOf(first)]!.x - left;
+    const paragraphs = bodies.flatMap((body, index): TextParagraph[] => {
+      const own = body.content.paragraphs ?? [{ text: body.content.text }];
+      const previous = bodies[index - 1];
+      if (!previous || own.length === 0) return own;
+      const previousRect = rects[members.indexOf(previous)]!;
+      const gap =
+        rects[members.indexOf(body)]!.y -
+        (previousRect.y + estimateTextHeight(previous, textScale));
+      const [head, ...rest] = own;
+      return [{ ...head!, spaceBefore: Math.max(0, gap) }, ...rest];
+    });
     units.push({
       layer: {
         ...first,
@@ -70,9 +88,7 @@ export function mergeTextFlows(layers: readonly Layer[]): SlideLayerUnit[] {
         position: { x: left, y: top, width: right - left, height: bottom - top },
         content: {
           text: bodies.map((body) => body.content.text).join('\n'),
-          paragraphs: bodies.flatMap(
-            (body) => body.content.paragraphs ?? [{ text: body.content.text }],
-          ),
+          paragraphs,
           style: first.content.style,
         },
       },
