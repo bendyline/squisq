@@ -63,6 +63,8 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // Columnar store + kernel + TanStack-Virtual renderer; tiny by design.
   '@bendyline/squisq-grid-react': 60_000,
   '@bendyline/squisq-calc': 110_000,
+  // Pure-TS layout engine plus its self-contained worker entry.
+  '@bendyline/squisq-graph': 60_000,
   '@bendyline/squisq-video': 35_000,
   // Ships the MP4/GIF export graph plus the single-frame cover-image and
   // dashboard-image entries, with mediabunny's MP4/Matroska demuxers bundled

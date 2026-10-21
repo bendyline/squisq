@@ -8,7 +8,7 @@ import { planContentBuilds } from '../builds.js';
  * more visual template after validation and preview.
  */
 
-import type { Layer } from '../../schemas/Doc.js';
+import type { Layer, TextParagraph } from '../../schemas/Doc.js';
 import type { ContentBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { MarkdownBlockNode, MarkdownList } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
@@ -30,36 +30,57 @@ function bodyNodes(context: TemplateContext): MarkdownBlockNode[] {
   );
 }
 
-/** Plain projection for accessibility and non-HTML consumers. */
-function plainListText(list: MarkdownList, depth = 0): string {
-  const indent = '  '.repeat(depth);
-  return list.children
-    .flatMap((item, index) => {
-      const ownText = item.children
-        .filter((node) => node.type !== 'list')
-        .map((node) => extractPlainText(node).trim())
-        .filter(Boolean)
-        .join(' ');
-      const marker = list.ordered ? `${(list.start ?? 1) + index}.` : '•';
-      const lines = ownText ? [`${indent}${marker} ${ownText}`] : [];
-      for (const child of item.children) {
-        if (child.type === 'list') lines.push(plainListText(child, depth + 1));
-      }
-      return lines;
-    })
-    .join('\n');
+function listParagraphs(list: MarkdownList, level = 0): TextParagraph[] {
+  const ordered = Boolean(list.ordered);
+  return list.children.flatMap((item, index) => {
+    const ownText = item.children
+      .filter((node) => node.type !== 'list')
+      .map((node) => extractPlainText(node).trim())
+      .filter(Boolean)
+      .join(' ');
+    const paragraphs: TextParagraph[] = ownText
+      ? [
+          {
+            text: ownText,
+            list: { ordered, level, ...(ordered ? { number: (list.start ?? 1) + index } : {}) },
+          },
+        ]
+      : [];
+    for (const child of item.children) {
+      if (child.type === 'list') paragraphs.push(...listParagraphs(child, level + 1));
+    }
+    return paragraphs;
+  });
 }
 
-function completeBodyText(nodes: readonly MarkdownBlockNode[]): string {
-  return nodes
-    .map((node, index) => {
-      const text = node.type === 'list' ? plainListText(node) : extractPlainText(node);
-      if (index === 0) return text;
-      const separator = '\n'.repeat(markdownBlockSeparatorLines(nodes[index - 1], node));
-      return `${separator}${text}`;
-    })
-    .join('')
-    .trim();
+/** A paragraph as plain text: list items carry their indent and marker. */
+function plainParagraphText({ text, list }: TextParagraph): string {
+  if (!list) return text;
+  const marker = list.ordered ? `${list.number ?? 1}.` : '•';
+  return `${'  '.repeat(list.level)}${marker} ${text}`;
+}
+
+/**
+ * The body as paragraphs, list items kept structured, with blank paragraphs
+ * standing in for the blank lines between blocks. Trimmed like the plain
+ * text it projects to, so `text` stays exactly the historical body string.
+ */
+function completeBodyParagraphs(nodes: readonly MarkdownBlockNode[]): TextParagraph[] {
+  const paragraphs = nodes.flatMap((node, index): TextParagraph[] => {
+    const own = node.type === 'list' ? listParagraphs(node) : [{ text: extractPlainText(node) }];
+    if (index === 0) return own;
+    const blankLines = markdownBlockSeparatorLines(nodes[index - 1], node) - 1;
+    return [...Array.from({ length: blankLines }, () => ({ text: '' })), ...own];
+  });
+  while (paragraphs.length && !plainParagraphText(paragraphs[0]!).trim()) paragraphs.shift();
+  while (paragraphs.length && !plainParagraphText(paragraphs[paragraphs.length - 1]!).trim()) {
+    paragraphs.pop();
+  }
+  const first = paragraphs[0];
+  if (first && !first.list) paragraphs[0] = { ...first, text: first.text.trimStart() };
+  const last = paragraphs[paragraphs.length - 1];
+  if (last) paragraphs[paragraphs.length - 1] = { ...last, text: last.text.trimEnd() };
+  return paragraphs;
 }
 
 function bodyFontSize(body: string, context: TemplateContext): number {
@@ -71,7 +92,8 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
   const { theme } = context;
   const title = input.title ?? context.block?.title ?? '';
   const markdown = bodyNodes(context);
-  const body = completeBodyText(markdown);
+  const paragraphs = completeBodyParagraphs(markdown);
+  const body = paragraphs.map(plainParagraphText).join('\n');
   const builds = planContentBuilds(markdown, input.build ?? context.block?.build);
   const bodyHtml = renderMarkdownBlocksHtml(markdown, builds);
   const layers: Layer[] = [createBackgroundLayer('bg', theme.colors.background)];
@@ -104,6 +126,8 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
         text: body,
         ...(builds.steps.length ? { buildSteps: builds.steps } : {}),
         ...(bodyHtml ? { html: bodyHtml } : {}),
+        // Only a body with list items has structure `text` cannot carry.
+        ...(paragraphs.some((paragraph) => paragraph.list) ? { paragraphs } : {}),
         style: {
           fontSize: bodyFontSize(body, context),
           fontFamily: getThemeFont(context, 'body'),

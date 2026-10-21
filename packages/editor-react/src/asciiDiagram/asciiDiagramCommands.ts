@@ -11,6 +11,7 @@
 
 import type { Editor } from '@tiptap/react';
 import {
+  arrangeAsciiDiagram,
   canvasToAsciiCell,
   ASCII_CHAR_H,
   ASCII_CHAR_W,
@@ -180,6 +181,8 @@ export function applyAsciiDiagramCommand(
     }
     case 'removeNode':
       return apply((d) => removeNodeOp(d, cmd.nodeId));
+    case 'autoArrange':
+      return apply((d) => arrangeAsciiDiagram(d, { direction: cmd.direction }));
   }
   const _exhaustive: never = cmd;
   void _exhaustive;

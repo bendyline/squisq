@@ -35,6 +35,8 @@ import {
 } from './accentImage.js';
 import { estimateProseLineCount, estimateWrappedLineCount } from './captionUtils.js';
 
+/** Flow id tying the marker and item layers into one native list (see TextFlow). */
+const LIST_ITEMS_FLOW = 'list-items';
 const LIST_ITEM_LINE_HEIGHT = 1.2;
 const LIST_ITEM_BASE_FONT_PX = 34;
 /** Inter-item gap at the base font size; it scales down with the type. */
@@ -344,6 +346,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
       content: {
         // Bullets stay bullets; only ordered (or legacy, unflagged) lists count.
         text: ordered ? `${i + 1}.` : '•',
+        flow: { id: LIST_ITEMS_FLOW, role: 'marker' },
         style: {
           fontSize: itemFontSize,
           fontFamily: getThemeFont(context, 'body'),
@@ -367,6 +370,13 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
       content: {
         text: itemText,
         ...(itemHtml ? { html: itemHtml } : {}),
+        paragraphs: [
+          {
+            text: itemText,
+            list: { ordered, level: 0, ...(ordered ? { number: i + 1 } : {}) },
+          },
+        ],
+        flow: { id: LIST_ITEMS_FLOW },
         style: {
           fontSize: itemFontSize,
           fontFamily: getThemeFont(context, 'body'),

@@ -7,13 +7,16 @@
  *
  * Layout rules:
  * 1. Children with both `x` and `y` set keep their authored coordinates.
- * 2. Children missing either coordinate are auto-placed in a square-ish
- *    grid in declaration order, offset below the bounding box of the
- *    explicitly-positioned children.
+ * 2. Children missing either coordinate are auto-placed below the bounding
+ *    box of the explicitly-positioned children: by a layered layout
+ *    (squisq-graph) when connections run between them, so the flow reads
+ *    one way and crosses little, otherwise in a square-ish grid in
+ *    declaration order.
  * 3. Edges come from each child's `connectsTo`. Targets that don't match
  *    any sibling id are dropped (and counted in `warnings`).
  */
 
+import { layoutGraph } from '@bendyline/squisq-graph';
 import type { Block, BlockConnection } from '../../schemas/Doc.js';
 
 export interface DiagramNodePosition {
@@ -59,6 +62,11 @@ export interface DiagramLayoutOptions {
   gridOriginX?: number;
   /** Origin y for the grid when no explicit nodes anchor it. Default: 80. */
   gridOriginY?: number;
+  /** Node size the layered layout spaces for. Default: 180 × 64, the diagram card. */
+  nodeWidth?: number;
+  nodeHeight?: number;
+  /** Which way connected auto-placed nodes flow. Default: `right`. */
+  direction?: 'right' | 'down';
 }
 
 const DEFAULT_OPTS: Required<DiagramLayoutOptions> = {
@@ -67,6 +75,9 @@ const DEFAULT_OPTS: Required<DiagramLayoutOptions> = {
   gridPad: 80,
   gridOriginX: 80,
   gridOriginY: 80,
+  nodeWidth: 180,
+  nodeHeight: 64,
+  direction: 'right',
 };
 
 /**
@@ -97,10 +108,9 @@ export function computeDiagramLayout(
     }
   }
 
-  // Second pass: lay out unpositioned children in a square-ish grid.
+  // Second pass: auto-place unpositioned children below the pinned ones.
   if (unpositionedIdx.length > 0) {
-    const cols = Math.max(1, Math.ceil(Math.sqrt(unpositionedIdx.length)));
-    // Find the bottom-right of the pinned bounding box so the grid sits below it.
+    // Find the bottom-right of the pinned bounding box so the placement sits below it.
     let baseX = opts.gridOriginX;
     let baseY = opts.gridOriginY;
     const pinned = entries.filter((e) => e.pinned);
@@ -110,11 +120,15 @@ export function computeDiagramLayout(
       baseX = minX;
       baseY = maxY + opts.gridPad + opts.gapY;
     }
+    const placed = layeredPlacement(children, unpositionedIdx, opts);
+    const cols = Math.max(1, Math.ceil(Math.sqrt(unpositionedIdx.length)));
     unpositionedIdx.forEach((entryIdx, k) => {
-      const col = k % cols;
-      const row = Math.floor(k / cols);
-      entries[entryIdx].x = baseX + col * opts.gapX;
-      entries[entryIdx].y = baseY + row * opts.gapY;
+      const at = placed?.get(entryIdx) ?? {
+        x: (k % cols) * opts.gapX,
+        y: Math.floor(k / cols) * opts.gapY,
+      };
+      entries[entryIdx].x = baseX + at.x;
+      entries[entryIdx].y = baseY + at.y;
     });
   }
 
@@ -152,6 +166,55 @@ export function computeDiagramLayout(
   }
 
   return { nodes, edges, warnings };
+}
+
+/**
+ * Positions for the unpositioned children, relative to the placement origin,
+ * when connections run between them; null when none do, so a diagram of
+ * unconnected cards keeps its familiar grid. Spacing follows the grid pitch:
+ * the gaps between cards are what `gapX`/`gapY` leave around a card.
+ */
+function layeredPlacement(
+  children: readonly Block[],
+  unpositionedIdx: readonly number[],
+  opts: Required<DiagramLayoutOptions>,
+): Map<number, { x: number; y: number }> | null {
+  const free = new Set(unpositionedIdx.map((i) => children[i].id));
+  const edges: { id: string; source: string; target: string }[] = [];
+  for (const i of unpositionedIdx) {
+    for (const conn of children[i].connectsTo ?? []) {
+      if (free.has(conn.target) && conn.target !== children[i].id) {
+        edges.push({ id: String(edges.length), source: children[i].id, target: conn.target });
+      }
+    }
+  }
+  if (edges.length === 0) return null;
+  const across = opts.direction === 'right';
+  const result = layoutGraph(
+    {
+      nodes: unpositionedIdx.map((i) => ({
+        id: children[i].id,
+        width: opts.nodeWidth,
+        height: opts.nodeHeight,
+      })),
+      edges,
+    },
+    {
+      direction: opts.direction,
+      layerSpacing: Math.max(0, across ? opts.gapX - opts.nodeWidth : opts.gapY - opts.nodeHeight),
+      nodeSpacing: Math.max(0, across ? opts.gapY - opts.nodeHeight : opts.gapX - opts.nodeWidth),
+      componentSpacing: Math.max(0, opts.gapX - opts.nodeWidth),
+      // The template draws its own connectors between card sides; only the
+      // positions are used, so no room is reserved for routing tracks.
+      edgeSpacing: 1,
+    },
+  );
+  const out = new Map<number, { x: number; y: number }>();
+  unpositionedIdx.forEach((entryIdx, k) => {
+    const n = result.nodes[k];
+    out.set(entryIdx, { x: Math.round(n.x), y: Math.round(n.y) });
+  });
+  return out;
 }
 
 function makeEdgeId(source: string, conn: BlockConnection): string {

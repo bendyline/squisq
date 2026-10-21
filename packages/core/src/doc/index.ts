@@ -201,6 +201,7 @@ export {
   ASCII_CHAR_H,
   ASCII_CHAR_W,
   ASCII_DIAGRAM_FENCE_LANGS,
+  arrangeAsciiDiagram,
   asciiCellToCanvas,
   asciiDiagramFromBlocks,
   asciiDiagramFromTemplateData,
@@ -216,6 +217,7 @@ export {
   repairAsciiDiagram,
 } from './asciiDiagram/index.js';
 export type {
+  ArrangeAsciiDiagramOptions,
   AsciiDiagram,
   AsciiDiagramDetection,
   AsciiDiagramEdge,

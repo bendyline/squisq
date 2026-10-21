@@ -41,7 +41,9 @@ export type DiagramCommand =
   | { kind: 'removeConnection'; source: string; target: string; type?: string }
   | { kind: 'renameNode'; nodeId: string; newLabel: string }
   | { kind: 'addNode'; x: number; y: number }
-  | { kind: 'removeNode'; nodeId: string };
+  | { kind: 'removeNode'; nodeId: string }
+  /** Re-place every node so connections flow one way (`down` unless told otherwise). */
+  | { kind: 'autoArrange'; direction?: 'down' | 'right' };
 
 interface DiagramCanvasProps {
   nodes: DiagramNode[];

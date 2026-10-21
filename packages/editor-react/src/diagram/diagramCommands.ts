@@ -295,7 +295,9 @@ export function moveNode(
  * shared `computeDiagramLayout` on a set of synthetic blocks. Returns
  * a map of `nodeId → {x, y, pinned}`. `pinned` reflects whether the
  * child already had an authored position (so callers can decide
- * whether a write is necessary).
+ * whether a write is necessary). Connections are carried too: they
+ * decide where auto-placed children land, so freezing without them
+ * would snap the diagram to a different layout on the first drag.
  */
 function computeCurrentPositions(
   children: readonly HeadingLocation[],
@@ -306,6 +308,7 @@ function computeCurrentPositions(
     const yRaw = params.y;
     const xN = xRaw != null ? Number(xRaw) : NaN;
     const yN = yRaw != null ? Number(yRaw) : NaN;
+    const connectsTo = parseConnectionsList(params.connectsTo);
     return {
       id: c.id,
       startTime: 0,
@@ -314,6 +317,7 @@ function computeCurrentPositions(
       title: getHeadingText(c.node) || c.id,
       ...(Number.isFinite(xN) ? { x: xN } : {}),
       ...(Number.isFinite(yN) ? { y: yN } : {}),
+      ...(connectsTo.length > 0 ? { connectsTo } : {}),
     } as Block;
   });
   const layout = computeDiagramLayout(blocks);

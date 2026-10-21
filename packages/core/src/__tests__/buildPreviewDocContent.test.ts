@@ -162,6 +162,69 @@ Fun fact: this slideshow is running from one of my apps`);
     expect(markers('# Steps {[list]}\n\n1. First\n2. Second')).toEqual(['1.', '2.']);
   });
 
+  it('describes content-body list items as structured paragraphs that project to the text', () => {
+    // Native exporters (PPTX) write `paragraphs` as real bullets; the plain
+    // `text` must stay exactly the marker-prefixed projection of them.
+    const slide = firstPreviewSlide(`### Mixed body
+
+An opening paragraph.
+
+- First
+  - Nested
+- Second
+
+3. Third
+4. Fourth`);
+    expect(slide.template).toBe('content');
+
+    const { layers } = materializeBlockLayers(slide as unknown as DocBlock);
+    const body = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'body',
+    );
+    expect(body?.content.text).toBe(
+      'An opening paragraph.\n\n• First\n  • Nested\n• Second\n\n3. Third\n4. Fourth',
+    );
+    expect(body?.content.paragraphs).toEqual([
+      { text: 'An opening paragraph.' },
+      { text: '' },
+      { text: 'First', list: { ordered: false, level: 0 } },
+      { text: 'Nested', list: { ordered: false, level: 1 } },
+      { text: 'Second', list: { ordered: false, level: 0 } },
+      { text: '' },
+      { text: 'Third', list: { ordered: true, level: 0, number: 3 } },
+      { text: 'Fourth', list: { ordered: true, level: 0, number: 4 } },
+    ]);
+  });
+
+  it('leaves a list-free content body without structured paragraphs', () => {
+    const slide = firstPreviewSlide('### Prose only\n\nOne paragraph.\n\nAnother paragraph.');
+    const { layers } = materializeBlockLayers(slide as unknown as DocBlock);
+    const body = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'body',
+    );
+    expect(body?.content.text).toBe('One paragraph.\n\nAnother paragraph.');
+    expect(body?.content.paragraphs).toBeUndefined();
+  });
+
+  it('ties list-template markers and items into one text flow', () => {
+    const slide = firstPreviewSlide('# Steps {[list]}\n\n1. First\n2. Second');
+    const { layers } = materializeBlockLayers(slide as unknown as DocBlock);
+    const flow = layers.filter(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.content.flow !== undefined,
+    );
+    expect(flow.map((layer) => [layer.id, layer.content.flow])).toEqual([
+      ['item-0-marker', { id: 'list-items', role: 'marker' }],
+      ['item-0', { id: 'list-items' }],
+      ['item-1-marker', { id: 'list-items', role: 'marker' }],
+      ['item-1', { id: 'list-items' }],
+    ]);
+    const items = flow.filter((layer) => !layer.content.flow?.role);
+    expect(items.map((layer) => layer.content.paragraphs?.[0]?.list)).toEqual([
+      { ordered: true, level: 0, number: 1 },
+      { ordered: true, level: 0, number: 2 },
+    ]);
+  });
+
   it('preserves prose-separated lists as complete content instead of a stat extraction', () => {
     const slide = firstPreviewSlide(`### What's in a model name
 

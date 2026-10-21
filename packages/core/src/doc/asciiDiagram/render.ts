@@ -122,7 +122,7 @@ export function renderAsciiDiagram(
  * distinct, gapped cells — adjacent attachments (`┬┬`) route into each
  * other and collapse to one component on re-parse.
  */
-function computeSideDegrees(
+export function computeSideDegrees(
   nodes: readonly AsciiDiagramNode[],
   edges: readonly AsciiDiagramEdge[],
 ): Map<string, { top: number; bottom: number; left: number; right: number }> {
@@ -144,6 +144,47 @@ function computeSideDegrees(
     deg.get(e.target)![enter]++;
   }
   return deg;
+}
+
+/**
+ * The size a leaf box renders at: its authored size, grown to fit its label
+ * and to give every edge on a side its own gapped attachment cell. A side
+ * with K edges needs ≥ 2K+1 inner cells so the spread
+ * (`from + round((i+1)*inner/(K+1))`) leaves a blank cell between
+ * consecutive attachments and off the corners.
+ */
+export function leafBoxSize(
+  node: Pick<AsciiDiagramNode, 'label' | 'wCols' | 'hRows'>,
+  deg: { top: number; bottom: number; left: number; right: number },
+): { wCols: number; hRows: number } {
+  const labelLines = normalizeLabelLines(node.label);
+  const innerW = labelLines.reduce((w, l) => Math.max(w, cellWidth(l)), 0);
+  const horizDeg = Math.max(deg.top, deg.bottom);
+  const vertDeg = Math.max(deg.left, deg.right);
+  return {
+    wCols: Math.max(node.wCols, innerW + 4, 3, horizDeg > 0 ? 2 * horizDeg + 1 : 0),
+    hRows: Math.max(node.hRows, labelLines.length + 2, 3, vertDeg > 0 ? 2 * vertDeg + 1 : 0),
+  };
+}
+
+/**
+ * The cells a container keeps around its children: two on each side, plus
+ * one more row on top per label line after the first (the title sits in the
+ * top border), and a top border wide enough for `── Title ──`.
+ */
+export function containerBoxMargins(label: string): {
+  top: number;
+  side: number;
+  minWidth: number;
+} {
+  const labelLines = normalizeLabelLines(label);
+  const titleLen = cellWidth(labelLines[0] ?? '');
+  const innerLinesW = labelLines.slice(1).reduce((w, l) => Math.max(w, cellWidth(l)), 0);
+  return {
+    top: 2 + Math.max(0, labelLines.length - 1),
+    side: 2,
+    minWidth: Math.max(titleLen > 0 ? titleLen + 6 : 3, innerLinesW > 0 ? innerLinesW + 4 : 3),
+  };
 }
 
 function layoutNodes(
@@ -212,20 +253,8 @@ function layoutNodes(
     const children = childIds.get(id) ?? [];
 
     if (children.length === 0) {
-      const innerW = labelLines.reduce((w, l) => Math.max(w, cellWidth(l)), 0);
-      // Attachment gap: a side with K edges needs ≥ 2K+1 inner cells so the
-      // spread (`from + round((i+1)*inner/(K+1))`) leaves a blank column
-      // between consecutive attachments and off the corners.
       const deg = sideDeg.get(id) ?? { top: 0, bottom: 0, left: 0, right: 0 };
-      const horizDeg = Math.max(deg.top, deg.bottom);
-      const vertDeg = Math.max(deg.left, deg.right);
-      const wCols = Math.max(node.wCols, innerW + 4, 3, horizDeg > 0 ? 2 * horizDeg + 1 : 0);
-      const hRows = Math.max(
-        node.hRows,
-        labelLines.length + 2,
-        3,
-        vertDeg > 0 ? 2 * vertDeg + 1 : 0,
-      );
+      const { wCols, hRows } = leafBoxSize(node, deg);
       const rect: Rect = {
         r0: node.row,
         c0: node.col,
@@ -239,20 +268,17 @@ function layoutNodes(
     // Container: children first, then derive our rect around them.
     const childRects = placeSiblings(children, (childId) => layoutSubtree(childId, depth + 1));
     const bbox = unionRects(childRects);
-    const extraRows = Math.max(0, labelLines.length - 1);
-    const titleLen = cellWidth(labelLines[0] ?? '');
+    const margins = containerBoxMargins(node.label);
     const rect: Rect = {
-      r0: bbox.r0 - 2 - extraRows,
-      c0: bbox.c0 - 2,
-      r1: bbox.r1 + 2,
-      c1: bbox.c1 + 2,
+      r0: bbox.r0 - margins.top,
+      c0: bbox.c0 - margins.side,
+      r1: bbox.r1 + margins.side,
+      c1: bbox.c1 + margins.side,
     };
     // Top border must host `── Title ──` with ≥1 line char each side; the
     // remaining label lines sit inside and need ≥1 blank cell each side
     // (a truncated interior line would silently lose label text).
-    const innerLinesW = labelLines.slice(1).reduce((w, l) => Math.max(w, cellWidth(l)), 0);
-    const minW = Math.max(titleLen > 0 ? titleLen + 6 : 3, innerLinesW > 0 ? innerLinesW + 4 : 3);
-    if (rect.c1 - rect.c0 + 1 < minW) rect.c1 = rect.c0 + minW - 1;
+    if (rect.c1 - rect.c0 + 1 < margins.minWidth) rect.c1 = rect.c0 + margins.minWidth - 1;
     // Never shrink below the parsed size (visual stability for wide containers).
     if (rect.c1 - rect.c0 + 1 < node.wCols) rect.c1 = rect.c0 + node.wCols - 1;
     placed.set(id, { node, rect, labelLines, isContainer: true, depth });

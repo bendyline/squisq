@@ -5,6 +5,7 @@ const repoRoot = resolve(import.meta.dirname, '..');
 const checkOnly = process.argv.includes('--check');
 
 const packageDirs = [
+  'graph',
   'core',
   'calc',
   'formats',
@@ -74,6 +75,8 @@ the \`@bendyline/squisq-calc/ironcalc\` subpath via dynamic import. It is not
 bundled, and consumers who never construct an IronCalc engine do not install
 it. Copyright and complete license texts for the listed dependencies are
 included in their respective npm distributions and source repositories.`,
+  graph: `This package has no third-party runtime dependencies. The layout engine and its
+worker entry are Squisq-authored (MIT).`,
   formats: `Squisq uses jszip under its MIT license option. Copyright and complete license
 texts for these dependencies are included in their respective npm
 distributions and source repositories.`,
@@ -137,6 +140,7 @@ const configs = {
     bundled: ['@fortawesome/fontawesome-free'],
   },
   calc: { heading: 'Runtime and peer dependencies', peers: true },
+  graph: { heading: 'Runtime dependencies' },
   formats: { heading: 'Runtime and peer dependencies', peers: true },
   'grid-react': { heading: 'Runtime and peer dependencies', peers: true },
   react: {
