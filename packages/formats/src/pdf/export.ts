@@ -673,6 +673,23 @@ function flattenInlines(
   return spans;
 }
 
+const STANDARD_FONT_NAMES: ReadonlySet<string> = new Set(Object.values(StandardFonts));
+
+/**
+ * The width pdf-lib actually draws. For the standard fonts,
+ * `widthOfTextAtSize` adds the font's kerning pairs, but `drawText` never
+ * applies kerning. A word measured that way ends before its drawn glyphs do,
+ * so the next word starts inside the space ("Typeto", "PDF,a"). Measuring one
+ * character at a time drops the pairs. Embedded fonts already measure glyph
+ * advances without kerning, and keep their ligatures.
+ */
+function drawnWidth(font: PDFFont, text: string, size: number): number {
+  if (!STANDARD_FONT_NAMES.has(font.name)) return font.widthOfTextAtSize(text, size);
+  let width = 0;
+  for (const character of text) width += font.widthOfTextAtSize(character, size);
+  return width;
+}
+
 /**
  * The spans for one stretch of text: one per run `ctx.runs` splits it into,
  * each in the font that draws it, all sharing the rest of the styling.
@@ -706,7 +723,7 @@ function drawTextLine(
       font: run.font,
       color: rgb(at.color.r, at.color.g, at.color.b),
     });
-    x += run.font.widthOfTextAtSize(run.text, at.size);
+    x += drawnWidth(run.font, run.text, at.size);
   }
 }
 
@@ -752,7 +769,7 @@ function drawSpans(
         color: rgb(span.color.r, span.color.g, span.color.b),
       });
 
-      const textWidth = span.font.widthOfTextAtSize(span.text, span.fontSize);
+      const textWidth = drawnWidth(span.font, span.text, span.fontSize);
 
       // Underline for links
       if (span.link) {
@@ -819,7 +836,7 @@ function wrapSpans(spans: TextSpan[], maxWidth: number): TextSpan[][] {
     const words = splitIntoWords(span.text);
 
     for (const word of words) {
-      const wordWidth = span.font.widthOfTextAtSize(word, span.fontSize);
+      const wordWidth = drawnWidth(span.font, word, span.fontSize);
 
       if (lineWidth + wordWidth > maxWidth && currentLine.length > 0 && word.trim().length > 0) {
         // Wrap to next line
@@ -831,7 +848,7 @@ function wrapSpans(spans: TextSpan[], maxWidth: number): TextSpan[][] {
       // Trim leading space on new line
       const trimmedWord = currentLine.length === 0 ? word.replace(/^\s+/, '') : word;
       if (trimmedWord.length > 0) {
-        const tw = span.font.widthOfTextAtSize(trimmedWord, span.fontSize);
+        const tw = drawnWidth(span.font, trimmedWord, span.fontSize);
         currentLine.push({ ...span, text: trimmedWord });
         lineWidth += tw;
       }
@@ -1084,7 +1101,7 @@ function renderListItem(
   const indent = extraIndent + depth * LIST_INDENT;
   const bullet = ordered ? `${counter}.` : BULLET_CHAR;
   const bulletFont = ctx.fonts.regular;
-  const bulletWidth = bulletFont.widthOfTextAtSize(bullet + ' ', ctx.fontSize);
+  const bulletWidth = drawnWidth(bulletFont, bullet + ' ', ctx.fontSize);
 
   // Draw bullet
   const lineHeight = ctx.fontSize * LINE_HEIGHT_FACTOR;
@@ -1264,7 +1281,7 @@ function renderTable(node: MarkdownTable, ctx: ExportContext, extraIndent: numbe
               font: span.font,
               color: rgb(span.color.r, span.color.g, span.color.b),
             });
-            lx += span.font.widthOfTextAtSize(span.text, span.fontSize);
+            lx += drawnWidth(span.font, span.text, span.fontSize);
           }
           ctx.y -= getLineHeight(line);
         }

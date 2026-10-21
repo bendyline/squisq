@@ -10,8 +10,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
+import { AlignedTableCell, AlignedTableHeader } from '../tiptap/alignedTableCells';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -41,16 +40,18 @@ export function EmbeddedRichTextField(props: EmbeddedRichTextFieldProps) {
       }),
       Table.configure({ resizable: false }),
       TableRow,
-      TableCell,
-      TableHeader,
+      AlignedTableCell,
+      AlignedTableHeader,
       TaskList,
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: placeholder ?? '' }),
       MarkdownEscape,
     ],
     content: markdownToTiptap(value),
-    onUpdate: ({ editor: ed }) => {
-      if (isExternalUpdate.current) return;
+    onUpdate: ({ editor: ed, transaction }) => {
+      // The read-only sync's setEditable() emits `update` with an empty
+      // transaction; that is not an edit to report.
+      if (!transaction.docChanged || isExternalUpdate.current) return;
       const html = ed.getHTML();
       const md = tiptapToMarkdown(html);
       lastValueRef.current = md;

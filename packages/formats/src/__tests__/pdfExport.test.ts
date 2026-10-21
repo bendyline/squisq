@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { PDFArray, PDFDocument, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
+import { PDFArray, PDFDocument, PDFRawStream, StandardFonts, decodePDFRawStream } from 'pdf-lib';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type {
   MarkdownDocument,
@@ -520,5 +520,42 @@ describe('PDF export — images resized in the editor', () => {
       .join('\n');
     // 192 CSS px is 144 pt; the 1×1 picture keeps its square shape.
     expect(operators).toMatch(/\b144 0 0 144 [\d.]+ [\d.]+ cm\b/);
+  });
+});
+
+describe('word spacing', () => {
+  it('advances by the width it draws, so kerned words keep their spaces', async () => {
+    // pdf-lib draws the standard fonts without kerning but measured them with
+    // it, so "Type" ended before its glyphs did and the space after it was
+    // drawn inside the word ("Typeto").
+    const pdf = await exportAndLoad(parseMarkdown('Type to add text.'));
+    const page = pdf.getPages()[0]!;
+    const contents = page.node.Contents();
+    const streams = contents instanceof PDFArray ? contents.asArray() : [contents];
+    const operators = streams
+      .map((ref) => pdf.context.lookup(ref))
+      .map((stream) =>
+        new TextDecoder().decode(decodePDFRawStream(stream as PDFRawStream).decode()),
+      )
+      .join('\n');
+    const shows = [
+      ...operators.matchAll(/ ([\d.]+) Tf[\s\S]*?1 0 0 1 ([\d.]+) [\d.]+ Tm\s*<([0-9A-F]*)> Tj/g),
+    ].map(([, size, x, hex]) => ({
+      size: Number(size),
+      x: Number(x),
+      text: (hex!.match(/../g) ?? [])
+        .map((byte) => String.fromCharCode(parseInt(byte, 16)))
+        .join(''),
+    }));
+    const word = shows.findIndex((show) => show.text === 'Type');
+    expect(word).toBeGreaterThanOrEqual(0);
+    const { size, x } = shows[word]!;
+    expect(shows[word + 1]?.text).toBe(' ');
+
+    const helvetica = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+    const drawn = [...'Type'].reduce((sum, c) => sum + helvetica.widthOfTextAtSize(c, size), 0);
+    // The kerned measure is visibly shorter, so the two cannot be confused.
+    expect(helvetica.widthOfTextAtSize('Type', size)).toBeLessThan(drawn - 0.5);
+    expect(shows[word + 1]!.x - x).toBeCloseTo(drawn, 2);
   });
 });
