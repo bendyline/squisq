@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq-graph",
-  "version": "0.1.0",
+  "version": "2.13.0",
   "description": "Graph layout for squisq: a compound layered layout with orthogonal edge routing, nested containers with shared border ports, deterministic, dependency-free, and runnable in a Web Worker",
   "license": "MIT",
   "author": "Bendyline",
