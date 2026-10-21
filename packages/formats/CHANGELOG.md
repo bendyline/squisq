@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.8.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.7.6...@bendyline/squisq-formats@2.8.0) (2026-10-21)
+
+### Features
+
+* Graphs for diagrams ([#100](https://github.com/bendyline/squisq/issues/100)) ([708e7c4](https://github.com/bendyline/squisq/commit/708e7c4f4cc140a6b797579580dbcc21224d5d04))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.0
+
 ## @bendyline/squisq-formats [2.7.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.7.5...@bendyline/squisq-formats@2.7.6) (2026-10-20)
 
 ### Bug Fixes

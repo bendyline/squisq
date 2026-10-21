@@ -1,3 +1,13 @@
+## @bendyline/squisq [2.13.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.5...@bendyline/squisq@2.13.0) (2026-10-21)
+
+### Features
+
+* Graphs for diagrams ([#100](https://github.com/bendyline/squisq/issues/100)) ([708e7c4](https://github.com/bendyline/squisq/commit/708e7c4f4cc140a6b797579580dbcc21224d5d04))
+
+### Bug Fixes
+
+* Package bumps ([eab0206](https://github.com/bendyline/squisq/commit/eab020680381724b6c591b81d0ea24ef36313611))
+
 ## @bendyline/squisq [2.12.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.4...@bendyline/squisq@2.12.5) (2026-10-20)
 
 ### Bug Fixes

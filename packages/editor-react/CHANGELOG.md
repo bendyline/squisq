@@ -1,3 +1,18 @@
+## @bendyline/squisq-editor-react [2.13.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.11...@bendyline/squisq-editor-react@2.13.0) (2026-10-21)
+
+### Features
+
+* Graphs for diagrams ([#100](https://github.com/bendyline/squisq/issues/100)) ([708e7c4](https://github.com/bendyline/squisq/commit/708e7c4f4cc140a6b797579580dbcc21224d5d04))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.0
+* **@bendyline/squisq-formats:** upgraded to 2.8.0
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.29
+* **@bendyline/squisq-react:** upgraded to 2.12.8
+* **@bendyline/squisq-video-react:** upgraded to 2.5.9
+
 ## @bendyline/squisq-editor-react [2.12.11](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.12.10...@bendyline/squisq-editor-react@2.12.11) (2026-10-20)
 
 
