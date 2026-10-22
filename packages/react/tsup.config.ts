@@ -11,13 +11,14 @@ export default defineConfig({
     'markdown/index': 'src/entries/markdown.ts',
     'json-view/index': 'src/entries/json-view.ts',
     'diagram-pictures/index': 'src/export/diagramPictures.ts',
+    'graph/index': 'src/entries/graph.ts',
   },
   format: ['esm'],
   dts: true,
   sourcemap: false,
   clean: true,
   esbuildPlugins: [bundleLicenseMetadata(import.meta.dirname, 'esm')],
-  external: ['react', 'react-dom', '@bendyline/squisq', 'mermaid'],
+  external: ['react', 'react-dom', '@bendyline/squisq', '@bendyline/squisq-graph', 'mermaid'],
   esbuildOptions(options) {
     options.jsx = 'automatic';
   },

@@ -167,9 +167,11 @@ import {
   blockConversionRange,
   insertTaskList,
   isTiptapActive,
+  listNesting,
   tableContent,
   taskListContent,
 } from './toolbar/tiptapToolbar';
+import { ListLevelButtons, ListLevelOverflowItems } from './toolbar/ListLevelControls';
 
 import {
   DIAGRAM_STARTER_MARKDOWN,
@@ -1649,6 +1651,11 @@ export function Toolbar({
   // Detect whether cursor is inside a table (WYSIWYG mode only)
   const isInTable = isWysiwyg ? tiptapEditor.isActive('table') : false;
 
+  // List-level controls for the list item at the caret — in the document or a
+  // focused layout textbox, whichever the formatting buttons drive. The
+  // Markdown view has none: Monaco's Tab already indents source lines.
+  const listLevel = formatActive && formattingEditor ? listNesting(formattingEditor) : null;
+
   // Detect current heading template (WYSIWYG mode only)
   const wysiwygTemplate = isWysiwyg
     ? tiptapEditor.isActive('heading')
@@ -2268,6 +2275,16 @@ export function Toolbar({
               </button>
             </div>
           )}
+
+          {/* List level controls — visible when the caret is in a list item */}
+          {showFormattingControls && listLevel && (
+            <ListLevelButtons
+              editor={formattingEditor!}
+              nesting={listLevel}
+              clipped={clippedContextual.has('list')}
+              disabled={dataCardFocused}
+            />
+          )}
         </div>
       )}
       {/* Keep the flexible middle lane when built-in actions are hidden so
@@ -2278,7 +2295,7 @@ export function Toolbar({
 
       {/* Overflow menu — outside the overflow:hidden actions container.
           Also appears when a contextual group (template/transition picker,
-          table controls) is clipped, even if every plain button fits. */}
+          table / list controls) is clipped, even if every plain button fits. */}
       {showToolbarOverflow && (
         <div className="squisq-toolbar-overflow" ref={overflowRef}>
           <button
@@ -2501,6 +2518,16 @@ export function Toolbar({
                       </button>
                     ))}
                   </>
+                )}
+
+                {/* Contextual: list level controls in overflow */}
+                {showFormattingControls && listLevel && clippedContextual.has('list') && (
+                  <ListLevelOverflowItems
+                    editor={formattingEditor!}
+                    nesting={listLevel}
+                    disabled={dataCardFocused}
+                    onSelect={() => setShowOverflow(false)}
+                  />
                 )}
               </div>,
               overflowTriggerRef.current?.closest('[role="dialog"][aria-modal="true"]') ??

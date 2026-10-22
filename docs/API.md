@@ -1927,6 +1927,7 @@ React component library for rendering docs, blocks, and controls. Depends on
 **Styles:** `@bendyline/squisq-react/styles`
 **Standalone bundle:** `@bendyline/squisq-react/standalone` (IIFE) and
 `@bendyline/squisq-react/standalone-source` (the bundle as a string).
+**Graph viewer:** `@bendyline/squisq-react/graph` (see [Graph viewer](#graph-viewer-squisq-reactgraph)).
 
 ### Components
 
@@ -2304,6 +2305,45 @@ instance-scoped `SquisqPlayerHandle`; in render mode, await
 host element's box; in render mode it publishes a minimal render API whose
 `seekTo` resolves once assets have settled (the single-frame capture
 contract), with `getDuration() === 0` and no cover.
+
+### Graph viewer (`squisq-react/graph`)
+
+Draws a graph laid out by `@bendyline/squisq-graph` as boxes and routed
+arrows, with pan, zoom, selection, hover emphasis and keyboard navigation. A
+subpath of its own: the root entry and the standalone players never load it.
+
+```ts
+<DiagramViewer
+  layout={layout}                 // LayoutResult from layoutGraph / useGraphLayout
+  nodes={[{ id, label, detail?, badge?, tone?, fill?, expandable?, expanded?, title? }]}
+  edges={[{ id, weight?, dashed?, bidirectional?, tone?, title? }]}
+  selectedIds={ids} onSelectionChange={setIds}   // click; shift/⌘ adds; background clears
+  onNodeActivate={open}           // double-click or Enter
+  onContainerToggle={(id, expanded) => …}        // chevron click or Space
+  onEdgeClick={…} onHoverChange={…}
+  highlightIds={hits}             // keep these bright, dim the rest
+  wheel="zoom"                    // or 'scroll-unless-modifier' inside a scrolling page
+  ariaLabel="Dependencies" describeNode={(id) => …}
+/>
+// ref: { fit(), focus(ids), reveal(id), keepInPlace(id), zoomBy(factor) } — a toggled node
+// is held where it was on screen through the next layout
+
+useGraphLayout(graph, options?, { engine?, slowAfterMs? })
+//  → { layout, pending, slow, error, signature } — cached by graphSignature,
+//    superseded layouts aborted, the previous layout kept while a new one runs
+graphNodeSize({ label, detail?, badge?, expandable? }, { minWidth?, maxWidth? }) // → { width, height }
+estimateTextWidth(text, fontSize?); truncateToWidth(text, maxWidth, fontSize?)
+```
+
+Keys: arrows move the selection, `]` / `[` follow outgoing / incoming edges,
+Enter opens, Space toggles, Escape clears, `f` or `0` fits, `+` / `-` zoom.
+Panning and zooming re-render nothing inside the drawing, and hover and
+selection are a generated stylesheet, so neither re-renders it either. Above
+600 nodes only what is near the screen is drawn. Labels, details and badges
+drop out as the drawing shrinks. Colors are custom properties with light
+fallbacks (`--squisq-graph-node-bg`, `--squisq-graph-text`,
+`--squisq-graph-edge`, `--squisq-graph-container-bg`,
+`--squisq-graph-tone-<tone>`, …) that a host sets on an ancestor.
 
 ---
 

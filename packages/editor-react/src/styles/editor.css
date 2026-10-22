@@ -400,6 +400,8 @@
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.12),
     0 2px 6px rgba(0, 0, 0, 0.08);
+  /* Portaled onto <body>, outside the shell's chrome face. */
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
 }
 
 .squisq-block-props-row {
@@ -5877,6 +5879,9 @@ button.squisq-view-menu-radio-row:focus-visible {
   border-radius: 8px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
   padding: 6px;
+  /* Portaled onto <body>, outside the shell's chrome face. Each theme's
+     name chip still previews that theme's own font (set inline). */
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
   /* Card grid: each theme is a compact card, packed into as many columns
      as the (viewport-clamped) popover width allows. Collapses to a single
      column on narrow windows so the popover never overruns the viewport. */
@@ -6383,6 +6388,7 @@ button.squisq-view-menu-radio-row:focus-visible {
   box-shadow:
     0 8px 24px rgba(0, 0, 0, 0.12),
     0 2px 6px rgba(0, 0, 0, 0.08);
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
   overflow: hidden;
 }
 

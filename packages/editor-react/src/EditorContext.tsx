@@ -46,6 +46,7 @@ import type { editor as MonacoEditorNs } from 'monaco-editor';
 import { createDocument } from '@tiptap/core';
 import { closeHistory } from '@tiptap/pm/history';
 import { markdownToTiptap } from './tiptapBridge';
+import { replaceEditorSelection } from './tiptap/replaceSelection';
 import { selectionMarkdown } from './selectionMarkdown';
 import { getBlockSlices, sliceIndexAtOffset, type BlockSlice } from './blockRange';
 import { tiptapBlockInsertion } from './blockInsertion';
@@ -1422,9 +1423,14 @@ export function EditorProvider({
   const replaceSelection = useCallback(
     (markdown: string): boolean => {
       if (activeView === 'wysiwyg' && tiptapEditor) {
-        // insertContent replaces a non-empty selection and inserts at an empty
-        // one, in a single transaction — so one undo takes the whole edit back.
-        tiptapEditor.chain().focus().insertContent(markdownToTiptap(markdown)).run();
+        const html = markdownToTiptap(markdown);
+        // A selection is replaced as an edit to its text, so a one-paragraph
+        // rewrite stays inside its paragraph. At an empty caret, insertContent
+        // inserts the blocks. Either way it is one transaction, so one undo
+        // takes the whole edit back.
+        if (!replaceEditorSelection(tiptapEditor, html)) {
+          tiptapEditor.chain().focus().insertContent(html).run();
+        }
         return true;
       }
       if (activeView === 'raw' && monacoEditor) {

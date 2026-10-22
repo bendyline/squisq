@@ -16,7 +16,7 @@
 /**
  * Collapse order, first to go → last to go. Ids are toolbar BUTTONS ids, the
  * synthetic `insert` dropdown, the document-chrome ids below, and
- * `contextual:<data-contextual>` for the template / transition / table
+ * `contextual:<data-contextual>` for the template / transition / table / list
  * groups (which only ever borrow whatever width is left over, as before).
  * An id missing from this list collapses before every listed one.
  */
@@ -24,6 +24,7 @@ export const TOOLBAR_COLLAPSE_ORDER: readonly string[] = [
   'contextual:table',
   'contextual:transition',
   'contextual:template',
+  'contextual:list',
   'subscript',
   'superscript',
   'layouts',
