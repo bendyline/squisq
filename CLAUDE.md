@@ -15,7 +15,7 @@ rendering and spatial utilities. It is designed to be framework-agnostic at the 
 **npm packages** (10 published + 1 dev-only):
 
 - `@bendyline/squisq` — Headless utilities (schemas, themes, templates, spatial math, markdown, storage, versions, jsonForm, icons, image-edit, transform, recommend)
-- `@bendyline/squisq-react` — React component library (DocPlayer, BlockRenderer, layers, hooks, LinearDocView, MarkdownRenderer, JsonView, inline media players, standalone IIFE bundle)
+- `@bendyline/squisq-react` — React component library (DocPlayer, BlockRenderer, layers, hooks, LinearDocView, MarkdownRenderer, JsonView, inline media players, standalone IIFE bundle). The `/graph` subpath holds `DiagramViewer` (draws a squisq-graph layout: pan/zoom, selection, hover emphasis, keyboard navigation; layers are memoized and hover/selection are a generated stylesheet, so interaction never re-renders the drawing; culls above 600 nodes) plus `useGraphLayout` and the `graphNodeSize` text metrics hosts size nodes with
 - `@bendyline/squisq-formats` — Document format converters (DOCX, PDF, HTML, EPUB, PPTX, XLSX, CSV import/export; shared OOXML infrastructure; format registry + `convert()`; outside-in rendered-file/companion-Markdown contract via `/outside-in`; ContentContainer ZIP serialization; theme + layout inference from office files via `/infer`)
 - `@bendyline/squisq-grid-react` — Virtualized data grid for sidecar tables (TanStack-Virtual DOM renderer + in-house columnar Web-Worker store implementing core's `TableQueryProvider`; sortable/filterable/editable with per-cell locks + a `FormulaSupport` seam for engine-backed `=formula` editing; the editor's data card mounts it lazily)
 - `@bendyline/squisq-graph` — Graph layout: a compound layered (Sugiyama) layout with orthogonal edge routing, pure TS with zero runtime dependencies, deterministic (ties by input order; `graphSignature` keys caches). Nodes nest in container nodes to any depth; each container is laid out innermost-first so contents never leak, and edges cross borders through shared ports (`portSharing: 'neighbor'` per outside neighbor, or `'container'` one per side). Long edges into one node share bend points and converging channel runs share a track, so fans draw as trees. `integerCoordinates` lays out character grids. `createWorkerLayoutEngine` runs it in a Web Worker (self-contained `/worker` subpath, `workerFactory` override, one request at a time, abort/timeout ends the worker, falls back to the calling thread when no worker can start), protocol-parity-tested via `createLocalLayoutTransport`. Core depends on it: the `diagram` template's auto-placement and `arrangeAsciiDiagram`
@@ -262,6 +262,8 @@ squisq/
         InlineVideoPlayer.tsx
         InlineAudioPlayer.tsx
         jsonView/           # <JsonView> read-only renderer for JSON values bound to a schema
+        graph/              # /graph subpath: DiagramViewer, useGraphLayout, text metrics, view
+                            #   transform math, grid spatial index (never in the root or players)
         standalone-entry.tsx # IIFE bundle entry — used by formats/html and squisq-cli
     graph/                  # @bendyline/squisq-graph (zero deps; core depends on it)
       src/

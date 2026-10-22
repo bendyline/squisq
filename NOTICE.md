@@ -65,11 +65,12 @@ IronCalc engine.
 
 ## @bendyline/squisq-react
 
-| Package            | Version   | License | Repository          |
-| ------------------ | --------- | ------- | ------------------- |
-| @bendyline/squisq  | workspace | MIT     | (internal)          |
-| react _(peer)_     | ^18 / ^19 | MIT     | https://reactjs.org |
-| react-dom _(peer)_ | ^18 / ^19 | MIT     | https://reactjs.org |
+| Package                 | Version   | License | Repository          |
+| ----------------------- | --------- | ------- | ------------------- |
+| @bendyline/squisq       | workspace | MIT     | (internal)          |
+| @bendyline/squisq-graph | workspace | MIT     | (internal)          |
+| react _(peer)_          | ^18 / ^19 | MIT     | https://reactjs.org |
+| react-dom _(peer)_      | ^18 / ^19 | MIT     | https://reactjs.org |
 
 ## @bendyline/squisq-grid-react
 
