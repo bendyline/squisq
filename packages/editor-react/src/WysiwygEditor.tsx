@@ -32,6 +32,7 @@ import type { MarkdownWrapState } from '@bendyline/squisq/markdown';
 import { HeadingWithTemplate } from './TemplateAnnotation';
 import { Superscript, Subscript } from './VerticalAlign';
 import { MarkdownEscape } from './MarkdownEscape';
+import { PlainTextClipboard } from './PlainTextClipboard';
 import { AsciiDiagramExtension } from './asciiDiagram/AsciiDiagramExtension';
 import { RepairableDiagramExtension } from './asciiDiagram/RepairableDiagramExtension';
 import { applyRepairCommand } from './asciiDiagram/asciiDiagramCommands';
@@ -429,6 +430,7 @@ export function WysiwygEditor({
       Superscript,
       Subscript,
       MarkdownEscape,
+      PlainTextClipboard,
       BlockTagActivityExtension,
       AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
       MermaidDiagramExtension.configure({ themeStore: mermaidThemeStore }),
@@ -655,6 +657,10 @@ export function WysiwygEditor({
           }
         }
 
+        // A copy out of a ProseMirror editor, this one included, carries its
+        // exact structure in the HTML flavor. Its plain text marks list items
+        // ("- item"), which would read as markdown and drop the copied marks.
+        if (clipboard.getData('text/html').includes('data-pm-slice')) return false;
         if (!looksLikeMarkdown(text)) return false;
         const html = markdownToTiptap(text);
         if (!html) return false;
