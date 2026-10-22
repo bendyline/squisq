@@ -10,7 +10,7 @@ export function useToolbarCollapse(activeView: EditorView, actionsLaneShown: boo
   // so identical measurements bail out of re-rendering.
   const [collapsedKey, setCollapsedKey] = useState('');
   // '|'-joined data-contextual ids of the contextual groups (template /
-  // transition pickers, table controls) that don't fit in the actions row.
+  // transition pickers, table / list controls) that don't fit in the actions row.
   const [clippedContextualKey, setClippedContextualKey] = useState('');
   // Collapsed items are `display: none`, so their widths are remembered from
   // the last time they were laid out — every item starts out displayed.

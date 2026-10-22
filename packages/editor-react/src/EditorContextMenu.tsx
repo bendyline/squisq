@@ -25,6 +25,7 @@ import type { editor as MonacoEditorNs } from 'monaco-editor';
 import { CellSelection } from '@tiptap/pm/tables';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorContext, type EditorView } from './EditorContext';
+import { indentListItem, listNesting, outdentListItem } from './toolbar/tiptapToolbar';
 
 export interface EditorContextMenuContext {
   /** Editor rendition that was right-clicked. */
@@ -301,6 +302,39 @@ function tableMenuItems(
   return items;
 }
 
+/** Indent/outdent for a right-click inside a list item (WYSIWYG only). */
+function listMenuItems(
+  editor: TiptapEditor | null,
+  context: EditorContextMenuContext,
+): EditorContextMenuItem[] {
+  if (context.view !== 'wysiwyg' || !editor?.view.dom.contains(context.target)) return [];
+  const nesting = listNesting(editor);
+  if (!nesting) return [];
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  return [
+    {
+      id: 'squisq.list.outdent',
+      label: 'Decrease indent',
+      shortcut: mac ? '⇧Tab' : 'Shift+Tab',
+      group: 'list',
+      disabled: !context.editable || !nesting.canOutdent,
+      onSelect: () => {
+        outdentListItem(editor);
+      },
+    },
+    {
+      id: 'squisq.list.indent',
+      label: 'Increase indent',
+      shortcut: 'Tab',
+      group: 'list',
+      disabled: !context.editable || !nesting.canIndent,
+      onSelect: () => {
+        indentListItem(editor);
+      },
+    },
+  ];
+}
+
 function shortcutModifier(): string {
   return /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 }
@@ -496,8 +530,9 @@ export function EditorContextMenuProvider({
         },
       ];
       const tableItems = tableMenuItems(tiptapEditor, context);
+      const listItems = listMenuItems(tiptapEditor, context);
       const hostItems = Array.from(itemGettersRef.current).flatMap((getItems) => getItems());
-      const items = [...baseItems, ...tableItems, ...hostItems]
+      const items = [...baseItems, ...tableItems, ...listItems, ...hostItems]
         .filter((item) => shouldShowItem(item, context))
         .map((item) => ({ item, disabled: resolveDisabled(item, context) }));
       if (!items.some((item) => !item.disabled)) return false;

@@ -165,8 +165,11 @@ import { useToolbarCollapse } from './toolbar/useToolbarCollapse';
 
 import {
   blockConversionRange,
+  indentListItem,
   insertTaskList,
   isTiptapActive,
+  listNesting,
+  outdentListItem,
   tableContent,
   taskListContent,
 } from './toolbar/tiptapToolbar';
@@ -1649,6 +1652,31 @@ export function Toolbar({
   // Detect whether cursor is inside a table (WYSIWYG mode only)
   const isInTable = isWysiwyg ? tiptapEditor.isActive('table') : false;
 
+  // List-level controls for the list item at the caret — in the document or a
+  // focused layout textbox, whichever the formatting buttons drive. The
+  // Markdown view has none: Monaco's Tab already indents source lines.
+  const listLevel = formatActive && formattingEditor ? listNesting(formattingEditor) : null;
+  const listLevelActions = listLevel
+    ? [
+        {
+          id: 'outdent',
+          label: 'Decrease indent',
+          title: 'Decrease indent (Shift+Tab)',
+          faIcon: 'fa-solid fa-outdent',
+          enabled: listLevel.canOutdent,
+          run: () => outdentListItem(formattingEditor!),
+        },
+        {
+          id: 'indent',
+          label: 'Increase indent',
+          title: 'Increase indent (Tab)',
+          faIcon: 'fa-solid fa-indent',
+          enabled: listLevel.canIndent,
+          run: () => indentListItem(formattingEditor!),
+        },
+      ]
+    : [];
+
   // Detect current heading template (WYSIWYG mode only)
   const wysiwygTemplate = isWysiwyg
     ? tiptapEditor.isActive('heading')
@@ -2268,6 +2296,29 @@ export function Toolbar({
               </button>
             </div>
           )}
+
+          {/* List level controls — visible when the caret is in a list item */}
+          {showFormattingControls && listLevel && (
+            <div
+              className={`squisq-toolbar-group squisq-toolbar-contextual squisq-list-controls${clippedContextual.has('list') ? ' squisq-toolbar-contextual--clipped' : ''}`}
+              data-contextual="list"
+            >
+              <div className="squisq-toolbar-separator" />
+              {listLevelActions.map((action) => (
+                <button
+                  key={action.id}
+                  className="squisq-toolbar-button"
+                  data-toolbar-item={action.id}
+                  data-tooltip={action.title}
+                  onClick={action.run}
+                  aria-label={action.title}
+                  disabled={!action.enabled || dataCardFocused}
+                >
+                  <Icon icon={action.faIcon} />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {/* Keep the flexible middle lane when built-in actions are hidden so
@@ -2278,7 +2329,7 @@ export function Toolbar({
 
       {/* Overflow menu — outside the overflow:hidden actions container.
           Also appears when a contextual group (template/transition picker,
-          table controls) is clipped, even if every plain button fits. */}
+          table / list controls) is clipped, even if every plain button fits. */}
       {showToolbarOverflow && (
         <div className="squisq-toolbar-overflow" ref={overflowRef}>
           <button
@@ -2498,6 +2549,32 @@ export function Toolbar({
                         }}
                       >
                         <span>{item.label}</span>
+                      </button>
+                    ))}
+                  </>
+                )}
+
+                {/* Contextual: list level controls in overflow */}
+                {showFormattingControls && listLevel && clippedContextual.has('list') && (
+                  <>
+                    <div
+                      className="squisq-toolbar-separator"
+                      style={{ margin: '4px 0', width: '100%', height: 1 }}
+                    />
+                    {listLevelActions.map((action) => (
+                      <button
+                        key={action.id}
+                        className="squisq-toolbar-overflow-item"
+                        onClick={() => {
+                          action.run();
+                          setShowOverflow(false);
+                        }}
+                        disabled={!action.enabled || dataCardFocused}
+                      >
+                        <span className="squisq-toolbar-overflow-icon">
+                          <Icon icon={action.faIcon} />
+                        </span>
+                        <span>{action.label}</span>
                       </button>
                     ))}
                   </>
