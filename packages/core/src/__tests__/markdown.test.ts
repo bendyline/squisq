@@ -1592,3 +1592,18 @@ describe('extractPlainText table projection', () => {
     expect(extractPlainText(table)).toBe('Segment Before After\nWest 1,200 2,900\nEast 980 2,100');
   });
 });
+
+describe('extractPlainText hard breaks', () => {
+  it('keeps a line apart at a hard break instead of fusing the words either side', () => {
+    expect(extractPlainText(parseMarkdown('Line one  \nafter a break'))).toBe(
+      'Line one\nafter a break',
+    );
+    expect(extractPlainText(parseMarkdown('Line one\\\nafter a break'))).toBe(
+      'Line one\nafter a break',
+    );
+    // A soft break is already a newline in the text node itself.
+    expect(extractPlainText(parseMarkdown('Line one\nafter a wrap'))).toBe(
+      'Line one\nafter a wrap',
+    );
+  });
+});

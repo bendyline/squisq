@@ -86,6 +86,10 @@ export function extractPlainText(node: MarkdownNode): string {
   if ('value' in node && typeof node.value === 'string') {
     return node.value;
   }
+  // A hard break (two trailing spaces or a backslash) is the author's own
+  // line break. It has no text of its own, so without this the words either
+  // side fuse ("Line oneafter") in captions, reading time and narration.
+  if (node.type === 'break') return '\n';
 
   const children = getChildren(node);
   // Preserve boundaries between block-level elements (list items, paragraphs
