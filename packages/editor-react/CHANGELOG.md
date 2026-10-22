@@ -1,3 +1,15 @@
+## @bendyline/squisq-editor-react [2.13.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.1...@bendyline/squisq-editor-react@2.13.2) (2026-10-22)
+
+### Bug Fixes
+
+* Add @squisq-react/graph viewer subpath ([#102](https://github.com/bendyline/squisq/issues/102)) ([e78a527](https://github.com/bendyline/squisq/commit/e78a5276c2415db92eda66188836895372a70593))
+
+
+### Dependencies
+
+* **@bendyline/squisq-react:** upgraded to 2.12.9
+* **@bendyline/squisq-video-react:** upgraded to 2.5.10
+
 ## @bendyline/squisq-editor-react [2.13.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.0...@bendyline/squisq-editor-react@2.13.1) (2026-10-21)
 
 ### Bug Fixes

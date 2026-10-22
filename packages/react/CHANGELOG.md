@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.12.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.8...@bendyline/squisq-react@2.12.9) (2026-10-22)
+
+### Bug Fixes
+
+* Add @squisq-react/graph viewer subpath ([#102](https://github.com/bendyline/squisq/issues/102)) ([e78a527](https://github.com/bendyline/squisq/commit/e78a5276c2415db92eda66188836895372a70593))
+
 ## @bendyline/squisq-react [2.12.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.7...@bendyline/squisq-react@2.12.8) (2026-10-21)
 
 
