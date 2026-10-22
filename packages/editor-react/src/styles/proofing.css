@@ -207,6 +207,9 @@
 
 /* ── Suggestions menu (portaled; carries its own data-theme) ────────── */
 
+/* Both the menu and the hover card portal onto <body>, outside the
+   shell's chrome face, so each names `--squisq-ux-font` itself — without
+   it they fell back to the browser's default serif. */
 .squisq-proof-menu {
   min-width: 200px;
   max-width: 320px;
@@ -215,6 +218,7 @@
   border-radius: 8px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
   padding: 4px;
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
   font-size: 13px;
 }
 
@@ -271,6 +275,7 @@
   border-radius: 8px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
   padding: 8px 10px;
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
   font-size: 12px;
   line-height: 1.4;
   color: var(--squisq-text);
