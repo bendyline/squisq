@@ -165,14 +165,13 @@ import { useToolbarCollapse } from './toolbar/useToolbarCollapse';
 
 import {
   blockConversionRange,
-  indentListItem,
   insertTaskList,
   isTiptapActive,
   listNesting,
-  outdentListItem,
   tableContent,
   taskListContent,
 } from './toolbar/tiptapToolbar';
+import { ListLevelButtons, ListLevelOverflowItems } from './toolbar/ListLevelControls';
 
 import {
   DIAGRAM_STARTER_MARKDOWN,
@@ -1656,26 +1655,6 @@ export function Toolbar({
   // focused layout textbox, whichever the formatting buttons drive. The
   // Markdown view has none: Monaco's Tab already indents source lines.
   const listLevel = formatActive && formattingEditor ? listNesting(formattingEditor) : null;
-  const listLevelActions = listLevel
-    ? [
-        {
-          id: 'outdent',
-          label: 'Decrease indent',
-          title: 'Decrease indent (Shift+Tab)',
-          faIcon: 'fa-solid fa-outdent',
-          enabled: listLevel.canOutdent,
-          run: () => outdentListItem(formattingEditor!),
-        },
-        {
-          id: 'indent',
-          label: 'Increase indent',
-          title: 'Increase indent (Tab)',
-          faIcon: 'fa-solid fa-indent',
-          enabled: listLevel.canIndent,
-          run: () => indentListItem(formattingEditor!),
-        },
-      ]
-    : [];
 
   // Detect current heading template (WYSIWYG mode only)
   const wysiwygTemplate = isWysiwyg
@@ -2299,25 +2278,12 @@ export function Toolbar({
 
           {/* List level controls — visible when the caret is in a list item */}
           {showFormattingControls && listLevel && (
-            <div
-              className={`squisq-toolbar-group squisq-toolbar-contextual squisq-list-controls${clippedContextual.has('list') ? ' squisq-toolbar-contextual--clipped' : ''}`}
-              data-contextual="list"
-            >
-              <div className="squisq-toolbar-separator" />
-              {listLevelActions.map((action) => (
-                <button
-                  key={action.id}
-                  className="squisq-toolbar-button"
-                  data-toolbar-item={action.id}
-                  data-tooltip={action.title}
-                  onClick={action.run}
-                  aria-label={action.title}
-                  disabled={!action.enabled || dataCardFocused}
-                >
-                  <Icon icon={action.faIcon} />
-                </button>
-              ))}
-            </div>
+            <ListLevelButtons
+              editor={formattingEditor!}
+              nesting={listLevel}
+              clipped={clippedContextual.has('list')}
+              disabled={dataCardFocused}
+            />
           )}
         </div>
       )}
@@ -2556,28 +2522,12 @@ export function Toolbar({
 
                 {/* Contextual: list level controls in overflow */}
                 {showFormattingControls && listLevel && clippedContextual.has('list') && (
-                  <>
-                    <div
-                      className="squisq-toolbar-separator"
-                      style={{ margin: '4px 0', width: '100%', height: 1 }}
-                    />
-                    {listLevelActions.map((action) => (
-                      <button
-                        key={action.id}
-                        className="squisq-toolbar-overflow-item"
-                        onClick={() => {
-                          action.run();
-                          setShowOverflow(false);
-                        }}
-                        disabled={!action.enabled || dataCardFocused}
-                      >
-                        <span className="squisq-toolbar-overflow-icon">
-                          <Icon icon={action.faIcon} />
-                        </span>
-                        <span>{action.label}</span>
-                      </button>
-                    ))}
-                  </>
+                  <ListLevelOverflowItems
+                    editor={formattingEditor!}
+                    nesting={listLevel}
+                    disabled={dataCardFocused}
+                    onSelect={() => setShowOverflow(false)}
+                  />
                 )}
               </div>,
               overflowTriggerRef.current?.closest('[role="dialog"][aria-modal="true"]') ??
