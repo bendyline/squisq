@@ -194,7 +194,11 @@ class V {
     this.fontFamily(`${path}.titleFont`, v.titleFont);
     if (v.monoFont !== undefined) this.fontFamily(`${path}.monoFont`, v.monoFont);
     if (v.captionFont !== undefined) this.fontFamily(`${path}.captionFont`, v.captionFont);
-    if (v.captionCase !== undefined && v.captionCase !== 'upper' && v.captionCase !== 'as-written') {
+    if (
+      v.captionCase !== undefined &&
+      v.captionCase !== 'upper' &&
+      v.captionCase !== 'as-written'
+    ) {
       this.err(`${path}.captionCase`, 'expected "upper" or "as-written"');
     }
     for (const k of ['titleScale', 'bodyScale', 'lineHeight', 'titleLineHeight']) {

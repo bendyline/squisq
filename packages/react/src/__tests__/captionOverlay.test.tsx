@@ -210,7 +210,9 @@ describe('Social caption case', () => {
         viewport={{ width: 1080, height: 1920, name: 'portrait' }}
       />,
     );
-    expect(overlayStyle(container, 'social-caption-overlay__chunk').textTransform).toBe('uppercase');
+    expect(overlayStyle(container, 'social-caption-overlay__chunk').textTransform).toBe(
+      'uppercase',
+    );
   });
 
   it('starts a new chunk at a sentence end', () => {
@@ -222,11 +224,13 @@ describe('Social caption case', () => {
           startTime: 0,
           endTime: 4,
           audioSegment: 0,
-          words: ['Hold', 'your', 'breath.', 'Ahead,', 'icebergs', 'glow', 'blue.'].map((text, i) => ({
-            text,
-            startTime: i * 0.5,
-            endTime: i * 0.5 + 0.5,
-          })),
+          words: ['Hold', 'your', 'breath.', 'Ahead,', 'icebergs', 'glow', 'blue.'].map(
+            (text, i) => ({
+              text,
+              startTime: i * 0.5,
+              endTime: i * 0.5 + 0.5,
+            }),
+          ),
         },
       ],
     };
@@ -254,17 +258,25 @@ describe('Social caption case', () => {
           startTime: 1,
           endTime: 3,
           audioSegment: 0,
-          words: ['The', 'Lemaire', 'Channel', 'narrows.'].map((text, i) => ({ text, startTime: 1 + i * 0.5, endTime: 1.5 + i * 0.5 })),
+          words: ['The', 'Lemaire', 'Channel', 'narrows.'].map((text, i) => ({
+            text,
+            startTime: 1 + i * 0.5,
+            endTime: 1.5 + i * 0.5,
+          })),
         },
       ],
     };
-    const titleChunks = buildWordStream(titled, portraitRowEm, 'as-written').chunks.map((c) => c.words.map((w) => w.text).join(' '));
+    const titleChunks = buildWordStream(titled, portraitRowEm, 'as-written').chunks.map((c) =>
+      c.words.map((w) => w.text).join(' '),
+    );
     expect(titleChunks[0]).toBe('Antarctic Peninsula');
     expect(titleChunks[1].startsWith('The')).toBe(true);
   });
 
   it('measures mixed case narrower than capitals, and still never needs a third row', () => {
-    expect(estimateSocialWordEm('submerge', 'as-written')).toBeLessThan(estimateSocialWordEm('submerge'));
+    expect(estimateSocialWordEm('submerge', 'as-written')).toBeLessThan(
+      estimateSocialWordEm('submerge'),
+    );
     // Capitals measure the same either way (the widest faces).
     expect(estimateSocialWordEm('MMM', 'as-written')).toBeCloseTo(estimateSocialWordEm('MMM'), 1);
     const upper = buildWordStream(narration, portraitRowEm, 'upper').chunks;

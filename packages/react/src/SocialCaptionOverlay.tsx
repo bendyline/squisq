@@ -36,7 +36,6 @@ import {
   type WordChunk,
 } from './socialCaptionLayout';
 
-
 /**
  * Frame placement for the overlay band. Portrait frames keep a larger bottom
  * inset: short-form players (Shorts, Reels, TikTok) cover roughly the lowest
@@ -187,7 +186,9 @@ export function SocialCaptionOverlay({
 
   // A word wider than a whole row (a long compound, a URL) shrinks this chunk
   // until it fits, rather than overflowing the frame or taking a third row.
-  const widestEm = Math.max(...activeChunk.words.map((w) => estimateSocialWordEm(w.text, textCase)));
+  const widestEm = Math.max(
+    ...activeChunk.words.map((w) => estimateSocialWordEm(w.text, textCase)),
+  );
   const chunkFontSize =
     widestEm > rowEm ? Math.max(16, Math.floor((fontSize * rowEm) / widestEm)) : fontSize;
 

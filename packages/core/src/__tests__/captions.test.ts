@@ -59,7 +59,16 @@ describe('buildCaptionTrack', () => {
     });
     const track = buildCaptionTrack([{ segment, timing: { sourceText, duration: 8, bookmarks } }]);
     const texts = track.phrases.flatMap((p) => (p.words ?? []).map((w) => w.text));
-    expect(texts).toEqual(['Hold', 'your', 'breath.', 'Ahead,', 'the', '“Eternity', 'Bird”', 'waits.']);
+    expect(texts).toEqual([
+      'Hold',
+      'your',
+      'breath.',
+      'Ahead,',
+      'the',
+      '“Eternity',
+      'Bird”',
+      'waits.',
+    ]);
     // A spoken title is its own paragraph: no full stop, but the phrase ends there.
     const titled = 'Antarctic Peninsula\n\nThe Lemaire Channel narrows.';
     const titleWords = ['Antarctic', 'Peninsula', 'The', 'Lemaire', 'Channel', 'narrows'];
@@ -78,11 +87,24 @@ describe('buildCaptionTrack', () => {
         },
       },
     ]);
-    expect(titleTrack.phrases.map((p) => p.text)).toEqual(['Antarctic Peninsula', 'The Lemaire Channel narrows.']);
-    expect(titleTrack.phrases[0].words?.[1]).toMatchObject({ text: 'Peninsula', paragraphEnd: true });
+    expect(titleTrack.phrases.map((p) => p.text)).toEqual([
+      'Antarctic Peninsula',
+      'The Lemaire Channel narrows.',
+    ]);
+    expect(titleTrack.phrases[0].words?.[1]).toMatchObject({
+      text: 'Peninsula',
+      paragraphEnd: true,
+    });
     // A wrong offset keeps the bare fragment rather than guessing.
     const off = buildCaptionTrack([
-      { segment, timing: { sourceText, duration: 8, bookmarks: [{ id: 'w0', time: 0, charOffset: 3, textFragment: 'Hold' }] } },
+      {
+        segment,
+        timing: {
+          sourceText,
+          duration: 8,
+          bookmarks: [{ id: 'w0', time: 0, charOffset: 3, textFragment: 'Hold' }],
+        },
+      },
     ]);
     expect(off.phrases[0].words?.[0].text).toBe('Hold');
   });

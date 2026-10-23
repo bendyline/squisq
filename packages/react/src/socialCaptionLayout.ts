@@ -59,7 +59,9 @@ export interface SocialCaptionLayout {
 
 /** Layout constants for a case: mixed case reads as words, so it needs less air between them. */
 export function socialCaptionLayout(textCase: SocialCaptionCase = 'upper'): SocialCaptionLayout {
-  return textCase === 'upper' ? SOCIAL_CAPTION_LAYOUT : { ...SOCIAL_CAPTION_LAYOUT, columnGapEm: 0.16 };
+  return textCase === 'upper'
+    ? SOCIAL_CAPTION_LAYOUT
+    : { ...SOCIAL_CAPTION_LAYOUT, columnGapEm: 0.16 };
 }
 
 /**
