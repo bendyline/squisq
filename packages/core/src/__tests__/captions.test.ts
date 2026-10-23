@@ -47,6 +47,68 @@ describe('buildCaptionTrack', () => {
     expect(track.phrases[1].endTime).toBe(20);
   });
 
+  it('restores the punctuation that TTS word bookmarks leave off, and breaks phrases at sentence ends', () => {
+    // Azure reports bare fragments; the text carries the marks.
+    const sourceText = 'Hold your breath. Ahead, the “Eternity Bird” waits.';
+    const words = ['Hold', 'your', 'breath', 'Ahead', 'the', 'Eternity', 'Bird', 'waits'];
+    let from = 0;
+    const bookmarks = words.map((w, i) => {
+      const charOffset = sourceText.indexOf(w, from);
+      from = charOffset + w.length;
+      return { id: `w${i}`, time: i * 0.5, charOffset, textFragment: w };
+    });
+    const track = buildCaptionTrack([{ segment, timing: { sourceText, duration: 8, bookmarks } }]);
+    const texts = track.phrases.flatMap((p) => (p.words ?? []).map((w) => w.text));
+    expect(texts).toEqual([
+      'Hold',
+      'your',
+      'breath.',
+      'Ahead,',
+      'the',
+      '“Eternity',
+      'Bird”',
+      'waits.',
+    ]);
+    // A spoken title is its own paragraph: no full stop, but the phrase ends there.
+    const titled = 'Antarctic Peninsula\n\nThe Lemaire Channel narrows.';
+    const titleWords = ['Antarctic', 'Peninsula', 'The', 'Lemaire', 'Channel', 'narrows'];
+    let at = 0;
+    const titleTrack = buildCaptionTrack([
+      {
+        segment,
+        timing: {
+          sourceText: titled,
+          duration: 8,
+          bookmarks: titleWords.map((w, i) => {
+            const charOffset = titled.indexOf(w, at);
+            at = charOffset + w.length;
+            return { id: `t${i}`, time: i, charOffset, textFragment: w };
+          }),
+        },
+      },
+    ]);
+    expect(titleTrack.phrases.map((p) => p.text)).toEqual([
+      'Antarctic Peninsula',
+      'The Lemaire Channel narrows.',
+    ]);
+    expect(titleTrack.phrases[0].words?.[1]).toMatchObject({
+      text: 'Peninsula',
+      paragraphEnd: true,
+    });
+    // A wrong offset keeps the bare fragment rather than guessing.
+    const off = buildCaptionTrack([
+      {
+        segment,
+        timing: {
+          sourceText,
+          duration: 8,
+          bookmarks: [{ id: 'w0', time: 0, charOffset: 3, textFragment: 'Hold' }],
+        },
+      },
+    ]);
+    expect(off.phrases[0].words?.[0].text).toBe('Hold');
+  });
+
   it('falls back to estimated text timing and includes the spoken prefix', () => {
     const track = buildCaptionTrack(
       [

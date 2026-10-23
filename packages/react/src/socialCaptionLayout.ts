@@ -3,17 +3,23 @@
  *
  * How SocialCaptionOverlay groups narration into on-screen chunks: words are
  * gathered from every caption phrase into one timed stream and cut into
- * chunks of about four words (2-6) for even pacing. A chunk closes early when
- * its next word would wrap it past SOCIAL_CAPTION_MAX_ROWS rows, or when the
- * narration moves to another audio segment, so a chunk never shows a word
+ * chunks of about four words (2-6) for even pacing. A chunk closes early at
+ * the end of a sentence (once it holds two words) or of a paragraph (a spoken
+ * title, which has no full stop), when its next word would
+ * wrap it past SOCIAL_CAPTION_MAX_ROWS rows, or when the narration moves to
+ * another audio segment, so a chunk never shows a word
  * before its segment starts (a Short's hook would otherwise flash the intro's
  * first word).
  *
- * Wrapping is predicted before layout from a per-character width table
- * measured for the warm-earth title face, so the split is deterministic: the
- * same in the browser and in a frame-by-frame video render, before and after
- * web fonts load. The estimate errs wide (the wider of PT Serif Bold and
- * Georgia Bold, plus headroom), so real layout never needs more rows than it.
+ * Wrapping is predicted before layout from a per-character width table, so
+ * the split is deterministic: the same in the browser and in a frame-by-frame
+ * video render, before and after web fonts load. Captions are cased one of two
+ * ways (`SocialCaptionCase`, from the theme's `typography.captionCase`):
+ * `'upper'` (the default) measures capitals of PT Serif Bold and Georgia Bold;
+ * `'as-written'` keeps the narration's own casing and measures both cases of
+ * PT Sans, Helvetica Neue, Arial, PT Serif and Georgia (all Bold). Either way
+ * the estimate takes the widest face plus headroom, so real layout never needs
+ * more rows than it.
  *
  * Related files:
  * - SocialCaptionOverlay.tsx — renders the chunks with the layout constants below
@@ -40,6 +46,23 @@ export const SOCIAL_CAPTION_LAYOUT = {
   chunkPadXEm: 0.55,
   letterSpacingEm: 0.01,
 } as const;
+
+/** How caption words are cased on screen: all capitals, or as the narration text writes them. */
+export type SocialCaptionCase = 'upper' | 'as-written';
+
+export interface SocialCaptionLayout {
+  wordPadEm: number;
+  columnGapEm: number;
+  chunkPadXEm: number;
+  letterSpacingEm: number;
+}
+
+/** Layout constants for a case: mixed case reads as words, so it needs less air between them. */
+export function socialCaptionLayout(textCase: SocialCaptionCase = 'upper'): SocialCaptionLayout {
+  return textCase === 'upper'
+    ? SOCIAL_CAPTION_LAYOUT
+    : { ...SOCIAL_CAPTION_LAYOUT, columnGapEm: 0.16 };
+}
 
 /**
  * Advance widths in em of capitals, digits and common punctuation: the wider
@@ -106,40 +129,142 @@ const CHAR_EM: Readonly<Record<string, number>> = {
   '°': 0.42,
   $: 0.64,
 };
+/**
+ * Advance widths in em for as-written (mixed-case) captions: the widest of PT Sans,
+ * Helvetica Neue, Arial, PT Serif and Georgia, all Bold, measured in Chromium, so a
+ * theme may pair `'as-written'` with a sans or a serif caption face.
+ */
+const AS_WRITTEN_CHAR_EM: Readonly<Record<string, number>> = {
+  A: 0.76,
+  B: 0.76,
+  C: 0.74,
+  D: 0.83,
+  E: 0.72,
+  F: 0.67,
+  G: 0.81,
+  H: 0.91,
+  I: 0.45,
+  J: 0.6,
+  K: 0.82,
+  L: 0.69,
+  M: 1.02,
+  N: 0.84,
+  O: 0.82,
+  P: 0.7,
+  Q: 0.82,
+  R: 0.8,
+  S: 0.67,
+  T: 0.68,
+  U: 0.83,
+  V: 0.76,
+  W: 1.13,
+  X: 0.81,
+  Y: 0.73,
+  Z: 0.69,
+  a: 0.6,
+  b: 0.65,
+  c: 0.57,
+  d: 0.66,
+  e: 0.57,
+  f: 0.39,
+  g: 0.61,
+  h: 0.68,
+  i: 0.35,
+  j: 0.35,
+  k: 0.63,
+  l: 0.34,
+  m: 1.02,
+  n: 0.69,
+  o: 0.64,
+  p: 0.66,
+  q: 0.65,
+  r: 0.52,
+  s: 0.56,
+  t: 0.4,
+  u: 0.68,
+  v: 0.57,
+  w: 0.86,
+  x: 0.59,
+  y: 0.56,
+  z: 0.53,
+  '0': 0.7,
+  '1': 0.57,
+  '2': 0.63,
+  '3': 0.62,
+  '4': 0.65,
+  '5': 0.6,
+  '6': 0.65,
+  '7': 0.57,
+  '8': 0.68,
+  '9': 0.65,
+  "'": 0.28,
+  '’': 0.31,
+  '.': 0.33,
+  ',': 0.33,
+  ';': 0.37,
+  ':': 0.37,
+  '!': 0.38,
+  '?': 0.61,
+  '-': 0.41,
+  '–': 0.7,
+  '—': 1,
+  '"': 0.51,
+  '“': 0.52,
+  '”': 0.52,
+  '(': 0.45,
+  ')': 0.45,
+  '%': 1,
+  '&': 0.9,
+  '/': 0.47,
+  '°': 0.44,
+  $: 0.64,
+};
 /** Characters outside the table (other scripts, symbols): assumed wide, so estimates stay safe. */
 const DEFAULT_CHAR_EM = 0.9;
 /** Headroom for theme title faces somewhat wider than PT Serif and Georgia. */
 const WIDTH_SAFETY = 1.06;
 
-/** Estimated width of one caption word in em, padding included (uppercase, accents ignored). */
-export function estimateSocialWordEm(text: string): number {
+/** Estimated width of one caption word in em, padding included (accents ignored). */
+export function estimateSocialWordEm(text: string, textCase: SocialCaptionCase = 'upper'): number {
+  const upper = textCase === 'upper';
+  const table = upper ? CHAR_EM : AS_WRITTEN_CHAR_EM;
   let em = 0;
   let count = 0;
-  for (const ch of text.toUpperCase().normalize('NFD').replace(/\p{M}/gu, '')) {
-    em += CHAR_EM[ch] ?? DEFAULT_CHAR_EM;
+  for (const ch of (upper ? text.toUpperCase() : text).normalize('NFD').replace(/\p{M}/gu, '')) {
+    em += table[ch] ?? DEFAULT_CHAR_EM;
     count++;
   }
-  const { letterSpacingEm, wordPadEm } = SOCIAL_CAPTION_LAYOUT;
+  const { letterSpacingEm, wordPadEm } = socialCaptionLayout(textCase);
   return (em + count * letterSpacingEm) * WIDTH_SAFETY + 2 * wordPadEm;
 }
 
 /** Rows `words` take in a row `rowEm` wide, filled the way flex-wrap fills them (greedily). */
-export function estimateSocialRows(words: readonly string[], rowEm: number): number {
+export function estimateSocialRows(
+  words: readonly string[],
+  rowEm: number,
+  textCase: SocialCaptionCase = 'upper',
+): number {
+  const { columnGapEm } = socialCaptionLayout(textCase);
   let rows = 0;
   let x = 0;
   for (const word of words) {
-    const width = estimateSocialWordEm(word);
+    const width = estimateSocialWordEm(word, textCase);
     if (rows === 0) {
       rows = 1;
       x = width;
-    } else if (x + SOCIAL_CAPTION_LAYOUT.columnGapEm + width <= rowEm) {
-      x += SOCIAL_CAPTION_LAYOUT.columnGapEm + width;
+    } else if (x + columnGapEm + width <= rowEm) {
+      x += columnGapEm + width;
     } else {
       rows++;
       x = width;
     }
   }
   return rows;
+}
+
+/** A word that ends a sentence ("breath.", "home?”"): the next chunk starts the next sentence. */
+function endsSentence(text: string): boolean {
+  return /[.!?…]["'”’»)\]]*$/.test(text);
 }
 
 /** A timed word derived from phrase data. */
@@ -149,6 +274,8 @@ export interface TimedWord {
   endTime: number;
   /** The phrase's audio segment: a chunk never mixes two. */
   segment?: number;
+  /** A paragraph break follows (a spoken title): the next word starts a new chunk. */
+  paragraphEnd?: boolean;
 }
 
 /** A chunk of words displayed together. */
@@ -169,6 +296,7 @@ function resolvePhraseTiming(phrase: CaptionPhrase): TimedWord[] {
       text: w.text,
       startTime: w.startTime,
       endTime: w.endTime,
+      ...(w.paragraphEnd ? { paragraphEnd: true } : {}),
     }));
   }
 
@@ -196,6 +324,7 @@ function resolvePhraseTiming(phrase: CaptionPhrase): TimedWord[] {
 export function buildWordStream(
   captions: CaptionTrack,
   rowEm = Number.POSITIVE_INFINITY,
+  textCase: SocialCaptionCase = 'upper',
 ): { words: TimedWord[]; chunks: WordChunk[] } {
   // Gather all words across all phrases
   const allWords: TimedWord[] = [];
@@ -233,7 +362,9 @@ export function buildWordStream(
       current.length > 0 &&
       (current.length >= chunkSize ||
         word.segment !== current[0].segment ||
-        estimateSocialRows([...current.map((w) => w.text), word.text], rowEm) >
+        current[current.length - 1].paragraphEnd ||
+        (current.length >= MIN_CHUNK_SIZE && endsSentence(current[current.length - 1].text)) ||
+        estimateSocialRows([...current.map((w) => w.text), word.text], rowEm, textCase) >
           SOCIAL_CAPTION_MAX_ROWS)
     ) {
       close();

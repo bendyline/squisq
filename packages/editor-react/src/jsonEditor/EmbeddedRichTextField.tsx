@@ -15,6 +15,7 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Placeholder from '@tiptap/extension-placeholder';
 import { MarkdownEscape } from '../MarkdownEscape';
+import { PlainTextClipboard } from '../PlainTextClipboard';
 import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 
 export interface EmbeddedRichTextFieldProps {
@@ -46,6 +47,7 @@ export function EmbeddedRichTextField(props: EmbeddedRichTextFieldProps) {
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: placeholder ?? '' }),
       MarkdownEscape,
+      PlainTextClipboard,
     ],
     content: markdownToTiptap(value),
     onUpdate: ({ editor: ed, transaction }) => {

@@ -67,6 +67,15 @@ describe('buildNarrationScript', () => {
     expect(tokenByText('starts').pauseAfter).toBe(0);
   });
 
+  it('keeps the words either side of a hard break apart, with a line pause', () => {
+    const script = buildNarrationScript(
+      markdownToDoc(parseMarkdown('# Address\n\n12 Main Street  \nSpringfield')),
+    );
+    expect(script.sourceText).toBe('Address\n12 Main Street\nSpringfield');
+    expect(script.tokens.map((t) => t.text)).toContain('Springfield');
+    expect(script.tokens.find((t) => t.text === 'Street')!.pauseAfter).toBe(2);
+  });
+
   it('includes headings as spoken text and honors includeTitles=false', () => {
     const doc = markdownToDoc(parseMarkdown(MD));
     const withTitles = buildNarrationScript(doc);

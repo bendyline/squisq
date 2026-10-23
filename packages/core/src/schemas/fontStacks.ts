@@ -85,6 +85,14 @@ export const AVAILABLE_FONT_STACKS: FontStack[] = [
     googleFontFamily: 'DM Sans',
   },
   {
+    // PT Serif's companion sans (same designers, shared proportions); also a macOS system font.
+    id: 'pt-sans',
+    label: 'PT Sans',
+    family: '"PT Sans", "Helvetica Neue", Arial, sans-serif',
+    kind: 'sans',
+    googleFontFamily: 'PT Sans',
+  },
+  {
     id: 'oswald',
     label: 'Oswald',
     // Condensed grotesques make a far better stand-in for Oswald than
