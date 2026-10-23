@@ -106,13 +106,12 @@ test.describe('Video export', () => {
     const modalHeading = page.getByRole('heading', { name: 'Export Video' });
     await expect(modalHeading).toBeVisible({ timeout: 5_000 });
 
-    // Pick the fastest settings so the test isn't bottlenecked on html2canvas.
-    // Modal labels aren't wired with htmlFor, so target the selects by their
-    // unique option values instead.
-    await page.locator('select:has(option[value="draft"])').selectOption('draft');
-    // Scope to the export modal — the site toolbar's text-size select also
-    // carries a "15" option and would make the bare locator ambiguous.
-    await page.getByLabel('Frame Rate').selectOption('15');
+    // Quality and frame rate live inside the collapsed Advanced options.
+    // Open it before picking the fastest settings for the capture loop.
+    const modal = page.getByRole('dialog', { name: 'Export Video', exact: true });
+    await modal.getByText('Advanced options', { exact: true }).click();
+    await modal.getByLabel('Quality', { exact: true }).selectOption('draft');
+    await modal.getByLabel('Frame Rate', { exact: true }).selectOption('15');
 
     const exportBtn = page.getByRole('button', { name: 'Export Video' });
     await exportBtn.click();
@@ -162,9 +161,22 @@ test.describe('Video export', () => {
       timeout: 5_000,
     });
 
-    // Should have quality/format options and an export button
-    const exportBtn = page.locator('button', { hasText: /Export|Start/i }).last();
-    await expect(exportBtn).toBeVisible();
+    const modal = page.getByRole('dialog', { name: 'Export Video', exact: true });
+    await expect(modal.getByLabel('Format', { exact: true })).toBeVisible();
+    await expect(modal.getByRole('button', { name: 'Export Video', exact: true })).toBeVisible();
+
+    // Cover advanced configuration even when H.264 support skips the MP4 test.
+    const quality = modal.getByLabel('Quality', { exact: true });
+    const frameRate = modal.getByLabel('Frame Rate', { exact: true });
+    await expect(quality).toBeHidden();
+    await expect(frameRate).toBeHidden();
+    await modal.getByText('Advanced options', { exact: true }).click();
+    await expect(quality).toBeVisible();
+    await expect(frameRate).toBeVisible();
+    await quality.selectOption('draft');
+    await frameRate.selectOption('15');
+    await expect(quality).toHaveValue('draft');
+    await expect(frameRate).toHaveValue('15');
   });
 
   test('animated GIF selection applies compression-friendly defaults', async ({ page }) => {
