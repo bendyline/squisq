@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.12.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.9...@bendyline/squisq-react@2.12.10) (2026-10-23)
+
+### Bug Fixes
+
+* Preserve hard breaks in plain text extraction ([#103](https://github.com/bendyline/squisq/issues/103)) ([85f1107](https://github.com/bendyline/squisq/commit/85f1107a1a83a7e74cecbc44f499ee1c7179ae23))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.1
+
 ## @bendyline/squisq-react [2.12.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.8...@bendyline/squisq-react@2.12.9) (2026-10-22)
 
 ### Bug Fixes

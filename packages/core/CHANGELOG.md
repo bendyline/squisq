@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.0...@bendyline/squisq@2.13.1) (2026-10-23)
+
+### Bug Fixes
+
+* Preserve hard breaks in plain text extraction ([#103](https://github.com/bendyline/squisq/issues/103)) ([85f1107](https://github.com/bendyline/squisq/commit/85f1107a1a83a7e74cecbc44f499ee1c7179ae23))
+
 ## @bendyline/squisq [2.13.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.12.5...@bendyline/squisq@2.13.0) (2026-10-21)
 
 ### Features
