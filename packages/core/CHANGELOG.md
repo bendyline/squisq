@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.1...@bendyline/squisq@2.13.2) (2026-10-23)
+
+### Bug Fixes
+
+* Add frosted hero cover style and backdrop filters ([#104](https://github.com/bendyline/squisq/issues/104)) ([28836c8](https://github.com/bendyline/squisq/commit/28836c8661d0e974840755940f2ba5aaf2728228))
+
 ## @bendyline/squisq [2.13.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.0...@bendyline/squisq@2.13.1) (2026-10-23)
 
 ### Bug Fixes
