@@ -138,6 +138,13 @@ export interface ThemeTypography {
   titleLineHeight?: number;
   /** Default title font weight */
   titleWeight?: 'normal' | 'bold';
+  /** Font family for social (burned-in, word-by-word) captions (default: titleFont) */
+  captionFont?: FontFamily;
+  /**
+   * Letter case of social captions: `'upper'` (default) sets them in capitals;
+   * `'as-written'` keeps the narration's own casing, so names keep their capitals.
+   */
+  captionCase?: 'upper' | 'as-written';
 }
 
 // ============================================

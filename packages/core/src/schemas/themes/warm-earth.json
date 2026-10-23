@@ -16,6 +16,8 @@
   "typography": {
     "bodyFont": { "stackId": "pt-serif" },
     "titleFont": { "stackId": "pt-serif" },
+    "captionFont": { "stackId": "pt-sans" },
+    "captionCase": "as-written",
     "titleWeight": "bold",
     "lineHeight": 1.6
   },

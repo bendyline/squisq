@@ -1190,6 +1190,11 @@ export interface CaptionWord {
   startTime: number;
   /** End time in seconds */
   endTime: number;
+  /**
+   * The narration text starts a new paragraph after this word, with no punctuation to
+   * show it (a spoken title or heading): captions break here as at a sentence end.
+   */
+  paragraphEnd?: boolean;
 }
 
 /**

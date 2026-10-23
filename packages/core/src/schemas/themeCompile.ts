@@ -193,6 +193,9 @@ export function compileTheme(partial: DeepPartial<Theme>, opts: CompileOptions =
     if (partialTypography.monoFont !== undefined) {
       merged.typography.monoFont = partialTypography.monoFont as FontFamily;
     }
+    if (partialTypography.captionFont !== undefined) {
+      merged.typography.captionFont = partialTypography.captionFont as FontFamily;
+    }
   }
 
   // Step 1c: colorSchemes is a map the user edits wholesale (add / remove

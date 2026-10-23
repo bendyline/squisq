@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import type { CaptionTrack } from '@bendyline/squisq/schemas';
+import { resolveTheme } from '@bendyline/squisq/schemas';
 import { CaptionOverlay } from '../CaptionOverlay';
 import {
   buildWordStream,
@@ -165,6 +166,119 @@ describe('Social caption rows', () => {
     const size = parseInt(overlayStyle(container, 'social-caption-overlay__chunk').fontSize, 10);
     expect(size).toBeLessThan(73);
     expect(estimateSocialWordEm(word) * size).toBeLessThanOrEqual(portraitRowEm * 73);
+  });
+});
+
+// All-caps serif captions read as shouting (Qualla feedback, 2026-10-22): a theme
+// can set them in another face, in the narration's own casing.
+describe('Social caption case', () => {
+  const portraitRowEm = (1080 * 0.86) / 73 - 2 * 0.55;
+  const narration: CaptionTrack = {
+    version: 1,
+    phrases: [
+      {
+        text: 'The mountains submerge at Tierra del Fuego, loop underwater through the Scotia Arc, then rise again as this final frozen extension of the American cordillera.',
+        startTime: 0,
+        endTime: 12,
+        audioSegment: 0,
+      },
+    ],
+  };
+
+  it('sets as-written captions in the theme caption font, keeping their capitals', () => {
+    const { container } = render(
+      <CaptionOverlay
+        captions={narration}
+        currentTime={2}
+        captionStyle="social"
+        theme={resolveTheme('warm-earth')}
+        viewport={{ width: 1080, height: 1920, name: 'portrait' }}
+      />,
+    );
+    const chunk = overlayStyle(container, 'social-caption-overlay__chunk');
+    expect(chunk.textTransform).toBe('none');
+    expect(chunk.fontFamily).toContain('PT Sans');
+  });
+
+  it('keeps capitals in the title font when a theme sets no caption style', () => {
+    const { container } = render(
+      <CaptionOverlay
+        captions={narration}
+        currentTime={2}
+        captionStyle="social"
+        theme={resolveTheme('standard')}
+        viewport={{ width: 1080, height: 1920, name: 'portrait' }}
+      />,
+    );
+    expect(overlayStyle(container, 'social-caption-overlay__chunk').textTransform).toBe('uppercase');
+  });
+
+  it('starts a new chunk at a sentence end', () => {
+    const sentences: CaptionTrack = {
+      version: 1,
+      phrases: [
+        {
+          text: 'Hold your breath. Ahead, icebergs glow blue.',
+          startTime: 0,
+          endTime: 4,
+          audioSegment: 0,
+          words: ['Hold', 'your', 'breath.', 'Ahead,', 'icebergs', 'glow', 'blue.'].map((text, i) => ({
+            text,
+            startTime: i * 0.5,
+            endTime: i * 0.5 + 0.5,
+          })),
+        },
+      ],
+    };
+    const { chunks } = buildWordStream(sentences, portraitRowEm, 'as-written');
+    expect(chunks.map((c) => c.words.map((w) => w.text).join(' '))).toEqual([
+      'Hold your breath.',
+      'Ahead, icebergs glow blue.',
+    ]);
+    // A spoken title ends its paragraph without a full stop.
+    const titled: CaptionTrack = {
+      version: 1,
+      phrases: [
+        {
+          text: 'Antarctic Peninsula',
+          startTime: 0,
+          endTime: 1,
+          audioSegment: 0,
+          words: [
+            { text: 'Antarctic', startTime: 0, endTime: 0.5 },
+            { text: 'Peninsula', startTime: 0.5, endTime: 1, paragraphEnd: true },
+          ],
+        },
+        {
+          text: 'The Lemaire Channel narrows.',
+          startTime: 1,
+          endTime: 3,
+          audioSegment: 0,
+          words: ['The', 'Lemaire', 'Channel', 'narrows.'].map((text, i) => ({ text, startTime: 1 + i * 0.5, endTime: 1.5 + i * 0.5 })),
+        },
+      ],
+    };
+    const titleChunks = buildWordStream(titled, portraitRowEm, 'as-written').chunks.map((c) => c.words.map((w) => w.text).join(' '));
+    expect(titleChunks[0]).toBe('Antarctic Peninsula');
+    expect(titleChunks[1].startsWith('The')).toBe(true);
+  });
+
+  it('measures mixed case narrower than capitals, and still never needs a third row', () => {
+    expect(estimateSocialWordEm('submerge', 'as-written')).toBeLessThan(estimateSocialWordEm('submerge'));
+    // Capitals measure the same either way (the widest faces).
+    expect(estimateSocialWordEm('MMM', 'as-written')).toBeCloseTo(estimateSocialWordEm('MMM'), 1);
+    const upper = buildWordStream(narration, portraitRowEm, 'upper').chunks;
+    const asWritten = buildWordStream(narration, portraitRowEm, 'as-written').chunks;
+    expect(asWritten.length).toBeLessThanOrEqual(upper.length);
+    for (const chunk of asWritten) {
+      expect(
+        estimateSocialRows(
+          chunk.words.map((w) => w.text),
+          portraitRowEm,
+          'as-written',
+        ),
+      ).toBeLessThanOrEqual(SOCIAL_CAPTION_MAX_ROWS);
+    }
   });
 });
 

@@ -4,9 +4,16 @@
  * Converts narration segment text and optional word/bookmark timing into the
  * canonical Doc CaptionTrack. Hosts retain responsibility for mapping their
  * domain model and timing sidecars into CaptionSegmentSource records.
+ *
+ * Bookmark words keep the punctuation around them in the narration text: TTS
+ * engines such as Azure report bare fragments ("breath"), so the closing and
+ * opening marks ("breath.", "“Eternity") are recovered from `sourceText` at the
+ * bookmark's offset. That keeps sentence ends visible in mixed-case captions
+ * and lets phrases break at them.
  */
 
 import type {
+  AudioBookmark,
   AudioSegment,
   AudioTimingData,
   CaptionPhrase,
@@ -38,6 +45,33 @@ const DEFAULT_MIN_DURATION = 1.5;
 const DEFAULT_MAX_DURATION = 6;
 const DEFAULT_WORDS_PER_SECOND = 2.5;
 
+/** Marks that close a word in written text (kept on the caption word). */
+const CLOSING_MARKS = /^[.,;:!?…"'”’»)\]]+/;
+/** Opening quotes and brackets directly before a word. */
+const OPENING_MARKS = /[“"‘'«([]+$/;
+
+/**
+ * A bookmark's word as the narration text writes it, punctuation included, and
+ * whether a paragraph break follows it (a spoken title has no full stop). Falls
+ * back to the bare fragment when the offset does not point at it.
+ */
+function writtenWord(
+  sourceText: string | undefined,
+  bookmark: AudioBookmark,
+  fragment: string,
+): { text: string; paragraphEnd: boolean } {
+  const at = bookmark.charOffset;
+  if (!sourceText || !(at >= 0)) return { text: fragment, paragraphEnd: false };
+  if (sourceText.slice(at, at + fragment.length).toLowerCase() !== fragment.toLowerCase()) {
+    return { text: fragment, paragraphEnd: false };
+  }
+  const end = at + fragment.length;
+  const before = OPENING_MARKS.exec(sourceText.slice(Math.max(0, at - 3), at))?.[0] ?? '';
+  const after = CLOSING_MARKS.exec(sourceText.slice(end, end + 4))?.[0] ?? '';
+  const paragraphEnd = /^[^\S\n]*\n/.test(sourceText.slice(end + after.length));
+  return { text: before + fragment + after, paragraphEnd };
+}
+
 function phrasesFromTiming(
   source: CaptionSegmentSource,
   segmentIndex: number,
@@ -53,8 +87,9 @@ function phrasesFromTiming(
 
   for (let index = 0; index < timing.bookmarks.length; index += 1) {
     const bookmark = timing.bookmarks[index];
-    const text = bookmark.textFragment?.trim() ?? '';
-    if (!text) continue;
+    const fragment = bookmark.textFragment?.trim() ?? '';
+    if (!fragment) continue;
+    const { text, paragraphEnd } = writtenWord(timing.sourceText, bookmark, fragment);
 
     const next = timing.bookmarks[index + 1];
     const startTime = Math.min(
@@ -69,11 +104,13 @@ function phrasesFromTiming(
       text,
       startTime,
       endTime,
+      ...(paragraphEnd ? { paragraphEnd: true } : {}),
     };
     words.push(word);
     phraseText += `${phraseText ? ' ' : ''}${text}`;
 
     const flush =
+      paragraphEnd ||
       (/[.!?]$/.test(text) && words.length >= 4) ||
       (/[,;:]$/.test(text) && words.length >= targetWords - 2) ||
       words.length >= targetWords + 3 ||

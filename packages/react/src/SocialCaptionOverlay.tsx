@@ -5,7 +5,10 @@
  * showing 2-6 words at a time on at most two rows (SOCIAL_CAPTION_MAX_ROWS),
  * with the currently-spoken word highlighted as a filled pill in the theme's
  * primary color over a soft dark backdrop. Font and colors come from the
- * active theme; type is scaled to the frame's narrower axis, and the band
+ * active theme: `typography.captionFont` (else the title font) and
+ * `typography.captionCase` — `'upper'` (default, all capitals) or
+ * `'as-written'` (the narration's own casing, so names keep their capitals).
+ * Type is scaled to the frame's narrower axis, and the band
  * sits above the region short-form players cover with their UI. A third row
  * would climb into the middle of a portrait frame, over the picture.
  *
@@ -29,11 +32,10 @@ import type { CaptionPosition } from './types';
 import {
   buildWordStream,
   estimateSocialWordEm,
-  SOCIAL_CAPTION_LAYOUT,
+  socialCaptionLayout,
   type WordChunk,
 } from './socialCaptionLayout';
 
-const { wordPadEm, columnGapEm, chunkPadXEm, letterSpacingEm } = SOCIAL_CAPTION_LAYOUT;
 
 /**
  * Frame placement for the overlay band. Portrait frames keep a larger bottom
@@ -98,13 +100,15 @@ export function SocialCaptionOverlay({
   const baseFontSize = Math.min(viewportHeight * 0.055, viewportWidth * 0.068);
   const fontSize = Math.max(22, Math.min(96, Math.round(baseFontSize)));
   const sidePadding = portrait ? 0.07 : 0.1;
+  const textCase = theme?.typography?.captionCase ?? 'upper';
+  const { wordPadEm, columnGapEm, chunkPadXEm, letterSpacingEm } = socialCaptionLayout(textCase);
   // Width of one caption row in em: the band less its side padding and the chunk's own.
   const rowEm = (viewportWidth * (1 - 2 * sidePadding)) / fontSize - 2 * chunkPadXEm;
 
   // Build the word stream once when captions or the row width change (memoized)
   const { chunks } = useMemo(
-    () => (captions ? buildWordStream(captions, rowEm) : { words: [], chunks: [] }),
-    [captions, rowEm],
+    () => (captions ? buildWordStream(captions, rowEm, textCase) : { words: [], chunks: [] }),
+    [captions, rowEm, textCase],
   );
 
   if (!enabled || chunks.length === 0) {
@@ -176,13 +180,14 @@ export function SocialCaptionOverlay({
 
   // Theme-derived styling
   const primaryColor = theme?.colors?.primary ?? '#5b9bd5';
-  const fontFamily = theme?.typography?.titleFont
-    ? resolveFontFamily(theme.typography.titleFont, '"PT Serif", Georgia, serif')
+  const captionFont = theme?.typography?.captionFont ?? theme?.typography?.titleFont;
+  const fontFamily = captionFont
+    ? resolveFontFamily(captionFont, '"PT Serif", Georgia, serif')
     : '"PT Serif", Georgia, serif';
 
   // A word wider than a whole row (a long compound, a URL) shrinks this chunk
   // until it fits, rather than overflowing the frame or taking a third row.
-  const widestEm = Math.max(...activeChunk.words.map((w) => estimateSocialWordEm(w.text)));
+  const widestEm = Math.max(...activeChunk.words.map((w) => estimateSocialWordEm(w.text, textCase)));
   const chunkFontSize =
     widestEm > rowEm ? Math.max(16, Math.floor((fontSize * rowEm) / widestEm)) : fontSize;
 
@@ -222,7 +227,7 @@ export function SocialCaptionOverlay({
           fontFamily,
           fontSize: `${chunkFontSize}px`,
           lineHeight: 1.18,
-          textTransform: 'uppercase',
+          textTransform: textCase === 'upper' ? 'uppercase' : 'none',
           letterSpacing: `${letterSpacingEm}em`,
           whiteSpace: 'normal',
         }}
