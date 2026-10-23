@@ -818,6 +818,48 @@ describe('<Toolbar> Files badge', () => {
 });
 
 describe('<Toolbar> Insert menu', () => {
+  it('positions from its rendered width and stays inside a resized viewport', async () => {
+    const originalInnerWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    const rectSpy = vi
+      .spyOn(Element.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: Element) {
+        return this.classList.contains('squisq-insert-menu')
+          ? new DOMRect(0, 0, 256, 300)
+          : new DOMRect();
+      });
+
+    try {
+      render(
+        <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+          <Toolbar />
+        </EditorProvider>,
+      );
+      const trigger = screen.getByLabelText('Insert');
+      trigger.getBoundingClientRect = () => new DOMRect(181, 40, 30, 40);
+      fireEvent.click(trigger);
+      const menu = await screen.findByRole('menu');
+
+      // The old 200px estimate left the actual 256px menu at x=181 (right=437).
+      expect(menu.style.left).toBe('8px');
+
+      // Follow a live trigger after a resize, then clamp its measured menu even
+      // when the trigger itself straddles the new viewport's right edge.
+      trigger.getBoundingClientRect = () => new DOMRect(300, 40, 30, 40);
+      fireEvent(window, new Event('resize'));
+      expect(menu.style.left).toBe('74px');
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 });
+      fireEvent(window, new Event('resize'));
+      expect(menu.style.left).toBe('56px');
+    } finally {
+      rectSpy.mockRestore();
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        value: originalInnerWidth,
+      });
+    }
+  });
+
   it('flips above its trigger when the rendered menu would cross the viewport bottom', async () => {
     const originalInnerHeight = window.innerHeight;
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 });

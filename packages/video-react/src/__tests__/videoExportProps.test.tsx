@@ -150,6 +150,9 @@ describe('VideoExportModal', () => {
     expect(
       (container.querySelector('[aria-label="Include audio"]') as HTMLInputElement).checked,
     ).toBe(true);
+    expect((container.querySelector('[aria-label="Preset"]') as HTMLSelectElement).value).toBe(
+      'custom',
+    );
     expect(container.textContent).toContain('Include audio');
     expect(container.textContent).not.toContain('Best effort');
   });

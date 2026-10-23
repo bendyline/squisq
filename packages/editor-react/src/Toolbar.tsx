@@ -154,7 +154,6 @@ import {
   CONVERT_BUTTONS,
   fileCountBadge,
   fileCountLabel,
-  INSERT_MENU_WIDTH,
   FILE_STORING_BUTTONS,
   MEDIA_BUTTONS,
   MERMAID_TYPE_MENU_WIDTH,
@@ -390,7 +389,7 @@ export function Toolbar({
   const codeSnippetMenuRef = useRef<HTMLDivElement | null>(null);
   const mermaidTypeMenuRef = useRef<HTMLDivElement | null>(null);
   const chartTypeMenuRef = useRef<HTMLDivElement | null>(null);
-  const insertMenuTriggerRectRef = useRef<DOMRect | null>(null);
+  const insertMenuTriggerRef = useRef<{ element: HTMLElement; rect: DOMRect } | null>(null);
   const [insertMenuAnchor, setInsertMenuAnchor] = useState<{
     top: number;
     left: number;
@@ -417,15 +416,10 @@ export function Toolbar({
       ? overflowTriggerRef.current
       : insertMenuButtonRef.current;
     const rect = btn.getBoundingClientRect();
-    const gap = 4;
-    const margin = 8;
-    const vw = window.innerWidth;
-    let left = rect.left;
-    if (left + INSERT_MENU_WIDTH + margin > vw) {
-      left = Math.max(margin, rect.right - INSERT_MENU_WIDTH);
-    }
-    insertMenuTriggerRectRef.current = rect;
-    setInsertMenuAnchor({ top: rect.bottom + gap, left, placement: 'down' });
+    insertMenuTriggerRef.current = { element: btn, rect };
+    // The menu's content and the host's font determine its width. Measure it
+    // in the layout effect before paint rather than guessing from min-width.
+    setInsertMenuAnchor({ top: rect.bottom + 4, left: rect.left, placement: 'down' });
     setCodeSnippetMenuAnchor(null);
     setMermaidTypeMenuAnchor(null);
     setChartTypeMenuAnchor(null);
@@ -483,7 +477,7 @@ export function Toolbar({
   }, []);
 
   const closeInsertMenu = useCallback(() => {
-    insertMenuTriggerRectRef.current = null;
+    insertMenuTriggerRef.current = null;
     setInsertMenuAnchor(null);
     setCodeSnippetMenuAnchor(null);
     setMermaidTypeMenuAnchor(null);
@@ -604,32 +598,60 @@ export function Toolbar({
   useLayoutEffect(() => {
     if (!insertMenuOpen) return;
     const menu = insertMenuRef.current;
-    const triggerRect = insertMenuTriggerRectRef.current;
-    if (!menu || !triggerRect) return;
+    const trigger = insertMenuTriggerRef.current;
+    if (!menu || !trigger) return;
 
-    const gap = 4;
-    const margin = 8;
-    const spaceBelow = Math.max(0, window.innerHeight - triggerRect.bottom - gap - margin);
-    const spaceAbove = Math.max(0, triggerRect.top - gap - margin);
-    const naturalHeight = Math.max(menu.scrollHeight, menu.getBoundingClientRect().height);
-    const placement =
-      naturalHeight > spaceBelow && spaceAbove > spaceBelow ? ('up' as const) : ('down' as const);
-    const maxHeight = placement === 'up' ? spaceAbove : spaceBelow;
-    const visibleHeight = Math.min(naturalHeight, maxHeight);
-    const top =
-      placement === 'up'
-        ? Math.max(margin, triggerRect.top - gap - visibleHeight)
-        : triggerRect.bottom + gap;
+    const positionMenu = () => {
+      // An overflow-menu trigger unmounts when Insert opens. Retain its last
+      // rect, but follow a still-mounted toolbar button when the viewport resizes.
+      const liveRect = trigger.element.getBoundingClientRect();
+      const triggerRect =
+        trigger.element.isConnected && liveRect.width > 0 ? liveRect : trigger.rect;
+      const gap = 4;
+      const margin = 8;
+      const menuRect = menu.getBoundingClientRect();
+      const rightEdge = window.innerWidth - margin;
+      const preferredLeft =
+        triggerRect.left + menuRect.width <= rightEdge
+          ? triggerRect.left
+          : triggerRect.right - menuRect.width;
+      const left = Math.max(margin, Math.min(preferredLeft, rightEdge - menuRect.width));
+      const spaceBelow = Math.max(0, window.innerHeight - triggerRect.bottom - gap - margin);
+      const spaceAbove = Math.max(0, triggerRect.top - gap - margin);
+      const naturalHeight = Math.max(menu.scrollHeight, menuRect.height);
+      const placement =
+        naturalHeight > spaceBelow && spaceAbove > spaceBelow ? ('up' as const) : ('down' as const);
+      const maxHeight = placement === 'up' ? spaceAbove : spaceBelow;
+      const visibleHeight = Math.min(naturalHeight, maxHeight);
+      const top =
+        placement === 'up'
+          ? Math.max(margin, triggerRect.top - gap - visibleHeight)
+          : triggerRect.bottom + gap;
 
-    setInsertMenuAnchor((current) => {
-      if (
-        !current ||
-        (current.top === top && current.maxHeight === maxHeight && current.placement === placement)
-      ) {
-        return current;
-      }
-      return { ...current, top, maxHeight, placement };
-    });
+      setInsertMenuAnchor((current) => {
+        if (
+          !current ||
+          (current.left === left &&
+            current.top === top &&
+            current.maxHeight === maxHeight &&
+            current.placement === placement)
+        ) {
+          return current;
+        }
+        return { ...current, left, top, maxHeight, placement };
+      });
+    };
+
+    positionMenu();
+    // A late-loading host font or newly registered insert action can resize
+    // this portaled menu without changing its open state.
+    const observer = new ResizeObserver(positionMenu);
+    observer.observe(menu);
+    window.addEventListener('resize', positionMenu);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', positionMenu);
+    };
   }, [insertMenuOpen]);
 
   // Force re-render when Tiptap selection or formatting state changes
