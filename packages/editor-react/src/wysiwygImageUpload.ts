@@ -1,8 +1,63 @@
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView as ProseMirrorView } from '@tiptap/pm/view';
+import { fileReference, mediaMimeType, squisqMediaKind, squisqMediaNode } from './mediaDragMime';
+import { processMediaFiles } from './utils/dropUtils';
 
 type ImageMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
+
+/** Whether a file becomes a `<video>` or `<audio>` player when inserted. */
+export function isPlayableMediaFile(file: Pick<File, 'name' | 'type'>): boolean {
+  const kind = squisqMediaKind(mediaMimeType(file));
+  return kind === 'video' || kind === 'audio';
+}
+
+/**
+ * Store video and audio files, then insert a player for each at the caret,
+ * which a drop has already moved to the drop point. Players are block atoms,
+ * so they cannot borrow the inline placeholder images use; they land together,
+ * in the order given, once every file is stored.
+ */
+export async function uploadAndInsertMediaPlayers(
+  view: ImageMutationView,
+  files: File[],
+  mediaProvider: MediaProvider,
+  onMediaUploaded?: () => void,
+): Promise<void> {
+  const paths = await processMediaFiles(files, mediaProvider);
+  if (!paths.some(Boolean)) return;
+  onMediaUploaded?.();
+
+  const { schema } = view.state;
+  const players: ProseMirrorNode[] = [];
+  for (const [index, path] of paths.entries()) {
+    if (!path) continue;
+    const spec = squisqMediaNode(fileReference(path, files[index].name, files[index].type));
+    const nodeType = spec ? schema.nodes[spec.type] : undefined;
+    if (spec && nodeType) players.push(nodeType.create(spec.attrs));
+  }
+  if (players.length > 0) insertTopLevelNodes(view, players);
+}
+
+/**
+ * Insert block nodes at the top level: in place of the caret's paragraph when
+ * it is empty, otherwise after the caret's top-level block — never inside a
+ * list item, whose serializer would drop a nested block.
+ */
+export function insertTopLevelNodes(view: ImageMutationView, nodes: ProseMirrorNode[]): void {
+  const { state } = view;
+  const { $from } = state.selection;
+  if ($from.depth < 1) {
+    view.dispatch(state.tr.insert(state.doc.content.size, nodes).scrollIntoView());
+    return;
+  }
+  const block = $from.node(1);
+  const tr =
+    block.type.name === 'paragraph' && block.content.size === 0
+      ? state.tr.replaceWith($from.before(1), $from.after(1), nodes)
+      : state.tr.insert($from.after(1), nodes);
+  view.dispatch(tr.scrollIntoView());
+}
 
 /**
  * Upload images while stable placeholder nodes retain the original event
