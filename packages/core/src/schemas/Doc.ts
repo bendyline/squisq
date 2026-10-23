@@ -55,6 +55,14 @@ export interface StartBlockConfig {
   heroCredit?: string;
   /** License identifier for the hero image */
   heroLicense?: string;
+  /**
+   * How a hero cover keeps its title legible. `'scrim'` (default): a gradient tinted from
+   * the theme background darkens the lower frame, with the title low and wide.
+   * `'frosted'`: the photo stays clear; the title sits on a frosted-glass plate near the
+   * bottom that grows upward for longer titles, kept within the frame's centre square
+   * (so a square crop, such as a social link card, shows all of it).
+   */
+  coverStyle?: 'scrim' | 'frosted';
 }
 
 /**
@@ -651,6 +659,18 @@ export interface ShapeLayer extends BaseLayer {
     borderStyle?: BorderStyle;
     /** Corner radius for rect */
     borderRadius?: number;
+    /**
+     * Frosted glass: blur what lies behind a rect by this radius in px (CSS
+     * `backdrop-filter`), under its fill. Use a translucent fill for the tint.
+     */
+    backdropBlur?: number;
+    /**
+     * Frosted glass: scale the contrast of what lies behind a rect toward mid-grey (CSS
+     * `backdrop-filter: contrast()`), with `backdropBlur`. Below 1 it pulls bright snow
+     * or sky down (and deep shadow up) while mid-tones barely move, so light text stays
+     * legible on glass over any photo without darkening the glass overall.
+     */
+    backdropContrast?: number;
   };
 }
 

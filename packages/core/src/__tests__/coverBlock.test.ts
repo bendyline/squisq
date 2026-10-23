@@ -6,6 +6,8 @@ import {
   fitCoverTitleSize,
   coverScrimAlphaAtY,
   COVER_SCRIM_STOPS,
+  frostedCoverLayout,
+  opticalCentreShiftEm,
 } from '../doc/templates/coverBlock';
 import { createTemplateContext, DEFAULT_THEME, VIEWPORT_PRESETS } from '../doc/templates/index';
 import { THEMES } from '../schemas/themeLibrary';
@@ -18,6 +20,7 @@ import type { ImageLayer, TextLayer, ShapeLayer } from '../schemas/Doc';
 
 const landscapeContext = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
 const portraitContext = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.portrait);
+const squareContext = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.square);
 
 function findLayer(layers: ReturnType<typeof coverBlock>, id: string) {
   return layers.find((l) => l.id === id);
@@ -491,6 +494,173 @@ describe('coverBlock hero scrim contrast', () => {
 });
 
 // ── startBlockToCoverInput ──────────────────────────────────────────
+
+// ── coverStyle: 'frosted' ───────────────────────────────────────────
+
+describe('coverBlock frosted style', () => {
+  const frosted = (title: string, extra: Partial<CoverBlockInput> = {}) =>
+    ({ heroSrc: 'hero.jpg', title, coverStyle: 'frosted', ...extra }) as CoverBlockInput;
+  const { width: W, height: H } = VIEWPORT_PRESETS.landscape;
+
+  it('keeps the photo clear: a frosted plate, no scrim', () => {
+    const layers = coverBlock(frosted('Conguillío National Park'), landscapeContext);
+    expect(findShape(layers, 'cover-gradient')).toBeUndefined();
+    const plate = findShape(layers, 'cover-plate')!;
+    expect(plate.content.backdropBlur).toBeGreaterThan(0);
+    // The default theme's dark title gets a light plate; nothing to dim.
+    expect(plate.content.backdropContrast).toBeUndefined();
+    expect(plate.content.borderRadius).toBeGreaterThan(0);
+    // A neutral tint, never the theme background (warm themes turned covers brown).
+    expect(plate.content.fill).not.toContain(DEFAULT_THEME.colors.background);
+    expect(layers.map((l) => l.id)).toEqual(['cover-hero', 'cover-plate', 'cover-title']);
+  });
+
+  it('tames a bright backdrop under a light title without darkening mid-tones', () => {
+    const warm = createTemplateContext(THEMES['warm-earth'], 0, 1, VIEWPORT_PRESETS.landscape);
+    const plate = findShape(coverBlock(frosted('Antarctic Peninsula'), warm), 'cover-plate')!;
+    const c = plate.content.backdropContrast!;
+    expect(c).toBeLessThan(1);
+    const alpha = Number(/^rgba\(12, 12, 14, ([\d.]+)\)$/.exec(plate.content.fill!)![1]);
+    const glass = (v: number) =>
+      Math.round(((v / 255 - 0.5) * c + 0.5) * 255 * (1 - alpha) + 12 * alpha);
+    const hex = (v: number) => `#${glass(v).toString(16).padStart(2, '0').repeat(3)}`;
+    // Snow behind the glass: better than the tint alone (about 2:1), the shadow does the rest.
+    expect(contrastRatio(THEMES['warm-earth'].colors.text, hex(255))).toBeGreaterThan(2.4);
+    // A mid-tone shows through within a few levels of the light tint alone.
+    expect(Math.abs(glass(120) - Math.round(120 * (1 - alpha) + 12 * alpha))).toBeLessThan(5);
+  });
+
+  it('rests the plate a fixed margin above the bottom and grows it upward', () => {
+    const short = frostedCoverLayout('Tonga', undefined, landscapeContext);
+    const long = frostedCoverLayout(
+      'Humberstone and Santa Laura Saltpeter Works',
+      undefined,
+      landscapeContext,
+    );
+    for (const { plate } of [short, long]) expect(plate.y + plate.height).toBeCloseTo(H * 0.93, 5);
+    expect(long.plate.height).toBeGreaterThan(short.plate.height);
+    expect(long.plate.y).toBeLessThan(short.plate.y);
+    expect(long.plate.y).toBeGreaterThan(H * 0.4);
+
+    const tall = frostedCoverLayout('Tonga', undefined, portraitContext);
+    expect(tall.plate.y + tall.plate.height).toBeCloseTo(
+      VIEWPORT_PRESETS.portrait.height * 0.83,
+      5,
+    );
+  });
+
+  it('centres the title in the plate, with even padding', () => {
+    for (const title of ['Tonga', 'Antarctic Peninsula', 'Ruins of São Miguel das Missões']) {
+      const { plate, title: box } = frostedCoverLayout(title, undefined, landscapeContext);
+      expect(box.cx).toBeCloseTo(plate.x + plate.width / 2, 5);
+      expect(box.cy).toBeCloseTo(plate.y + plate.height / 2, 5);
+      expect(box.width).toBeLessThan(plate.width);
+      expect(box.height).toBeLessThanOrEqual(plate.height + 1e-6);
+      // Room for the font's whole ascent and descent, so shrink-to-fit leaves the size alone.
+      expect(box.height).toBeGreaterThan(
+        1.3 * frostedCoverLayout(title, undefined, landscapeContext).fontSize,
+      );
+    }
+  });
+
+  it('keeps every title inside the centre square a square crop shows', () => {
+    const titles = [
+      'Tonga',
+      'Conguillío National Park',
+      'Humberstone and Santa Laura Saltpeter Works',
+      'qualla.com/\nconguillio-national-\npark',
+    ];
+    for (const title of titles) {
+      for (const ctx of [landscapeContext, squareContext, portraitContext]) {
+        const { width, height } = ctx.viewport;
+        const side = Math.min(width, height);
+        const { plate, lines } = frostedCoverLayout(title, undefined, ctx);
+        expect(plate.x).toBeGreaterThanOrEqual((width - side) / 2);
+        expect(plate.x + plate.width).toBeLessThanOrEqual((width + side) / 2);
+        expect(lines.length).toBeLessThanOrEqual(3);
+      }
+    }
+    expect(W).toBeGreaterThan(H);
+  });
+
+  it('balances a long title across its lines and keeps explicit breaks', () => {
+    const { lines } = frostedCoverLayout(
+      'Humberstone and Santa Laura Saltpeter Works',
+      undefined,
+      landscapeContext,
+    );
+    expect(lines.join(' ')).toBe('Humberstone and Santa Laura Saltpeter Works');
+    expect(lines.length).toBeGreaterThan(1);
+    expect(Math.min(...lines.map((l) => l.length))).toBeGreaterThan(5);
+
+    const link = frostedCoverLayout(
+      'qualla.com/\nconguillio-national-\npark',
+      undefined,
+      portraitContext,
+    );
+    expect(link.lines).toEqual(['qualla.com/', 'conguillio-national-', 'park']);
+  });
+
+  it('shrinks a title that will not fit three lines, down to the cover minimum', () => {
+    const roomy = frostedCoverLayout('Colonia', undefined, landscapeContext);
+    const crowded = frostedCoverLayout(
+      'Reserva Provincial La Payunia and the Volcanic Fields of Southern Mendoza',
+      undefined,
+      landscapeContext,
+    );
+    expect(crowded.fontSize).toBeLessThan(roomy.fontSize);
+    expect(crowded.fontSize).toBeGreaterThan(0);
+  });
+
+  it('draws the title box the renderer will not re-wrap', () => {
+    const layout = frostedCoverLayout('Little Lilli Isle', undefined, landscapeContext);
+    for (const line of layout.lines) {
+      // TextLayer wraps at half an em per character.
+      expect(Math.floor(layout.title.width / (layout.fontSize * 0.5))).toBeGreaterThanOrEqual(
+        line.length,
+      );
+    }
+  });
+
+  it('centres the title optically, not on its x-height', () => {
+    expect(opticalCentreShiftEm(['Antarctic Peninsula'])).toBeCloseTo(0.13, 3);
+    expect(opticalCentreShiftEm(['Paraguay'])).toBeCloseTo(0.0475, 2);
+    expect(opticalCentreShiftEm(['Óbidos'])).toBeCloseTo(0.175, 3);
+    expect(opticalCentreShiftEm(['Órgãos'])).toBeCloseTo(0.0925, 2);
+    expect(opticalCentreShiftEm(['Saltpeter Works', 'and Santa Laura'])).toBeCloseTo(0.13, 3);
+    expect(opticalCentreShiftEm(['once more'])).toBeCloseTo(0, 3);
+    const layers = coverBlock(frosted('Antarctic Peninsula'), landscapeContext);
+    const title = findText(layers, 'cover-title')!;
+    expect(title.content.style.verticalAlign).toBe('middle');
+    expect(title.content.style.baselineShift).toBeCloseTo(0.13, 3);
+  });
+
+  it('puts a subtitle inside the plate under the title', () => {
+    const { plate, title, subtitle } = frostedCoverLayout(
+      'Tonga',
+      'The Friendly Islands',
+      landscapeContext,
+    );
+    expect(subtitle).toBeDefined();
+    expect(subtitle!.cy).toBeGreaterThan(title.cy + title.height / 2);
+    expect(subtitle!.cy + subtitle!.height / 2).toBeLessThan(plate.y + plate.height);
+  });
+
+  it('falls back to the theme background cover without a hero', () => {
+    const layers = coverBlock({ title: 'No Hero', coverStyle: 'frosted' }, landscapeContext);
+    expect(findShape(layers, 'cover-plate')).toBeUndefined();
+    expect(findShape(layers, 'cover-bg')).toBeDefined();
+  });
+
+  it('flows from StartBlockConfig through expandCoverBlock', () => {
+    const config: StartBlockConfig = { heroSrc: 'h.jpg', title: 'Tonga', coverStyle: 'frosted' };
+    expect(startBlockToCoverInput(config).coverStyle).toBe('frosted');
+    expect(expandCoverBlock(config, landscapeContext).some((l) => l.id === 'cover-plate')).toBe(
+      true,
+    );
+    expect(startBlockToCoverInput({ title: 'Plain' })).not.toHaveProperty('coverStyle');
+  });
+});
 
 describe('startBlockToCoverInput', () => {
   it('maps all StartBlockConfig fields to CoverBlockInput', () => {

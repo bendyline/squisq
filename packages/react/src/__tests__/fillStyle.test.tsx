@@ -72,6 +72,28 @@ describe('ShapeLayer fill/border', () => {
     expect(rect.getAttribute('stroke-dasharray')).toBe('12 8');
   });
 
+  it('renders a backdrop-blurred rect as a frosted HTML panel', () => {
+    const { container } = render(
+      <svg>
+        <ShapeLayer
+          layer={makeShape({
+            fill: 'rgba(12, 12, 14, 0.36)',
+            borderRadius: 24,
+            backdropBlur: 18,
+            backdropContrast: 0.75,
+          })}
+          viewport={viewport}
+          blockTime={0}
+        />
+      </svg>,
+    );
+    expect(container.querySelector('rect')).toBeNull();
+    const panel = container.querySelector('foreignObject > div') as HTMLDivElement;
+    expect(panel.style.backdropFilter).toBe('blur(18px) contrast(0.75)');
+    expect(panel.style.background).toBe('rgba(12, 12, 14, 0.36)');
+    expect(panel.style.borderRadius).toBe('24px');
+  });
+
   it('renders a gradient via an SVG linearGradient', () => {
     const { container } = render(
       <svg>

@@ -429,7 +429,9 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
         >
           {lines.map((line, i) => (
             <tspan key={i} x={x} dy={i === 0 ? firstLineDy + baselineShiftPx : lineHeightPx}>
-              {renderLine(line)} {/* Non-breaking space for empty lines */}
+              {/* No whitespace after the line: a trailing space would widen each
+                  line but the last and push centred lines half a space left. */}
+              {renderLine(line)}
             </tspan>
           ))}
         </text>
