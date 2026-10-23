@@ -11,6 +11,7 @@ import {
   deriveTemplateInputs,
   extractBodyPlainText,
   extractEmbeddedVideos,
+  extractHostedVideos,
   extractBlockquoteText,
   extractImages,
   extractListItems,
@@ -220,17 +221,7 @@ function buildTemplatePreviewInputs(
     }
     case 'leftFeature':
     case 'rightFeature': {
-      const hasFeature =
-        hasText(provided.imageSrc) ||
-        extractImages(contents, 1).length > 0 ||
-        extractEmbeddedVideos(contents, 1).length > 0 ||
-        (contents ?? []).some(
-          (node) => node.type === 'code' && isPictureFence(node) && !!node.value.trim(),
-        ) ||
-        ['diagram', 'tree', 'timeline'].some(
-          (template) =>
-            !!deriveTemplateInputs(template, headingText, contents, { placeholders: false }),
-        );
+      const hasFeature = hasText(provided.imageSrc) || hasVisualFeature(contents, headingText);
       return {
         inputs: hasFeature
           ? (deriveTemplateInputs(templateName, headingText, contents, { placeholders: false }) ?? {
@@ -239,6 +230,17 @@ function buildTemplatePreviewInputs(
             })
           : null,
         ...(hasFeature ? {} : { warning: 'No visual feature found in this block' }),
+      };
+    }
+    case 'topFeature':
+    case 'bottomFeature':
+    case 'mediaOnly': {
+      // Like `content`, these read the original AST from `context.block`;
+      // without media they would only repeat the content preview.
+      const hasFeature = hasVisualFeature(contents, headingText);
+      return {
+        inputs: hasFeature ? { title: headingText } : null,
+        ...(hasFeature ? {} : { warning: 'No image or video found in this block' }),
       };
     }
     case 'imageWithCaption':
@@ -348,6 +350,22 @@ function buildTemplatePreviewInputs(
         inputs: deriveTemplateInputs(templateName, headingText, contents, { placeholders: false }),
       };
   }
+}
+
+/** Body media a feature template can lead with: pictures, clips, players, diagrams. */
+function hasVisualFeature(contents: Block['contents'], headingText: string): boolean {
+  return (
+    extractImages(contents, 1).length > 0 ||
+    extractEmbeddedVideos(contents, 1).length > 0 ||
+    extractHostedVideos(contents, 1).length > 0 ||
+    (contents ?? []).some(
+      (node) => node.type === 'code' && isPictureFence(node) && !!node.value.trim(),
+    ) ||
+    ['diagram', 'tree', 'timeline'].some(
+      (template) =>
+        !!deriveTemplateInputs(template, headingText, contents, { placeholders: false }),
+    )
+  );
 }
 
 function derivePullQuoteInputs(

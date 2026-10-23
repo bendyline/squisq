@@ -299,6 +299,45 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
     ),
   },
   {
+    name: 'topFeature',
+    label: 'Top Feature',
+    description: 'Image or video across the full width at the top, title and body text below.',
+    icon: (
+      <TemplateIcon>
+        <rect x={3} y={3} width={50} height={19} rx={2} fill={F2} opacity={0.55} />
+        <polygon points="25,8.5 25,16.5 32,12.5" fill="white" opacity={0.5} />
+        <rect x={3} y={25} width={22} height={4} rx={1} fill={FA} />
+        <rect x={3} y={31} width={48} height={2.5} rx={1} fill={F1} />
+        <rect x={3} y={35.5} width={34} height={2.5} rx={1} fill={F1} opacity={0.75} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'bottomFeature',
+    label: 'Bottom Feature',
+    description: 'Title and body text at the top, image or video across the full width below.',
+    icon: (
+      <TemplateIcon>
+        <rect x={3} y={3} width={22} height={4} rx={1} fill={FA} />
+        <rect x={3} y={9} width={48} height={2.5} rx={1} fill={F1} />
+        <rect x={3} y={13.5} width={34} height={2.5} rx={1} fill={F1} opacity={0.75} />
+        <rect x={3} y={18} width={50} height={19} rx={2} fill={F2} opacity={0.55} />
+        <polygon points="25,23.5 25,31.5 32,27.5" fill="white" opacity={0.5} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'mediaOnly',
+    label: 'Media Only',
+    description: 'The image or video fills the slide, with no title, text or caption.',
+    icon: (
+      <TemplateIcon>
+        <rect x={3} y={3} width={50} height={34} rx={2} fill={F2} opacity={0.55} />
+        <polygon points="24,14 24,26 34,20" fill="white" opacity={0.5} />
+      </TemplateIcon>
+    ),
+  },
+  {
     name: 'map',
     label: 'Map',
     description: 'Embeds an interactive map centered on a geographic location.',

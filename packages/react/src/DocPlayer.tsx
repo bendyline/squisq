@@ -1721,6 +1721,9 @@ function DocPlayerContent({
               // Only the current slide plays a hosted video; frame capture
               // draws a still (a cross-origin player cannot be captured).
               videoEmbeds={renderMode ? 'placeholder' : 'player'}
+              // A slideshow's clock is stepped by hand and never runs, so a
+              // clip on the current slide is the presenter's to play.
+              videoClips={isSlideshowMode && !renderMode ? 'player' : 'timed'}
               staticMedia={renderMode}
             />
           </div>

@@ -311,6 +311,9 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
   ],
   leftFeature: FEATURE_DESCRIPTORS(),
   rightFeature: FEATURE_DESCRIPTORS(),
+  topFeature: [{ key: 'title', description: 'Heading shown with the body under the media' }],
+  bottomFeature: [{ key: 'title', description: 'Heading shown with the body above the media' }],
+  mediaOnly: [{ key: 'title', description: 'Heading, shown only when the block has no media' }],
   map: [
     {
       key: 'center',

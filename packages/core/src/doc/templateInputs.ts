@@ -20,6 +20,7 @@ import type { ContentBuildPlan } from './builds.js';
  */
 
 import type {
+  HtmlElement,
   MarkdownBlockNode,
   MarkdownCodeBlock,
   MarkdownInlineNode,
@@ -34,6 +35,7 @@ import { extractPlainText } from '../markdown/utils.js';
 import { isSvgIslandLang } from '../markdown/svgIsland.js';
 import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
+import { isStandaloneHtmlVideo } from './mediaAnnotations.js';
 import {
   detectAsciiDiagram,
   isEligibleAsciiFenceLang,
@@ -66,6 +68,9 @@ export interface EmbeddedVideo {
 }
 
 const VIDEO_FILE_RE = /\.(?:webm|mp4|mov|m4v|ogv)(?:[?#].*)?$/i;
+
+/** An inline `<video>`/`<audio>` tag (or its `<source>`/`<track>`/closing tag). */
+const INLINE_MEDIA_TAG_RE = /^<\/?(?:video|audio|source|track)\b/i;
 
 /** A hosted video (YouTube, Vimeo, …) a block body stands for. */
 export interface HostedVideo {
@@ -116,14 +121,40 @@ export function isPictureFence(node: MarkdownNode): boolean {
 
 /**
  * Body nodes that render as their own visual layer rather than as prose: a
- * picture fence ({@link isPictureFence}) and a hosted-video paragraph (a
- * player, via `appendRichContentLayers`). Repeating them as body text would
- * print the diagram source or the video's link under the very thing they
- * became.
+ * picture fence ({@link isPictureFence}), a hosted-video paragraph and a
+ * standalone `<video>` (players, via `appendRichContentLayers`). Repeating
+ * them as body text would print the diagram source, the video's link or its
+ * raw tag under the very thing they became.
  */
 export function isMaterializedMediaNode(node: MarkdownBlockNode): boolean {
   if (node.type === 'code') return isPictureFence(node);
-  return findBlockVideoEmbed(node) !== null;
+  return findBlockVideoEmbed(node) !== null || isStandaloneHtmlVideo(node);
+}
+
+/**
+ * A paragraph that is only pictures: markdown images (a video file in image
+ * syntax included) or resized `<img>` tags. A media-led template shows them
+ * in its media band, so their alt text repeated as body copy would caption
+ * the picture twice.
+ */
+export function isPictureParagraph(node: MarkdownBlockNode): boolean {
+  if (node.type !== 'paragraph') return false;
+  let pictures = 0;
+  for (const child of node.children) {
+    if (child.type === 'image') {
+      if (!VIDEO_FILE_RE.test(child.url) && mediaKindForUrl(child.url)) return false;
+      pictures += 1;
+    } else if (child.type === 'htmlInline') {
+      const elements = child.htmlChildren.filter(
+        (html): html is HtmlElement => html.type === 'htmlElement',
+      );
+      if (!elements.length || !elements.every((html) => html.tagName === 'img')) return false;
+      pictures += elements.length;
+    } else if (child.type !== 'break' && !(child.type === 'text' && !child.value.trim())) {
+      return false;
+    }
+  }
+  return pictures > 0;
 }
 
 /** Plain text of a block's body contents (excluding the heading). */
@@ -200,7 +231,11 @@ function renderInlineHtml(nodes: MarkdownInlineNode[]): string {
         case 'inlineIcon':
           return `<i class="fa-${node.family} fa-${node.name}" aria-hidden="true"></i>`;
         case 'htmlInline':
-          return escapeInlineHtml(node.rawHtml);
+          // A clip plays as its own layer; its markup printed as text says
+          // nothing (a recording inside a list item lands here).
+          return INLINE_MEDIA_TAG_RE.test(node.rawHtml.trim())
+            ? ''
+            : escapeInlineHtml(node.rawHtml);
       }
     })
     .join('');

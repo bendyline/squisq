@@ -295,3 +295,25 @@ Supporting context.
     expect(JSON.stringify(result.visual?.layers)).toContain('Output');
   });
 });
+
+describe('media-led template previews', () => {
+  const templates = ['topFeature', 'bottomFeature', 'mediaOnly'];
+
+  it.each(templates)('previews %s with the section’s clip', (templateName) => {
+    const result = resolveTemplateContentPreviewResult(
+      templateName,
+      previewSource('## Demo\n\nThe walkthrough.\n\n<video src="video/demo.mp4" controls></video>'),
+    );
+    expect(result.warning).toBeUndefined();
+    expect(result.visual?.layers?.some((layer) => layer.type === 'video')).toBe(true);
+  });
+
+  it.each(templates)('asks for media before previewing %s', (templateName) => {
+    const result = resolveTemplateContentPreviewResult(
+      templateName,
+      previewSource('## Notes\n\nJust prose here.'),
+    );
+    expect(result.visual).toBeNull();
+    expect(result.warning).toBe('No image or video found in this block');
+  });
+});

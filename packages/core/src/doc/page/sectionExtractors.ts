@@ -539,6 +539,11 @@ export const sectionExtractors: Record<string, SectionExtractor> = {
   imageWithCaption,
   leftFeature,
   rightFeature,
+  // A page reads top to bottom, so a media-led slide is its prose section:
+  // the heading and body, with the body's media inline where it was written.
+  topFeature: content,
+  bottomFeature: content,
+  mediaOnly: content,
   map,
   fullBleedQuote,
   list,

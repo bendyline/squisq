@@ -684,7 +684,9 @@ function appendRichContentLayers(
   const items = collectRichMediaItems(timedLayers, block);
   if (items.length === 0) return timedLayers;
 
-  const aspects = items.map((item) => {
+  // Real shapes only: a measured ratio, or one the item carries itself. A
+  // clip's 16:9 is a guess until its metadata has been measured.
+  const knownAspects = items.map((item) => {
     const key =
       item.kind === 'image' || item.kind === 'video'
         ? item.src
@@ -692,8 +694,10 @@ function appendRichContentLayers(
           ? item.source
           : undefined;
     const intrinsic = key ? mediaAspectRatios?.[key] : undefined;
-    return intrinsic && Number.isFinite(intrinsic) && intrinsic > 0 ? intrinsic : item.aspectRatio;
+    if (intrinsic && Number.isFinite(intrinsic) && intrinsic > 0) return intrinsic;
+    return item.kind === 'video' ? undefined : item.aspectRatio;
   });
+  const aspects = items.map((item, index) => knownAspects[index] ?? item.aspectRatio);
   const layout =
     block.summaryLayout === 'feature'
       ? resolveFeatureSummaryLayout(timedLayers, viewport, aspects)
@@ -708,6 +712,7 @@ function appendRichContentLayers(
               block.summaryMode === 'headings-and-features' &&
               !timedLayers.some((layer) => layer.id === 'feature-body'),
             stackColumns: createTemplateContext(theme, 0, 1, viewport).layout.stackColumns,
+            knownAspectRatios: knownAspects,
           },
         );
   const cells = gridCells(layout.mediaRect, items.length, viewport, layout.framed);

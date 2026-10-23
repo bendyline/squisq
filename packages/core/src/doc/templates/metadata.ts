@@ -77,6 +77,18 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     label: 'Right Feature',
     description: 'Image on the right, title and body text stacked on the left.',
   },
+  topFeature: {
+    label: 'Top Feature',
+    description: 'Image or video across the full width at the top, title and body text below.',
+  },
+  bottomFeature: {
+    label: 'Bottom Feature',
+    description: 'Title and body text at the top, image or video across the full width below.',
+  },
+  mediaOnly: {
+    label: 'Media Only',
+    description: 'The image or video fills the slide, with no title, text or caption.',
+  },
   map: {
     label: 'Map',
     description: 'Embeds an interactive map centered on a geographic location.',

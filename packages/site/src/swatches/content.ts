@@ -359,6 +359,14 @@ const FEATURE_SEED = (heading: string): TemplateSeed => ({
   bodyExpectation: 'full',
 });
 
+const VIDEO_PREFIX = `<video src="${CLIP}" poster="${POSTER}" aria-label="Generated video poster"></video>`;
+
+const MEDIA_LED_SEED = (heading: string): TemplateSeed => ({
+  heading,
+  mediaPrefix: VIDEO_PREFIX,
+  bodyExpectation: 'full',
+});
+
 export const TEMPLATE_SEEDS: Readonly<Record<string, TemplateSeed>> = {
   title: {
     heading: 'Designing Better Blocks',
@@ -425,6 +433,14 @@ export const TEMPLATE_SEEDS: Readonly<Record<string, TemplateSeed>> = {
   },
   leftFeature: FEATURE_SEED('Image-led explanation'),
   rightFeature: FEATURE_SEED('Text-led comparison'),
+  topFeature: MEDIA_LED_SEED('The clip leads, the notes follow'),
+  bottomFeature: MEDIA_LED_SEED('The notes lead, the clip follows'),
+  mediaOnly: {
+    heading: 'The clip is the slide',
+    mediaPrefix: VIDEO_PREFIX,
+    bodyExpectation: 'none',
+    variants: PROSE_BLIND_VARIANTS,
+  },
   map: {
     heading: 'San Francisco Bay',
     params: {

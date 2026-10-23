@@ -400,6 +400,41 @@ export interface RightFeatureInput extends FeatureInputBase {
 }
 
 /**
+ * Shared fields for the media-led templates. Like `content`, they take only
+ * a heading: the body and its media (images, video clips, hosted players,
+ * diagrams) come from the block's own markdown.
+ */
+interface MediaLedInputBase extends BaseTemplateBlock {
+  /** Heading shown with the body. */
+  title: string;
+}
+
+/**
+ * Top feature — the block's media spans the full width across the top, with
+ * the heading and complete body in a band below sized to the text. For wide
+ * media and portrait slides, where a side-by-side feature would halve it.
+ */
+export interface TopFeatureInput extends MediaLedInputBase {
+  template: 'topFeature';
+}
+
+/**
+ * Bottom feature — the heading and complete body in a band across the top,
+ * with the block's media spanning the full width below.
+ */
+export interface BottomFeatureInput extends MediaLedInputBase {
+  template: 'bottomFeature';
+}
+
+/**
+ * Media only — the block's media fills the slide, with no title, body or
+ * caption. A block without media renders as a `content` slide instead.
+ */
+export interface MediaOnlyInput extends MediaLedInputBase {
+  template: 'mediaOnly';
+}
+
+/**
  * Map block - geographic map showing article location.
  *
  * Displays a map centered on given coordinates with optional title,
@@ -913,6 +948,9 @@ export type TemplateBlock =
   | ImageWithCaptionInput
   | LeftFeatureInput
   | RightFeatureInput
+  | TopFeatureInput
+  | BottomFeatureInput
+  | MediaOnlyInput
   | MapBlockInput
   | FullBleedQuoteInput
   | ListBlockInput

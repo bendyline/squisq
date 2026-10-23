@@ -120,6 +120,33 @@ describe('hosted videos on slides', () => {
   });
 });
 
+describe('local video files on content slides', () => {
+  const clips = (layers: Layer[]) => layers.filter((layer) => layer.type === 'video');
+
+  it('plays a dropped recording beside the prose without printing its tag', () => {
+    const layers = slideLayers(
+      '## How it looks {[content]}\n\nThe process:\n\n1. Seed\n2. Expand\n\n' +
+        '<video src="clips/Screen Recording 1.mp4" controls width="480"></video>',
+    );
+    expect(clips(layers)).toEqual([
+      expect.objectContaining({
+        content: expect.objectContaining({ src: 'clips/Screen Recording 1.mp4' }),
+      }),
+    ]);
+    expect(text(layers)).toContain('Expand');
+    expect(text(layers)).not.toMatch(/video|&lt;/);
+  });
+
+  it('drops a recording tag nested in a list item from the slide text', () => {
+    const layers = slideLayers(
+      '## Steps {[content]}\n\n1. Step\n   <video src="video/clip.webm" controls></video>\n2. Next',
+    );
+    expect(clips(layers)).toHaveLength(1);
+    expect(text(layers)).toContain('Step');
+    expect(text(layers)).not.toMatch(/video|&lt;/);
+  });
+});
+
 describe('hosted videos in spoken text', () => {
   it('neither captions nor narrates the video link', () => {
     const doc = markdownToDoc(

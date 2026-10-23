@@ -107,6 +107,24 @@ export const TEMPLATE_AUTHORING_METADATA = {
     safeForContentFirst: false,
     placement: 'heading',
   },
+  topFeature: {
+    role: 'media',
+    bodyPolicy: 'complete',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  bottomFeature: {
+    role: 'media',
+    bodyPolicy: 'complete',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  mediaOnly: {
+    role: 'media',
+    bodyPolicy: 'ignored',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
   map: {
     role: 'spatial',
     bodyPolicy: 'structured',

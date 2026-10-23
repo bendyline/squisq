@@ -22,7 +22,7 @@ import { TextLayer } from './layers/TextLayer';
 import { ShapeLayer } from './layers/ShapeLayer';
 import { PathLayer } from './layers/PathLayer';
 import { MapLayer } from './layers/MapLayer';
-import { VideoLayer } from './layers/VideoLayer';
+import { VideoLayer, type VideoClipMode } from './layers/VideoLayer';
 import { VideoEmbedLayer, type VideoEmbedMode } from './layers/VideoEmbedLayer';
 import { TableLayer } from './layers/TableLayer';
 import type { TableLayerContentRenderer } from './layers/TableLayer';
@@ -193,6 +193,12 @@ interface BlockRendererProps {
    */
   videoEmbeds?: VideoEmbedMode;
   /**
+   * How video-file clips play: `timed` (default) on the doc clock, or as a
+   * `player` the viewer drives with native controls — for a slide stepped by
+   * hand, whose clock never runs.
+   */
+  videoClips?: VideoClipMode;
+  /**
    * Draw media that animates on its own wall clock — SVG islands' SMIL and
    * CSS animation — as a still. Set for frame capture, where such motion
    * would make frames nondeterministic. Reduced motion and
@@ -218,6 +224,7 @@ export function BlockRenderer({
   tableContentRenderer,
   growTextToFit = false,
   videoEmbeds = 'poster',
+  videoClips = 'timed',
   staticMedia = false,
 }: BlockRendererProps) {
   // Build transition class and inline style for dynamic duration
@@ -391,6 +398,7 @@ export function BlockRenderer({
             tableContentRenderer={tableContentRenderer}
             textScale={textScale}
             videoEmbeds={videoEmbeds}
+            videoClips={videoClips}
             staticMedia={staticMedia || reducedMotion || !animationsEnabled}
           />
         ))}
@@ -412,6 +420,7 @@ interface LayerRendererProps {
   tableContentRenderer?: TableLayerContentRenderer;
   textScale: number;
   videoEmbeds: VideoEmbedMode;
+  videoClips: VideoClipMode;
   staticMedia: boolean;
 }
 
@@ -431,6 +440,7 @@ function LayerRenderer({
   tableContentRenderer,
   textScale,
   videoEmbeds,
+  videoClips,
   staticMedia,
 }: LayerRendererProps) {
   // Render policy must not mutate caller-owned Docs. A shallow copy is enough:
@@ -481,6 +491,7 @@ function LayerRenderer({
           blockTime={blockTime}
           isPlaying={isPlaying}
           muted={muted}
+          mode={videoClips}
         />
       );
     case 'videoEmbed':
