@@ -122,6 +122,10 @@ interface StartBlockConfig {
   ambientMotion?: 'zoomIn' | 'zoomOut' | 'panLeft' | 'panRight';
   heroCredit?: string;
   heroLicense?: string;
+  // 'scrim' (default): theme-tinted gradient, title low and wide.
+  // 'frosted': clear photo, title on a frosted-glass plate resting near the bottom that
+  // grows upward for longer titles, inside the frame's centre square (survives a square crop).
+  coverStyle?: 'scrim' | 'frosted';
 }
 ````
 
@@ -187,6 +191,8 @@ interface ShapeLayer extends BaseLayer {
     strokeWidth?: number;
     borderStyle?: BorderStyle; // 'solid' | 'dashed' | 'dotted'
     borderRadius?: number;
+    backdropBlur?: number; // rect only: frosted glass, blurs what lies behind (px); use a translucent fill
+    backdropContrast?: number; // rect only: eases (<1) the contrast of what shows through the glass
   };
 }
 

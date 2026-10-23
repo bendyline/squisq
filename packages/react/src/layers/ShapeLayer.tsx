@@ -2,7 +2,9 @@
  * ShapeLayer Component
  *
  * Renders simple geometric shapes (rect, circle, line) within an SVG block.
- * Useful for visual accents, dividers, and background elements.
+ * Useful for visual accents, dividers, and background elements. A rect with a
+ * CSS gradient string or a `backdropBlur` (frosted glass) renders as an HTML
+ * div in a foreignObject, since SVG can do neither.
  */
 
 import { useId } from 'react';
@@ -66,8 +68,19 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
   // The structured `content.gradient` (preferred) is handled below for all
   // shapes via an SVG <linearGradient>.
   const isCSSGradient = typeof fill === 'string' && fill.includes('gradient(');
+  // Frosted glass blurs whatever lies behind the rect, which only an HTML
+  // `backdrop-filter` can do; the fill (a translucent colour, typically) tints it.
+  const backdropFilter =
+    content.shape === 'rect'
+      ? [
+          content.backdropBlur ? `blur(${content.backdropBlur}px)` : '',
+          content.backdropContrast !== undefined ? `contrast(${content.backdropContrast})` : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+      : '';
 
-  if (content.shape === 'rect' && isCSSGradient && !content.gradient) {
+  if (content.shape === 'rect' && ((isCSSGradient && !content.gradient) || backdropFilter)) {
     return (
       // Shape layers are visual primitives. In particular, theme top-layers
       // can cover the whole slide; they must not shield interactive table,
@@ -85,6 +98,7 @@ export function ShapeLayer({ layer, viewport, blockTime }: ShapeLayerProps) {
               height: `${paintHeight}px`,
               background: fill,
               borderRadius: content.borderRadius ? `${content.borderRadius}px` : undefined,
+              ...(backdropFilter ? { backdropFilter, WebkitBackdropFilter: backdropFilter } : {}),
               pointerEvents: 'none',
             }}
           />

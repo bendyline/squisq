@@ -297,6 +297,13 @@ function validateStartBlock(value: unknown, issues: DocSchemaIssue[]): void {
   optionalString(value, 'heroSrc', 'startBlock.heroSrc', issues);
   optionalString(value, 'heroAlt', 'startBlock.heroAlt', issues);
   optionalString(value, 'subtitle', 'startBlock.subtitle', issues);
+  if (
+    value.coverStyle !== undefined &&
+    value.coverStyle !== 'scrim' &&
+    value.coverStyle !== 'frosted'
+  ) {
+    add(issues, 'startBlock.coverStyle', 'must be "scrim" or "frosted"', value.coverStyle);
+  }
 }
 
 function validateCaptions(value: unknown, issues: DocSchemaIssue[]): void {
