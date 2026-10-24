@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.3...@bendyline/squisq@2.13.4) (2026-10-24)
+
+### Bug Fixes
+
+* Styling updates, continued ([#106](https://github.com/bendyline/squisq/issues/106)) ([eec456a](https://github.com/bendyline/squisq/commit/eec456af6d9d559e41f10a886e393b280054d673))
+
 ## @bendyline/squisq [2.13.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.2...@bendyline/squisq@2.13.3) (2026-10-24)
 
 ### Bug Fixes
