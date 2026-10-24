@@ -624,9 +624,13 @@ describe('coverBlock frosted style', () => {
 
   it('centres the title optically, not on its x-height', () => {
     expect(opticalCentreShiftEm(['Antarctic Peninsula'])).toBeCloseTo(0.13, 3);
-    expect(opticalCentreShiftEm(['Paraguay'])).toBeCloseTo(0.0475, 2);
+    // Capitals stand lower than ascenders, and a "g" hangs further than a comma.
+    expect(opticalCentreShiftEm(['Bora Bora'])).toBeCloseTo(0.11, 3);
+    expect(opticalCentreShiftEm(['BORA', 'BORA'])).toBeCloseTo(0.11, 3);
+    expect(opticalCentreShiftEm(['Paraguay'])).toBeCloseTo(0.01, 3);
+    expect(opticalCentreShiftEm(['Salvador, Bahia'])).toBeCloseTo(0.052, 3);
     expect(opticalCentreShiftEm(['Óbidos'])).toBeCloseTo(0.175, 3);
-    expect(opticalCentreShiftEm(['Órgãos'])).toBeCloseTo(0.0925, 2);
+    expect(opticalCentreShiftEm(['Órgãos'])).toBeCloseTo(0.075, 3);
     expect(opticalCentreShiftEm(['Saltpeter Works', 'and Santa Laura'])).toBeCloseTo(0.13, 3);
     expect(opticalCentreShiftEm(['once more'])).toBeCloseTo(0, 3);
     const layers = coverBlock(frosted('Antarctic Peninsula'), landscapeContext);

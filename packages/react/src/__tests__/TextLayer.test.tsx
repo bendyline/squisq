@@ -219,6 +219,30 @@ describe('TextLayer', () => {
     expect(firstDy(caption(0.07))).toBeCloseTo(3.5, 5);
   });
 
+  it('keeps words apart across line breaks without widening any line', () => {
+    const layer: TextLayerType = {
+      id: 'title',
+      type: 'text',
+      content: { text: '125 feet\nat their highest', style: { fontSize: 60, color: '#fff' } },
+      position: { x: '50%', y: '50%', anchor: 'center', width: '60%' },
+    };
+    const { container } = render(
+      <svg>
+        <TextLayer layer={layer} viewport={viewport} blockTime={0} />
+      </svg>,
+    );
+    // Copy and screen readers get "feet at", not "feetat".
+    expect(container.querySelector('text')!.textContent).toBe('125 feet at their highest');
+    const lines = [...container.querySelectorAll('text > tspan')];
+    expect(lines).toHaveLength(2);
+    // The separator has no advance, so centred lines stay centred.
+    expect(lines[0].firstChild!.textContent).toBe('125 feet');
+    const separator = lines[0].querySelector('tspan') as SVGTSpanElement;
+    expect(separator.textContent).toBe(' ');
+    expect(separator.style.fontSize).toMatch(/^0(px)?$/);
+    expect(lines[1].querySelector('tspan')).toBeNull();
+  });
+
   it('shifts rich text down by baselineShift em of its own size', () => {
     const layer: TextLayerType = {
       id: 'rich',

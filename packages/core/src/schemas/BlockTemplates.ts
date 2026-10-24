@@ -199,6 +199,13 @@ export interface BigTextInput extends BaseTemplateBlock {
    * vertical video's title clear of captions burned into the lower band.
    */
   placement?: 'center' | 'upper' | 'lower';
+  /**
+   * What keeps the title legible over the image (default `bloom`, a radial
+   * shade tinted from the theme background). `frosted` leaves the photo clear
+   * and sets the title on a frosted-glass plate that hugs it, as the frosted
+   * cover does. Ignored without an image.
+   */
+  backdrop?: 'bloom' | 'frosted';
 }
 
 /**
