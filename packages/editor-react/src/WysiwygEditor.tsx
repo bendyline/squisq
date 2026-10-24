@@ -68,7 +68,7 @@ import {
 } from './customTemplates';
 import { saveLibraryTemplate } from './customTemplates/library';
 import { useDocCustomTemplates } from './customTemplates/useDocCustomTemplates';
-import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
+import type { CustomTemplateDefinition, MediaProvider } from '@bendyline/squisq/schemas';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceByHeadingIndex } from './blockSlice';
 import { stripFrontmatter } from './frontmatter';
@@ -84,7 +84,12 @@ import {
   type SquisqMediaDragPayload,
 } from './mediaDragMime';
 import { usePreviewSettingsOptional } from './PreviewControls';
-import { uploadAndInsertImages } from './wysiwygImageUpload';
+import {
+  insertTopLevelNodes,
+  isPlayableMediaFile,
+  uploadAndInsertImages,
+  uploadAndInsertMediaPlayers,
+} from './wysiwygImageUpload';
 import { isAllowedLinkHref } from './tiptap/linkHrefPolicy';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { FindHighlightExtension } from './find/FindHighlightExtension';
@@ -668,12 +673,12 @@ export function WysiwygEditor({
         view.pasteHTML(html);
         return true;
       },
-      // When image files are dropped onto the editor, upload them via the
-      // MediaProvider and insert <img> nodes referencing the relative paths.
-      // Drags from the MediaBin can also insert existing image, video, audio,
-      // or generic-file references without uploading them again.
-      // Falls through to default handling for non-image drops or when no
-      // MediaProvider is available.
+      // When image, video or audio files are dropped onto the editor, upload
+      // them via the MediaProvider and insert image nodes / players
+      // referencing the relative paths. Drags from the MediaBin can also
+      // insert existing image, video, audio, or generic-file references
+      // without uploading them again. Falls through to default handling for
+      // other drops or when no MediaProvider is available.
       handleDrop: (view, event, _slice, moved) => {
         const dt = event.dataTransfer;
         if (!dt) return false;
@@ -688,44 +693,13 @@ export function WysiwygEditor({
         // dimension-less duplicate next to the original.
         if (moved) return false;
 
-        // In-app drag from the MediaBin — insert without uploading
-        const squisqRaw = dt.getData(SQUISQ_MEDIA_MIME);
-        if (squisqRaw) {
-          const payload = parseSquisqMediaPayload(squisqRaw);
-          if (payload) {
-            event.preventDefault();
-            moveSelectionToDropPoint(view, event);
-            return insertExistingMediaReference(view, payload);
-          }
-        }
-
-        const imageFiles = filesFromDataTransfer(dt);
-        if (imageFiles.length === 0) {
-          // Nothing image-like in the drop. Let the browser / ProseMirror
-          // handle it (links, text, etc.). Log enough to debug if the user
-          // expected this to be an image drop — Windows/browser combos
-          // sometimes deliver image drags without a usable File payload.
-          if (dt.files.length > 0 || dt.items.length > 0) {
-            console.warn(
-              '[squisq-editor] Drop received with no recognizable image File. Types:',
-              Array.from(dt.types ?? []),
-              'files:',
-              Array.from(dt.files).map((f) => `${f.name} (${f.type || 'no-type'})`),
-            );
-          }
-          return false;
-        }
-        if (!mediaProviderRef.current) {
-          console.warn(
-            '[squisq-editor] Image drop received but no MediaProvider is wired up; cannot persist the image. Pass `mediaProvider` to EditorShell / EditorProvider.',
-          );
-          return false;
-        }
-
-        event.preventDefault();
-        moveSelectionToDropPoint(view, event);
-        uploadAndInsertImages(view, imageFiles, mediaProviderRef.current, bumpMediaRevision);
-        return true;
+        return insertDroppedMedia(
+          view,
+          event,
+          { left: event.clientX, top: event.clientY },
+          mediaProviderRef.current,
+          bumpMediaRevision,
+        );
       },
     },
   });
@@ -1038,6 +1012,29 @@ export function WysiwygEditor({
     editor.view.dispatch(editor.state.tr.setMeta(DOCUMENT_TRAY_KEY, layoutMode === 'document'));
   }, [editor, layoutMode]);
 
+  // A drop on the desk beside the page never reaches ProseMirror. Take it at
+  // the nearest point of the page rather than letting it vanish.
+  const handleDeskDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (event.defaultPrevented || readOnly || !editor || editor.isDestroyed) return;
+      const { view } = editor;
+      // A drag out of the document itself also carries its image as a file.
+      if (view.dragging || view.dom.contains(event.target as Node)) return;
+      const page = view.dom.getBoundingClientRect();
+      insertDroppedMedia(
+        view,
+        event.nativeEvent,
+        {
+          left: Math.min(Math.max(event.clientX, page.left + 1), page.right - 1),
+          top: Math.min(Math.max(event.clientY, page.top + 1), page.bottom - 1),
+        },
+        mediaProviderRef.current,
+        bumpMediaRevision,
+      );
+    },
+    [bumpMediaRevision, editor, readOnly],
+  );
+
   return (
     <CustomTemplateProvider docTemplates={docTemplates} onDocTemplatesChange={onDocTemplatesChange}>
       <div
@@ -1053,6 +1050,7 @@ export function WysiwygEditor({
         data-block-tags={BLOCK_TAG_DATA_VALUES[blockTagVisibility]}
         data-theme-inheritance={themeInheritance}
         ref={containerRef}
+        onDrop={handleDeskDrop}
       >
         {editor && layoutMode === 'document' && <DocumentTray editor={editor} />}
         <EditorContent editor={editor} style={{ height: '100%' }} />
@@ -1142,19 +1140,17 @@ function looksLikeImageFile(file: File): boolean {
   return IMAGE_EXT_RE.test(file.name);
 }
 
-/** Extract image File objects from a DataTransfer (drop event). Reads
- *  from both `dt.files` and `dt.items`; some drag sources (cross-tab
- *  drags, certain native apps) populate only one of the two. */
+/** Extract File objects from a DataTransfer (drop event). Reads from both
+ *  `dt.files` and `dt.items`; some drag sources (cross-tab drags, certain
+ *  native apps) populate only one of the two. */
 function filesFromDataTransfer(dt: DataTransfer): File[] {
   const files: File[] = [];
   const seen = new Set<string>();
 
   for (let i = 0; i < dt.files.length; i++) {
     const file = dt.files[i];
-    if (looksLikeImageFile(file)) {
-      files.push(file);
-      seen.add(`${file.name}|${file.size}`);
-    }
+    files.push(file);
+    seen.add(`${file.name}|${file.size}`);
   }
 
   if (dt.items) {
@@ -1163,7 +1159,6 @@ function filesFromDataTransfer(dt: DataTransfer): File[] {
       if (item.kind !== 'file') continue;
       const file = item.getAsFile();
       if (!file) continue;
-      if (!looksLikeImageFile(file)) continue;
       const key = `${file.name}|${file.size}`;
       if (seen.has(key)) continue;
       files.push(file);
@@ -1215,10 +1210,7 @@ function insertExistingMediaReference(
   if (spec) {
     const nodeType = state.schema.nodes[spec.type];
     if (!nodeType) return false;
-    const node = nodeType.create(spec.attrs);
-    const { $from } = state.selection;
-    const pos = $from.depth >= 1 ? $from.after(1) : state.doc.content.size;
-    view.dispatch(state.tr.insert(pos, node).scrollIntoView());
+    insertTopLevelNodes(view, [nodeType.create(spec.attrs)]);
     return true;
   }
 
@@ -1230,12 +1222,75 @@ function insertExistingMediaReference(
   return true;
 }
 
-/** Move the selection to the document position under the drop event's coordinates. */
-function moveSelectionToDropPoint(view: ProseMirrorView, event: DragEvent): void {
-  const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+/** Move the selection to the document position under the given viewport point. */
+function moveSelectionToPoint(view: ProseMirrorView, point: { left: number; top: number }): void {
+  const coords = view.posAtCoords(point);
   if (!coords) return;
   const tr = view.state.tr.setSelection(Selection.near(view.state.doc.resolve(coords.pos)));
   view.dispatch(tr);
+}
+
+/**
+ * Insert what a drop carries at `point`: a Files-panel entry by reference, or
+ * dropped images, video and audio uploaded through `mediaProvider`. False —
+ * leaving the drop to the browser / ProseMirror — when it carries neither or
+ * nothing can store the files.
+ */
+function insertDroppedMedia(
+  view: ProseMirrorView,
+  event: DragEvent,
+  point: { left: number; top: number },
+  mediaProvider: MediaProvider | null,
+  onMediaUploaded: () => void,
+): boolean {
+  const dt = event.dataTransfer;
+  if (!dt) return false;
+
+  // In-app drag from the MediaBin — insert without uploading
+  const squisqRaw = dt.getData(SQUISQ_MEDIA_MIME);
+  if (squisqRaw) {
+    const payload = parseSquisqMediaPayload(squisqRaw);
+    if (payload) {
+      event.preventDefault();
+      moveSelectionToPoint(view, point);
+      return insertExistingMediaReference(view, payload);
+    }
+  }
+
+  const droppedFiles = filesFromDataTransfer(dt);
+  const imageFiles = droppedFiles.filter(looksLikeImageFile);
+  const playerFiles = droppedFiles.filter(isPlayableMediaFile);
+  if (imageFiles.length === 0 && playerFiles.length === 0) {
+    // Nothing media-like in the drop. Let the browser / ProseMirror
+    // handle it (links, text, etc.). Log enough to debug if the user
+    // expected this to be a media drop — Windows/browser combos
+    // sometimes deliver image drags without a usable File payload.
+    if (dt.files.length > 0 || dt.items.length > 0) {
+      console.warn(
+        '[squisq-editor] Drop received with no recognizable image, video or audio File. Types:',
+        Array.from(dt.types ?? []),
+        'files:',
+        Array.from(dt.files).map((f) => `${f.name} (${f.type || 'no-type'})`),
+      );
+    }
+    return false;
+  }
+  if (!mediaProvider) {
+    console.warn(
+      '[squisq-editor] Media drop received but no MediaProvider is wired up; cannot persist the file. Pass `mediaProvider` to EditorShell / EditorProvider.',
+    );
+    return false;
+  }
+
+  event.preventDefault();
+  moveSelectionToPoint(view, point);
+  if (imageFiles.length > 0) {
+    uploadAndInsertImages(view, imageFiles, mediaProvider, onMediaUploaded);
+  }
+  if (playerFiles.length > 0) {
+    void uploadAndInsertMediaPlayers(view, playerFiles, mediaProvider, onMediaUploaded);
+  }
+  return true;
 }
 
 /**

@@ -11,7 +11,12 @@ import type { MediaProvider, MediaEntry } from '@bendyline/squisq/schemas';
 import { isSvgImageSource } from '@bendyline/squisq/markdown';
 import { sanitizedSvgImageUrl } from '@bendyline/squisq-react';
 import { ownsContextMenuProps } from './EditorContextMenu';
-import { SQUISQ_MEDIA_MIME, buildSquisqMediaReference } from './mediaDragMime';
+import {
+  SQUISQ_MEDIA_MIME,
+  buildSquisqMediaReference,
+  mediaMimeType,
+  squisqMediaKind,
+} from './mediaDragMime';
 import { filterVisibleMediaEntries } from './mediaEntries';
 
 // ============================================
@@ -29,7 +34,7 @@ export interface MediaBinProps {
   usedMediaPaths?: ReadonlySet<string>;
   /**
    * Fired after a successful upload via the MediaBin's "+ Upload"
-   * button or image drop target. `relativePath` is what the provider returned (the same
+   * button or media drop target. `relativePath` is what the provider returned (the same
    * value embedded in markdown refs, e.g. `attachments/xyz.png`);
    * `name` is the uploader-chosen filename before storage renamed
    * it. Consumers typically use this to insert a markdown image ref
@@ -97,22 +102,23 @@ function isImageMime(mimeType: string): boolean {
   return mimeType.startsWith('image/');
 }
 
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif', 'ico']);
+/** Images, video and audio — the files a drop on the panel accepts. */
+function isMediaFile(file: Pick<File, 'name' | 'type'>): boolean {
+  return squisqMediaKind(mediaMimeType(file)) !== 'file';
+}
 
-function isImageFile(file: Pick<File, 'name' | 'type'>): boolean {
-  if (isImageMime(file.type)) return true;
-  const dot = file.name.lastIndexOf('.');
-  return dot >= 0 && IMAGE_EXTENSIONS.has(file.name.slice(dot + 1).toLowerCase());
+function isMediaMime(mimeType: string): boolean {
+  return squisqMediaKind(mimeType) !== 'file';
 }
 
 /** During drag-over browsers expose item MIME types but often not filenames. */
-function dataTransferMayContainImage(dataTransfer: DataTransfer): boolean {
+function dataTransferMayContainMedia(dataTransfer: DataTransfer): boolean {
   if (dataTransfer.items.length > 0) {
     return Array.from(dataTransfer.items).some(
-      (item) => item.kind === 'file' && (item.type === '' || isImageMime(item.type)),
+      (item) => item.kind === 'file' && (item.type === '' || isMediaMime(item.type)),
     );
   }
-  return Array.from(dataTransfer.files).some(isImageFile);
+  return Array.from(dataTransfer.files).some(isMediaFile);
 }
 
 /**
@@ -292,7 +298,7 @@ export function MediaBin({
       try {
         for (const file of files) {
           const buffer = await file.arrayBuffer();
-          const mimeType = file.type || 'application/octet-stream';
+          const mimeType = mediaMimeType(file);
           const relativePath = await mediaProvider.addMedia(file.name, buffer, mimeType);
           if (onMediaUploaded) {
             try {
@@ -324,7 +330,7 @@ export function MediaBin({
 
   const handleDragEnter = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
-      if (!mediaProvider || loading || !dataTransferMayContainImage(event.dataTransfer)) return;
+      if (!mediaProvider || loading || !dataTransferMayContainMedia(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
       dropDepthRef.current += 1;
@@ -335,7 +341,7 @@ export function MediaBin({
 
   const handleDragOver = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
-      if (!mediaProvider || loading || !dataTransferMayContainImage(event.dataTransfer)) return;
+      if (!mediaProvider || loading || !dataTransferMayContainMedia(event.dataTransfer)) return;
       event.preventDefault();
       event.stopPropagation();
       event.dataTransfer.dropEffect = 'copy';
@@ -356,13 +362,13 @@ export function MediaBin({
 
   const handleDrop = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
-      const imageFiles = Array.from(event.dataTransfer.files).filter(isImageFile);
-      if (!mediaProvider || (!isDropActive && imageFiles.length === 0)) return;
+      const mediaFiles = Array.from(event.dataTransfer.files).filter(isMediaFile);
+      if (!mediaProvider || (!isDropActive && mediaFiles.length === 0)) return;
       event.preventDefault();
       event.stopPropagation();
       dropDepthRef.current = 0;
       setIsDropActive(false);
-      if (imageFiles.length > 0) void uploadFiles(imageFiles);
+      if (mediaFiles.length > 0) void uploadFiles(mediaFiles);
     },
     [isDropActive, mediaProvider, uploadFiles],
   );
@@ -597,7 +603,7 @@ export function MediaBin({
       {isDropActive && (
         <div className="squisq-media-bin-drop-target" aria-hidden="true">
           <span className="squisq-media-bin-drop-target-icon">+</span>
-          <strong>Drop images here</strong>
+          <strong>Drop media here</strong>
           <span>Attach to this document</span>
         </div>
       )}

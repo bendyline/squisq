@@ -240,7 +240,6 @@ export const MEDIA_BUTTONS = BUTTONS.filter((b) => b.group === 'media');
 /** Buttons that store a file through the MediaProvider — disabled without one. */
 export const FILE_STORING_BUTTONS: ReadonlySet<string> = new Set(['image', 'file']);
 export const CONVERT_BUTTONS = MEDIA_BUTTONS.filter((b) => b.id === 'table' || b.id === 'tasklist');
-export const INSERT_MENU_WIDTH = 200;
 export const CODE_SNIPPET_MENU_WIDTH = 220;
 export const MERMAID_TYPE_MENU_WIDTH = 520;
 export const CHART_TYPE_MENU_WIDTH = 360;

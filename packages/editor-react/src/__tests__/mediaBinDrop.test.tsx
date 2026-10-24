@@ -46,7 +46,7 @@ function dataTransfer(files: File[], itemTypes: string[]) {
   };
 }
 
-describe('MediaBin image drop target', () => {
+describe('MediaBin media drop target', () => {
   it('shows a red-dot Record button and delegates opening the recorder to its host', async () => {
     const { provider } = createProvider();
     const onRecord = vi.fn();
@@ -81,17 +81,46 @@ describe('MediaBin image drop target', () => {
 
     fireEvent.dragEnter(bin, { dataTransfer: transfer });
     expect(bin.classList.contains('squisq-media-bin--drop-active')).toBe(true);
-    expect(screen.getByText('Drop images here')).toBeTruthy();
+    expect(screen.getByText('Drop media here')).toBeTruthy();
 
     fireEvent.drop(bin, { dataTransfer: transfer });
 
     await waitFor(() => expect(added).toEqual(['attachments/photo.png']));
     expect(onMediaUploaded).toHaveBeenCalledWith('attachments/photo.png', 'photo.png', 'image/png');
     expect(await screen.findByText('photo.png')).toBeTruthy();
-    expect(screen.queryByText('Drop images here')).toBeNull();
+    expect(screen.queryByText('Drop media here')).toBeNull();
   });
 
-  it('does not activate or upload for a non-image file', async () => {
+  it('uploads dropped video and audio, typing an untyped file from its extension', async () => {
+    const { provider, added } = createProvider();
+    const onMediaUploaded = vi.fn();
+    const video = new File([new Uint8Array([1, 2, 3])], 'clip.mp4', { type: 'video/mp4' });
+    const audio = new File([new Uint8Array([4, 5])], 'take.mp3', { type: '' });
+    for (const file of [video, audio]) {
+      Object.defineProperty(file, 'arrayBuffer', {
+        configurable: true,
+        value: async () => new Uint8Array([1, 2, 3]).buffer,
+      });
+    }
+
+    const { container } = render(
+      <MediaBin mediaProvider={provider} isDark={false} onMediaUploaded={onMediaUploaded} />,
+    );
+    const bin = container.querySelector('.squisq-media-bin') as HTMLElement;
+    const transfer = dataTransfer([video, audio], ['video/mp4', '']);
+    await screen.findByText('No files yet.');
+
+    fireEvent.dragEnter(bin, { dataTransfer: transfer });
+    expect(bin.classList.contains('squisq-media-bin--drop-active')).toBe(true);
+
+    fireEvent.drop(bin, { dataTransfer: transfer });
+
+    await waitFor(() => expect(added).toEqual(['attachments/clip.mp4', 'attachments/take.mp3']));
+    expect(onMediaUploaded).toHaveBeenCalledWith('attachments/clip.mp4', 'clip.mp4', 'video/mp4');
+    expect(onMediaUploaded).toHaveBeenCalledWith('attachments/take.mp3', 'take.mp3', 'audio/mpeg');
+  });
+
+  it('does not activate or upload for a non-media file', async () => {
     const { provider, added } = createProvider();
     const text = new File(['notes'], 'notes.txt', { type: 'text/plain' });
     const { container } = render(<MediaBin mediaProvider={provider} isDark={false} />);
@@ -103,7 +132,7 @@ describe('MediaBin image drop target', () => {
     fireEvent.drop(bin, { dataTransfer: transfer });
 
     expect(bin.classList.contains('squisq-media-bin--drop-active')).toBe(false);
-    expect(screen.queryByText('Drop images here')).toBeNull();
+    expect(screen.queryByText('Drop media here')).toBeNull();
     await waitFor(() => expect(added).toEqual([]));
   });
 

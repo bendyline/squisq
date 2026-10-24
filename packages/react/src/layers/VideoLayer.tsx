@@ -7,14 +7,20 @@
  * lets recorded clips carry their own audio, while muted/render callers keep
  * the layer silent.
  *
- * Two modes of operation:
- * 1. Normal playback: Video auto-plays from clipStart to clipEnd on mount,
- *    pausing when the clip ends or when the block is no longer active.
- * 2. Render/seekTo mode (Playwright frame capture): Video is paused and seeked
- *    programmatically via data attributes read by DocPlayer's seekTo handler.
+ * Modes of operation, chosen by the host (`VideoClipMode`):
+ * 1. `timed` (default) normal playback: Video auto-plays from clipStart to
+ *    clipEnd on mount, pausing when the clip ends or when the block is no
+ *    longer active.
+ * 2. `timed` render/seekTo mode (Playwright frame capture): Video is paused and
+ *    seeked programmatically via data attributes read by DocPlayer's seekTo
+ *    handler.
+ * 3. `player`: the viewer drives the clip with native controls, from its
+ *    in-point to the end of the source. For a slideshow's current slide, whose
+ *    clock is stepped by hand and never runs, so a timed clip would sit on its
+ *    first frame.
  *
- * The <video> element carries data-clip-start and data-clip-end attributes so
- * the seekTo handler can calculate the correct video time for any doc time.
+ * A timed <video> carries data-clip-start and data-clip-end attributes so the
+ * seekTo handler can calculate the correct video time for any doc time.
  *
  * Related Files:
  * - schemas/Doc.ts — VideoLayer type definition
@@ -31,6 +37,9 @@ import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
 
 const VIDEO_SYNC_DRIFT_SECONDS = 0.2;
 
+/** How a video clip plays: on the doc clock, or by the viewer's hand. */
+export type VideoClipMode = 'timed' | 'player';
+
 interface VideoLayerProps {
   layer: VideoLayerType;
   /** Base path for resolving relative video URLs */
@@ -43,6 +52,8 @@ interface VideoLayerProps {
   isPlaying?: boolean;
   /** Silence the video's own audio track. */
   muted?: boolean;
+  /** How the clip plays (see the component docs). Default `timed`. */
+  mode?: VideoClipMode;
 }
 
 export function VideoLayer({
@@ -52,10 +63,12 @@ export function VideoLayer({
   blockTime,
   isPlaying,
   muted = false,
+  mode = 'timed',
 }: VideoLayerProps) {
   const { content, position } = layer;
   const videoRef = useRef<HTMLVideoElement>(null);
   const hasStartedRef = useRef(false);
+  const isPlayer = mode === 'player';
 
   // Seconds into the block before this clip begins. Until then the video is
   // held (paused) at its in-point so a `startAt` offset reads as a delay.
@@ -89,6 +102,10 @@ export function VideoLayer({
     video.currentTime = content.clipStart;
     hasStartedRef.current = true;
 
+    // A clip the viewer drives has no clock to follow and no block-length
+    // out-point to stop at.
+    if (isPlayer) return () => video.pause();
+
     // Start playing if doc is already playing
     if (isPlaying) {
       const playPromise = video.play();
@@ -113,7 +130,7 @@ export function VideoLayer({
       video.pause();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- isPlaying is handled by the separate sync effect below
-  }, [src, content.clipStart, content.clipEnd]);
+  }, [src, content.clipStart, content.clipEnd, isPlayer]);
 
   // Sync video time + play/pause with the doc clock, honoring the startAt
   // gate. The time correction matters when a synchronized audience player is
@@ -121,7 +138,7 @@ export function VideoLayer({
   // current frame rather than restarting from clipStart.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !hasStartedRef.current) return;
+    if (!video || !hasStartedRef.current || isPlayer) return;
 
     const targetTime = gated
       ? content.clipStart
@@ -153,7 +170,7 @@ export function VideoLayer({
     } else if (!isCaptureDrivenVideo(video)) {
       video.pause();
     }
-  }, [isPlaying, gated, blockTime, startAt, src, content.clipStart, content.clipEnd]);
+  }, [isPlaying, gated, blockTime, startAt, src, content.clipStart, content.clipEnd, isPlayer]);
 
   return (
     <g className="block-layer block-layer--video" data-layer-id={layer.id}>
@@ -164,17 +181,27 @@ export function VideoLayer({
           poster={posterSrc}
           muted={muted}
           playsInline
-          preload="auto"
-          data-clip-start={content.clipStart}
-          data-clip-end={content.clipEnd}
-          data-start-at={startAt}
+          {...(isPlayer
+            ? {
+                controls: true,
+                preload: 'metadata',
+                'aria-label': content.alt || undefined,
+                // A drag on the seek bar scrubs the clip rather than swiping slides.
+                'data-no-swipe': '',
+              }
+            : {
+                preload: 'auto',
+                'data-clip-start': content.clipStart,
+                'data-clip-end': content.clipEnd,
+                'data-start-at': startAt,
+              })}
           style={{
             width: `${width}px`,
             height: `${height}px`,
             objectFit: content.fit || 'cover',
             objectPosition: 'center',
             display: 'block',
-            pointerEvents: 'none',
+            pointerEvents: isPlayer ? undefined : 'none',
           }}
         />
       </foreignObject>

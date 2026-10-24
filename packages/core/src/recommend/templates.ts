@@ -289,10 +289,15 @@ const UNIVERSAL_DEFAULTS = ['title', 'sectionHeader', 'content', 'factCard', 'tw
  * template list (see {@link recommendTemplatesForBlock}).
  */
 function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
-  // A compound body needs the one template whose contract includes every
-  // authored body node. Recommending a list/stat/table template here presents
-  // a lossy extraction as though it were an equivalent layout choice.
-  if (profile.hasCompoundBody) return ['content'];
+  // A compound body needs a template whose contract includes every authored
+  // body node. Recommending a list/stat/table template here presents a lossy
+  // extraction as though it were an equivalent layout choice. The media-led
+  // features keep the complete body too, so a body with media may lead with it.
+  if (profile.hasCompoundBody) {
+    return profile.hasImage || profile.hasVideo
+      ? ['content', 'topFeature', 'bottomFeature']
+      : ['content'];
+  }
 
   const names = new Set<string>();
   let anyContentSignal = false;
@@ -317,12 +322,18 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
     names.add('imageWithCaption');
     names.add('leftFeature');
     names.add('rightFeature');
+    names.add('topFeature');
+    names.add('bottomFeature');
+    names.add('mediaOnly');
     if (profile.imageCount >= 2) names.add('photoGrid');
   }
 
   if (profile.hasVideo) {
     anyContentSignal = true;
     names.add('videoWithCaption');
+    names.add('topFeature');
+    names.add('bottomFeature');
+    names.add('mediaOnly');
     if (profile.hasBlockquote) names.add('videoPullQuote');
   }
 

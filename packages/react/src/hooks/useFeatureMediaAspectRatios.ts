@@ -1,10 +1,16 @@
-/** Browser metadata for the visual-first summary's pure layout selection. */
+/**
+ * Browser metadata for the pure layout selection of the visual-first summary
+ * and of templates whose media fills a native slot (`topFeature`, …), which
+ * size that slot to the media's real shape.
+ */
 import { useEffect, useMemo, useState } from 'react';
 import type { Block, Theme } from '@bendyline/squisq/schemas';
 import {
   extractImages,
   extractEmbeddedVideos,
   flattenRenderableBlocks,
+  getBlockMediaLayoutPolicy,
+  resolveTemplateName,
 } from '@bendyline/squisq/doc';
 import { isResourceUrlAllowed } from '@bendyline/squisq/markdown';
 import { useMediaProvider, useResourcePolicy } from './MediaContext.js';
@@ -70,7 +76,10 @@ export function useFeatureMediaAspectRatios(
   const sourceKey = useMemo(() => {
     const sources = new Map<string, FeatureSource>();
     for (const block of flattenRenderableBlocks(blocks ?? [])) {
-      if (block.summaryLayout !== 'feature') continue;
+      const nativeSlot =
+        !!block.template &&
+        getBlockMediaLayoutPolicy(resolveTemplateName(block.template))?.ownership === 'native-slot';
+      if (block.summaryLayout !== 'feature' && !nativeSlot) continue;
       for (const image of extractImages(block.contents))
         sources.set(image.src, { kind: 'image', source: image.src });
       for (const video of extractEmbeddedVideos(block.contents))

@@ -89,6 +89,39 @@ export function resolveVideoSaveActionLabel(
   return formatter?.(format) ?? `Save ${format.toUpperCase()} to Downloads`;
 }
 
+const VIDEO_PRESETS = [
+  {
+    id: 'presentation',
+    label: 'Presentation',
+    description: 'Landscape video with smooth motion for presenting and sharing.',
+    quality: 'normal',
+    fps: 30,
+    orientation: 'landscape',
+    captionMode: 'off',
+    animationsEnabled: true,
+  },
+  {
+    id: 'social',
+    label: 'Social portrait',
+    description: 'Vertical video with large captions for phone viewing.',
+    quality: 'normal',
+    fps: 30,
+    orientation: 'portrait',
+    captionMode: 'social',
+    animationsEnabled: true,
+  },
+  {
+    id: 'small',
+    label: 'Small file',
+    description: 'Lower quality and less motion for a smaller file and faster export.',
+    quality: 'draft',
+    fps: 15,
+    orientation: 'landscape',
+    captionMode: 'off',
+    animationsEnabled: false,
+  },
+] as const;
+
 const FRAME_PREVIEW_INTERVAL = 15;
 const FRAME_PREVIEW_WIDTH = 480;
 const FRAME_PREVIEW_HEIGHT = 270;
@@ -181,9 +214,13 @@ const overlayStyle: React.CSSProperties = {
 const modalStyle: React.CSSProperties = {
   position: 'relative',
   borderRadius: 0,
-  padding: '24px 28px',
-  minWidth: 380,
-  maxWidth: 480,
+  boxSizing: 'border-box',
+  padding: '20px clamp(12px, 4vw, 28px)',
+  width: 'min(480px, calc(100vw - 24px))',
+  minWidth: 0,
+  maxHeight: 'calc(100dvh - 24px)',
+  overflowY: 'auto',
+  overscrollBehavior: 'contain',
   boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
   fontFamily: 'system-ui, -apple-system, sans-serif',
 };
@@ -218,7 +255,9 @@ const labelStyle: React.CSSProperties = {
 };
 
 const selectStyle: React.CSSProperties = {
+  boxSizing: 'border-box',
   width: '100%',
+  minWidth: 0,
   padding: '6px 8px',
   fontSize: 13,
   fontFamily: 'inherit',
@@ -254,6 +293,7 @@ const progressBarOuterStyle: React.CSSProperties = {
 
 const footerStyle: React.CSSProperties = {
   display: 'flex',
+  flexWrap: 'wrap',
   justifyContent: 'flex-end',
   gap: 8,
   marginTop: 20,
@@ -294,6 +334,23 @@ export function VideoExportModal({
     defaultConfig?.animationsEnabled ?? initialOutputFormat === 'mp4',
   );
   const [includeAudio, setIncludeAudio] = useState(defaultConfig?.audioPolicy !== 'omit');
+  const preset = VIDEO_PRESETS.find(
+    (entry) =>
+      entry.quality === quality &&
+      entry.fps === fps &&
+      entry.orientation === orientation &&
+      entry.captionMode === captionMode &&
+      entry.animationsEnabled === animationsEnabled,
+  );
+  const applyPreset = (id: string) => {
+    const next = VIDEO_PRESETS.find((entry) => entry.id === id);
+    if (!next) return;
+    setQuality(next.quality);
+    setFps(next.fps);
+    setOrientation(next.orientation);
+    setCaptionMode(next.captionMode);
+    setAnimationsEnabled(next.animationsEnabled);
+  };
   const palette: VideoExportPalette = {
     ...VIDEO_EXPORT_PALETTES[colorScheme],
     ...uiPalette,
@@ -533,108 +590,145 @@ export function VideoExportModal({
               </select>
             </div>
 
-            <div>
-              <label style={themedLabelStyle}>Quality</label>
-              <select
-                aria-label="Quality"
-                style={themedSelectStyle}
-                value={quality}
-                onChange={(e) => setQuality(e.target.value as VideoQuality)}
-              >
-                <option value="draft">Draft — fast, lower quality</option>
-                <option value="normal">Normal — balanced</option>
-                <option value="high">High — best quality, slower</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={themedLabelStyle}>Frame Rate</label>
-              <select
-                aria-label="Frame Rate"
-                style={themedSelectStyle}
-                value={fps}
-                onChange={(e) => setFps(Number(e.target.value))}
-              >
-                <option value={10}>10 fps — recommended for GIF</option>
-                <option value={15}>15 fps — fast export</option>
-                <option value={24}>24 fps — cinematic</option>
-                <option value={30}>30 fps — smooth</option>
-              </select>
-            </div>
-
-            <div>
-              <label style={themedLabelStyle}>Orientation</label>
-              <select
-                aria-label="Orientation"
-                style={themedSelectStyle}
-                value={orientation}
-                onChange={(e) => setOrientation(e.target.value as VideoOrientation)}
-              >
-                <option value="landscape">
-                  Landscape ({outputFormat === 'gif' ? '960 × 540' : '1920 × 1080'})
-                </option>
-                <option value="portrait">
-                  Portrait ({outputFormat === 'gif' ? '540 × 960' : '1080 × 1920'})
-                </option>
-              </select>
-            </div>
-
-            <div>
-              <label style={themedLabelStyle}>Captions</label>
-              <select
-                aria-label="Captions"
-                style={themedSelectStyle}
-                value={captionMode}
-                onChange={(e) => setCaptionMode(e.target.value as CaptionMode)}
-              >
-                <option value="off">None</option>
-                <option value="standard">Standard (top bar)</option>
-                <option value="social">Social media (large words)</option>
-              </select>
-            </div>
-
             {outputFormat === 'mp4' && (
               <div>
-                <label style={themedLabelStyle}>Audio</label>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    marginBottom: 12,
-                    fontSize: 14,
-                    color: palette.text,
-                    cursor: 'pointer',
-                  }}
+                <label style={themedLabelStyle}>Preset</label>
+                <select
+                  aria-label="Preset"
+                  style={themedSelectStyle}
+                  value={preset?.id ?? 'custom'}
+                  onChange={(event) => applyPreset(event.target.value)}
                 >
-                  <input
-                    type="checkbox"
-                    aria-label="Include audio"
-                    checked={includeAudio}
-                    onChange={(e) => setIncludeAudio(e.target.checked)}
-                  />
-                  Include audio
-                </label>
+                  {VIDEO_PRESETS.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.label}
+                    </option>
+                  ))}
+                  {!preset && (
+                    <option value="custom" disabled>
+                      Custom settings
+                    </option>
+                  )}
+                </select>
+                <p style={{ fontSize: 13, color: palette.label, margin: '0 0 12px' }}>
+                  {preset?.description ?? 'Your settings are kept in Advanced options.'}
+                </p>
               </div>
             )}
-
-            <div>
-              <label style={themedLabelStyle}>Animations &amp; transitions</label>
-              <select
-                aria-label="Animations and transitions"
-                style={themedSelectStyle}
-                value={animationsEnabled ? 'enabled' : 'disabled'}
-                onChange={(e) => setAnimationsEnabled(e.target.value === 'enabled')}
+            <p style={{ fontSize: 13, color: palette.label, margin: '0 0 12px' }}>
+              {formatDuration(Math.ceil(doc.duration))} ·{' '}
+              {orientation === 'portrait' ? 'Portrait' : 'Landscape'} ·{' '}
+              {outputFormat === 'gif' || !includeAudio ? 'No audio' : 'Document audio enabled'}
+            </p>
+            <details>
+              <summary
+                style={{ cursor: 'pointer', color: palette.label, fontSize: 14, marginBottom: 12 }}
               >
-                <option value="enabled">Enabled</option>
-                <option value="disabled">Disabled — smaller files</option>
-              </select>
-              {outputFormat === 'gif' && animationsEnabled && (
-                <p style={{ fontSize: 12, color: palette.muted, margin: '-6px 0 12px' }}>
-                  Disabling motion is recommended for much smaller GIFs.
-                </p>
+                Advanced options
+              </summary>
+              <div>
+                <label style={themedLabelStyle}>Quality</label>
+                <select
+                  aria-label="Quality"
+                  style={themedSelectStyle}
+                  value={quality}
+                  onChange={(e) => setQuality(e.target.value as VideoQuality)}
+                >
+                  <option value="draft">Draft — fast, lower quality</option>
+                  <option value="normal">Normal — balanced</option>
+                  <option value="high">High — best quality, slower</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={themedLabelStyle}>Frame Rate</label>
+                <select
+                  aria-label="Frame Rate"
+                  style={themedSelectStyle}
+                  value={fps}
+                  onChange={(e) => setFps(Number(e.target.value))}
+                >
+                  <option value={10}>10 fps — recommended for GIF</option>
+                  <option value={15}>15 fps — fast export</option>
+                  <option value={24}>24 fps — cinematic</option>
+                  <option value={30}>30 fps — smooth</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={themedLabelStyle}>Orientation</label>
+                <select
+                  aria-label="Orientation"
+                  style={themedSelectStyle}
+                  value={orientation}
+                  onChange={(e) => setOrientation(e.target.value as VideoOrientation)}
+                >
+                  <option value="landscape">
+                    Landscape ({outputFormat === 'gif' ? '960 × 540' : '1920 × 1080'})
+                  </option>
+                  <option value="portrait">
+                    Portrait ({outputFormat === 'gif' ? '540 × 960' : '1080 × 1920'})
+                  </option>
+                </select>
+              </div>
+
+              <div>
+                <label style={themedLabelStyle}>Captions</label>
+                <select
+                  aria-label="Captions"
+                  style={themedSelectStyle}
+                  value={captionMode}
+                  onChange={(e) => setCaptionMode(e.target.value as CaptionMode)}
+                >
+                  <option value="off">None</option>
+                  <option value="standard">Standard (top bar)</option>
+                  <option value="social">Social media (large words)</option>
+                </select>
+              </div>
+
+              {outputFormat === 'mp4' && (
+                <div>
+                  <label style={themedLabelStyle}>Audio</label>
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 12,
+                      fontSize: 14,
+                      color: palette.text,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label="Include audio"
+                      checked={includeAudio}
+                      onChange={(e) => setIncludeAudio(e.target.checked)}
+                    />
+                    Include audio
+                  </label>
+                </div>
               )}
-            </div>
+
+              <div>
+                <label style={themedLabelStyle}>Animations &amp; transitions</label>
+                <select
+                  aria-label="Animations and transitions"
+                  style={themedSelectStyle}
+                  value={animationsEnabled ? 'enabled' : 'disabled'}
+                  onChange={(e) => setAnimationsEnabled(e.target.value === 'enabled')}
+                >
+                  <option value="enabled">Enabled</option>
+                  <option value="disabled">Disabled — smaller files</option>
+                </select>
+                {outputFormat === 'gif' && animationsEnabled && (
+                  <p style={{ fontSize: 12, color: palette.muted, margin: '-6px 0 12px' }}>
+                    Disabling motion is recommended for much smaller GIFs.
+                  </p>
+                )}
+              </div>
+            </details>
 
             {preparingEdits && (
               <p
@@ -768,6 +862,34 @@ export function VideoExportModal({
               <p style={{ fontSize: 12, color: palette.muted, margin: '0 0 4px 0' }}>
                 Video only{audioSkippedReason ? ` — ${audioSkippedReason}` : ''}
               </p>
+            )}
+            {downloadUrl && (
+              <figure style={{ margin: '12px 0' }}>
+                {completedOutputFormat === 'gif' ? (
+                  <img
+                    src={downloadUrl}
+                    alt="Exported animation preview"
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      maxHeight: 240,
+                      objectFit: 'contain',
+                    }}
+                  />
+                ) : (
+                  <video
+                    src={downloadUrl}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    aria-label="Exported video preview"
+                    style={{ display: 'block', width: '100%', maxHeight: 240 }}
+                  />
+                )}
+                <figcaption style={{ fontSize: 12, color: palette.label, marginTop: 6 }}>
+                  Preview your export before saving.
+                </figcaption>
+              </figure>
             )}
             {saveOptions && (
               <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: '12px 0 0' }}>

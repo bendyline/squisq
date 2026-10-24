@@ -30,9 +30,14 @@ export type SupplementalMediaVariantMatrix = Record<
 export type NoMediaLayout =
   'template-default' | 'template-without-optional-media' | 'unsupported' | 'intrinsic-visual';
 
-/** Which part of the system owns the template's primary media geometry. */
+/**
+ * Which part of the system owns the template's primary media geometry.
+ * `native-slot`: the template declares where media goes (a band, the whole
+ * slide) but never draws any itself — the body's media fills that slot
+ * through the shared rich-media pass.
+ */
 export type TemplateMediaOwnership =
-  'supplemental' | 'optional-native' | 'required-native' | 'intrinsic-visual';
+  'supplemental' | 'optional-native' | 'required-native' | 'native-slot' | 'intrinsic-visual';
 
 /** Geometry already implemented by templates that own their primary media. */
 export type NativeMediaLayout =
@@ -42,6 +47,9 @@ export type NativeMediaLayout =
   | 'accent-strip-or-inset'
   | 'feature-left'
   | 'feature-right'
+  | 'feature-top'
+  | 'feature-bottom'
+  | 'full-frame'
   | 'map-canvas'
   | 'photo-grid'
   | 'spatial-canvas'
@@ -252,6 +260,33 @@ export const BLOCK_MEDIA_LAYOUT_POLICIES = {
     noMedia: 'unsupported',
     ownership: 'required-native',
     nativeLayout: 'feature-right',
+    additionalMediaLayout: 'overlay-inset',
+    unconsumedMedia: 'retain-native-layout',
+  },
+  topFeature: {
+    summary:
+      'Body media spans the full width across the top; the heading and complete body take a band below sized to the text. Without media it is a content slide.',
+    noMedia: 'template-default',
+    ownership: 'native-slot',
+    nativeLayout: 'feature-top',
+    additionalMediaLayout: 'overlay-inset',
+    unconsumedMedia: 'retain-native-layout',
+  },
+  bottomFeature: {
+    summary:
+      'The heading and complete body take a band across the top sized to the text; body media spans the full width below. Without media it is a content slide.',
+    noMedia: 'template-default',
+    ownership: 'native-slot',
+    nativeLayout: 'feature-bottom',
+    additionalMediaLayout: 'overlay-inset',
+    unconsumedMedia: 'retain-native-layout',
+  },
+  mediaOnly: {
+    summary:
+      'Body media fills the whole slide with no text; without media the heading and body render as a content slide.',
+    noMedia: 'template-default',
+    ownership: 'native-slot',
+    nativeLayout: 'full-frame',
     additionalMediaLayout: 'overlay-inset',
     unconsumedMedia: 'retain-native-layout',
   },

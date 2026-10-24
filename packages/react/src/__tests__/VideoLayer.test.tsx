@@ -148,3 +148,44 @@ describe('VideoLayer playback synchronization', () => {
     expect(video.pause).toHaveBeenCalled();
   });
 });
+
+describe('VideoLayer player mode', () => {
+  const renderPlayer = (blockTime: number) => (
+    <svg>
+      <VideoLayer
+        layer={layer}
+        basePath="/media"
+        viewport={{ width: 640, height: 360 }}
+        blockTime={blockTime}
+        mode="player"
+      />
+    </svg>
+  );
+
+  it('hands a slideshow clip to the viewer with native controls', async () => {
+    const { container } = render(renderPlayer(0));
+    const video = container.querySelector('video')!;
+
+    expect(video.controls).toBe(true);
+    expect(video.style.pointerEvents).toBe('');
+    expect(video.hasAttribute('data-no-swipe')).toBe(true);
+    expect(video.getAttribute('aria-label')).toBe('Demo clip');
+    // Frame capture's seekTo handler must not drive a viewer's clip.
+    expect(video.hasAttribute('data-clip-start')).toBe(false);
+    await waitFor(() => expect(video.currentTime).toBe(2));
+  });
+
+  it('neither follows the stepped clock nor stops at the block-length out-point', async () => {
+    const { container, rerender } = render(renderPlayer(0));
+    const video = container.querySelector('video')!;
+    await waitFor(() => expect(video.currentTime).toBe(2));
+    vi.mocked(video.pause).mockClear();
+
+    video.currentTime = 30;
+    video.dispatchEvent(new Event('timeupdate'));
+    rerender(renderPlayer(20));
+
+    expect(video.currentTime).toBe(30);
+    expect(video.pause).not.toHaveBeenCalled();
+  });
+});

@@ -20,6 +20,7 @@ import { twoColumn } from './twoColumn.js';
 import { dateEvent } from './dateEvent.js';
 import { imageWithCaption } from './imageWithCaption.js';
 import { leftFeature, rightFeature } from './featureBlock.js';
+import { bottomFeature, mediaOnly, topFeature } from './mediaFeatureBlock.js';
 import { mapBlock } from './mapBlock.js';
 import { fullBleedQuote } from './fullBleedQuote.js';
 import { listBlock } from './listBlock.js';
@@ -91,6 +92,9 @@ export const templateRegistry: TemplateRegistry = {
   imageWithCaption,
   leftFeature,
   rightFeature,
+  topFeature,
+  bottomFeature,
+  mediaOnly,
   map: mapBlock,
   fullBleedQuote,
   list: listBlock,

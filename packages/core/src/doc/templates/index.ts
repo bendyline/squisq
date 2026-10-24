@@ -735,6 +735,7 @@ export { twoColumn } from './twoColumn.js';
 export { dateEvent } from './dateEvent.js';
 export { imageWithCaption } from './imageWithCaption.js';
 export { leftFeature, rightFeature } from './featureBlock.js';
+export { bottomFeature, mediaOnly, topFeature } from './mediaFeatureBlock.js';
 export { mapBlock } from './mapBlock.js';
 export { coverBlock, expandCoverBlock } from './coverBlock.js';
 export type { CoverBlockInput } from './coverBlock.js';

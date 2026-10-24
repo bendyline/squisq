@@ -2,7 +2,11 @@ import { Schema } from '@tiptap/pm/model';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import { describe, expect, it, vi } from 'vitest';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
-import { uploadAndInsertImages } from '../wysiwygImageUpload';
+import {
+  isPlayableMediaFile,
+  uploadAndInsertImages,
+  uploadAndInsertMediaPlayers,
+} from '../wysiwygImageUpload';
 
 const schema = new Schema({
   nodes: {
@@ -122,5 +126,105 @@ describe('bounded image upload concurrency', () => {
     expect(final).toEqual(files.map((file) => `assets/${file.name}`));
     expect(maximum).toBe(3);
     expect(uploaded).toHaveBeenCalledTimes(4);
+  });
+});
+
+const blockSchema = new Schema({
+  nodes: {
+    doc: { content: 'block+' },
+    paragraph: { content: 'text*', group: 'block' },
+    text: {},
+    video: {
+      group: 'block',
+      atom: true,
+      attrs: { src: {}, controls: { default: true }, width: { default: null } },
+    },
+    audio: { group: 'block', atom: true, attrs: { src: {}, controls: { default: true } } },
+  },
+});
+
+function blockView(paragraphs: string[], caret: number) {
+  const doc = blockSchema.node(
+    'doc',
+    null,
+    paragraphs.map((text) =>
+      blockSchema.node('paragraph', null, text ? blockSchema.text(text) : []),
+    ),
+  );
+  let state = EditorState.create({
+    schema: blockSchema,
+    doc,
+    selection: TextSelection.create(doc, caret),
+  });
+  return {
+    get state() {
+      return state;
+    },
+    dispatch(tr: typeof state.tr) {
+      state = state.apply(tr);
+    },
+  };
+}
+
+function mediaFile(name: string, type: string, bytes = 1): File {
+  return { name, type, arrayBuffer: async () => new Uint8Array(bytes).buffer } as File;
+}
+
+const storingProvider = {
+  addMedia: vi.fn(async (name: string) => `attachments/${name}`),
+} as unknown as MediaProvider;
+
+describe('dropped video and audio players', () => {
+  it('recognizes video and audio by MIME type or, when untyped, by extension', () => {
+    expect(isPlayableMediaFile({ name: 'clip.mp4', type: 'video/mp4' })).toBe(true);
+    expect(isPlayableMediaFile({ name: 'take.mp3', type: '' })).toBe(true);
+    expect(isPlayableMediaFile({ name: 'voice.m4a', type: 'application/octet-stream' })).toBe(true);
+    expect(isPlayableMediaFile({ name: 'photo.png', type: 'image/png' })).toBe(false);
+    expect(isPlayableMediaFile({ name: 'brief.pdf', type: 'application/pdf' })).toBe(false);
+  });
+
+  it('inserts players in drop order after the caret’s block', async () => {
+    const view = blockView(['first', 'second'], 3);
+    const uploaded = vi.fn();
+    await uploadAndInsertMediaPlayers(
+      view,
+      [mediaFile('clip.mp4', 'video/mp4'), mediaFile('take.mp3', '')],
+      storingProvider,
+      uploaded,
+    );
+
+    const children = view.state.doc.children.map((node) =>
+      node.isTextblock ? node.textContent : `${node.type.name}:${node.attrs.src}`,
+    );
+    expect(children).toEqual([
+      'first',
+      'video:attachments/clip.mp4',
+      'audio:attachments/take.mp3',
+      'second',
+    ]);
+    expect(view.state.doc.child(1).attrs.width).toBe(480);
+    expect(uploaded).toHaveBeenCalledOnce();
+  });
+
+  it('replaces the empty paragraph the caret sits in', async () => {
+    const view = blockView([''], 1);
+    await uploadAndInsertMediaPlayers(view, [mediaFile('clip.mp4', 'video/mp4')], storingProvider);
+
+    expect(view.state.doc.childCount).toBe(1);
+    expect(view.state.doc.firstChild?.type.name).toBe('video');
+  });
+
+  it('leaves the document alone when no file could be stored', async () => {
+    const view = blockView(['first'], 3);
+    const uploaded = vi.fn();
+    await uploadAndInsertMediaPlayers(
+      view,
+      [mediaFile('empty.mp4', 'video/mp4', 0)],
+      storingProvider,
+      uploaded,
+    );
+
+    expect(view.state.doc.childCount).toBe(1);
+    expect(uploaded).not.toHaveBeenCalled();
   });
 });

@@ -90,6 +90,54 @@ describe('VideoExportModal Escape', () => {
     });
   }
 
+  it('exports the chosen preset while preserving the audio choice', async () => {
+    const result = exportResult('idle');
+    useVideoExportMock.mockReturnValue(result);
+    const { getByRole, container } = render(
+      <VideoExportModal doc={doc} onClose={onClose} defaultConfig={{ audioPolicy: 'omit' }} />,
+    );
+    expect(container.querySelector('details')?.open).toBe(false);
+    fireEvent.change(getByRole('combobox', { name: 'Preset' }), { target: { value: 'social' } });
+    await act(async () => fireEvent.click(getByRole('button', { name: 'Export Video' })));
+    expect(result.startExport).toHaveBeenLastCalledWith(
+      doc,
+      expect.objectContaining({
+        orientation: 'portrait',
+        quality: 'normal',
+        fps: 30,
+        captionMode: 'social',
+        animationsEnabled: true,
+        audioPolicy: 'omit',
+      }),
+    );
+    fireEvent.change(getByRole('combobox', { name: 'Preset' }), { target: { value: 'small' } });
+    await act(async () => fireEvent.click(getByRole('button', { name: 'Export Video' })));
+    expect(result.startExport).toHaveBeenLastCalledWith(
+      doc,
+      expect.objectContaining({
+        orientation: 'landscape',
+        quality: 'draft',
+        fps: 15,
+        captionMode: 'off',
+        animationsEnabled: false,
+        audioPolicy: 'omit',
+      }),
+    );
+  });
+
+  for (const format of ['mp4', 'gif'] as const) {
+    it(`previews the completed ${format} before saving without autoplay`, () => {
+      const result = { ...exportResult('complete'), outputFormat: format };
+      useVideoExportMock.mockReturnValue(result);
+      const { container } = render(<VideoExportModal doc={doc} onClose={onClose} />);
+      const preview = container.querySelector(format === 'gif' ? 'img' : 'video');
+      expect(preview?.getAttribute('src')).toBe(result.downloadUrl);
+      expect(preview?.hasAttribute('autoplay')).toBe(false);
+      if (format === 'mp4') expect(preview?.hasAttribute('controls')).toBe(true);
+      expect(container.textContent).toContain('Preview your export before saving.');
+    });
+  }
+
   it('ignores Escape over a finished export that has not been saved', () => {
     useVideoExportMock.mockReturnValue(exportResult('complete'));
     render(<VideoExportModal doc={doc} onClose={onClose} />);

@@ -140,6 +140,29 @@ describe('intrinsic feature summary layout', () => {
     expect(load).toHaveBeenCalledTimes(1);
   });
 
+  it('measures the clip of a template that sizes its media slot to it', () => {
+    const video = document.createElement('video');
+    const createElement = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag, options) =>
+      tag === 'video' ? video : createElement(tag, options),
+    );
+    vi.spyOn(video, 'load').mockImplementation(() => {});
+    Object.defineProperties(video, {
+      videoWidth: { value: 1920 },
+      videoHeight: { value: 1080 },
+    });
+    const doc = buildPreviewDoc(
+      markdownToDoc(parseMarkdown('# Demo {[topFeature]}\n\n<video src="wide.mp4"></video>'), {
+        generateCoverBlock: false,
+      }),
+    );
+    const { result } = renderHook(() =>
+      useFeatureMediaAspectRatios(doc.blocks, '/media', DEFAULT_THEME),
+    );
+    act(() => video.dispatchEvent(new Event('loadedmetadata')));
+    expect(result.current['wide.mp4']).toBe(1920 / 1080);
+  });
+
   it('obeys resource policy and clears dimensions when the document changes', async () => {
     const first = summary('# Feature\n\n![Feature](local.png)');
     const next = summary('# Feature\n\n![Feature](https://example.com/remote.png)');

@@ -5154,6 +5154,10 @@ button.squisq-view-menu-radio-row:focus-visible {
 /* Auto-hide the gutter (and its connector strip) when the editor body is
    too narrow to host both surfaces comfortably. */
 @container squisq-editor-body (max-width: 720px) {
+  /* A card preview has the same width cost as the document gutter. Collapse
+     it automatically too; keep the preference and editor mounted so widening
+     the host restores the preview without losing the current edit. */
+  .squisq-block-preview-panel,
   .squisq-inline-preview-gutter,
   .squisq-inline-preview-connectors,
   .squisq-outline {

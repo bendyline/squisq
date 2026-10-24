@@ -169,6 +169,14 @@ function standaloneHtmlVideo(
 }
 
 /**
+ * Whether `node` is nothing but an HTML `<video>` — the form the recorder and
+ * a dropped clip insert, as a paragraph of inline tags or an HTML block.
+ */
+export function isStandaloneHtmlVideo(node: MarkdownBlockNode): boolean {
+  return standaloneHtmlVideo(node) !== null;
+}
+
+/**
  * Promote a standalone HTML video with an explicit non-content placement to
  * the same typed schedule used by `{[video ...]}` annotations. Plain videos
  * remain untouched in the block body and continue through rich-media layout.

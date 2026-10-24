@@ -151,6 +151,18 @@ doc-wide persistent layers), and `imageTreatment` (`none` | `mono` | `duotone`
   - Inputs: `imageSrc` _(required — or an image in the block body)_, `imageAlt`, `imageWidth`, `imageHeight`, `title`, `body`
   - Usage: editorial feature block with text on the left and media on the right
 
+- `topFeature`
+  - Inputs: `title` — the body and its media (image, video clip, hosted video, diagram) come from the block's markdown
+  - Usage: wide media, or a portrait slide — the media spans the full width across the top, and the heading and complete body (lists kept) fill a band below sized to the text. Without media it renders as `content`
+
+- `bottomFeature`
+  - Inputs: as `topFeature`
+  - Usage: the mirror of `topFeature` — heading and body across the top, media spanning the full width below
+
+- `mediaOnly`
+  - Inputs: `title`, shown only when the block has no media
+  - Usage: the media fills the slide, with no title, text or caption. Without media it renders as `content`
+
 - `map`
   - Inputs: `center` _(required; an object `{ lat, lng }`)_, `zoom` _(required)_, `mapStyle`, `title`, `caption`, `markers` (array of `{ lat, lng, label? }`), `ambientMotion`, `staticSrc` (pre-rendered image path)
   - Usage: small map embeds

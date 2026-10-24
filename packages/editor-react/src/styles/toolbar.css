@@ -957,7 +957,10 @@
 
 .squisq-insert-menu {
   z-index: 100;
-  min-width: 200px;
+  box-sizing: border-box;
+  width: max-content;
+  min-width: min(200px, calc(100vw - 16px));
+  max-width: calc(100vw - 16px);
   padding: 4px 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -978,6 +981,22 @@
   border: 1px solid var(--squisq-border-subtle);
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+/* Long labels must wrap at the viewport cap, not create a clipped horizontal
+   scroll area. Keep icons and submenu chevrons visible beside the label. */
+.squisq-insert-menu .squisq-toolbar-overflow-item {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.squisq-insert-menu .squisq-toolbar-overflow-item > span {
+  min-width: 0;
+}
+
+.squisq-insert-menu .squisq-toolbar-overflow-icon,
+.squisq-insert-menu .squisq-toolbar-overflow-item > svg {
+  flex-shrink: 0;
 }
 
 .squisq-insert-menu-header {

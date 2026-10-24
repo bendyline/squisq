@@ -10,13 +10,15 @@
  * incidental overlap between its layers.
  */
 
-import type { Layer, Position } from '../schemas/Doc.js';
+import type { Layer, Position, TextLayer } from '../schemas/Doc.js';
 import type { ViewportConfig, ViewportOrientation } from '../schemas/Viewport.js';
 import { getViewportOrientation } from '../schemas/Viewport.js';
 import { estimateTextHeight, fitProse } from './templates/captionUtils.js';
+import { fitWrapWidth } from './templates/featureBlock.js';
 import { featureMediaSlot } from './templates/featureMediaSlot.js';
 import {
   getBlockMediaLayoutPolicy,
+  type NativeMediaLayout,
   type SupplementalMediaLayoutVariant,
   type SupplementalMediaShape,
 } from './templates/mediaLayoutPolicy.js';
@@ -663,6 +665,184 @@ function leastObstructedMediaRect(layers: readonly Layer[], viewport: ViewportCo
   });
 }
 
+/** The edge a media-led template gives its media, or the whole slide. */
+type MediaBand = 'top' | 'bottom' | 'full';
+
+const MEDIA_BANDS: Partial<Record<NativeMediaLayout, MediaBand>> = {
+  'feature-top': 'top',
+  'feature-bottom': 'bottom',
+  'full-frame': 'full',
+};
+
+/** Space a rich text layer leaves between blocks (its `p`/list margins), in em. */
+const BLOCK_GAP_EM = 0.55;
+
+function textLayer(layers: readonly Layer[], id: string): TextLayer | undefined {
+  const layer = layers.find((candidate) => candidate.id === id);
+  return layer?.type === 'text' ? layer : undefined;
+}
+
+/**
+ * Media-led compositions (`topFeature`, `bottomFeature`, `mediaOnly`). The
+ * media spans the slide's full width, edge to edge. The template's `content`
+ * lockup — its `title` and `body` text layers — is re-fitted into a band on
+ * the other side, sized to the text and capped so the media always keeps most
+ * of the slide: a heading alone leaves it nearly everything. When one item's
+ * real shape (`aspect`) needs less height at full width — a wide clip on a
+ * portrait slide — the band shrinks to it and the media-and-text group is
+ * centered rather than leaving the spare height inside the band. `full` keeps
+ * only the backdrop.
+ */
+function mediaBandLayout(
+  layers: Layer[],
+  viewport: ViewportConfig,
+  band: MediaBand,
+  aspect: number | undefined,
+): SupplementalMediaLayout {
+  const backdrop = layers.filter((layer) => isFullViewportBackground(layer, viewport));
+  const title = textLayer(layers, 'title');
+  const body = textLayer(layers, 'body');
+  if (band === 'full' || (!title && !body)) {
+    return { layers: backdrop, mediaRect: rect(viewport, 0, 0, 1, 1), framed: false };
+  }
+
+  const { width, height } = viewport;
+  const unit = Math.min(width, height);
+  const margin = unit * 0.045;
+  const gap = unit * 0.03;
+  const innerGap = title && body ? unit * 0.02 : 0;
+  const textWidth = width - margin * 2;
+  const maxBandHeight = height * (body ? 0.4 : 0.2);
+
+  const titleLineHeight = title?.content.style.lineHeight ?? 1.15;
+  // Portrait layouts scale titles down and body copy up; across the full
+  // width the heading must still read above its body.
+  const titleBaseSize = Math.max(
+    title?.content.style.fontSize ?? 0,
+    Math.round((body?.content.style.fontSize ?? 0) * 1.2),
+  );
+  // The renderer wraps a plain title at 0.5em a character, but a bold display
+  // face paints wider; across the full width that would run past the edge, so
+  // the title wraps on a narrower box.
+  const titleWrapWidth = title
+    ? Math.min(
+        textWidth * 0.86,
+        fitWrapWidth(
+          title.content.text,
+          titleBaseSize,
+          textWidth,
+          title.content.style.fontFamily ?? '',
+        ),
+      )
+    : textWidth;
+  const titleFit = title
+    ? fitProse({
+        text: title.content.text,
+        baseFontSize: titleBaseSize,
+        minFontSize: Math.min(titleBaseSize, unit * 0.03),
+        maxWidthPx: titleWrapWidth,
+        maxHeightPx: body ? maxBandHeight * 0.35 : maxBandHeight,
+        lineHeight: titleLineHeight,
+      })
+    : undefined;
+  const titleHeight = titleFit?.heightPx ?? 0;
+  const bodyRoom = maxBandHeight - titleHeight - innerGap;
+  const bodyLineHeight = body?.content.style.lineHeight ?? 1.35;
+  // The body renders as HTML, which spaces its blocks by a fraction of a line
+  // (BLOCK_GAP_EM), not by the blank line its plain projection carries.
+  const blockGaps = body ? (body.content.text.match(/\n[^\S\n]*\n/g) ?? []).length : 0;
+  const bodyBaseSize = body?.content.style.fontSize ?? 0;
+  // Inline marks (code, emoji, sub/superscripts, a URL broken at its hyphens)
+  // wrap a line past any width estimate; one spare line keeps the last one
+  // inside the box, which hides overflow.
+  const headroomLines = 1;
+  const bodyText = body?.content.text.replace(/\n[^\S\n]*\n/g, '\n') ?? '';
+  const bodyFit = body
+    ? fitProse({
+        text: bodyText,
+        baseFontSize: bodyBaseSize,
+        minFontSize: Math.min(bodyBaseSize, unit * 0.016),
+        // HTML wraps on real glyphs; wide ones (CJK, emoji) fill lines in
+        // half the characters the estimate assumes, so count lines narrower.
+        maxWidthPx: fitWrapWidth(
+          bodyText,
+          bodyBaseSize,
+          textWidth,
+          body.content.style.fontFamily ?? '',
+        ),
+        maxHeightPx:
+          bodyRoom - (blockGaps * BLOCK_GAP_EM + headroomLines * bodyLineHeight) * bodyBaseSize,
+        lineHeight: bodyLineHeight,
+      })
+    : undefined;
+  const bodyHeight = bodyFit
+    ? Math.min(
+        bodyRoom,
+        bodyFit.heightPx +
+          (blockGaps * BLOCK_GAP_EM + headroomLines * bodyLineHeight) * bodyFit.fontSize,
+      )
+    : 0;
+  const bandHeight = titleHeight + innerGap + bodyHeight;
+  const roomForMedia = height - margin - gap - bandHeight;
+  const mediaHeight =
+    aspect && Number.isFinite(aspect) && aspect > 0
+      ? Math.min(roomForMedia, width / aspect)
+      : roomForMedia;
+  // Height the media did not need, split above and below the whole group.
+  const offset = (roomForMedia - mediaHeight) / 2;
+  const mediaTop = band === 'top' ? offset : margin + offset + bandHeight + gap;
+  const bandTop = band === 'top' ? mediaTop + mediaHeight + gap : margin + offset;
+
+  const placed: Layer[] = [...backdrop];
+  if (title && titleFit) {
+    placed.push({
+      ...title,
+      position: {
+        x: margin,
+        y: bandTop,
+        width: titleWrapWidth,
+        height: titleHeight,
+        anchor: 'top-left',
+      },
+      content: {
+        ...title.content,
+        style: {
+          ...title.content.style,
+          fontSize: titleFit.fontSize,
+          lineHeight: titleLineHeight,
+          ...(titleFit.maxLines ? { maxLines: titleFit.maxLines } : {}),
+        },
+      },
+    });
+  }
+  if (body && bodyFit) {
+    placed.push({
+      ...body,
+      position: {
+        x: margin,
+        y: bandTop + titleHeight + innerGap,
+        width: textWidth,
+        height: bodyHeight,
+        anchor: 'top-left',
+      },
+      content: {
+        ...body.content,
+        style: {
+          ...body.content.style,
+          fontSize: bodyFit.fontSize,
+          lineHeight: bodyLineHeight,
+          ...(bodyFit.maxLines ? { maxLines: bodyFit.maxLines } : {}),
+        },
+      },
+    });
+  }
+  return {
+    layers: placed,
+    mediaRect: { x: 0, y: mediaTop, width, height: mediaHeight },
+    framed: false,
+  };
+}
+
 /**
  * Resolve the media-present variant for a block. No-media blocks never call
  * this function and therefore retain their template's original layer graph.
@@ -673,7 +853,12 @@ export function resolveSupplementalMediaLayout(
   viewport: ViewportConfig,
   mediaCount: number,
   aspectRatios: readonly (number | undefined)[],
-  featureOptions: { summaryFeature?: boolean; stackColumns?: boolean } = {},
+  featureOptions: {
+    summaryFeature?: boolean;
+    stackColumns?: boolean;
+    /** Per item: its measured or authored shape, undefined where only guessed. */
+    knownAspectRatios?: readonly (number | undefined)[];
+  } = {},
 ): SupplementalMediaLayout {
   const policy = getBlockMediaLayoutPolicy(template);
   const shape = mediaShape(mediaCount, aspectRatios);
@@ -686,6 +871,11 @@ export function resolveSupplementalMediaLayout(
       layer.type === 'mermaid' ||
       layer.type === 'svg',
   );
+  const band = policy?.nativeLayout ? MEDIA_BANDS[policy.nativeLayout] : undefined;
+  if (band && !alreadyOwnsMedia) {
+    const aspect = mediaCount === 1 ? featureOptions.knownAspectRatios?.[0] : undefined;
+    return mediaBandLayout(layers, viewport, band, aspect);
+  }
   // A feature template without a primary image still owns its feature cell.
   // Embedded videos and diagrams fill that cell instead of an extra-media inset.
   if (

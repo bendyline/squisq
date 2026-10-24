@@ -238,6 +238,26 @@ describe('DocPlayer smoke test', () => {
     expect(container.querySelector('video')?.muted).toBe(true);
   });
 
+  it('hands the current slide’s video to the presenter in slideshow mode', () => {
+    const doc = docWithBlockVideo();
+    const audioController = controller();
+    const { container, rerender } = render(
+      <DocPlayer doc={doc} audioController={audioController} displayMode="slideshow" />,
+    );
+    const slideVideo = container.querySelector<HTMLVideoElement>(
+      '.doc-player__block--active video',
+    );
+    expect(slideVideo?.controls).toBe(true);
+    expect(slideVideo?.hasAttribute('data-clip-start')).toBe(false);
+
+    rerender(<DocPlayer doc={doc} audioController={audioController} displayMode="video" />);
+    const timedVideo = container.querySelector<HTMLVideoElement>(
+      '.doc-player__block--active video',
+    );
+    expect(timedVideo?.controls).toBe(false);
+    expect(timedVideo?.hasAttribute('data-clip-start')).toBe(true);
+  });
+
   it('starts audible recorded media inside the Play-button gesture', () => {
     const doc: Doc = {
       ...docWithBlockVideo(),
