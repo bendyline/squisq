@@ -31,6 +31,21 @@ import { relativeLuminance, withAlpha } from '../../schemas/colorUtils.js';
 import { mapAmbientMotion } from './accentImage.js';
 import { estimateProseLineCount, estimateTextHeight } from './captionUtils.js';
 import { estimateDisplayTextWidth } from '../utils/textMetrics.js';
+import {
+  FROSTED_PAD_X_EM,
+  FROSTED_PAD_Y_EM,
+  FROSTED_RADIUS_EM,
+  balancedDisplayLines,
+  frostedBlurPx,
+  frostedPlateLayer,
+  frostedTitleBoxWidth,
+  frostedUnderLightText,
+  opticalCentreShiftEm,
+  pct,
+  wrapDisplayLine,
+} from './frostedPlate.js';
+
+export { opticalCentreShiftEm } from './frostedPlate.js';
 import type { CoverSlideTemplate } from '../coverSlideSettings.js';
 import { bigText } from './bigText.js';
 import { imageWithCaption } from './imageWithCaption.js';
@@ -153,103 +168,14 @@ const FROSTED_LINE_HEIGHT = 1.12;
 const FROSTED_MAX_LINES = 3;
 /** Widest the plate may be, as a share of the frame's centre square (its shorter side). */
 const FROSTED_SQUARE_SHARE = 0.9;
-/** Plate padding around the title block, in em of the title size. */
-const FROSTED_PAD_X_EM = 0.45;
-const FROSTED_PAD_Y_EM = 0.3;
-/** Plate corner radius, in em of the title size. */
-const FROSTED_RADIUS_EM = 0.3;
-/** Backdrop blur radius as a share of the frame's shorter side (12px at 720p). */
-const FROSTED_BLUR_SHARE = 0.0167;
 /**
  * Gap below the plate, in percent of frame height. A tall frame keeps more: a feed shows
  * a vertical video's middle 3:4, and the Shorts and Reels players lay their captions and
  * buttons over its bottom fifth.
  */
 const FROSTED_BOTTOM_MARGIN_PCT = { wide: 7, tall: 17 } as const;
-/**
- * Neutral plate tints. Never the theme background: on a warm theme that tinted every
- * cover brown, the haze the frosted style exists to remove.
- */
-const FROSTED_TINT_UNDER_LIGHT_TEXT = 'rgba(12, 12, 14, 0.26)';
-const FROSTED_TINT_UNDER_DARK_TEXT = 'rgba(250, 250, 250, 0.5)';
-/**
- * Backdrop contrast under light text. The tint alone leaves glass over snow or sky pale
- * grey (about 2:1 against white text). Easing the contrast of what shows through pulls
- * the brightest tones down and leaves mid-tones (water, rock, foliage) almost as the
- * light tint shows them; dimming everything instead (brightness) made the glass read
- * dark. A white backdrop lands near 2.4:1, with the title's drop shadow doing the rest.
- */
-const FROSTED_BACKDROP_CONTRAST = 0.65;
 /** Subtitle size (pre-viewport-scale), as on the scrim cover. */
 const COVER_SUBTITLE_BASE_PX = 40;
-
-/**
- * Ink extents of display type, in em above (or, for `descent`, below) the baseline:
- * the x-height, capitals and ascenders, an accented capital (its accent is light,
- * so it counts for less than its full height), and descenders. Calibrated on PT Serif
- * Bold as Chromium draws it, measured from rendered covers.
- */
-const INK_EM = { xHeight: 0.45, ascent: 0.71, accentedCapital: 0.8, descent: 0.165 } as const;
-
-/**
- * `TextStyle.baselineShift` (em) that centres a title's ink on its layer's middle.
- * Vertically centred text puts the middle of the x-height on the centre line, so
- * capitals and ascenders on the first line lift the visible block, and descenders on
- * the last line lower it: "Antarctic Peninsula" needs pushing down an eighth of an em,
- * "Paraguay" half as much.
- */
-export function opticalCentreShiftEm(lines: readonly string[]): number {
-  const first = (lines[0] ?? '').normalize('NFD');
-  const last = lines[lines.length - 1] ?? '';
-  const top = /[A-Z]\p{M}/u.test(first)
-    ? INK_EM.accentedCapital
-    : /[A-Zbdfhklt0-9]|[a-z]\p{M}/u.test(first)
-      ? INK_EM.ascent
-      : INK_EM.xHeight;
-  const bottom = /[gjpqyQ,;]/.test(last) ? INK_EM.descent : 0;
-  return Math.round(((top - bottom) / 2 - INK_EM.xHeight / 2) * 1000) / 1000;
-}
-
-/** Greedy word wrap at `maxWidth` px; a word wider than the line keeps a line of its own. */
-function wrapDisplayLine(line: string, fontSize: number, maxWidth: number): string[] {
-  const lines: string[] = [];
-  let current = '';
-  for (const word of line.trim().split(/\s+/).filter(Boolean)) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (!current || estimateDisplayTextWidth(candidate, fontSize) <= maxWidth) {
-      current = candidate;
-    } else {
-      lines.push(current);
-      current = word;
-    }
-  }
-  if (current) lines.push(current);
-  return lines.length > 0 ? lines : [''];
-}
-
-/**
- * Wrap a line into as few lines as fit `maxWidth`, then balance them: break at the
- * narrowest width that needs no more lines, so a title reads "Humberstone and /
- * Santa Laura / Saltpeter Works" rather than leaving one word alone at the bottom.
- */
-function balancedDisplayLines(line: string, fontSize: number, maxWidth: number): string[] {
-  const greedy = wrapDisplayLine(line, fontSize, maxWidth);
-  if (greedy.length < 2) return greedy;
-  let lo = Math.max(
-    ...line
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((word) => estimateDisplayTextWidth(word, fontSize)),
-  );
-  let hi = maxWidth;
-  if (lo >= hi) return greedy;
-  while (hi - lo > 0.5) {
-    const mid = (lo + hi) / 2;
-    if (wrapDisplayLine(line, fontSize, mid).length <= greedy.length) hi = mid;
-    else lo = mid;
-  }
-  return wrapDisplayLine(line, fontSize, hi);
-}
 
 /** Geometry of a frosted cover, in px of the viewport (exported for tests and tools). */
 export interface FrostedCoverLayout {
@@ -339,11 +265,6 @@ export function frostedCoverLayout(
   const plateY = plateBottom - plateHeight;
   const cx = frameW / 2;
 
-  // The renderer re-wraps any line longer than its box allows at half an em per
-  // character; keep the box at least that wide so the lines above stay as drawn.
-  const longestChars = Math.max(...lines.map((line) => line.length));
-  const titleBoxWidth = Math.max(textWidth, longestChars * fontSize * 0.5 + 1);
-
   return {
     fontSize,
     lines,
@@ -360,7 +281,7 @@ export function frostedCoverLayout(
     title: {
       cx,
       cy: plateY + padY + textHeight / 2,
-      width: titleBoxWidth,
+      width: frostedTitleBoxWidth(lines, fontSize, textWidth),
       height: textHeight + 2 * padY,
     },
     ...(sub
@@ -379,39 +300,17 @@ export function frostedCoverLayout(
         }
       : {}),
     baselineShift: opticalCentreShiftEm(lines),
-    blur: Math.round(FROSTED_BLUR_SHARE * shortSide),
+    blur: frostedBlurPx(context),
   };
-}
-
-/** Round a px measure to a percentage of `total` with two decimals. */
-function pct(value: number, total: number): string {
-  return `${Math.round((value / total) * 10000) / 100}%`;
 }
 
 /** The frosted plate, title and subtitle layers that sit over a clear hero. */
 function frostedCoverLayers(input: CoverBlockInput, context: TemplateContext): Layer[] {
   const { theme, viewport } = context;
   const layout = frostedCoverLayout(input.title, input.subtitle, context);
-  const lightText = relativeLuminance(theme.colors.text) > 0.5;
-  const { plate } = layout;
+  const lightText = frostedUnderLightText(context);
   const layers: Layer[] = [
-    {
-      type: 'shape',
-      id: 'cover-plate',
-      content: {
-        shape: 'rect',
-        fill: lightText ? FROSTED_TINT_UNDER_LIGHT_TEXT : FROSTED_TINT_UNDER_DARK_TEXT,
-        borderRadius: Math.round(plate.radius),
-        backdropBlur: layout.blur,
-        ...(lightText ? { backdropContrast: FROSTED_BACKDROP_CONTRAST } : {}),
-      },
-      position: {
-        x: pct(plate.x, viewport.width),
-        y: pct(plate.y, viewport.height),
-        width: pct(plate.width, viewport.width),
-        height: pct(plate.height, viewport.height),
-      },
-    },
+    frostedPlateLayer('cover-plate', layout.plate, context),
     {
       type: 'text',
       id: 'cover-title',

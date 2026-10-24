@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { bigText, fitBigTextSize } from '../doc/templates/bigText';
+import { bigText, fitBigTextSize, frostedBigTextLayout } from '../doc/templates/bigText';
 import { expandCoverBlock } from '../doc/templates/coverBlock';
 import { createTemplateContext, DEFAULT_THEME, VIEWPORT_PRESETS } from '../doc/templates/index';
+import { THEMES } from '../schemas/themeLibrary';
 import { resolveCoverSlideSettings } from '../doc/coverSlideSettings';
 import type { StartBlockConfig } from '../schemas/Doc';
 import type { BigTextInput } from '../schemas/BlockTemplates';
@@ -189,5 +190,81 @@ describe('bigText placement', () => {
     expect(fitBigTextSize('FALKLAND ISLANDS', VIEWPORT_PRESETS.portrait, 0.44)).toBeLessThanOrEqual(
       fitBigTextSize('FALKLAND ISLANDS', VIEWPORT_PRESETS.portrait),
     );
+  });
+});
+
+// The frosted cover's glass on a title card: the photo stays clear, the title
+// sits on a plate that hugs it.
+describe('bigText frosted backdrop', () => {
+  const portrait = createTemplateContext(THEMES['warm-earth'], 0, 1, VIEWPORT_PRESETS.portrait);
+  const card = (title: string, input: Partial<BigTextInput> = {}) =>
+    bigText(
+      {
+        ...base,
+        template: 'bigText',
+        title,
+        imageSrc: 'p.jpg',
+        placement: 'upper',
+        backdrop: 'frosted',
+        ...input,
+      },
+      portrait,
+    );
+
+  it('swaps the bloom for a frosted plate under the title', () => {
+    const layers = card('Licancabur');
+    expect(layers.map((l) => l.id)).toEqual(['bigtext-image', 'bigtext-plate', 'bigtext-title']);
+    const plate = layers.find((l) => l.id === 'bigtext-plate') as ShapeLayer;
+    expect(plate.content.backdropBlur).toBeGreaterThan(0);
+    expect(String(plate.content.fill)).not.toContain('gradient');
+    // A fading ancestor isolates backdrop-filter: the glass would show unblurred.
+    expect(plate.animation).toBeUndefined();
+    const title = layers.find((l) => l.id === 'bigtext-title') as TextLayer;
+    expect(title.content.text).toBe('LICANCABUR');
+    expect(title.content.style.verticalAlign).toBe('middle');
+    expect(title.content.style.baselineShift).toBeGreaterThan(0);
+    expect(title.content.style.shadow).toBe(true);
+  });
+
+  it('wears the same glass as the frosted cover', () => {
+    const plate = card('Licancabur').find((l) => l.id === 'bigtext-plate') as ShapeLayer;
+    const cover = expandCoverBlock(
+      { title: 'Licancabur', heroSrc: 'p.jpg', coverStyle: 'frosted' },
+      portrait,
+    ).find((l) => l.id === 'cover-plate') as ShapeLayer;
+    expect(plate.content.fill).toBe(cover.content.fill);
+    expect(plate.content.backdropBlur).toBe(cover.content.backdropBlur);
+    expect(plate.content.backdropContrast).toBe(cover.content.backdropContrast);
+  });
+
+  it('centres the plate on its band, inside the frame', () => {
+    const { width, height } = VIEWPORT_PRESETS.portrait;
+    for (const name of ['TONGA', 'EASTER ISLAND', 'HUMBERSTONE AND SANTA LAURA SALTPETER WORKS']) {
+      const layout = frostedBigTextLayout(name, VIEWPORT_PRESETS.portrait, {
+        y: 0.3,
+        height: 0.44,
+      });
+      const { plate } = layout;
+      expect(plate.y + plate.height / 2).toBeCloseTo(height * 0.3, 0);
+      expect(plate.x + plate.width / 2).toBeCloseTo(width / 2, 0);
+      expect(plate.width).toBeLessThanOrEqual(width * 0.9 + 1);
+      expect(plate.height).toBeLessThanOrEqual(width * 0.45 + 1);
+      expect(layout.title.cy).toBeCloseTo(plate.y + plate.height / 2, 0);
+    }
+  });
+
+  it('prefers one line to a stack when a short name fits', () => {
+    const layout = frostedBigTextLayout('LA PAZ', VIEWPORT_PRESETS.portrait, {
+      y: 0.3,
+      height: 0.44,
+    });
+    expect(layout.lines).toEqual(['LA PAZ']);
+    expect(layout.fontSize).toBeGreaterThan(150);
+  });
+
+  it('keeps the bloom without an image', () => {
+    const layers = card('Licancabur', { imageSrc: undefined });
+    expect(layers.find((l) => l.id === 'bigtext-plate')).toBeUndefined();
+    expect(layers.map((l) => l.id)).toEqual(['bigtext-bg', 'bigtext-tint', 'bigtext-title']);
   });
 });
