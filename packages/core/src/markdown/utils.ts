@@ -70,6 +70,14 @@ export function findNodesByType<T extends MarkdownNode>(root: MarkdownNode, type
 }
 
 /**
+ * Whether a raw inline HTML fragment is a line break tag: `<br>`, `<br/>` or
+ * `<br />`. Markdown has no other way to break a line inside a table cell.
+ */
+export function isHtmlLineBreak(rawHtml: string): boolean {
+  return /^<br\s*\/?>$/i.test(rawHtml.trim());
+}
+
+/**
  * Extract all plain text content from a node and its descendants.
  * Concatenates text values, ignoring formatting, links, etc.
  *
@@ -90,6 +98,9 @@ export function extractPlainText(node: MarkdownNode): string {
   // line break. It has no text of its own, so without this the words either
   // side fuse ("Line oneafter") in captions, reading time and narration.
   if (node.type === 'break') return '\n';
+  // So is a `<br>` tag, the only break a table cell can hold, and the one the
+  // editor writes there for Enter.
+  if (node.type === 'htmlInline' && isHtmlLineBreak(node.rawHtml)) return '\n';
 
   const children = getChildren(node);
   // Preserve boundaries between block-level elements (list items, paragraphs

@@ -56,7 +56,7 @@ import type {
   MarkdownInlineIcon,
   MarkdownNode,
 } from '@bendyline/squisq/markdown';
-import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
+import { isHtmlLineBreak, readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 import { FootnoteIndex } from '../shared/footnotes.js';
 import { authoredImageSize, fitWithin, readImageDimensions } from '../shared/images.js';
 
@@ -599,22 +599,16 @@ function flattenInlines(
       }
 
       case 'break':
-        // Deliberately NOT sanitized: this "\n" is our own control token, not
-        // document text. `wrapSpans` matches it exactly to force a line break
-        // and consumes it, so it never reaches pdf-lib. (Newlines occurring
-        // *inside* author text are sanitized to spaces like any other
-        // unencodable character.)
-        spans.push({
-          text: '\n',
-          font: ctx.fonts.regular,
-          fontSize: ctx.fontSize,
-          color: ctx.colors.text,
-        });
+        spans.push(lineBreakSpan(ctx));
         break;
 
       case 'htmlInline': {
         const html = (node as MarkdownInlineHtml).rawHtml;
-        if (html) {
+        // `<br>` is how a table cell breaks a line (the editor writes one for
+        // Enter there), not markup to print.
+        if (isHtmlLineBreak(html)) {
+          spans.push(lineBreakSpan(ctx));
+        } else if (html) {
           spans.push(
             ...textSpans(ctx, html, ctx.fonts.mono, {
               fontSize: CODE_FONT_SIZE,
@@ -671,6 +665,17 @@ function flattenInlines(
   }
 
   return spans;
+}
+
+/**
+ * A forced line break. Deliberately NOT sanitized: this "\n" is our own
+ * control token, not document text. `wrapSpans` matches it exactly to force a
+ * line break and consumes it, so it never reaches pdf-lib. (Newlines occurring
+ * *inside* author text are sanitized to spaces like any other unencodable
+ * character.)
+ */
+function lineBreakSpan(ctx: ExportContext): TextSpan {
+  return { text: '\n', font: ctx.fonts.regular, fontSize: ctx.fontSize, color: ctx.colors.text };
 }
 
 const STANDARD_FONT_NAMES: ReadonlySet<string> = new Set(Object.values(StandardFonts));
@@ -832,8 +837,9 @@ function wrapSpans(spans: TextSpan[], maxWidth: number): TextSpan[][] {
       continue;
     }
 
-    // Split by whitespace for word-wrapping
-    const words = splitIntoWords(span.text);
+    // Split by whitespace for word-wrapping, and break any word that could
+    // never fit a line of its own.
+    const words = splitIntoWords(span.text).flatMap((word) => breakLongWord(word, span, maxWidth));
 
     for (const word of words) {
       const wordWidth = drawnWidth(span.font, word, span.fontSize);
@@ -860,6 +866,67 @@ function wrapSpans(spans: TextSpan[], maxWidth: number): TextSpan[][] {
   }
 
   return lines.length > 0 ? lines : [[]];
+}
+
+/**
+ * A word wider than a whole line, cut into pieces that each fit one. A long
+ * URL or an unbroken token otherwise runs past the page margin, or out of its
+ * table cell and over the next cell's text. Text with no spaces at all, such
+ * as CJK, breaks the same way.
+ */
+function breakLongWord(word: string, span: TextSpan, maxWidth: number): string[] {
+  if (word.trim().length === 0 || drawnWidth(span.font, word, span.fontSize) <= maxWidth) {
+    return [word];
+  }
+  const pieces: string[] = [];
+  let piece = '';
+  let pieceWidth = 0;
+  for (const cluster of characterClusters(word)) {
+    const width = drawnWidth(span.font, cluster, span.fontSize);
+    if (piece && pieceWidth + width > maxWidth) {
+      pieces.push(piece);
+      piece = '';
+      pieceWidth = 0;
+    }
+    piece += cluster;
+    pieceWidth += width;
+  }
+  if (piece) pieces.push(piece);
+  return pieces;
+}
+
+/**
+ * Whether a code point belongs to the character before it: a combining mark,
+ * a zero-width joiner, a variation selector or an emoji skin tone.
+ */
+function continuesCluster(ch: string): boolean {
+  const codePoint = ch.codePointAt(0) as number;
+  return (
+    /\p{M}/u.test(ch) ||
+    codePoint === 0x200d ||
+    codePoint === 0xfe0e ||
+    codePoint === 0xfe0f ||
+    (codePoint >= 0x1f3fb && codePoint <= 0x1f3ff)
+  );
+}
+
+/**
+ * Text as the characters a reader sees, near enough to break a word between
+ * them: a combining accent, variation selector or skin tone stays with the
+ * character it modifies, and a zero-width joiner holds an emoji sequence
+ * together.
+ */
+function characterClusters(text: string): string[] {
+  const clusters: string[] = [];
+  for (const ch of text) {
+    const last = clusters.length - 1;
+    if (last >= 0 && (continuesCluster(ch) || clusters[last]!.endsWith('‍'))) {
+      clusters[last] += ch;
+    } else {
+      clusters.push(ch);
+    }
+  }
+  return clusters;
 }
 
 /**
@@ -1206,22 +1273,31 @@ function renderTable(node: MarkdownTable, ctx: ExportContext, extraIndent: numbe
   );
   if (numCols === 0) return;
 
-  // Simple equal-width columns
-  const colWidth = tableWidth / numCols;
-
-  for (let rowIdx = 0; rowIdx < node.children.length; rowIdx++) {
-    const row = node.children[rowIdx] as MarkdownTableRow;
+  const rows = node.children.map((rowNode, rowIdx) => {
+    const row = rowNode as MarkdownTableRow;
     const isHeader = rowIdx === 0 && row.children.some((c) => (c as MarkdownTableCell).isHeader);
-
-    // Calculate row height
-    const rowCellHeights = row.children.map((cell) => {
-      const cellNode = cell as MarkdownTableCell;
-      const spans = flattenInlines(cellNode.children, ctx, {
+    const cells = row.children.map((cell) =>
+      flattenInlines((cell as MarkdownTableCell).children, ctx, {
         bold: isHeader,
         italic: false,
         code: false,
-      });
-      const lines = wrapSpans(spans, colWidth - 2 * TABLE_CELL_PAD_X);
+      }),
+    );
+    return { isHeader, cells };
+  });
+  const colWidths = tableColumnWidths(
+    rows.map((row) => row.cells),
+    tableWidth,
+    numCols,
+  );
+  const colX = colWidths.map((_, colIdx) =>
+    colWidths.slice(0, colIdx).reduce((sum, width) => sum + width, x0),
+  );
+
+  for (const { isHeader, cells } of rows) {
+    // Calculate row height
+    const rowCellHeights = cells.map((spans, colIdx) => {
+      const lines = wrapSpans(spans, colWidths[colIdx]! - 2 * TABLE_CELL_PAD_X);
       return lines.length * ctx.fontSize * LINE_HEIGHT_FACTOR + 2 * TABLE_CELL_PAD_Y;
     });
     const rowHeight = Math.max(
@@ -1244,7 +1320,8 @@ function renderTable(node: MarkdownTable, ctx: ExportContext, extraIndent: numbe
 
     // Draw cell borders and text
     for (let colIdx = 0; colIdx < numCols; colIdx++) {
-      const cellX = x0 + colIdx * colWidth;
+      const cellX = colX[colIdx]!;
+      const colWidth = colWidths[colIdx]!;
 
       // Draw cell border
       ctx.page.drawRectangle({
@@ -1256,14 +1333,8 @@ function renderTable(node: MarkdownTable, ctx: ExportContext, extraIndent: numbe
         borderWidth: TABLE_BORDER_WIDTH,
       });
 
-      if (colIdx < row.children.length) {
-        const cellNode = row.children[colIdx] as MarkdownTableCell;
-        const spans = flattenInlines(cellNode.children, ctx, {
-          bold: isHeader,
-          italic: false,
-          code: false,
-        });
-
+      const spans = cells[colIdx];
+      if (spans) {
         // Draw text inside cell
         const savedY = ctx.y;
         ctx.y = ctx.y - TABLE_CELL_PAD_Y;
@@ -1294,6 +1365,60 @@ function renderTable(node: MarkdownTable, ctx: ExportContext, extraIndent: numbe
   }
 
   ctx.y -= PARAGRAPH_SPACING;
+}
+
+/**
+ * Column widths that follow the content, as a browser lays out an auto-width
+ * table. Each column first gets the width of its longest word, then the rest
+ * of the table width is shared out by how much wider each column's text would
+ * like to be, so a column of single digits stays narrow. No column's floor is
+ * more than an equal share: a longer word breaks instead (see
+ * `breakLongWord`).
+ */
+function tableColumnWidths(rows: TextSpan[][][], tableWidth: number, numCols: number): number[] {
+  const pad = 2 * TABLE_CELL_PAD_X;
+  const minimum = new Array<number>(numCols).fill(pad);
+  const preferred = new Array<number>(numCols).fill(pad);
+  for (const cells of rows) {
+    cells.forEach((spans, colIdx) => {
+      let longestLine = 0;
+      let longestWord = 0;
+      let line = 0;
+      for (const span of spans) {
+        if (span.text === '\n') {
+          line = 0;
+          continue;
+        }
+        for (const word of splitIntoWords(span.text)) {
+          const width = drawnWidth(span.font, word, span.fontSize);
+          line += width;
+          if (word.trim().length > 0) longestWord = Math.max(longestWord, width);
+        }
+        longestLine = Math.max(longestLine, line);
+      }
+      minimum[colIdx] = Math.max(minimum[colIdx]!, longestWord + pad);
+      preferred[colIdx] = Math.max(preferred[colIdx]!, longestLine + pad);
+    });
+  }
+
+  const share = tableWidth / numCols;
+  const floor = minimum.map((width) => Math.min(width, share));
+  const wish = preferred.map((width, colIdx) => Math.max(width, floor[colIdx]!));
+  const sum = (values: number[]): number => values.reduce((total, value) => total + value, 0);
+
+  // Everything fits on one line per cell: widen every column in proportion,
+  // so the table still spans the page.
+  const wished = sum(wish);
+  if (wished <= tableWidth) return wish.map((width) => (width / wished) * tableWidth);
+
+  // Otherwise each column keeps its floor and the remainder goes to the
+  // columns whose text wraps, in proportion to how much more each wants.
+  const spare = tableWidth - sum(floor);
+  const wants = wish.map((width, colIdx) => width - floor[colIdx]!);
+  const wanted = sum(wants);
+  return floor.map((width, colIdx) =>
+    wanted > 0 ? width + (spare * wants[colIdx]!) / wanted : width + spare / numCols,
+  );
 }
 
 // ---- Thematic Break ----

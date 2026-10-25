@@ -22,6 +22,7 @@ import type {
   MarkdownFootnoteReference,
   MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
+import { isHtmlLineBreak } from '@bendyline/squisq/markdown';
 import { stripHtmlTags } from './text.js';
 
 /** Active character formatting threaded down through nested inline nodes. */
@@ -97,6 +98,8 @@ export function inlineNodeToRuns(
     case 'inlineMath':
       return handlers.run(node.value, { ...format, code: true });
     case 'htmlInline':
+      // `<br>` is how a table cell breaks a line; any other tag keeps its text.
+      if (isHtmlLineBreak(node.rawHtml)) return handlers.lineBreak();
       return handlers.run(stripHtmlTags(node.rawHtml), format);
     case 'link':
       if (node.wikiTarget !== undefined && !node.url)

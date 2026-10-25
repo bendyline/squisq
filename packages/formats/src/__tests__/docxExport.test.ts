@@ -719,3 +719,13 @@ describe('DOCX export — images resized in the editor', () => {
     expect(xml).toContain('descr="Shot"');
   });
 });
+
+describe('<br> in a table cell', () => {
+  it('writes a line break, not run-together text', async () => {
+    const zip = await exportAndParse(
+      parseMarkdown('| Notes |\n| --- |\n| second row<br>continued |\n'),
+    );
+    const xml = await zip.file('word/document.xml')!.async('text');
+    expect(xml).toMatch(/second row<\/w:t><\/w:r><w:r><w:br\/><\/w:r><w:r><w:t[^>]*>continued/);
+  });
+});

@@ -1978,11 +1978,8 @@ export function Toolbar({
       showInsertInOverflow ||
       collapsedChrome.length > 0);
 
-  // Modal dialogs opened from the toolbar portal to <body>. The toolbar is a
-  // size container, and the Chromium in VS Code 1.85–1.97 made a size
-  // container the containing block for `position: fixed` descendants, so a
-  // full-window overlay rendered here was pinned to the toolbar strip and
-  // its dialog opened above the top of the window.
+  // Dialogs portal to <body>: VS Code 1.85–1.97's Chromium made this size container the
+  // containing block for their fixed overlays, which then opened above the window.
   const portalDialog = (dialog: ReactNode) =>
     createPortal(
       <div className="squisq-dialog-portal" data-theme={colorScheme}>

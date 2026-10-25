@@ -286,8 +286,8 @@ export class WinAnsiTracker {
     if (options.unicodeFont) {
       return (
         `PDF export replaced ${this.count} character(s) that its fonts cannot draw ` +
-        `(${this.samples.join(', ')}). Scripts such as CJK and emoji are not ` +
-        `available in PDF export.`
+        `(${this.samples.join(', ')}). The PDF fonts do not cover CJK scripts or ` +
+        `most emoji.`
       );
     }
     return (

@@ -452,7 +452,7 @@ describe('markdownDocToPdf with characters outside WinAnsi', () => {
     expect(warnings[0]).toContain('character(s)');
     // The bundled Unicode font draws the Cyrillic and arrows; only CJK and
     // emoji are left to replace.
-    expect(warnings[0]).toContain('CJK and emoji');
+    expect(warnings[0]).toContain('CJK scripts or most emoji');
     expect(warnings[0]).not.toMatch(/"[ЖЕё→]"/u);
   });
 
@@ -557,5 +557,77 @@ describe('word spacing', () => {
     // The kerned measure is visibly shorter, so the two cannot be confused.
     expect(helvetica.widthOfTextAtSize('Type', size)).toBeLessThan(drawn - 0.5);
     expect(shows[word + 1]!.x - x).toBeCloseTo(drawn, 2);
+  });
+});
+
+describe('tables and long words', () => {
+  /** Each piece of text the first page draws, where, and how wide. */
+  async function drawnText(markdown: string) {
+    const pdf = await exportAndLoad(parseMarkdown(markdown));
+    const page = pdf.getPages()[0]!;
+    const contents = page.node.Contents();
+    const streams = contents instanceof PDFArray ? contents.asArray() : [contents];
+    const operators = streams
+      .map((ref) => pdf.context.lookup(ref))
+      .map((stream) =>
+        new TextDecoder().decode(decodePDFRawStream(stream as PDFRawStream).decode()),
+      )
+      .join('\n');
+    const helvetica = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+    return [
+      ...operators.matchAll(/ ([\d.]+) Tf[\s\S]*?1 0 0 1 ([\d.]+) ([\d.]+) Tm\s*<([0-9A-F]*)> Tj/g),
+    ].map(([, size, x, y, hex]) => {
+      const text = (hex!.match(/../g) ?? [])
+        .map((byte) => String.fromCharCode(parseInt(byte, 16)))
+        .join('');
+      const width = [...text].reduce(
+        (sum, c) => sum + helvetica.widthOfTextAtSize(c, Number(size)),
+        0,
+      );
+      return { text, x: Number(x), y: Number(y), right: Number(x) + width };
+    });
+  }
+
+  const TABLE = [
+    '| Name | Value | Notes |',
+    '| --- | --- | --- |',
+    '| beta | 2 | second row<br>continued |',
+    '| superlongunbrokentoken-1792190847694-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz | 3 | third row |',
+  ].join('\n');
+
+  it('breaks the line at a <br> in a table cell instead of printing the tag', async () => {
+    const shows = await drawnText(TABLE);
+    expect(shows.some((show) => show.text.includes('<br'))).toBe(false);
+    const second = shows.find((show) => show.text === 'second')!;
+    const continued = shows.find((show) => show.text === 'continued')!;
+    expect(continued.x).toBeCloseTo(second.x, 2);
+    expect(continued.y).toBeLessThan(second.y);
+  });
+
+  it('keeps a long unbroken token inside its column', async () => {
+    const shows = await drawnText(TABLE);
+    const three = shows.find((show) => show.text === '3')!;
+    const token =
+      'superlongunbrokentoken-1792190847694-abcdefghijklmnopqrstuvwxyz-abcdefghijklmnopqrstuvwxyz';
+    const pieces = shows.filter((show) => show.text.length > 5 && token.includes(show.text));
+    // The token wraps onto more than one line, and none of it reaches the
+    // Value column, where it used to overprint the "3".
+    expect(new Set(pieces.map((show) => show.y)).size).toBeGreaterThan(1);
+    for (const piece of pieces) expect(piece.right).toBeLessThan(three.x);
+  });
+
+  it('sizes columns to their content', async () => {
+    const shows = await drawnText(TABLE);
+    const value = shows.find((show) => show.text === 'Value')!;
+    const notes = shows.find((show) => show.text === 'Notes')!;
+    // Letter page, 72pt margins: an equal share would be 156pt.
+    expect(notes.x - value.x).toBeLessThan(100);
+  });
+
+  it('wraps a long URL at the margin instead of running off the page', async () => {
+    const url = `https://example.com/${'segment/'.repeat(20)}end`;
+    const shows = await drawnText(`Paragraph: ${url}`);
+    expect(shows.length).toBeGreaterThan(2);
+    for (const show of shows) expect(show.right).toBeLessThanOrEqual(612 - 72 + 0.01);
   });
 });
