@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.8.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.5...@bendyline/squisq-formats@2.8.6) (2026-10-25)
+
+### Bug Fixes
+
+* Preserve untouched Markdown in Write saves ([#107](https://github.com/bendyline/squisq/issues/107)) ([ca42bb9](https://github.com/bendyline/squisq/commit/ca42bb9fd38eddc437da043c1041f9a3864c9036))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.5
+
 ## @bendyline/squisq-formats [2.8.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.4...@bendyline/squisq-formats@2.8.5) (2026-10-24)
 
 
