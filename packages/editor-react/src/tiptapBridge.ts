@@ -24,6 +24,15 @@ import {
 import { mediaEditHtmlAttribute } from '@bendyline/squisq/mediaEdit';
 import { mediaEditKeysFor } from './tiptap/mediaEditAttributes';
 import { needsAngleDestination, unwrapLinkDestination } from './markdownDestination';
+import { escapeHtml, unescapeHtml } from './htmlEntities';
+import {
+  fenceContentLine,
+  fencedCodeToHtml,
+  fencedCodeToMarkdown,
+  isFenceClose,
+  matchFenceOpen,
+  type CodeFence,
+} from './markdownFence';
 import {
   isQuoteLine,
   quoteBodyToHtml,
@@ -157,7 +166,6 @@ const RE_ESCAPE_SPAN = new RegExp(
 
 const RE_INLINE_CODE = /`(.+?)`/g;
 const BACKTICK = '`';
-const FENCE = '```';
 // `*?` on the alt — an empty alt (`![](foo.png)`) is valid markdown and
 // the most common shape for pasted/uploaded images that don't yet have
 // a human-picked caption. Previously required at least one alt char,
@@ -220,17 +228,25 @@ function joinWrappedCodeSpans(lines: string[]): string[] {
   if (!lines.some((line) => line.includes(BACKTICK))) return lines;
 
   const joined: string[] = [];
-  let inFence = false;
+  let fence: CodeFence | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    // Mirrors the fence test in the block loop below — the two must agree, or
-    // this pass could rewrite lines that loop treats as verbatim code.
-    if (line.startsWith(FENCE)) {
-      inFence = !inFence;
+    // Mirrors the fence test in the block loop below, or this pass could
+    // rewrite lines that loop treats as verbatim code. It may see MORE fences
+    // than the loop (an indented fence inside a list item): that only skips
+    // a join, never joins code.
+    if (fence) {
+      if (isFenceClose(line, fence)) fence = null;
       joined.push(line);
       continue;
     }
-    if (inFence || !leavesCodeSpanOpen(line)) {
+    const opener = matchFenceOpen(line);
+    if (opener) {
+      fence = opener;
+      joined.push(line);
+      continue;
+    }
+    if (!leavesCodeSpanOpen(line)) {
       joined.push(line);
       continue;
     }
@@ -242,7 +258,7 @@ function joinWrappedCodeSpans(lines: string[]): string[] {
       const candidate = lines[next];
       // A blank line or a fence ends the paragraph, so the span cannot reach
       // past it; the backtick was literal after all.
-      if (candidate.trim() === '' || candidate.startsWith(FENCE)) break;
+      if (candidate.trim() === '' || matchFenceOpen(candidate)) break;
       // The break becomes the space CommonMark says it is, and the
       // continuation’s indent goes with it — that is what a lazy
       // continuation line means.
@@ -305,8 +321,7 @@ export function markdownToTiptap(markdown: string): string {
   // the fence and destroy the whole frontmatter block.
   const frontmatterEnd = findFrontmatterEnd(lines);
   const outputBlocks: string[] = [];
-  let inCodeBlock = false;
-  let codeBlockLang = '';
+  let codeFence: CodeFence | null = null;
   let codeBlockLines: string[] = [];
   // Open list levels, shallowest first. A markdown list nests by INDENT,
   // but Tiptap nests by markup (the child `<ul>` is a child of the parent
@@ -522,35 +537,34 @@ export function markdownToTiptap(markdown: string): string {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Code fence handling
-    if (line.startsWith('```')) {
-      if (!inCodeBlock) {
-        flushList();
-        // A fence is the ONE block start reached before the generic
-        // "line is not a table row → flushTable()" guard below (that guard
-        // runs after the in-code-block early-continue, which a fence must
-        // precede). Without this call the buffered table rows stayed queued
-        // and were flushed by the fence's own `pushBlock`, emitting the
-        // <pre> BEFORE the <table>: a table immediately followed by a fence
-        // came back with its blocks in the opposite ORDER.
-        flushTable();
-        flushPendingBlankParagraphs();
-        inCodeBlock = true;
-        codeBlockLang = line.slice(3).trim();
+    // Code fence handling: ``` or ~~~ (three or more), closed by the same
+    // character at least as long.
+    if (codeFence) {
+      if (isFenceClose(line, codeFence)) {
+        pushBlock(fencedCodeToHtml(codeFence, codeBlockLines));
+        codeFence = null;
         codeBlockLines = [];
-        continue;
       } else {
-        const langAttr = codeBlockLang ? ` class="language-${escapeHtml(codeBlockLang)}"` : '';
-        pushBlock(`<pre><code${langAttr}>${escapeHtml(codeBlockLines.join('\n'))}</code></pre>`);
-        inCodeBlock = false;
-        codeBlockLang = '';
-        codeBlockLines = [];
-        continue;
+        codeBlockLines.push(fenceContentLine(line, codeFence));
       }
+      continue;
     }
-
-    if (inCodeBlock) {
-      codeBlockLines.push(line);
+    const fenceOpen = matchFenceOpen(line);
+    // An indented fence inside an open list belongs to the list item, which
+    // the list handling below owns; at the left margin it ends the list.
+    if (fenceOpen && (fenceOpen.indent === 0 || listStack.length === 0)) {
+      flushList();
+      // A fence is the ONE block start reached before the generic
+      // "line is not a table row → flushTable()" guard below (that guard
+      // runs after the in-code-block early-continue, which a fence must
+      // precede). Without this call the buffered table rows stayed queued
+      // and were flushed by the fence's own `pushBlock`, emitting the
+      // <pre> BEFORE the <table>: a table immediately followed by a fence
+      // came back with its blocks in the opposite ORDER.
+      flushTable();
+      flushPendingBlankParagraphs();
+      codeFence = fenceOpen;
+      codeBlockLines = [];
       continue;
     }
 
@@ -705,6 +719,19 @@ export function markdownToTiptap(markdown: string): string {
     // (the block image can't live inside the paragraph). That bug
     // manifested as a broken-image glyph after a markdown → WYSIWYG
     // round-trip for any dropped/pasted image.
+    // A standalone LINKED image (`[![alt](src)](url)`, a README badge) is the
+    // same block image carrying its link target: a link mark cannot wrap a
+    // block node, so `<a><img></a>` would lose the link on parse.
+    const linkedImageMatch = line.trim().match(/^\[!\[([^\]]*)\]\(([^()\s]+)\)\]\(([^()\s]+)\)$/);
+    if (linkedImageMatch) {
+      flushList();
+      const alt = escapeHtml(linkedImageMatch[1] ?? '');
+      const src = escapeHtml(unwrapLinkDestination(linkedImageMatch[2] ?? ''));
+      const href = escapeHtml(unwrapLinkDestination(linkedImageMatch[3] ?? ''));
+      pushBlock(`<img alt="${alt}" src="${src}" data-squisq-image-href="${href}">`);
+      continue;
+    }
+
     const standaloneImageMatch = line.trim().match(/^!\[(.*?)\]\((.+?)\)$/);
     if (standaloneImageMatch) {
       flushList();
@@ -784,9 +811,8 @@ export function markdownToTiptap(markdown: string): string {
   }
 
   // Close any remaining open blocks
-  if (inCodeBlock) {
-    const langAttr = codeBlockLang ? ` class="language-${escapeHtml(codeBlockLang)}"` : '';
-    pushBlock(`<pre><code${langAttr}>${escapeHtml(codeBlockLines.join('\n'))}</code></pre>`);
+  if (codeFence) {
+    pushBlock(fencedCodeToHtml(codeFence, codeBlockLines));
   }
   flushList();
   flushTable();
@@ -856,13 +882,9 @@ export function tiptapToMarkdown(html: string): string {
     // editor.getHTML() output carries class="squisq-code-block" on the
     // <pre> (StarterKit codeBlock HTMLAttributes), which a bare
     // `<pre><code` anchor never matches, silently dropping the fence.
-    const codeMatch = remaining.match(/^<pre\b[^>]*><code\b([^>]*)>(.*?)<\/code><\/pre>/s);
+    const codeMatch = remaining.match(/^<pre\b([^>]*)><code\b([^>]*)>(.*?)<\/code><\/pre>/s);
     if (codeMatch) {
-      const lang = /\bclass="language-([^"]*)"/.exec(codeMatch[1] ?? '')?.[1] ?? '';
-      const code = unescapeHtml(codeMatch[2]);
-      lines.push('```' + lang);
-      lines.push(code);
-      lines.push('```');
+      lines.push(...fencedCodeToMarkdown(codeMatch[1] ?? '', codeMatch[2] ?? '', codeMatch[3]));
       lines.push('');
       remaining = remaining.slice(codeMatch[0].length);
       continue;
@@ -1018,8 +1040,9 @@ export function tiptapToMarkdown(html: string): string {
         const serialized = serializeImage(src, alt, attrs);
         // The attribute values are still entity-encoded. The markdown
         // shorthand wants them decoded (as the inline path's final
-        // `unescapeHtml` does); a sized raw `<img>` must stay encoded.
-        lines.push(serialized.startsWith('<') ? serialized : unescapeHtml(serialized));
+        // `unescapeHtml` does); a sized raw `<img>` (linked or not) must
+        // stay encoded.
+        lines.push(serialized.includes('<img') ? serialized : unescapeHtml(serialized));
         lines.push('');
       }
       remaining = remaining.slice(imgMatch[0].length);
@@ -1525,17 +1548,22 @@ function serializeImage(src: string, alt: string, attrs: string): string {
   const width = /\bwidth="([^"]*)"/i.exec(attrs)?.[1];
   const height = /\bheight="([^"]*)"/i.exec(attrs)?.[1];
   const title = /\btitle="([^"]*)"/i.exec(attrs)?.[1];
+  // A linked image (`[![alt](src)](url)`, a README badge): the editor's image
+  // is a block node a link mark cannot wrap, so its target rides along.
+  const href = /\bdata-squisq-image-href="([^"]*)"/i.exec(attrs)?.[1];
+  const linked = (image: string): string =>
+    href ? `[${image}](${escapedDestination(href)})` : image;
   // Upload placeholders are editor state, never durable image references.
   if (title?.startsWith('squisq-upload:')) return '';
   if (!width && !height) {
-    return `![${alt}](${escapedDestination(src)})`;
+    return linked(`![${alt}](${escapedDestination(src)})`);
   }
   const parts = [`<img alt="${alt}" src="${src}"`];
   if (width) parts.push(` width="${width}"`);
   if (height) parts.push(` height="${height}"`);
   if (title) parts.push(` title="${title}"`);
   parts.push('>');
-  return parts.join('');
+  return linked(parts.join(''));
 }
 
 /**
@@ -1547,23 +1575,6 @@ function serializeImage(src: string, alt: string, attrs: string): string {
  */
 function escapedDestination(attrValue: string): string {
   return needsAngleDestination(attrValue) ? `&lt;${attrValue}&gt;` : attrValue;
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function unescapeHtml(text: string): string {
-  return text
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&nbsp;|&#160;|&#xA0;/gi, '\u00a0')
-    .replace(/&amp;/g, '&');
 }
 
 /** Convert inline markdown to HTML for Tiptap consumption */
