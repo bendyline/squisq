@@ -63,6 +63,15 @@ export interface StartBlockConfig {
    * (so a square crop, such as a social link card, shows all of it).
    */
   coverStyle?: 'scrim' | 'frosted';
+  /**
+   * Where a frosted cover puts its subtitle. `'stacked'` (default): under the title, on the
+   * title's plate. `'split'`: the title on a plate near the top of the frame and the
+   * subtitle, set as a display deck, on a plate of its own near the bottom — a vertical
+   * cover's name and its hook. Both plates stay inside the middle 3:4 that feeds crop a
+   * 9:16 frame to, with even room above the title and below the subtitle. A split that would crowd the frame (two plates closer than half
+   * the title's size) stacks instead. No effect without a subtitle or with the scrim style.
+   */
+  coverLayout?: 'stacked' | 'split';
 }
 
 /**

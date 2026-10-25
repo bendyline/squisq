@@ -650,6 +650,125 @@ describe('coverBlock frosted style', () => {
     expect(subtitle!.cy + subtitle!.height / 2).toBeLessThan(plate.y + plate.height);
   });
 
+  describe('split layout', () => {
+    const hook = "Over 800 volcanoes and Earth's longest recent lava flow";
+    const { width: PW, height: PH } = VIEWPORT_PRESETS.portrait;
+
+    it('puts the title up top and the subtitle on its own plate where the stacked plate rests', () => {
+      const split = frostedCoverLayout('La Payunia', hook, portraitContext, 'split');
+      const stacked = frostedCoverLayout('La Payunia', undefined, portraitContext);
+      // The bottom margin mirrored: as much room over the title as under the deck.
+      expect(split.plate.y).toBeCloseTo(PH * 0.17, 5);
+      expect(split.subtitlePlate!.y + split.subtitlePlate!.height).toBeCloseTo(
+        stacked.plate.y + stacked.plate.height,
+        5,
+      );
+      // Alone up top, the title outgrows its stacked size; the deck is display type at about two-thirds of it.
+      expect(split.fontSize).toBeGreaterThan(stacked.fontSize * 1.4);
+      expect(split.subtitle!.fontSize).toBeLessThan(split.fontSize * 0.7);
+      expect(split.subtitle!.fontSize).toBeGreaterThan(split.fontSize * 0.55);
+      expect(split.subtitle!.lines.join(' ')).toBe(hook);
+      expect(split.subtitle!.lines).toHaveLength(3);
+    });
+
+    it('fits a 45-character hook in three lines at full size', () => {
+      // Qualla's limit for a Short's hook. Text that needs a fourth line steps the deck down.
+      const full = frostedCoverLayout(
+        'Humberstone',
+        'Ghost town of the industry that fed the world',
+        portraitContext,
+        'split',
+      );
+      const long = frostedCoverLayout('Tonga', `${hook} ${hook}`, portraitContext, 'split');
+      expect(full.subtitle!.lines.length).toBeLessThanOrEqual(3);
+      expect(long.subtitle!.lines.length).toBeGreaterThan(3);
+      expect(long.subtitle!.fontSize).toBeLessThan(full.subtitle!.fontSize);
+    });
+
+    it('keeps both plates inside the middle 3:4 a feed crops a 9:16 cover to', () => {
+      const cropTop = (PH - (PW * 4) / 3) / 2;
+      for (const [title, sub] of [
+        ['Palacio de Aguas Corrientes', 'A giant tank in a ballgown'],
+        ['Marcahuamachuco', 'The citadel six centuries older than Machu Picchu'],
+        ['Tonga', 'The Pacific kingdom no empire ever took'],
+      ]) {
+        const { plate, subtitlePlate } = frostedCoverLayout(title, sub, portraitContext, 'split');
+        expect(plate.y).toBeGreaterThan(cropTop);
+        expect(subtitlePlate!.y + subtitlePlate!.height).toBeLessThan(PH - cropTop);
+        for (const p of [plate, subtitlePlate!]) {
+          expect(p.x).toBeGreaterThanOrEqual(0);
+          expect(p.x + p.width).toBeLessThanOrEqual(PW);
+        }
+      }
+    });
+
+    it('centres each text on its own plate', () => {
+      const { plate, title, subtitle, subtitlePlate } = frostedCoverLayout(
+        'Antarctic Peninsula',
+        'Where the Andes rise again from the sea',
+        portraitContext,
+        'split',
+      );
+      expect(title.cy).toBeCloseTo(plate.y + plate.height / 2, 5);
+      expect(subtitle!.cy).toBeCloseTo(subtitlePlate!.y + subtitlePlate!.height / 2, 5);
+      expect(subtitle!.cx).toBeCloseTo(subtitlePlate!.x + subtitlePlate!.width / 2, 5);
+      expect(subtitle!.baselineShift).toBeCloseTo(opticalCentreShiftEm(subtitle!.lines), 5);
+    });
+
+    it('draws two plates and a display deck', () => {
+      const layers = coverBlock(
+        frosted('La Payunia', { subtitle: hook, coverLayout: 'split' }),
+        portraitContext,
+      );
+      expect(layers.map((l) => l.id)).toEqual([
+        'cover-hero',
+        'cover-plate',
+        'cover-title',
+        'cover-subtitle-plate',
+        'cover-subtitle',
+      ]);
+      const deck = findText(layers, 'cover-subtitle')!;
+      expect(deck.content.style.fontWeight).toBe('bold');
+      expect(deck.content.style.verticalAlign).toBe('middle');
+      expect(findShape(layers, 'cover-subtitle-plate')!.content.backdropBlur).toBeGreaterThan(0);
+    });
+
+    it('stacks when the two plates would crowd the frame', () => {
+      const crowded = frostedCoverLayout(
+        'Humberstone and Santa Laura Saltpeter Works',
+        // A paragraph, not a hook: at the deck's minimum size it still fills the frame.
+        Array(4)
+          .fill(
+            'The ghost town of the nitrate industry that fed half the world, ' +
+              'built in the driest desert on Earth and kept standing by its dry air.',
+          )
+          .join(' '),
+        landscapeContext,
+        'split',
+      );
+      expect(crowded.subtitlePlate).toBeUndefined();
+      expect(crowded.subtitle!.cy).toBeLessThan(crowded.plate.y + crowded.plate.height);
+    });
+
+    it('changes nothing without a subtitle, and flows from StartBlockConfig', () => {
+      expect(frostedCoverLayout('Tonga', undefined, portraitContext, 'split')).toEqual(
+        frostedCoverLayout('Tonga', undefined, portraitContext),
+      );
+      const config: StartBlockConfig = {
+        heroSrc: 'h.jpg',
+        title: 'Tonga',
+        subtitle: 'The Pacific kingdom no empire ever took',
+        coverStyle: 'frosted',
+        coverLayout: 'split',
+      };
+      expect(startBlockToCoverInput(config).coverLayout).toBe('split');
+      expect(
+        expandCoverBlock(config, portraitContext).some((l) => l.id === 'cover-subtitle-plate'),
+      ).toBe(true);
+      expect(startBlockToCoverInput({ title: 'Plain' })).not.toHaveProperty('coverLayout');
+    });
+  });
+
   it('falls back to the theme background cover without a hero', () => {
     const layers = coverBlock({ title: 'No Hero', coverStyle: 'frosted' }, landscapeContext);
     expect(findShape(layers, 'cover-plate')).toBeUndefined();

@@ -381,6 +381,19 @@ export const ImageWithMediaProvider = Image.extend({
         renderHTML: (attrs: { height?: number | null }) =>
           attrs.height ? { height: String(attrs.height) } : {},
       },
+      // A linked image (`[![alt](src)](url)`, a README badge). This image is
+      // a block node, which a link mark cannot wrap, so the parser lifts it
+      // out of its `<a>` and the link was lost on every save. Keep the target
+      // as an attribute the Markdown bridge writes back around the image.
+      href: {
+        default: null,
+        parseHTML: (element) =>
+          element.getAttribute('data-squisq-image-href') ??
+          element.closest('a[href]')?.getAttribute('href') ??
+          null,
+        renderHTML: (attrs: { href?: string | null }) =>
+          attrs.href ? { 'data-squisq-image-href': attrs.href } : {},
+      },
     };
   },
   parseHTML() {

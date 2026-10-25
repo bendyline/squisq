@@ -1978,6 +1978,16 @@ export function Toolbar({
       showInsertInOverflow ||
       collapsedChrome.length > 0);
 
+  // Dialogs portal to <body>: VS Code 1.85–1.97's Chromium made this size container the
+  // containing block for their fixed overlays, which then opened above the window.
+  const portalDialog = (dialog: ReactNode) =>
+    createPortal(
+      <div className="squisq-dialog-portal" data-theme={colorScheme}>
+        {dialog}
+      </div>,
+      document.body,
+    );
+
   return (
     <div
       ref={toolbarRootRef}
@@ -2636,18 +2646,20 @@ export function Toolbar({
       {slotRight}
 
       {/* Document settings (frontmatter) dialog */}
-      {showDocumentChrome && showDocSettings && (
-        <DocumentSettingsDialog
-          markdownSource={markdownSource}
-          onSave={(next) => {
-            setMarkdownSource(next);
-            setShowDocSettings(false);
-          }}
-          onClose={() => setShowDocSettings(false)}
-          defaultThemeId={previewSettings?.inheritedThemeId}
-          defaultThemeLabel={previewSettings?.inheritedThemeLabel}
-        />
-      )}
+      {showDocumentChrome &&
+        showDocSettings &&
+        portalDialog(
+          <DocumentSettingsDialog
+            markdownSource={markdownSource}
+            onSave={(next) => {
+              setMarkdownSource(next);
+              setShowDocSettings(false);
+            }}
+            onClose={() => setShowDocSettings(false)}
+            defaultThemeId={previewSettings?.inheritedThemeId}
+            defaultThemeLabel={previewSettings?.inheritedThemeLabel}
+          />,
+        )}
 
       {/* Custom layout manager — full-window list + designer dialog. */}
       {showDocumentChrome && showLayoutManager && (
@@ -2656,19 +2668,20 @@ export function Toolbar({
 
       {contextMenuAvailable && <WikiLinkMenuItems onEdit={() => handleAction('link')} />}
       {/* Link insert/edit dialog — shared by WYSIWYG and Raw views. */}
-      {linkDialog && (
-        <LinkDialog
-          mode={linkDialog.mode}
-          kind={linkDialog.wiki ? 'wiki' : 'url'}
-          initialText={linkDialog.initialText}
-          initialUrl={linkDialog.initialUrl}
-          onConfirm={handleLinkConfirm}
-          onClose={() => setLinkDialog(null)}
-          documentLinkProvider={documentLinkProvider}
-          linkSchemes={linkSchemes}
-        />
-      )}
-      {videoEmbedDialog}
+      {linkDialog &&
+        portalDialog(
+          <LinkDialog
+            mode={linkDialog.mode}
+            kind={linkDialog.wiki ? 'wiki' : 'url'}
+            initialText={linkDialog.initialText}
+            initialUrl={linkDialog.initialUrl}
+            onConfirm={handleLinkConfirm}
+            onClose={() => setLinkDialog(null)}
+            documentLinkProvider={documentLinkProvider}
+            linkSchemes={linkSchemes}
+          />,
+        )}
+      {videoEmbedDialog && portalDialog(videoEmbedDialog)}
 
       {/* Insert menu — portaled to the document body so the overflow:hidden
           actions row doesn't clip it. Position computed from trigger rect. */}

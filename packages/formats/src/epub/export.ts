@@ -37,7 +37,7 @@ import type {
   MarkdownTableCell,
   MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
-import { readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
+import { isHtmlLineBreak, readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
 import { FootnoteIndex, footnoteIds } from '../shared/footnotes.js';
 import { exportImageBytes, svgIslandsAsImages } from '../shared/svgIslands.js';
 import { escapeXml } from '../ooxml/xmlUtils.js';
@@ -722,7 +722,9 @@ function inlineToXhtml(node: MarkdownInlineNode, ctx: EpubRenderCtx): string {
       return `<span class="math">${escapeXml(node.value)}</span>`;
 
     case 'htmlInline':
-      // Strip tags for XHTML safety
+      // `<br>` is how a table cell breaks a line. Other tags are stripped for
+      // XHTML safety.
+      if (isHtmlLineBreak(node.rawHtml)) return '<br/>';
       return escapeXml(node.rawHtml.replace(/<[^>]+>/g, ''));
 
     case 'inlineIcon': {

@@ -8,6 +8,7 @@ import {
   walkMarkdownTree,
   findNodesByType,
   extractPlainText,
+  isHtmlLineBreak,
   countNodes,
   createDocument,
   parseFrontmatter,
@@ -1605,5 +1606,19 @@ describe('extractPlainText hard breaks', () => {
     expect(extractPlainText(parseMarkdown('Line one\nafter a wrap'))).toBe(
       'Line one\nafter a wrap',
     );
+  });
+});
+
+describe('extractPlainText and <br>', () => {
+  it('reads a <br> in a table cell as a line break, as it reads a hard break', () => {
+    const doc = parseMarkdown('| Notes |\n| --- |\n| second row<br>continued |\n');
+    expect(extractPlainText(doc)).toContain('second row\ncontinued');
+  });
+
+  it('reads <br/> and <br /> the same way', () => {
+    expect(isHtmlLineBreak('<br/>')).toBe(true);
+    expect(isHtmlLineBreak('<BR />')).toBe(true);
+    expect(isHtmlLineBreak('<b>')).toBe(false);
+    expect(isHtmlLineBreak('<br data-x="1">')).toBe(false);
   });
 });

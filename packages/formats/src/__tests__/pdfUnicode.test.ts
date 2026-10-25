@@ -97,7 +97,7 @@ describe('PDF export of text the standard fonts cannot encode', () => {
     expect(result.text).toContain('Жизнь');
     expect(result.text).not.toContain('中文');
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('CJK and emoji');
+    expect(warnings[0]).toContain('do not cover CJK scripts or most emoji');
   });
 
   it('replaces as before when the caller turns the Unicode font off', async () => {

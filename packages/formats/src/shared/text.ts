@@ -8,6 +8,7 @@
  */
 
 import type { MarkdownInlineNode } from '@bendyline/squisq/markdown';
+import { isHtmlLineBreak } from '@bendyline/squisq/markdown';
 
 /** Strip HTML tags from a string, keeping only the text content. */
 export function stripHtmlTags(html: string): string {
@@ -36,6 +37,8 @@ export function inlineToPlainText(node: MarkdownInlineNode): string {
       return `{[${node.token}]}`;
     case 'break':
       return ' ';
+    case 'htmlInline':
+      return isHtmlLineBreak(node.rawHtml) ? ' ' : '';
     default:
       return '';
   }

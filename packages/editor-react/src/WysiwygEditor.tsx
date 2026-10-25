@@ -14,12 +14,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { Selection } from '@tiptap/pm/state';
-import { Extension } from '@tiptap/core';
+import { Extension, getHTMLFromFragment } from '@tiptap/core';
 import type { EditorView as ProseMirrorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import { AlignedTableCell, AlignedTableHeader } from './tiptap/alignedTableCells';
+import { CodeFenceSource } from './tiptap/codeFenceSource';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import Link from '@tiptap/extension-link';
@@ -73,6 +74,8 @@ import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squ
 import { findBlockSliceByHeadingIndex } from './blockSlice';
 import { stripFrontmatter } from './frontmatter';
 import { ingestForWrite, persistFromWrite } from './wrapPolicy';
+import { createSourceBaseline, preserveSource } from './sourcePreservation';
+import type { SourceBaseline } from './sourcePreservation';
 import { useEditorContext } from './EditorContext';
 import { buildMentionExtension } from './MentionExtension';
 import { markdownToTiptap, tiptapToMarkdown } from './tiptapBridge';
@@ -400,6 +403,15 @@ export function WysiwygEditor({
       initialDisplayBodyRef.current = body;
     }
   }
+  // The bound body exactly as last loaded into Tiptap (frontmatter stripped,
+  // wrapping intact). Saves write its original bytes back for every region an
+  // edit did not touch (sourcePreservation.ts) instead of re-serializing the
+  // whole document. The alignment is built at the first edit after each load,
+  // so documents that are only opened never pay for it.
+  const loadedSourceRef = useRef<{ body: string; baseline: SourceBaseline | null } | null>(null);
+  if (loadedSourceRef.current === null) {
+    loadedSourceRef.current = { body: stripFrontmatter(editorSource).body, baseline: null };
+  }
   // Tiptap reads `content` only when it creates the editor, but the options
   // object passed to useEditor is rebuilt on every render. Converting the body
   // inline re-ran markdownToTiptap over the whole mount-time document on every
@@ -432,6 +444,7 @@ export function WysiwygEditor({
         },
       }),
       HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+      CodeFenceSource,
       Superscript,
       Subscript,
       MarkdownEscape,
@@ -505,7 +518,19 @@ export function WysiwygEditor({
       // selected block into the previous block's range. The expensive full-doc
       // parse remains debounced in EditorContext, so correctness here does not
       // reintroduce parse-on-every-keystroke work.
-      const bodyMd = persistFromWrite(tiptapToMarkdown(ed.getHTML()), wrapStateRef.current);
+      const serialize = (html: string): string =>
+        persistFromWrite(tiptapToMarkdown(html), wrapStateRef.current);
+      let bodyMd = serialize(ed.getHTML());
+      const loaded = loadedSourceRef.current;
+      if (loaded) {
+        // The first change after a load starts from the document as loaded,
+        // so its `before` is what that load serializes to.
+        loaded.baseline ??= createSourceBaseline(
+          loaded.body,
+          serialize(getHTMLFromFragment(transaction.before.content, ed.schema)),
+        );
+        bodyMd = preserveSource(loaded.baseline, bodyMd);
+      }
       const frontmatter =
         sourceLayoutRef.current === 'document'
           ? String(ed.state.doc.attrs.sourceFrontmatter ?? '')
@@ -878,6 +903,7 @@ export function WysiwygEditor({
       const { body, frontmatter } = stripFrontmatter(editorSource);
       pendingLocalSourcesRef.current = [];
       frontmatterRef.current = frontmatter;
+      loadedSourceRef.current = { body, baseline: null };
       // Re-detect the wrap convention on every external ingest (echoes of our
       // own writes were dropped above, so a manual Wrap/Unwrap transform or a
       // Source-view edit updates the convention we persist with).

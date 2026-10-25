@@ -207,6 +207,7 @@ export {
   walkMarkdownTree,
   findNodesByType,
   extractPlainText,
+  isHtmlLineBreak,
   countNodes,
   createDocument,
   parseFrontmatter,

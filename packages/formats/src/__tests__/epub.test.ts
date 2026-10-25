@@ -8,6 +8,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import JSZip from 'jszip';
 import type { MarkdownDocument, MarkdownBlockNode } from '@bendyline/squisq/markdown';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownDocToEpub } from '../epub/export';
 import type { EpubExportOptions } from '../epub/export';
 
@@ -759,5 +760,15 @@ describe('markdownDocToEpub', () => {
       expect(ids.filter((id) => id.startsWith('img-'))).toHaveLength(2);
       expect(new Set(ids).size).toBe(ids.length);
     });
+  });
+});
+
+describe('<br> in a table cell', () => {
+  it('keeps the line break', async () => {
+    const zip = await exportAndUnzip(
+      parseMarkdown('# Notes\n\n| Notes |\n| --- |\n| second row<br>continued |\n'),
+    );
+    const chapter = await zip.file('OEBPS/chapters/chapter-001.xhtml')!.async('string');
+    expect(chapter).toContain('second row<br/>continued');
   });
 });
