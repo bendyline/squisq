@@ -304,6 +304,13 @@ function validateStartBlock(value: unknown, issues: DocSchemaIssue[]): void {
   ) {
     add(issues, 'startBlock.coverStyle', 'must be "scrim" or "frosted"', value.coverStyle);
   }
+  if (
+    value.coverLayout !== undefined &&
+    value.coverLayout !== 'stacked' &&
+    value.coverLayout !== 'split'
+  ) {
+    add(issues, 'startBlock.coverLayout', 'must be "stacked" or "split"', value.coverLayout);
+  }
 }
 
 function validateCaptions(value: unknown, issues: DocSchemaIssue[]): void {

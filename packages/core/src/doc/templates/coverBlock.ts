@@ -11,7 +11,9 @@
  *   photo with the title on a frosted-glass plate (`'frosted'`): the plate rests near
  *   the bottom, grows upward for longer titles, and stays inside the frame's centre
  *   square so a square crop (a social link card) still shows the whole title
- * - Large centered title with optional subtitle
+ * - Large centered title with optional subtitle; a frosted cover can split them
+ *   (`coverLayout: 'split'`), the title on a plate up top and the subtitle as a deck
+ *   on its own plate below, for a vertical cover's name and hook
  * - No animation delays (shown at rest, not during playback)
  *
  * This is shared code used by both site and efb-app doc renderers.
@@ -74,6 +76,8 @@ export interface CoverBlockInput {
   imageTreatment?: 'none' | 'mono' | 'duotone' | 'warm' | 'cool';
   /** How a hero cover keeps its title legible (see StartBlockConfig.coverStyle). */
   coverStyle?: 'scrim' | 'frosted';
+  /** Where a frosted cover puts its subtitle (see StartBlockConfig.coverLayout). */
+  coverLayout?: 'stacked' | 'split';
 }
 
 /** Base (pre-viewport-scale) font size for a full-size cover title. */
@@ -162,6 +166,41 @@ function coverScrimGradient(background: string): string {
   return `linear-gradient(0deg, ${stops.join(', ')})`;
 }
 
+/**
+ * Fit display text to a frosted plate at most `maxPlateWidth` wide: balanced lines in the
+ * plate's column, the size stepping down (to `minSize`) while the text needs more than
+ * `maxLines` lines or a single word overflows the column.
+ */
+function fitFrostedText(
+  text: string,
+  size: number,
+  minSize: number,
+  maxPlateWidth: number,
+  maxLines: number,
+): { fontSize: number; lines: string[]; column: number; textWidth: number } {
+  const wrapAt = (s: number) => {
+    const column = maxPlateWidth - 2 * FROSTED_PAD_X_EM * s;
+    const lines = text.split('\n').flatMap((line) => balancedDisplayLines(line, s, column));
+    const width = Math.max(...lines.map((line) => estimateDisplayTextWidth(line, s)));
+    return { lines, width, column };
+  };
+  let fontSize = size;
+  let wrapped = wrapAt(fontSize);
+  while (
+    (wrapped.lines.length > maxLines || wrapped.width > wrapped.column) &&
+    fontSize > minSize
+  ) {
+    fontSize = Math.max(minSize, Math.floor(fontSize * 0.95));
+    wrapped = wrapAt(fontSize);
+  }
+  return {
+    fontSize,
+    lines: wrapped.lines,
+    column: wrapped.column,
+    textWidth: Math.min(wrapped.width, wrapped.column),
+  };
+}
+
 /** Line height of a frosted cover's title (display type sits tighter than the scrim's 1.4). */
 const FROSTED_LINE_HEIGHT = 1.12;
 /** Lines a frosted title may take before its size steps down. */
@@ -174,8 +213,27 @@ const FROSTED_SQUARE_SHARE = 0.9;
  * buttons over its bottom fifth.
  */
 const FROSTED_BOTTOM_MARGIN_PCT = { wide: 7, tall: 17 } as const;
+/**
+ * Gap above a split cover's title plate, in percent of frame height: the bottom margin
+ * mirrored, so a feed's 3:4 crop of a 9:16 frame (Instagram's grid starts 12.5% down, the
+ * Shorts shelf about 8%) leaves as much room over the title as under the deck.
+ */
+const FROSTED_TOP_MARGIN_PCT = FROSTED_BOTTOM_MARGIN_PCT;
 /** Subtitle size (pre-viewport-scale), as on the scrim cover. */
 const COVER_SUBTITLE_BASE_PX = 40;
+/**
+ * A split cover's deck (its subtitle set as display type): base size, pre-viewport-scale.
+ * It scales as a title does, so it stays about 0.63 of the split title in every frame:
+ * 80px under a 126px title on a 1080×1920 cover, which a vertical frame's title scale
+ * (0.7) would otherwise shrink below the body-scaled subtitle floor.
+ */
+const COVER_DECK_BASE_PX = 114;
+/** A split cover's title starts this much larger than a stacked one's: it has the top to itself. */
+const FROSTED_SPLIT_TITLE_SCALE = 1.5;
+/** Lines a deck may take before its size steps down. */
+const FROSTED_DECK_MAX_LINES = 3;
+/** Narrowest gap a split cover leaves between its plates, in em of the title size. */
+const FROSTED_SPLIT_MIN_GAP_EM = 0.5;
 
 /** Geometry of a frosted cover, in px of the viewport (exported for tests and tools). */
 export interface FrostedCoverLayout {
@@ -187,7 +245,7 @@ export interface FrostedCoverLayout {
   plate: { x: number; y: number; width: number; height: number; radius: number };
   /** The title's box: as wide as its longest line, centred on the title block with room for the font's full ascent and descent. */
   title: { cx: number; cy: number; width: number; height: number };
-  /** The subtitle's box under the title, inside the plate. */
+  /** The subtitle's box: under the title inside the plate, or centred on `subtitlePlate` when split. */
   subtitle?: {
     cx: number;
     cy: number;
@@ -195,7 +253,11 @@ export interface FrostedCoverLayout {
     height: number;
     fontSize: number;
     lines: string[];
+    /** Split covers only: optical centring of the deck's ink (see {@link opticalCentreShiftEm}). */
+    baselineShift?: number;
   };
+  /** Split covers only: the subtitle's own plate near the bottom (`plate` then sits near the top). */
+  subtitlePlate?: { x: number; y: number; width: number; height: number; radius: number };
   /** Optical centring of the title's ink (see {@link opticalCentreShiftEm}). */
   baselineShift: number;
   /** Backdrop blur radius, px. */
@@ -208,37 +270,114 @@ export interface FrostedCoverLayout {
  * minimum when it needs more); the plate wraps it with even padding, its bottom edge
  * a fixed margin above the frame's, so a longer title grows the plate upward. Every
  * part of it stays inside the centre square of a wide frame.
+ *
+ * `'split'` moves the title's plate to a fixed margin below the frame's top, starting the
+ * title {@link FROSTED_SPLIT_TITLE_SCALE} times larger, and gives the subtitle a plate of
+ * its own where the stacked plate rests, its text set as a display deck (the title's face
+ * at about two-thirds the title's size, up to {@link FROSTED_DECK_MAX_LINES} balanced
+ * lines before it steps down).
  */
 export function frostedCoverLayout(
   title: string,
   subtitle: string | undefined,
   context: TemplateContext,
+  coverLayout: 'stacked' | 'split' = 'stacked',
 ): FrostedCoverLayout {
   const { width: frameW, height: frameH } = context.viewport;
   const shortSide = Math.min(frameW, frameH);
   const maxPlateWidth = FROSTED_SQUARE_SHARE * shortSide;
   const minSize = themedFontSize(COVER_TITLE_MIN_BASE_PX, context, true);
 
-  const wrapAt = (size: number) => {
-    const column = maxPlateWidth - 2 * FROSTED_PAD_X_EM * size;
-    const lines = title.split('\n').flatMap((line) => balancedDisplayLines(line, size, column));
-    const width = Math.max(...lines.map((line) => estimateDisplayTextWidth(line, size)));
-    return { lines, width, column };
+  const tall = frameH > frameW;
+  const marginPct = tall ? FROSTED_BOTTOM_MARGIN_PCT.tall : FROSTED_BOTTOM_MARGIN_PCT.wide;
+  const plateBottom = frameH * (1 - marginPct / 100);
+  const cx = frameW / 2;
+  /** The title fitted from `scale` × its cover size, with its plate padding and box. */
+  const fitTitle = (scale: number) => {
+    const fit = fitFrostedText(
+      title,
+      Math.round(scale * themedFontSize(fitCoverTitleSize(title), context, true)),
+      minSize,
+      maxPlateWidth,
+      FROSTED_MAX_LINES,
+    );
+    const textHeight = fit.lines.length * fit.fontSize * FROSTED_LINE_HEIGHT;
+    const padX = FROSTED_PAD_X_EM * fit.fontSize;
+    const padY = FROSTED_PAD_Y_EM * fit.fontSize;
+    return {
+      ...fit,
+      textHeight,
+      padX,
+      padY,
+      radius: FROSTED_RADIUS_EM * fit.fontSize,
+      // The box spans the plate's padding too: shrink-to-fit measures the font's whole
+      // ascent and descent (about 1.3 em), which overflows a box of 1.12 em lines and
+      // would scale every title down by up to 14%.
+      box: (plateY: number) => ({
+        cx,
+        cy: plateY + padY + textHeight / 2,
+        width: frostedTitleBoxWidth(fit.lines, fit.fontSize, fit.textWidth),
+        height: textHeight + 2 * padY,
+      }),
+    };
   };
-  let fontSize = themedFontSize(fitCoverTitleSize(title), context, true);
-  let wrapped = wrapAt(fontSize);
-  while (
-    (wrapped.lines.length > FROSTED_MAX_LINES || wrapped.width > wrapped.column) &&
-    fontSize > minSize
-  ) {
-    fontSize = Math.max(minSize, Math.floor(fontSize * 0.95));
-    wrapped = wrapAt(fontSize);
+
+  if (coverLayout === 'split' && subtitle?.trim()) {
+    const { fontSize, lines, textWidth, textHeight, padX, padY, radius, box } =
+      fitTitle(FROSTED_SPLIT_TITLE_SCALE);
+    const deckMin = themedFontSize(COVER_SUBTITLE_BASE_PX, context, false);
+    const deck = fitFrostedText(
+      subtitle.trim(),
+      Math.max(deckMin, themedFontSize(COVER_DECK_BASE_PX, context, true)),
+      deckMin,
+      maxPlateWidth,
+      FROSTED_DECK_MAX_LINES,
+    );
+    const deckPadX = FROSTED_PAD_X_EM * deck.fontSize;
+    const deckHeight =
+      deck.lines.length * deck.fontSize * FROSTED_LINE_HEIGHT +
+      2 * FROSTED_PAD_Y_EM * deck.fontSize;
+    const deckWidth = deck.textWidth + 2 * deckPadX;
+    const topPct = tall ? FROSTED_TOP_MARGIN_PCT.tall : FROSTED_TOP_MARGIN_PCT.wide;
+    const titlePlate = {
+      x: cx - (textWidth + 2 * padX) / 2,
+      y: (frameH * topPct) / 100,
+      width: textWidth + 2 * padX,
+      height: textHeight + 2 * padY,
+      radius,
+    };
+    const deckPlate = {
+      x: cx - deckWidth / 2,
+      y: plateBottom - deckHeight,
+      width: deckWidth,
+      height: deckHeight,
+      // The title's corners, so the two plates read as a pair.
+      radius: Math.min(radius, deckHeight / 2),
+    };
+    const gap = deckPlate.y - (titlePlate.y + titlePlate.height);
+    if (gap >= FROSTED_SPLIT_MIN_GAP_EM * fontSize) {
+      return {
+        fontSize,
+        lines,
+        plate: titlePlate,
+        title: box(titlePlate.y),
+        subtitle: {
+          cx,
+          cy: deckPlate.y + deckHeight / 2,
+          width: frostedTitleBoxWidth(deck.lines, deck.fontSize, deck.textWidth),
+          height: deckHeight,
+          fontSize: deck.fontSize,
+          lines: deck.lines,
+          baselineShift: opticalCentreShiftEm(deck.lines),
+        },
+        subtitlePlate: deckPlate,
+        baselineShift: opticalCentreShiftEm(lines),
+        blur: frostedBlurPx(context),
+      };
+    }
   }
-  const { lines, column } = wrapped;
-  const textWidth = Math.min(wrapped.width, column);
-  const textHeight = lines.length * fontSize * FROSTED_LINE_HEIGHT;
-  const padX = FROSTED_PAD_X_EM * fontSize;
-  const padY = FROSTED_PAD_Y_EM * fontSize;
+
+  const { fontSize, lines, column, textWidth, textHeight, padX, padY, radius, box } = fitTitle(1);
 
   let sub:
     { lines: string[]; width: number; height: number; fontSize: number; gap: number } | undefined;
@@ -259,11 +398,7 @@ export function frostedCoverLayout(
 
   const plateWidth = Math.max(textWidth, sub?.width ?? 0) + 2 * padX;
   const plateHeight = textHeight + (sub ? sub.gap + sub.height : 0) + 2 * padY;
-  const marginPct =
-    frameH > frameW ? FROSTED_BOTTOM_MARGIN_PCT.tall : FROSTED_BOTTOM_MARGIN_PCT.wide;
-  const plateBottom = frameH * (1 - marginPct / 100);
   const plateY = plateBottom - plateHeight;
-  const cx = frameW / 2;
 
   return {
     fontSize,
@@ -273,17 +408,9 @@ export function frostedCoverLayout(
       y: plateY,
       width: plateWidth,
       height: plateHeight,
-      radius: FROSTED_RADIUS_EM * fontSize,
+      radius,
     },
-    // The box spans the plate's padding too: shrink-to-fit measures the font's whole
-    // ascent and descent (about 1.3 em), which overflows a box of 1.12 em lines and
-    // would scale every title down by up to 14%.
-    title: {
-      cx,
-      cy: plateY + padY + textHeight / 2,
-      width: frostedTitleBoxWidth(lines, fontSize, textWidth),
-      height: textHeight + 2 * padY,
-    },
+    title: box(plateY),
     ...(sub
       ? {
           subtitle: {
@@ -307,7 +434,7 @@ export function frostedCoverLayout(
 /** The frosted plate, title and subtitle layers that sit over a clear hero. */
 function frostedCoverLayers(input: CoverBlockInput, context: TemplateContext): Layer[] {
   const { theme, viewport } = context;
-  const layout = frostedCoverLayout(input.title, input.subtitle, context);
+  const layout = frostedCoverLayout(input.title, input.subtitle, context, input.coverLayout);
   const lightText = frostedUnderLightText(context);
   const layers: Layer[] = [
     frostedPlateLayer('cover-plate', layout.plate, context),
@@ -341,7 +468,36 @@ function frostedCoverLayers(input: CoverBlockInput, context: TemplateContext): L
         : { type: 'fadeIn', duration: 0.8 },
     },
   ];
-  if (layout.subtitle) {
+  if (layout.subtitle && layout.subtitlePlate) {
+    // Split: the deck is display type on its own glass, styled as a smaller title.
+    layers.push(frostedPlateLayer('cover-subtitle-plate', layout.subtitlePlate, context), {
+      type: 'text',
+      id: 'cover-subtitle',
+      content: {
+        text: layout.subtitle.lines.join('\n'),
+        style: {
+          fontSize: layout.subtitle.fontSize,
+          fontFamily: getThemeFont(context, 'title'),
+          fontWeight: 'bold',
+          color: theme.colors.text,
+          textAlign: 'center',
+          verticalAlign: 'middle',
+          lineHeight: FROSTED_LINE_HEIGHT,
+          baselineShift: layout.subtitle.baselineShift,
+          shadow: lightText,
+          shrinkToFit: true,
+        },
+      },
+      position: {
+        x: '50%',
+        y: pct(layout.subtitle.cy, viewport.height),
+        anchor: 'center',
+        width: pct(layout.subtitle.width, viewport.width),
+        height: pct(layout.subtitle.height, viewport.height),
+      },
+      animation: motionEntrance(context, { type: 'fadeIn', duration: 0.8, delay: 0.2 }),
+    });
+  } else if (layout.subtitle) {
     layers.push({
       type: 'text',
       id: 'cover-subtitle',
@@ -587,6 +743,7 @@ export function startBlockToCoverInput(config: StartBlockConfig): CoverBlockInpu
     heroCredit: config.heroCredit,
     heroLicense: config.heroLicense,
     ...(config.coverStyle ? { coverStyle: config.coverStyle } : {}),
+    ...(config.coverLayout ? { coverLayout: config.coverLayout } : {}),
   };
 }
 
