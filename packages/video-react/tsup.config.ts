@@ -10,6 +10,8 @@ export default defineConfig({
     'hooks/index': 'src/entries/hooks.ts',
     'encoder/index': 'src/entries/encoder.ts',
     'media-edit/index': 'src/entries/media-edit.ts',
+    // Build-time only: the Vite plugin hosts add to emit RNNoise's WASM once.
+    'vite/index': 'src/entries/vite.ts',
     // The encoder worker is loaded at runtime via `new URL('./workers/encode.worker.js', import.meta.url)`
     // (see workerEncoder.ts), so it must ship as a separate file alongside dist/index.js.
     'workers/encode.worker': 'src/workers/encode.worker.ts',

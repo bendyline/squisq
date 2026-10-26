@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import type { Connect, Plugin } from 'vite';
 import { SQUISQ_DEV_PORT, SQUISQ_E2E_PORT } from '../../scripts/portUtils.ts';
-import { rnnoiseWasmPlugin } from './build/rnnoiseWasmPlugin.ts';
+import { rnnoiseWasmPlugin } from '../video-react/src/vite/rnnoiseWasmPlugin.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

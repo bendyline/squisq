@@ -27,6 +27,7 @@ const expectedSubpaths = {
     './components': 'VideoExportModal',
     './hooks': 'useVideoExport',
     './encoder': 'createEncoder',
+    './vite': 'rnnoiseWasmPlugin',
   },
 } as const;
 
