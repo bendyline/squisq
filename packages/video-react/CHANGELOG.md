@@ -1,3 +1,14 @@
+## @bendyline/squisq-video-react [2.5.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.5.15...@bendyline/squisq-video-react@2.5.16) (2026-10-26)
+
+### Bug Fixes
+
+* Add video-react Vite RNNoise plugin export ([#108](https://github.com/bendyline/squisq/issues/108)) ([427e7f5](https://github.com/bendyline/squisq/commit/427e7f5b43b50118cb1a33ac2ab430bb8f97b056))
+
+
+### Dependencies
+
+* **@bendyline/squisq-react:** upgraded to 2.12.15
+
 ## @bendyline/squisq-video-react [2.5.15](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.5.14...@bendyline/squisq-video-react@2.5.15) (2026-10-25)
 
 
