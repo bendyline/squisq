@@ -92,7 +92,7 @@
     }
   },
   "scripts": {
-    "build": "tsup && tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs && node ../../scripts/build-styles.mjs && node ../../scripts/generate-bundle-licenses.mjs . && node ../../scripts/remove-empty-chunks.mjs dist",
+    "build": "tsup && tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs && node ../../scripts/build-styles.mjs && node ../../scripts/generate-bundle-licenses.mjs . @fortawesome/fontawesome-free && node ../../scripts/remove-empty-chunks.mjs dist",
     "build:esm": "tsup",
     "build:standalone": "tsup --config tsup.standalone.config.ts && node scripts/generate-standalone-source.mjs",
     "dev": "npm run build:standalone && concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
@@ -105,10 +105,10 @@
   "dependencies": {
     "@bendyline/squisq": "2.13.5",
     "@bendyline/squisq-graph": "2.13.0",
-    "@fortawesome/fontawesome-free": "7.3.1",
     "mermaid": "11.17.2"
   },
   "devDependencies": {
+    "@fortawesome/fontawesome-free": "7.3.1",
     "@types/react": "18.3.31",
     "preact": "10.29.8",
     "react": "18.3.1",

@@ -145,9 +145,17 @@ Host wiring:
   schedule them).
 - `VideoExportModal` `mediaEditRenders` prop: export waits for pending renders
   ("Processing audio edits…") and mixes processed audio.
+- Vite hosts: add `rnnoiseWasmPlugin()` from
+  `@bendyline/squisq-video-react/vite` to both `plugins` and `worker.plugins`.
+  RNNoise's 3.6 MB WASM then ships once, as an emitted `rnnoise-*.wasm`
+  fetched on first use, instead of twice as base64 (in the worker and in the
+  fallback chunk; about 3.6 MB gzipped saved). It works for ES and IIFE
+  workers and follows `base` the way Vite's own asset URLs do. Without it the
+  self-contained modules still work.
 - CSP: `'wasm-unsafe-eval'` (RNNoise), `worker-src` for the worker, and
   `connect-src data: blob:` when the provider resolves media as data/blob URLs
-  (the manager `fetch`es sources and manifests).
+  (the manager `fetch`es sources and manifests). With the Vite plugin, RNNoise
+  `fetch`es its WASM too, so `connect-src` must allow where it is served.
 
 ## Playback
 

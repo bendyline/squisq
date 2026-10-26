@@ -145,7 +145,9 @@ const configs = {
   'grid-react': { heading: 'Runtime and peer dependencies', peers: true },
   react: {
     heading: 'Runtime, peer, and bundled dependencies',
-    bundled: ['preact'],
+    // Font Awesome's stylesheets and webfonts are built into dist/styles and
+    // the standalone player, so consumers no longer install the package.
+    bundled: ['@fortawesome/fontawesome-free', 'preact'],
     peers: true,
   },
   'editor-react': {

@@ -220,6 +220,27 @@ available, and otherwise skipped with `audioIncluded: false` plus an
 completes. GIF skips audio preparation entirely. `supportsWebCodecsH264(config)` probes a specific encoder
 configuration; `EncoderConfig` and `FfmpegWasmLoadConfig` are also exported.
 
+### RNNoise WASM for Vite hosts (recommended)
+
+Media-edit denoise uses RNNoise, whose package embeds a 3.6 MB WASM as base64.
+A host that bundles the media-edit worker and its main-thread fallback gets that
+payload twice. Add the plugin to both the page and the worker builds and it
+ships once, as an emitted `rnnoise-*.wasm` fetched on first use:
+
+```ts
+// vite.config.ts
+import { rnnoiseWasmPlugin } from '@bendyline/squisq-video-react/vite';
+
+export default defineConfig({
+  plugins: [rnnoiseWasmPlugin()],
+  worker: { plugins: () => [rnnoiseWasmPlugin()] },
+});
+```
+
+It works for ES and IIFE (Vite's default) worker formats and follows `base`
+the way Vite's own asset URLs do. The fetch must be allowed by `connect-src`.
+Without the plugin, everything still works with the self-contained modules.
+
 ## Audio export
 
 `@bendyline/squisq-video-react/encoder` also exports a streaming audio-file
