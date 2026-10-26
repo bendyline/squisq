@@ -26,7 +26,13 @@ export function resolveBlockVisual(
   },
 ): Block | null {
   try {
-    const slide = buildPreviewDoc({ ...doc, blocks: [block] }).blocks[0] as DocBlock | undefined;
+    // A lone block is not a presentation. Compiling the doc's saved or dynamic
+    // slide plan against it either fails (the saved plan no longer matches the
+    // text) or plans the block as a deck's opening `title` beat — so every card
+    // read "Title" whatever block type the author picked. Previews show the
+    // authored block; the whole-deck projection owns the presentation.
+    const slide = buildPreviewDoc({ ...doc, blocks: [block], presentationApplied: true })
+      .blocks[0] as DocBlock | undefined;
     if (!slide) return null;
     const ctx: MaterializeBlockLayersOptions = {
       ...position,

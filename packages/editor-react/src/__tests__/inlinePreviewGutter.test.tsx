@@ -76,6 +76,33 @@ describe('InlinePreviewGutter', () => {
     expect(labels).toContain('Stat Highlight');
   });
 
+  it('previews authored block types when the slideshow uses dynamic slides', async () => {
+    // Dynamic slides plan the deck from prose. Planning a single block made
+    // every card that plan's opening title beat, ignoring the chosen type.
+    const md = [
+      '---',
+      'squisq-transform: dynamic-slides',
+      '---',
+      '',
+      '## The background',
+      '',
+      'It started as a simple editor.',
+      '',
+      '## Core engine {[factCard]}',
+      '',
+      'One engine renders every surface.',
+    ].join('\n');
+
+    const { container } = renderGutter(md);
+
+    await screen.findByTestId('inline-preview-gutter');
+    const cards = Array.from(container.querySelectorAll('.squisq-inline-preview-card'));
+    expect(cards.map((card) => card.getAttribute('data-template'))).toEqual([
+      'content',
+      'factCard',
+    ]);
+  });
+
   it('renders rows resolved from a data sidecar', async () => {
     const sidecar = 'report_files/data/report.csv';
     const container = new MemoryContentContainer();
