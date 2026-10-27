@@ -546,6 +546,11 @@ export async function waitForCaptureMediaResolutions(
 
 /** Keep html2canvas's document clone limited to the rendered player and styles. */
 function shouldIgnoreCaptureSibling(element: Element, captureRoot: HTMLElement): boolean {
+  // Audio has no pixels, and a cloned `<audio preload>` starts loading its
+  // source. Blink keeps a loading media element — and with it the whole clone
+  // document — alive after html2canvas removes the iframe: one leaked document
+  // per raster, which ground long animated exports to a near halt.
+  if (element.localName === 'audio') return true;
   const { head } = captureRoot.ownerDocument;
   const isInDocumentHead = element === head || head.contains(element);
   const isInCaptureBranch =
