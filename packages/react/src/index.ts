@@ -19,6 +19,7 @@ export type {
 } from './MarkdownRenderer.js';
 export { MermaidDiagram } from './mermaid/MermaidDiagram.js';
 export type { MermaidDiagramProps } from './mermaid/MermaidDiagram.js';
+export { withMermaidLabelWrapping } from './mermaid/mermaidRuntime.js';
 export { LinearDocView } from './LinearDocView.js';
 export type { LinearDocViewProps, ImageDisplayMode } from './LinearDocView.js';
 export { PaginatedDocView } from './PaginatedDocView.js';

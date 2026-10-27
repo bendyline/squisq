@@ -45,6 +45,43 @@ function enqueue<T>(run: () => Promise<T>): Promise<T> {
   return result;
 }
 
+/**
+ * Mermaid wraps an HTML label only when the label, laid out on one line under
+ * its wrapping `max-width`, measures exactly that width (`bbox.width ===
+ * width`). At fractional display scales Chromium snaps layout to device
+ * pixels, so a clamped 200px label measures 199.995 or 200.00002 and Mermaid
+ * lays every long label out as one clipped line. Half a pixel is far beyond
+ * that snapping, and a label really that much narrower fits on one line
+ * whether or not Mermaid switches it to wrapping.
+ */
+const LABEL_WIDTH_SNAP = 0.5;
+
+/**
+ * Run Mermaid work with HTML label widths snapped to their wrapping width, so
+ * long labels wrap at every display scale. Call it inside the shared Mermaid
+ * work queue, which keeps two renders from overlapping.
+ */
+export async function withMermaidLabelWrapping<T>(run: () => Promise<T>): Promise<T> {
+  const prototype = Element.prototype;
+  const measure = prototype.getBoundingClientRect;
+  function snapped(this: Element): DOMRect {
+    const rect = measure.call(this);
+    if (!(this instanceof HTMLElement) || this.parentElement?.localName !== 'foreignObject') {
+      return rect;
+    }
+    const maxWidth = Number.parseFloat(this.style.maxWidth);
+    return Math.abs(rect.width - maxWidth) < LABEL_WIDTH_SNAP
+      ? new DOMRect(rect.x, rect.y, maxWidth, rect.height)
+      : rect;
+  }
+  prototype.getBoundingClientRect = snapped;
+  try {
+    return await run();
+  } finally {
+    if (prototype.getBoundingClientRect === snapped) prototype.getBoundingClientRect = measure;
+  }
+}
+
 /** Render one source through Mermaid's public API. */
 export function renderMermaidSvg(
   id: string,
@@ -59,7 +96,9 @@ export function renderMermaidSvg(
       theme: 'base',
       themeVariables: buildMermaidThemeVariables(theme),
     });
-    const { svg, diagramType } = await mermaid.render(id, source, container);
+    const { svg, diagramType } = await withMermaidLabelWrapping(() =>
+      mermaid.render(id, source, container),
+    );
     return { svg, diagramType };
   });
 }
