@@ -1,3 +1,17 @@
+## @bendyline/squisq-cli [2.9.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.18...@bendyline/squisq-cli@2.9.19) (2026-10-27)
+
+### Bug Fixes
+
+* Inline preview block type resolution ([#109](https://github.com/bendyline/squisq/issues/109)) ([1c318db](https://github.com/bendyline/squisq/commit/1c318dbd6b618c8233483e4cfce9ecaddcd4c222))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.6
+* **@bendyline/squisq-formats:** upgraded to 2.8.7
+* **@bendyline/squisq-video:** upgraded to 2.4.12
+* **@bendyline/squisq-react:** upgraded to 2.12.16
+
 ## @bendyline/squisq-cli [2.9.18](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.17...@bendyline/squisq-cli@2.9.18) (2026-10-26)
 
 ### Bug Fixes

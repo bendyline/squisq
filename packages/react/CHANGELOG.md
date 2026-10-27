@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.12.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.15...@bendyline/squisq-react@2.12.16) (2026-10-27)
+
+### Bug Fixes
+
+* Inline preview block type resolution ([#109](https://github.com/bendyline/squisq/issues/109)) ([1c318db](https://github.com/bendyline/squisq/commit/1c318dbd6b618c8233483e4cfce9ecaddcd4c222))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.6
+
 ## @bendyline/squisq-react [2.12.15](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.14...@bendyline/squisq-react@2.12.15) (2026-10-26)
 
 ### Bug Fixes

@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.6](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.5...@bendyline/squisq@2.13.6) (2026-10-27)
+
+### Bug Fixes
+
+* Inline preview block type resolution ([#109](https://github.com/bendyline/squisq/issues/109)) ([1c318db](https://github.com/bendyline/squisq/commit/1c318dbd6b618c8233483e4cfce9ecaddcd4c222))
+
 ## @bendyline/squisq [2.13.5](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.4...@bendyline/squisq@2.13.5) (2026-10-25)
 
 ### Bug Fixes
