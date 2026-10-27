@@ -11,6 +11,10 @@
  * clip moves its `startAt`; dragging the clip's right edge changes its length;
  * double-clicking a clip toggles `spillover`. All edits are written back to the
  * markdown source via {@link timelineSource}.
+ *
+ * A dynamic-slides document times its own summary slides, so its section bars
+ * offer no edge drags and their menu can only clear a pin: one pinned section
+ * would stop a narrated deck from compiling and fall back to the authored blocks.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,6 +27,7 @@ import {
 } from '@bendyline/squisq/schemas';
 import { flattenBlocks, DEFAULT_THEME, getPinnedBlockMeta } from '@bendyline/squisq/doc';
 import { createMediaTimeMap } from '@bendyline/squisq/mediaEdit';
+import { usesDynamicPresentation } from '@bendyline/squisq/transform';
 import { useProcessedAudio } from '@bendyline/squisq-video-react/media-edit';
 import { MediaClipLayer, MediaContext } from '@bendyline/squisq-react';
 import { useEditorContext } from './EditorContext';
@@ -237,6 +242,7 @@ export function TimelineTrack({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const blocks = useMemo(() => (doc ? flattenBlocks(doc.blocks) : []), [doc]);
+  const timingLocked = doc ? usesDynamicPresentation(doc) : false;
 
   // Tiny slideshow thumbnail for every block, filling its bar. Resolved once
   // per doc/theme so dragging (which re-renders bar geometry each frame)
@@ -528,6 +534,7 @@ export function TimelineTrack({
         explicitDuration: pinned.duration != null,
         startTime: pinned.startTime ?? null,
         transition: readHeadingLineTransition(heading),
+        timingLocked,
       };
     }
   } else if (itemMenu?.kind === 'video') {
@@ -649,7 +656,7 @@ export function TimelineTrack({
                       />
                     </div>
                   )}
-                  {prev && headingLine(prev) != null && (
+                  {!timingLocked && prev && headingLine(prev) != null && (
                     <span
                       className="squisq-timeline-edge squisq-timeline-edge--left"
                       onPointerDown={(e) =>
@@ -695,7 +702,7 @@ export function TimelineTrack({
                       …
                     </button>
                   )}
-                  {line != null && (
+                  {!timingLocked && line != null && (
                     <span
                       className="squisq-timeline-edge squisq-timeline-edge--right"
                       onPointerDown={(e) =>
@@ -1051,6 +1058,13 @@ export function TimelineTrack({
             if (itemMenu.kind !== 'block') return;
             const next = setBlockStartTimeInSource(markdownSource, itemMenu.sourceLine, seconds);
             if (next) setMarkdownSource(next);
+          }}
+          onBlockClearTiming={() => {
+            if (itemMenu.kind !== 'block') return;
+            const line = itemMenu.sourceLine;
+            const cleared = setBlockDurationInSource(markdownSource, line, null) ?? markdownSource;
+            const next = setBlockStartTimeInSource(cleared, line, null) ?? cleared;
+            if (next !== markdownSource) setMarkdownSource(next);
           }}
           onBlockTransition={(transition) => {
             if (itemMenu.kind !== 'block') return;

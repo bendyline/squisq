@@ -26,6 +26,11 @@ export interface TimelineBlockMenuTarget {
   explicitDuration: boolean;
   startTime: number | null;
   transition: TransitionFields;
+  /**
+   * Dynamic slides time their summary slides themselves, so a section's length
+   * and start can only be cleared here, never pinned.
+   */
+  timingLocked?: boolean;
 }
 
 export interface TimelineVideoMenuTarget {
@@ -53,6 +58,8 @@ export interface TimelineItemMenuProps {
   accentColor?: string;
   onBlockDuration: (seconds: number | null) => void;
   onBlockStartTime: (seconds: number | null) => void;
+  /** Remove both timing pins in one source edit. */
+  onBlockClearTiming?: () => void;
   onBlockTransition: (transition: TransitionFields) => void;
   onVideoPatch: (patch: MediaClipPatch) => void;
   /** Open the audio editor on this clip. Omitted: the action is not offered. */
@@ -67,6 +74,7 @@ export function TimelineItemMenu({
   accentColor,
   onBlockDuration,
   onBlockStartTime,
+  onBlockClearTiming,
   onBlockTransition,
   onVideoPatch,
   onEditMedia,
@@ -138,6 +146,7 @@ export function TimelineItemMenu({
           accentColor={accentColor}
           onDuration={onBlockDuration}
           onStartTime={onBlockStartTime}
+          onClearTiming={onBlockClearTiming}
           onTransition={onBlockTransition}
         />
       ) : (
@@ -168,6 +177,7 @@ function BlockMenu({
   accentColor,
   onDuration,
   onStartTime,
+  onClearTiming,
   onTransition,
 }: {
   target: TimelineBlockMenuTarget;
@@ -175,6 +185,7 @@ function BlockMenu({
   accentColor?: string;
   onDuration: (seconds: number | null) => void;
   onStartTime: (seconds: number | null) => void;
+  onClearTiming?: () => void;
   onTransition: (transition: TransitionFields) => void;
 }) {
   const [explicitDuration, setExplicitDuration] = useState(target.explicitDuration);
@@ -195,40 +206,67 @@ function BlockMenu({
     }
   };
 
+  const pinned = explicitDuration || startTime !== '';
+
   return (
     <div className="squisq-timeline-item-menu-body">
-      <label className="squisq-timeline-item-menu-check">
-        <input
-          type="checkbox"
-          checked={!explicitDuration}
-          onChange={(event) => toggleAutotime(event.target.checked)}
-        />
-        <span>Autotime block</span>
-      </label>
-      <p className="squisq-timeline-item-menu-hint">
-        Uses narration, content, and interior media when no explicit duration is set.
-      </p>
-      <MenuNumberField
-        label="Duration"
-        ariaLabel="Block duration in seconds"
-        value={duration}
-        disabled={!explicitDuration}
-        onChange={(value) => {
-          setDuration(value);
-          const seconds = numericValue(value);
-          if (seconds != null) onDuration(seconds);
-        }}
-      />
-      <MenuNumberField
-        label="Start time"
-        ariaLabel="Block start time in seconds"
-        value={startTime}
-        placeholder="auto"
-        onChange={(value) => {
-          setStartTime(value);
-          onStartTime(value.trim() === '' ? null : numericValue(value));
-        }}
-      />
+      {target.timingLocked ? (
+        <>
+          <p className="squisq-timeline-item-menu-hint">
+            Dynamic slides time each slide from the narration or reading pace, so this section's
+            length and start can't be pinned.
+            {pinned && ' A pinned time here stops a narrated deck from playing.'}
+          </p>
+          {pinned && onClearTiming && (
+            <button
+              type="button"
+              className="squisq-timeline-item-menu-action"
+              onClick={() => {
+                setExplicitDuration(false);
+                setStartTime('');
+                onClearTiming();
+              }}
+            >
+              Clear pinned timing
+            </button>
+          )}
+        </>
+      ) : (
+        <>
+          <label className="squisq-timeline-item-menu-check">
+            <input
+              type="checkbox"
+              checked={!explicitDuration}
+              onChange={(event) => toggleAutotime(event.target.checked)}
+            />
+            <span>Autotime block</span>
+          </label>
+          <p className="squisq-timeline-item-menu-hint">
+            Uses narration, content, and interior media when no explicit duration is set.
+          </p>
+          <MenuNumberField
+            label="Duration"
+            ariaLabel="Block duration in seconds"
+            value={duration}
+            disabled={!explicitDuration}
+            onChange={(value) => {
+              setDuration(value);
+              const seconds = numericValue(value);
+              if (seconds != null) onDuration(seconds);
+            }}
+          />
+          <MenuNumberField
+            label="Start time"
+            ariaLabel="Block start time in seconds"
+            value={startTime}
+            placeholder="auto"
+            onChange={(value) => {
+              setStartTime(value);
+              onStartTime(value.trim() === '' ? null : numericValue(value));
+            }}
+          />
+        </>
+      )}
       <div className="squisq-timeline-item-menu-row">
         <span className="squisq-timeline-item-menu-label">Transition</span>
         <TransitionPicker
