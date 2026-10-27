@@ -422,6 +422,13 @@ describe('dynamic slides with embedded videos and diagrams', () => {
         content: { clipStart: number; clipEnd: number };
       }>;
     expect(layers(fits[0]!.id, 'mermaid')).toHaveLength(1);
+    // Summary points are bulleted, not numbered from 1 again on every slide.
+    const markers = expanded
+      .find((block) => block.id === fits[0]!.id)!
+      .layers!.filter((layer) => layer.id?.endsWith('-marker'))
+      .map((layer) => (layer.type === 'text' ? layer.content.text : ''));
+    expect(markers.length).toBeGreaterThan(1);
+    expect(new Set(markers)).toEqual(new Set(['•']));
     // The recording plays on across the section's slides rather than restarting.
     const timed = compiled.blocks.filter((block) => demoBeats.some((beat) => beat.id === block.id));
     expect(timed.map((block) => layers(block.id, 'video')[0]!.content.clipStart)).toEqual(

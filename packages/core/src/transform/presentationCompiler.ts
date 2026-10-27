@@ -198,7 +198,16 @@ function visualBlock(
         explanation: beat.points.join('\n\n'),
       };
     case 'list':
-      return { ...base, template: 'list', title: beat.headline, items: beat.points, colorScheme };
+      // Summary points are not a sequence, and a numbered process split across
+      // slides would restart at 1 on each, so the deck's lists are bulleted.
+      return {
+        ...base,
+        template: 'list',
+        title: beat.headline,
+        items: beat.points,
+        ordered: false,
+        colorScheme,
+      };
     case 'comparison':
       return {
         ...base,

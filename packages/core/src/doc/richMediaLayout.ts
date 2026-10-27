@@ -462,14 +462,18 @@ function mapForegroundLayers(
     if (isFullViewportBackground(layer, viewport)) return layer;
     const position = mapPosition(layer.position, contentRect, viewport);
     if (layer.type === 'text') {
+      const fontSize = Math.max(12, Math.round(layer.content.style.fontSize * fontScale));
       return {
         ...layer,
-        position,
+        position:
+          layer.content.flow?.role === 'marker'
+            ? markerPosition(layer, position, fontSize / layer.content.style.fontSize, viewport)
+            : position,
         content: {
           ...layer.content,
           style: {
             ...layer.content.style,
-            fontSize: Math.max(12, Math.round(layer.content.style.fontSize * fontScale)),
+            fontSize,
             ...(layer.content.style.padding !== undefined
               ? { padding: Math.round(layer.content.style.padding * fontScale) }
               : {}),
@@ -480,6 +484,37 @@ function mapForegroundLayers(
     return { ...layer, position } as Layer;
   });
   return arrangeTitleFamily(mapped, template, contentRect, viewport);
+}
+
+/**
+ * A list marker's box is sized to its own text (`1.`), and the region shrinks
+ * boxes faster than fonts, so it would wrap its number apart. Keep the width
+ * its scaled font needs, growing away from the body it hangs beside.
+ */
+function markerPosition(
+  layer: TextLayer,
+  mapped: Position,
+  textScale: number,
+  viewport: ViewportConfig,
+): Position {
+  if (mapped.width === undefined || layer.position.width === undefined) return mapped;
+  const width = resolvePositionValue(mapped.width, viewport.width);
+  // Whole pixels: the box is an exact fit, and 23.999 would still wrap `1.`.
+  const needed = Math.ceil(resolvePositionValue(layer.position.width, viewport.width) * textScale);
+  if (needed <= width) return mapped;
+  const grow = needed - width;
+  const anchor = mapped.anchor ?? 'top-left';
+  const shift =
+    layer.content.style.textAlign !== 'right' || anchor.includes('right')
+      ? 0
+      : anchor === 'center'
+        ? grow / 2
+        : grow;
+  return {
+    ...mapped,
+    x: resolvePositionValue(mapped.x, viewport.width) - shift,
+    width: needed,
+  };
 }
 
 /** Recompose title-family lockups after their foreground has a smaller region. */
