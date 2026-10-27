@@ -1765,6 +1765,16 @@ describe('useFrameCapture', () => {
     expect(ignoreElements(root!)).toBe(false);
     expect(ignoreElements(captureDescendant)).toBe(false);
     expect(ignoreElements(unrelatedSibling)).toBe(true);
+    // A cloned <audio preload> starts loading, and Blink then keeps the whole
+    // clone document alive: one leaked document per raster. It has no pixels.
+    const captureAudio = document.createElement('audio');
+    captureAudio.preload = 'auto';
+    const captureVideo = document.createElement('video');
+    root!.append(captureAudio, captureVideo);
+    expect(ignoreElements(captureAudio)).toBe(true);
+    expect(ignoreElements(captureVideo)).toBe(false);
+    captureAudio.remove();
+    captureVideo.remove();
     captureDescendant.remove();
     unrelatedSibling.remove();
     const firstCanvas = frameCaptureMocks.html2canvas.mock.calls[0][1].canvas as HTMLCanvasElement;
