@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.12.17](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.16...@bendyline/squisq-react@2.12.17) (2026-10-27)
+
+### Bug Fixes
+
+* Ignore audio in html2canvas capture clones ([#110](https://github.com/bendyline/squisq/issues/110)) ([376a9ac](https://github.com/bendyline/squisq/commit/376a9aca6096a14a89bede5f0bd184bc4130a72e))
+
 ## @bendyline/squisq-react [2.12.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.15...@bendyline/squisq-react@2.12.16) (2026-10-27)
 
 ### Bug Fixes
