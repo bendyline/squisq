@@ -32,7 +32,7 @@ import { createBackgroundLayer } from '../captionUtils.js';
 import { contentBlock } from '../contentBlock.js';
 import { extractTableFromContents } from '../../templateInputs.js';
 import type { ChartData, ChartKind, ChartRenderInput } from './types.js';
-import { buildChartData } from './parse.js';
+import { buildChartData, normalizeChartTable } from './parse.js';
 import { formatChartValue, niceTicks, type NiceTicks } from './scale.js';
 import { arcPath, areaPath, polylinePath, type ChartPoint } from './geometry.js';
 import {
@@ -298,7 +298,8 @@ function resolveTable(input: ChartRenderInput, context: TemplateContext): Resolv
     Array.isArray(input.rows) &&
     input.rows.length > 0
   ) {
-    return { headers: input.headers, rows: input.rows };
+    // JSON-authored blocks carry number cells; the engine and the table layer read strings.
+    return normalizeChartTable(input);
   }
   const contents =
     (input as { contents?: MarkdownBlockNode[] }).contents ?? context.block?.contents;

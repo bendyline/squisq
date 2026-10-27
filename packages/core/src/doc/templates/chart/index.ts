@@ -1,7 +1,13 @@
 /** Chart engine public surface (used by the chart templates and tests). */
 
 export * from './types.js';
-export { parseCellNumber, isNumericColumn, resolveColumnRef, buildChartData } from './parse.js';
+export {
+  parseCellNumber,
+  isNumericColumn,
+  resolveColumnRef,
+  buildChartData,
+  normalizeChartTable,
+} from './parse.js';
 export { niceTicks, formatChartValue, type NiceTicks } from './scale.js';
 export { arcPath, polylinePath, areaPath, pointOnCircle, type ChartPoint } from './geometry.js';
 export {

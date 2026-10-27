@@ -6,12 +6,37 @@
  * — currency symbols, thousands separators, percent signs, accounting
  * negatives — but never invents data: a cell that doesn't parse is
  * `null` (a gap), not zero.
+ *
+ * Blocks authored as JSON (typed `headers`/`rows` rather than a markdown
+ * table) naturally carry numbers — `["Birds", 216]`. `normalizeChartTable`
+ * stringifies every cell where the table enters the engine, so those plot
+ * like their markdown equivalents instead of throwing.
  */
 
 import type { ChartData, ChartTableData } from './types.js';
 
 /** Share of non-empty cells that must parse for a column to count as numeric. */
 const NUMERIC_COLUMN_THRESHOLD = 0.6;
+
+function cellText(cell: unknown): string {
+  if (typeof cell === 'string') return cell;
+  if (cell === null || cell === undefined) return '';
+  if (typeof cell === 'number') return Number.isFinite(cell) ? String(cell) : '';
+  return typeof cell === 'object' ? '' : String(cell);
+}
+
+/**
+ * Coerce a typed table to the all-string shape the engine parses: numeric
+ * and boolean cells become their text, missing/null/object cells become
+ * empty, and non-array rows are dropped.
+ */
+export function normalizeChartTable(table: { headers?: unknown; rows?: unknown }): ChartTableData {
+  const headers = Array.isArray(table.headers) ? table.headers.map(cellText) : [];
+  const rows = Array.isArray(table.rows)
+    ? table.rows.filter(Array.isArray).map((row: unknown[]) => row.map(cellText))
+    : [];
+  return { headers, rows };
+}
 
 /**
  * Parse one table cell to a number, or null when it isn't numeric.
@@ -92,8 +117,7 @@ export function buildChartData(
   table: ChartTableData,
   options: { labelColumn?: string; valueColumns?: string[] } = {},
 ): ChartData | null {
-  const headers = Array.isArray(table.headers) ? table.headers : [];
-  const rows = Array.isArray(table.rows) ? table.rows : [];
+  const { headers, rows } = normalizeChartTable(table);
   if (headers.length === 0 || rows.length === 0) return null;
 
   const warnings: string[] = [];

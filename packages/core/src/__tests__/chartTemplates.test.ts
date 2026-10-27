@@ -8,7 +8,9 @@ import { describe, it, expect } from 'vitest';
 import { markdownToDoc } from '../doc/markdownToDoc.js';
 import { parseMarkdown } from '../markdown/parse.js';
 import { materializeLayers } from './materializeTestUtils.js';
+import { materializeBlockLayers } from '../doc/materializeBlockLayers.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
+import type { DocBlock } from '../schemas/BlockTemplates.js';
 import type { Layer, ShapeLayer, TextLayer, PathLayer, TableLayer } from '../schemas/Doc.js';
 
 const TABLE_MD = `| Region | Q1 | Q2 |
@@ -283,6 +285,50 @@ describe('chart data via structured data fences', () => {
     expect(block.templateData?.headers).toEqual(['Label', 'Value']);
     const layers = materializeLayers(block);
     expect(shapes(layers, 'mark-')).toHaveLength(2);
+  });
+
+  it('plots number cells from a json data fence', () => {
+    const md = [
+      '## Fence numbers {[columnChart]}',
+      '',
+      '```json data',
+      '{"headers": ["Label", "Value"], "rows": [["A", 10], ["B", 30]]}',
+      '```',
+      '',
+    ].join('\n');
+    expect(shapes(materializeLayers(firstBlock(md)), 'mark-')).toHaveLength(2);
+  });
+
+  it('plots number cells on a typed template block instead of failing', () => {
+    const block = {
+      id: 'species',
+      template: 'barChart',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Species',
+      headers: ['Group', 'Species'],
+      rows: [
+        ['Birds', 216],
+        ['Mammals', 36],
+        ['Fish', 168],
+      ],
+      showValues: true,
+      showTable: true,
+    } as unknown as DocBlock;
+    const result = materializeBlockLayers(block, { persistentLayers: false });
+    expect(result.diagnostic).toBeUndefined();
+    expect(result.source).toBe('template');
+    const marks = shapes(result.layers, 'mark-');
+    expect(marks).toHaveLength(3);
+    const width = (id: string) => Number(marks.find((m) => m.id === id)!.position.width);
+    expect(width('mark-0-0') / width('mark-0-1')).toBeCloseTo(216 / 36, 1);
+    expect(texts(result.layers)).toContain('216');
+    const table = result.layers.find((l): l is TableLayer => l.type === 'table');
+    expect(table!.content.rows).toEqual([
+      ['Birds', '216'],
+      ['Mammals', '36'],
+      ['Fish', '168'],
+    ]);
   });
 
   it('keeps author-supplied fence data over the body table', () => {

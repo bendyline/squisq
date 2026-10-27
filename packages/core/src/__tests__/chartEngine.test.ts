@@ -113,6 +113,19 @@ describe('buildChartData', () => {
     expect(data!.series[1].values).toEqual([1400, 1100, 800]);
   });
 
+  it('accepts number cells from JSON-authored tables', () => {
+    const data = buildChartData({
+      headers: ['Group', 'Species'],
+      rows: [
+        ['Birds', 216],
+        ['Mammals', 36],
+        ['Fish', null],
+      ] as unknown as string[][],
+    });
+    expect(data!.labels).toEqual(['Birds', 'Mammals', 'Fish']);
+    expect(data!.series[0].values).toEqual([216, 36, null]);
+  });
+
   it('honors explicit column roles by name and by index', () => {
     const data = buildChartData(table, { labelColumn: 'Notes', valueColumns: ['1'] });
     expect(data!.labelHeader).toBe('Notes');
