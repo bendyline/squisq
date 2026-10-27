@@ -41,6 +41,7 @@ import {
   type SpeechInputCapability,
   type SpeechInputProvider,
   type SpeechInputReadiness,
+  type SpeechRecognizerAccess,
 } from './types.js';
 import { insertDictationIntoMonaco, insertDictationIntoTiptap } from './dictationInsertion.js';
 import { setDictationInterim } from './DictationExtension.js';
@@ -158,6 +159,8 @@ export interface DictationControllerInput {
 export interface DictationController {
   control: DictationControl | null;
   state: DictationState | null;
+  /** The resolved provider, shared with other speech features. */
+  recognizer: SpeechRecognizerAccess | null;
 }
 
 interface ActiveSession {
@@ -534,5 +537,10 @@ export function useDictationController({
     ],
   );
 
-  return { control, state };
+  const recognizer = useMemo<SpeechRecognizerAccess | null>(
+    () => (provider ? { provider, readiness } : null),
+    [provider, readiness],
+  );
+
+  return { control, state, recognizer };
 }

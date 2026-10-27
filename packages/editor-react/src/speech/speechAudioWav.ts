@@ -16,6 +16,15 @@ import { SPEECH_INPUT_SAMPLE_RATE } from './types.js';
 
 /** Decode a recorded take and re-encode it as 16 kHz mono PCM16 WAV bytes. */
 export async function microphoneTakeAsWav(blob: Blob): Promise<ArrayBuffer> {
+  const samples = await decodeSpeechPcm(blob);
+  return encodeMonoPcm16Wav([samples], SPEECH_INPUT_SAMPLE_RATE).buffer;
+}
+
+/**
+ * Decode any recording the browser can play — including the audio track of a
+ * video file — to mono float samples at {@link SPEECH_INPUT_SAMPLE_RATE}.
+ */
+export async function decodeSpeechPcm(blob: Blob): Promise<Float32Array> {
   const encoded = await blobBytes(blob);
   let audio: AudioBuffer;
   try {
@@ -28,11 +37,9 @@ export async function microphoneTakeAsWav(blob: Blob): Promise<ArrayBuffer> {
     audio.getChannelData(index),
   );
   const mono = downmixToMono(channels);
-  const samples =
-    audio.sampleRate === SPEECH_INPUT_SAMPLE_RATE
-      ? mono
-      : resampleLinear(mono, audio.sampleRate, SPEECH_INPUT_SAMPLE_RATE);
-  return encodeMonoPcm16Wav([samples], SPEECH_INPUT_SAMPLE_RATE).buffer;
+  return audio.sampleRate === SPEECH_INPUT_SAMPLE_RATE
+    ? mono
+    : resampleLinear(mono, audio.sampleRate, SPEECH_INPUT_SAMPLE_RATE);
 }
 
 /** `Blob.arrayBuffer()`, with a `FileReader` fallback for engines that lack it. */

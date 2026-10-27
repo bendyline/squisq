@@ -53,15 +53,38 @@ export interface SpeechInputTranscribeOptions {
   /** BCP-47-ish language hint. The editor does not currently set it. */
   readonly language?: string;
   /**
+   * Ask for {@link SpeechInputTranscript.segments} with times (and word times
+   * where the engine has them). Set when timing narration from its audio;
+   * dictation leaves it off. A provider that cannot time its output ignores it.
+   */
+  readonly timestamps?: boolean;
+  /**
    * Aborted when the user cancels dictation or the editor unmounts. A
    * provider should stop promptly; a rejection after abort is ignored.
    */
   readonly signal: AbortSignal;
 }
 
+/** A recognized word, in seconds from the start of the take. */
+export interface SpeechInputWord {
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+}
+
+/** A recognized phrase, in seconds from the start of the take. */
+export interface SpeechInputSegment {
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+  readonly words?: readonly SpeechInputWord[];
+}
+
 export interface SpeechInputTranscript {
   /** Recognized text. Blank (or Whisper's `[BLANK_AUDIO]`) means silence. */
   readonly text: string;
+  /** Timed phrases, when `timestamps` was requested and the engine supports it. */
+  readonly segments?: readonly SpeechInputSegment[];
 }
 
 export interface SpeechInputProvider {
@@ -88,6 +111,18 @@ export interface SpeechInputProvider {
   ): Promise<SpeechInputTranscript>;
   /** Release resources. Called by the editor only for a provider it created from a factory. */
   dispose?(): void;
+}
+
+/**
+ * The host's resolved recognizer on the editor context
+ * (`useEditorContext().speechRecognizer`), for features beyond dictation that
+ * transcribe recorded audio — e.g. timing a document narration from its take.
+ * `null` when the host injected no `speechInput` capability.
+ */
+export interface SpeechRecognizerAccess {
+  readonly provider: SpeechInputProvider;
+  /** Last known readiness; `null` until the provider first answers. */
+  readonly readiness: SpeechInputReadiness | null;
 }
 
 /**

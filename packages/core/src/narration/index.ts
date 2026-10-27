@@ -78,6 +78,15 @@ export { traceWordPosAt, downsampleTrace, type NarrationTrace, type TraceSample 
 export { alignNarration, type AlignInput } from './align.js';
 
 export {
+  alignTranscript,
+  transcriptWordKeys,
+  type TranscriptAlignInput,
+  type TranscriptAlignment,
+  type TranscriptSegment,
+  type TranscriptWord,
+} from './transcriptAlign.js';
+
+export {
   buildNarrationTimingJson,
   parseNarrationTimingJson,
   resolveNarrationTimingGenerator,

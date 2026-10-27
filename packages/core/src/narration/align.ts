@@ -38,7 +38,8 @@ export interface AlignInput {
   signal?: AbortSignal;
 }
 
-interface DetectedEvent {
+/** Exported for the transcript aligner, which reports silences as `gap` events. */
+export interface DetectedEvent {
   kind: 'syl' | 'gap';
   /** Representative time (onset peak, or gap midpoint). */
   tSec: number;
@@ -461,7 +462,12 @@ function deriveWordTimings(
   return words;
 }
 
-function deriveBlockRanges(
+/**
+ * Contiguous block ranges from word timings: each block starts at its first
+ * word (snapped to the end of a breath gap just before it) and the last block
+ * covers the tail. Shared with the transcript aligner.
+ */
+export function deriveBlockRanges(
   script: NarrationScript,
   words: WordTiming[],
   gaps: DetectedEvent[],

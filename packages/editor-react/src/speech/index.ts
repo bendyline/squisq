@@ -13,8 +13,11 @@ export type {
   SpeechInputProviderFactory,
   SpeechInputReadiness,
   SpeechInputReadinessState,
+  SpeechInputSegment,
   SpeechInputTranscribeOptions,
   SpeechInputTranscript,
+  SpeechInputWord,
+  SpeechRecognizerAccess,
 } from './types.js';
 export {
   SPEECH_INPUT_SAMPLE_RATE,
