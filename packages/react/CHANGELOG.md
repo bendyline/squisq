@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.12.18](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.17...@bendyline/squisq-react@2.12.18) (2026-10-27)
+
+### Bug Fixes
+
+* Mermaid label wrapping at fractional scale ([#111](https://github.com/bendyline/squisq/issues/111)) ([45bcf74](https://github.com/bendyline/squisq/commit/45bcf744be5bdb3d54f3323b8904db19a32abda9))
+
 ## @bendyline/squisq-react [2.12.17](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.16...@bendyline/squisq-react@2.12.17) (2026-10-27)
 
 ### Bug Fixes

@@ -1,3 +1,15 @@
+## @bendyline/squisq-editor-react [2.13.11](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.10...@bendyline/squisq-editor-react@2.13.11) (2026-10-27)
+
+### Bug Fixes
+
+* Mermaid label wrapping at fractional scale ([#111](https://github.com/bendyline/squisq/issues/111)) ([45bcf74](https://github.com/bendyline/squisq/commit/45bcf744be5bdb3d54f3323b8904db19a32abda9))
+
+
+### Dependencies
+
+* **@bendyline/squisq-react:** upgraded to 2.12.18
+* **@bendyline/squisq-video-react:** upgraded to 2.5.19
+
 ## @bendyline/squisq-editor-react [2.13.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.9...@bendyline/squisq-editor-react@2.13.10) (2026-10-27)
 
 
