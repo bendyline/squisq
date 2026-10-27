@@ -294,11 +294,16 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
         const maxW = boxWidth ?? viewport.width;
         const maxH = boxHeight ?? viewport.height;
         const scale = Math.min(1, maxW / bbox.width, maxH / bbox.height);
-        setFit(
-          scale < 0.995
-            ? { scale, cx: bbox.x + bbox.width / 2, cy: bbox.y + bbox.height / 2 }
-            : null,
-        );
+        // Shrink toward the text's own alignment edge: the pivot already sits
+        // on it horizontally, so left-aligned text keeps its margin instead of
+        // drifting toward the centre of its box.
+        const cy =
+          dominantBaseline === 'middle'
+            ? bbox.y + bbox.height / 2
+            : dominantBaseline === 'text-after-edge'
+              ? bbox.y + bbox.height
+              : bbox.y;
+        setFit(scale < 0.995 ? { scale, cx: x, cy } : null);
       } catch {
         // Detached node (e.g. mid-unmount) — keep the previous fit.
       }
@@ -318,6 +323,8 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
   }, [
     shrinkToFit,
     linesKey,
+    x,
+    dominantBaseline,
     boxWidth,
     boxHeight,
     viewport.width,

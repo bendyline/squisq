@@ -66,8 +66,11 @@ export interface NarrationTimingJsonV3 {
  * - `'tts'` — a host synthesized the narration (text-to-speech). Block and
  *   sentence boundaries are exact because each was synthesized separately;
  *   word times are interpolated.
+ * - `'transcript-align'` — a speech recognizer transcribed the take and its
+ *   timed words were matched to the script's words. Paraphrase and skipped
+ *   passages are tolerated; unmatched words are interpolated.
  */
-export type NarrationTimingMethod = 'dsp-align' | 'presenter-advance' | 'tts';
+export type NarrationTimingMethod = 'dsp-align' | 'presenter-advance' | 'tts' | 'transcript-align';
 
 /** Provenance recorded in a sidecar's `generator` field. */
 export interface NarrationTimingGenerator {

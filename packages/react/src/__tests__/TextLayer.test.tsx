@@ -188,6 +188,41 @@ describe('TextLayer', () => {
     expect(fitGroup?.style.transformOrigin).toBe('100px 200px');
   });
 
+  // A shrunk headline used to scale around its own centre, so left-aligned
+  // text drifted right of the body copy beneath it.
+  it('shrinks oversized text toward its alignment edge', () => {
+    const shrunk = (textAlign: 'left' | 'center'): string | null => {
+      const layer: TextLayerType = {
+        id: 'fact',
+        type: 'text',
+        content: {
+          text: 'A long display headline that is wider than its box',
+          style: { fontSize: 40, color: '#fff', textAlign, shrinkToFit: true },
+        },
+        position: { x: 490, y: 400, width: 700, height: 150, anchor: 'center' },
+      };
+      const { container, unmount } = render(
+        <svg>
+          <TextLayer layer={layer} viewport={viewport} blockTime={0} />
+        </svg>,
+      );
+      const transform = container.querySelector('text')!.getAttribute('transform');
+      unmount();
+      return transform;
+    };
+    const prototype = SVGElement.prototype as SVGElement & { getBBox?: () => DOMRect };
+    const original = prototype.getBBox;
+    prototype.getBBox = () => DOMRect.fromRect({ x: 140, y: 350, width: 1400, height: 100 });
+    try {
+      // The box spans 140–840, so left-aligned text keeps its 140 edge.
+      expect(shrunk('left')).toBe('translate(140 400) scale(0.5) translate(-140 -400)');
+      expect(shrunk('center')).toBe('translate(490 400) scale(0.5) translate(-490 -400)');
+    } finally {
+      if (original) prototype.getBBox = original;
+      else delete prototype.getBBox;
+    }
+  });
+
   // Centred text aligns its lowercase middle on the anchor, so a caption's
   // capitals sat high on its band; baselineShift drops the drawn text, in em.
   it('shifts plain text down by baselineShift em without moving its anchor', () => {

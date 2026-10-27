@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { ImageLayer, Layer } from '../schemas/Doc.js';
+import type { Block, ImageLayer, Layer, TextLayer } from '../schemas/Doc.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
 import { resolveSupplementalMediaLayout } from '../doc/richMediaLayout.js';
+import { expandDocBlocks } from '../doc/templates/index.js';
 import {
   BLOCK_MEDIA_LAYOUT_POLICIES,
   type BlockMediaLayoutPolicy,
@@ -179,6 +180,33 @@ describe('BLOCK_MEDIA_LAYOUT_POLICIES', () => {
       expect(reserved.layers).not.toBe(withoutNative);
       expect(overlay.framed).toBe(true);
       expect(overlay.layers).toBe(withNative);
+    }
+  });
+
+  // The paired layout shrinks boxes faster than fonts; a marker box sized to
+  // its own `1.` used to wrap the number apart, leaving a stray `.` line.
+  it('keeps numbered list markers whole beside supplemental media', () => {
+    for (const count of [2, 12]) {
+      const block = {
+        id: 'steps',
+        template: 'list',
+        items: Array.from({ length: count }, (_, i) => `Step ${i + 1}`),
+        startTime: 0,
+        duration: 5,
+        audioSegment: 0,
+        contents: [{ type: 'code', lang: 'mermaid', value: 'flowchart LR\n  a --> b' }],
+      } as unknown as Block;
+      const layers = expandDocBlocks([block])[0]!.layers!;
+      expect(layers.some((layer) => layer.type === 'mermaid')).toBe(true);
+      const text = (id: string) => layers.find((layer) => layer.id === id) as TextLayer;
+      const marker = text(`item-${count - 1}-marker`);
+      const body = text(`item-${count - 1}`);
+      const width = Number(marker.position.width);
+      // The renderer estimates half an em per character when it wraps.
+      expect(Math.floor(width / (marker.content.style.fontSize * 0.5))).toBeGreaterThanOrEqual(
+        marker.content.text.length,
+      );
+      expect(Number(marker.position.x) + width).toBeLessThanOrEqual(Number(body.position.x));
     }
   });
 });

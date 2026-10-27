@@ -318,6 +318,45 @@ describe('TimelineTrack block-edge drags', () => {
     expect(latestSource).toContain('# Next {[duration=8]}');
   });
 
+  it('offers no edge drags on a dynamic-slides document and only clears its pins', () => {
+    // A narrated dynamic deck refuses pinned sections, so one stray drag here
+    // used to swap the whole video back to the authored blocks.
+    const dynamic = [
+      '---',
+      'squisq-transform: dynamic-slides',
+      '---',
+      '',
+      '# Intro {[duration=12 startTime=1]}',
+      '',
+      'Body text.',
+      '',
+      '# Next',
+      '',
+      'More text.',
+      '',
+    ].join('\n');
+    const { container } = render(
+      <EditorProvider initialMarkdown={dynamic} initialView="wysiwyg">
+        <SourceProbe />
+        <TimelineTrack />
+      </EditorProvider>,
+    );
+    expect(container.querySelector('.squisq-timeline-edge')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Block options for Next' }));
+    expect(screen.queryByRole('checkbox', { name: 'Autotime block' })).toBeNull();
+    expect(screen.queryByRole('spinbutton', { name: 'Block duration in seconds' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear pinned timing' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Block options for Intro' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear pinned timing' }));
+    expect(latestSource).toContain('# Intro\n');
+    expect(latestSource).not.toContain('duration=');
+    expect(latestSource).not.toContain('startTime=');
+    expect(screen.queryByRole('button', { name: 'Clear pinned timing' })).toBeNull();
+  });
+
   it('a bare click on a block edge never writes a pin', () => {
     renderTimeline();
     const before = latestSource;

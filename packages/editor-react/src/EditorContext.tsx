@@ -33,7 +33,11 @@ import {
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
-import type { DictationControl, SpeechInputCapability } from './speech/types';
+import type {
+  DictationControl,
+  SpeechInputCapability,
+  SpeechRecognizerAccess,
+} from './speech/types';
 import { DictationStateContext, useDictationController } from './speech/useDictationController';
 import {
   DocumentVersionManager,
@@ -571,6 +575,12 @@ export interface EditorContextValue extends EditorState, EditorActions {
    * was injected. See docs/speech-input.md.
    */
   dictation: DictationControl | null;
+  /**
+   * The same capability's resolved recognizer, for transcribing recorded
+   * audio (e.g. updating a document narration's timings). `null` when no
+   * capability was injected.
+   */
+  speechRecognizer: SpeechRecognizerAccess | null;
   /** The document's article id — part of the proofing document ref. */
   articleId: string;
   /**
@@ -1783,6 +1793,7 @@ export function EditorProvider({
     monacoEditor,
   });
   const dictation = dictationController.control;
+  const speechRecognizer = dictationController.recognizer;
 
   const value = useMemo<EditorContextValue>(
     () => ({
@@ -1833,6 +1844,7 @@ export function EditorProvider({
       proofingGrammarEnabled,
       proofingIgnoreStore,
       dictation,
+      speechRecognizer,
       articleId,
       documentLinkProvider,
       wikiLinks,
@@ -1917,6 +1929,7 @@ export function EditorProvider({
       proofingGrammarEnabled,
       proofingIgnoreStore,
       dictation,
+      speechRecognizer,
       articleId,
       documentLinkProvider,
       wikiLinks,

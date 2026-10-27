@@ -648,7 +648,9 @@ blocks with no body text get 5s) and `startTime` defaults to the running sum
 of prior durations. A pinned `startTime` keeps its value while the running
 cursor still advances past it, so following blocks sequence after it. The
 editor's **Timeline** view edits these by dragging block edges — see the
-editor docs.
+editor docs. A `squisq-transform: dynamic-slides` document times its summary
+slides itself, so its Timeline offers no edge drags and a section's options
+can only clear a pin: a narrated dynamic deck refuses pinned sections.
 
 ### Timed media clips
 

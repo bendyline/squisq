@@ -20,6 +20,8 @@ export interface PresentationBeat {
   headline: string;
   points: string[];
   imageSrc?: string;
+  /** The section's videos and diagrams shown beside this slide's text (`presentationMedia`). */
+  media?: string[];
 }
 export interface PresentationPlan {
   version: 1;
@@ -31,6 +33,7 @@ export const PRESENTATION_LIMITS = {
   sourceCharacters: 40_000,
   beats: 80,
   serializedCharacters: 160_000,
+  mediaPerBeat: 4,
 } as const;
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -87,7 +90,7 @@ export function parsePresentationPlan(input: unknown): PresentationPlan | null {
       !keys(
         beat,
         ['id', 'sourceStart', 'sourceEnd', 'layout', 'headline', 'points'],
-        ['imageSrc'],
+        ['imageSrc', 'media'],
       ) ||
       !text(beat.id, 80) ||
       ids.has(beat.id) ||
@@ -110,6 +113,15 @@ export function parsePresentationPlan(input: unknown): PresentationPlan | null {
       return null;
     if (beat.layout === 'comparison' && beat.points.length !== 2) return null;
     if (beat.layout === 'image' ? !text(beat.imageSrc, 2048) : 'imageSrc' in beat) return null;
+    if (
+      'media' in beat &&
+      (!Array.isArray(beat.media) ||
+        !beat.media.length ||
+        beat.media.length > PRESENTATION_LIMITS.mediaPerBeat ||
+        new Set(beat.media).size !== beat.media.length ||
+        !beat.media.every((ref) => text(ref, 1100)))
+    )
+      return null;
     ids.add(beat.id);
     end = beat.sourceEnd;
     beats.push({
@@ -120,6 +132,7 @@ export function parsePresentationPlan(input: unknown): PresentationPlan | null {
       headline: beat.headline,
       points: [...beat.points] as string[],
       ...(beat.layout === 'image' ? { imageSrc: beat.imageSrc as string } : {}),
+      ...('media' in beat ? { media: [...(beat.media as string[])] } : {}),
     });
   }
   if (value.sourceText.slice(end).trim()) return null;

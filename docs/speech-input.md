@@ -69,11 +69,22 @@ interface SpeechInputProvider {
   requestSetup?(): void;
   transcribe(
     wav: ArrayBuffer,
-    options: { prompt?: string; language?: string; signal: AbortSignal },
-  ): Promise<{ text: string }>;
+    options: { prompt?: string; language?: string; timestamps?: boolean; signal: AbortSignal },
+  ): Promise<{ text: string; segments?: SpeechInputSegment[] }>;
   dispose?(): void;
 }
+
+// Seconds from the start of the take.
+interface SpeechInputSegment {
+  start: number;
+  end: number;
+  text: string;
+  words?: { start: number; end: number; text: string }[];
+}
 ```
+
+`timestamps` and `segments` serve [narration timing](#timing-a-narration-from-its-audio);
+dictation never sets `timestamps` and ignores `segments`.
 
 ### Readiness
 
@@ -129,6 +140,35 @@ editor unmounts. Stop promptly when it does: a rejection after abort is
 ignored, and a result after abort is discarded. A `transcribe` rejection
 otherwise ends the session (the microphone is released at once — a failed take
 will not get better by sending another) and shows its message.
+
+## Timing a narration from its audio
+
+The same provider also times a recorded document narration. When the shell has
+a `speechInput` capability (not `unavailable`), a `workspaceContainer` and a
+`mediaProvider`, the document media tray offers **Update timings from audio**
+on the document-anchored narration clip. Squisq then:
+
+1. decodes the take — an audio file or the audio track of a video — to 16 kHz
+   mono, keeping to the clip's `clip-start`/`clip-end` window;
+2. cuts it into pieces of at most 29 s at the quietest moment near each limit,
+   and transcribes them **serially** with `timestamps: true` and the running
+   `prompt` tail;
+3. matches the recognized words to the document's narration script
+   (`alignTranscript` in `@bendyline/squisq/narration`), tolerating
+   paraphrase, skipped passages and long pauses;
+4. writes the take's v3 sidecar at `<media>.timing.json` with
+   `generator.method: 'transcript-align'`, keeping any `cameraOffsetSec` and
+   build steps the original sidecar recorded, and bumps `mediaRevision`.
+
+Return word times in `segments[].words` when the engine has them (whisper.cpp:
+`response_format=verbose_json`, whose sub-word tokens the host should join into
+words). Segment times alone also work, at phrase precision; a provider that
+returns no segments still works, at piece precision. If fewer than a fifth of
+the script's words are heard, the run fails and the existing sidecar is left
+untouched. A run continues if the tray unmounts and reports again when it
+returns. The resolved provider is on the context as
+`useEditorContext().speechRecognizer` for hosts that want their own entry
+point.
 
 ## What the editor does with the text
 
