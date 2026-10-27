@@ -13,6 +13,7 @@ import { buildNarrationScript } from '../narration/script.js';
 import { flattenRenderableBlocks } from '../doc/markdownToDoc.js';
 import { extractDocImages } from './blockAnalyzer.js';
 import { transformNarratedSegment } from './narratedSegment.js';
+import { collectPresentationMedia } from './presentationMedia.js';
 import {
   PRESENTATION_LIMITS,
   type PresentationBeat,
@@ -292,6 +293,35 @@ export function createPresentationPlan(
     throw new Error(
       'This document has too many sections for one presentation. Split it into shorter documents.',
     );
+  // A section's videos and diagrams accompany its slides in source order. The
+  // slides are shared out so every visual is shown; one that can resume stays
+  // on screen across consecutive slides, and the deck's opener and image
+  // slides keep their own visual whenever the section has other slides.
+  const sectionMedia = collectPresentationMedia(
+    doc,
+    script.blocks.map((block) => block.blockId),
+  );
+  for (const block of script.blocks) {
+    const items = sectionMedia.get(block.blockId);
+    if (!items?.length) continue;
+    const own = beats.filter(
+      (beat) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
+    );
+    const open = own.filter((beat) => beat !== beats[0] && beat.layout !== 'image');
+    const slots = open.length ? open : own;
+    const shown = new Set<string>();
+    slots.forEach((beat, slot) => {
+      const from = Math.floor((slot * items.length) / slots.length);
+      const to = Math.max(from + 1, Math.floor(((slot + 1) * items.length) / slots.length));
+      const refs = items
+        .slice(from, to)
+        .filter((item) => item.continuous || !shown.has(item.ref))
+        .slice(0, PRESENTATION_LIMITS.mediaPerBeat)
+        .map((item) => item.ref);
+      for (const ref of refs) shown.add(ref);
+      if (refs.length) beat.media = refs;
+    });
+  }
   const closing = beats[beats.length - 1];
   if (
     beats.length > 2 &&
@@ -340,6 +370,9 @@ export function createPresentationPlan(
       beat.headline = hint.wording.headline ?? beat.headline;
       beat.points = hint.wording.points ?? beat.points;
     }
+    // A steps diagram leaves a video or diagram only a small inset, while the
+    // text layouts pair them side by side; an explicit section choice stands.
+    if (beat.media && beat.layout === 'steps' && hint?.layout !== 'steps') beat.layout = 'list';
     if (
       ['steps', 'list', 'comparison'].includes(beat.layout) &&
       (beat.points.length < 2 || (beat.layout === 'comparison' && beat.points.length !== 2))

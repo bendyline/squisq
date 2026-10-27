@@ -14,6 +14,9 @@ import type { TemplateBlock } from '../schemas/BlockTemplates.js';
 import { buildNarrationScript } from '../narration/script.js';
 import { flattenRenderableBlocks, getPinnedBlockMeta } from '../doc/markdownToDoc.js';
 import { extractDocImages } from './blockAnalyzer.js';
+import { collectPresentationMedia, presentationMediaNode } from './presentationMedia.js';
+import type { MarkdownBlockNode } from '../markdown/types.js';
+import type { MediaClip } from '../schemas/Media.js';
 import {
   PRESENTATION_KEY,
   parsePresentationPlan,
@@ -54,6 +57,20 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     throw new Error(
       'A presentation image is no longer in the document. Make the presentation again.',
     );
+  const media = new Map(
+    [
+      ...collectPresentationMedia(
+        doc,
+        script.blocks.map((block) => block.blockId),
+      ).values(),
+    ]
+      .flat()
+      .map((item) => [item.ref, item]),
+  );
+  if (checked.beats.some((beat) => beat.media?.some((ref) => !media.has(ref))))
+    throw new Error(
+      'A presentation video or diagram is no longer in the document. Make the presentation again.',
+    );
   const duration = narration
     ? narration.startTime + narration.duration
     : Math.max(4, script.tokens.length / 2.5);
@@ -86,19 +103,58 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
   });
   const authoredBlocks = flattenRenderableBlocks(doc.blocks);
   const buildHints = parsePresentationHints(doc.frontmatter?.[PRESENTATION_HINTS_KEY]);
+  const sourceOf = (beat: PresentationBeat) =>
+    script.blocks.find(
+      (block) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
+    );
+  // A section's timed clips (music beds, cut-ins) start on its first slide and
+  // stop where the section ends, as they did on the section itself.
+  const sectionEnds = new Map<string, number>();
+  checked.beats.forEach((beat, index) => {
+    const section = sourceOf(beat)?.blockId;
+    if (section) sectionEnds.set(section, starts[index + 1] ?? duration);
+  });
+  const clipsPlaced = new Set<string>();
+  const mediaStarts = new Map<string, number>();
   const blocks: Block[] = [];
   checked.beats.forEach((beat, index) => {
     const start = starts[index]!;
     const end = starts[index + 1] ?? duration;
     if (end <= start) return;
-    const source = script.blocks.find(
-      (block) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
-    );
+    const source = sourceOf(beat);
     const build =
       buildHints?.blocks.find((hint) => hint.blockId === source?.blockId)?.build ??
       authoredBlocks.find((block) => block.id === source?.blockId)?.build;
+    const contents = (beat.media ?? []).flatMap((ref): MarkdownBlockNode[] => {
+      const first = mediaStarts.get(ref) ?? start;
+      mediaStarts.set(ref, first);
+      const node = presentationMediaNode(media.get(ref)!, start - first);
+      return node ? [node] : [];
+    });
+    let clips: MediaClip[] = [];
+    if (source && !clipsPlaced.has(source.blockId)) {
+      clipsPlaced.add(source.blockId);
+      const sectionEnd = sectionEnds.get(source.blockId) ?? end;
+      clips = (authoredBlocks.find((block) => block.id === source.blockId)?.media ?? []).flatMap(
+        (clip) => {
+          if (clip.spillover) return [clip];
+          const room = sectionEnd - start - clip.startAt;
+          if (room <= 0) return [];
+          const clipStart = clip.clipStart ?? 0;
+          return [
+            {
+              ...clip,
+              spillover: true,
+              clipEnd: Math.min(clip.clipEnd ?? Infinity, clipStart + room),
+            },
+          ];
+        },
+      );
+    }
     const base = {
       ...(build ? { build } : {}),
+      ...(contents.length ? { contents } : {}),
+      ...(clips.length ? { media: clips } : {}),
       id: beat.id,
       duration: end - start,
       startTime: start,

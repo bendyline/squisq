@@ -155,3 +155,4 @@ reports/
 /.claude/worktrees
 /.stryker-tmp
 .corpus/
+/state

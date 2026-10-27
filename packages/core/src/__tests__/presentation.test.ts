@@ -18,11 +18,15 @@ import { MemoryContentContainer } from '../storage/ContentContainer.js';
 import { applyTransform } from '../transform/applyTransform.js';
 import { createPresentationPlan } from '../transform/presentationPlanner.js';
 import { compilePresentationPlan } from '../transform/presentationCompiler.js';
+import { collectPresentationMedia, presentationMediaNode } from '../transform/presentationMedia.js';
 import {
   parsePresentationPlan,
   serializePresentationPlan,
   PRESENTATION_KEY,
 } from '../transform/presentationPlan.js';
+import { extractEmbeddedVideos } from '../doc/templateInputs.js';
+import { resolveMediaSchedule } from '../schemas/Media.js';
+import type { Doc } from '../schemas/Doc.js';
 
 const source =
   '# Start with an idea\n\nWrite a few bullet points. Build a document with a clear story.\n\n## Make it visual\n\nFirst organize your points. Then add diagrams. Finally share your presentation.\n\n## Keep your voice\n\nNarration runs locally. Turn the same document into a narrated video.';
@@ -365,3 +369,93 @@ describe('dynamic slide summarization', () => {
     expect(parsePresentationHints('x'.repeat(160001))).toBeNull();
   });
 });
+
+describe('dynamic slides with embedded videos and diagrams', () => {
+  const demo = [
+    '# Opening',
+    '',
+    'This deck opens with a short welcome.',
+    '',
+    '## Demo',
+    '',
+    'Watch the recording while I explain each part of the editor. ' +
+      'First we open a document and type a few rough notes into it. ' +
+      'Then we ask for a review and accept the suggestions we like. ' +
+      'Next we switch to the slideshow view and pick a theme for it. ' +
+      'Finally we export a narrated video and share it with the team.',
+    '',
+    '<video src="video/demo.mp4" controls data-squisq-video-clip-end="50"></video>',
+    '',
+    '{[audio src=audio/bed.mp3]}',
+    '',
+    '## How it fits',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '  a --> b',
+    '```',
+    '',
+    'First organize your points. Then add diagrams. Finally share your presentation.',
+  ].join('\n');
+  const concise = { ...defaultPresentationHints(), density: 'concise' as const };
+
+  it('shows each section video and diagram beside its slides instead of dropping them', async () => {
+    const { doc } = await narrated(demo, [0, 10, 70, 90]);
+    const plan = createPresentationPlan(doc, concise);
+    const section = (id: string) =>
+      plan.beats.filter((beat) => sectionAt(doc, beat.sourceStart) === id);
+    const demoBeats = section('demo');
+    expect(demoBeats.length).toBeGreaterThan(1);
+    expect(demoBeats.every((beat) => beat.media?.join() === 'demo#0')).toBe(true);
+    expect(plan.beats[0]!.media).toBeUndefined();
+    // A steps diagram would leave the flowchart a small inset; a list pairs them.
+    const fits = section('how-it-fits');
+    expect(fits.map((beat) => [beat.layout, beat.media])).toEqual([['list', ['how-it-fits#0']]]);
+    expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+
+    const compiled = compilePresentationPlan(doc, plan);
+    const expanded = expandDocBlocks(compiled.blocks, { audioSegments: compiled.audio.segments });
+    const layers = (id: string, type: string) =>
+      expanded
+        .find((block) => block.id === id)!
+        .layers!.filter((layer) => layer.type === type) as Array<{
+        content: { clipStart: number; clipEnd: number };
+      }>;
+    expect(layers(fits[0]!.id, 'mermaid')).toHaveLength(1);
+    // The recording plays on across the section's slides rather than restarting.
+    const timed = compiled.blocks.filter((block) => demoBeats.some((beat) => beat.id === block.id));
+    expect(timed.map((block) => layers(block.id, 'video')[0]!.content.clipStart)).toEqual(
+      timed.map((block) => block.startTime - timed[0]!.startTime),
+    );
+    expect(layers(timed[0]!.id, 'video')[0]!.content.clipEnd).toBe(50);
+  });
+
+  it('keeps a section audio bed playing until that section ends', async () => {
+    const { doc } = await narrated(demo, [0, 10, 70, 90]);
+    const compiled = compilePresentationPlan(doc, createPresentationPlan(doc, concise));
+    const bed = resolveMediaSchedule(compiled).filter((clip) => clip.src === 'audio/bed.mp3');
+    expect(bed.map((clip) => [clip.absoluteStart, clip.absoluteEnd])).toEqual([[10, 70]]);
+  });
+
+  it('resumes a video only within its authored clip and refuses stale visuals', async () => {
+    const { doc } = await narrated(demo, [0, 10, 70, 90]);
+    const item = collectPresentationMedia(doc, ['opening', 'demo', 'how-it-fits']).get('demo')![0]!;
+    const attributes = (seconds: number) =>
+      extractEmbeddedVideos([presentationMediaNode(item, seconds)!])[0];
+    expect(attributes(12)).toMatchObject({ clipStart: 12, clipEnd: 50 });
+    expect(presentationMediaNode(item, 50)).toBeNull();
+    expect(extractEmbeddedVideos([item.node])[0]!.clipStart).toBeUndefined();
+
+    // A saved plan whose visual was removed must be made again.
+    const plan = createPresentationPlan(doc, concise);
+    const withoutVideo = (await narrated(demo.replace(/<video[^\n]*/u, ''), [0, 10, 70, 90])).doc;
+    expect(() => compilePresentationPlan(withoutVideo, plan)).toThrow('video or diagram');
+  });
+});
+
+/** The narrated section a plan offset falls in. */
+function sectionAt(doc: Doc, offset: number): string | undefined {
+  return buildNarrationScript(doc).blocks.find(
+    (block) => offset >= block.charStart && offset < block.charEnd,
+  )?.blockId;
+}
