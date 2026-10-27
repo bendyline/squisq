@@ -4,6 +4,7 @@ import type { RenderResult } from 'mermaid';
 import type { Theme } from '@bendyline/squisq/schemas';
 import { buildMermaidThemeVariables } from '@bendyline/squisq/schemas';
 import { DEFAULT_THEME } from '@bendyline/squisq/doc';
+import { withMermaidLabelWrapping } from '@bendyline/squisq-react';
 import type {
   MermaidEditableEdge,
   MermaidEditableModel,
@@ -104,7 +105,9 @@ export async function renderMermaidDiagram(
       themeVariables: buildMermaidThemeVariables(theme),
     });
     const model = await inspectMermaidSourceWith(mermaid, source);
-    const { svg, diagramType } = await mermaid.render(id, source, container);
+    const { svg, diagramType } = await withMermaidLabelWrapping(() =>
+      mermaid.render(id, source, container),
+    );
     return model ? { svg, diagramType, model } : { svg, diagramType };
   };
   // `getDiagramFromText` and `render` share Mermaid diagram databases. Keep
