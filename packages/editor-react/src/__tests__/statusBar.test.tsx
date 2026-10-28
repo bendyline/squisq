@@ -54,7 +54,7 @@ describe('StatusBar', () => {
     expect(screen.queryByText('Parsing…')).toBeNull();
   });
 
-  it('keeps the last settled parse status visible while an edit is pending', async () => {
+  it('keeps the last settled stats visible while an edit is pending', async () => {
     render(
       <EditorProvider initialMarkdown="Working draft" articleId="status-bar-test">
         <StatusBar />
@@ -62,14 +62,19 @@ describe('StatusBar', () => {
       </EditorProvider>,
     );
 
-    expect(screen.getByText('✓ OK')).toBeTruthy();
     expect(screen.getByText('13 chars')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit source' }));
 
     expect(screen.getByTestId('parse-state').textContent).toBe('true');
-    expect(screen.getByText('✓ OK')).toBeTruthy();
     expect(screen.getByText('13 chars')).toBeTruthy();
     expect(await screen.findByText('18 chars')).toBeTruthy();
+  });
+
+  it('shows no parse indicator while the document parses cleanly', () => {
+    renderStatusBar('Working draft');
+
+    expect(screen.queryByText('✓ OK')).toBeNull();
+    expect(screen.queryByText('⚠ Error')).toBeNull();
   });
 });

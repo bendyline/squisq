@@ -508,10 +508,6 @@
   flex: 1;
 }
 
-.squisq-status-ok {
-  color: var(--squisq-success);
-}
-
 .squisq-status-error {
   color: var(--squisq-danger);
 }

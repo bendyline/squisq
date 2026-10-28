@@ -4,6 +4,11 @@
  * Renders an image layer within an SVG block. Supports Ken Burns and other
  * animations via CSS classes. Images are rendered using SVG <image> element
  * with proper aspect ratio handling.
+ *
+ * Cover images draw as an HTML <img> inside a <foreignObject> (object-fit),
+ * and Ken Burns motion animates that <img>. WebKit paints an animated element
+ * there without the slide's scale, so on WebKit the Ken Burns branch uses an
+ * SVG <image> instead (utils/foreignObjectPaint.ts).
  */
 
 import type { ImageLayer as ImageLayerType, Animation } from '@bendyline/squisq/schemas';
@@ -11,6 +16,7 @@ import { cssFilterForTreatment } from '@bendyline/squisq/doc';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
 import { useMediaUrl } from '../hooks/MediaContext';
+import { paintsForeignObjectLayersUnscaled } from '../utils/foreignObjectPaint';
 
 interface ImageLayerProps {
   layer: ImageLayerType;
@@ -126,6 +132,37 @@ export function ImageLayer({
   if (isCover && isSpatialAnim && animation) {
     const kbAnim = remapToKenBurns(animation);
     const kbStyle = getAnimationStyle(kbAnim, blockTime);
+
+    // WebKit paints the animated <img> without the slide's scale (see
+    // utils/foreignObjectPaint.ts), so there the same keyframes run on an SVG
+    // <image>, clipped by a nested <svg> the size of the layer.
+    if (paintsForeignObjectLayersUnscaled()) {
+      return (
+        <g
+          className="block-layer block-layer--image"
+          data-layer-id={layer.id}
+          data-image-framing="svg-ken-burns"
+        >
+          <svg x={finalX} y={finalY} width={width} height={height} style={{ overflow: 'hidden' }}>
+            <image
+              href={src}
+              width={width}
+              height={height}
+              preserveAspectRatio="xMidYMid slice"
+              className={kbStyle.className}
+              {...(content.alt ? { role: 'img', 'aria-label': content.alt } : {})}
+              style={{
+                pointerEvents: 'none',
+                transformBox: 'fill-box',
+                transformOrigin: 'center center',
+                ...(filter ? { filter } : {}),
+                ...kbStyle.style,
+              }}
+            />
+          </svg>
+        </g>
+      );
+    }
 
     return (
       <g className="block-layer block-layer--image" data-layer-id={layer.id}>
