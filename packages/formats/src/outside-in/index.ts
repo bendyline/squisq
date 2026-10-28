@@ -51,6 +51,12 @@ const OUTSIDE_IN_VERSION_KEY = 'squisq-outside-in';
 const OUTSIDE_IN_OUTPUT_KEY = 'squisq-output';
 const OUTSIDE_IN_FORMAT_KEY = 'squisq-output-format';
 export const OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY = 'squisq-updatefrommarkdown';
+/**
+ * Frontmatter naming the page template a rendered output is generated
+ * through: a path relative to the companion Markdown, a `/`-prefixed path
+ * from the container root, or `none` to opt out of a host default.
+ */
+export const OUTSIDE_IN_OUTPUT_TEMPLATE_KEY = 'squisq-output-template';
 
 export interface OutsideInMetadata {
   version: 1;
@@ -123,6 +129,27 @@ export function isOutsideInMarkdownEditingEnabled(source: string | MarkdownDocum
   const yaml = rawFrontmatter(source);
   const frontmatter = yaml === null ? null : parseFrontmatter(yaml);
   return frontmatter?.[OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY] === true;
+}
+
+/**
+ * The companion's page template choice: the authored path, `'none'` when it
+ * opts out of any host default, or null when it names none. Resolving the
+ * path against the companion is the host's job, since only the host knows
+ * where the container root is.
+ */
+export function readOutsideInOutputTemplate(source: string | MarkdownDocument): string | null {
+  const frontmatter =
+    typeof source === 'string'
+      ? (() => {
+          const yaml = rawFrontmatter(source);
+          return yaml === null ? null : parseFrontmatter(yaml);
+        })()
+      : source.frontmatter;
+  const value = frontmatter?.[OUTSIDE_IN_OUTPUT_TEMPLATE_KEY];
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.toLowerCase() === 'none' ? 'none' : trimmed;
 }
 
 /**

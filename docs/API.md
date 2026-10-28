@@ -2989,11 +2989,35 @@ interface HtmlZipExportOptions extends HtmlExportOptions {}
 
 // Static plain-HTML export
 function markdownDocToPlainHtml(doc: MarkdownDocument, options?: PlainHtmlExportOptions): string;
+// Body + functional CSS only (no page shell or theme page styles), for page templates
+function markdownDocToPlainHtmlParts(
+  doc: MarkdownDocument,
+  options?: PlainHtmlExportOptions,
+): PlainHtmlParts; // { title, bodyHtml, featureHeadHtml }
 function markdownDocsToPlainHtmlBundle(options: PlainHtmlBundleOptions): Promise<Blob>;
 function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Promise<Blob>; // player-embedded multi-doc bundle
 function collectLinkRefs(doc: MarkdownDocument): Set<string>;
 
-// HTML import
+// Page templates: an author's HTML page whose unnamed <slot> receives the body,
+// <slot name="title"> the title, and <slot name="KEY"> values[KEY] as text.
+// Unfilled slots keep their fallback children; <title> slots are matched as
+// text; relative URLs are rebased from templatePath to outputPath; everything
+// else is copied byte for byte. Throws HtmlPageTemplateError for an unusable template.
+function applyHtmlPageTemplate(
+  template: string,
+  content: {
+    bodyHtml: string;
+    headHtml?: string;
+    title: string;
+    values?: Record<string, string | undefined>;
+  },
+  options?: { templatePath?: string; outputPath?: string },
+): string;
+function inspectHtmlPageTemplate(html: string): HtmlPageTemplateInspection; // slots + errors (with lines)
+function isHtmlPageTemplate(html: string): boolean; // has a <slot> outside <template>
+function extractHtmlPageTemplateContent(html: string): string | null; // body between the content markers
+
+// HTML import (a templated page imports only the body between its content markers)
 function htmlToMarkdownDocSync(html: string, options?: HtmlImportOptions): MarkdownDocument;
 function htmlToMarkdownDoc(
   data: ArrayBuffer | Uint8Array | string,

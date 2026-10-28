@@ -141,6 +141,27 @@ const page = markdownDocToPlainHtml(markdownDoc, { themeId: 'warm-earth' });
 const imported = await htmlToMarkdownDoc(htmlString);
 ```
 
+To place a document inside your own page — a site header, navigation, footer, and stylesheet — write the page as an HTML template with standard `<slot>` elements and fill it:
+
+```ts
+import { applyHtmlPageTemplate, markdownDocToPlainHtmlParts } from '@bendyline/squisq-formats/html';
+
+// template: <title><slot name="title">Post</slot> · My Blog</title> … <h1><slot name="title"></slot></h1> <slot></slot>
+const parts = markdownDocToPlainHtmlParts(markdownDoc);
+const page = applyHtmlPageTemplate(
+  template,
+  {
+    bodyHtml: parts.bodyHtml,
+    headHtml: parts.featureHeadHtml,
+    title: 'Hello',
+    values: { date: '2026-10-28' },
+  },
+  { templatePath: '_templates/post.html', outputPath: 'posts/hello.html' },
+);
+```
+
+The unnamed `<slot>` receives the body (between `<!-- squisq:content -->` markers, which `htmlToMarkdownDoc` honors on re-import), named slots receive text values or keep their fallback children, relative URLs are rebased from the template's folder to the page's, and everything else in the template is copied byte for byte.
+
 The subpath also exports `markdownDocsToPlainHtmlBundle` / `markdownDocsToHtmlBundle` (recursive multi-doc ZIP bundles with `.md` links rewritten to `.html`), `htmlToMarkdownDocSync` / `htmlToMarkdown`, and helpers (`collectImagePaths`, `collectLinkRefs`, `inferMimeType`).
 
 ### EPUB

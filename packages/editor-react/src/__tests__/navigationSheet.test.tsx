@@ -220,6 +220,34 @@ describe('NavigationSheet', () => {
     expect(sheet.dataset.state).toBe('closed');
   });
 
+  it('cancels the touch moves of a drag it follows, and only those', () => {
+    renderSheet();
+    const editor = screen.getByTestId('editor');
+    const touchMove = (): boolean => {
+      const event = new Event('touchmove', { bubbles: true, cancelable: true });
+      act(() => {
+        editor.dispatchEvent(event);
+      });
+      return event.defaultPrevented;
+    };
+
+    drag(editor, [
+      [315, 200],
+      [312, 260],
+    ]);
+    expect(touchMove()).toBe(false);
+    touch('pointerup', editor, 312, 260);
+
+    // Left to the browser, a quick swipe leaves a fling running behind pan-y,
+    // and on Android, ChromeOS and Linux the next tap only stops it.
+    touch('pointerdown', editor, 315, 200);
+    expect(touchMove()).toBe(false);
+    touch('pointermove', editor, 290, 200);
+    expect(touchMove()).toBe(true);
+    touch('pointerup', editor, 150, 200);
+    expect(touchMove()).toBe(false);
+  });
+
   it('swipes an open sheet back closed', () => {
     const { panel } = renderSheet({ initial: 'outline' });
 

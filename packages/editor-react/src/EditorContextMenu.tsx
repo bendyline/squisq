@@ -26,6 +26,7 @@ import { CellSelection } from '@tiptap/pm/tables';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import { useEditorContext, type EditorView } from './EditorContext';
 import { indentListItem, listNesting, outdentListItem } from './toolbar/tiptapToolbar';
+import { copyMediaCommand, mediaNodePosAt, type ClipboardMediaKind } from './mediaClipboard';
 
 export interface EditorContextMenuContext {
   /** Editor rendition that was right-clicked. */
@@ -35,6 +36,11 @@ export interface EditorContextMenuContext {
   hasSelection: boolean;
   /** False in Preview and when the host made the editor read-only. */
   editable: boolean;
+  /**
+   * The image, video or audio clip the right-click landed on, which it
+   * selected (Write view only). Cut and Copy act on the clip.
+   */
+  media?: { kind: ClipboardMediaKind; src: string };
   clientX: number;
   clientY: number;
   target: Element;
@@ -190,6 +196,48 @@ async function writeClipboard(text: string): Promise<void> {
 async function readClipboard(): Promise<string> {
   if (!navigator.clipboard?.readText) throw new Error('Clipboard access is unavailable.');
   return navigator.clipboard.readText();
+}
+
+/**
+ * Everything the clipboard holds that a paste reads — text, HTML and images —
+ * or null where the browser has no asynchronous read. Throws when it refuses.
+ */
+async function readClipboardTransfer(): Promise<DataTransfer | null> {
+  if (
+    !navigator.clipboard?.read ||
+    typeof DataTransfer === 'undefined' ||
+    typeof ClipboardEvent === 'undefined'
+  ) {
+    return null;
+  }
+  const transfer = new DataTransfer();
+  for (const item of await navigator.clipboard.read()) {
+    for (const type of item.types) {
+      const blob = await item.getType(type);
+      if (type.startsWith('text/')) transfer.setData(type, await blob.text());
+      else if (type.startsWith('image/')) {
+        transfer.items.add(new File([blob], `image.${type.slice(6).split('+')[0]}`, { type }));
+      }
+    }
+  }
+  return transfer;
+}
+
+/**
+ * Run the Write view's own paste handling on `transfer`, exactly as ⌘V does:
+ * images are stored, a copied clip keeps its reference, markdown converts.
+ */
+function dispatchPaste(editor: TiptapEditor, transfer: DataTransfer): void {
+  const event = new ClipboardEvent('paste', {
+    clipboardData: transfer,
+    bubbles: true,
+    cancelable: true,
+  });
+  // Safari ignores `clipboardData` in the event's init.
+  if (event.clipboardData !== transfer) {
+    Object.defineProperty(event, 'clipboardData', { value: transfer });
+  }
+  editor.view.dom.dispatchEvent(event);
 }
 
 function shouldShowItem(item: EditorContextMenuItem, context: EditorContextMenuContext): boolean {
@@ -365,7 +413,8 @@ export function EditorContextMenuProvider({
   readOnly = false,
   children,
 }: EditorContextMenuProviderProps): ReactElement {
-  const { activeView, editorMode, colorScheme, monacoEditor, tiptapEditor } = useEditorContext();
+  const { activeView, editorMode, colorScheme, monacoEditor, tiptapEditor, mediaProvider } =
+    useEditorContext();
   const itemGettersRef = useRef(new Set<ItemGetter>());
   const menuRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
@@ -385,7 +434,10 @@ export function EditorContextMenuProvider({
 
       const editable = !readOnly && activeView !== 'preview';
       let selectedText = '';
+      let media: EditorContextMenuContext['media'];
+      let copySelection: (() => Promise<void>) | null = null;
       let cutSelection: () => Promise<void> = async () => undefined;
+      let pasteContents: (() => Promise<boolean>) | null = null;
       let pasteText: (text: string) => Promise<void> = async () => undefined;
       let focusTarget: () => void = () => undefined;
 
@@ -426,27 +478,68 @@ export function EditorContextMenuProvider({
           monacoEditor.focus();
         };
       } else if (tiptapEditor && tiptapEditor.view.dom.contains(target)) {
-        const hit = tiptapEditor.view.posAtCoords({ left: clientX, top: clientY });
-        let { from, to, empty } = tiptapEditor.state.selection;
-        if (hit && ((!empty && (hit.pos < from || hit.pos > to)) || empty)) {
-          tiptapEditor.commands.setTextSelection(hit.pos);
-          ({ from, to, empty } = tiptapEditor.state.selection);
+        const { view } = tiptapEditor;
+        const mediaPos = mediaNodePosAt(view, target);
+        const mediaNode = mediaPos === null ? null : view.state.doc.nodeAt(mediaPos);
+        let restoreSelection: () => void;
+        if (mediaPos !== null && mediaNode) {
+          // Select the clip, so the menu acts on it and the editor shows what it acts on.
+          tiptapEditor.commands.setNodeSelection(mediaPos);
+          media = {
+            kind: mediaNode.type.name as ClipboardMediaKind,
+            src: String(mediaNode.attrs.src ?? ''),
+          };
+          restoreSelection = () => tiptapEditor.commands.setNodeSelection(mediaPos);
+          copySelection = () => copyMediaCommand(view, mediaPos, mediaProvider, false);
+          cutSelection = () => copyMediaCommand(view, mediaPos, mediaProvider, true);
+          pasteText = async (text: string) => {
+            tiptapEditor
+              .chain()
+              .focus()
+              .setNodeSelection(mediaPos)
+              .command(({ tr }) => {
+                tr.insertText(text);
+                return true;
+              })
+              .run();
+          };
+        } else {
+          const hit = view.posAtCoords({ left: clientX, top: clientY });
+          let { from, to, empty } = tiptapEditor.state.selection;
+          if (hit && ((!empty && (hit.pos < from || hit.pos > to)) || empty)) {
+            tiptapEditor.commands.setTextSelection(hit.pos);
+            ({ from, to, empty } = tiptapEditor.state.selection);
+          }
+          if (!empty) selectedText = tiptapEditor.state.doc.textBetween(from, to, '\n');
+          restoreSelection = () => tiptapEditor.commands.setTextSelection({ from, to });
+          cutSelection = async () => {
+            tiptapEditor.chain().focus().setTextSelection({ from, to }).deleteSelection().run();
+          };
+          pasteText = async (text: string) => {
+            tiptapEditor
+              .chain()
+              .focus()
+              .setTextSelection({ from, to })
+              .command(({ tr }) => {
+                tr.insertText(text, from, to);
+                return true;
+              })
+              .run();
+          };
         }
-        if (!empty) selectedText = tiptapEditor.state.doc.textBetween(from, to, '\n');
         focusTarget = () => tiptapEditor.commands.focus();
-        cutSelection = async () => {
-          tiptapEditor.chain().focus().setTextSelection({ from, to }).deleteSelection().run();
-        };
-        pasteText = async (text: string) => {
-          tiptapEditor
-            .chain()
-            .focus()
-            .setTextSelection({ from, to })
-            .command(({ tr }) => {
-              tr.insertText(text, from, to);
-              return true;
-            })
-            .run();
+        pasteContents = async () => {
+          let transfer: DataTransfer | null;
+          try {
+            transfer = await readClipboardTransfer();
+          } catch {
+            return false;
+          }
+          if (!transfer) return false;
+          restoreSelection();
+          tiptapEditor.commands.focus();
+          dispatchPaste(tiptapEditor, transfer);
+          return true;
         };
       } else if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
         const start = target.selectionStart ?? 0;
@@ -472,18 +565,22 @@ export function EditorContextMenuProvider({
         selectedText,
         hasSelection: selectedText.length > 0,
         editable,
+        ...(media ? { media } : {}),
         clientX,
         clientY,
         target,
       };
       return {
         context,
-        copy: () => writeClipboard(selectedText),
-        cut: async () => {
-          await writeClipboard(selectedText);
-          await cutSelection();
-        },
+        copy: copySelection ?? (() => writeClipboard(selectedText)),
+        cut: media
+          ? cutSelection
+          : async () => {
+              await writeClipboard(selectedText);
+              await cutSelection();
+            },
         paste: async () => {
+          if (await pasteContents?.()) return;
           try {
             await pasteText(await readClipboard());
           } catch (error: unknown) {
@@ -494,7 +591,7 @@ export function EditorContextMenuProvider({
         },
       };
     },
-    [activeView, editorMode, monacoEditor, readOnly, rootRef, tiptapEditor],
+    [activeView, editorMode, mediaProvider, monacoEditor, readOnly, rootRef, tiptapEditor],
   );
 
   const openAt = useCallback(
@@ -509,7 +606,7 @@ export function EditorContextMenuProvider({
           label: 'Cut',
           shortcut: `${modifier}X`,
           group: 'clipboard',
-          disabled: !context.editable || !context.hasSelection,
+          disabled: !context.editable || (!context.hasSelection && !context.media),
           onSelect: interaction.cut,
         },
         {
@@ -517,7 +614,7 @@ export function EditorContextMenuProvider({
           label: 'Copy',
           shortcut: `${modifier}C`,
           group: 'clipboard',
-          disabled: !context.hasSelection,
+          disabled: !context.hasSelection && !context.media,
           onSelect: interaction.copy,
         },
         {

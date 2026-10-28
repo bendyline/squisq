@@ -103,11 +103,13 @@ export {
 export {
   OUTSIDE_IN_FORMAT_IDS,
   OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY,
+  OUTSIDE_IN_OUTPUT_TEMPLATE_KEY,
   isOutsideInTargetPath,
   isOutsideInMarkdownEditingEnabled,
   resolveOutsideInLayout,
   chooseOutsideInMarkdownPath,
   readOutsideInMetadata,
+  readOutsideInOutputTemplate,
   withOutsideInMetadata,
   withOutsideInMarkdownEditing,
   importOutsideInDocument,

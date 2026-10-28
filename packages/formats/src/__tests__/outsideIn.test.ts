@@ -5,6 +5,7 @@ import {
   importOutsideInDocument,
   isOutsideInMarkdownEditingEnabled,
   readOutsideInMetadata,
+  readOutsideInOutputTemplate,
   renderOutsideInDocument,
   resolveOutsideInLayout,
   withOutsideInMetadata,
@@ -66,6 +67,19 @@ describe('outside-in documents', () => {
     const editable = withOutsideInMarkdownEditing(readOnly, layout);
     expect(isOutsideInMarkdownEditingEnabled(editable)).toBe(true);
     expect(readOutsideInMetadata(editable)?.updateFromMarkdown).toBe(true);
+  });
+
+  it('reads the page template a companion names, or its opt-out', () => {
+    const page = (value: string) => `---\nsquisq-output-template: ${value}\n---\n# Post\n`;
+    expect(readOutsideInOutputTemplate(page('/_templates/post.html'))).toBe(
+      '/_templates/post.html',
+    );
+    expect(readOutsideInOutputTemplate(page('../../_templates/post.html'))).toBe(
+      '../../_templates/post.html',
+    );
+    expect(readOutsideInOutputTemplate(page('None'))).toBe('none');
+    expect(readOutsideInOutputTemplate('# No frontmatter\n')).toBeNull();
+    expect(readOutsideInOutputTemplate(page('""'))).toBeNull();
   });
 
   it('imports HTML into a frontmatter-linked Markdown source', async () => {

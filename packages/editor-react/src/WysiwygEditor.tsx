@@ -34,6 +34,7 @@ import { HeadingWithTemplate } from './TemplateAnnotation';
 import { Superscript, Subscript } from './VerticalAlign';
 import { MarkdownEscape } from './MarkdownEscape';
 import { PlainTextClipboard } from './PlainTextClipboard';
+import { MediaClipboard, pasteCopiedMedia } from './mediaClipboard';
 import { AsciiDiagramExtension } from './asciiDiagram/AsciiDiagramExtension';
 import { RepairableDiagramExtension } from './asciiDiagram/RepairableDiagramExtension';
 import { applyRepairCommand } from './asciiDiagram/asciiDiagramCommands';
@@ -449,6 +450,7 @@ export function WysiwygEditor({
       Subscript,
       MarkdownEscape,
       PlainTextClipboard,
+      MediaClipboard.configure({ mediaProvider: () => mediaProviderRef.current }),
       BlockTagActivityExtension,
       AsciiDiagramExtension.configure({ textChannel: sceneTextChannel }),
       MermaidDiagramExtension.configure({ themeStore: mermaidThemeStore }),
@@ -600,6 +602,14 @@ export function WysiwygEditor({
       handlePaste: (view, event) => {
         const clipboard = event.clipboardData;
         if (!clipboard) return false;
+
+        // An image, video or audio clip copied in Squisq: in its own document
+        // the same reference, elsewhere a stored copy of its file. Before the
+        // image-file rule, which would store the copy's PNG a second time.
+        if (pasteCopiedMedia(view, clipboard, mediaProviderRef.current, bumpMediaRevision)) {
+          event.preventDefault();
+          return true;
+        }
 
         // Image files in the clipboard → upload via MediaProvider and insert
         const imageFiles = filesFromClipboard(clipboard);

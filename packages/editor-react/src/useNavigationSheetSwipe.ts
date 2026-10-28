@@ -33,7 +33,8 @@ export interface NavigationSheetSwipeOptions {
  * Swipe in from the right edge for the outline, then drag downward for block
  * previews; swipe the open sheet back to the right to close it.
  *
- * Pointer Events only, like the host drawers this sits beside, and
+ * Pointer Events drive it, like the host drawers this sits beside; the one
+ * touch listener only cancels the moves of a drag the sheet has taken. And
  * `--squisq-navigation-sheet-progress` is written straight onto the sheet
  * during the drag so following the finger costs no React renders. Listeners
  * run in the capture phase so the sheet's scrim can stop a touch from also
@@ -169,15 +170,29 @@ export function useNavigationSheetSwipe({
       else if (!shouldOpen) callbacks.onClose();
     };
 
+    // pan-y keeps the browser from scrolling sideways, but its fling controller
+    // sees the gesture first: a quick swipe still leaves a fling running with
+    // nothing to scroll, and Chromium on Android, ChromeOS and Linux treats the
+    // next tap as stopping that fling — never a click. Cancelling the moves the
+    // sheet follows drops the fling before it starts. Pointer moves arrive
+    // ahead of their touch moves, so `axis` is already decided here.
+    const onTouchMove = (event: TouchEvent): void => {
+      if (pointerId !== null && axis === 'horizontal' && event.cancelable) {
+        event.preventDefault();
+      }
+    };
+
     surface.addEventListener('pointerdown', onPointerDown, true);
     surface.addEventListener('pointermove', onPointerMove, true);
     surface.addEventListener('pointerup', finish, true);
     surface.addEventListener('pointercancel', finish, true);
+    surface.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
     return () => {
       surface.removeEventListener('pointerdown', onPointerDown, true);
       surface.removeEventListener('pointermove', onPointerMove, true);
       surface.removeEventListener('pointerup', finish, true);
       surface.removeEventListener('pointercancel', finish, true);
+      surface.removeEventListener('touchmove', onTouchMove, true);
       clearDrag();
     };
   }, [sheetRef, panelRef, open]);

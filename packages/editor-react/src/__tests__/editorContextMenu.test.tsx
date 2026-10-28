@@ -8,6 +8,8 @@ import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import { CellSelection } from '@tiptap/pm/tables';
+import { NodeSelection } from '@tiptap/pm/state';
+import Image from '@tiptap/extension-image';
 import { EditorProvider, useEditorContext } from '../EditorContext';
 import {
   EditorContextMenuProvider,
@@ -15,6 +17,7 @@ import {
   useEditorContextMenuItems,
   type EditorContextMenuContext,
 } from '../EditorContextMenu';
+import { forgetMediaCopy, MediaClipboard } from '../mediaClipboard';
 
 function HostActions({ onNarrate }: { onNarrate: (context: EditorContextMenuContext) => void }) {
   const items = useMemo(
@@ -315,5 +318,101 @@ describe('EditorContextMenu', () => {
     expect(screen.getByRole('menuitem', { name: 'Insert column to the right' })).toBeDefined();
     expect(screen.getByRole('menuitem', { name: 'Delete column' })).toBeDefined();
     editor.destroy();
+  });
+
+  describe('on an image', () => {
+    const written: Array<Record<string, Promise<Blob> | Blob>> = [];
+
+    beforeEach(() => {
+      written.length = 0;
+      vi.stubGlobal(
+        'ClipboardItem',
+        class {
+          constructor(readonly items: Record<string, Promise<Blob> | Blob>) {}
+        },
+      );
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: {
+          writeText,
+          readText,
+          // Settles as a browser does: only once every format has resolved.
+          write: vi.fn(async ([item]: Array<{ items: Record<string, Promise<Blob> | Blob> }>) => {
+            await Promise.all(Object.values(item.items));
+            written.push(item.items);
+          }),
+        },
+      });
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      forgetMediaCopy();
+    });
+
+    /** jsdom's Blob reads only through FileReader. */
+    function blobText(blob: Blob): Promise<string> {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsText(blob);
+      });
+    }
+
+    function makeImageEditor(): Editor {
+      return new Editor({
+        extensions: [StarterKit, Image.configure({ inline: false }), MediaClipboard],
+        content: '<p>Before</p><img src="images/photo.png" alt="Photo"><p>After</p>',
+        editorProps: { attributes: { class: 'squisq-wysiwyg-editor' } },
+      });
+    }
+
+    it('selects the image and offers Cut and Copy for it', async () => {
+      const editor = makeImageEditor();
+      render(<TableHarness editor={editor} />);
+
+      fireEvent.contextMenu(editor.view.dom.querySelector('img')!, { clientX: 40, clientY: 60 });
+
+      const copy = await screen.findByRole('menuitem', { name: /^Copy/ });
+      expect(copy).toHaveProperty('disabled', false);
+      expect(screen.getByRole('menuitem', { name: /^Cut/ })).toHaveProperty('disabled', false);
+      const { selection } = editor.state;
+      expect(selection).toBeInstanceOf(NodeSelection);
+      expect((selection as NodeSelection).node.type.name).toBe('image');
+      editor.destroy();
+    });
+
+    it('copies the image as its reference', async () => {
+      const editor = makeImageEditor();
+      render(<TableHarness editor={editor} />);
+      fireEvent.contextMenu(editor.view.dom.querySelector('img')!, { clientX: 40, clientY: 60 });
+
+      fireEvent.click(await screen.findByRole('menuitem', { name: /^Copy/ }));
+
+      // No picture to draw in jsdom, so the HTML alone is written.
+      await waitFor(() => expect(written).toHaveLength(1));
+      expect(Object.keys(written[0]!)).toEqual(['text/html']);
+      const html = await blobText(written[0]!['text/html'] as Blob);
+      expect(html).toContain('src="images/photo.png"');
+      expect(html).toMatch(/data-squisq-media-copy="[^"]+"/);
+      expect(writeText).not.toHaveBeenCalled();
+      expect(screen.queryByRole('menu')).toBeNull();
+      editor.destroy();
+    });
+
+    it('cuts the image out of the document', async () => {
+      const editor = makeImageEditor();
+      render(<TableHarness editor={editor} />);
+      fireEvent.contextMenu(editor.view.dom.querySelector('img')!, { clientX: 40, clientY: 60 });
+
+      fireEvent.click(await screen.findByRole('menuitem', { name: /^Cut/ }));
+
+      await waitFor(() => expect(editor.view.dom.querySelector('img')).toBeNull());
+      expect(written).toHaveLength(1);
+      expect(editor.getText()).toContain('Before');
+      expect(editor.getText()).toContain('After');
+      editor.destroy();
+    });
   });
 });

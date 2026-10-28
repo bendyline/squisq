@@ -36,6 +36,7 @@ import {
   linkFootnoteReferences,
   buildFootnoteDefinitions,
 } from './footnoteImport.js';
+import { extractHtmlPageTemplateContent } from './pageTemplate.js';
 
 export interface HtmlImportOptions {
   /** Cancel before parsing. */
@@ -574,11 +575,15 @@ export function htmlToMarkdownDocSync(
   // Both halves are sanitized below, so nothing skips the filter — the pass
   // only reads the shape, it never trusts the content.
   const headMetadata = options.headMetadata === false ? {} : readHeadMetadata(nodes);
+  // A page generated from a page template marks the document it carries;
+  // everything outside the markers is the template's chrome, not content.
+  const templated = extractHtmlPageTemplateContent(html);
+  const contentNodes = templated === null ? nodes : parseHtmlToNodes(templated);
   const {
     nodes: bodyNodes,
     bodies,
     identifiers,
-  } = extractFootnoteSection(dropContentlessElements(nodes));
+  } = extractFootnoteSection(dropContentlessElements(contentNodes));
   const clean = (input: HtmlNode[]): HtmlNode[] =>
     options.sanitize === false ? input : sanitizeHtmlNodes(input);
 
