@@ -29,6 +29,8 @@ import { WysiwygEditor } from './WysiwygEditor';
 import { InlinePreviewGutter } from './InlinePreviewGutter';
 import { BlockPreviewPanel } from './BlockPreviewPanel';
 import { OutlinePanel, OUTLINE_RESPONSIVE_WIDTH } from './OutlinePanel';
+import { NavigationSheet } from './NavigationSheet';
+import type { NavigationSheetPanel } from './useNavigationSheetSwipe';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
 import { ProofingRoot } from './proofing/ProofingContext';
 import { ReviewRoot } from './review/ReviewContext';
@@ -633,6 +635,21 @@ export interface EditorShellProps {
    */
   outlineWidth?: number;
   /**
+   * The navigation sheet that stands in for the outline and preview panes
+   * once the editor body is too narrow for them (~720px): a popover from the
+   * right edge holding the outline or a scrolling list of block previews.
+   * On touch, swiping in from the right edge opens the outline and turning
+   * the swipe downward opens previews; tapping outside it, Escape, swiping it
+   * back, or choosing a section closes it.
+   *
+   * Leave unset for the shell to manage it. Hosts that need to close it
+   * themselves (from a hardware Back button, say) pass the open panel, or
+   * `null` while closed, together with {@link onNavigationSheetChange}.
+   */
+  navigationSheet?: NavigationSheetPanel | null;
+  /** Called when the navigation sheet opens, changes panel, or closes. */
+  onNavigationSheetChange?: (panel: NavigationSheetPanel | null) => void;
+  /**
    * Legacy initial visibility of inline block-template tags on headings.
    * `true` maps to always visible and `false` maps to hidden. When omitted,
    * {@link blockTagVisibility} defaults to `'active'`.
@@ -782,6 +799,8 @@ export function EditorShell({
   inlinePreviewWidth = 320,
   outline = false,
   outlineWidth,
+  navigationSheet,
+  onNavigationSheetChange,
   blockTags,
   blockTagVisibility,
   themeInheritance = 'fonts',
@@ -929,6 +948,8 @@ export function EditorShell({
               versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
               inlinePreviewWidth={inlinePreviewWidth}
               outlineWidth={outlineWidth}
+              navigationSheet={navigationSheet}
+              onNavigationSheetChange={onNavigationSheetChange}
               themeOverride={themeOverride}
               defaultThemeId={defaultThemeId}
               defaultThemeLabel={defaultThemeLabel}
@@ -996,6 +1017,8 @@ interface EditorShellInnerProps {
   versioningAutoSaveIdleMs?: number;
   inlinePreviewWidth: number;
   outlineWidth?: number;
+  navigationSheet?: NavigationSheetPanel | null;
+  onNavigationSheetChange?: (panel: NavigationSheetPanel | null) => void;
   themeOverride: Theme | null;
   defaultThemeId?: string;
   defaultThemeLabel?: string;
@@ -1090,11 +1113,24 @@ function EditorShellInner({
   versioningAutoSaveIdleMs,
   inlinePreviewWidth,
   outlineWidth,
+  navigationSheet,
+  onNavigationSheetChange,
   themeOverride,
   defaultThemeId,
   defaultThemeLabel,
 }: EditorShellInnerProps) {
   const shellRef = useRef<HTMLDivElement>(null);
+  const [uncontrolledNavigationSheet, setUncontrolledNavigationSheet] =
+    useState<NavigationSheetPanel | null>(null);
+  const navigationSheetPanel =
+    navigationSheet === undefined ? uncontrolledNavigationSheet : navigationSheet;
+  const handleNavigationSheetChange = useCallback(
+    (panel: NavigationSheetPanel | null) => {
+      if (navigationSheet === undefined) setUncontrolledNavigationSheet(panel);
+      onNavigationSheetChange?.(panel);
+    },
+    [navigationSheet, onNavigationSheetChange],
+  );
   const {
     activeView,
     markdownSource,
@@ -1684,6 +1720,16 @@ function EditorShellInner({
                         mediaProvider={mediaProvider}
                       />
                     )}
+                    {isMarkdownMode && (
+                      <NavigationSheet
+                        key="navigation-sheet"
+                        panel={navigationSheetPanel}
+                        onPanelChange={handleNavigationSheetChange}
+                        readOnly={readOnly}
+                        basePath={basePath}
+                        mediaProvider={mediaProvider}
+                      />
+                    )}
                   </div>
                 )}
                 {/* WYSIWYG + Preview are markdown-only surfaces — skip them
@@ -1738,6 +1784,14 @@ function EditorShellInner({
                         mediaProvider={mediaProvider}
                       />
                     )}
+                    <NavigationSheet
+                      key="navigation-sheet"
+                      panel={navigationSheetPanel}
+                      onPanelChange={handleNavigationSheetChange}
+                      readOnly={readOnly}
+                      basePath={basePath}
+                      mediaProvider={mediaProvider}
+                    />
                   </div>
                 )}
                 {isMarkdownMode && isPreview && (

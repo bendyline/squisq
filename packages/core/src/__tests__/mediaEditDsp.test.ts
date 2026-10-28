@@ -279,7 +279,11 @@ describe('breath detection', () => {
   });
 });
 
-describe('renderMediaFx', () => {
+// The loudness cases synthesize ~7 s of 48 kHz harmonic speech (~25 sin() per
+// sample) and render it through the full chain — two-pass analysis plus an
+// oversampled true-peak limiter, sometimes twice: ~0.5 s each under coverage,
+// but a saturated full-suite run slows that past the 5 s default.
+describe('renderMediaFx', { timeout: 30_000 }, () => {
   it('keeps output sample-aligned and exactly as long as the source', async () => {
     const x = concat(phrase(4, 7), new Float32Array(1234));
     const identity: Denoiser = {

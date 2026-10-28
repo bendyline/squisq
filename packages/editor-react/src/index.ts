@@ -210,6 +210,7 @@ export { BlockPropertiesPopover } from './BlockPropertiesPopover.js';
 export type { BlockPropertiesPopoverProps } from './BlockPropertiesPopover.js';
 export { InlinePreviewGutter } from './InlinePreviewGutter.js';
 export type { InlinePreviewGutterProps } from './InlinePreviewGutter.js';
+export type { NavigationSheetPanel } from './useNavigationSheetSwipe.js';
 
 export { MediaBin } from './MediaBin.js';
 export type { MediaBinProps } from './MediaBin.js';

@@ -185,7 +185,13 @@ describe('RecorderModal — slides mode', () => {
   });
 });
 
-describe('RecorderModal — slide timing capture', () => {
+// Every case records a ~30 s take through `advanceTimersByTimeAsync`, which
+// spends a real event-loop turn on each fake timer it fires — and with
+// narration on, the teleprompter's two rAF loops add ~3,900 frames. That is
+// ~1 s under coverage, and a saturated full-suite run slows it past the 5 s
+// default. A timeout here is also contagious: the abandoned case's act() scope
+// stays open, so every later case in this block renders an empty body.
+describe('RecorderModal — slide timing capture', { timeout: 30_000 }, () => {
   let container: MemoryContentContainer;
   let onSave: ReturnType<typeof vi.fn<(result: RecorderSaveResult) => void>>;
 

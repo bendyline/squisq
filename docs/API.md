@@ -3238,6 +3238,8 @@ interface EditorShellProps {
   inlinePreviewWidth?: number; // default 320
   outline?: boolean;
   outlineWidth?: number; // omit → responsive 260–460px
+  navigationSheet?: NavigationSheetPanel | null; // 'outline' | 'previews'; omit to leave it to the shell
+  onNavigationSheetChange?: (panel: NavigationSheetPanel | null) => void;
   showStatusBar?: boolean; // default true
   showPlayTab?: boolean; // default true
   blockTags?: boolean; // default true

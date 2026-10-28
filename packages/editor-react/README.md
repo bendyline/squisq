@@ -97,6 +97,11 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
 - **Panels** — `outline` (heading outline pane) and `inlinePreview` (per-block
   SVG preview gutter, `inlinePreviewWidth` default 320). Block previews include
   ordinary sections and heading-less introductory text; template tags are optional.
+  Below ~720px, where those panes hide, the **navigation sheet** stands in: a
+  popover from the right edge with Outline and Block previews tabs. On touch,
+  swipe in from the right edge for the outline, or turn the swipe downward for
+  previews; choosing a section closes it. Control it with `navigationSheet` /
+  `onNavigationSheetChange` to close it from host input such as a Back button.
 - **Code & image modes** — pass `fileName` / `language` to get a Monaco-only
   code editor, or `imageSrc` (+ `imageMode: 'edit'`) for the image surface.
   `.jsonc` files, `language="jsonc"`, and fenced `jsonc` snippets use JSON
