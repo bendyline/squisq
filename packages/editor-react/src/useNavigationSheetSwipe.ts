@@ -41,7 +41,7 @@ export interface NavigationSheetSwipeOptions {
  *
  * The editor body has to let horizontal moves through as pointer events: a
  * scroller left at `touch-action: auto` hands them to the browser, which
- * cancels the pointer after the first move. editor.css gives the WYSIWYG
+ * cancels the pointer after the first move. navigation-sheet.css gives the WYSIWYG
  * scroller `pan-y` on narrow touch layouts for exactly that reason.
  */
 export function useNavigationSheetSwipe({

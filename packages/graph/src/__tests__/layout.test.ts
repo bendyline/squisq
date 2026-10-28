@@ -487,7 +487,10 @@ describe('layoutGraph — random graphs', () => {
       for (const p of e.points) expect(Number.isInteger(p.x) && Number.isInteger(p.y)).toBe(true);
   });
 
-  it('lays out a 600-file graph promptly', () => {
+  // ~0.7 s under coverage. The elapsed assertion below is the budget; the
+  // runner's 5 s default sat under it, so a saturated full-suite run timed out
+  // before the assertion could ever pass or fail.
+  it('lays out a 600-file graph promptly', { timeout: 30_000 }, () => {
     const graph = randomGraph(42, 600, 1200, 40);
     const started = Date.now();
     const result = layoutGraph(graph);

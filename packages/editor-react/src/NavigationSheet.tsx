@@ -8,7 +8,7 @@
  * {@link useNavigationSheetSwipe} for the gestures that open it.
  *
  * Mounted inside `.squisq-editor-with-gutter` so the outline and preview list
- * find the editor they navigate. editor.css removes it when the editor body
+ * find the editor they navigate. navigation-sheet.css removes it when the editor body
  * is wide enough for the panes themselves.
  */
 
@@ -39,7 +39,7 @@ const TAB_LABELS: Record<NavigationSheetPanel, string> = {
   previews: 'Previews',
 };
 const PANELS: readonly NavigationSheetPanel[] = ['outline', 'previews'];
-/** Outlasts the slide-out in editor.css, so a closing sheet keeps its content. */
+/** Outlasts the slide-out in navigation-sheet.css, so a closing sheet keeps its content. */
 const CLOSE_LINGER_MS = 300;
 
 export function NavigationSheet({
