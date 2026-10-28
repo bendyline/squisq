@@ -71,7 +71,6 @@ for (const placement of ['document tray', 'body'] as const) {
       'https://www.youtube-nocookie.com',
       'https://player.vimeo.com',
       'https://www.loom.com',
-      'https://www.dailymotion.com',
       'https://fast.wistia.net',
     ]) {
       expect(contentSecurityPolicy).toContain(playerOrigin);

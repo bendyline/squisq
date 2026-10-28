@@ -811,7 +811,7 @@ export interface VideoLayer extends BaseLayer {
 }
 
 /**
- * Hosted video layer — the YouTube / Vimeo / Loom / Dailymotion / Wistia
+ * Hosted video layer — the YouTube / Vimeo / Loom / Wistia
  * player for a paragraph that is only a link to the video's page.
  *
  * Carries the page URL, never a player URL: renderers re-derive the iframe

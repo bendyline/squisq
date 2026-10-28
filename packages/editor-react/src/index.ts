@@ -558,7 +558,7 @@ export type {
 export { DataCardWidget } from './dataCard/DataCardWidget.js';
 
 // Hosted-video embeds — a top-level paragraph that is only a link (or bare
-// URL) to a YouTube/Vimeo/Loom/Dailymotion/Wistia page plays inline in the
+// URL) to a YouTube/Vimeo/Loom/Wistia page plays inline in the
 // Write view, with the paragraph kept as its editable caption. Insert →
 // Online Video writes that paragraph; pasted `<iframe>` embed code becomes it.
 export {

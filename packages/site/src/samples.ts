@@ -252,7 +252,7 @@ Scripts, event handlers, links, embedded HTML and anything that would load from 
 `,
   'video-embeds': `# Video embeds
 
-Put a YouTube, Vimeo, Loom, Dailymotion or Wistia link on a line of its own and it plays right in the document -- and on its slide in the slideshow. Word exports get a playable online video; anywhere that doesn't know the convention -- GitHub, PDF -- it is still just a link. Insert -> Online Video does this for you, and pasting a video's embed code works too.
+Put a YouTube, Vimeo, Loom or Wistia link on a line of its own and it plays right in the document -- and on its slide in the slideshow. Word exports get a playable online video; anywhere that doesn't know the convention -- GitHub, PDF -- it is still just a link. Insert -> Online Video does this for you, and pasting a video's embed code works too.
 
 ## A titled link
 

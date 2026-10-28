@@ -2,7 +2,7 @@
  * VideoEmbedExtension — the Write view's inline player for hosted videos.
  *
  * A top-level paragraph that is nothing but a link (or bare URL) to a
- * YouTube, Vimeo, Loom, Dailymotion or Wistia page gets the provider's player
+ * YouTube, Vimeo, Loom or Wistia page gets the provider's player
  * mounted ABOVE it. The paragraph itself stays in the document, visible and
  * editable, styled as the player's caption: edit its text to retitle the
  * video, edit the link (or the URL) to change it, delete it to remove the

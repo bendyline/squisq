@@ -1,5 +1,9 @@
 /**
- * Hosted-video embeds (YouTube, Vimeo, Loom, Dailymotion, Wistia).
+ * Hosted-video embeds (YouTube, Vimeo, Loom, Wistia).
+ *
+ * Dailymotion is deliberately absent: it now refuses its `/embed/video/<id>`
+ * player on third-party pages (HTTP 403), and the Player Embed that replaced
+ * it needs a Player ID from a Dailymotion account. Its links stay links.
  *
  * The authored form is a paragraph that is ONLY a link, or a bare URL, to a
  * video page:
@@ -28,7 +32,7 @@ import { parseHtmlToNodes } from './htmlParse.js';
 import type { HtmlElement, HtmlNode, MarkdownBlockNode, MarkdownInlineNode } from './types.js';
 import { extractPlainText } from './utils.js';
 
-export type VideoEmbedProviderId = 'youtube' | 'vimeo' | 'loom' | 'dailymotion' | 'wistia';
+export type VideoEmbedProviderId = 'youtube' | 'vimeo' | 'loom' | 'wistia';
 
 /** Display facts about a supported provider, for pickers and help text. */
 export interface VideoEmbedProviderInfo {
@@ -48,7 +52,6 @@ export const VIDEO_EMBED_PROVIDERS: readonly VideoEmbedProviderInfo[] = [
     name: 'Loom',
     example: 'https://www.loom.com/share/0281766fa2d04bb788eaf19e65135184',
   },
-  { id: 'dailymotion', name: 'Dailymotion', example: 'https://www.dailymotion.com/video/x7tgad0' },
   { id: 'wistia', name: 'Wistia', example: 'https://home.wistia.com/medias/e4a27b971d' },
 ];
 
@@ -81,7 +84,7 @@ export interface VideoEmbed {
   startSeconds?: number;
   /**
    * A still poster image, when the provider serves one at a predictable URL
-   * with no API call (YouTube, Dailymotion). Remote — callers that must stay
+   * with no API call (YouTube). Remote — callers that must stay
    * offline should not fetch it.
    */
   thumbnailUrl?: string;
@@ -342,36 +345,6 @@ function parseLoom(url: URL): VideoEmbed | null {
   });
 }
 
-const DAILYMOTION_ID_RE = /^[A-Za-z0-9]{5,20}$/;
-
-function parseDailymotion(url: URL): VideoEmbed | null {
-  const host = baseHost(url);
-  const segments = pathSegments(url);
-  let raw: string | null = null;
-  if (host === 'dai.ly') raw = segments[0] ?? null;
-  else if (host === 'dailymotion.com') {
-    if (segments[0] === 'video') raw = segments[1] ?? null;
-    else if (segments[0] === 'embed' && segments[1] === 'video') raw = segments[2] ?? null;
-    else return null;
-  } else if (host === 'geo.dailymotion.com') {
-    raw = url.searchParams.get('video');
-  } else {
-    return null;
-  }
-  // Older page URLs append a title slug: `/video/x7tgad0_some-title`.
-  const id = raw?.split('_')[0];
-  if (!id || !DAILYMOTION_ID_RE.test(id)) return null;
-  const startSeconds = parseVideoStartTime(url.searchParams.get('start'));
-  const start = startSeconds ? String(startSeconds) : undefined;
-  return build('dailymotion', {
-    id,
-    startSeconds,
-    embedUrl: withQuery(`https://www.dailymotion.com/embed/video/${id}`, [['start', start]]),
-    watchUrl: withQuery(`https://www.dailymotion.com/video/${id}`, [['start', start]]),
-    thumbnailUrl: `https://www.dailymotion.com/thumbnail/video/${id}`,
-  });
-}
-
 const WISTIA_ID_RE = /^[a-z0-9]{10}$/;
 const WISTIA_ACCOUNT_HOST_RE = /^[a-z0-9-]{1,63}\.wistia\.com$/;
 
@@ -401,7 +374,6 @@ const PARSERS: ReadonlyArray<(url: URL) => VideoEmbed | null> = [
   parseYouTube,
   parseVimeo,
   parseLoom,
-  parseDailymotion,
   parseWistia,
 ];
 

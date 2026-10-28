@@ -1,7 +1,7 @@
 /**
  * VideoEmbedFrame
  *
- * The provider player (YouTube, Vimeo, Loom, Dailymotion, Wistia) for a
+ * The provider player (YouTube, Vimeo, Loom, Wistia) for a
  * recognized hosted video — what the MarkdownRenderer renders for a paragraph
  * that is only a link to a video page, or for a provider `<iframe>` embed
  * snippet. See `@bendyline/squisq/markdown`'s `findBlockVideoEmbed`.

@@ -108,7 +108,7 @@ export interface PlainHtmlExportOptions {
   htmlPolicy?: HtmlPolicy;
   /**
    * How a hosted video (a paragraph that is only a link to a YouTube, Vimeo,
-   * Loom, Dailymotion or Wistia page, or that provider's `<iframe>` embed
+   * Loom or Wistia page, or that provider's `<iframe>` embed
    * code) renders:
    *
    * - `player` (default) — the provider's player iframe;

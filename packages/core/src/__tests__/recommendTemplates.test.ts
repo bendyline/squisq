@@ -94,7 +94,7 @@ describe('profileBlockContents', () => {
   });
 
   it('detects every supported video host, and only actual videos', () => {
-    expect(profileOf('https://www.dailymotion.com/video/x7tgad0').hasVideo).toBe(true);
+    expect(profileOf('https://home.wistia.com/medias/e4a27b971d').hasVideo).toBe(true);
     expect(profileOf('[Our channel](https://www.youtube.com/@bendyline)').hasVideo).toBe(false);
   });
 
