@@ -29,6 +29,7 @@ import { ConversionError } from '../registry/errors.js';
 import { convert } from '../registry/convert.js';
 import { defaultRegistry } from '../registry/registry.js';
 import type { ConversionResult, ConvertOptions, FormatRegistry } from '../registry/types.js';
+import type { DiagramRasterizer } from '../diagrams/index.js';
 import {
   OUTSIDE_IN_FORMAT_IDS,
   OUTSIDE_IN_OUTPUT_TEMPLATE_KEY,
@@ -79,6 +80,17 @@ export interface RenderOutsideInOptions extends ConvertOptions {
     /** URL from the rendered HTML file to its companion media folder. */
     basePath?: string;
   };
+  /**
+   * Draws diagrams as pictures for the targets that cannot draw them: Word
+   * and PDF get pictures in place of Mermaid, ASCII diagrams, timelines, file
+   * trees, drawings, and layouts (PDF also of SVG islands, which Word embeds
+   * as vector art over the picture); PowerPoint, whose own shapes draw the
+   * rest, gets pictures of Mermaid and of SVG islands. In a browser, pass
+   * `createDiagramPictureRenderer()` from
+   * `@bendyline/squisq-react/diagram-pictures`. Without one those diagrams
+   * render as their source text. HTML targets draw their own.
+   */
+  renderDiagram?: DiagramRasterizer;
 }
 
 function rawFrontmatter(source: string): string | null {
@@ -310,7 +322,9 @@ export async function renderOutsideInDocument(
     );
   }
 
-  const formatOptions = { ...(options.formatOptions ?? {}) };
+  const formatOptions: NonNullable<ConvertOptions['formatOptions']> = {
+    ...(options.formatOptions ?? {}),
+  };
   if (layout.format === 'html' && options.html) {
     formatOptions.html = {
       ...(formatOptions.html ?? {}),
@@ -319,10 +333,19 @@ export async function renderOutsideInDocument(
     };
   }
 
-  return convert(
+  const warnings: string[] = [];
+  const markdown = await prepareOutsideInMarkdown(
+    source.markdown,
+    layout.format,
+    source.container,
+    options,
+    formatOptions,
+    warnings,
+  );
+  const result = await convert(
     {
       kind: 'markdown',
-      markdown: source.markdown,
+      markdown,
       container: source.container,
       baseName: layout.stem,
     },
@@ -333,4 +356,70 @@ export async function renderOutsideInDocument(
       formatOptions,
     },
   );
+  return warnings.length > 0 ? { ...result, warnings: [...warnings, ...result.warnings] } : result;
+}
+
+/**
+ * Settle what the target cannot do itself before it renders: show the table
+ * a `{[dataTable src=…]}` reference points at (a document cannot carry the
+ * sidecar file; spreadsheets embed every row themselves), and picture the
+ * diagrams it cannot draw. Pictures land in `formatOptions`.
+ */
+async function prepareOutsideInMarkdown(
+  markdown: string | MarkdownDocument,
+  format: OutsideInFormatId,
+  container: ContentContainer | undefined,
+  options: RenderOutsideInOptions,
+  formatOptions: NonNullable<ConvertOptions['formatOptions']>,
+  warnings: string[],
+): Promise<string | MarkdownDocument> {
+  const render = options.renderDiagram;
+  if (!render || (format !== 'docx' && format !== 'pdf' && format !== 'pptx')) return markdown;
+
+  const onWarning = (message: string): void => {
+    warnings.push(message);
+  };
+  let doc = typeof markdown === 'string' ? parseMarkdown(markdown) : markdown;
+  const { rasterizeDiagrams, EXPORT_DIAGRAM_KINDS } = await import('../diagrams/index.js');
+  const signal = options.signal;
+  if (format === 'pptx') {
+    // Drawings, timelines, ASCII diagrams and charts become native slide shapes.
+    const { mermaid, svg } = await rasterizeDiagrams(doc, render, {
+      kinds: ['mermaid', 'svg'],
+      signal,
+      onWarning,
+    });
+    formatOptions.pptx = {
+      ...formatOptions.pptx,
+      diagramImages: new Map([...mermaid, ...svg, ...(formatOptions.pptx?.diagramImages ?? [])]),
+    };
+    return doc;
+  }
+  // A chart fed by a data file is drawn from its rows, so they go in first;
+  // the exporter then finds the table in place and adds no second copy.
+  const { materializeDataReferences, DATA_PREVIEW_ROWS } = await import('../data/materialize.js');
+  doc = await materializeDataReferences(doc, container, onWarning, {
+    maxRows: DATA_PREVIEW_ROWS,
+  });
+  const pictured = await rasterizeDiagrams(doc, render, {
+    kinds: format === 'pdf' ? EXPORT_DIAGRAM_KINDS : undefined,
+    signal,
+    onWarning,
+  });
+  if (format === 'docx') {
+    // Word embeds SVG islands as vector art; their pictures are the PNG it
+    // stores beside the vector for readers without SVG support.
+    const { svg } = await rasterizeDiagrams(doc, render, { kinds: ['svg'], signal, onWarning });
+    formatOptions.docx = {
+      ...formatOptions.docx,
+      images: new Map([...(formatOptions.docx?.images ?? []), ...pictured.images]),
+      svgIslandFallbacks: new Map([...svg, ...(formatOptions.docx?.svgIslandFallbacks ?? [])]),
+    };
+  } else {
+    formatOptions.pdf = {
+      ...formatOptions.pdf,
+      images: new Map([...(formatOptions.pdf?.images ?? []), ...pictured.images]),
+    };
+  }
+  return pictured.markdownDoc;
 }

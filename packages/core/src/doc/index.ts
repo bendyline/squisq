@@ -183,6 +183,21 @@ export {
   extractTableData,
 } from './structuredData.js';
 export type { DataFenceParseResult, ExtractedTableData } from './structuredData.js';
+// A standalone `{[…]}` paragraph, parsed with the heading grammar — for
+// renderers that show the markdown itself and must not print block tags.
+export { parseStandaloneAnnotation, type ParsedAnnotation } from './standaloneAnnotation.js';
+export { isMediaAnnotationName } from './mediaAnnotations.js';
+// The single trailing `{[…]}` tag an unannotated section's body carries — on
+// its own line or glued to its last sentence — which `markdownToDoc` promotes
+// onto the section's heading.
+export {
+  detectPromotableBodyAnnotation,
+  type PromotableDetection,
+} from './promoteBodyAnnotation.js';
+// The chart engine's table → series projection: null is "not chartable",
+// the case the chart templates render as ordinary content.
+export { buildChartData, normalizeChartTable } from './templates/chart/parse.js';
+export type { ChartData, ChartTableData } from './templates/chart/types.js';
 export { validateMarkdownSource, validateMarkdownDoc } from './validate.js';
 export type { ValidateOptions, MarkdownValidationResult } from './validate.js';
 export { fallbackBlockLayers } from './templates/fallbackBlock.js';

@@ -236,6 +236,12 @@ the inline size thresholds as a data sidecar under `<docname>_files/data/` and r
 the Markdown. [Data and calc](../../data-and-calc.md) covers sidecars, and
 [Storage](../concepts/storage.md) covers containers.
 
+When you convert a document that references a data file, pass the container that holds it. Formats
+that carry the file keep it (`htmlzip` and `dbk`), and XLSX and CSV embed every row. The rest show
+its first rows: Word, PDF, and EPUB the first 100, followed by a "Showing N of M rows" note, and
+single-file HTML and PowerPoint the 50 the editor preview shows. A file the container doesn't hold
+is reported in the result's `warnings`.
+
 ## Per-format functions
 
 Each format also has its own subpath with direct functions. They work on core's `MarkdownDocument`
@@ -296,6 +302,19 @@ const docx = await markdownDocToDocx(pictured.markdownDoc, { images: pictured.im
 ```
 
 A diagram the renderer can't draw stays as source; the export never fails on it.
+
+`kinds` chooses what gets pictured. By default it's Mermaid, ASCII diagrams, timelines, file trees,
+drawing, layout, and diagram blocks, and charts. A chart's picture takes the place of its table, as
+the player shows the chart alone; with `showTable=true` the table stays beneath it. Add `'svg'` to
+picture SVG islands too (PDF has no vector picture of its own). For a plain HTML page,
+`prepareMarkdownDocForPlainHtml` makes these choices for you; see
+[Static sites](static-sites.md#diagrams-charts-and-data-tables). A file whose diagrams change one
+at a time, regenerated on every save, can wrap the renderer in `cachingDiagramRasterizer` so each
+pass redraws only what changed.
+
+Block tags don't print: Word, PDF, and EPUB leave out a paragraph that is only a `{[…]}` tag, and
+the single tag at the end of an unannotated section, on its own line or glued to its last sentence.
+The player reads those as templates, and a document has nothing to type.
 
 ## Node and the browser
 

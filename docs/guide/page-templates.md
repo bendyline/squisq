@@ -13,7 +13,10 @@ you wrote it.
 
 Page templates hold the plain, text-first rendition of a document — the one
 [Document mode](display-modes.md#document) shows: headings, paragraphs, lists, tables, images,
-and embedded videos. Your stylesheet decides how it looks.
+and embedded videos. The page runs no script, so what Squisq would draw is settled when the page
+is generated: Mermaid and ASCII diagrams, timelines, and charts become pictures, icons become
+small inline images in the text color, audio and video files get players, and a table that points
+at a data file shows its first 100 rows. Your stylesheet decides how it looks.
 
 ## A complete example
 

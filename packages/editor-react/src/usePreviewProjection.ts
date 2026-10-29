@@ -26,13 +26,14 @@ const DATA_PREVIEW_ROWS = 50;
  * windowing) — for a 20 MB CSV that is seconds of main-thread work per
  * keystroke without this. Scoped by container (WeakMap — dropped with the
  * workspace) and cleared whenever mediaRevision moves (re-uploads/saves).
+ * The Document preview shares it: both key reads the same way.
  */
 const dataTableCaches = new WeakMap<
   ContentContainer,
   { revision: number; cache: Map<string, Promise<DataSourceTable>> }
 >();
 
-function dataTableCacheFor(
+export function dataTableCacheFor(
   container: ContentContainer,
   revision: number,
 ): Map<string, Promise<DataSourceTable>> {

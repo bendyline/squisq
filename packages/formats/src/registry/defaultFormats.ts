@@ -126,12 +126,8 @@ async function collectContainerImages(
   return collectContainerAssets(container, IMAGE_ASSET_RE, signal);
 }
 
-/**
- * Lossy-export warnings for `{[dataTable src=…]}` sidecar references: a
- * format that cannot carry the referenced file alongside the document
- * (single-file HTML, EPUB) ships the bounded preview and a dangling link.
- */
-function dataReferenceWarnings(doc: Doc, formatLabel: string): string[] {
+/** The data files a Doc's `{[dataTable src=…]}` references point at. */
+function dataReferenceSources(doc: Doc): Set<string> {
   const srcs = new Set<string>();
   const visit = (blocks: readonly Block[]): void => {
     for (const block of blocks) {
@@ -141,10 +137,58 @@ function dataReferenceWarnings(doc: Doc, formatLabel: string): string[] {
     }
   };
   visit(doc.blocks);
-  return [...srcs].map(
+  return srcs;
+}
+
+/**
+ * Lossy-export warnings for `{[dataTable src=…]}` sidecar references: a
+ * format that cannot carry the referenced file alongside the document
+ * (single-file HTML, EPUB) shows its first rows and a dangling link.
+ */
+function dataReferenceWarnings(doc: Doc, formatLabel: string): string[] {
+  return [...dataReferenceSources(doc)].map(
     (src) =>
-      `${formatLabel} cannot embed the data sidecar "${src}"; the export carries its bounded preview and the link will not resolve outside the source container.`,
+      `${formatLabel} cannot embed the data sidecar "${src}"; the export shows its first rows and the link will not resolve outside the source container.`,
   );
+}
+
+/**
+ * The Markdown with each data reference's first rows embedded under its
+ * heading, for a document format: it cannot carry the referenced file, and
+ * without this the reference is only a link.
+ */
+async function markdownWithDataPreview(
+  input: NormalizedInput,
+  warnings: string[],
+): Promise<MarkdownDocument> {
+  const markdownDoc = await markdownOf(input);
+  if (dataReferenceSources(input.doc).size === 0) return markdownDoc;
+  const { materializeDataReferences, DATA_PREVIEW_ROWS } = await import('../data/materialize.js');
+  return materializeDataReferences(
+    markdownDoc,
+    input.container,
+    (message) => warnings.push(message),
+    { maxRows: DATA_PREVIEW_ROWS },
+  );
+}
+
+/**
+ * The Doc with each data reference's preview rows filled in — what the editor
+ * preview and the player show — for formats rendered from the Doc.
+ */
+async function docWithDataPreview(input: NormalizedInput, warnings: string[]): Promise<Doc> {
+  if (dataReferenceSources(input.doc).size === 0) return input.doc;
+  const [{ resolveDataReferences }, { defaultDataReaders }] = await Promise.all([
+    import('@bendyline/squisq/doc'),
+    import('../data/readers.js'),
+  ]);
+  const { doc, diagnostics } = await resolveDataReferences(input.doc, input.container, {
+    readers: defaultDataReaders(),
+  });
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.severity !== 'info') warnings.push(diagnostic.message);
+  }
+  return doc;
 }
 
 async function collectContainerDocxImages(
@@ -255,7 +299,8 @@ export function defaultFormats(): FormatDefinition[] {
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToDocx } = await import('../docx/index.js');
       const raw = optionsFor(options, 'docx');
-      const markdownDoc = await markdownOf(input);
+      const warnings: string[] = [];
+      const markdownDoc = await markdownWithDataPreview(input, warnings);
       const containerImages = await collectContainerDocxImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const buf = await markdownDocToDocx(markdownDoc, {
@@ -265,7 +310,10 @@ export function defaultFormats(): FormatDefinition[] {
         themeRegistry: options.themeRegistry ?? raw.themeRegistry,
         images,
       });
-      return ok(await toBytes(buf), MIME.docx, markdownFidelityWarnings(markdownDoc, 'docx'));
+      return ok(await toBytes(buf), MIME.docx, [
+        ...markdownFidelityWarnings(markdownDoc, 'docx'),
+        ...warnings,
+      ]);
     },
   };
 
@@ -286,11 +334,11 @@ export function defaultFormats(): FormatDefinition[] {
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToPdf } = await import('../pdf/index.js');
       const raw = optionsFor(options, 'pdf');
-      const markdownDoc = await markdownOf(input);
       // PDF export substitutes characters the standard-14 fonts can't encode
       // (emoji/CJK/Cyrillic/…) rather than failing. Route that note into the
       // structured warnings channel instead of letting it hit console.warn.
       const pdfWarnings: string[] = [];
+      const markdownDoc = await markdownWithDataPreview(input, pdfWarnings);
       // Same image sources as DOCX: the container's files, then caller-supplied ones.
       const containerImages = await collectContainerDocxImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
@@ -335,7 +383,8 @@ export function defaultFormats(): FormatDefinition[] {
       const containerImages = await collectContainerImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const pptxWarnings: string[] = [];
-      const buf = await docToPptx(input.doc, {
+      const doc = await docWithDataPreview(input, pptxWarnings);
+      const buf = await docToPptx(doc, {
         ...raw,
         ...(options.title !== undefined ? { title: options.title } : {}),
         themeId: resolveThemeId(input, options),
@@ -452,9 +501,11 @@ export function defaultFormats(): FormatDefinition[] {
     // so there is nothing to extract into a container this wave.
     async exportDoc(input, options): Promise<ConversionResult> {
       const raw = optionsFor(options, 'html');
+      const warnings: string[] = [];
+      const doc = await docWithDataPreview(input, warnings);
       if (raw.playerScriptPath) {
         const { generateExternalHtml } = await import('../html/index.js');
-        const htmlText = generateExternalHtml(input.doc, {
+        const htmlText = generateExternalHtml(doc, {
           ...raw,
           playerScriptPath: raw.playerScriptPath,
           title: options.title ?? input.baseName,
@@ -462,7 +513,7 @@ export function defaultFormats(): FormatDefinition[] {
           themeId: resolveThemeId(input, options),
           themeRegistry: options.themeRegistry ?? raw.themeRegistry,
         });
-        return ok(new TextEncoder().encode(htmlText), MIME.html);
+        return ok(new TextEncoder().encode(htmlText), MIME.html, warnings);
       }
 
       const playerScript = await requirePlayerScript(options, 'html');
@@ -475,7 +526,7 @@ export function defaultFormats(): FormatDefinition[] {
         false,
       );
       const images = new Map([...containerImages, ...media, ...(raw.images ?? new Map())]);
-      const htmlText = docToHtml(input.doc, {
+      const htmlText = docToHtml(doc, {
         ...raw,
         playerScript,
         images,
@@ -485,11 +536,10 @@ export function defaultFormats(): FormatDefinition[] {
         themeId: resolveThemeId(input, options),
         themeRegistry: options.themeRegistry ?? raw.themeRegistry,
       });
-      return ok(
-        new TextEncoder().encode(htmlText),
-        MIME.html,
-        dataReferenceWarnings(input.doc, 'Single-file HTML'),
-      );
+      return ok(new TextEncoder().encode(htmlText), MIME.html, [
+        ...dataReferenceWarnings(input.doc, 'Single-file HTML'),
+        ...warnings,
+      ]);
     },
   };
 
@@ -525,7 +575,9 @@ export function defaultFormats(): FormatDefinition[] {
         ...media,
         ...(raw.images ?? new Map()),
       ]);
-      const blob = await docToHtmlZip(input.doc, {
+      const warnings: string[] = [];
+      const doc = await docWithDataPreview(input, warnings);
+      const blob = await docToHtmlZip(doc, {
         ...raw,
         playerScript,
         images,
@@ -535,7 +587,7 @@ export function defaultFormats(): FormatDefinition[] {
         themeId: resolveThemeId(input, options),
         themeRegistry: options.themeRegistry ?? raw.themeRegistry,
       });
-      return ok(await toBytes(blob), MIME.zip);
+      return ok(await toBytes(blob), MIME.zip, warnings);
     },
   };
 
@@ -548,7 +600,8 @@ export function defaultFormats(): FormatDefinition[] {
     async exportDoc(input, options): Promise<ConversionResult> {
       const { markdownDocToEpub } = await import('../epub/index.js');
       const raw = optionsFor(options, 'epub');
-      const markdownDoc = await markdownOf(input);
+      const warnings: string[] = [];
+      const markdownDoc = await markdownWithDataPreview(input, warnings);
       const containerImages = await collectContainerImages(input.container, options.signal);
       const images = new Map([...containerImages, ...(raw.images ?? new Map())]);
       const buf = await markdownDocToEpub(markdownDoc, {
@@ -561,6 +614,7 @@ export function defaultFormats(): FormatDefinition[] {
       return ok(await toBytes(buf), MIME.epub, [
         ...markdownFidelityWarnings(markdownDoc, 'epub'),
         ...dataReferenceWarnings(input.doc, 'EPUB'),
+        ...warnings,
       ]);
     },
   };

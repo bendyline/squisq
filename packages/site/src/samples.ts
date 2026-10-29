@@ -122,7 +122,8 @@ export const SAMPLES: Record<string, string> = {
   'e2e-tasklist': `# Tasks\n\n- [ ] open task\n- [x] closed task\n`,
   // One diagram of each kind the document exports picture, for
   // `e2e/export-diagrams.spec.ts`: a Mermaid flowchart, an ASCII timeline,
-  // a file tree, and a drawing block.
+  // a file tree, and a drawing block — plus a chart, which only a plain HTML
+  // page pictures (documents keep its table).
   'e2e-diagrams': [
     '# Diagrams',
     '',
@@ -157,6 +158,14 @@ export const SAMPLES: Record<string, string> = {
     '### Engineer {#engineer} {[rectangle x=0 y=200 width=200 height=90]}',
     '',
     '### {[arrow from=lead to=engineer]}',
+    '',
+    '## Revenue {[barChart]}',
+    '',
+    '| Quarter | Revenue |',
+    '| --- | --- |',
+    '| Q1 | 120 |',
+    '| Q2 | 180 |',
+    '| Q3 | 150 |',
     '',
     '## After',
     '',

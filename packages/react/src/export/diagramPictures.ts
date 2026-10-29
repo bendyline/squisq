@@ -48,7 +48,7 @@ export interface DiagramPictureOptions {
 
 /** The diagram description `@bendyline/squisq-formats/diagrams` passes. */
 export interface DiagramToPicture {
-  kind: 'mermaid' | 'diagram' | 'timeline' | 'tree' | 'container' | 'svg';
+  kind: 'mermaid' | 'diagram' | 'timeline' | 'tree' | 'container' | 'svg' | 'chart';
   markdown: string;
   source: string;
 }
@@ -272,8 +272,8 @@ async function settle(host: HTMLElement): Promise<void> {
 }
 
 /**
- * A Squisq-rendered diagram — an ASCII diagram or timeline fence, or a
- * drawing, layout, or diagram heading block — as a PNG cropped to its
+ * A Squisq-rendered diagram — an ASCII diagram or timeline fence, a
+ * drawing, layout, or diagram heading block, or a chart — as a PNG cropped to its
  * content, or null when it has nothing to draw.
  */
 export async function renderSquisqDiagramPicture(
@@ -347,7 +347,7 @@ export async function renderSquisqDiagramPicture(
 
 /**
  * A renderer for `rasterizeDiagrams` from `@bendyline/squisq-formats/diagrams`:
- * Mermaid, ASCII diagrams and timelines, file trees, and drawing, layout,
+ * Mermaid, ASCII diagrams and timelines, file trees, charts, and drawing, layout,
  * and diagram blocks.
  */
 export function createDiagramPictureRenderer(
@@ -361,8 +361,34 @@ export function createDiagramPictureRenderer(
         return renderTreePicture(diagram.source, options);
       case 'svg':
         return renderSvgIslandPicture(diagram.source, options);
+      case 'chart':
+        return renderSquisqDiagramPicture(diagram.markdown, {
+          ...options,
+          theme: withLargerLabels(settings(options).theme, CHART_LABEL_SCALE),
+        });
       default:
         return renderSquisqDiagramPicture(diagram.markdown, options);
     }
+  };
+}
+
+/**
+ * How much larger a chart's labels are drawn in a picture than on a slide.
+ * Chart type is sized for a 1080p frame seen across a room; a picture shrinks
+ * that frame to a column width, which left axis labels near 10px.
+ */
+const CHART_LABEL_SCALE = 1.5;
+
+/**
+ * The theme with its body type scaled. The chart engine sizes its gutters,
+ * legend, and label spacing from these sizes, so the layout makes room.
+ */
+function withLargerLabels(theme: Theme, scale: number): Theme {
+  return {
+    ...theme,
+    typography: {
+      ...theme.typography,
+      bodyScale: (theme.typography.bodyScale ?? 1) * scale,
+    },
   };
 }

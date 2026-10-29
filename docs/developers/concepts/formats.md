@@ -235,7 +235,8 @@ Supported targets are `html`, `docx`, `pdf`, `pptx`, `xlsx`, and `csv` (`OUTSIDE
 adds the registry-backed half: `importOutsideInDocument({ data, targetPath })` returns the
 Markdown (with the relationship recorded in its frontmatter), the media container, and warnings;
 `renderOutsideInDocument({ markdown, targetPath, container })` regenerates the target (an HTML
-target also needs `html.playerScriptPath`, the URL of a shared player script). Regenerating
+target also needs `html.playerScriptPath`, the URL of a shared player script, and Word, PDF, and
+PowerPoint targets picture their diagrams when given a `renderDiagram`). Regenerating
 is opt-in: it throws `invalid-input` until the companion's frontmatter sets
 `squisq-updatefrommarkdown: true` (`withOutsideInMarkdownEditing` toggles it), so an import never
 overwrites the user's file by surprise. The host owns the file system and the order of writes.

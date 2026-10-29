@@ -12,6 +12,7 @@ import { PDFDocument, PDFName, PDFDict } from 'pdf-lib';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import {
+  cachingDiagramRasterizer,
   findDiagrams,
   rasterizeDiagrams,
   type DiagramPicture,
@@ -151,6 +152,85 @@ describe('rasterizeDiagrams', () => {
     expect(kinds.filter((type) => type === 'code')).toHaveLength(2); // ts + tree
   });
 
+  describe('charts', () => {
+    const CHARTS = [
+      '## Revenue {[barChart showValues=true]}',
+      '',
+      'Up every quarter.',
+      '',
+      '| Quarter | Revenue | Cost |',
+      '| --- | --- | --- |',
+      '| Q1 | $1,200 | 900 |',
+      '| Q2 | $1,500 | 950 |',
+      '',
+      '## Mix {[pieChart showTable=true]}',
+      '',
+      '| Region | Share |',
+      '| --- | --- |',
+      '| North | 60% |',
+      '| South | 40% |',
+      '',
+      '## Roster {[barChart]}',
+      '',
+      '| Name | Role |',
+      '| --- | --- |',
+      '| Ada | Lead |',
+      '',
+      '## Plain',
+      '',
+      '| A | B |',
+      '| --- | --- |',
+      '| x | 1 |',
+      '',
+    ].join('\n');
+
+    it('finds a chart only where the chart engine can plot its table', () => {
+      const charts = findDiagrams(parseMarkdown(CHARTS)).filter(
+        (diagram) => diagram.kind === 'chart',
+      );
+      expect(charts.map((chart) => [chart.template, chart.alt])).toEqual([
+        ['barChart', 'Revenue: bar chart of Revenue, Cost by Quarter'],
+        ['pieChart', 'Mix: pie chart of Share by Region'],
+      ]);
+      // The picture is the chart alone: its table, never `showTable`.
+      expect(charts[0].markdown).toContain('## Revenue {[barChart showValues=true]}');
+      expect(charts[0].markdown).not.toContain('Up every quarter');
+      expect(charts[1].markdown).toContain('{[pieChart]}');
+    });
+
+    it('is pictured by default, as the player shows a chart rather than its table', async () => {
+      const result = await rasterizeDiagrams(parseMarkdown(CHARTS), picture);
+      expect(result.images.size).toBe(2);
+      const others = await rasterizeDiagrams(parseMarkdown(CHARTS), picture, {
+        kinds: ['mermaid'],
+      });
+      expect(others.images.size).toBe(0);
+    });
+
+    it("puts the picture in the table's place, or above it with showTable", async () => {
+      const result = await rasterizeDiagrams(parseMarkdown(CHARTS), picture, { kinds: ['chart'] });
+      expect(result.images.size).toBe(2);
+      const top = result.markdownDoc.children;
+      expect(top.map((node) => node.type)).toEqual([
+        'heading',
+        'paragraph', // prose stays
+        'paragraph', // the bar chart's table → its picture
+        'heading',
+        'paragraph', // the pie chart's picture…
+        'table', // …over its table
+        'heading',
+        'table', // not chartable
+        'heading',
+        'table',
+      ]);
+      const revenue = top[0];
+      expect(revenue.type === 'heading' && revenue.templateAnnotation).toBeFalsy();
+      expect(JSON.stringify(top[2])).toContain('Revenue: bar chart of Revenue, Cost by Quarter');
+      const roster = top[6];
+      expect(roster.type === 'heading' && roster.templateAnnotation?.template).toBe('barChart');
+    });
+  });
+
   it('pictures only the kinds asked for', async () => {
     const result = await rasterizeDiagrams(parseMarkdown(SOURCE), picture, { kinds: ['mermaid'] });
     expect(result.images.size).toBe(1);
@@ -260,5 +340,31 @@ describe('exporters with diagram pictures', () => {
     expect(all).toContain('descr="Review flow"');
     expect(all).toContain('Lead');
     expect(all).toContain('Engineer');
+  });
+});
+
+describe('cachingDiagramRasterizer', () => {
+  it('draws each diagram once, redraws a changed one, and retries a failure', async () => {
+    const drawn: string[] = [];
+    let fail = true;
+    const cached = cachingDiagramRasterizer(async (diagram) => {
+      drawn.push(diagram.source);
+      if (diagram.source === 'broken' && fail) throw new Error('no canvas');
+      return picture();
+    });
+    const fence = (source: string): ExportDiagram => ({
+      kind: 'mermaid',
+      markdown: '',
+      source,
+      template: '',
+      alt: '',
+    });
+    await cached(fence('a'));
+    await cached(fence('a'));
+    await cached(fence('b'));
+    await expect(cached(fence('broken'))).rejects.toThrow('no canvas');
+    fail = false;
+    await cached(fence('broken'));
+    expect(drawn).toEqual(['a', 'b', 'broken', 'broken']);
   });
 });

@@ -17,10 +17,18 @@ import type { Doc, MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import type { PreparedPlainHtmlDocument } from '@bendyline/squisq-formats/html';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-react';
 import { collectAudioForHtmlExport, collectImagesForHtmlExport } from './exportHelpers';
-import { attachmentImages, pictureDiagrams, pictureSvgAttachments } from './exportDiagrams';
+import {
+  attachmentImages,
+  pictureDiagrams,
+  pictureSvgAttachments,
+  prepareForPlainHtml,
+  withDataPreviews,
+  withDataTables,
+} from './exportDiagrams';
 import { slugifyTitle } from './exportFilename';
 import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
 import {
@@ -258,7 +266,7 @@ async function downloadLinkedHtmlBundle(
 }
 
 async function downloadPlainHtmlZip(
-  mdDoc: MarkdownDocument,
+  prepared: PreparedPlainHtmlDocument,
   title: string,
   mediaProvider: MediaProvider | null,
   filename: string,
@@ -268,14 +276,15 @@ async function downloadPlainHtmlZip(
     import('@bendyline/squisq-formats/html'),
     import('jszip'),
   ]);
-  const html = markdownDocToPlainHtml(mdDoc, { title, theme });
+  const mdDoc = prepared.markdownDoc;
+  const html = markdownDocToPlainHtml(mdDoc, { title, theme, images: prepared.images });
   const zip = new JSZip();
   zip.file('index.html', html);
   if (mediaProvider) {
     const refs = collectMarkdownImageRefs(mdDoc);
     await Promise.all(
       Array.from(refs).map(async (ref) => {
-        if (isExternalRef(ref)) return;
+        if (isExternalRef(ref) || prepared.images.has(ref)) return;
         try {
           const url = await mediaProvider.resolveUrl(ref);
           const res = await fetch(url);
@@ -540,10 +549,11 @@ export function ExportConfigModal({
       switch (format) {
         case 'docx': {
           const { markdownDocToDocx } = await import('@bendyline/squisq-formats/docx');
-          const pictured = await pictureDiagrams(mdDoc);
+          const dataDoc = await withDataTables(mdDoc, workspaceContainer);
+          const pictured = await pictureDiagrams(dataDoc);
           // SVG islands and attached SVGs go in as vector art; their pictures
           // are only the PNG fallback Word stores beside it.
-          const { svg } = await pictureDiagrams(mdDoc, ['svg']);
+          const { svg } = await pictureDiagrams(dataDoc, ['svg']);
           const attachments = await collectImagesByName();
           const svgAttachments = await pictureSvgAttachments(attachments);
           const buf = await markdownDocToDocx(pictured.markdownDoc, {
@@ -567,10 +577,10 @@ export function ExportConfigModal({
           // were folded into their parent section.
           const { docToPptx } = await import('@bendyline/squisq-formats/pptx');
           const images = await collectImagesByName();
-          const exportDoc = prepareExportDoc(currentSource, {
-            transformStyle,
-            themeId,
-          });
+          const exportDoc = await withDataPreviews(
+            prepareExportDoc(currentSource, { transformStyle, themeId }),
+            workspaceContainer,
+          );
           // Drawings, timelines and ASCII diagrams export as native shapes;
           // Mermaid needs a picture, and an SVG island's picture is the PNG
           // fallback stored beside its vector art.
@@ -593,7 +603,10 @@ export function ExportConfigModal({
           const { markdownDocToPdf } = await import('@bendyline/squisq-formats/pdf');
           // PDF has no vector picture of its own: SVG islands are pictured
           // too, and attached SVGs are replaced by their PNG.
-          const pictured = await pictureDiagrams(mdDoc, 'all');
+          const pictured = await pictureDiagrams(
+            await withDataTables(mdDoc, workspaceContainer),
+            'all',
+          );
           const attachments = await collectImagesByName();
           const pdfAttachments = await attachmentImages(
             attachments,
@@ -616,11 +629,14 @@ export function ExportConfigModal({
             const { markdownDocToPlainHtml } = await import('@bendyline/squisq-formats/html');
             const docTitle = inferDocumentTitle(mdDoc) ?? 'Document';
             const themeForExport = exportThemeId ? resolveTheme(exportThemeId) : undefined;
+            // No script runs in the page: fill data tables and picture the
+            // diagrams and charts the player would draw.
+            const prepared = await prepareForPlainHtml(mdDoc, workspaceContainer);
             if (format === 'html') {
-              const inlineImages = await collectInlineImages(mdDoc, mediaProvider);
-              const html = markdownDocToPlainHtml(mdDoc, {
+              const inlineImages = await collectInlineImages(prepared.markdownDoc, mediaProvider);
+              const html = markdownDocToPlainHtml(prepared.markdownDoc, {
                 title: docTitle,
-                images: inlineImages,
+                images: new Map([...(inlineImages ?? []), ...prepared.images]),
                 theme: themeForExport,
               });
               downloadBlob(
@@ -640,7 +656,7 @@ export function ExportConfigModal({
               );
             } else {
               await downloadPlainHtmlZip(
-                mdDoc,
+                prepared,
                 docTitle,
                 mediaProvider,
                 `${filenameStem}.html.zip`,
@@ -658,7 +674,10 @@ export function ExportConfigModal({
           // without this the exported player paces on reading-time estimates.
           const parsedDoc = markdownToDoc(mdDoc);
           const rawDoc = workspaceContainer
-            ? await resolveAudioMapping(parsedDoc, workspaceContainer)
+            ? await withDataPreviews(
+                await resolveAudioMapping(parsedDoc, workspaceContainer),
+                workspaceContainer,
+              )
             : parsedDoc;
           const doc = renderMode === 'slideshow' ? buildPreviewDoc(rawDoc) : rawDoc;
           const images = await collectImagesForHtmlExport(doc, mediaProvider);

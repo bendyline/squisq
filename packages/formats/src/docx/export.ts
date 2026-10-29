@@ -52,6 +52,7 @@ import {
 import { createPackage } from '../ooxml/writer.js';
 import { RelIdAllocator } from '../ooxml/relIds.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
+import { withoutBlockTags } from '../shared/blockTags.js';
 import { authoredImageSize, fitWithin, readImageDimensions } from '../shared/images.js';
 import { stripHtmlTags } from '../shared/text.js';
 import { normalizeOoxmlHex } from '../shared/ooxmlColor.js';
@@ -180,10 +181,12 @@ export interface DocxExportOptions {
  * @returns An ArrayBuffer containing the .docx file
  */
 export async function markdownDocToDocx(
-  doc: MarkdownDocument,
+  source: MarkdownDocument,
   options: DocxExportOptions = {},
 ): Promise<ArrayBuffer> {
   options.signal?.throwIfAborted();
+  // `{[…]}` block tags type content for the player; in Word they would print.
+  const doc = withoutBlockTags(source);
   // Mirror the PPTX export: fall back to the doc's frontmatter themeId
   // when the caller didn't pass one explicitly. Lets the editor's
   // `squisq-theme: …` frontmatter flow straight through without each
