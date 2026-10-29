@@ -1,7 +1,7 @@
 /**
  * VideoEmbedLayer Component
  *
- * Renders a hosted-video layer (YouTube, Vimeo, Loom, Dailymotion, Wistia)
+ * Renders a hosted-video layer (YouTube, Vimeo, Loom, Wistia)
  * within an SVG block, letterboxed to the video's aspect ratio inside the
  * layer's bounds. Three modes, chosen by the host:
  *

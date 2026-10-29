@@ -31,6 +31,7 @@ import { defaultRegistry } from '../registry/registry.js';
 import type { ConversionResult, ConvertOptions, FormatRegistry } from '../registry/types.js';
 import {
   OUTSIDE_IN_FORMAT_IDS,
+  OUTSIDE_IN_OUTPUT_TEMPLATE_KEY,
   resolveOutsideInLayout,
   type OutsideInFormatId,
   type OutsideInLayout,
@@ -40,6 +41,7 @@ import {
 // `/outside-in-layout`); this entry keeps the full contract in one place.
 export {
   OUTSIDE_IN_FORMAT_IDS,
+  OUTSIDE_IN_OUTPUT_TEMPLATE_KEY,
   chooseOutsideInMarkdownPath,
   isOutsideInTargetPath,
   resolveOutsideInLayout,
@@ -123,6 +125,27 @@ export function isOutsideInMarkdownEditingEnabled(source: string | MarkdownDocum
   const yaml = rawFrontmatter(source);
   const frontmatter = yaml === null ? null : parseFrontmatter(yaml);
   return frontmatter?.[OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY] === true;
+}
+
+/**
+ * The companion's page template choice: the authored path, `'none'` when it
+ * opts out of any host default, or null when it names none. Resolving the
+ * path against the companion is the host's job, since only the host knows
+ * where the container root is.
+ */
+export function readOutsideInOutputTemplate(source: string | MarkdownDocument): string | null {
+  const frontmatter =
+    typeof source === 'string'
+      ? (() => {
+          const yaml = rawFrontmatter(source);
+          return yaml === null ? null : parseFrontmatter(yaml);
+        })()
+      : source.frontmatter;
+  const value = frontmatter?.[OUTSIDE_IN_OUTPUT_TEMPLATE_KEY];
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.toLowerCase() === 'none' ? 'none' : trimmed;
 }
 
 /**

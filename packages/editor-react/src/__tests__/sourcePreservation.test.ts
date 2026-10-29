@@ -183,9 +183,15 @@ describe('preserveSource on real documents', () => {
   // Deterministic edits: change, insert after, and delete a few lines.
   function* edits(normalized: string): Generator<[string, string]> {
     const lines = normalized.split('\n');
+    // Prose only: a line inside a fence is code, and emptying a fence leaves
+    // text the editor never holds (it writes an empty block with a blank line).
+    let inFence = false;
     const prose = lines
-      .map((line, index) => ({ line, index }))
-      .filter(({ line }) => /^[A-Za-z]/.test(line) && line.length > 20);
+      .map((line, index) => {
+        if (/^(`{3,}|~{3,})/.test(line)) inFence = !inFence;
+        return { line, index, inFence };
+      })
+      .filter(({ line, inFence }) => !inFence && /^[A-Za-z]/.test(line) && line.length > 20);
     for (const { line, index } of prose.filter((_, k) => k % 7 === 3).slice(0, 4)) {
       const changed = [...lines];
       changed[index] = line.replace(/\b(\w+)\b/, '$1 edited');

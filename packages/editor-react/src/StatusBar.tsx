@@ -90,12 +90,12 @@ export function StatusBar({ className, slotRight }: StatusBarProps) {
         </button>
       )}
       <span className="squisq-status-spacer" />
+      {/* Only a failure earns a parse indicator; a standing "OK" read as a button. */}
       {parseError && (
         <span className="squisq-status-item squisq-status-error" title={parseError}>
           ⚠ Error
         </span>
       )}
-      {!parseError && <span className="squisq-status-item squisq-status-ok">✓ OK</span>}
       {slotRight}
     </div>
   );

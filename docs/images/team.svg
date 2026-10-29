@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <title>Team illustration</title>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2d5f73"/>
+      <stop offset="1" stop-color="#9fd3c7"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <g fill="#f4efe6"><circle cx="330" cy="330" r="80"/><circle cx="600" cy="300" r="90"/><circle cx="870" cy="330" r="80"/></g>
+  <g fill="#1c4352"><path d="M190 640 q140 -260 280 0z"/><path d="M440 640 q160 -300 320 0z"/><path d="M730 640 q140 -260 280 0z"/></g>
+  <rect x="0" y="640" width="1200" height="160" fill="#173947"/>
+</svg>

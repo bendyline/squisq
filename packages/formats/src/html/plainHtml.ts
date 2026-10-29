@@ -108,7 +108,7 @@ export interface PlainHtmlExportOptions {
   htmlPolicy?: HtmlPolicy;
   /**
    * How a hosted video (a paragraph that is only a link to a YouTube, Vimeo,
-   * Loom, Dailymotion or Wistia page, or that provider's `<iframe>` embed
+   * Loom or Wistia page, or that provider's `<iframe>` embed
    * code) renders:
    *
    * - `player` (default) — the provider's player iframe;
@@ -154,6 +154,83 @@ export function markdownDocToPlainHtml(
   doc: MarkdownDocument,
   options: PlainHtmlExportOptions = {},
 ): string {
+  const { title, body, fontsLink, iconsLink, themedCss, featureCss } = renderPlainHtml(
+    doc,
+    options,
+  );
+  // A <style> element is an HTML raw-text context: `</style>` closes it even
+  // when those bytes occur inside a quoted CSS value. Escape every literal
+  // less-than sign as a CSS code point so caller-owned theme values cannot
+  // break back into HTML. This is a final output-boundary defense in addition
+  // to theme validation and font-family quoting.
+  const safeCss = escapeStyleText(`${themedCss}\n${featureCss}`);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(title)}</title>
+${fontsLink}${iconsLink}<style>
+${safeCss}
+</style>
+</head>
+<body>
+${body}
+</body>
+</html>`;
+}
+
+/**
+ * The pieces of a plain HTML page that belong to the document itself, for a
+ * host that places the document inside a page of its own (see
+ * `applyHtmlPageTemplate`).
+ */
+export interface PlainHtmlParts {
+  /** The `title` option, unescaped. */
+  title: string;
+  /** The rendered document body, footnotes included. */
+  bodyHtml: string;
+  /**
+   * `<head>` markup for the CSS the body's own constructs need — feature
+   * sections, video embeds, SVG islands, icons — and nothing that styles the
+   * page around them: no theme typography, colors, fonts, or `body` rules.
+   */
+  featureHeadHtml: string;
+}
+
+/**
+ * Render a document's body and the functional CSS it depends on, without the
+ * page shell or theme stylesheet `markdownDocToPlainHtml` wraps around them.
+ * The theme (when one resolves) still informs body rendering, such as the
+ * color an SVG island's `currentColor` follows.
+ */
+export function markdownDocToPlainHtmlParts(
+  doc: MarkdownDocument,
+  options: PlainHtmlExportOptions = {},
+): PlainHtmlParts {
+  const { title, body, iconsLink, featureCss } = renderPlainHtml(doc, options);
+  return {
+    title,
+    bodyHtml: body,
+    featureHeadHtml: `${iconsLink}<style data-squisq>\n${escapeStyleText(featureCss)}\n</style>\n`,
+  };
+}
+
+interface RenderedPlainHtml {
+  title: string;
+  body: string;
+  fontsLink: string;
+  iconsLink: string;
+  /** Theme (or default) page CSS, unescaped. */
+  themedCss: string;
+  /** CSS for the document's own constructs, unescaped. */
+  featureCss: string;
+}
+
+function renderPlainHtml(
+  doc: MarkdownDocument,
+  options: PlainHtmlExportOptions,
+): RenderedPlainHtml {
   const {
     title = 'Document',
     images,
@@ -204,28 +281,16 @@ export function markdownDocToPlainHtml(
         : '';
   }
   const themedCss = theme ? renderThemedCss(theme) : DEFAULT_CSS;
-  // A <style> element is an HTML raw-text context: `</style>` closes it even
-  // when those bytes occur inside a quoted CSS value. Escape every literal
-  // less-than sign as a CSS code point so caller-owned theme values cannot
-  // break back into HTML. This is a final output-boundary defense in addition
-  // to theme validation and font-family quoting.
   const videoCss = docUsesVideoEmbeds(doc, htmlPolicy) ? `\n${VIDEO_EMBED_CSS}` : '';
   const svgCss = docUsesSvgIslands(doc) ? `\n${SVG_ISLAND_CSS}` : '';
-  const safeCss = escapeStyleText(`${themedCss}\n${FEATURE_CSS}${videoCss}${svgCss}`);
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${escapeHtml(title)}</title>
-${fontsLink}${iconsLink}<style>
-${safeCss}
-</style>
-</head>
-<body>
-${body}
-</body>
-</html>`;
+  return {
+    title,
+    body,
+    fontsLink,
+    iconsLink,
+    themedCss,
+    featureCss: `${FEATURE_CSS}${videoCss}${svgCss}`,
+  };
 }
 
 function escapeStyleText(css: string): string {

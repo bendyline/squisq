@@ -27,17 +27,12 @@
  */
 
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import type { Block, ViewportConfig, MediaProvider } from '@bendyline/squisq/schemas';
+import type { ViewportConfig, MediaProvider } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
-import { flattenRenderableBlocks, DEFAULT_THEME } from '@bendyline/squisq/doc';
-import { extractPlainText } from '@bendyline/squisq/markdown';
 import { BlockRenderer, MediaContext } from '@bendyline/squisq-react';
-import { usePreviewSettingsOptional } from './PreviewControls';
-import { useEditorContext } from './EditorContext';
 import { templateLabel } from './TemplatePicker';
 import { useHeadingLayout } from './useHeadingLayout';
-import { usePreviewProjection } from './usePreviewProjection';
-import { resolveBlockVisual } from './resolveBlockVisual';
+import { useBlockPreviewItems } from './useBlockPreviewItems';
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -61,14 +56,6 @@ export interface InlinePreviewGutterProps {
    * `basePath`-prefixed URLs (which usually 404 in container-backed editors).
    */
   mediaProvider?: MediaProvider | null;
-}
-
-interface PreviewItem {
-  id: string;
-  template: string;
-  headingText: string;
-  block: Block;
-  sourceBlock: Block;
 }
 
 // ── Connector layout constants ─────────────────────────────────────
@@ -96,44 +83,9 @@ export function InlinePreviewGutter({
   connectorWidth = 24,
   mediaProvider = null,
 }: InlinePreviewGutterProps) {
-  const { doc, workspaceContainer, fileName, mediaRevision } = useEditorContext();
-  const projection = usePreviewProjection(doc, '', workspaceContainer, fileName, mediaRevision);
-  const previewDoc = projection?.contentDoc ?? doc;
   const gutterRef = useRef<HTMLElement | null>(null);
   const { entries: headingEntries, scrollToBlock } = useHeadingLayout(gutterRef);
-  // Follow the document's active theme so the mini cards reflect the
-  // same palette as the main preview surface. PreviewSettingsProvider
-  // resolves this from frontmatter (`squisq-theme` / legacy `theme`)
-  // and theme overrides, so we never duplicate that logic here. Falls
-  // back to DEFAULT_THEME when the gutter is mounted outside the
-  // provider (defensive — EditorShell always wraps with it).
-  const previewSettings = usePreviewSettingsOptional();
-  const activeTheme = previewSettings?.activeTheme ?? DEFAULT_THEME;
-
-  // Keep the source block for positioning/navigation: the preview projection
-  // intentionally strips source headings while choosing a renderable template.
-  const items = useMemo<PreviewItem[]>(() => {
-    if (!previewDoc || !previewDoc.blocks.length) return [];
-    const flat = flattenRenderableBlocks(previewDoc.blocks);
-    const result: PreviewItem[] = [];
-
-    flat.forEach((block, index) => {
-      const visual = resolveBlockVisual(previewDoc, block, activeTheme, viewport, {
-        blockIndex: index,
-        totalBlocks: flat.length,
-      });
-      if (!visual) return;
-      result.push({
-        id: block.id,
-        template: visual.template ?? 'content',
-        headingText: block.sourceHeading ? extractPlainText(block.sourceHeading) : '',
-        block: visual,
-        sourceBlock: block,
-      });
-    });
-
-    return result;
-  }, [previewDoc, viewport, activeTheme]);
+  const items = useBlockPreviewItems(viewport);
 
   // Heading top per item id — derived from the layout hook. The connector
   // dot tracks this even when stacking pushes the card below.

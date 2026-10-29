@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <title>Ocean illustration</title>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d3b66"/>
+      <stop offset="1" stop-color="#7cc6d6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <circle cx="600" cy="360" r="120" fill="#fff6dc" opacity="0.85"/>
+  <path d="M0 470 Q150 440 300 470 T600 470 T900 470 T1200 470 V800 H0Z" fill="#11507d"/>
+  <path d="M0 560 Q150 530 300 560 T600 560 T900 560 T1200 560 V800 H0Z" fill="#0d416a"/>
+  <path d="M0 660 Q150 630 300 660 T600 660 T900 660 T1200 660 V800 H0Z" fill="#0a3456"/>
+</svg>

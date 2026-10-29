@@ -508,10 +508,6 @@
   flex: 1;
 }
 
-.squisq-status-ok {
-  color: var(--squisq-success);
-}
-
 .squisq-status-error {
   color: var(--squisq-danger);
 }
@@ -5160,7 +5156,7 @@ button.squisq-view-menu-radio-row:focus-visible {
   .squisq-block-preview-panel,
   .squisq-inline-preview-gutter,
   .squisq-inline-preview-connectors,
-  .squisq-outline {
+  .squisq-outline:not(.squisq-outline--sheet) {
     display: none;
   }
 }

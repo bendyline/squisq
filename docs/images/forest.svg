@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <title>Forest illustration</title>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f4d3a"/>
+      <stop offset="1" stop-color="#cfe3a8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <circle cx="1000" cy="180" r="80" fill="#fffbe0" opacity="0.8"/>
+  <path d="M0 600 Q600 520 1200 600 V800 H0Z" fill="#1a3d2e"/>
+  <g fill="#245640"><path d="M120 620 l70 -250 l70 250z"/><path d="M300 640 l90 -320 l90 320z"/><path d="M520 610 l60 -210 l60 210z"/><path d="M700 650 l95 -340 l95 340z"/><path d="M930 630 l70 -260 l70 260z"/></g>
+  <g fill="#173a2b"><path d="M40 760 l80 -280 l80 280z"/><path d="M420 780 l90 -300 l90 300z"/><path d="M820 790 l100 -330 l100 330z"/></g>
+</svg>

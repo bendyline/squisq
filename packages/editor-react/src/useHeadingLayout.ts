@@ -271,7 +271,7 @@ export function useHeadingLayout(refInsideWrapper: RefObject<HTMLElement | null>
 // ── Helpers ────────────────────────────────────────────────────────
 
 /** Pair headings only with heading blocks, so a preamble cannot shift them. */
-function blockAnchors(blocks: Block[], container: HTMLElement): (HTMLElement | null)[] {
+export function blockAnchors(blocks: Block[], container: HTMLElement): (HTMLElement | null)[] {
   const surface = container.querySelector<HTMLElement>('.squisq-wysiwyg-editor');
   const headings = (surface ?? container).querySelectorAll<HTMLElement>(
     ':scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > h5, :scope > h6',
@@ -288,7 +288,8 @@ function blockAnchors(blocks: Block[], container: HTMLElement): (HTMLElement | n
   });
 }
 
-function blockStartLine(block: Block): number | undefined {
+/** The 1-based source line a block begins on: its heading, else its first content. */
+export function blockStartLine(block: Block): number | undefined {
   return block.sourceHeading?.position?.start.line ?? block.contents?.[0]?.position?.start.line;
 }
 

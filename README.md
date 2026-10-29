@@ -4,7 +4,7 @@
 
 # Squiggly Square (squisq)
 
-> **Please visit our format & component sandbox at [squigglysquare.com](https://squigglysquare.com).**
+> **Try the editor at [squigglysquare.com](https://squigglysquare.com), and read the [documentation](https://squigglysquare.com/docs/).**
 
 Squiggly Square is a core library, set of React components, and format interop elements for creating rich multimedia documents from standard Markdown. Authors annotate headings with [Squiggly Square tags](docs/SquigglySquare.md) — a lightweight `{[ ]}` syntax that maps content to visual templates (slides, photo grids, pull quotes, stat highlights, and more). The library parses the Markdown, expands the annotations into a block/layer document model, and renders the result as resolution-independent SVG — all with zero build-time preprocessing.
 
@@ -33,10 +33,14 @@ Open-source monorepo providing reusable libraries for document/block rendering, 
 
 ## Documentation
 
-- **Squiggly Square standard** — [docs/SquigglySquare.md](docs/SquigglySquare.md): the markdown-extension syntax (template annotations, frontmatter keys, data fences, timed media, drawings, custom templates & themes)
-- **API Reference** — [docs/API.md](docs/API.md): every exported function, component, and type across all seven packages
-- **Package guides** — each package has its own README front door: [core](packages/core), [react](packages/react), [formats](packages/formats), [editor-react](packages/editor-react), [video](packages/video), [video-react](packages/video-react), [cli](packages/cli)
-- **Upgrading to v1.5** — [MIGRATION.md](MIGRATION.md): every API rename/removal (with old → new) plus the additive highlights
+**[squigglysquare.com/docs](https://squigglysquare.com/docs/)** — the documentation site, built from the Markdown in [`docs/`](docs):
+
+- **Guide** — for authors: getting started, the editor, the format and its tags, themes, page view, HTML page templates, dashboards, diagrams, data and charts, media, narration, import and export, and the CLI
+- **Block gallery** — every built-in block with live examples and its parameters
+- **Developers** — overview, installation, quick start, concepts, task guides, and complete sample apps
+- **API reference** — every exported function, component, and type, one page per package (source: [docs/API.md](docs/API.md))
+
+Also in the repo: the full [Squiggly Square format specification](docs/SquigglySquare.md), each package's README, and [MIGRATION.md](MIGRATION.md) for every v1.5 API rename and removal. To work on the docs, see [docs/\_theme/README.md](docs/_theme/README.md); `npm run dev` serves them at `/docs/`.
 
 ## Quick Start
 

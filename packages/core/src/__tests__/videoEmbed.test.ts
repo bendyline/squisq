@@ -8,6 +8,7 @@ import {
   parseVideoStartTime,
   sanitizeHtmlNodes,
   stringifyHtmlNodes,
+  VIDEO_EMBED_PROVIDERS,
   videoEmbedIframeAttributes,
 } from '../markdown/index';
 import type { HtmlElement, MarkdownBlockNode } from '../markdown/index';
@@ -164,25 +165,16 @@ describe('parseVideoEmbedUrl — other providers', () => {
     expect(parseVideoEmbedUrl('https://www.loom.com/share/not-an-id')).toBeNull();
   });
 
-  it('recognizes Dailymotion pages, short links, and player URLs', () => {
+  it('leaves Dailymotion links as links: its legacy player refuses third-party pages', () => {
     for (const input of [
       'https://www.dailymotion.com/video/x7tgad0',
-      'https://www.dailymotion.com/video/x7tgad0_some-old-title-slug',
       'https://dai.ly/x7tgad0',
       'https://www.dailymotion.com/embed/video/x7tgad0',
       'https://geo.dailymotion.com/player.html?video=x7tgad0',
     ]) {
-      expect(parseVideoEmbedUrl(input), input).toMatchObject({
-        provider: 'dailymotion',
-        id: 'x7tgad0',
-        embedUrl: 'https://www.dailymotion.com/embed/video/x7tgad0',
-        watchUrl: 'https://www.dailymotion.com/video/x7tgad0',
-      });
+      expect(parseVideoEmbedUrl(input), input).toBeNull();
     }
-    expect(parseVideoEmbedUrl('https://www.dailymotion.com/video/x7tgad0?start=42')).toMatchObject({
-      embedUrl: 'https://www.dailymotion.com/embed/video/x7tgad0?start=42',
-      watchUrl: 'https://www.dailymotion.com/video/x7tgad0?start=42',
-    });
+    expect(VIDEO_EMBED_PROVIDERS.map((provider) => provider.name)).not.toContain('Dailymotion');
   });
 
   it('recognizes Wistia media pages and player URLs', () => {

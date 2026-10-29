@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { DocumentSettingsDialog } from '../DocumentSettingsDialog';
+import type { PageTemplateSettings } from '../pageTemplates';
 
 afterEach(() => cleanup());
 
@@ -237,5 +238,92 @@ author: Keep
     open('## Subtitle\n\nBody.', onSave);
     const input = screen.getByLabelText('Title') as HTMLInputElement;
     expect(input.placeholder).toBe('Subtitle');
+  });
+});
+
+describe('DocumentSettingsDialog page template', () => {
+  const templates: PageTemplateSettings = {
+    listTemplates: async () => [
+      { value: '/_templates/post.html', label: '_templates/post.html' },
+      { value: '/_templates/page.html', label: '_templates/page.html' },
+    ],
+    defaultLabel: 'Workspace default (_templates/post.html)',
+  };
+
+  function openWithTemplates(
+    source: string,
+    onSave: (next: string) => void,
+    pageTemplates: PageTemplateSettings | null = templates,
+  ) {
+    return render(
+      <DocumentSettingsDialog
+        markdownSource={source}
+        onSave={onSave}
+        onClose={() => {}}
+        pageTemplates={pageTemplates}
+      />,
+    );
+  }
+
+  it('is offered only when the host renders through page templates', () => {
+    open('# Doc\n', () => {});
+    expect(screen.queryByLabelText('Page template')).toBeNull();
+  });
+
+  it('lists the host templates after the default and None', async () => {
+    openWithTemplates('# Doc\n', () => {});
+    const select = screen.getByLabelText('Page template') as HTMLSelectElement;
+    await screen.findByRole('option', { name: '_templates/post.html' });
+    expect([...select.options].map((option) => option.textContent)).toEqual([
+      'Workspace default (_templates/post.html)',
+      'None',
+      '_templates/post.html',
+      '_templates/page.html',
+    ]);
+    expect(select.value).toBe('');
+  });
+
+  it('writes the chosen template, None, or removes the key for the default', async () => {
+    for (const [choice, expected] of [
+      ['/_templates/page.html', 'squisq-output-template: /_templates/page.html'],
+      ['none', 'squisq-output-template: none'],
+    ] as const) {
+      const onSave = vi.fn();
+      openWithTemplates('# Doc\n', onSave);
+      await screen.findByRole('option', { name: '_templates/page.html' });
+      fireEvent.change(screen.getByLabelText('Page template'), { target: { value: choice } });
+      clickSave();
+      expect(onSave.mock.calls[0][0]).toContain(expected);
+      cleanup();
+    }
+
+    const onSave = vi.fn();
+    openWithTemplates('---\nsquisq-output-template: none\n---\n# Doc\n', onSave);
+    expect((screen.getByLabelText('Page template') as HTMLSelectElement).value).toBe('none');
+    fireEvent.change(screen.getByLabelText('Page template'), { target: { value: '' } });
+    clickSave();
+    expect(onSave.mock.calls[0][0]).not.toContain('squisq-output-template');
+  });
+
+  it('keeps an authored path the host does not list, untouched on save', async () => {
+    const onSave = vi.fn();
+    const source = '---\nsquisq-output-template: ../layouts/custom.html\n---\n# Doc\n';
+    openWithTemplates(source, onSave);
+    await screen.findByRole('option', { name: '_templates/post.html' });
+    const select = screen.getByLabelText('Page template') as HTMLSelectElement;
+    expect(select.value).toBe('../layouts/custom.html');
+    clickSave();
+    expect(onSave.mock.calls[0][0]).toContain('squisq-output-template: ../layouts/custom.html');
+  });
+
+  it('calls the only choice None when no default applies, and reports listing errors', async () => {
+    openWithTemplates('# Doc\n', () => {}, {
+      listTemplates: async () => {
+        throw new Error('offline');
+      },
+    });
+    const select = screen.getByLabelText('Page template') as HTMLSelectElement;
+    expect([...select.options].map((option) => option.textContent)).toEqual(['None']);
+    expect((await screen.findByRole('alert')).textContent).toContain('offline');
   });
 });

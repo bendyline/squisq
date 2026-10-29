@@ -47,6 +47,14 @@ export interface OutlinePanelProps {
   className?: string;
   /** Disable heading-level changes and section reordering. */
   readOnly?: boolean;
+  /**
+   * `sheet` fills the navigation sheet instead of taking a pane's width, and
+   * leaves focus where it is after a jump so choosing a section does not
+   * raise the on-screen keyboard. Defaults to `pane`.
+   */
+  presentation?: 'pane' | 'sheet';
+  /** Called after choosing a row has moved the editor to that section. */
+  onNavigate?: () => void;
 }
 
 interface OutlineSectionRef {
@@ -68,7 +76,13 @@ interface OutlineDropTarget {
 const OUTLINE_DRAG_MIME = 'application/x-squisq-outline-section';
 const EMPTY_BLOCKS: Block[] = [];
 
-export function OutlinePanel({ width, className, readOnly = false }: OutlinePanelProps) {
+export function OutlinePanel({
+  width,
+  className,
+  readOnly = false,
+  presentation = 'pane',
+  onNavigate,
+}: OutlinePanelProps) {
   const {
     doc,
     markdownSource,
@@ -111,6 +125,8 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
     activeView,
     monacoEditor,
     tiptapEditor,
+    presentation,
+    onNavigate,
   });
   interactionRef.current = {
     doc,
@@ -122,6 +138,8 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
     activeView,
     monacoEditor,
     tiptapEditor,
+    presentation,
+    onNavigate,
   };
 
   // In block-at-a-time mode there's no live cursor across the whole document
@@ -142,10 +160,13 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
     const current = interactionRef.current;
     const block = findLiveBlock(current.doc, outlineBlock.id) ?? outlineBlock;
 
+    const focusEditor = current.presentation !== 'sheet';
+
     if (current.layoutMode === 'block') {
       const line = block.sourceHeading?.position?.start.line;
       if (typeof line === 'number') {
         current.goToBlockByLine(line);
+        current.onNavigate?.();
         return;
       }
     }
@@ -159,13 +180,14 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
       const index = blocks.findIndex((candidate) => candidate.id === block.id);
       if (index < 0 || index >= headings.length) return;
       headings[index].scrollIntoView({ behavior: 'smooth', block: 'start' });
-      if (current.tiptapEditor) {
+      if (focusEditor && current.tiptapEditor) {
         try {
           current.tiptapEditor.chain().focus().run();
         } catch {
           // Ignore focus failures from an editor that is being unmounted.
         }
       }
+      current.onNavigate?.();
       return;
     }
 
@@ -174,7 +196,8 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
       if (typeof line === 'number') {
         current.monacoEditor.revealLineInCenter(line);
         current.monacoEditor.setPosition({ lineNumber: line, column: 1 });
-        current.monacoEditor.focus();
+        if (focusEditor) current.monacoEditor.focus();
+        current.onNavigate?.();
       }
     }
   }, []);
@@ -307,9 +330,8 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
   const basis =
     width != null ? `${width}px` : `var(--squisq-outline-width, ${OUTLINE_RESPONSIVE_WIDTH})`;
   const paneStyle: CSSProperties = {
-    width: basis,
-    flex: `0 0 ${basis}`,
-    overflow: 'auto',
+    // The sheet's body is the scroller there, so the tree just takes its width.
+    ...(presentation === 'sheet' ? {} : { width: basis, flex: `0 0 ${basis}`, overflow: 'auto' }),
     ...(accentColor
       ? ({ ['--squisq-outline-accent' as string]: accentColor } as CSSProperties)
       : {}),
@@ -318,7 +340,9 @@ export function OutlinePanel({ width, className, readOnly = false }: OutlinePane
   return (
     <aside
       ref={paneRef}
-      className={`squisq-outline${className ? ` ${className}` : ''}`}
+      className={`squisq-outline${presentation === 'sheet' ? ' squisq-outline--sheet' : ''}${
+        className ? ` ${className}` : ''
+      }`}
       style={paneStyle}
       data-testid="outline-panel"
       aria-label="Document outline"

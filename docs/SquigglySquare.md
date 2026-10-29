@@ -271,12 +271,9 @@ Notes and caveats:
 - **A `title` param becomes the block's display title**; every other param
   flows through `templateOverrides` and is coerced (below) like a heading
   annotation's.
-- **Round-trip caveat.** A standalone annotation placed _before_ a sub-heading
-  child of the same section relocates to _after_ that child on the first
-  markdown→markdown round-trip (the heading-less block is emitted as a sibling
-  after the parent's whole subtree). The result is stable — a second round-trip
-  is a no-op — but expect that one-time reordering if you interleave standalone
-  annotations with sub-headings.
+- **Round-trips keep their place.** A standalone annotation interleaved with
+  sub-headings stays where you wrote it on a markdown→markdown round-trip; only
+  its attribute values are canonicalized (see the quoting rules above).
 - **List-item nesting is not lifted.** Only top-level standalone paragraphs are
   recognized. A `{[…]}` paragraph nested inside a list item still warns as an
   `unparsed-annotation`; true list-item template blocks are future work.
@@ -321,15 +318,21 @@ Unannotated headings don't always stay on the structural default
 heading's body for one strong content signal and applies the matching
 template, deriving its inputs from that body:
 
-| Body signal (checked in this order)                  | Auto-picked template                         |
-| ---------------------------------------------------- | -------------------------------------------- |
-| GFM table                                            | `dataTable`                                  |
-| 2+ images                                            | `photoGrid`                                  |
-| 1 image                                              | `leftFeature` / `rightFeature` (alternating) |
-| Blockquote                                           | `quote`                                      |
-| A short, stat-looking line (`89%`, `$2.3M`, `1,234`) | `statHighlight`                              |
-| List                                                 | `list`                                       |
+| Body signal (checked in this order)                    | Auto-picked template                         |
+| ------------------------------------------------------ | -------------------------------------------- |
+| One ASCII box-diagram fence                            | `diagram`                                    |
+| One ASCII timeline fence                               | `timeline`                                   |
+| One ASCII tree fence                                   | `tree`                                       |
+| GFM table                                              | `dataTable`                                  |
+| One video (a video file or a hosted video link), alone | `videoWithCaption`                           |
+| 2–4 images and no other text                           | `photoGrid`                                  |
+| Paragraphs that include an image                       | `leftFeature` / `rightFeature` (alternating) |
+| Blockquote                                             | `quote`                                      |
+| A short, stat-looking line (`89%`, `$2.3M`, `1,234`)   | `statHighlight`                              |
+| List                                                   | `list`                                       |
 
+The body must be _only_ that one structure: a table with an introductory
+paragraph, or a list followed by a closing sentence, keeps the default.
 Derivation is strict: if the essential input can't be built from the body
 (e.g. a feature with no image source), the block keeps the structural
 default. Auto-picked blocks are marked `block.autoTemplate = true`, which is
@@ -343,7 +346,7 @@ document with frontmatter `squisq-auto-templates: false`, or on the CLI with
 
 ## YAML Frontmatter
 
-Squisq Markdown documents can include a YAML frontmatter block at the very top (delimited by `---`). Frontmatter properties set document-level rendering hints.
+Squisq Markdown documents can include a YAML frontmatter block at the very top (delimited by `---`). Frontmatter properties set document-level rendering hints. This section covers the core keys; the [frontmatter reference](guide/frontmatter.md) lists every key Squisq reads, with values and defaults.
 
 Two of the keys below — `document-render-as` and `display-mode` — are **editor-preview hints only**: the editor's Preview panel and toolbar read them, but core (`markdownToDoc`) and the exporters/CLI do not. The `theme` key (and the other `squisq-*` keys documented under [Other Squisq frontmatter keys](#other-squisq-frontmatter-keys)) _are_ load-bearing — every render and export path honours them.
 
@@ -372,15 +375,17 @@ Default when omitted: `landscape`.
 
 Sets the default display/playback mode.
 
-| Value                                         | Resolved mode                                                      |
-| --------------------------------------------- | ------------------------------------------------------------------ |
-| `video`                                       | Video — timeline playback with audio sync, scrub bar, auto-advance |
-| `slideshow`, `slides`, `presentation`, `deck` | Slideshow — prev/next navigation, no auto-advance                  |
-| `dashboard`, `dash`                           | Dashboard — every block arranged on one static canvas              |
-| `linear`, `document`, `scroll`                | Document — long-scrolling readable view, no audio                  |
-| `page`, `html`, `plain`, `reader`             | Page — static plain-HTML rendering (no doc model)                  |
+| Value                                           | Resolved mode                                                                    |
+| ----------------------------------------------- | -------------------------------------------------------------------------------- |
+| `slideshow`, `slides`, `presentation`, `deck`   | Slideshow — prev/next navigation, no auto-advance                                |
+| `video`                                         | Video — timeline playback with audio sync, scrub bar, auto-advance               |
+| `page`, `paged`, `linear`                       | Page — the styled, theme-art-directed scrolling page                             |
+| `document`, `scroll`, `html`, `plain`, `reader` | Document — static plain-HTML rendering (no doc model)                            |
+| `dashboard`, `dash`                             | Dashboard — every block arranged on one static canvas                            |
+| `flashcards`, `flashcard`, `study`, `quiz`      | Flashcards — a progressively revealed study deck                                 |
+| `narrate`, `teleprompter`, `prompter`           | Narrate — the voice-paced teleprompter (Video when the host turns narration off) |
 
-Default when omitted: `video`.
+Values are case-insensitive; anything else is ignored. Default when omitted: `slideshow`.
 
 ### `theme`
 
@@ -421,15 +426,15 @@ These are read by core and every export path (not just the editor preview):
 
 These are managed by the editor's Preview controls and consumed by the player/export paths:
 
-| Key                                               | Purpose                                                                                                     |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `squisq-transform` (legacy `transform-style`)     | Slideshow transform style id applied in preview. Omitted for the default of no transform.                   |
-| `squisq-captions` (legacy `caption-style`)        | Caption mode — `off`, `standard`, or `social` (`instagram`/`tiktok`/`reels` → social). Default: `standard`. |
-| `squisq-cover-slide` (legacy `cover-slide`)       | Whether to show the generated cover slide. Default: `true`.                                                 |
-| `squisq-cover-template` (legacy `cover-template`) | Cover appearance: `cover`, `title`, `sectionHeader`, or `imageWithCaption`. Default: `cover`.               |
-| `squisq-cover-duration` (legacy `cover-duration`) | Seconds the cover remains visible in Video/export (0-60). Default: `2`.                                     |
-| `squisq-cover-playback` (legacy `cover-playback`) | `preroll` delays the story; `overlay` advances video/audio beneath the cover. Default: `preroll`.           |
-| `squisq-video-loop` (legacy `video-loop`)         | Whether Video mode restarts automatically after playback ends. Default: `false`.                            |
+| Key                                               | Purpose                                                                                                                  |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `squisq-transform` (legacy `transform-style`)     | Slideshow transform style id applied in preview. Omitted for the default of no transform.                                |
+| `squisq-captions` (legacy `caption-style`)        | Caption mode — `off`, `standard`, or `social` (`instagram`/`tiktok`/`reels` → social). Default: `standard`.              |
+| `squisq-cover-slide` (legacy `cover-slide`)       | Whether to show the generated cover slide. Default: `true`.                                                              |
+| `squisq-cover-template` (legacy `cover-template`) | Cover appearance: `cover`, `title`, `sectionHeader`, `imageWithCaption`, `bigText`, or `bigTextImage`. Default: `cover`. |
+| `squisq-cover-duration` (legacy `cover-duration`) | Seconds the cover remains visible in Video/export (0-60). Default: `2`.                                                  |
+| `squisq-cover-playback` (legacy `cover-playback`) | `preroll` delays the story; `overlay` advances video/audio beneath the cover. Default: `preroll`.                        |
+| `squisq-video-loop` (legacy `video-loop`)         | Whether Video mode restarts automatically after playback ends. Default: `false`.                                         |
 
 When the editor writes these settings, values matching their runtime defaults are omitted rather than persisted. The same applies to the default `standard` theme. Choosing a default also removes any legacy alias; non-default values use the canonical `squisq-*` key.
 
@@ -459,21 +464,7 @@ accepted — pinned cells are exempt from the automatic pick, and automatic
 boosts rally to a pinned level so the dashboard keeps ≤2 unique sizes):
 
 ```yaml
-squisq-dashboard-layouts:
-  {
-    'kpi-wall':
-      {
-        'lb': 'KPI Wall',
-        'ce':
-          {
-            'ls':
-              [
-                { 'x': '0%', 'y': '0%', 'wd': '49%', 'hg': '100%', 'bk': 1 },
-                { 'x': '51%', 'y': '0%', 'wd': '49%', 'hg': '100%' },
-              ],
-          },
-      },
-  }
+squisq-dashboard-layouts: {"kpi-wall":{"lb":"KPI Wall","ce":{"ls":[{"x":"0%","y":"0%","wd":"49%","hg":"100%","bk":1},{"x":"51%","y":"0%","wd":"49%","hg":"100%"}]}}}
 squisq-dashboard-layout: kpi-wall
 ```
 
@@ -486,14 +477,14 @@ image" dialog; the CLI exports the same rendition with `squisq image` or
 
 Any other YAML key-value pairs in the frontmatter block are preserved in `Doc.frontmatter` as a `Record<string, unknown>` and are available to consuming applications. Squisq only interprets the keys documented above; everything else is passed through untouched.
 
-Note that squisq's frontmatter parser is deliberately a **line-based subset**
-of YAML: flat `key: value` pairs only, with `true`/`false` and numbers coerced
-to their types, surrounding quotes stripped, and `#`-comment lines skipped.
-Nested YAML mapping/sequence structures are not parsed (a single-line JSON
-literal passes through verbatim — which is exactly how the custom-templates and
-custom-themes payloads ride along). The one exception is the **literal block
-scalar** described next, which lets those payloads be authored across multiple
-lines.
+Note that squisq's frontmatter parser is deliberately a **subset** of YAML:
+`key: value` pairs with `true`/`false` and numbers coerced to their types (`yes`/`no`
+stay strings), surrounding quotes stripped, and `#`-comment lines skipped. Indented
+block mappings and `- item` sequences parse into nested objects and arrays. Flow
+collections do not: `[a, b]` and a single-line JSON literal pass through verbatim
+as strings — which is exactly how the custom-templates and custom-themes payloads
+ride along. The **literal block scalar** described next lets those payloads be
+authored across multiple lines.
 
 ### Multi-line frontmatter
 
@@ -507,16 +498,7 @@ Compact single-line JSON still parses (fully backward compatible):
 
 ```yaml
 ---
-squisq-custom-templates:
-  {
-    'myCard':
-      {
-        'name': 'myCard',
-        'label': 'My Card',
-        'viewport': { 'width': 1920, 'height': 1080 },
-        'layers': [],
-      },
-  }
+squisq-custom-templates: {"myCard":{"lb":"My Card","ly":[]}}
 ---
 ```
 
@@ -527,16 +509,17 @@ The same payload as a block scalar:
 squisq-custom-templates: |-
   {
     "myCard": {
-      "name": "myCard",
-      "label": "My Card",
-      "viewport": { "width": 1920, "height": 1080 },
-      "layers": []
+      "lb": "My Card",
+      "ly": []
     }
   }
 ---
 ```
 
-Both parse to the identical `Doc.customTemplates`. The serializer emits a
+Both parse to the identical `Doc.customTemplates`. The map keyed by template name uses the
+compact property names the serializer writes (`lb` label, `ds` description, `vp` viewport, `ly`
+layers); full property names (`name`, `label`, `viewport`, `layers`) are read only in the array
+form, `[{"name": "myCard", "label": "My Card", "layers": []}]`. The serializer emits a
 block scalar (`|-`) automatically for any multi-line frontmatter value and a
 verbatim single line for compact JSON, so hand-authored multi-line payloads
 round-trip. (Only `|` / `|-` are modelled; folded scalars `>` / `>-` and the

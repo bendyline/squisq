@@ -147,6 +147,7 @@ export { EmojiPicker } from './EmojiPicker.js';
 export type { EmojiPickerProps } from './EmojiPicker.js';
 export { DocumentSettingsDialog } from './DocumentSettingsDialog.js';
 export type { DocumentSettingsDialogProps } from './DocumentSettingsDialog.js';
+export type { PageTemplateChoice, PageTemplateSettings } from './pageTemplates.js';
 export { ThemePicker } from './ThemePicker.js';
 export type { ThemePickerProps } from './ThemePicker.js';
 export { PICKER_CATEGORIES, ALL_PICKER_ENTRIES, searchPickerEntries } from './emojiData.js';
@@ -210,6 +211,7 @@ export { BlockPropertiesPopover } from './BlockPropertiesPopover.js';
 export type { BlockPropertiesPopoverProps } from './BlockPropertiesPopover.js';
 export { InlinePreviewGutter } from './InlinePreviewGutter.js';
 export type { InlinePreviewGutterProps } from './InlinePreviewGutter.js';
+export type { NavigationSheetPanel } from './useNavigationSheetSwipe.js';
 
 export { MediaBin } from './MediaBin.js';
 export type { MediaBinProps } from './MediaBin.js';
@@ -558,7 +560,7 @@ export type {
 export { DataCardWidget } from './dataCard/DataCardWidget.js';
 
 // Hosted-video embeds — a top-level paragraph that is only a link (or bare
-// URL) to a YouTube/Vimeo/Loom/Dailymotion/Wistia page plays inline in the
+// URL) to a YouTube/Vimeo/Loom/Wistia page plays inline in the
 // Write view, with the paragraph kept as its editable caption. Insert →
 // Online Video writes that paragraph; pasted `<iframe>` embed code becomes it.
 export {

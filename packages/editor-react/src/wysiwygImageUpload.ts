@@ -59,6 +59,9 @@ export function insertTopLevelNodes(view: ImageMutationView, nodes: ProseMirrorN
   view.dispatch(tr.scrollIntoView());
 }
 
+/** A blank GIF that stands in for an image until its file is stored. */
+const UPLOAD_PLACEHOLDER_SRC = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+
 /**
  * Upload images while stable placeholder nodes retain the original event
  * position as the surrounding ProseMirror document continues to change.
@@ -77,7 +80,7 @@ export async function uploadAndInsertImages(
   for (const [index, token] of placeholders.entries()) {
     placeholderTr = placeholderTr.replaceSelectionWith(
       imageType.create({
-        src: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+        src: UPLOAD_PLACEHOLDER_SRC,
         alt: files[index].name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ') || 'Image',
         title: token,
       }),
@@ -111,6 +114,47 @@ export async function uploadAndInsertImages(
     }
   };
   await Promise.all(Array.from({ length: Math.min(3, files.length) }, uploadNext));
+}
+
+/**
+ * Insert a copy of `image` while its file is still being stored. A placeholder
+ * holds its place, as for an upload, then takes `image`'s attributes and the
+ * path `store` returns — or `image`'s own src when nothing was stored. The
+ * copy keeps its alt text, size and link either way.
+ */
+export async function insertImageWhileStoring(
+  view: ImageMutationView,
+  image: ProseMirrorNode,
+  store: () => Promise<string | null>,
+  onMediaUploaded?: () => void,
+): Promise<void> {
+  const token = `squisq-upload:${uniquePasteToken()}`;
+  view.dispatch(
+    view.state.tr
+      .replaceSelectionWith(
+        image.type.create({ ...image.attrs, src: UPLOAD_PLACEHOLDER_SRC, title: token }),
+      )
+      .scrollIntoView(),
+  );
+  let stored: string | null = null;
+  try {
+    stored = await store();
+  } catch (err) {
+    console.error('Failed to store pasted image:', err);
+  }
+  const found = findUploadPlaceholder(view, token);
+  if (!found) return;
+  // Out of the undo history, so one undo removes the pasted image rather
+  // than turning it back into a placeholder that never resolves.
+  view.dispatch(
+    view.state.tr
+      .setNodeMarkup(found.pos, undefined, {
+        ...image.attrs,
+        ...(stored ? { src: stored } : {}),
+      })
+      .setMeta('addToHistory', false),
+  );
+  if (stored) onMediaUploaded?.();
 }
 
 function findUploadPlaceholder(
@@ -153,7 +197,7 @@ function removeUploadPlaceholder(view: ImageMutationView, token: string): void {
 }
 
 let pasteCounter = 0;
-function uniquePasteToken(): string {
+export function uniquePasteToken(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }

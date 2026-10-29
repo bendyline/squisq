@@ -36,7 +36,7 @@ import {
   buildPageCssVars,
   pageStyleDataAttributes,
   PAGE_BASE_CSS,
-  DEFAULT_THEME,
+  resolveThemeForDoc,
 } from '@bendyline/squisq/doc';
 import type {
   MaterializeBlockLayersOptions,
@@ -69,7 +69,7 @@ export interface LinearDocViewProps {
   viewport?: ViewportConfig;
   /** Optional CSS class for the outer container */
   className?: string;
-  /** Theme to use for rendering (default: DEFAULT_THEME from the theme library) */
+  /** Theme to use for rendering (default: the document's own theme, as the player resolves it) */
   theme?: Theme;
   /** Whether embedded canvas sections render their layer animations (default: true). */
   animationsEnabled?: boolean;
@@ -185,9 +185,9 @@ export function LinearDocView({
   const resolvedSurface: SurfaceScheme | undefined = surface === 'auto' ? autoSurface : surface;
 
   const activeTheme = useMemo(() => {
-    const baseTheme = theme ?? DEFAULT_THEME;
+    const baseTheme = theme ?? resolveThemeForDoc(resolvedDoc);
     return resolvedSurface ? applySurface(baseTheme, resolvedSurface) : baseTheme;
-  }, [theme, resolvedSurface]);
+  }, [theme, resolvedDoc, resolvedSurface]);
 
   const pageStyle = useMemo(
     () => resolvePageStyle(activeTheme, transformPage, variant),

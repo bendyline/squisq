@@ -1,0 +1,95 @@
+<!doctype html>
+<!--
+  The documentation site's page template. It is an ordinary Squisq HTML page
+  template (see guide/page-templates.md): the unnamed slot receives each
+  rendered page, the "title" slot its title, and the description meta its
+  summary. The docs build then fills the docs:tabs / docs:sidebar / docs:toc
+  comment markers with navigation and resolves `squisq-docs-root:/` to the
+  site root, where the editor lives.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src  'self' blob: 'wasm-unsafe-eval';
+        style-src   'self' 'unsafe-inline';
+        img-src     'self' blob: data: https://i.ytimg.com https://tile.openstreetmap.org https://tile.opentopomap.org https://tiles.stadiamaps.com https://server.arcgisonline.com;
+        media-src   'self' blob: data:;
+        font-src    'self' data:;
+        connect-src 'self' blob: data:;
+        worker-src  'self' blob:;
+        frame-src   https://www.youtube-nocookie.com https://player.vimeo.com https://www.loom.com https://fast.wistia.net;
+        object-src  'none';
+        base-uri    'self';
+        form-action 'self';
+      "
+    />
+    <title><slot name="title">Squiggly Square Docs</slot></title>
+    <meta name="description" content="" />
+    <meta property="og:title" content="" />
+    <meta property="og:description" content="" />
+    <meta property="og:site_name" content="Squiggly Square" />
+    <link rel="icon" type="image/png" sizes="32x32" href="squisq-docs-root:/res/favicon-32.png" />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="squisq-docs-root:/res/apple-touch-icon.png"
+    />
+    <link rel="stylesheet" href="squisq-docs-root:/fonts/fonts.css" />
+    <link rel="stylesheet" href="docs.css" />
+    <script src="docs.js" defer></script>
+  </head>
+  <body>
+    <a class="sq-skip" href="#content">Skip to content</a>
+    <header class="sq-header">
+      <div class="sq-header-inner">
+        <button
+          class="sq-menu"
+          type="button"
+          aria-label="Show navigation"
+          aria-expanded="false"
+          aria-controls="sq-sidebar"
+        >
+          <span aria-hidden="true"></span>
+        </button>
+        <a class="sq-brand" href="../index.html">
+          <img src="squisq-docs-root:/res/squisq.jpg" alt="" width="30" height="30" />
+          <span>Squiggly Square <em>Docs</em></span>
+        </a>
+        <nav class="sq-tabs" aria-label="Documentation sections"><!--docs:tabs--></nav>
+        <div class="sq-search" role="search">
+          <input
+            type="search"
+            placeholder="Search docs"
+            aria-label="Search the documentation"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <kbd aria-hidden="true">/</kbd>
+          <div class="sq-search-results" role="listbox" hidden></div>
+        </div>
+        <a class="sq-header-cta" href="squisq-docs-root:/">Open the editor</a>
+        <a class="sq-header-link" href="https://github.com/bendyline/squisq">GitHub</a>
+      </div>
+    </header>
+    <div class="sq-layout __DOCS_LAYOUT__">
+      <nav id="sq-sidebar" class="sq-sidebar" aria-label="Pages in this section">
+        <!--docs:sidebar-->
+      </nav>
+      <main id="content" class="sq-main"><slot></slot></main>
+      <aside class="sq-toc" aria-label="On this page"><!--docs:toc--></aside>
+    </div>
+    <footer class="sq-footer">
+      <p>
+        Squiggly Square is open source under the
+        <a href="squisq-docs-root:/legal/LICENSE.txt">MIT license</a> ·
+        <a href="squisq-docs-root:/legal/NOTICE.md">Built on open source</a> ·
+        <a href="https://github.com/bendyline/squisq">Source on GitHub</a>
+      </p>
+    </footer>
+  </body>
+</html>

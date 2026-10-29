@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <title>Harbor illustration</title>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0f4c5c"/>
+      <stop offset="1" stop-color="#f2a65a"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <circle cx="930" cy="250" r="110" fill="#ffe3b3" opacity="0.9"/>
+  <path d="M0 520 Q300 470 600 515 T1200 505 V800 H0Z" fill="#0b3c49"/>
+  <path d="M0 590 Q300 560 600 600 T1200 585 V800 H0Z" fill="#08303b"/>
+  <path d="M250 520 l60 -170 l8 170z" fill="#f6efe2"/><path d="M318 520 l0 -150 l70 150z" fill="#e9dcc4"/>
+  <path d="M215 520 h200 l-25 30 h-150z" fill="#3a2a1d"/>
+  <path d="M780 548 h120 l-15 20 h-90z" fill="#3a2a1d"/><path d="M830 548 l0 -90 l40 90z" fill="#f6efe2"/>
+</svg>

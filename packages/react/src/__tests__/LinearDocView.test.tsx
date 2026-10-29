@@ -2,7 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
 import { LinearDocView } from '../LinearDocView';
 import type { Doc, Block } from '@bendyline/squisq/schemas';
-import { DARK_SURFACE, DEFAULT_THEME, LIGHT_SURFACE } from '@bendyline/squisq/schemas';
+import {
+  DARK_SURFACE,
+  DEFAULT_THEME,
+  LIGHT_SURFACE,
+  resolveTheme,
+} from '@bendyline/squisq/schemas';
 import type {
   MarkdownBlockNode,
   MarkdownInlineNode,
@@ -318,6 +323,20 @@ describe('LinearDocView', () => {
     // DEFAULT_THEME has a specific background; applying LIGHT_SURFACE below
     // must produce a different value to prove override is working.
     expect(el.style.background).not.toBe(LIGHT_SURFACE.background);
+  });
+
+  it("falls back to the document's own theme, like the player", () => {
+    const blocks = [mkBlock({ id: 'b', contents: [paragraph(text('hi'))] })];
+    const standard = render(<LinearDocView doc={mkDoc(blocks)} />).container;
+    const magazine = render(
+      <LinearDocView doc={{ ...mkDoc(blocks), themeId: 'magazine' }} />,
+    ).container;
+    const background = (root: HTMLElement) =>
+      (root.querySelector('.squisq-linear') as HTMLElement).style.background;
+    const probe = document.createElement('div');
+    probe.style.background = resolveTheme('magazine').colors.background;
+    expect(background(magazine)).toBe(probe.style.background);
+    expect(background(magazine)).not.toBe(background(standard));
   });
 
   it('light surface overlays the theme background', () => {

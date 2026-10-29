@@ -3,7 +3,9 @@
  *
  * Modal editor for the frontmatter values that Squisq currently
  * understands: document title and cover subtitle plus the persisted preview keys
- * (`squisq-theme`, `squisq-transform`, `squisq-captions`). Writes back
+ * (`squisq-theme`, `squisq-transform`, `squisq-captions`), and — when the
+ * host renders the document through page templates — its page template
+ * (`squisq-output-template`). Writes back
  * to the same `setFrontmatterValues` channel that `PreviewControls`
  * uses, so any change made here is reflected in the play-mode controls
  * (and vice versa).
@@ -15,7 +17,7 @@
  * storing a redundant value.
  */
 
-import { useCallback, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   inferDocumentTitle,
   parseMarkdown,
@@ -35,6 +37,12 @@ import {
 import { useModalDialog } from './modal/useModalDialog';
 import { PROOF_DIALECTS, PROOF_FRONTMATTER_KEYS } from '@bendyline/squisq/proof';
 import { useProofingState } from './proofing/ProofingContext';
+import { OUTSIDE_IN_OUTPUT_TEMPLATE_KEY } from '@bendyline/squisq-formats/outside-in-layout';
+import {
+  usePageTemplateSettings,
+  type PageTemplateChoice,
+  type PageTemplateSettings,
+} from './pageTemplates';
 
 // ── Frontmatter key constants ─────────────────────────────────────
 
@@ -73,6 +81,19 @@ export interface DocumentSettingsDialogProps {
   defaultThemeId?: string;
   /** Label for the Theme picker's default entry. Defaults to `'Default'`. */
   defaultThemeLabel?: string;
+  /**
+   * Page template capability. Defaults to the one `EditorShell` received as
+   * `pageTemplates`; the Page template field appears only when one is set.
+   */
+  pageTemplates?: PageTemplateSettings | null;
+}
+
+/** The authored template choice: a path, `'none'`, or `''` for the default. */
+function readPageTemplate(fm: Record<string, unknown> | undefined): string {
+  const value = fm?.[OUTSIDE_IN_OUTPUT_TEMPLATE_KEY];
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return trimmed.toLowerCase() === 'none' ? 'none' : trimmed;
 }
 
 // ── Component ─────────────────────────────────────────────────────
@@ -83,8 +104,11 @@ export function DocumentSettingsDialog({
   onClose,
   defaultThemeId,
   defaultThemeLabel,
+  pageTemplates: pageTemplatesProp,
 }: DocumentSettingsDialogProps) {
   const hostDefaultThemeId = defaultThemeId?.trim() || undefined;
+  const contextPageTemplates = usePageTemplateSettings();
+  const pageTemplates = pageTemplatesProp === undefined ? contextPageTemplates : pageTemplatesProp;
   // Parse once at open; further edits flow through local form state and
   // are committed in a single `setFrontmatterValues` call on Save.
   const parsed = useMemo(() => parseMarkdown(markdownSource), [markdownSource]);
@@ -143,6 +167,34 @@ export function DocumentSettingsDialog({
         : '',
   );
   const [proofDialect, setProofDialect] = useState(currentProofDialect);
+  const currentPageTemplate = readPageTemplate(frontmatter);
+  const [pageTemplate, setPageTemplate] = useState(currentPageTemplate);
+  const [templateChoices, setTemplateChoices] = useState<{
+    status: 'loading' | 'ready' | 'error';
+    choices: readonly PageTemplateChoice[];
+    message?: string;
+  }>({ status: 'loading', choices: [] });
+  useEffect(() => {
+    if (!pageTemplates) return;
+    let current = true;
+    pageTemplates.listTemplates().then(
+      (choices) => {
+        if (current) setTemplateChoices({ status: 'ready', choices });
+      },
+      (error: unknown) => {
+        if (current) {
+          setTemplateChoices({
+            status: 'error',
+            choices: [],
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [pageTemplates]);
 
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLFormElement>(null);
@@ -214,7 +266,17 @@ export function DocumentSettingsDialog({
           }
         : {};
 
-      const nextSource = setFrontmatterValues(markdownSource, { ...updates, ...proofingUpdates });
+      // Only a host that renders through page templates owns this key.
+      const pageTemplateUpdates: Record<string, string | null> =
+        pageTemplates && pageTemplate !== currentPageTemplate
+          ? { [OUTSIDE_IN_OUTPUT_TEMPLATE_KEY]: pageTemplate || null }
+          : {};
+
+      const nextSource = setFrontmatterValues(markdownSource, {
+        ...updates,
+        ...proofingUpdates,
+        ...pageTemplateUpdates,
+      });
       onSave(nextSource);
     },
     [
@@ -227,6 +289,9 @@ export function DocumentSettingsDialog({
       proofingState,
       proofingEnabled,
       proofDialect,
+      pageTemplates,
+      pageTemplate,
+      currentPageTemplate,
       inferredTitle,
       inferredSubtitle,
       hostDefaultThemeId,
@@ -322,6 +387,50 @@ export function DocumentSettingsDialog({
               ariaLabel="Theme"
             />
           </div>
+
+          {pageTemplates && (
+            <div className="squisq-doc-settings-field">
+              <label
+                className="squisq-doc-settings-label"
+                htmlFor="squisq-doc-settings-page-template"
+              >
+                Page template
+              </label>
+              <select
+                id="squisq-doc-settings-page-template"
+                className="squisq-doc-settings-input"
+                value={pageTemplate}
+                onChange={(e) => setPageTemplate(e.target.value)}
+                aria-describedby="squisq-doc-settings-page-template-hint"
+              >
+                <option value="">{pageTemplates.defaultLabel ?? 'None'}</option>
+                {pageTemplates.defaultLabel && <option value="none">None</option>}
+                {templateChoices.choices.map((choice) => (
+                  <option key={choice.value} value={choice.value}>
+                    {choice.label}
+                  </option>
+                ))}
+                {pageTemplate &&
+                  pageTemplate !== 'none' &&
+                  !templateChoices.choices.some((choice) => choice.value === pageTemplate) && (
+                    <option value={pageTemplate}>{pageTemplate}</option>
+                  )}
+              </select>
+              <span
+                id="squisq-doc-settings-page-template-hint"
+                className="squisq-doc-settings-hint"
+                role={templateChoices.status === 'error' ? 'alert' : undefined}
+              >
+                {templateChoices.status === 'loading'
+                  ? 'Looking for page templates…'
+                  : templateChoices.status === 'error'
+                    ? `Page templates couldn’t be listed: ${templateChoices.message}`
+                    : templateChoices.choices.length === 0
+                      ? 'No page templates found. A page template is an HTML file with a <slot> where the content goes.'
+                      : 'The page this document is generated inside. Its <slot> receives the content.'}
+              </span>
+            </div>
+          )}
 
           <div className="squisq-doc-settings-field">
             <label className="squisq-doc-settings-label" htmlFor="squisq-doc-settings-transform">

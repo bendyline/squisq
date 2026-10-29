@@ -253,8 +253,23 @@ export async function docToHtmlZip(doc: Doc, options: HtmlZipExportOptions): Pro
 
 export { collectImagePaths, generateExternalHtml } from './htmlTemplate.js';
 export { inferMimeType, arrayBufferToBase64DataUrl, extractFilename } from './imageUtils.js';
-export { markdownDocToPlainHtml } from './plainHtml.js';
-export type { PlainHtmlExportOptions } from './plainHtml.js';
+export { markdownDocToPlainHtml, markdownDocToPlainHtmlParts } from './plainHtml.js';
+export type { PlainHtmlExportOptions, PlainHtmlParts } from './plainHtml.js';
+export {
+  HTML_PAGE_TEMPLATE_CONTENT_END,
+  HTML_PAGE_TEMPLATE_CONTENT_START,
+  HtmlPageTemplateError,
+  applyHtmlPageTemplate,
+  extractHtmlPageTemplateContent,
+  inspectHtmlPageTemplate,
+  isHtmlPageTemplate,
+} from './pageTemplate.js';
+export type {
+  HtmlPageTemplateContent,
+  HtmlPageTemplateInspection,
+  HtmlPageTemplateIssue,
+  HtmlPageTemplateOptions,
+} from './pageTemplate.js';
 export { markdownDocsToPlainHtmlBundle, collectLinkRefs } from './plainHtmlBundle.js';
 export type { PlainHtmlBundleOptions } from './plainHtmlBundle.js';
 export { markdownDocsToHtmlBundle } from './docsHtmlBundle.js';

@@ -141,7 +141,10 @@ describe('SeededRandom', () => {
       };
     }
 
-    it('matches reference Mulberry32 across long streams', () => {
+    // 26M draws (five seeds × 5.2M), each checked against the reference: ~0.5 s
+    // under coverage, but a saturated full-suite run slows that past the 5 s
+    // default.
+    it('matches reference Mulberry32 across long streams', { timeout: 30_000 }, () => {
       for (const seed of [0, 1, 42, 0xdeadbeef, 123456789]) {
         const rng = new SeededRandom(seed);
         const ref = reference(seed);

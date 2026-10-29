@@ -22,6 +22,13 @@ export const OUTSIDE_IN_FORMAT_IDS = ['html', 'docx', 'pdf', 'pptx', 'xlsx', 'cs
 
 export type OutsideInFormatId = (typeof OUTSIDE_IN_FORMAT_IDS)[number];
 
+/**
+ * Frontmatter naming the page template a rendered output is generated
+ * through: a path relative to the companion Markdown, a `/`-prefixed path
+ * from the container root, or `none` to opt out of a host default.
+ */
+export const OUTSIDE_IN_OUTPUT_TEMPLATE_KEY = 'squisq-output-template';
+
 const OUTSIDE_IN_FORMAT_SET = new Set<string>(OUTSIDE_IN_FORMAT_IDS);
 
 export interface OutsideInLayout {

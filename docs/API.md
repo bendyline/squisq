@@ -1,6 +1,6 @@
-cçç# Squisq API Reference
+# Squisq API Reference
 
-> Reference for the seven published packages and their subpath exports. Types
+> Reference for the published packages and their subpath exports. Types
 > and signatures below are transcribed from source; when in doubt, the `.d.ts`
 > files under each package's `dist/` are the ground truth.
 
@@ -1977,7 +1977,7 @@ interface DocPlayerProps {
   onFullscreenToggle?: () => void;
   onBlockMarkers?: (markers: BlockMarker[]) => void;
   forceViewport?: ViewportConfig;
-  theme?: Theme; // default DEFAULT_THEME
+  theme?: Theme; // default: the document's own theme (resolveThemeForDoc)
   motion?: MotionSpec | null; // motion profile override; default: doc `motion` → frontmatter → theme.renderStyle.motionProfile → 'calm'
   surface?: SurfaceScheme | 'auto';
   displayMode?: DisplayMode; // default 'video'
@@ -2043,7 +2043,7 @@ interface LinearDocViewProps {
   markdown?: string; // parsed internally when `doc` is absent (empty container otherwise)
   basePath?: string;
   viewport?: ViewportConfig; // aspect for embedded canvas sections
-  theme?: Theme; // default DEFAULT_THEME; theme.pageStyle art-directs the page
+  theme?: Theme; // default: the document's own theme; theme.pageStyle art-directs the page
   animationsEnabled?: boolean; // default true
   surface?: SurfaceScheme | 'auto';
   thinMargins?: boolean;
@@ -2989,11 +2989,35 @@ interface HtmlZipExportOptions extends HtmlExportOptions {}
 
 // Static plain-HTML export
 function markdownDocToPlainHtml(doc: MarkdownDocument, options?: PlainHtmlExportOptions): string;
+// Body + functional CSS only (no page shell or theme page styles), for page templates
+function markdownDocToPlainHtmlParts(
+  doc: MarkdownDocument,
+  options?: PlainHtmlExportOptions,
+): PlainHtmlParts; // { title, bodyHtml, featureHeadHtml }
 function markdownDocsToPlainHtmlBundle(options: PlainHtmlBundleOptions): Promise<Blob>;
 function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Promise<Blob>; // player-embedded multi-doc bundle
 function collectLinkRefs(doc: MarkdownDocument): Set<string>;
 
-// HTML import
+// Page templates: an author's HTML page whose unnamed <slot> receives the body,
+// <slot name="title"> the title, and <slot name="KEY"> values[KEY] as text.
+// Unfilled slots keep their fallback children; <title> slots are matched as
+// text; relative URLs are rebased from templatePath to outputPath; everything
+// else is copied byte for byte. Throws HtmlPageTemplateError for an unusable template.
+function applyHtmlPageTemplate(
+  template: string,
+  content: {
+    bodyHtml: string;
+    headHtml?: string;
+    title: string;
+    values?: Record<string, string | undefined>;
+  },
+  options?: { templatePath?: string; outputPath?: string },
+): string;
+function inspectHtmlPageTemplate(html: string): HtmlPageTemplateInspection; // slots + errors (with lines)
+function isHtmlPageTemplate(html: string): boolean; // has a <slot> outside <template>
+function extractHtmlPageTemplateContent(html: string): string | null; // body between the content markers
+
+// HTML import (a templated page imports only the body between its content markers)
 function htmlToMarkdownDocSync(html: string, options?: HtmlImportOptions): MarkdownDocument;
 function htmlToMarkdownDoc(
   data: ArrayBuffer | Uint8Array | string,
@@ -3238,6 +3262,8 @@ interface EditorShellProps {
   inlinePreviewWidth?: number; // default 320
   outline?: boolean;
   outlineWidth?: number; // omit → responsive 260–460px
+  navigationSheet?: NavigationSheetPanel | null; // 'outline' | 'previews'; omit to leave it to the shell
+  onNavigationSheetChange?: (panel: NavigationSheetPanel | null) => void;
   showStatusBar?: boolean; // default true
   showPlayTab?: boolean; // default true
   blockTags?: boolean; // default true
@@ -3265,6 +3291,11 @@ interface EditorShellProps {
   themeOverride?: Theme | null;
   defaultThemeId?: string; // host fallback theme for docs whose frontmatter names none
   defaultThemeLabel?: string; // picker label for that fallback; default 'Default'
+  // Document settings gains a Page template field (squisq-output-template)
+  pageTemplates?: {
+    listTemplates: () => Promise<readonly { value: string; label: string }[]>; // called on open
+    defaultLabel?: string; // e.g. 'Workspace default (_templates/post.html)'
+  } | null;
   uxFont?: string; // font stack for the editor chrome (toolbar/tabs/status bar)
   viewPreferences?: ViewPreferences;
   onViewPreferencesChange?: (prefs: ViewPreferences) => void;
