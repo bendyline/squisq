@@ -2998,45 +2998,11 @@ function markdownDocsToPlainHtmlBundle(options: PlainHtmlBundleOptions): Promise
 function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Promise<Blob>; // player-embedded multi-doc bundle
 function collectLinkRefs(doc: MarkdownDocument): Set<string>;
 
-// Settle what a script-free page cannot draw, before rendering it: data references
-// get their first rows, Mermaid / ASCII diagrams / timelines / drawing, layout,
-// and diagram blocks / charts become pictures (file trees stay text), and inline
-// icons become SVG outlines (given `outlineIcons`). Render the returned markdownDoc
-// with `images` merged into the renderer's `images` option and `icons` as its
-// `icons` option.
-function prepareMarkdownDocForPlainHtml(
-  doc: MarkdownDocument,
-  options?: PlainHtmlPreparationOptions,
-): Promise<PreparedPlainHtmlDocument>; // { markdownDoc, images: Map<url, data: URL>, icons }
-// Whether the step above would change anything — a live preview renders at once when not.
-function needsPlainHtmlPreparation(
-  doc: MarkdownDocument,
-  options?: {
-    renderDiagram?: DiagramRasterizer;
-    outlineIcons?: PlainHtmlIconOutliner;
-    container?: ContentContainer | null;
-  },
-): boolean;
-interface PlainHtmlPreparationOptions {
-  renderDiagram?: DiagramRasterizer; // browser: createDiagramPictureRenderer(); without it diagrams stay source
-  outlineIcons?: PlainHtmlIconOutliner; // plainHtmlIcons from /html-icons; without it icons keep Font Awesome markup
-  container?: ContentContainer | null; // the data sidecars; without it a data reference keeps only its link
-  maxDataRows?: number; // default 100; a block's own previewRows wins
-  dataTableCache?: Map<string, Promise<DataSourceTable>>; // caller-owned memo of data-file reads
-  signal?: AbortSignal;
-  onWarning?: (message: string) => void;
-}
 interface PlainHtmlIcon {
   width: number; // the outline's box: `0 0 width height`, height drawn at 1em
   height: number;
   path: string; // SVG path data
 }
-type PlainHtmlIconOutliner = (doc: MarkdownDocument) => Promise<Map<string, PlainHtmlIcon>>;
-
-// @bendyline/squisq-formats/html-icons — the icon outliner, on its own subpath so a
-// bundle of /html never carries fontkit and the Font Awesome faces (~2.5 MB).
-// Outlines each icon `doc` uses, keyed `family:name`; needs no browser.
-function plainHtmlIcons(doc: MarkdownDocument): Promise<Map<string, PlainHtmlIcon>>;
 
 // Page templates: an author's HTML page whose unnamed <slot> receives the body,
 // <slot name="title"> the title, and <slot name="KEY"> values[KEY] as text.
@@ -3093,6 +3059,50 @@ whitespace is laid out the way a browser shows it — runs collapse across
 element boundaries, block edges are trimmed, and edge spaces sit outside
 emphasis and links — so pretty-printed HTML imports without `&#x20;` escapes
 or `** bold **` runs.
+
+### Subpaths: HTML preparation and icons
+
+**Import:** `@bendyline/squisq-formats/html-prepare` and
+`@bendyline/squisq-formats/html-icons` — what a plain page needs settled before
+it is rendered. They are separate from `/html` because they reach the data
+readers and the Font Awesome faces (with fontkit, ~2.5 MB), which a host that
+bundles `/html` only to render pages, such as an editor-extension host, must not
+carry.
+
+```ts
+// html-prepare: settle what a script-free page cannot draw, before rendering it:
+// data references get their first rows, Mermaid / ASCII diagrams / timelines /
+// drawing, layout, and diagram blocks / charts become pictures (file trees stay
+// text), and inline icons become SVG outlines (given `outlineIcons`). Render the
+// returned markdownDoc with `images` merged into the renderer's `images` option
+// and `icons` as its `icons` option.
+function prepareMarkdownDocForPlainHtml(
+  doc: MarkdownDocument,
+  options?: PlainHtmlPreparationOptions,
+): Promise<PreparedPlainHtmlDocument>; // { markdownDoc, images: Map<url, data: URL>, icons }
+// Whether the step above would change anything — a live preview renders at once when not.
+function needsPlainHtmlPreparation(
+  doc: MarkdownDocument,
+  options?: {
+    renderDiagram?: DiagramRasterizer;
+    outlineIcons?: PlainHtmlIconOutliner;
+    container?: ContentContainer | null;
+  },
+): boolean;
+interface PlainHtmlPreparationOptions {
+  renderDiagram?: DiagramRasterizer; // browser: createDiagramPictureRenderer(); without it diagrams stay source
+  outlineIcons?: PlainHtmlIconOutliner; // plainHtmlIcons from /html-icons; without it icons keep Font Awesome markup
+  container?: ContentContainer | null; // the data sidecars; without it a data reference keeps only its link
+  maxDataRows?: number; // default 100; a block's own previewRows wins
+  dataTableCache?: Map<string, Promise<DataSourceTable>>; // caller-owned memo of data-file reads
+  signal?: AbortSignal;
+  onWarning?: (message: string) => void;
+}
+type PlainHtmlIconOutliner = (doc: MarkdownDocument) => Promise<Map<string, PlainHtmlIcon>>;
+
+// html-icons: outline each icon `doc` uses, keyed `family:name`; needs no browser.
+function plainHtmlIcons(doc: MarkdownDocument): Promise<Map<string, PlainHtmlIcon>>;
+```
 
 ### Subpath: Container
 

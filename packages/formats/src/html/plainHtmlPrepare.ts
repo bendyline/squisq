@@ -18,11 +18,13 @@
  * File trees stay preformatted text, which a page shows as well as a picture
  * would and keeps selectable; SVG islands the renderer already draws.
  *
- * Both drawing steps are the host's to pass in rather than imported here: a
- * bundler that writes one file inlines every dynamic import it can reach, and
- * the icon outlines alone (Font Awesome's faces and their parser) are ~2.5 MB
- * that a host rendering plain HTML in, say, an editor-extension host must not
- * carry.
+ * This module is its own entry, `@bendyline/squisq-formats/html-prepare`, and
+ * nothing under `/html` imports it. A bundler that writes one file inlines
+ * every dynamic import it can reach, and filling data tables reaches the XLSX
+ * reader (an XML parser and zip code, ~300 KB) that a host only rendering
+ * plain HTML — say, an editor-extension host — must not carry. Both drawing
+ * steps are the host's to pass in for the same reason: the icon outlines alone
+ * (Font Awesome's faces and their parser) are ~2.5 MB.
  */
 
 import type { MarkdownDocument, MarkdownImage, MarkdownNode } from '@bendyline/squisq/markdown';

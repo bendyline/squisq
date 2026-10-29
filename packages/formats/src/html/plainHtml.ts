@@ -127,11 +127,12 @@ export interface PlainHtmlExportOptions {
   videoEmbeds?: 'player' | 'poster';
   /**
    * Inline icons as SVG, keyed `family:name` (`solid:star`) — the `icons` that
-   * `prepareMarkdownDocForPlainHtml` returns when given `outlineIcons`, or
-   * `plainHtmlIcons` from `@bendyline/squisq-formats/html-icons` called
-   * directly. An icon found here is drawn as
-   * an inline `<svg>` in the text color and needs no Font Awesome stylesheet;
-   * any other icon keeps its Font Awesome markup (see {@link iconsCss}).
+   * `prepareMarkdownDocForPlainHtml` (`@bendyline/squisq-formats/html-prepare`)
+   * returns when given `outlineIcons`, or `plainHtmlIcons` from
+   * `@bendyline/squisq-formats/html-icons` called directly. An icon found here
+   * is drawn as an inline `<svg>` in the text color and needs no Font Awesome
+   * stylesheet; any other icon keeps its Font Awesome markup (see
+   * {@link iconsCss}).
    */
   icons?: ReadonlyMap<string, PlainHtmlIcon>;
 }

@@ -11,8 +11,8 @@
  * This module is its own entry, `@bendyline/squisq-formats/html-icons`, and
  * nothing under `/html` may import it: the faces and their parser are ~2.5 MB,
  * and a one-file bundle of `/html` would carry them even if it never drew an
- * icon. Hosts pass `plainHtmlIcons` to `prepareMarkdownDocForPlainHtml` as
- * `outlineIcons`.
+ * icon. Hosts pass `plainHtmlIcons` to `prepareMarkdownDocForPlainHtml`
+ * (`@bendyline/squisq-formats/html-prepare`) as `outlineIcons`.
  */
 
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';

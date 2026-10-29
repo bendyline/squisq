@@ -41,7 +41,8 @@ import {
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { DiagramRasterizer } from '@bendyline/squisq-formats/diagrams';
-import type { PlainHtmlIcon, PlainHtmlIconOutliner } from '@bendyline/squisq-formats/html';
+import type { PlainHtmlIcon } from '@bendyline/squisq-formats/html';
+import type { PlainHtmlIconOutliner } from '@bendyline/squisq-formats/html-prepare';
 import { sanitizedSvgImageUrl, type CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 import { collectInlineFontAwesomeCss } from './utils/collectInlineFontAwesomeCss';
@@ -63,28 +64,28 @@ function loadRenderFn(): Promise<RenderFn> {
   return cachedRenderPromise;
 }
 
-type HtmlModule = typeof import('@bendyline/squisq-formats/html');
+type PrepareModule = typeof import('@bendyline/squisq-formats/html-prepare');
 
 /**
  * The export's preparation step, with a picture renderer that remembers what
  * it drew and the icon outliner.
  */
 interface Preparation {
-  needs: HtmlModule['needsPlainHtmlPreparation'];
-  prepare: HtmlModule['prepareMarkdownDocForPlainHtml'];
+  needs: PrepareModule['needsPlainHtmlPreparation'];
+  prepare: PrepareModule['prepareMarkdownDocForPlainHtml'];
   renderDiagram: DiagramRasterizer;
   outlineIcons: PlainHtmlIconOutliner;
 }
 let preparationPromise: Promise<Preparation> | null = null;
 function loadPreparation(): Promise<Preparation> {
   preparationPromise ??= Promise.all([
-    import('@bendyline/squisq-formats/html'),
+    import('@bendyline/squisq-formats/html-prepare'),
     import('@bendyline/squisq-formats/html-icons'),
     import('@bendyline/squisq-formats/diagrams'),
     import('@bendyline/squisq-react/diagram-pictures'),
-  ]).then(([html, icons, diagrams, pictures]) => ({
-    needs: html.needsPlainHtmlPreparation,
-    prepare: html.prepareMarkdownDocForPlainHtml,
+  ]).then(([prep, icons, diagrams, pictures]) => ({
+    needs: prep.needsPlainHtmlPreparation,
+    prepare: prep.prepareMarkdownDocForPlainHtml,
     renderDiagram: diagrams.cachingDiagramRasterizer(pictures.createDiagramPictureRenderer()),
     outlineIcons: icons.plainHtmlIcons,
   }));

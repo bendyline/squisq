@@ -17,7 +17,7 @@ import type { Doc, MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import type { PreparedPlainHtmlDocument } from '@bendyline/squisq-formats/html';
+import type { PreparedPlainHtmlDocument } from '@bendyline/squisq-formats/html-prepare';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { buildPreviewDoc, PlainHtmlPreview } from '@bendyline/squisq-editor-react';
 import { collectAudioForHtmlExport, collectImagesForHtmlExport } from './exportHelpers';

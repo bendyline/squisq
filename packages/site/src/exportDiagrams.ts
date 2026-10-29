@@ -16,7 +16,7 @@ import type {
   ExportDiagramKind,
   RasterizedDiagrams,
 } from '@bendyline/squisq-formats/diagrams';
-import type { PreparedPlainHtmlDocument } from '@bendyline/squisq-formats/html';
+import type { PreparedPlainHtmlDocument } from '@bendyline/squisq-formats/html-prepare';
 
 export async function pictureDiagrams(
   markdownDoc: MarkdownDocument,
@@ -78,7 +78,7 @@ export async function prepareForPlainHtml(
 ): Promise<PreparedPlainHtmlDocument> {
   const [{ prepareMarkdownDocForPlainHtml }, { plainHtmlIcons }, { createDiagramPictureRenderer }] =
     await Promise.all([
-      import('@bendyline/squisq-formats/html'),
+      import('@bendyline/squisq-formats/html-prepare'),
       import('@bendyline/squisq-formats/html-icons'),
       import('@bendyline/squisq-react/diagram-pictures'),
     ]);
