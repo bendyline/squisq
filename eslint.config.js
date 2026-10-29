@@ -4,6 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import sonarjs from 'eslint-plugin-sonarjs';
 import prettier from 'eslint-config-prettier';
+import globals from 'globals';
 
 export default tseslint.config(
   // Global ignores
@@ -105,6 +106,13 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
     },
+  },
+
+  // The documentation site's runtime (docs/_theme/docs.js) is a plain
+  // browser script, not a module.
+  {
+    files: ['docs/_theme/**/*.js'],
+    languageOptions: { sourceType: 'script', globals: globals.browser },
   },
 
   // Disable rules that conflict with Prettier (must be last)

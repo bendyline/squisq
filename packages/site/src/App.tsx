@@ -41,6 +41,7 @@ import { createSlotContentContainer } from './slotStorage';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import { parseTheme } from '@bendyline/squisq/schemas';
 import { openExternalLink } from './externalLinks';
+import { decodeSharedMarkdown } from './sharedMarkdown';
 
 const CUSTOM_THEME_STORAGE_KEY = 'squisq-site:customTheme';
 const COLOR_MODE_STORAGE_KEY = 'squisq-site:colorMode';
@@ -188,6 +189,16 @@ function getInitialSampleKey(): string {
   return DEFAULT_SAMPLE_KEY;
 }
 
+/**
+ * Markdown handed over in a `#md=` link — the documentation's "Open in
+ * editor" buttons. It opens in place of a sample, in a fresh in-memory
+ * workspace, so a storage slot is never overwritten by following a link.
+ */
+function getInitialSharedMarkdown(): string | null {
+  if (typeof window === 'undefined') return null;
+  return decodeSharedMarkdown(window.location.hash);
+}
+
 /** Load a previously-saved custom theme from localStorage. Returns null on miss / parse failure. */
 function loadStoredCustomTheme(): Theme | null {
   if (typeof localStorage === 'undefined') return null;
@@ -204,8 +215,11 @@ function loadStoredCustomTheme(): Theme | null {
 }
 
 export function App() {
+  const [sharedMarkdown] = useState(getInitialSharedMarkdown);
   const initialSampleKey = getInitialSampleKey();
-  const [selectedSample, setSelectedSample] = useState(initialSampleKey);
+  const [selectedSample, setSelectedSample] = useState(
+    sharedMarkdown === null ? initialSampleKey : '',
+  );
   const [showDebug, setShowDebug] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [calcEngine, setCalcEngine] = useState<CalcEngineChoice>(() => loadCalcEngineChoice());
@@ -213,7 +227,7 @@ export function App() {
   const [showImageEditorDemo, setShowImageEditorDemo] = useState(false);
   const [showCodeContextDemo, setShowCodeContextDemo] = useState(false);
   const [findMode, setFindMode] = useState(false);
-  const [currentSource, setCurrentSource] = useState(SAMPLES[initialSampleKey]);
+  const [currentSource, setCurrentSource] = useState(sharedMarkdown ?? SAMPLES[initialSampleKey]);
   const [colorMode, setColorMode] = useState<DemoColorMode>(() => getInitialColorMode());
   const [writeCanvasSettings, setWriteCanvasSettings] = useState<DemoWriteCanvasSettings>(() =>
     getInitialWriteCanvasSettings(),
@@ -521,16 +535,30 @@ export function App() {
           transition: 'background 0.2s, border-color 0.2s',
         }}
       >
-        <a
-          href="https://github.com/bendyline/squisq/blob/main/docs/SquigglySquare.md"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <a href={`${SITE_BASE_URL}docs/`} title="Squiggly Square documentation">
           <img
             src="/res/squisq.jpg"
-            alt="Squisq"
+            alt="Squisq documentation"
             style={{ height: 28, position: 'relative', top: 3 }}
           />
+        </a>
+
+        <a
+          href={`${SITE_BASE_URL}docs/`}
+          data-testid="docs-link"
+          style={{
+            fontSize: 13,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            fontWeight: 600,
+            padding: '4px 12px',
+            background: '#8B6914',
+            color: '#fff',
+            border: '1px solid #7a5c10',
+            textDecoration: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          Docs
         </a>
 
         <label

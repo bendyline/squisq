@@ -1,6 +1,6 @@
-cçç# Squisq API Reference
+# Squisq API Reference
 
-> Reference for the seven published packages and their subpath exports. Types
+> Reference for the published packages and their subpath exports. Types
 > and signatures below are transcribed from source; when in doubt, the `.d.ts`
 > files under each package's `dist/` are the ground truth.
 
@@ -1977,7 +1977,7 @@ interface DocPlayerProps {
   onFullscreenToggle?: () => void;
   onBlockMarkers?: (markers: BlockMarker[]) => void;
   forceViewport?: ViewportConfig;
-  theme?: Theme; // default DEFAULT_THEME
+  theme?: Theme; // default: the document's own theme (resolveThemeForDoc)
   motion?: MotionSpec | null; // motion profile override; default: doc `motion` → frontmatter → theme.renderStyle.motionProfile → 'calm'
   surface?: SurfaceScheme | 'auto';
   displayMode?: DisplayMode; // default 'video'
@@ -2043,7 +2043,7 @@ interface LinearDocViewProps {
   markdown?: string; // parsed internally when `doc` is absent (empty container otherwise)
   basePath?: string;
   viewport?: ViewportConfig; // aspect for embedded canvas sections
-  theme?: Theme; // default DEFAULT_THEME; theme.pageStyle art-directs the page
+  theme?: Theme; // default: the document's own theme; theme.pageStyle art-directs the page
   animationsEnabled?: boolean; // default true
   surface?: SurfaceScheme | 'auto';
   thinMargins?: boolean;

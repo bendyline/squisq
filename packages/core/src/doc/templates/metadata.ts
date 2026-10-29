@@ -103,7 +103,7 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
   },
   photoGrid: {
     label: 'Photo Grid',
-    description: 'Arranges multiple photos in a 2×2 or 3×3 mosaic grid.',
+    description: 'Arranges up to four photos in a mosaic grid.',
   },
   definitionCard: {
     label: 'Definition Card',
@@ -123,7 +123,7 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
   },
   videoPullQuote: {
     label: 'Video Pull Quote',
-    description: 'Combines a video panel with a highlighted pull quote side-by-side.',
+    description: 'A highlighted pull quote over a full-bleed background video.',
   },
   dataTable: {
     label: 'Data Table',
@@ -160,7 +160,7 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
   diagram: {
     label: 'Diagram',
     description:
-      'Renders sub-headings as connected nodes — edit visually as a node-and-edge diagram.',
+      'Draws a box-and-line diagram fence as connected nodes — edit it visually on a canvas.',
   },
   tree: {
     label: 'Tree',

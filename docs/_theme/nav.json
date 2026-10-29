@@ -1,0 +1,130 @@
+{
+  "title": "Squiggly Square Docs",
+  "home": "index.md",
+  "tabs": [
+    {
+      "id": "guide",
+      "label": "Guide",
+      "sections": [
+        {
+          "title": "Start here",
+          "pages": [
+            { "path": "guide/index.md", "label": "Welcome" },
+            "guide/getting-started.md",
+            "guide/editor.md"
+          ]
+        },
+        {
+          "title": "The format",
+          "pages": [
+            "guide/markup.md",
+            "guide/tags.md",
+            "guide/frontmatter.md",
+            "guide/cheatsheet.md",
+            { "path": "SquigglySquare.md", "label": "Format specification" }
+          ]
+        },
+        {
+          "title": "Presenting",
+          "pages": [
+            "guide/display-modes.md",
+            "guide/themes.md",
+            "guide/page-mode.md",
+            "guide/page-templates.md",
+            "guide/dashboards.md",
+            "guide/custom-templates.md"
+          ]
+        },
+        {
+          "title": "Rich content",
+          "pages": [
+            "guide/diagrams.md",
+            "guide/data-and-charts.md",
+            "guide/media.md",
+            "guide/narration.md"
+          ]
+        },
+        {
+          "title": "Sharing",
+          "pages": ["guide/import-export.md", "guide/cli.md"]
+        }
+      ]
+    },
+    {
+      "id": "blocks",
+      "label": "Block gallery",
+      "sections": [
+        { "title": "Gallery", "pages": [{ "path": "blocks/index.md", "label": "All blocks" }] },
+        { "generate": "blocks" }
+      ]
+    },
+    {
+      "id": "developers",
+      "label": "Developers",
+      "sections": [
+        {
+          "title": "Overview",
+          "pages": [
+            { "path": "developers/index.md", "label": "Introduction" },
+            "developers/installation.md",
+            "developers/quick-start.md"
+          ]
+        },
+        {
+          "title": "Concepts",
+          "pages": [
+            "developers/concepts/architecture.md",
+            "developers/concepts/document-model.md",
+            "developers/concepts/templates.md",
+            "developers/concepts/projections.md",
+            "developers/concepts/themes.md",
+            "developers/concepts/storage.md",
+            "developers/concepts/formats.md"
+          ]
+        },
+        {
+          "title": "Guides",
+          "pages": [
+            "developers/guides/rendering.md",
+            "developers/guides/editor.md",
+            "developers/guides/standalone-player.md",
+            "developers/guides/conversion.md",
+            "developers/guides/static-sites.md",
+            "developers/guides/video-and-images.md",
+            "developers/guides/cli-api.md",
+            "developers/guides/graph-layout.md",
+            "developers/guides/contributing-templates.md"
+          ]
+        },
+        {
+          "title": "Host integration",
+          "pages": [
+            { "path": "theming.md", "label": "Editor chrome theming" },
+            { "path": "proofing.md", "label": "Proofing" },
+            { "path": "speech-input.md", "label": "Speech input" },
+            { "path": "data-and-calc.md", "label": "Data & calculation" },
+            { "path": "media-edits.md", "label": "Media edits" },
+            { "path": "narration-and-audio-export.md", "label": "Narration & audio export" }
+          ]
+        },
+        {
+          "title": "Sample apps",
+          "pages": [
+            { "path": "developers/samples/index.md", "label": "All samples" },
+            "developers/samples/react-viewer.md",
+            "developers/samples/no-build-player.md",
+            "developers/samples/editor-app.md",
+            "developers/samples/node-converter.md",
+            "developers/samples/static-blog.md",
+            "developers/samples/branded-deck.md"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "api",
+      "label": "API reference",
+      "sections": [{ "title": "Packages", "split": "API.md", "dir": "api" }]
+    }
+  ]
+}

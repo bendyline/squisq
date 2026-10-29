@@ -24,7 +24,7 @@ rendering and spatial utilities. It is designed to be framework-agnostic at the 
 - `@bendyline/squisq-video` — Cross-runtime render/timeline/preset helpers, shared GIF palette arguments, and a browser-only ffmpeg.wasm MP4 encoder. Node MP4/GIF export uses the CLI's native FFmpeg path.
 - `@bendyline/squisq-video-react` — React components for browser-based MP4/GIF export (WebCodecs primary, ffmpeg.wasm fallback/palette pass; MP4 muxes narration audio, GIF is silent) + single-frame image export dialogs (cover + dashboard) sharing the capture pipeline + audio export for hosts (`/encoder`: streaming M4A/Opus/WAV `createAudioFileEncoder`, whole-document `renderDocumentAudio`)
 - `@bendyline/squisq-cli` — `squisq` bin command for converting documents (markdown **or** binary DOCX/PPTX/PDF/XLSX/CSV/HTML inputs) to DOCX/PDF/HTML/EPUB/PPTX/XLSX/CSV/MP4/GIF/PNG from the terminal, plus `squisq image` (dashboard → PNG, Chromium-only), `squisq doctor` (environment readiness) and `squisq transform` (markdown source transforms: unwrap/wrap/cleanup) — built on the shared format registry `convert()`
-- `squisq-site` — Dev/demo site (not published)
+- `squisq-site` — Dev/demo site (not published). Its Vite build also publishes the documentation site: the Markdown under the repo-root `docs/` folder, served at `/docs/` beside the editor (see "Documentation site" below)
 
 ## Git & Version Control (Agent Boundaries)
 
@@ -195,7 +195,7 @@ squisq/
         timing/             # Narration/reading time estimation
         random/             # SeededRandom (Mulberry32 PRNG)
         generate/           # Content extraction (slideshow generator removed in v1.5 → use transform/)
-        transform/          # Slideshow transform pipeline: block analysis + 6 transform styles
+        transform/          # Slideshow transform pipeline: block analysis + 7 transform styles
                             #   (data-driven, documentary, magazine, minimal, narrative, headings-and-features)
         versions/           # Document version history (snapshots in .versions/, prune/coalesce,
                             #   DocumentVersionManager)
@@ -524,6 +524,14 @@ squisq/
                             #   frame loop and renderDocToDashboardPng's single screenshot
     site/                   # squisq-site (dev/demo, not published)
       src/
+        docsSite/           # The documentation site build (docs/ → dist/docs/): pages rendered
+                            #   by markdownDocToPlainHtmlParts into docs/_theme/page.html via
+                            #   applyHtmlPageTemplate; live `markdown preview` examples (Doc JSON
+                            #   for the standalone player); generated reference tables; API.md
+                            #   split per package; link + anchor checking. Pure — the Vite
+                            #   plugin (vite.config.ts docsSitePlugin) and docsSite.test.ts
+                            #   share it
+        sharedMarkdown.ts   # `#md=<base64url>` editor links — the docs' "Open in editor"
         App.tsx             # Sample picker + view switching + the Advanced… options dialog
                             #   (AdvancedOptionsDialog.tsx): switches the data card's calc
                             #   engine between the in-house tier and IronCalc wasm (lazy
@@ -604,6 +612,9 @@ npm run lint               # ESLint
 npm run format             # Prettier format
 npm run deps:cooldown      # Cooldown gate: versions this branch adds/changes (docs/dependencies.md)
 npm run deps:cooldown:all  # Cooldown gate: full lockfile audit
+npm run docs:check         # Build the documentation site; report broken links/anchors and
+                           #   examples that fail to convert (--out <dir> writes it; --layers
+                           #   <page> prints what each live example on a page renders)
 npm run all                # install:safe + deps:cooldown:all + build + lint + format:check +
                            #   typecheck + coverage + published + CLI + required native MP4/GIF +
                            #   browser E2E (full pre-release sweep; needs network, FFmpeg, browsers)
@@ -625,7 +636,7 @@ build entry and a `package.json` export):
 - `@bendyline/squisq/timing` — Narration/reading time estimation (estimateNarrationTime, estimateReadingTime, countSpokenWords)
 - `@bendyline/squisq/random` — SeededRandom PRNG, hashString
 - `@bendyline/squisq/generate` — Content extraction only (`extractContent`, `stripMarkdown`, `mapElementToBlock`). The legacy `generateSlideshow` was **removed** in v1.5 — use `markdownToDoc` + `applyTransform` instead. `extractContent`/`stripMarkdown` output shapes are a frozen public contract used directly by downstream consumers.
-- `@bendyline/squisq/transform` — Slideshow transform pipeline: `applyTransform`, `resolveTransformStyle`, `createTransformStyleRegistry` (explicit caller-owned custom styles; no process-global mutation), 6 built-in styles (`data-driven`, `documentary`, `magazine`, `minimal`, `narrative`, `headings-and-features`), block analyzer, doc-image extractor. `applyTransform` accepts a canonical style id or a call-scoped `TransformStyleConfig`; caller-owned ids resolve through `TransformOptions.registry`. Historical persisted `dataDriven` remains readable as `data-driven`, but ids/writes are canonical. Style contract v2: `templateMap` (per-style extraction→template remap, translated via `translateTemplateBlock`), `suggestedThemeId` (applied when neither caller nor doc declares a theme), `pacing` (intro/outro bookends), `budget.slidesPerMinute` (duration-based promotion cap), `page` (Page-mode hints — `spacing` overlay + `emphasisCurve`; consumers pass it as `MaterializePageSectionsOptions.transformPage`). Transform output carries provenance: extraction slides get `sourceBlockId`/`sourceCharOffset`, and `sourceStartTime`/`sourceDuration` are real doc-timeline SECONDS derived from the source block's timing (voice-timed when the doc has a narration take) — `allocateTiming` anchors such slides at their narration positions (floats fill the gaps; contiguous timeline), falling back to the historical rescale-to-fit when no anchors exist.
+- `@bendyline/squisq/transform` — Slideshow transform pipeline: `applyTransform`, `resolveTransformStyle`, `createTransformStyleRegistry` (explicit caller-owned custom styles; no process-global mutation), 7 built-in styles (`data-driven`, `documentary`, `dynamic-slides`, `magazine`, `minimal`, `narrative`, `headings-and-features`), block analyzer, doc-image extractor. `applyTransform` accepts a canonical style id or a call-scoped `TransformStyleConfig`; caller-owned ids resolve through `TransformOptions.registry`. Historical persisted `dataDriven` remains readable as `data-driven`, but ids/writes are canonical. Style contract v2: `templateMap` (per-style extraction→template remap, translated via `translateTemplateBlock`), `suggestedThemeId` (applied when neither caller nor doc declares a theme), `pacing` (intro/outro bookends), `budget.slidesPerMinute` (duration-based promotion cap), `page` (Page-mode hints — `spacing` overlay + `emphasisCurve`; consumers pass it as `MaterializePageSectionsOptions.transformPage`). Transform output carries provenance: extraction slides get `sourceBlockId`/`sourceCharOffset`, and `sourceStartTime`/`sourceDuration` are real doc-timeline SECONDS derived from the source block's timing (voice-timed when the doc has a narration take) — `allocateTiming` anchors such slides at their narration positions (floats fill the gaps; contiguous timeline), falling back to the historical rescale-to-fit when no anchors exist.
 - `@bendyline/squisq/versions` — Document version history: `DocumentVersionManager` plus `saveVersion` / `listVersions` / `readVersion` / `revertToVersion` / `pruneVersions` / `coalesceVersions`, `PrunePolicy`, `Version` types, sortable-timestamp + path helpers. Snapshots live inside the same `ContentContainer` as the doc at `.versions/<basename>.<timestamp>.md`, so they ride along through ZIP serialization. Saving history also maintains a container-root `.gitignore` rule for `.versions/`, which keeps snapshots out of Git when the container is persisted as a `*_files/` sidecar folder. **`revertToVersion` is fail-safe:** it snapshots the current state first and, if that snapshot can't be written, ABANDONS the revert (`RevertResult.reason: 'snapshot-failed'`) rather than destroying unrecoverable state. Hosts whose live document lives outside the container (an editor buffer) MUST pass `RevertOptions.content` — otherwise the snapshot reads stale container bytes, or yields `no-document` and the revert declines. Pass `snapshotCurrent: false` when the caller has already preserved the current state itself. `revertToImageEditVersion` mirrors this contract with `RevertImageEditOptions.doc`.
 - `@bendyline/squisq/jsonForm` — JSON Form headless logic. Exports the `SquisqAnnotatedSchema` / `SquisqHints` / `SquisqWhen` / `ControlKind` types, `chooseControl()` (the dispatcher both `<JsonView>` and `<JsonEditor>` use), `evaluateWhen()` / `resolveFlag()` (conditional visibility / disabled rules), `inferSchema()` (sample → JSON Schema via genson-js), and JSON Pointer helpers (`getByPointer`, `setByPointer`, `resolveRef`).
 - `@bendyline/squisq/imageEdit` — Layered raster authoring: `ImageEditDoc` schema re-exports, state helpers (`addLayer`, `removeLayer`, `reorderLayer`, `updateLayer`, `setCanvas`), persistence (`readImageEditDoc`, `writeImageEditDoc`), version operations (`saveImageEditVersion`, `listImageEditVersions`, etc. — parallels `versions/` over JSON state), `ImageEditVersionManager`, the SVG → raster export, and animated-image inspection (`inspectAnimatedImage(bytes)` → `AnimatedImageInfo` `{format, animated, frameCount, durationMs, playCount}` for GIF / APNG / animated WebP — container structure only, never throws; `mayBeAnimatedImage(srcOrMime)` — the cheap extension/MIME gate, PNG deliberately excluded).
@@ -644,7 +655,7 @@ build entry and a `package.json` export):
 - Hooks: useAudioSync, useDocPlayback, useViewportOrientation, useAutoSurface (light/dark surface detection), MediaContext/useMediaProvider/useMediaUrl, useAnimatedImage (inspects blob:/data:/same-origin sources once — never a cross-origin fetch — via core `inspectAnimatedImage`; playback stays the native `<img>` animation, pause lays a still over it, play restarts from frame 0 under a fresh object URL, finite animations flip to `ended`; starts paused under `prefers-reduced-motion`)
 - Layers: ImageLayer, TextLayer, ShapeLayer, VideoLayer, VideoEmbedLayer (a hosted YouTube/Vimeo/… player for the core `videoEmbed` layer; `BlockRenderer`'s `videoEmbeds` prop picks `player` — DocPlayer's CURRENT slide and interactive dashboards only — `poster` (default: thumbnails/previews never load a player) or `placeholder` (render mode: no remote thumbnail, nothing a capture must wait on); the iframe src is re-derived from the layer's page `url` by core `parseVideoEmbedUrl`, never taken from the layer), MapLayer, TableLayer (HTML table embedded via `<foreignObject>`), TreeLayer (interactive filesystem treeview — folder/file icons, connector rails, collapse chevrons — via `<foreignObject>`; interactive in the player, captured expanded in exports), MermaidLayer, SvgLayer (an SVG island as a synchronous SVG `<image>` of core's data URL, re-sanitized from the layer's RAW `source` on every render; a notice in place of a fence that does not sanitize). `BlockRenderer`'s `staticMedia` prop (set wherever render mode is, implied by reduced motion and `animationsEnabled={false}`) draws islands as stills, and `decodeSvgImages(root)` — awaited by the dashboard settle and video frame capture — decodes `data:`/`blob:` SVG `<image>` hrefs
 - Styles: `@bendyline/squisq-react/styles` for CSS (covers DocPlayer animations + `<JsonView>`)
-- Standalone bundle: `@bendyline/squisq-react/standalone` and `/standalone-source` — IIFE bundle (`PLAYER_BUNDLE`) used by `formats/html` and `cli` to embed a complete player in a single HTML file. `mount()` returns a `SquisqPlayerHandle`; `getHandle(element)` recovers it, and render controls stay instance-scoped rather than being copied onto `window`. `MountOptions.mode` is `'slideshow' | 'static' | 'dashboard'` — dashboard mounts size their canvas from the host element's box and (in render mode) expose the dashboard render API through the same handle, which is what the CLI's single-frame PNG capture polls for.
+- Standalone bundle: `@bendyline/squisq-react/standalone` and `/standalone-source` — IIFE bundle (`PLAYER_BUNDLE`) used by `formats/html` and `cli` to embed a complete player in a single HTML file. `mount()` returns a `SquisqPlayerHandle`; `getHandle(element)` recovers it, and render controls stay instance-scoped rather than being copied onto `window`. `MountOptions.mode` is `'slideshow' | 'video' | 'static' | 'dashboard' | 'flashcards'` — dashboard mounts size their canvas from the host element's box and (in render mode) expose the dashboard render API through the same handle, which is what the CLI's single-frame PNG capture polls for.
 
 `@bendyline/squisq-formats` exposes 11 subpath entries:
 
@@ -664,7 +675,7 @@ build entry and a `package.json` export):
 
 `@bendyline/squisq-editor-react` exports everything from the root, plus granular subpath entries (`/monaco`, `/monaco-workers`, `/shell`, `/json-editor`, `/image-editor`, `/recorder`, `/teleprompter`, `/proofing`, `/speech`, `/styles`):
 
-- Components: EditorShell, RawEditor, WysiwygEditor, PreviewPanel, PlainHtmlPreview, Toolbar, StatusBar, ViewSwitcher, ViewMenuPanel, TransformMenu (toolbar popover applying core's markdown source transforms — unwrap/wrap-at-width/cleanup — with a detected wrap-state readout; Source view applies as minimal Monaco `executeEdits` between undo stops for a single byte-exact undo step, Write view as one `setMarkdownSource` write/one Tiptap history entry, Use view disabled with a hint; takes a pre-apply version snapshot when versioning is enabled), OutlinePanel, PreviewControls (+ PreviewSettingsProvider + PreviewToolbarControls + usePreviewSettings), VersionHistoryPanel, InlinePreviewGutter, ThemePicker, ThemeCustomizerPanel, TemplatePicker, templateLabel, DocumentSettingsDialog, EmojiPicker (+ `PICKER_CATEGORIES`, `ALL_PICKER_ENTRIES`, `searchPickerEntries`), LinkDialog, MediaBin, ImageEditor, ImageViewer, ImageNodeView, TooltipLayer, DropZoneOverlay, RecorderSlidesPanel (+ `buildRecorderSlideDeck` and the `slidesModePolicy` helpers), JsonEditor (editable form for JSON values bound to a Squisq-annotated schema; embeds `WysiwygEditor` for `richtext` controls)
+- Components: EditorShell, RawEditor, WysiwygEditor, PreviewPanel, PlainHtmlPreview, Toolbar, StatusBar, ViewSwitcher, ViewMenuPanel, TransformMenu (toolbar popover applying core's markdown source transforms — unwrap/wrap-at-width/cleanup/condense — with a detected wrap-state readout; the Toolbar mounts it in the Source view only. Source view applies as minimal Monaco `executeEdits` between undo stops for a single byte-exact undo step, Write view as one `setMarkdownSource` write/one Tiptap history entry, Use view disabled with a hint; takes a pre-apply version snapshot when versioning is enabled), OutlinePanel, PreviewControls (+ PreviewSettingsProvider + PreviewToolbarControls + usePreviewSettings), VersionHistoryPanel, InlinePreviewGutter, ThemePicker, ThemeCustomizerPanel, TemplatePicker, templateLabel, DocumentSettingsDialog, EmojiPicker (+ `PICKER_CATEGORIES`, `ALL_PICKER_ENTRIES`, `searchPickerEntries`), LinkDialog, MediaBin, ImageEditor, ImageViewer, ImageNodeView, TooltipLayer, DropZoneOverlay, RecorderSlidesPanel (+ `buildRecorderSlideDeck` and the `slidesModePolicy` helpers), JsonEditor (editable form for JSON values bound to a Squisq-annotated schema; embeds `WysiwygEditor` for `richtext` controls)
 - Context: EditorProvider, useEditorContext
 - File-kind detection: `resolveFileKind`, `detectLanguageFromFileName` — useful for hosts that want to pre-decide chrome around the editor based on whether a file is markdown or code
 - Media & file insertion: the toolbar's Insert → **Image/Media** item (button id stays `image`) and Insert → **File** (id `file`, any file; both need a media provider — `FILE_STORING_BUTTONS`), file drops, and Files-panel uploads all go through `mediaInsertion.ts` over the `mediaDragMime.ts` vocabulary (`squisqMediaKind`, `buildSquisqMediaReference`, `squisqMediaNode`, `fileReference`, `mediaMimeType` — extension fallback for untyped files, `MEDIA_FILE_ACCEPT`). Both pickers share one handler, `addFileToDocument`, and differ only in their `accept` filter: a data file (csv/tsv/xlsx/parquet) is stored under `dataSidecarPrefix(resolveDocBasename(container))` and inserted by `insertDataReference` as the `## <title> {[dataTable src=…]}` block + body link (the Write view mounts it as the data card); images stay `![alt](src)` (an animated GIF included — the renderers give it play/pause controls); video/audio become the recorder's `<video … controls width="480">` / `<audio … controls>` players; anything else (a .zip, a .dat, a .docx) is stored beside the document and linked by its FULL file name (`[data.zip](data.zip)`). Block content goes in at the top level — in place of an empty paragraph at the caret, else after the caret's top-level block, never inside a list item; in the Source view `asOwnParagraph` pads it onto its own lines (a tag or `##` glued to prose would not parse as one). A drop no longer discards files of no known kind: `partitionFiles` returns them as `other` and the shell attaches them as links. Destinations go through `markdownDestination.ts`: a path with spaces or unbalanced parentheses is written in CommonMark's angle-bracket form (`[Q3 Report.zip](<Q3 Report.zip>)`) and labels escape brackets — and the tiptap bridge reads (`unwrapLinkDestination`) and writes (`needsAngleDestination`) that form for links and images, where it used to keep the brackets inside the href and emit the invalid bare form. The image node view hides its Edit affordance on an animated image, because the raster editor would save one still back over the animation.
@@ -751,7 +762,7 @@ build entry and a `package.json` export):
 - React packages use `react` imports; consumers may alias them through `preact/compat`
 - Core package has zero framework dependencies and no NodeJS-specific dependencies — must run in browser and Node
 - Formats package depends on jszip (ZIP archives), pdf-lib, pdfjs-dist, and core's MarkdownDocument as pivot format; `hyparquet` is an **optional peer** reached only via dynamic import (parquet reading degrades to a per-block diagnostic without it)
-- Editor-react depends on @tiptap and monaco-editor as peer dependencies
+- Editor-react depends on @tiptap (regular dependencies); `monaco-editor`, `react`, and `react-dom` are peer dependencies, and `harper.js` an optional peer
 - Video-react depends on `@bendyline/squisq-video` (browser-pure), `mp4-muxer`, and `html2canvas`
 - CLI depends on commander + playwright-core. `cli video` renders headlessly by feeding generated HTML straight to `page.setContent` — there is no dev server and nothing binds a port; the page's routes are blocked except `about:`/`blob:`/`data:`, which is the SSRF guard.
 - All block templates are pure functions: `(input, context) => Layer[]`
@@ -797,7 +808,7 @@ If you need an `any` outside these boundaries, find a different solution. Use `a
 
 ## Adding a New Block Template
 
-This is the single most error-prone mechanical change in the codebase. **All eight steps are required** — skipping any one breaks the build, the runtime, or makes the template silently invisible in the editor:
+This is the single most error-prone mechanical change in the codebase. **All nine steps are required** — skipping any one breaks the build, the runtime, or makes the template silently invisible in the editor:
 
 1. Add the input interface `XxxInput extends BaseTemplateBlock` in `core/src/schemas/BlockTemplates.ts`.
 2. Add it to the `TemplateBlock` discriminated union in the same file.
@@ -807,8 +818,32 @@ This is the single most error-prone mechanical change in the codebase. **All eig
 6. Add a matching preview icon to `TEMPLATE_ENTRIES` in `editor-react/src/TemplatePicker.tsx` (same id/order; label + description must equal the core metadata). **Skipping this fails `templatePickerMetadata.test.ts`** — without it the template never shows up in the gallery.
 7. Add tests in `core/src/__tests__/templates.test.ts` covering representative inputs.
 8. Add input descriptors for the template's `{[…]}` params in `core/src/doc/templates/inputDescriptors.ts` — a `TEMPLATE_INPUT_DESCRIPTORS[<id>]` entry listing each param key (with `coerce` kind, closed-enum `values`, and `required` flags). This is what makes inline attribute coercion (`{[xxx key=value]}` → typed input) and param linting (`lintTemplateParams`) cover the new template. Without it the template still renders, but its annotation params stay untyped strings and are exempt from lint.
+9. Add its gallery page `docs/blocks/<id>.md` (frontmatter `template: <id>`, at least one ` ```markdown preview ` example — the first is its gallery thumbnail; the parameter table is generated from step 8). **Skipping this fails `docsSite.test.ts`.** See `docs/_theme/README.md`.
+
+Four more registries must also gain the new id; each has a 1:1 guard test that fails without it: `TEMPLATE_AUTHORING_METADATA` (`templates/authoringMetadata.ts` — role and body policy; `templateAuthoringMetadata.test.ts`), `TEMPLATE_TOKEN_NAMES` (`templates/templateNames.ts`; `templateTokenNames.test.ts`), `BLOCK_MEDIA_LAYOUT_POLICIES` (`templates/mediaLayoutPolicy.ts`; `mediaLayoutPolicy.test.ts`), and `sectionExtractors` (`core/src/doc/page/sectionExtractors.ts` — its Page-mode section; `materializePageSections.test.ts`).
 
 If the template replaces an older name, add it to the internal `TEMPLATE_ALIASES` in `templates/templateNames.ts` so legacy documents still resolve. After adding, update the template count in this file's "Subpath Exports" → `@bendyline/squisq/doc` line.
+
+## Documentation site
+
+The Markdown under `docs/` is published at `squigglysquare.com/docs/` beside the demo editor
+(the site root). It is built with Squisq itself — `packages/site/src/docsSite/buildDocsSite.ts`
+renders every page with `markdownDocToPlainHtmlParts` and places it into `docs/_theme/page.html`
+with `applyHtmlPageTemplate` — by a Vite plugin in `packages/site/vite.config.ts`: `npm run dev`
+serves it live at `/docs/`, and `npm run build` writes it to `packages/site/dist/docs/`, which the
+Pages deploy already uploads. Authoring conventions: `docs/_theme/README.md`.
+
+- **Only pages listed in `docs/_theme/nav.json` are published** (block pages are listed
+  automatically). Top-level `docs/*.md` files not in the nav (dependencies.md, review.md, …) stay
+  internal and are linked on GitHub. `docs/API.md` is split into one page per package.
+- **Live examples**: a ` ```markdown preview ` fence renders through the standalone player from a
+  Doc built at build time (`markdownToDoc` + `buildPreviewDoc`, synthetic audio and cover
+  dropped), with an "Open in editor" link (`#md=` — the app reads it in `getInitialSharedMarkdown`).
+- **Generated reference** (` ```squisq-docs ` fences): template parameter tables, block settings,
+  template and theme lists come from core's catalogs, so new params/themes document themselves.
+- `docsSite.test.ts` (in `npm test`) fails on broken links or anchors, examples that fail to
+  convert, a built-in template without `docs/blocks/<id>.md`, and leftover `STUB`/`TODO` text.
+  When you change behavior an author or integrator sees, update the guide page that describes it.
 
 ## Theme System
 

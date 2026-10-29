@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <title>Mountains illustration</title>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3b4f8a"/>
+      <stop offset="1" stop-color="#f4c8a8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <circle cx="300" cy="230" r="90" fill="#fff4e0" opacity="0.85"/>
+  <path d="M0 560 L260 300 L420 440 L640 210 L900 470 L1040 360 L1200 480 V800 H0Z" fill="#4a5f9e"/>
+  <path d="M640 210 L700 270 L670 280 L640 255 L610 285 L585 265Z" fill="#f3f1ff"/>
+  <path d="M0 640 L300 470 L520 600 L760 450 L1200 640 V800 H0Z" fill="#33447a"/>
+  <path d="M0 720 Q600 640 1200 720 V800 H0Z" fill="#252f57"/>
+</svg>

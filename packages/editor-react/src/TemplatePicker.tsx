@@ -395,7 +395,7 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
   {
     name: 'photoGrid',
     label: 'Photo Grid',
-    description: 'Arranges multiple photos in a 2×2 or 3×3 mosaic grid.',
+    description: 'Arranges up to four photos in a mosaic grid.',
     icon: (
       <TemplateIcon>
         <rect x={3} y={3} width={23} height={16} rx={1.5} fill={F2} opacity={0.55} />
@@ -469,7 +469,7 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
   {
     name: 'videoPullQuote',
     label: 'Video Pull Quote',
-    description: 'Combines a video panel with a highlighted pull quote side-by-side.',
+    description: 'A highlighted pull quote over a full-bleed background video.',
     icon: (
       <TemplateIcon>
         <rect x={3} y={4} width={23} height={32} rx={2} fill={F2} opacity={0.35} />
@@ -618,7 +618,7 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
     name: 'diagram',
     label: 'Diagram',
     description:
-      'Renders sub-headings as connected nodes — edit visually as a node-and-edge diagram.',
+      'Draws a box-and-line diagram fence as connected nodes — edit it visually on a canvas.',
     icon: (
       <TemplateIcon>
         <rect x={4} y={6} width={16} height={10} rx={2} fill={FA} opacity={0.85} />

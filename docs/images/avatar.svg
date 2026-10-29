@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" width="1200" height="800">
+  <title>Avatar illustration</title>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6b4fa0"/>
+      <stop offset="1" stop-color="#f2b5a0"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="800" fill="url(#sky)"/>
+  <circle cx="600" cy="330" r="150" fill="#fbe4d6"/>
+  <path d="M330 800 q270 -380 540 0z" fill="#3b2a62"/>
+  <path d="M450 290 q150 -200 300 0 q-20 -150 -150 -160 q-130 10 -150 160z" fill="#3b2a62"/>
+</svg>

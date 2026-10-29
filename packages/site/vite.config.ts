@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url';
 import type { Connect, Plugin } from 'vite';
 import { SQUISQ_DEV_PORT, SQUISQ_E2E_PORT } from '../../scripts/portUtils.ts';
 import { rnnoiseWasmPlugin } from '../video-react/src/vite/rnnoiseWasmPlugin.ts';
+import { buildDocsSite, type DocsSiteBuild } from './src/docsSite/buildDocsSite.ts';
+import { nodeDocsSource } from './src/docsSite/nodeDocsSource.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -199,6 +201,100 @@ function harperCorePlugin(): Plugin {
   };
 }
 
+const DOCS_CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif',
+};
+
+/**
+ * The documentation site: the Markdown under the repo-root `docs/` folder,
+ * built with Squisq's own HTML exporter and page templates
+ * (`src/docsSite/buildDocsSite.ts`) and published at `/docs/`.
+ *
+ * - Dev: served from memory, rebuilt when anything under `docs/` changes.
+ * - Build: written into `dist/docs/`. Problems (broken links, examples that
+ *   fail to convert) are build warnings here; `docsSite.test.ts` fails on them.
+ */
+function docsSitePlugin(): Plugin {
+  const repoDir = path.resolve(__dirname, '../..');
+  const docsDir = path.join(repoDir, 'docs');
+  let base = '/';
+  let cached: Promise<DocsSiteBuild> | null = null;
+
+  const build = () =>
+    (cached ??= import('@bendyline/squisq-react/standalone-source').then(({ PLAYER_BUNDLE }) =>
+      buildDocsSite({
+        source: nodeDocsSource(repoDir),
+        playerScript: PLAYER_BUNDLE,
+        siteBase: base,
+      }),
+    ));
+
+  const reportProblems = (result: DocsSiteBuild, warn: (message: string) => void) => {
+    for (const problem of result.problems) warn(`docs: ${problem.page}: ${problem.message}`);
+  };
+
+  return {
+    name: 'docs-site',
+    configResolved(config) {
+      base = config.base;
+    },
+    configureServer(server) {
+      server.watcher.add(docsDir);
+      server.watcher.on('all', (_event, file) => {
+        if (file.startsWith(docsDir)) cached = null;
+      });
+      server.middlewares.use((req, res, next) => {
+        const pathname = decodeURIComponent(req.url?.split('?', 1)[0] ?? '');
+        const prefix = `${base}docs`;
+        if (pathname !== prefix && !pathname.startsWith(`${prefix}/`)) return next();
+        if (pathname === prefix) {
+          res.statusCode = 302;
+          res.setHeader('Location', `${prefix}/`);
+          res.end();
+          return;
+        }
+        let relative = pathname.slice(prefix.length + 1);
+        if (relative === '' || relative.endsWith('/')) relative += 'index.html';
+        build()
+          .then((result) => {
+            if (relative === 'index.html') reportProblems(result, server.config.logger.warn);
+            const file = result.files.get(relative) ?? result.files.get(`${relative}.html`);
+            if (file === undefined) {
+              res.statusCode = 404;
+              res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+              res.end(`No documentation page at ${pathname}`);
+              return;
+            }
+            const ext = path.extname(result.files.has(relative) ? relative : `${relative}.html`);
+            res.setHeader('Content-Type', DOCS_CONTENT_TYPES[ext] ?? 'application/octet-stream');
+            res.setHeader('Cache-Control', 'no-store');
+            res.end(file);
+          })
+          .catch(next);
+      });
+    },
+    async writeBundle(options) {
+      const outDir = path.join(options.dir ?? path.resolve(__dirname, 'dist'), 'docs');
+      const result = await build();
+      reportProblems(result, (message) => this.warn(message));
+      for (const [relative, contents] of result.files) {
+        const destination = path.join(outDir, ...relative.split('/'));
+        fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.writeFileSync(destination, contents);
+      }
+    },
+  };
+}
+
 export default defineConfig({
   base: process.env.VITE_BASE || '/',
   plugins: [
@@ -207,6 +303,7 @@ export default defineConfig({
     ffmpegCorePlugin(),
     harperCorePlugin(),
     rnnoiseWasmPlugin(),
+    docsSitePlugin(),
   ],
   resolve: {
     // The editor package's CSS is bundled into dist/ only by its one-shot

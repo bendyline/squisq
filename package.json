@@ -38,6 +38,7 @@
     "test:published": "vitest run --config vitest.published.config.ts",
     "screenshots:templates": "node scripts/generate-template-screenshots.mjs",
     "screenshots:swatches": "tsx scripts/generate-swatches.ts",
+    "docs:check": "tsx scripts/check-docs.ts",
     "site": "npm run dev",
     "dev": "npm run build:dev && node scripts/run-dev.mjs",
     "dev:site": "npm run dev -w squisq-site",
