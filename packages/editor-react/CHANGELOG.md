@@ -1,3 +1,14 @@
+## @bendyline/squisq-editor-react [2.13.14](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.13...@bendyline/squisq-editor-react@2.13.14) (2026-10-29)
+
+### Bug Fixes
+
+* Package sizing fixes; split out HTML icons into a separate subpath ([#114](https://github.com/bendyline/squisq/issues/114)) ([bb4a6fd](https://github.com/bendyline/squisq/commit/bb4a6fd709f49e758333de4f77cf34341ad37e0f))
+
+
+### Dependencies
+
+* **@bendyline/squisq-formats:** upgraded to 2.8.10
+
 ## @bendyline/squisq-editor-react [2.13.13](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.12...@bendyline/squisq-editor-react@2.13.13) (2026-10-29)
 
 ### Bug Fixes

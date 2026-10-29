@@ -1,3 +1,9 @@
+## @bendyline/squisq-formats [2.8.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.9...@bendyline/squisq-formats@2.8.10) (2026-10-29)
+
+### Bug Fixes
+
+* Package sizing fixes; split out HTML icons into a separate subpath ([#114](https://github.com/bendyline/squisq/issues/114)) ([bb4a6fd](https://github.com/bendyline/squisq/commit/bb4a6fd709f49e758333de4f77cf34341ad37e0f))
+
 ## @bendyline/squisq-formats [2.8.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.8...@bendyline/squisq-formats@2.8.9) (2026-10-29)
 
 ### Bug Fixes
