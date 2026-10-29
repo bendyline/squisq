@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.7...@bendyline/squisq@2.13.8) (2026-10-29)
+
+### Bug Fixes
+
+* Prepare plain HTML and exports before render ([#113](https://github.com/bendyline/squisq/issues/113)) ([2b2ee9d](https://github.com/bendyline/squisq/commit/2b2ee9da805d9e18361b879142f7cb8b67ea878d))
+
 ## @bendyline/squisq [2.13.7](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.6...@bendyline/squisq@2.13.7) (2026-10-29)
 
 ### Bug Fixes

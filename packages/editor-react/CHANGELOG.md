@@ -1,3 +1,18 @@
+## @bendyline/squisq-editor-react [2.13.13](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.12...@bendyline/squisq-editor-react@2.13.13) (2026-10-29)
+
+### Bug Fixes
+
+* Prepare plain HTML and exports before render ([#113](https://github.com/bendyline/squisq/issues/113)) ([2b2ee9d](https://github.com/bendyline/squisq/commit/2b2ee9da805d9e18361b879142f7cb8b67ea878d))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.8
+* **@bendyline/squisq-formats:** upgraded to 2.8.9
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.37
+* **@bendyline/squisq-react:** upgraded to 2.12.20
+* **@bendyline/squisq-video-react:** upgraded to 2.5.21
+
 ## @bendyline/squisq-editor-react [2.13.12](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.11...@bendyline/squisq-editor-react@2.13.12) (2026-10-29)
 
 ### Bug Fixes

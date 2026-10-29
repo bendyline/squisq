@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.8.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.8...@bendyline/squisq-formats@2.8.9) (2026-10-29)
+
+### Bug Fixes
+
+* Prepare plain HTML and exports before render ([#113](https://github.com/bendyline/squisq/issues/113)) ([2b2ee9d](https://github.com/bendyline/squisq/commit/2b2ee9da805d9e18361b879142f7cb8b67ea878d))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.8
+
 ## @bendyline/squisq-formats [2.8.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.7...@bendyline/squisq-formats@2.8.8) (2026-10-29)
 
 ### Bug Fixes
