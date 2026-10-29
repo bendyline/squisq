@@ -189,7 +189,9 @@ describe('prepareMarkdownDocForPlainHtml', () => {
   });
 
   it('keeps Font Awesome markup for icons without an outliner', async () => {
-    const prepared = await prepareMarkdownDocForPlainHtml(parseMarkdown('Rated {[fa-solid:star]}.'));
+    const prepared = await prepareMarkdownDocForPlainHtml(
+      parseMarkdown('Rated {[fa-solid:star]}.'),
+    );
     expect(prepared.icons.size).toBe(0);
     const html = markdownDocToPlainHtmlParts(prepared.markdownDoc, { icons: prepared.icons });
     expect(html.bodyHtml).toContain('<i class="fa-solid fa-star"');
