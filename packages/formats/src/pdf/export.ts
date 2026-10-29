@@ -57,6 +57,7 @@ import type {
   MarkdownNode,
 } from '@bendyline/squisq/markdown';
 import { isHtmlLineBreak, readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
+import { withoutBlockTags } from '../shared/blockTags.js';
 import { FootnoteIndex } from '../shared/footnotes.js';
 import { authoredImageSize, fitWithin, readImageDimensions } from '../shared/images.js';
 
@@ -174,10 +175,12 @@ export interface PdfExportOptions {
  * Convert a MarkdownDocument to a PDF ArrayBuffer.
  */
 export async function markdownDocToPdf(
-  doc: MarkdownDocument,
+  source: MarkdownDocument,
   options: PdfExportOptions = {},
 ): Promise<ArrayBuffer> {
   options.signal?.throwIfAborted();
+  // `{[…]}` block tags type content for the player; on a page they would print.
+  const doc = withoutBlockTags(source);
   const pdfDoc = await PDFDocument.create();
 
   // Metadata

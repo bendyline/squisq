@@ -14,6 +14,14 @@
  * `mediaProvider.resolveUrl()` (which returns a cached blob URL), and
  * passes the resolved map to the renderer so the iframe gets blob URLs
  * it can fetch.
+ *
+ * The page runs no script, so what the player would draw is settled first,
+ * as the export settles it: diagrams and charts become pictures, data tables
+ * are filled from the workspace's data files, and icons become inline SVG.
+ * That step is asynchronous, so while it catches up with an edit the
+ * previous result stays on screen rather than flashing back to source; the
+ * picture renderer remembers what it drew, so an edit redraws only the
+ * diagram it changed.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -25,10 +33,19 @@ import {
   type WikiLinkSupport,
 } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
+import {
+  isMediaAnnotationName,
+  parseStandaloneAnnotation,
+  type DataSourceTable,
+} from '@bendyline/squisq/doc';
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
+import type { ContentContainer } from '@bendyline/squisq/storage';
+import type { DiagramRasterizer } from '@bendyline/squisq-formats/diagrams';
+import type { PlainHtmlIcon } from '@bendyline/squisq-formats/html';
 import { sanitizedSvgImageUrl, type CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 import { collectInlineFontAwesomeCss } from './utils/collectInlineFontAwesomeCss';
+import { dataTableCacheFor } from './usePreviewProjection';
 
 // formats/html is ~50 KB and only needed for the plain-HTML preview pane.
 // Lazy-load on first render so it doesn't sit in the editor's main chunk.
@@ -44,6 +61,37 @@ function loadRenderFn(): Promise<RenderFn> {
     });
   }
   return cachedRenderPromise;
+}
+
+type HtmlModule = typeof import('@bendyline/squisq-formats/html');
+
+/** The export's preparation step, with a picture renderer that remembers what it drew. */
+interface Preparation {
+  needs: HtmlModule['needsPlainHtmlPreparation'];
+  prepare: HtmlModule['prepareMarkdownDocForPlainHtml'];
+  renderDiagram: DiagramRasterizer;
+}
+let preparationPromise: Promise<Preparation> | null = null;
+function loadPreparation(): Promise<Preparation> {
+  preparationPromise ??= Promise.all([
+    import('@bendyline/squisq-formats/html'),
+    import('@bendyline/squisq-formats/diagrams'),
+    import('@bendyline/squisq-react/diagram-pictures'),
+  ]).then(([html, diagrams, pictures]) => ({
+    needs: html.needsPlainHtmlPreparation,
+    prepare: html.prepareMarkdownDocForPlainHtml,
+    renderDiagram: diagrams.cachingDiagramRasterizer(pictures.createDiagramPictureRenderer()),
+  }));
+  return preparationPromise;
+}
+
+/** A pause in typing before an edited document is prepared again. */
+const PREPARE_DELAY_MS = 300;
+
+interface PreparedView {
+  markdownDoc: MarkdownDocument;
+  images: Map<string, string>;
+  icons: Map<string, PlainHtmlIcon>;
 }
 
 export interface PlainHtmlPreviewProps {
@@ -68,6 +116,11 @@ export interface PlainHtmlPreviewProps {
    *  Mirrors the `mediaRevision` bump the editor uses after an image
    *  edit so saves show up in the preview without remount. */
   mediaRevision?: number;
+  /**
+   * The workspace holding the document's data files, so a
+   * `{[dataTable src=…]}` reference shows its first rows as the export does.
+   */
+  container?: ContentContainer | null;
   /**
    * Squisq theme to apply. When set, the iframe loads any Google-
    * hosted fonts the theme uses and the rendered HTML adopts the
@@ -106,6 +159,7 @@ export function PlainHtmlPreview({
   images,
   mediaProvider,
   mediaRevision,
+  container,
   theme,
   className,
   style,
@@ -210,6 +264,66 @@ export function PlainHtmlPreview({
   // fetch under `allow-same-origin`.
   const iconsCss = useMemo(() => collectInlineFontAwesomeCss(), []);
 
+  // Settle what the page cannot draw, as the plain-HTML export does.
+  const [preparation, setPreparation] = useState<Preparation | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadPreparation().then(
+      (loaded) => {
+        if (!cancelled) setPreparation(loaded);
+      },
+      () => {
+        /* Without it, diagrams show as their source. */
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const dataTableCache = useMemo<Map<string, Promise<DataSourceTable>> | undefined>(
+    () => (container ? dataTableCacheFor(container, mediaRevision ?? 0) : undefined),
+    [container, mediaRevision],
+  );
+  const needsPreparation = useMemo(
+    () =>
+      preparation?.needs(mdDoc, { renderDiagram: preparation.renderDiagram, container }) ?? false,
+    [preparation, mdDoc, container],
+  );
+  const [prepared, setPrepared] = useState<PreparedView | null>(null);
+  const preparedOnceRef = useRef(false);
+  useEffect(() => {
+    if (!preparation || !needsPreparation) return;
+    let cancelled = false;
+    const prepare = () => {
+      preparation
+        .prepare(mdDoc, {
+          renderDiagram: preparation.renderDiagram,
+          container,
+          dataTableCache,
+        })
+        .then(
+          (result) => {
+            if (!cancelled) setPrepared(result);
+          },
+          () => {
+            if (!cancelled)
+              setPrepared({ markdownDoc: mdDoc, images: new Map(), icons: new Map() });
+          },
+        );
+    };
+    // The first preparation runs at once; later ones wait for a pause in
+    // typing, so an edited diagram is drawn once rather than per keystroke.
+    const timer = setTimeout(prepare, preparedOnceRef.current ? PREPARE_DELAY_MS : 0);
+    preparedOnceRef.current = true;
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [preparation, needsPreparation, mdDoc, container, dataTableCache]);
+  // The latest preparation, even of an earlier edit: it stays on screen until
+  // the current one is ready.
+  const view = needsPreparation ? prepared : null;
+
   const [renderFn, setRenderFn] = useState<RenderFn | null>(() => cachedRender);
   useEffect(() => {
     if (renderFn) return;
@@ -222,15 +336,23 @@ export function PlainHtmlPreview({
     };
   }, [renderFn]);
 
-  const html = useMemo(
-    () =>
-      renderFn
-        ? // The frame is sandboxed without scripts, and a nested player
-          // iframe inherits that sandbox — so videos show as linked posters.
-          renderFn(mdDoc, { title, images: mergedImages, theme, iconsCss, videoEmbeds: 'poster' })
-        : '',
-    [renderFn, mdDoc, title, mergedImages, theme, iconsCss],
-  );
+  const html = useMemo(() => {
+    if (!renderFn) return '';
+    const images =
+      view && view.images.size > 0
+        ? new Map([...(mergedImages ?? []), ...view.images])
+        : mergedImages;
+    // The frame is sandboxed without scripts, and a nested player iframe
+    // inherits that sandbox — so videos show as linked posters.
+    return renderFn(view?.markdownDoc ?? mdDoc, {
+      title,
+      images,
+      theme,
+      iconsCss,
+      icons: view?.icons,
+      videoEmbeds: 'poster',
+    });
+  }, [renderFn, view, mdDoc, title, mergedImages, theme, iconsCss]);
 
   const installFrameLinkHandler = useCallback(() => {
     removeFrameLinkHandlerRef.current();
@@ -471,6 +593,13 @@ function collectImageRefs(doc: MarkdownDocument): Set<string> {
     const n = node as Record<string, unknown>;
     if (n.type === 'image' && typeof n.url === 'string' && n.url) {
       refs.add(n.url);
+    }
+    // `{[audio src=…]}` / `{[video src=…]}` play as their file's player.
+    if (n.type === 'paragraph') {
+      const tag = parseStandaloneAnnotation(node as MarkdownDocument['children'][number]);
+      if (tag?.template && isMediaAnnotationName(tag.template) && tag.params.src) {
+        refs.add(tag.params.src);
+      }
     }
     if ((n.type === 'htmlBlock' || n.type === 'htmlInline') && Array.isArray(n.htmlChildren)) {
       visitHtml(n.htmlChildren as HtmlNode[]);

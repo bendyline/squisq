@@ -38,6 +38,7 @@ import type {
   MarkdownInlineIcon,
 } from '@bendyline/squisq/markdown';
 import { isHtmlLineBreak, readFrontmatterThemeId, sanitizeUrl } from '@bendyline/squisq/markdown';
+import { withoutBlockTags } from '../shared/blockTags.js';
 import { FootnoteIndex, footnoteIds } from '../shared/footnotes.js';
 import { exportImageBytes, svgIslandsAsImages } from '../shared/svgIslands.js';
 import { escapeXml } from '../ooxml/xmlUtils.js';
@@ -97,10 +98,12 @@ export interface EpubExportOptions {
  * (provided via `options.images`) are embedded in the archive.
  */
 export async function markdownDocToEpub(
-  sourceDoc: MarkdownDocument,
+  authoredDoc: MarkdownDocument,
   options: EpubExportOptions = {},
 ): Promise<ArrayBuffer> {
   options.signal?.throwIfAborted();
+  // `{[…]}` block tags type content for the player; in a book they would print.
+  const sourceDoc = withoutBlockTags(authoredDoc);
   // SVG islands ship as image files like any other picture: each usable
   // ```svg fence becomes an image of core's sanitized re-serialization.
   const themeId = options.themeId ?? readFrontmatterThemeId(sourceDoc.frontmatter);

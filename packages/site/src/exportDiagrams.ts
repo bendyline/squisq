@@ -9,11 +9,14 @@
 
 import { isSvgImageSource, svgSourceFromBytes } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
+import type { Doc } from '@bendyline/squisq/schemas';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 import type {
   DiagramPicture,
   ExportDiagramKind,
   RasterizedDiagrams,
 } from '@bendyline/squisq-formats/diagrams';
+import type { PreparedPlainHtmlDocument } from '@bendyline/squisq-formats/html';
 
 export async function pictureDiagrams(
   markdownDoc: MarkdownDocument,
@@ -26,6 +29,59 @@ export async function pictureDiagrams(
     ]);
   return rasterizeDiagrams(markdownDoc, createDiagramPictureRenderer(), {
     kinds: kinds === 'all' ? EXPORT_DIAGRAM_KINDS : kinds,
+    onWarning: (message) => console.warn(message),
+  });
+}
+
+/**
+ * The Markdown with each `{[dataTable src=…]}` reference's first rows under
+ * its heading, for Word and PDF, which can't carry the data file. Run it
+ * before `pictureDiagrams`, so a chart fed by a data file is drawn too.
+ */
+export async function withDataTables(
+  markdownDoc: MarkdownDocument,
+  container: ContentContainer | null | undefined,
+): Promise<MarkdownDocument> {
+  if (!container) return markdownDoc;
+  const { materializeDataReferences, DATA_PREVIEW_ROWS } =
+    await import('@bendyline/squisq-formats/data');
+  return materializeDataReferences(markdownDoc, container, (message) => console.warn(message), {
+    maxRows: DATA_PREVIEW_ROWS,
+  });
+}
+
+/**
+ * The Doc with each data reference's preview rows filled in — what the
+ * editor preview shows — for exports rendered by the player (HTML, PPTX).
+ */
+export async function withDataPreviews(
+  doc: Doc,
+  container: ContentContainer | null | undefined,
+): Promise<Doc> {
+  if (!container) return doc;
+  const [{ resolveDataReferences }, { defaultDataReaders }] = await Promise.all([
+    import('@bendyline/squisq/doc'),
+    import('@bendyline/squisq-formats/data'),
+  ]);
+  return (await resolveDataReferences(doc, container, { readers: defaultDataReaders() })).doc;
+}
+
+/**
+ * A document ready for a plain (script-free) HTML page: data references
+ * filled from the workspace's sidecars, and diagrams and charts swapped for
+ * pictures, returned as `data:` URLs to merge into the page's `images`.
+ */
+export async function prepareForPlainHtml(
+  markdownDoc: MarkdownDocument,
+  container: ContentContainer | null | undefined,
+): Promise<PreparedPlainHtmlDocument> {
+  const [{ prepareMarkdownDocForPlainHtml }, { createDiagramPictureRenderer }] = await Promise.all([
+    import('@bendyline/squisq-formats/html'),
+    import('@bendyline/squisq-react/diagram-pictures'),
+  ]);
+  return prepareMarkdownDocForPlainHtml(markdownDoc, {
+    renderDiagram: createDiagramPictureRenderer(),
+    container,
     onWarning: (message) => console.warn(message),
   });
 }

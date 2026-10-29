@@ -307,6 +307,7 @@ export function PreviewPanel({
           showCover={activeCoverSlide}
           transformStyle={activeTransformStyle}
           mediaRevision={mediaRevision}
+          container={workspaceContainer ?? null}
         />
       );
     }
@@ -319,6 +320,7 @@ export function PreviewPanel({
           title={(contentDoc?.frontmatter?.title as string | undefined) ?? undefined}
           mediaProvider={mediaProvider}
           mediaRevision={mediaRevision}
+          container={workspaceContainer ?? null}
           theme={activeTheme}
           globalKeyboardShortcuts={!audience}
           onLinkClick={onLinkClick}

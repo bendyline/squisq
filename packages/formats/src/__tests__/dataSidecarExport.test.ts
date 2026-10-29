@@ -7,12 +7,16 @@
  *   not carried.
  * - HTML bundle exports carry the linked sidecar file at its authored
  *   path so the body link resolves after unzip.
+ * - Formats that cannot carry the file show its first rows: Word, PDF and
+ *   EPUB in their Markdown, HTML and PPTX in the player's preview.
  */
 
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { materializeDataReferences } from '../data/materialize';
+import { convert } from '../registry/convert';
 import { markdownDocToXlsx } from '../xlsx/export';
 import { xlsxToContainer, xlsxToTables } from '../xlsx/import';
 import { markdownDocsToPlainHtmlBundle } from '../html/plainHtmlBundle';
@@ -103,5 +107,68 @@ describe('plain HTML bundle sidecar carry', () => {
     expect(entry).not.toBeNull();
     expect(await entry!.async('string')).toContain('North,1200');
     expect(zip.file('report.html')).not.toBeNull();
+  });
+});
+
+describe('data references in converted documents', () => {
+  async function source() {
+    const rows = ['Item,Qty', ...Array.from({ length: 150 }, (_, i) => `Row ${i + 1},${i}`)];
+    const container = new MemoryContentContainer();
+    await container.writeFile(
+      'report_files/data/q3.csv',
+      Uint8Array.from(`${rows.join('\n')}\n`, (c) => c.charCodeAt(0)),
+    );
+    return {
+      kind: 'markdown' as const,
+      markdown: [
+        '# Report',
+        '',
+        '## Q3 {[dataTable src=report_files/data/q3.csv]}',
+        '',
+        '[q3.csv](report_files/data/q3.csv)',
+        '',
+      ].join('\n'),
+      container,
+      baseName: 'report',
+    };
+  }
+
+  async function partsOf(bytes: Uint8Array, pattern: RegExp): Promise<string> {
+    const zip = await JSZip.loadAsync(bytes);
+    const names = Object.keys(zip.files).filter((name) => pattern.test(name));
+    return (await Promise.all(names.map((name) => zip.file(name)!.async('string')))).join('\n');
+  }
+
+  it('Word, PDF and EPUB show the first rows and how many there are', async () => {
+    const docx = await convert(await source(), 'docx');
+    const xml = await partsOf(docx.bytes, /^word\/document\.xml$/);
+    expect(xml).toContain('Row 100');
+    expect(xml).not.toContain('Row 101');
+    expect(xml).toContain('Showing 100 of 150 rows.');
+
+    const epub = await convert(await source(), 'epub');
+    const xhtml = await partsOf(epub.bytes, /\.xhtml$/);
+    expect(xhtml).toContain('Row 100');
+    expect(xhtml).not.toContain('Row 101');
+    expect(epub.warnings.join('\n')).toContain('shows its first rows');
+
+    const pdf = await convert(await source(), 'pdf');
+    expect(pdf.warnings.join('\n')).not.toContain('could not be embedded');
+  });
+
+  it("single-file HTML fills the player's preview", async () => {
+    const html = await convert(await source(), 'html', {
+      resolvePlayerScript: async () => '/* stub */',
+    });
+    const text = new TextDecoder().decode(html.bytes);
+    expect(text).toContain('Row 50');
+    expect(text).not.toContain('Row 51');
+    expect(html.warnings.join('\n')).toContain('shows its first rows');
+  });
+
+  it('warns when the data file is missing', async () => {
+    const missing = { ...(await source()), container: new MemoryContentContainer() };
+    const docx = await convert(missing, 'docx');
+    expect(docx.warnings.join('\n')).toContain('file not found in container');
   });
 });

@@ -19,6 +19,7 @@ import {
 import { expandCoverBlock, materializeFlashcards } from '@bendyline/squisq/doc';
 import { resolveTransformStyle } from '@bendyline/squisq/transform';
 import type { Block } from '@bendyline/squisq/schemas';
+import type { ContentContainer } from '@bendyline/squisq/storage';
 import { PlainHtmlPreview } from '../PlainHtmlPreview';
 import { usePrintMode } from './PrintMode';
 
@@ -33,6 +34,8 @@ export interface PrintPreviewProps {
   showCover: boolean;
   transformStyle: string;
   mediaRevision: number;
+  /** The workspace holding the document's data files, for its data tables. */
+  container?: ContentContainer | null;
 }
 
 function chunk<T>(values: readonly T[], size: number): T[][] {
@@ -54,6 +57,7 @@ export function PrintPreview({
   showCover,
   transformStyle,
   mediaRevision,
+  container,
 }: PrintPreviewProps) {
   const { slidesPerPage, registerPrintHandler } = usePrintMode();
   const mediaProvider = useMediaProvider();
@@ -106,6 +110,7 @@ export function PrintPreview({
             title={title}
             mediaProvider={mediaProvider}
             mediaRevision={mediaRevision}
+            container={container}
             theme={theme}
             onFrameChange={setDocumentFrame}
           />

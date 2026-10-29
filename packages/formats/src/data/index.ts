@@ -19,7 +19,8 @@
  */
 
 export { csvDataReader, xlsxDataReader, parquetDataReader, defaultDataReaders } from './readers.js';
-export { materializeDataReferences } from './materialize.js';
+export { DATA_PREVIEW_ROWS, materializeDataReferences } from './materialize.js';
+export type { MaterializeDataReferencesOptions } from './materialize.js';
 export {
   docSlugForFileName,
   planDataSidecar,

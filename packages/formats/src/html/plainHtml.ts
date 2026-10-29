@@ -17,7 +17,9 @@
 import {
   findBlockVideoEmbed,
   isSvgIslandLang,
+  mediaKindForUrl,
   parseSvgIsland,
+  parseTimeSeconds,
   sanitizeHtmlNodes,
   svgIslandDataUrl,
   svgSourceFromDataUrl,
@@ -35,7 +37,12 @@ import {
 } from '@bendyline/squisq/markdown';
 import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { resolveFontFamily, buildGoogleFontsUrl } from '@bendyline/squisq/schemas';
-import { resolveThemeForDoc } from '@bendyline/squisq/doc';
+import {
+  isMediaAnnotationName,
+  parseStandaloneAnnotation,
+  resolveThemeForDoc,
+} from '@bendyline/squisq/doc';
+import { withoutBlockTags } from '../shared/blockTags.js';
 import { FootnoteIndex, footnoteIds } from '../shared/footnotes.js';
 import { imageSizeAttributes } from '../shared/images.js';
 
@@ -118,6 +125,20 @@ export interface PlainHtmlExportOptions {
    *   inherit the sandbox, so the player would load broken), or print.
    */
   videoEmbeds?: 'player' | 'poster';
+  /**
+   * Inline icons as SVG, keyed `family:name` (`solid:star`) — the `icons` that
+   * `prepareMarkdownDocForPlainHtml` returns. An icon found here is drawn as
+   * an inline `<svg>` in the text color and needs no Font Awesome stylesheet;
+   * any other icon keeps its Font Awesome markup (see {@link iconsCss}).
+   */
+  icons?: ReadonlyMap<string, PlainHtmlIcon>;
+}
+
+/** One icon's outline: an SVG path in a `0 0 width height` box whose height is 1em. */
+export interface PlainHtmlIcon {
+  width: number;
+  height: number;
+  path: string;
 }
 
 /**
@@ -130,6 +151,11 @@ interface RenderCtx {
   links?: Map<string, string>;
   htmlPolicy: HtmlPolicy;
   videoEmbeds?: 'player' | 'poster';
+  icons?: ReadonlyMap<string, PlainHtmlIcon>;
+  /** Set once an icon is drawn as SVG, so its CSS ships. */
+  usesSvgIcons?: boolean;
+  /** Set once an icon needs Font Awesome's own stylesheet. */
+  usesFontIcons?: boolean;
   /** The theme's text color, which an SVG island's `currentColor` follows. */
   textColor?: string;
   /**
@@ -138,6 +164,8 @@ interface RenderCtx {
    * reference then falls back to printing its identifier rather than a number.
    */
   footnotes?: FootnoteIndex;
+  /** Set once an audio or video player is emitted, so its CSS ships. */
+  usesMediaPlayers?: boolean;
 }
 
 // ── Public API ─────────────────────────────────────────────────────
@@ -240,6 +268,7 @@ function renderPlainHtml(
     htmlPolicy = 'sanitize',
     externalResources = 'deny',
     videoEmbeds,
+    icons,
   } = options;
   // Fall back chain for theme: explicit `theme` → explicit `themeId`
   // option → doc frontmatter `themeId`. Hosts whose export dialog
@@ -262,18 +291,21 @@ function renderPlainHtml(
     htmlPolicy,
     footnotes,
     videoEmbeds,
+    icons,
     textColor: theme?.colors.text,
   };
-  const body = renderTopLevel(doc.children, ctx) + renderFootnotesSection(footnotes, ctx);
+  // Block tags type content for the player; on a page they would print as
+  // prose. Media tags stay: each becomes its file's player.
+  const blocks = withoutBlockTags(doc, { keepMedia: true }).children;
+  const body = renderTopLevel(blocks, ctx) + renderFootnotesSection(footnotes, ctx);
   const fontsLink = theme && externalResources === 'allow' ? renderFontsLink(theme) : '';
-  // Resolve how to load FontAwesome — only when the doc actually uses
-  // icons. When the host supplies `iconsCss` (typical for sandboxed
-  // iframe previews where cross-origin font fetches get blocked), we
-  // inline it as a `<style>` block; otherwise we fall back to the
-  // public cdnjs `<link>` which works for standalone HTML files.
-  const usesIcons = docUsesIcons(doc);
+  // Resolve how to load FontAwesome — only when an icon was drawn with it
+  // rather than as SVG. When the host supplies `iconsCss` (typical for
+  // sandboxed iframe previews where cross-origin font fetches get blocked),
+  // we inline it as a `<style>` block; otherwise we fall back to the
+  // public cdnjs `<link>` after an external-resource opt-in.
   let iconsLink = '';
-  if (usesIcons) {
+  if (ctx.usesFontIcons) {
     iconsLink = iconsCss
       ? `<style data-fa-inline>\n${escapeStyleText(iconsCss)}\n</style>\n`
       : externalResources === 'allow'
@@ -283,13 +315,15 @@ function renderPlainHtml(
   const themedCss = theme ? renderThemedCss(theme) : DEFAULT_CSS;
   const videoCss = docUsesVideoEmbeds(doc, htmlPolicy) ? `\n${VIDEO_EMBED_CSS}` : '';
   const svgCss = docUsesSvgIslands(doc) ? `\n${SVG_ISLAND_CSS}` : '';
+  const mediaCss = ctx.usesMediaPlayers ? `\n${MEDIA_PLAYER_CSS}` : '';
+  const iconCss = ctx.usesSvgIcons ? `\n${SVG_ICON_CSS}` : '';
   return {
     title,
     body,
     fontsLink,
     iconsLink,
     themedCss,
-    featureCss: `${FEATURE_CSS}${videoCss}${svgCss}`,
+    featureCss: `${FEATURE_CSS}${videoCss}${svgCss}${mediaCss}${iconCss}`,
   };
 }
 
@@ -304,20 +338,8 @@ function escapeStyleText(css: string): string {
 const FONT_AWESOME_LINK = `<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.3.1/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer">
 `;
 
-/** Walk the doc looking for any `inlineIcon` node. Cheap depth-first
- *  traversal — bails out at the first hit. */
-function docUsesIcons(doc: MarkdownDocument): boolean {
-  function visit(node: unknown): boolean {
-    if (!node || typeof node !== 'object') return false;
-    const n = node as Record<string, unknown>;
-    if (n.type === 'inlineIcon') return true;
-    if (Array.isArray(n.children)) {
-      for (const child of n.children) if (visit(child)) return true;
-    }
-    return false;
-  }
-  return visit(doc);
-}
+/** An icon drawn as SVG sits on the text like a glyph of the font would. */
+const SVG_ICON_CSS = `  .squisq-icon { display: inline-block; height: 1em; vertical-align: -0.125em; overflow: visible; }`;
 
 /**
  * Whether anything renders as a video player or poster — a top-level video
@@ -380,17 +402,29 @@ function renderTopLevel(children: MarkdownNode[], ctx: RenderCtx | undefined): s
         continue;
       }
     }
-    // Only a TOP-LEVEL paragraph that is nothing but a link to a video page is
-    // a player; inside a list or blockquote it stays a link.
-    const video =
-      node && node.type === 'paragraph' ? findBlockVideoEmbed(node as MarkdownBlockNode) : null;
-    if (video) {
-      out.push(videoEmbedToHtml(video.embed, video.title, ctx));
-      continue;
-    }
-    out.push(nodeToHtml(node as MarkdownNode, ctx));
+    const html = topLevelBlockToHtml(node as MarkdownNode, ctx);
+    if (html !== null) out.push(html);
   }
   return out.join('\n');
+}
+
+/**
+ * A top-level block. Only at the top level is a paragraph that is nothing but
+ * a link to a video page a player, or a paragraph that is nothing but an
+ * `{[audio …]}` / `{[video …]}` tag a clip; inside a list or blockquote both
+ * stay text. Null when the block renders as nothing.
+ */
+function topLevelBlockToHtml(node: MarkdownNode, ctx: RenderCtx | undefined): string | null {
+  if (node?.type !== 'paragraph') return nodeToHtml(node, ctx);
+  const video = findBlockVideoEmbed(node as MarkdownBlockNode);
+  if (video) return videoEmbedToHtml(video.embed, video.title, ctx);
+  // `{[audio src=…]}` schedules a clip on the player's timeline; a static
+  // page has no timeline, so it gets the clip's own player instead.
+  const tag = parseStandaloneAnnotation(node as MarkdownBlockNode);
+  if (tag?.template && isMediaAnnotationName(tag.template)) {
+    return mediaAnnotationToHtml(tag.template, tag.params, ctx);
+  }
+  return nodeToHtml(node, ctx);
 }
 
 /**
@@ -473,8 +507,8 @@ function renderFeatureSection(
     ? renderFeatureImage(featured.image, ctx)
     : '<div class="squisq-feature__media squisq-feature__media--empty"></div>';
 
-  const textHtml = [headingHtml, ...featured.remaining.map((n) => nodeToHtml(n, ctx))]
-    .filter((s) => s.length > 0)
+  const textHtml = [headingHtml, ...featured.remaining.map((n) => topLevelBlockToHtml(n, ctx))]
+    .filter((s): s is string => !!s)
     .join('\n');
 
   const sideClass = side === 'leftFeature' ? 'squisq-feature--left' : 'squisq-feature--right';
@@ -884,6 +918,13 @@ function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): str
     case 'image': {
       const original = node.url ?? '';
       const resolved = ctx?.images?.get(original) ?? original;
+      // Image syntax is markdown's only embed, so `![A clip](clip.mp4)` plays
+      // rather than drawing a broken picture (as MarkdownRenderer does).
+      const mediaKind = mediaKindForUrl(original);
+      if (mediaKind) {
+        const label = node.alt || node.title || undefined;
+        return mediaPlayerHtml(mediaKind, resolved, label, ctx) ?? escapeHtml(node.alt ?? '');
+      }
       const safeSrc = sanitizeUrl(resolved, 'media') ?? svgDataImageToHtmlSrc(resolved);
       if (!safeSrc) return escapeHtml(node.alt ?? '');
       return `<img src="${escapeAttr(safeSrc)}" alt="${escapeAttr(node.alt ?? '')}"${imageSizeAttributes(node)} />`;
@@ -893,12 +934,22 @@ function nodeToHtml(node: MarkdownNode | undefined | null, ctx?: RenderCtx): str
     case 'table':
       return tableToHtml(node, ctx);
     case 'inlineIcon': {
-      // Render via FontAwesome's `fa-<family> fa-<name>` class pair.
-      // The `<link>` to the FA CSS is injected into <head> by
-      // `markdownDocToPlainHtml` when the doc contains any icon.
+      const token = escapeAttr(node.token ?? `${node.family}:${node.name}`);
+      const svg = ctx?.icons?.get(`${node.family}:${node.name}`);
+      if (svg) {
+        ctx!.usesSvgIcons = true;
+        const width = Number((svg.width / svg.height).toFixed(4));
+        return (
+          `<svg class="squisq-icon" viewBox="0 0 ${svg.width} ${svg.height}" width="${width}em"` +
+          ` height="1em" fill="currentColor" aria-hidden="true" focusable="false"` +
+          ` data-icon="${token}"><path d="${escapeAttr(svg.path)}"/></svg>`
+        );
+      }
+      // Render via FontAwesome's `fa-<family> fa-<name>` class pair; the
+      // renderer adds the FA stylesheet it needs to <head>.
+      if (ctx) ctx.usesFontIcons = true;
       const family = escapeAttr(node.family ?? 'solid');
       const name = escapeAttr(node.name ?? '');
-      const token = escapeAttr(node.token ?? `${node.family}:${node.name}`);
       return `<i class="fa-${family} fa-${name}" data-icon="${token}" aria-hidden="true"></i>`;
     }
     case 'htmlBlock':
@@ -1102,6 +1153,50 @@ const VIDEO_EMBED_CSS = `  .squisq-video-embed { display: block; max-width: 720p
   .squisq-video-embed-play::after { content: ''; position: absolute; left: 26px; top: 12px; border-style: solid; border-width: 10px 0 10px 16px; border-color: transparent transparent transparent #fff; }
   .squisq-video-embed-provider { position: absolute; left: 12px; bottom: 10px; color: #fff; font-size: 0.8em; font-weight: 600; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8); }
   .squisq-video-embed-caption { margin-top: 0.4em; font-size: 0.875em; opacity: 0.8; }`;
+
+// ── Audio and video files ──────────────────────────────────────────
+
+/** A native player for a media file, or null when its URL is not safe to load. */
+function mediaPlayerHtml(
+  kind: 'audio' | 'video',
+  src: string,
+  label: string | undefined,
+  ctx: RenderCtx | undefined,
+): string | null {
+  const safeSrc = sanitizeUrl(src, 'media');
+  if (!safeSrc) return null;
+  if (ctx) ctx.usesMediaPlayers = true;
+  const aria = label ? ` aria-label="${escapeAttr(label)}"` : '';
+  return `<${kind} class="squisq-media" src="${escapeAttr(safeSrc)}" controls preload="metadata"${aria}></${kind}>`;
+}
+
+/**
+ * A standalone `{[audio …]}` / `{[video …]}` tag as its file's player, its
+ * `clipStart`/`clipEnd` window kept as a media fragment. Null — the tag
+ * renders as nothing — when it names no playable file.
+ */
+function mediaAnnotationToHtml(
+  template: string,
+  params: Record<string, string>,
+  ctx: RenderCtx | undefined,
+): string | null {
+  if (!params.src) return null;
+  // The same rule `markdownToDoc` applies: only `video` is a video clip.
+  const kind = template === 'video' ? 'video' : 'audio';
+  let src = ctx?.images?.get(params.src) ?? params.src;
+  const start = parseTimeSeconds(params.clipStart ?? '');
+  const end = parseTimeSeconds(params.clipEnd ?? '');
+  if ((start !== null || end !== null) && !src.includes('#')) {
+    src += `#t=${start ?? ''}${end !== null ? `,${end}` : ''}`;
+  }
+  const player = mediaPlayerHtml(kind, src, undefined, ctx);
+  return player ? `<figure class="squisq-media-clip">${player}</figure>` : null;
+}
+
+/** Players fill the column; a video never overflows it. */
+const MEDIA_PLAYER_CSS = `  .squisq-media-clip { margin: 1.25em 0; }
+  video.squisq-media { display: block; width: 100%; max-width: 720px; height: auto; border-radius: 6px; }
+  audio.squisq-media { display: block; width: 100%; max-width: 480px; }`;
 
 /**
  * An SVG image inlined as a `data:` URL (an attachment, in a single-file

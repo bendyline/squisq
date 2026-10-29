@@ -30,7 +30,12 @@ await writeFile('spring-survey.html', html);
 
 `markdownDocToPlainHtml(doc, options?)` returns a complete HTML document: a `<head>` with a
 stylesheet and the rendered body. Footnotes become a numbered notes section, hosted-video links
-become players, and ` ```svg ` fences become sanitized images.
+become players, and ` ```svg ` fences become sanitized images. An audio or video file — written
+as an image (`![Launch clip](clip.mp4)`) or as a standalone `{[audio src=…]}` / `{[video src=…]}`
+tag — becomes a native player. Other block tags are left out rather than printed: a paragraph
+that is only a tag (`{[quote]}`), and the single tag at the end of an unannotated section, on its
+own line or glued to the last sentence (`Revenue grew 40% {[statHighlight]}`), which the player
+reads as that section's template.
 
 | Option              | Type                                 | Effect                                                                                         |
 | ------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------- |
@@ -43,9 +48,58 @@ become players, and ` ```svg ` fences become sanitized images.
 | `externalResources` | `'deny'` or `'allow'`                | Whether the page may load Google Fonts and the Font Awesome stylesheet (default `'deny'`)      |
 | `iconsCss`          | `string`                             | Font Awesome CSS to inline, for pages with inline icons that can't load the CDN                |
 | `videoEmbeds`       | `'player'` or `'poster'`             | Hosted videos as live players (default) or as linked poster cards                              |
+| `icons`             | `Map<string, PlainHtmlIcon>`         | Inline icons as SVG outlines, from `prepareMarkdownDocForPlainHtml` (see below)                |
 
 URLs not in `links` or `images` pass through unchanged. Without a theme the page gets a plain
 default stylesheet.
+
+## Diagrams, charts, and data tables
+
+A plain page runs no script, so anything the player draws at runtime has to be settled before the
+page is written. `prepareMarkdownDocForPlainHtml(doc, options?)` does that, and returns the
+document to render plus the pictures it drew:
+
+```ts
+import {
+  markdownDocToPlainHtml,
+  prepareMarkdownDocForPlainHtml,
+} from '@bendyline/squisq-formats/html';
+import { createDiagramPictureRenderer } from '@bendyline/squisq-react/diagram-pictures';
+
+const prepared = await prepareMarkdownDocForPlainHtml(doc, {
+  renderDiagram: createDiagramPictureRenderer(),
+  container, // the ContentContainer holding the document's data files
+});
+const html = markdownDocToPlainHtml(prepared.markdownDoc, {
+  title,
+  images: prepared.images,
+  icons: prepared.icons,
+});
+```
+
+- **Mermaid, ASCII diagrams, timelines, and drawing, layout, and diagram blocks** become PNG
+  pictures, embedded as `data:` URLs in `images` and sized to display at their natural width.
+- **Charts** (`{[barChart]}`, `{[pieChart]}`, …) become a picture of the chart in place of their
+  table; with `showTable=true` the table stays beneath it. A table the chart engine can't plot
+  stays a table.
+- **Data tables** that point at a data file (`{[dataTable src=…]}`, or a chart fed by one) get the
+  file's first 100 rows (`maxDataRows`, or the block's own `previewRows`), then a "Showing N of M
+  rows" note. The author's link to the full file follows.
+- **Inline icons** (`{[fa-solid:star]}`) become small inline SVGs in the text color, outlined from
+  the same Font Awesome fonts the Word, PDF, and EPUB exporters embed. The page needs no Font
+  Awesome stylesheet, font, or network. This part needs no browser.
+- **File trees** stay preformatted text, which reads as well as a picture and stays selectable.
+
+Drawing needs a browser, so `renderDiagram` is the host's to supply: without it diagrams stay as
+their source and charts as their table. A diagram the renderer can't draw also stays as source, and
+`onWarning` hears about it.
+
+A host that prepares the same document over and over, such as a live preview, can wrap its renderer
+in `cachingDiagramRasterizer` from `@bendyline/squisq-formats/diagrams`, so each pass redraws only
+the diagrams that changed, and pass a `dataTableCache` map so data files are read once. Before
+starting the asynchronous step, `needsPlainHtmlPreparation(doc, { renderDiagram, container })`
+tells it whether there is anything to prepare, so a document with nothing to do renders at once.
+The editor's Document and Print previews work this way.
 
 ## Place pages in your own template
 
@@ -431,9 +485,20 @@ const page = await renderOutsideInDocument(
 );
 ```
 
+Word, PDF, and PowerPoint targets can't draw Mermaid or Squisq diagrams. Pass `renderDiagram`
+(`createDiagramPictureRenderer()` in the browser) and `renderOutsideInDocument` pictures them the
+way [Diagrams in document formats](conversion.md#diagrams-in-document-formats) describes: Word and
+PDF get a picture of each diagram and chart, and PowerPoint, which draws the rest as native shapes,
+gets pictures of Mermaid diagrams. With a `container`, each `{[dataTable src=…]}` reference shows
+its first rows, as every `convert()` export does.
+
 Your host owns the file system: it writes the result, copies the import's media into the companion
-folder, and resolves and applies a `squisq-output-template` page template when it wants one. Authors
-choose that template as described in [Page templates](../../guide/page-templates.md).
+folder, and resolves and applies a `squisq-output-template` page template when it wants one. A page
+generated through a template is a plain page, so prepare it as in
+[Diagrams, charts, and data tables](#diagrams-charts-and-data-tables), and pass the companion's
+files in `links` as well as `images` so links to attachments resolve from the page, and the
+prepared `icons` in `icons`. Authors choose
+that template as described in [Page templates](../../guide/page-templates.md).
 
 ## Related
 

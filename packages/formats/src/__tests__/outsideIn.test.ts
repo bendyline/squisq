@@ -143,4 +143,82 @@ describe('outside-in documents', () => {
     expect(html).toContain('basePath: "battle-of-britain_files"');
     expect(html).not.toContain('SquisqPlayer=function');
   });
+
+  describe('diagrams and data in rendered documents', () => {
+    /** A valid 1×1 PNG. */
+    const PNG = Uint8Array.from(
+      atob(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      ),
+      (char) => char.charCodeAt(0),
+    );
+    const SOURCE = [
+      '# Plan',
+      '',
+      '```mermaid',
+      'flowchart LR',
+      '  a --> b',
+      '```',
+      '',
+      '## Ledger {[dataTable src=plan_files/data/ledger.csv]}',
+      '',
+      '[ledger.csv](plan_files/data/ledger.csv)',
+      '',
+    ].join('\n');
+
+    async function render(targetPath: string, withRenderer: boolean) {
+      const container = new MemoryContentContainer();
+      const rows = ['Item,Qty', ...Array.from({ length: 150 }, (_, i) => `Item ${i + 1},${i}`)];
+      await container.writeFile(
+        'plan_files/data/ledger.csv',
+        Uint8Array.from(`${rows.join('\n')}\n`, (char) => char.charCodeAt(0)),
+      );
+      const kinds: string[] = [];
+      const result = await renderOutsideInDocument(
+        {
+          targetPath,
+          markdown: withOutsideInMarkdownEditing(SOURCE, resolveOutsideInLayout(targetPath)!),
+          container,
+        },
+        withRenderer
+          ? {
+              renderDiagram: async (diagram) => {
+                kinds.push(diagram.kind);
+                return { data: PNG, width: 300, height: 120 };
+              },
+            }
+          : {},
+      );
+      return { result, kinds };
+    }
+
+    async function wordXml(bytes: Uint8Array): Promise<string> {
+      const { default: JSZip } = await import('jszip');
+      const zip = await JSZip.loadAsync(bytes);
+      return (await zip.file('word/document.xml')?.async('string')) ?? '';
+    }
+
+    it('gives Word a picture of each diagram and a preview of each data table', async () => {
+      const { result, kinds } = await render('Plan.docx', true);
+      expect(kinds).toEqual(['mermaid']);
+      const xml = await wordXml(result.bytes);
+      expect(xml).toContain('<pic:pic');
+      expect(xml).not.toContain('flowchart LR');
+      expect(xml).toContain('Item 100');
+      expect(xml).not.toContain('Item 101');
+      expect(xml).toContain('Showing 100 of 150 rows.');
+    });
+
+    it('keeps diagrams as source without a renderer', async () => {
+      const { result } = await render('Plan.docx', false);
+      const xml = await wordXml(result.bytes);
+      expect(xml).toContain('flowchart LR');
+      expect(xml).toContain('Item 100');
+    });
+
+    it('asks a PowerPoint target only for the diagrams its shapes cannot draw', async () => {
+      const { kinds } = await render('Plan.pptx', true);
+      expect(kinds).toEqual(['mermaid']);
+    });
+  });
 });

@@ -142,6 +142,105 @@ describe('markdownDocToPlainHtml', () => {
     expect(html).toContain('src="https://example.com/x.jpg"');
   });
 
+  it('plays an audio or video file written with image syntax', () => {
+    const html = render('![Launch clip](clip.mp4)\n\n![Bell](media/bell.mp3)', {
+      images: new Map([['clip.mp4', 'Report_files/clip.mp4']]),
+    });
+    expect(html).toContain(
+      '<video class="squisq-media" src="Report_files/clip.mp4" controls preload="metadata" aria-label="Launch clip"></video>',
+    );
+    expect(html).toContain('<audio class="squisq-media" src="media/bell.mp3"');
+    expect(html).not.toContain('<img');
+    expect(html).toContain('video.squisq-media {');
+    expect(render('![cat](cat.jpg)')).not.toContain('video.squisq-media {');
+  });
+
+  it('gives a standalone audio or video tag its own player', () => {
+    // On the player's timeline these schedule a clip; a script-free page has
+    // no timeline, and printing the tag would show markup as prose.
+    const html = render(
+      [
+        '# Talk',
+        '',
+        '{[audio src=audio/narration.webm anchor=document]}',
+        '',
+        '{[video src=demo.mp4 clipStart=2 clipEnd=7.5]}',
+        '',
+        '{[audio]}',
+      ].join('\n'),
+      { images: new Map([['audio/narration.webm', 'Talk_files/audio/narration.webm']]) },
+    );
+    expect(html).toContain(
+      '<figure class="squisq-media-clip"><audio class="squisq-media" src="Talk_files/audio/narration.webm" controls preload="metadata"></audio></figure>',
+    );
+    expect(html).toContain('<video class="squisq-media" src="demo.mp4#t=2,7.5"');
+    expect(html).not.toContain('{[');
+  });
+
+  it('drops a standalone template tag but keeps unknown and nested ones as text', () => {
+    const html = render(
+      [
+        '## Notes',
+        '',
+        '{[quote]}',
+        '',
+        'Body text.',
+        '',
+        '{[notATemplate size=2]}',
+        '',
+        '- {[quote]}',
+      ].join('\n'),
+    );
+    expect(html).toContain('<h2>Notes</h2>\n<p>Body text.</p>');
+    expect(html).toContain('<p>{[notATemplate size=2]}</p>');
+    expect(html).toContain('<li><p>{[quote]}</p></li>');
+  });
+
+  it('drops the tag glued to the end of a section, as the player promotes it', () => {
+    const html = render(
+      [
+        '## Growth',
+        '',
+        'Revenue grew 40% this year {[statHighlight]}',
+        '',
+        '## Typed {[quote]}',
+        '',
+        'Kept as written {[statHighlight]}',
+        '',
+        '## Two tags',
+        '',
+        '{[quote]}',
+        '',
+        'Still printed {[statHighlight]}',
+      ].join('\n'),
+    );
+    expect(html).toContain('<p>Revenue grew 40% this year</p>');
+    // Only an unannotated section's single trailing tag is promoted.
+    expect(html).toContain('<p>Kept as written {[statHighlight]}</p>');
+    expect(html).toContain('<p>Still printed {[statHighlight]}</p>');
+  });
+
+  it('draws an icon with an outline as inline SVG, without Font Awesome', () => {
+    const doc = parseMarkdown('Rated {[fa-solid:star]} and {[fa-solid:heart]}.');
+    const html = markdownDocToPlainHtml(doc, {
+      icons: new Map([['solid:star', { width: 576, height: 512, path: 'M0 0L576 512Z' }]]),
+      externalResources: 'allow',
+    });
+    expect(html).toContain(
+      '<svg class="squisq-icon" viewBox="0 0 576 512" width="1.125em" height="1em" fill="currentColor" aria-hidden="true" focusable="false" data-icon="fa-solid:star"><path d="M0 0L576 512Z"/></svg>',
+    );
+    expect(html).toContain('.squisq-icon {');
+    // An icon with no outline keeps its Font Awesome markup and stylesheet.
+    expect(html).toContain('<i class="fa-solid fa-heart"');
+    expect(html).toContain('font-awesome');
+
+    const allSvg = markdownDocToPlainHtml(parseMarkdown('Rated {[fa-solid:star]}.'), {
+      icons: new Map([['solid:star', { width: 576, height: 512, path: 'M0 0Z' }]]),
+      externalResources: 'allow',
+    });
+    expect(allSvg).not.toContain('font-awesome');
+  });
+
   it('rewrites raw HTML <img src> through the images map (resize round-trip)', () => {
     // The WYSIWYG editor serializes resized images as raw HTML because
     // markdown shorthand has no width syntax. The renderer must walk

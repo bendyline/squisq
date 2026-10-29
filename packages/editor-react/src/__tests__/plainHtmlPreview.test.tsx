@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import { resolveTheme } from '@bendyline/squisq/schemas';
+import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { PlainHtmlPreview } from '../PlainHtmlPreview';
 
 function getIframeSrcDoc(): string {
@@ -193,6 +194,35 @@ describe('PlainHtmlPreview', () => {
     );
     await waitFor(() => {
       expect(getIframeSrcDoc()).toContain('src="blob:r/resized.png"');
+    });
+  });
+
+  it('shows what the export will: icons as SVG, block tags left out', async () => {
+    render(
+      <PlainHtmlPreview
+        markdown={'## Notes\n\nRated {[fa-solid:star]} by readers {[statHighlight]}'}
+      />,
+    );
+    await waitFor(() => expect(getIframeSrcDoc()).toContain('<svg class="squisq-icon"'), {
+      timeout: 10_000,
+    });
+    expect(getIframeSrcDoc()).not.toContain('{[');
+  });
+
+  it("fills a data table from the workspace's data file", async () => {
+    const container = new MemoryContentContainer();
+    await container.writeFile(
+      'data/q3.csv',
+      Uint8Array.from('Region,Revenue\nNorth,120\n', (c) => c.charCodeAt(0)),
+    );
+    render(
+      <PlainHtmlPreview
+        markdown={'## Q3 {[dataTable src=data/q3.csv]}\n\n[q3.csv](data/q3.csv)'}
+        container={container}
+      />,
+    );
+    await waitFor(() => expect(getIframeSrcDoc()).toContain('<td>North</td><td>120</td>'), {
+      timeout: 10_000,
     });
   });
 });

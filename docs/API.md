@@ -2998,6 +2998,34 @@ function markdownDocsToPlainHtmlBundle(options: PlainHtmlBundleOptions): Promise
 function markdownDocsToHtmlBundle(options: HtmlBundleOptions): Promise<Blob>; // player-embedded multi-doc bundle
 function collectLinkRefs(doc: MarkdownDocument): Set<string>;
 
+// Settle what a script-free page cannot draw, before rendering it: data references
+// get their first rows, Mermaid / ASCII diagrams / timelines / drawing, layout,
+// and diagram blocks / charts become pictures (file trees stay text), and inline
+// icons become SVG outlines. Render the returned markdownDoc with `images` merged
+// into the renderer's `images` option and `icons` as its `icons` option.
+function prepareMarkdownDocForPlainHtml(
+  doc: MarkdownDocument,
+  options?: PlainHtmlPreparationOptions,
+): Promise<PreparedPlainHtmlDocument>; // { markdownDoc, images: Map<url, data: URL>, icons }
+// Whether the step above would change anything — a live preview renders at once when not.
+function needsPlainHtmlPreparation(
+  doc: MarkdownDocument,
+  options?: { renderDiagram?: DiagramRasterizer; container?: ContentContainer | null },
+): boolean;
+interface PlainHtmlPreparationOptions {
+  renderDiagram?: DiagramRasterizer; // browser: createDiagramPictureRenderer(); without it diagrams stay source
+  container?: ContentContainer | null; // the data sidecars; without it a data reference keeps only its link
+  maxDataRows?: number; // default 100; a block's own previewRows wins
+  dataTableCache?: Map<string, Promise<DataSourceTable>>; // caller-owned memo of data-file reads
+  signal?: AbortSignal;
+  onWarning?: (message: string) => void;
+}
+interface PlainHtmlIcon {
+  width: number; // the outline's box: `0 0 width height`, height drawn at 1em
+  height: number;
+  path: string; // SVG path data
+}
+
 // Page templates: an author's HTML page whose unnamed <slot> receives the body,
 // <slot name="title"> the title, and <slot name="KEY"> values[KEY] as text.
 // Unfilled slots keep their fallback children; <title> slots are matched as
@@ -3033,6 +3061,7 @@ interface PlainHtmlExportOptions {
   themeId?: string;
   themeRegistry?: ThemeRegistry;
   iconsCss?: string; // inline FontAwesome CSS instead of a CDN <link>
+  icons?: ReadonlyMap<string, PlainHtmlIcon>; // `family:name` → outline; drawn as inline SVG, no FA CSS
   htmlPolicy?: HtmlPolicy; // default 'sanitize'
 }
 interface HtmlImportOptions {
