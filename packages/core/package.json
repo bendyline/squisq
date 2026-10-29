@@ -1,6 +1,6 @@
 {
   "name": "@bendyline/squisq",
-  "version": "2.13.6",
+  "version": "2.13.7",
   "description": "Headless utilities for doc/block rendering, spatial math, Markdown, and storage",
   "license": "MIT",
   "author": "Bendyline",
@@ -154,7 +154,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bendyline/squisq-graph": "2.13.0",
+    "@bendyline/squisq-graph": "2.13.1",
     "genson-js": "0.0.8",
     "hast-util-from-html": "2.0.3",
     "localforage": "1.10.0",
