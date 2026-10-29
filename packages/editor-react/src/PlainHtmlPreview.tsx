@@ -41,7 +41,7 @@ import {
 import type { MediaProvider, Theme } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { DiagramRasterizer } from '@bendyline/squisq-formats/diagrams';
-import type { PlainHtmlIcon } from '@bendyline/squisq-formats/html';
+import type { PlainHtmlIcon, PlainHtmlIconOutliner } from '@bendyline/squisq-formats/html';
 import { sanitizedSvgImageUrl, type CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 import { collectInlineFontAwesomeCss } from './utils/collectInlineFontAwesomeCss';
@@ -65,22 +65,28 @@ function loadRenderFn(): Promise<RenderFn> {
 
 type HtmlModule = typeof import('@bendyline/squisq-formats/html');
 
-/** The export's preparation step, with a picture renderer that remembers what it drew. */
+/**
+ * The export's preparation step, with a picture renderer that remembers what
+ * it drew and the icon outliner.
+ */
 interface Preparation {
   needs: HtmlModule['needsPlainHtmlPreparation'];
   prepare: HtmlModule['prepareMarkdownDocForPlainHtml'];
   renderDiagram: DiagramRasterizer;
+  outlineIcons: PlainHtmlIconOutliner;
 }
 let preparationPromise: Promise<Preparation> | null = null;
 function loadPreparation(): Promise<Preparation> {
   preparationPromise ??= Promise.all([
     import('@bendyline/squisq-formats/html'),
+    import('@bendyline/squisq-formats/html-icons'),
     import('@bendyline/squisq-formats/diagrams'),
     import('@bendyline/squisq-react/diagram-pictures'),
-  ]).then(([html, diagrams, pictures]) => ({
+  ]).then(([html, icons, diagrams, pictures]) => ({
     needs: html.needsPlainHtmlPreparation,
     prepare: html.prepareMarkdownDocForPlainHtml,
     renderDiagram: diagrams.cachingDiagramRasterizer(pictures.createDiagramPictureRenderer()),
+    outlineIcons: icons.plainHtmlIcons,
   }));
   return preparationPromise;
 }
@@ -286,7 +292,11 @@ export function PlainHtmlPreview({
   );
   const needsPreparation = useMemo(
     () =>
-      preparation?.needs(mdDoc, { renderDiagram: preparation.renderDiagram, container }) ?? false,
+      preparation?.needs(mdDoc, {
+        renderDiagram: preparation.renderDiagram,
+        outlineIcons: preparation.outlineIcons,
+        container,
+      }) ?? false,
     [preparation, mdDoc, container],
   );
   const [prepared, setPrepared] = useState<PreparedView | null>(null);
@@ -298,6 +308,7 @@ export function PlainHtmlPreview({
       preparation
         .prepare(mdDoc, {
           renderDiagram: preparation.renderDiagram,
+          outlineIcons: preparation.outlineIcons,
           container,
           dataTableCache,
         })

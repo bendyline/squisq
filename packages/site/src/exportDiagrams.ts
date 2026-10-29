@@ -68,19 +68,23 @@ export async function withDataPreviews(
 
 /**
  * A document ready for a plain (script-free) HTML page: data references
- * filled from the workspace's sidecars, and diagrams and charts swapped for
- * pictures, returned as `data:` URLs to merge into the page's `images`.
+ * filled from the workspace's sidecars, diagrams and charts swapped for
+ * pictures, returned as `data:` URLs to merge into the page's `images`, and
+ * inline icons outlined for the page's `icons`.
  */
 export async function prepareForPlainHtml(
   markdownDoc: MarkdownDocument,
   container: ContentContainer | null | undefined,
 ): Promise<PreparedPlainHtmlDocument> {
-  const [{ prepareMarkdownDocForPlainHtml }, { createDiagramPictureRenderer }] = await Promise.all([
-    import('@bendyline/squisq-formats/html'),
-    import('@bendyline/squisq-react/diagram-pictures'),
-  ]);
+  const [{ prepareMarkdownDocForPlainHtml }, { plainHtmlIcons }, { createDiagramPictureRenderer }] =
+    await Promise.all([
+      import('@bendyline/squisq-formats/html'),
+      import('@bendyline/squisq-formats/html-icons'),
+      import('@bendyline/squisq-react/diagram-pictures'),
+    ]);
   return prepareMarkdownDocForPlainHtml(markdownDoc, {
     renderDiagram: createDiagramPictureRenderer(),
+    outlineIcons: plainHtmlIcons,
     container,
     onWarning: (message) => console.warn(message),
   });

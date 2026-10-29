@@ -10,42 +10,13 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { loadPublicPackages } from './_packages';
+import { reachableFiles } from './_reachable';
 
 const formats = loadPublicPackages().find((p) => p.name === '@bendyline/squisq-formats')!;
-
-const SPECIFIER_RE =
-  /(?:^|[\s;])(?:import|export)\b[^'"]*?\bfrom\s*['"]([^'"]+)['"]|(?:^|[\s;])import\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/gm;
-
-function specifiersOf(source: string): string[] {
-  const found: string[] = [];
-  for (const match of source.matchAll(SPECIFIER_RE)) {
-    const specifier = match[1] ?? match[2] ?? match[3];
-    if (specifier) found.push(specifier);
-  }
-  return found;
-}
-
-function reachableFiles(entry: string): { files: string[]; bare: string[] } {
-  const files: string[] = [];
-  const bare: string[] = [];
-  const queue = [entry];
-  const seen = new Set<string>();
-  while (queue.length > 0) {
-    const file = queue.shift()!;
-    if (seen.has(file)) continue;
-    seen.add(file);
-    files.push(file);
-    for (const specifier of specifiersOf(readFileSync(file, 'utf8'))) {
-      if (specifier.startsWith('.')) queue.push(resolve(dirname(file), specifier));
-      else bare.push(`${relative(formats.dir, file)} → ${specifier}`);
-    }
-  }
-  return { files, bare };
-}
 
 describe('@bendyline/squisq-formats/outside-in-layout', () => {
   const exportsEntry = formats.pkg.exports?.['./outside-in-layout'];
@@ -63,7 +34,7 @@ describe('@bendyline/squisq-formats/outside-in-layout', () => {
   it('reaches no package import and no registry code', () => {
     const entry = resolve(formats.dir, runtime!);
     expect(existsSync(entry), `${runtime} missing — run \`npm run build\` first.`).toBe(true);
-    const { files, bare } = reachableFiles(entry);
+    const { files, bare } = reachableFiles(entry, formats.dir);
     // The walk must actually reach the implementation (proves it follows
     // tsup's shared-chunk re-exports rather than stopping at the stub).
     expect(

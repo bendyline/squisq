@@ -83,6 +83,11 @@
       "import": "./dist/html/index.js",
       "default": "./dist/html/index.js"
     },
+    "./html-icons": {
+      "types": "./dist/html/icons.d.ts",
+      "import": "./dist/html/icons.js",
+      "default": "./dist/html/icons.js"
+    },
     "./epub": {
       "types": "./dist/epub/index.d.ts",
       "import": "./dist/epub/index.js",

@@ -256,7 +256,11 @@ export { inferMimeType, arrayBufferToBase64DataUrl, extractFilename } from './im
 export { markdownDocToPlainHtml, markdownDocToPlainHtmlParts } from './plainHtml.js';
 export type { PlainHtmlExportOptions, PlainHtmlIcon, PlainHtmlParts } from './plainHtml.js';
 export { needsPlainHtmlPreparation, prepareMarkdownDocForPlainHtml } from './plainHtmlPrepare.js';
-export type { PlainHtmlPreparationOptions, PreparedPlainHtmlDocument } from './plainHtmlPrepare.js';
+export type {
+  PlainHtmlIconOutliner,
+  PlainHtmlPreparationOptions,
+  PreparedPlainHtmlDocument,
+} from './plainHtmlPrepare.js';
 export {
   HTML_PAGE_TEMPLATE_CONTENT_END,
   HTML_PAGE_TEMPLATE_CONTENT_START,
