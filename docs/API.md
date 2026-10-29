@@ -3001,8 +3001,9 @@ function collectLinkRefs(doc: MarkdownDocument): Set<string>;
 // Settle what a script-free page cannot draw, before rendering it: data references
 // get their first rows, Mermaid / ASCII diagrams / timelines / drawing, layout,
 // and diagram blocks / charts become pictures (file trees stay text), and inline
-// icons become SVG outlines. Render the returned markdownDoc with `images` merged
-// into the renderer's `images` option and `icons` as its `icons` option.
+// icons become SVG outlines (given `outlineIcons`). Render the returned markdownDoc
+// with `images` merged into the renderer's `images` option and `icons` as its
+// `icons` option.
 function prepareMarkdownDocForPlainHtml(
   doc: MarkdownDocument,
   options?: PlainHtmlPreparationOptions,
@@ -3010,10 +3011,15 @@ function prepareMarkdownDocForPlainHtml(
 // Whether the step above would change anything — a live preview renders at once when not.
 function needsPlainHtmlPreparation(
   doc: MarkdownDocument,
-  options?: { renderDiagram?: DiagramRasterizer; container?: ContentContainer | null },
+  options?: {
+    renderDiagram?: DiagramRasterizer;
+    outlineIcons?: PlainHtmlIconOutliner;
+    container?: ContentContainer | null;
+  },
 ): boolean;
 interface PlainHtmlPreparationOptions {
   renderDiagram?: DiagramRasterizer; // browser: createDiagramPictureRenderer(); without it diagrams stay source
+  outlineIcons?: PlainHtmlIconOutliner; // plainHtmlIcons from /html-icons; without it icons keep Font Awesome markup
   container?: ContentContainer | null; // the data sidecars; without it a data reference keeps only its link
   maxDataRows?: number; // default 100; a block's own previewRows wins
   dataTableCache?: Map<string, Promise<DataSourceTable>>; // caller-owned memo of data-file reads
@@ -3025,6 +3031,12 @@ interface PlainHtmlIcon {
   height: number;
   path: string; // SVG path data
 }
+type PlainHtmlIconOutliner = (doc: MarkdownDocument) => Promise<Map<string, PlainHtmlIcon>>;
+
+// @bendyline/squisq-formats/html-icons — the icon outliner, on its own subpath so a
+// bundle of /html never carries fontkit and the Font Awesome faces (~2.5 MB).
+// Outlines each icon `doc` uses, keyed `family:name`; needs no browser.
+function plainHtmlIcons(doc: MarkdownDocument): Promise<Map<string, PlainHtmlIcon>>;
 
 // Page templates: an author's HTML page whose unnamed <slot> receives the body,
 // <slot name="title"> the title, and <slot name="KEY"> values[KEY] as text.

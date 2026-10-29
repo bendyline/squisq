@@ -64,10 +64,12 @@ import {
   markdownDocToPlainHtml,
   prepareMarkdownDocForPlainHtml,
 } from '@bendyline/squisq-formats/html';
+import { plainHtmlIcons } from '@bendyline/squisq-formats/html-icons';
 import { createDiagramPictureRenderer } from '@bendyline/squisq-react/diagram-pictures';
 
 const prepared = await prepareMarkdownDocForPlainHtml(doc, {
   renderDiagram: createDiagramPictureRenderer(),
+  outlineIcons: plainHtmlIcons,
   container, // the ContentContainer holding the document's data files
 });
 const html = markdownDocToPlainHtml(prepared.markdownDoc, {
@@ -94,11 +96,17 @@ Drawing needs a browser, so `renderDiagram` is the host's to supply: without it 
 their source and charts as their table. A diagram the renderer can't draw also stays as source, and
 `onWarning` hears about it.
 
+`outlineIcons` is the host's to supply too, though it needs no browser: `plainHtmlIcons` reads the
+Font Awesome fonts, about 2.5 MB with their parser, so it lives on its own subpath and a bundle that
+only renders pages never carries it. Without it, icons keep their Font Awesome markup and the page
+needs the Font Awesome stylesheet (`iconsCss`, or `externalResources: 'allow'`).
+
 A host that prepares the same document over and over, such as a live preview, can wrap its renderer
 in `cachingDiagramRasterizer` from `@bendyline/squisq-formats/diagrams`, so each pass redraws only
 the diagrams that changed, and pass a `dataTableCache` map so data files are read once. Before
-starting the asynchronous step, `needsPlainHtmlPreparation(doc, { renderDiagram, container })`
-tells it whether there is anything to prepare, so a document with nothing to do renders at once.
+starting the asynchronous step,
+`needsPlainHtmlPreparation(doc, { renderDiagram, outlineIcons, container })` tells it whether there
+is anything to prepare, so a document with nothing to do renders at once.
 The editor's Document and Print previews work this way.
 
 ## Place pages in your own template
