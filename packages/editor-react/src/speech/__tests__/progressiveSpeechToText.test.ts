@@ -190,8 +190,9 @@ describe('ProgressiveSpeechToText take cutting', () => {
 
 describe('ProgressiveSpeechToText transcription queue', () => {
   it('transcribes takes serially, in capture order, priming each with the prior text', async () => {
-    const { engine, calls, replies, transcripts, pending } = make();
+    const { engine, monitor, calls, replies, transcripts, pending } = make();
     engine.start();
+    monitor.emit(true);
     await vi.advanceTimersByTimeAsync(DEFAULT_SEGMENT_MS);
     await flush();
     await vi.advanceTimersByTimeAsync(DEFAULT_SEGMENT_MS);
@@ -212,6 +213,45 @@ describe('ProgressiveSpeechToText transcription queue', () => {
     await flush();
     expect(transcripts).toEqual(['Hello there.', 'How are you?']);
     expect(last(pending)).toBe(0);
+    engine.cancel();
+  });
+
+  it('sends a take the gate heard no speech in without the prompt', async () => {
+    const { engine, monitor, calls, replies, transcripts } = make();
+    engine.start();
+    monitor.emit(true);
+    await vi.advanceTimersByTimeAsync(1_000);
+    monitor.emit(false); // the pause flushes the phrase
+    await flush();
+    replies[0].resolve('Test, test.');
+    await flush();
+
+    // Room noise only: transcribed, but not primed into echoing the last phrase.
+    await vi.advanceTimersByTimeAsync(DEFAULT_SEGMENT_MS);
+    await flush();
+    expect(calls[1].prompt).toBe('');
+    replies[1].resolve('');
+    await flush();
+
+    // Speech resumes and the prompt with it.
+    monitor.emit(true);
+    await vi.advanceTimersByTimeAsync(DEFAULT_SEGMENT_MS);
+    await flush();
+    expect(calls[2].prompt).toBe('Test, test.');
+    expect(transcripts).toEqual(['Test, test.']);
+    engine.cancel();
+  });
+
+  it('primes every take when no activity gate is running', async () => {
+    const { engine, calls, replies } = make({ activityMonitor: null });
+    engine.start();
+    await vi.advanceTimersByTimeAsync(DEFAULT_SEGMENT_MS);
+    await flush();
+    replies[0].resolve('Hello there.');
+    await flush();
+    await vi.advanceTimersByTimeAsync(DEFAULT_SEGMENT_MS);
+    await flush();
+    expect(calls[1].prompt).toBe('Hello there.');
     engine.cancel();
   });
 

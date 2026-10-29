@@ -120,7 +120,10 @@ the microphone keeps capturing the next take.
 
 `prompt` is the session's recent recognized text — a word-aligned tail of at
 most 1,000 characters — for engines that accept a priming prompt (Whisper's
-`prompt`). It is absent on the first take. `language` is reserved; the editor
+`prompt`). It is absent on the first take, and on any take the microphone's
+activity gate heard no speech in: given a prompt and no words, Whisper
+continues the prompt, so room noise would come back as an echo of the last
+phrase. Those takes are still transcribed. `language` is reserved; the editor
 does not currently set it.
 
 Return `{ text: '' }` for silence. Whisper's `[BLANK_AUDIO]` sentinel is also

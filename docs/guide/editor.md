@@ -204,8 +204,9 @@ Pictures, recordings, and data files you add are stored _with_ the document. The
 toolbar shows and hides the **Attachments** panel, with a count of the files.
 
 The panel lists each file with a thumbnail or icon, its size, a download button, and an
-**Unused** badge if nothing in the document refers to it. Use **+ Upload** to add files, or
-**Record** to make a recording. Drag a file from the panel into the text to insert it.
+**Unused** badge if nothing in the document refers to it. Click a picture to see it full size, or
+a video or audio file to play it. Use **+ Upload** to add files, or **Record** to make a
+recording. Drag a file from the panel into the text to insert it.
 Right-click a file to remove it — which also removes it from the document.
 
 Dropping files onto the editor:

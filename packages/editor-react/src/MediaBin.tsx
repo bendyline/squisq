@@ -11,6 +11,7 @@ import type { MediaProvider, MediaEntry } from '@bendyline/squisq/schemas';
 import { isSvgImageSource } from '@bendyline/squisq/markdown';
 import { sanitizedSvgImageUrl } from '@bendyline/squisq-react';
 import { ownsContextMenuProps } from './EditorContextMenu';
+import { MediaPreviewDialog } from './MediaPreviewDialog';
 import {
   SQUISQ_MEDIA_MIME,
   buildSquisqMediaReference,
@@ -191,6 +192,11 @@ export function MediaBin({
     entry: MediaEntry;
     x: number;
     y: number;
+  } | null>(null);
+  const [preview, setPreview] = useState<{
+    entry: MediaEntry;
+    src: string | null;
+    failed: boolean;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -421,6 +427,34 @@ export function MediaBin({
     setContextMenu({ entry, x, y });
   }, []);
 
+  // A preview belongs to the provider that resolved its URL.
+  useEffect(() => {
+    setPreview(null);
+  }, [mediaProvider]);
+
+  const openPreview = useCallback(
+    async (entry: MediaEntry) => {
+      if (!mediaProvider || squisqMediaKind(entry.mimeType) === 'file') return;
+      const thumb = thumbUrls[entry.name];
+      setPreview({ entry, src: thumb ?? null, failed: false });
+      if (thumb !== undefined) return;
+      let src: string | null = null;
+      try {
+        src = isImageMime(entry.mimeType)
+          ? await resolveThumbnailUrl(mediaProvider, entry.name)
+          : await mediaProvider.resolveUrl(entry.name);
+      } catch {
+        // shown as an unpreviewable file
+      }
+      setPreview((current) =>
+        current?.entry.name === entry.name ? { entry, src, failed: src === null } : current,
+      );
+    },
+    [mediaProvider, thumbUrls],
+  );
+
+  const closePreview = useCallback(() => setPreview(null), []);
+
   const removeLabel = contextMenu
     ? isImageMime(contextMenu.entry.mimeType)
       ? 'Remove image'
@@ -437,205 +471,235 @@ export function MediaBin({
 
   const handleItemKeyDown = useCallback(
     (entry: MediaEntry, event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        // Enter on the row's own Download button belongs to that button.
+        if (event.target !== event.currentTarget) return;
+        if (squisqMediaKind(entry.mimeType) === 'file') return;
+        event.preventDefault();
+        void openPreview(entry);
+        return;
+      }
       if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
       event.preventDefault();
       const rect = event.currentTarget.getBoundingClientRect();
       openContextMenu(entry, rect.left + 16, rect.top + 16);
     },
-    [openContextMenu],
+    [openContextMenu, openPreview],
   );
 
-  return (
-    <div
-      className={[
-        'squisq-media-bin',
-        isDark ? 'squisq-media-bin--dark' : '',
-        isDropActive ? 'squisq-media-bin--drop-active' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      aria-busy={loading}
-      {...ownsContextMenuProps}
-    >
-      {/* Header */}
-      <div className="squisq-media-bin-header">
-        <span className="squisq-media-bin-title">
-          Attachments {entries.length > 0 && `(${entries.length})`}
-        </span>
+  const previewKind = preview ? squisqMediaKind(preview.entry.mimeType) : 'file';
 
-        <div className="squisq-media-bin-actions">
-          {onRecord && (
+  return (
+    <>
+      <div
+        className={[
+          'squisq-media-bin',
+          isDark ? 'squisq-media-bin--dark' : '',
+          isDropActive ? 'squisq-media-bin--drop-active' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        aria-busy={loading}
+        {...ownsContextMenuProps}
+      >
+        {/* Header */}
+        <div className="squisq-media-bin-header">
+          <span className="squisq-media-bin-title">
+            Attachments {entries.length > 0 && `(${entries.length})`}
+          </span>
+
+          <div className="squisq-media-bin-actions">
+            {onRecord && (
+              <button
+                type="button"
+                className="squisq-media-bin-record"
+                onClick={onRecord}
+                disabled={!mediaProvider}
+                title={
+                  mediaProvider
+                    ? 'Record media'
+                    : 'Load a content zip or select a storage slot first'
+                }
+                aria-label="Record media"
+                aria-haspopup="dialog"
+                aria-expanded={isRecorderOpen}
+              >
+                <span className="squisq-media-bin-action-icon" aria-hidden="true">
+                  <span className="squisq-media-bin-record-dot" />
+                </span>
+                <span>Record</span>
+              </button>
+            )}
+
             <button
               type="button"
-              className="squisq-media-bin-record"
-              onClick={onRecord}
-              disabled={!mediaProvider}
+              className="squisq-media-bin-upload"
+              onClick={handleUploadClick}
+              disabled={!mediaProvider || loading}
               title={
-                mediaProvider ? 'Record media' : 'Load a content zip or select a storage slot first'
+                mediaProvider ? 'Upload files' : 'Load a content zip or select a storage slot first'
               }
-              aria-label="Record media"
-              aria-haspopup="dialog"
-              aria-expanded={isRecorderOpen}
             >
-              <span className="squisq-media-bin-action-icon" aria-hidden="true">
-                <span className="squisq-media-bin-record-dot" />
-              </span>
-              <span>Record</span>
+              <span className="squisq-media-bin-action-icon">+</span>
+              <span>Upload</span>
             </button>
+          </div>
+        </div>
+
+        {/* File list */}
+        <div className="squisq-media-bin-list" ref={listRef}>
+          {!mediaProvider && (
+            <div className="squisq-media-bin-empty">
+              No media context.
+              <br />
+              Load a content zip or select a storage slot.
+            </div>
           )}
 
-          <button
-            type="button"
-            className="squisq-media-bin-upload"
-            onClick={handleUploadClick}
-            disabled={!mediaProvider || loading}
-            title={
-              mediaProvider ? 'Upload files' : 'Load a content zip or select a storage slot first'
-            }
-          >
-            <span className="squisq-media-bin-action-icon">+</span>
-            <span>Upload</span>
-          </button>
-        </div>
-      </div>
+          {mediaProvider && entries.length === 0 && !loading && (
+            <div className="squisq-media-bin-empty">No files yet.</div>
+          )}
 
-      {/* File list */}
-      <div className="squisq-media-bin-list" ref={listRef}>
-        {!mediaProvider && (
-          <div className="squisq-media-bin-empty">
-            No media context.
-            <br />
-            Load a content zip or select a storage slot.
+          {entries.map((entry) => {
+            const thumb = thumbUrls[entry.name];
+            const basename = basenameForPath(entry.name);
+            const altText = basename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+            const isUnused = !!usedMediaPaths && !usedMediaPaths.has(entry.name);
+            const isPreviewable = squisqMediaKind(entry.mimeType) !== 'file';
+
+            const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+              const payload = {
+                name: entry.name,
+                mimeType: entry.mimeType,
+                alt: altText,
+              };
+              e.dataTransfer.setData(SQUISQ_MEDIA_MIME, JSON.stringify(payload));
+              e.dataTransfer.setData('text/plain', buildSquisqMediaReference(payload));
+              e.dataTransfer.effectAllowed = 'copy';
+            };
+
+            return (
+              <div
+                key={entry.name}
+                data-media-path={entry.name}
+                className={[
+                  'squisq-media-bin-item',
+                  isPreviewable ? 'squisq-media-bin-item--previewable' : '',
+                  entry.name === highlightPath ? 'squisq-media-bin-item--highlight' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                title={`${entry.name}\n${entry.mimeType}\n${formatSize(entry.size)}`}
+                draggable
+                tabIndex={0}
+                onClick={isPreviewable ? () => void openPreview(entry) : undefined}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  openContextMenu(entry, e.clientX, e.clientY);
+                }}
+                onDragStart={handleDragStart}
+                onKeyDown={(e) => handleItemKeyDown(entry, e)}
+              >
+                {/* Thumbnail or icon */}
+                {thumb ? (
+                  <img
+                    src={thumb}
+                    alt={basename}
+                    className="squisq-media-bin-thumb"
+                    draggable={false}
+                  />
+                ) : (
+                  <span className="squisq-media-bin-icon">{iconForMime(entry.mimeType)}</span>
+                )}
+
+                {/* Name + size */}
+                <div className="squisq-media-bin-meta">
+                  <div className="squisq-media-bin-name">{basename}</div>
+                  <div className="squisq-media-bin-detail-row">
+                    <span className="squisq-media-bin-size">{formatSize(entry.size)}</span>
+                    {isUnused && (
+                      <span className="squisq-media-bin-unused-badge" title="Not used in document">
+                        Unused
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {allowBinaryDownloads && (
+                  <button
+                    type="button"
+                    className="squisq-media-bin-download"
+                    title={`Download ${basename}`}
+                    aria-label={`Download ${basename}`}
+                    disabled={!mediaProvider || downloadingPath !== null}
+                    draggable={false}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleDownloadEntry(entry);
+                    }}
+                    onDragStart={(event) => event.preventDefault()}
+                  >
+                    <span aria-hidden="true">{downloadingPath === entry.name ? '…' : '↓'}</span>
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {isDropActive && (
+          <div className="squisq-media-bin-drop-target" aria-hidden="true">
+            <span className="squisq-media-bin-drop-target-icon">+</span>
+            <strong>Drop media here</strong>
+            <span>Attach to this document</span>
           </div>
         )}
 
-        {mediaProvider && entries.length === 0 && !loading && (
-          <div className="squisq-media-bin-empty">No files yet.</div>
+        {contextMenu && (
+          <div
+            ref={contextMenuRef}
+            className="squisq-media-bin-context-menu"
+            role="menu"
+            aria-label={`${contextMenu.entry.name} actions`}
+            style={contextMenuStyle}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="squisq-media-bin-context-menu-item squisq-media-bin-context-menu-item--danger"
+              onClick={() => handleRemoveEntry(contextMenu.entry)}
+              disabled={!mediaProvider || loading}
+            >
+              {removeLabel}
+            </button>
+          </div>
         )}
 
-        {entries.map((entry) => {
-          const thumb = thumbUrls[entry.name];
-          const basename = basenameForPath(entry.name);
-          const altText = basename.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
-          const isUnused = !!usedMediaPaths && !usedMediaPaths.has(entry.name);
-
-          const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
-            const payload = {
-              name: entry.name,
-              mimeType: entry.mimeType,
-              alt: altText,
-            };
-            e.dataTransfer.setData(SQUISQ_MEDIA_MIME, JSON.stringify(payload));
-            e.dataTransfer.setData('text/plain', buildSquisqMediaReference(payload));
-            e.dataTransfer.effectAllowed = 'copy';
-          };
-
-          return (
-            <div
-              key={entry.name}
-              data-media-path={entry.name}
-              className={
-                entry.name === highlightPath
-                  ? 'squisq-media-bin-item squisq-media-bin-item--highlight'
-                  : 'squisq-media-bin-item'
-              }
-              title={`${entry.name}\n${entry.mimeType}\n${formatSize(entry.size)}`}
-              draggable
-              tabIndex={0}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                openContextMenu(entry, e.clientX, e.clientY);
-              }}
-              onDragStart={handleDragStart}
-              onKeyDown={(e) => handleItemKeyDown(entry, e)}
-            >
-              {/* Thumbnail or icon */}
-              {thumb ? (
-                <img
-                  src={thumb}
-                  alt={basename}
-                  className="squisq-media-bin-thumb"
-                  draggable={false}
-                />
-              ) : (
-                <span className="squisq-media-bin-icon">{iconForMime(entry.mimeType)}</span>
-              )}
-
-              {/* Name + size */}
-              <div className="squisq-media-bin-meta">
-                <div className="squisq-media-bin-name">{basename}</div>
-                <div className="squisq-media-bin-detail-row">
-                  <span className="squisq-media-bin-size">{formatSize(entry.size)}</span>
-                  {isUnused && (
-                    <span className="squisq-media-bin-unused-badge" title="Not used in document">
-                      Unused
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {allowBinaryDownloads && (
-                <button
-                  type="button"
-                  className="squisq-media-bin-download"
-                  title={`Download ${basename}`}
-                  aria-label={`Download ${basename}`}
-                  disabled={!mediaProvider || downloadingPath !== null}
-                  draggable={false}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void handleDownloadEntry(entry);
-                  }}
-                  onDragStart={(event) => event.preventDefault()}
-                >
-                  <span aria-hidden="true">{downloadingPath === entry.name ? '…' : '↓'}</span>
-                </button>
-              )}
-            </div>
-          );
-        })}
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          style={{ display: 'none' }}
+          onChange={handleFileChange}
+        />
       </div>
 
-      {isDropActive && (
-        <div className="squisq-media-bin-drop-target" aria-hidden="true">
-          <span className="squisq-media-bin-drop-target-icon">+</span>
-          <strong>Drop media here</strong>
-          <span>Attach to this document</span>
-        </div>
+      {preview && previewKind !== 'file' && (
+        <MediaPreviewDialog
+          kind={previewKind}
+          name={basenameForPath(preview.entry.name)}
+          detail={`${formatSize(preview.entry.size)} · ${preview.entry.mimeType}`}
+          src={preview.src}
+          failed={preview.failed}
+          isDark={isDark}
+          onClose={closePreview}
+        />
       )}
-
-      {contextMenu && (
-        <div
-          ref={contextMenuRef}
-          className="squisq-media-bin-context-menu"
-          role="menu"
-          aria-label={`${contextMenu.entry.name} actions`}
-          style={contextMenuStyle}
-        >
-          <button
-            type="button"
-            role="menuitem"
-            className="squisq-media-bin-context-menu-item squisq-media-bin-context-menu-item--danger"
-            onClick={() => handleRemoveEntry(contextMenu.entry)}
-            disabled={!mediaProvider || loading}
-          >
-            {removeLabel}
-          </button>
-        </div>
-      )}
-
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        style={{ display: 'none' }}
-        onChange={handleFileChange}
-      />
-    </div>
+    </>
   );
 }
