@@ -31,6 +31,7 @@ import { defaultRegistry } from '../registry/registry.js';
 import type { ConversionResult, ConvertOptions, FormatRegistry } from '../registry/types.js';
 import {
   OUTSIDE_IN_FORMAT_IDS,
+  OUTSIDE_IN_OUTPUT_TEMPLATE_KEY,
   resolveOutsideInLayout,
   type OutsideInFormatId,
   type OutsideInLayout,
@@ -40,6 +41,7 @@ import {
 // `/outside-in-layout`); this entry keeps the full contract in one place.
 export {
   OUTSIDE_IN_FORMAT_IDS,
+  OUTSIDE_IN_OUTPUT_TEMPLATE_KEY,
   chooseOutsideInMarkdownPath,
   isOutsideInTargetPath,
   resolveOutsideInLayout,
@@ -51,12 +53,6 @@ const OUTSIDE_IN_VERSION_KEY = 'squisq-outside-in';
 const OUTSIDE_IN_OUTPUT_KEY = 'squisq-output';
 const OUTSIDE_IN_FORMAT_KEY = 'squisq-output-format';
 export const OUTSIDE_IN_UPDATE_FROM_MARKDOWN_KEY = 'squisq-updatefrommarkdown';
-/**
- * Frontmatter naming the page template a rendered output is generated
- * through: a path relative to the companion Markdown, a `/`-prefixed path
- * from the container root, or `none` to opt out of a host default.
- */
-export const OUTSIDE_IN_OUTPUT_TEMPLATE_KEY = 'squisq-output-template';
 
 export interface OutsideInMetadata {
   version: 1;

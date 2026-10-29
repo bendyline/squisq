@@ -85,6 +85,7 @@ describe('@bendyline/squisq-formats/outside-in-layout', () => {
     >;
     expect(Object.keys(mod).sort()).toEqual([
       'OUTSIDE_IN_FORMAT_IDS',
+      'OUTSIDE_IN_OUTPUT_TEMPLATE_KEY',
       'chooseOutsideInMarkdownPath',
       'isOutsideInTargetPath',
       'resolveOutsideInLayout',

@@ -65,6 +65,7 @@ import {
   usePrintMode,
 } from './print/PrintMode';
 import { CustomThemeProvider, useDocCustomThemes } from './customThemes';
+import { PageTemplateContext, type PageTemplateSettings } from './pageTemplates';
 import { MediaBin } from './MediaBin';
 import { RecorderEntry } from './RecorderEntry';
 import { DropZoneOverlay } from './DropZoneOverlay';
@@ -710,6 +711,13 @@ export interface EditorShellProps {
    * `'Default'`.
    */
   defaultThemeLabel?: string;
+  /**
+   * Set when the document renders through a page template the author can
+   * choose (`squisq-output-template`). Document settings then offers a Page
+   * template field listing the host's templates. Keep the value stable
+   * across renders.
+   */
+  pageTemplates?: PageTemplateSettings | null;
 }
 
 /**
@@ -809,6 +817,7 @@ export function EditorShell({
   themeOverride = null,
   defaultThemeId,
   defaultThemeLabel,
+  pageTemplates = null,
 }: EditorShellProps) {
   const effectiveContainer = workspaceContainer ?? null;
 
@@ -892,68 +901,70 @@ export function EditorShell({
       >
         <ProofingRoot>
           <ReviewRoot providers={reviewProviders}>
-            <EditorShellInner
-              ariaLabel={
-                ariaLabel ??
-                (hostMode === 'chat'
-                  ? 'Message'
-                  : fileName
-                    ? `Edit ${fileName}`
-                    : 'Document editor')
-              }
-              basePath={basePath}
-              defaultViewportPreset={defaultViewportPreset}
-              onChange={onChange}
-              onLinkClick={onLinkClick}
-              showCodeCopyButton={showCodeCopyButton}
-              onCopyCode={onCopyCode}
-              className={className}
-              height={height}
-              minHeight={minHeight}
-              maxHeight={maxHeight}
-              placeholder={placeholder}
-              mediaProvider={effectiveMediaProvider ?? null}
-              workspaceContainer={effectiveContainer}
-              filesToggleEnabled={filesToggleEnabled}
-              showFilesWhenNotEmpty={showFilesWhenNotEmpty}
-              showFormattingControls={showFormattingControls}
-              showInsertControls={showInsertControls}
-              allowBinaryDownloads={allowBinaryDownloads}
-              toolbarSlotLeft={toolbarSlotLeft}
-              toolbarSlotAfterActions={toolbarSlotAfterActions}
-              toolbarSlotRight={toolbarSlotRight}
-              summarizationDesigner={summarizationDesigner}
-              statusBarSlotRight={statusBarSlotRight}
-              sidePanelSlot={sidePanelSlot}
-              showPlayTab={showPlayTab}
-              hostMode={hostMode}
-              allowPresentationWindow={allowPresentationWindow}
-              allowPresentationFullscreen={allowPresentationFullscreen}
-              allowPrint={allowPrint}
-              submitOnEnter={submitOnEnter}
-              calcEngineFactory={calcEngineFactory}
-              codeContext={codeContext}
-              fullWidth={fullWidth}
-              uxFont={uxFont}
-              thinMargins={thinMargins}
-              writeCanvasSettings={writeCanvasSettings}
-              readOnly={readOnly}
-              findShortcut={findShortcut}
-              imageSrc={imageSrc}
-              imageAlt={imageAlt}
-              imageMode={imageMode}
-              imageEditorContainer={imageEditorContainer}
-              onImageExport={onImageExport}
-              allowVersioning={allowVersioning}
-              versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-              inlinePreviewWidth={inlinePreviewWidth}
-              outlineWidth={outlineWidth}
-              navigationSheet={navigationSheet}
-              onNavigationSheetChange={onNavigationSheetChange}
-              themeOverride={themeOverride}
-              defaultThemeId={defaultThemeId}
-              defaultThemeLabel={defaultThemeLabel}
-            />
+            <PageTemplateContext.Provider value={pageTemplates}>
+              <EditorShellInner
+                ariaLabel={
+                  ariaLabel ??
+                  (hostMode === 'chat'
+                    ? 'Message'
+                    : fileName
+                      ? `Edit ${fileName}`
+                      : 'Document editor')
+                }
+                basePath={basePath}
+                defaultViewportPreset={defaultViewportPreset}
+                onChange={onChange}
+                onLinkClick={onLinkClick}
+                showCodeCopyButton={showCodeCopyButton}
+                onCopyCode={onCopyCode}
+                className={className}
+                height={height}
+                minHeight={minHeight}
+                maxHeight={maxHeight}
+                placeholder={placeholder}
+                mediaProvider={effectiveMediaProvider ?? null}
+                workspaceContainer={effectiveContainer}
+                filesToggleEnabled={filesToggleEnabled}
+                showFilesWhenNotEmpty={showFilesWhenNotEmpty}
+                showFormattingControls={showFormattingControls}
+                showInsertControls={showInsertControls}
+                allowBinaryDownloads={allowBinaryDownloads}
+                toolbarSlotLeft={toolbarSlotLeft}
+                toolbarSlotAfterActions={toolbarSlotAfterActions}
+                toolbarSlotRight={toolbarSlotRight}
+                summarizationDesigner={summarizationDesigner}
+                statusBarSlotRight={statusBarSlotRight}
+                sidePanelSlot={sidePanelSlot}
+                showPlayTab={showPlayTab}
+                hostMode={hostMode}
+                allowPresentationWindow={allowPresentationWindow}
+                allowPresentationFullscreen={allowPresentationFullscreen}
+                allowPrint={allowPrint}
+                submitOnEnter={submitOnEnter}
+                calcEngineFactory={calcEngineFactory}
+                codeContext={codeContext}
+                fullWidth={fullWidth}
+                uxFont={uxFont}
+                thinMargins={thinMargins}
+                writeCanvasSettings={writeCanvasSettings}
+                readOnly={readOnly}
+                findShortcut={findShortcut}
+                imageSrc={imageSrc}
+                imageAlt={imageAlt}
+                imageMode={imageMode}
+                imageEditorContainer={imageEditorContainer}
+                onImageExport={onImageExport}
+                allowVersioning={allowVersioning}
+                versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+                inlinePreviewWidth={inlinePreviewWidth}
+                outlineWidth={outlineWidth}
+                navigationSheet={navigationSheet}
+                onNavigationSheetChange={onNavigationSheetChange}
+                themeOverride={themeOverride}
+                defaultThemeId={defaultThemeId}
+                defaultThemeLabel={defaultThemeLabel}
+              />
+            </PageTemplateContext.Provider>
           </ReviewRoot>
         </ProofingRoot>
       </EditorProvider>

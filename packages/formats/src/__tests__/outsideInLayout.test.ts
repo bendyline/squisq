@@ -32,11 +32,13 @@ describe('outside-in layout subpath', () => {
     expect(outsideIn.chooseOutsideInMarkdownPath).toBe(layout.chooseOutsideInMarkdownPath);
     expect(outsideIn.isOutsideInTargetPath).toBe(layout.isOutsideInTargetPath);
     expect(outsideIn.OUTSIDE_IN_FORMAT_IDS).toBe(layout.OUTSIDE_IN_FORMAT_IDS);
+    expect(outsideIn.OUTSIDE_IN_OUTPUT_TEMPLATE_KEY).toBe(layout.OUTSIDE_IN_OUTPUT_TEMPLATE_KEY);
   });
 
   it('exposes exactly the synchronous path rules', () => {
     expect(Object.keys(layout).sort()).toEqual([
       'OUTSIDE_IN_FORMAT_IDS',
+      'OUTSIDE_IN_OUTPUT_TEMPLATE_KEY',
       'chooseOutsideInMarkdownPath',
       'isOutsideInTargetPath',
       'resolveOutsideInLayout',

@@ -3291,6 +3291,11 @@ interface EditorShellProps {
   themeOverride?: Theme | null;
   defaultThemeId?: string; // host fallback theme for docs whose frontmatter names none
   defaultThemeLabel?: string; // picker label for that fallback; default 'Default'
+  // Document settings gains a Page template field (squisq-output-template)
+  pageTemplates?: {
+    listTemplates: () => Promise<readonly { value: string; label: string }[]>; // called on open
+    defaultLabel?: string; // e.g. 'Workspace default (_templates/post.html)'
+  } | null;
   uxFont?: string; // font stack for the editor chrome (toolbar/tabs/status bar)
   viewPreferences?: ViewPreferences;
   onViewPreferencesChange?: (prefs: ViewPreferences) => void;

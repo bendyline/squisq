@@ -147,6 +147,7 @@ export { EmojiPicker } from './EmojiPicker.js';
 export type { EmojiPickerProps } from './EmojiPicker.js';
 export { DocumentSettingsDialog } from './DocumentSettingsDialog.js';
 export type { DocumentSettingsDialogProps } from './DocumentSettingsDialog.js';
+export type { PageTemplateChoice, PageTemplateSettings } from './pageTemplates.js';
 export { ThemePicker } from './ThemePicker.js';
 export type { ThemePickerProps } from './ThemePicker.js';
 export { PICKER_CATEGORIES, ALL_PICKER_ENTRIES, searchPickerEntries } from './emojiData.js';
