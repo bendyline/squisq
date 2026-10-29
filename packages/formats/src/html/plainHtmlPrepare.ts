@@ -11,11 +11,20 @@
  * - Mermaid fences, ASCII diagrams and timelines, drawing / layout / diagram
  *   blocks, and charts become pictures, drawn by a host-supplied renderer
  *   (drawing needs a browser) and returned as `data:` URLs;
- * - inline icons become inline SVG outlines, so the page needs no Font
- *   Awesome stylesheet or font.
+ * - inline icons become inline SVG outlines, drawn by a host-supplied
+ *   outliner (`plainHtmlIcons` from `@bendyline/squisq-formats/html-icons`),
+ *   so the page needs no Font Awesome stylesheet or font.
  *
  * File trees stay preformatted text, which a page shows as well as a picture
  * would and keeps selectable; SVG islands the renderer already draws.
+ *
+ * This module is its own entry, `@bendyline/squisq-formats/html-prepare`, and
+ * nothing under `/html` imports it. A bundler that writes one file inlines
+ * every dynamic import it can reach, and filling data tables reaches the XLSX
+ * reader (an XML parser and zip code, ~300 KB) that a host only rendering
+ * plain HTML — say, an editor-extension host — must not carry. Both drawing
+ * steps are the host's to pass in for the same reason: the icon outlines alone
+ * (Font Awesome's faces and their parser) are ~2.5 MB.
  */
 
 import type { MarkdownDocument, MarkdownImage, MarkdownNode } from '@bendyline/squisq/markdown';
@@ -39,6 +48,13 @@ const PAGE_DIAGRAM_KINDS: readonly ExportDiagramKind[] = [
   'chart',
 ];
 
+/**
+ * Outlines the inline icons `doc` uses, keyed `family:name` — the renderer's
+ * `icons` option. `plainHtmlIcons` from `@bendyline/squisq-formats/html-icons`
+ * is one.
+ */
+export type PlainHtmlIconOutliner = (doc: MarkdownDocument) => Promise<Map<string, PlainHtmlIcon>>;
+
 export interface PlainHtmlPreparationOptions {
   /**
    * Draws diagrams and charts as pictures. In a browser, pass
@@ -47,6 +63,12 @@ export interface PlainHtmlPreparationOptions {
    * their source and charts as their table.
    */
   renderDiagram?: DiagramRasterizer;
+  /**
+   * Draws inline icons as SVG outlines. Pass `plainHtmlIcons` from
+   * `@bendyline/squisq-formats/html-icons`; it needs no browser. Without one,
+   * icons keep their Font Awesome markup.
+   */
+  outlineIcons?: PlainHtmlIconOutliner;
   /**
    * The container holding the document's data sidecars. Without one, a data
    * reference keeps only its link.
@@ -84,7 +106,7 @@ export interface PreparedPlainHtmlDocument {
  */
 export function needsPlainHtmlPreparation(
   doc: MarkdownDocument,
-  options: Pick<PlainHtmlPreparationOptions, 'renderDiagram' | 'container'> = {},
+  options: Pick<PlainHtmlPreparationOptions, 'renderDiagram' | 'outlineIcons' | 'container'> = {},
 ): boolean {
   let icons = false;
   let data = false;
@@ -99,7 +121,7 @@ export function needsPlainHtmlPreparation(
     if (Array.isArray(n.children)) n.children.forEach(visit);
   };
   doc.children.forEach(visit);
-  if (icons || (data && options.container)) return true;
+  if ((icons && options.outlineIcons) || (data && options.container)) return true;
   if (!options.renderDiagram) return false;
   // A chart fed by a data file has no table to find until it is filled.
   return findDiagrams(doc).some((diagram) => PAGE_DIAGRAM_KINDS.includes(diagram.kind));
@@ -113,7 +135,7 @@ export async function prepareMarkdownDocForPlainHtml(
   doc: MarkdownDocument,
   options: PlainHtmlPreparationOptions = {},
 ): Promise<PreparedPlainHtmlDocument> {
-  const { renderDiagram, container, signal, onWarning } = options;
+  const { renderDiagram, outlineIcons, container, signal, onWarning } = options;
   let markdownDoc = doc;
   if (container) {
     const { materializeDataReferences, DATA_PREVIEW_ROWS } = await import('../data/materialize.js');
@@ -124,8 +146,7 @@ export async function prepareMarkdownDocForPlainHtml(
   }
   signal?.throwIfAborted();
 
-  const { plainHtmlIcons } = await import('./plainHtmlIcons.js');
-  const icons = await plainHtmlIcons(markdownDoc);
+  const icons = outlineIcons ? await outlineIcons(markdownDoc) : new Map<string, PlainHtmlIcon>();
   const images = new Map<string, string>();
   if (!renderDiagram) return { markdownDoc, images, icons };
 

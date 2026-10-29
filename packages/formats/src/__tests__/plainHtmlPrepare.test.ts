@@ -11,6 +11,7 @@ import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { DiagramPicture, ExportDiagram } from '../diagrams/index';
 import { materializeDataReferences } from '../data/materialize';
 import { markdownDocToPlainHtmlParts } from '../html/plainHtml';
+import { plainHtmlIcons } from '../html/plainHtmlIcons';
 import {
   needsPlainHtmlPreparation,
   prepareMarkdownDocForPlainHtml,
@@ -173,6 +174,7 @@ describe('prepareMarkdownDocForPlainHtml', () => {
   it('outlines inline icons from the bundled Font Awesome faces', async () => {
     const prepared = await prepareMarkdownDocForPlainHtml(
       parseMarkdown('Rated {[fa-solid:star]} by {[fa-brands:github]}.'),
+      { outlineIcons: plainHtmlIcons },
     );
     const star = prepared.icons.get('solid:star');
     // The box Font Awesome's own star.svg uses (viewBox="0 0 576 512"), and
@@ -184,6 +186,16 @@ describe('prepareMarkdownDocForPlainHtml', () => {
     const html = markdownDocToPlainHtmlParts(prepared.markdownDoc, { icons: prepared.icons });
     expect(html.bodyHtml).toContain('<svg class="squisq-icon"');
     expect(html.featureHeadHtml).not.toContain('font-awesome');
+  });
+
+  it('keeps Font Awesome markup for icons without an outliner', async () => {
+    const prepared = await prepareMarkdownDocForPlainHtml(
+      parseMarkdown('Rated {[fa-solid:star]}.'),
+    );
+    expect(prepared.icons.size).toBe(0);
+    const html = markdownDocToPlainHtmlParts(prepared.markdownDoc, { icons: prepared.icons });
+    expect(html.bodyHtml).toContain('<i class="fa-solid fa-star"');
+    expect(html.bodyHtml).not.toContain('<svg class="squisq-icon"');
   });
 });
 
@@ -202,6 +214,8 @@ describe('needsPlainHtmlPreparation', () => {
     expect(needsPlainHtmlPreparation(data)).toBe(false);
     expect(needsPlainHtmlPreparation(data, { container: new MemoryContentContainer() })).toBe(true);
 
-    expect(needsPlainHtmlPreparation(parseMarkdown('A {[fa-solid:star]}.'))).toBe(true);
+    const icon = parseMarkdown('A {[fa-solid:star]}.');
+    expect(needsPlainHtmlPreparation(icon)).toBe(false);
+    expect(needsPlainHtmlPreparation(icon, { outlineIcons: plainHtmlIcons })).toBe(true);
   });
 });

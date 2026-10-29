@@ -255,8 +255,9 @@ export { collectImagePaths, generateExternalHtml } from './htmlTemplate.js';
 export { inferMimeType, arrayBufferToBase64DataUrl, extractFilename } from './imageUtils.js';
 export { markdownDocToPlainHtml, markdownDocToPlainHtmlParts } from './plainHtml.js';
 export type { PlainHtmlExportOptions, PlainHtmlIcon, PlainHtmlParts } from './plainHtml.js';
-export { needsPlainHtmlPreparation, prepareMarkdownDocForPlainHtml } from './plainHtmlPrepare.js';
-export type { PlainHtmlPreparationOptions, PreparedPlainHtmlDocument } from './plainHtmlPrepare.js';
+// The preparation step (`prepareMarkdownDocForPlainHtml`) and the icon
+// outliner are their own entries, `/html-prepare` and `/html-icons`: what they
+// reach (data readers, Font Awesome faces) must stay out of a bundle of `/html`.
 export {
   HTML_PAGE_TEMPLATE_CONTENT_END,
   HTML_PAGE_TEMPLATE_CONTENT_START,

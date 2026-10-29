@@ -337,19 +337,21 @@ Also exported: `createRegistry` / `defaultRegistry` / `defaultFormats`, `BUILTIN
 
 ## Subpath Exports
 
-| Subpath                               | Contents                                                                        |
-| ------------------------------------- | ------------------------------------------------------------------------------- |
-| `@bendyline/squisq-formats/docx`      | DOCX import/export (+ `docxToContainer`)                                        |
-| `@bendyline/squisq-formats/pdf`       | PDF import/export (+ `pdfToContainer`, `configurePdfWorker`)                    |
-| `@bendyline/squisq-formats/html`      | Player HTML export, static plain-HTML export + bundles, HTML import             |
-| `@bendyline/squisq-formats/epub`      | EPUB 3 e-book export (with optional Media Overlays)                             |
-| `@bendyline/squisq-formats/pptx`      | PPTX export + import (text/lists/tables + slide images)                         |
-| `@bendyline/squisq-formats/xlsx`      | XLSX import + tables-only export                                                |
-| `@bendyline/squisq-formats/csv`       | CSV import/export (RFC 4180)                                                    |
-| `@bendyline/squisq-formats/ooxml`     | Shared OOXML infrastructure (package reader/writer, XML utilities, namespaces)  |
-| `@bendyline/squisq-formats/diagrams`  | `rasterizeDiagrams` / `findDiagrams`: diagrams as pictures for document exports |
-| `@bendyline/squisq-formats/container` | `ContentContainer` ↔ ZIP serialization                                          |
-| `@bendyline/squisq-formats/registry`  | Format registry + programmatic `convert()` (also re-exported from the root)     |
+| Subpath                                  | Contents                                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------- |
+| `@bendyline/squisq-formats/docx`         | DOCX import/export (+ `docxToContainer`)                                        |
+| `@bendyline/squisq-formats/pdf`          | PDF import/export (+ `pdfToContainer`, `configurePdfWorker`)                    |
+| `@bendyline/squisq-formats/html`         | Player HTML export, static plain-HTML export + bundles, HTML import             |
+| `@bendyline/squisq-formats/html-prepare` | `prepareMarkdownDocForPlainHtml`: data tables and pictures for plain-HTML pages |
+| `@bendyline/squisq-formats/html-icons`   | `plainHtmlIcons`: inline icons as SVG outlines for plain-HTML pages             |
+| `@bendyline/squisq-formats/epub`         | EPUB 3 e-book export (with optional Media Overlays)                             |
+| `@bendyline/squisq-formats/pptx`         | PPTX export + import (text/lists/tables + slide images)                         |
+| `@bendyline/squisq-formats/xlsx`         | XLSX import + tables-only export                                                |
+| `@bendyline/squisq-formats/csv`          | CSV import/export (RFC 4180)                                                    |
+| `@bendyline/squisq-formats/ooxml`        | Shared OOXML infrastructure (package reader/writer, XML utilities, namespaces)  |
+| `@bendyline/squisq-formats/diagrams`     | `rasterizeDiagrams` / `findDiagrams`: diagrams as pictures for document exports |
+| `@bendyline/squisq-formats/container`    | `ContentContainer` ↔ ZIP serialization                                          |
+| `@bendyline/squisq-formats/registry`     | Format registry + programmatic `convert()` (also re-exported from the root)     |
 
 The package root re-exports the common converters; `./container`, the plain-HTML/bundle functions, `docxToContainer`, `pdfToContainer`, `PdfPageSize`, and the image utilities are subpath-only.
 
