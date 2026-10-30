@@ -21,13 +21,15 @@ import {
 import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
-function bodyNodes(context: TemplateContext, omitPictures: boolean): MarkdownBlockNode[] {
+function bodyNodes(context: TemplateContext): MarkdownBlockNode[] {
   if (context.block?.summaryMode === 'headings-and-features') return [];
   return (context.block?.contents ?? []).filter(
-    // Mermaid source and hosted-video links are already materialized as
-    // visual layers (a diagram, a player). Repeating them as prose makes the
-    // loss-averse default noisy without preserving any additional meaning.
-    (node) => !isMaterializedMediaNode(node) && !(omitPictures && isPictureParagraph(node)),
+    // Mermaid source, hosted-video links and picture-only paragraphs are
+    // already materialized as visual layers (a diagram, a player, the picture
+    // itself). Repeating them as prose makes the loss-averse default noisy
+    // without preserving any additional meaning — a pasted picture's alt text
+    // is just its generated file name.
+    (node) => !isMaterializedMediaNode(node) && !isPictureParagraph(node),
   );
 }
 
@@ -89,23 +91,10 @@ function bodyFontSize(body: string, context: TemplateContext): number {
   return themedFontSize(base, context, false);
 }
 
-export interface ContentBlockOptions {
-  /**
-   * Leave picture-only paragraphs out of the body — for media-led templates,
-   * which show those pictures in their media band. `content` itself keeps
-   * their alt text, the loss-averse default.
-   */
-  omitPictures?: boolean;
-}
-
-export function contentBlock(
-  input: ContentBlockInput,
-  context: TemplateContext,
-  options: ContentBlockOptions = {},
-): Layer[] {
+export function contentBlock(input: ContentBlockInput, context: TemplateContext): Layer[] {
   const { theme } = context;
   const title = input.title ?? context.block?.title ?? '';
-  const markdown = bodyNodes(context, options.omitPictures === true);
+  const markdown = bodyNodes(context);
   const paragraphs = completeBodyParagraphs(markdown);
   const body = paragraphs.map(plainParagraphText).join('\n');
   const builds = planContentBuilds(markdown, input.build ?? context.block?.build);

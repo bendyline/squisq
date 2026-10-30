@@ -83,11 +83,14 @@ describe('topFeature', () => {
     );
     expect(media(layers).map((layer) => layer.type)).toEqual(['image']);
     expect(text(layers, 'body')?.content.html).not.toContain('Harbor sketch');
-    // `content` stays loss-averse and keeps the alt text.
+    // `content` shows the picture beside its body, so it does not caption it
+    // twice either — a pasted picture's alt text is only its file name.
     const content = slideLayers(
-      '## Field notes {[content]}\n\n![Harbor sketch](harbor.png)\n\nNotes from the walk.',
+      '## Field notes {[content]}\n\n![pasted 05fcd684](notes_files/pasted-05fcd684.png)\n\nNotes from the walk.',
     );
-    expect(text(content, 'body')?.content.html).toContain('Harbor sketch');
+    expect(media(content).map((layer) => layer.type)).toEqual(['image']);
+    expect(text(content, 'body')?.content.html).not.toContain('pasted');
+    expect(text(content, 'body')?.content.text).toBe('Notes from the walk.');
   });
 
   it('plays a hosted video in the band', () => {

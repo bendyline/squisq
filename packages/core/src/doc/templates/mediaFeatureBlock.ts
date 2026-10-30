@@ -22,11 +22,11 @@ import type {
 import { contentBlock } from './contentBlock.js';
 
 export function topFeature(input: TopFeatureInput, context: TemplateContext): Layer[] {
-  return contentBlock({ ...input, template: 'content' }, context, { omitPictures: true });
+  return contentBlock({ ...input, template: 'content' }, context);
 }
 
 export function bottomFeature(input: BottomFeatureInput, context: TemplateContext): Layer[] {
-  return contentBlock({ ...input, template: 'content' }, context, { omitPictures: true });
+  return contentBlock({ ...input, template: 'content' }, context);
 }
 
 export function mediaOnly(input: MediaOnlyInput, context: TemplateContext): Layer[] {
