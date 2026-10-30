@@ -30,6 +30,18 @@ const NESTED = [
   '└────────────────┘',
 ].join('\n');
 
+const ROW = [
+  '┌─────┐ ┌───────┐ ┌───────┐ ┌───────┐',
+  '│  A  │ │   B   │ │   C   │ │   D   │',
+  '└─────┘ └───────┘ └───────┘ └───────┘',
+].join('\n');
+
+const TIGHT_ROW = [
+  '┌───────┐ ┌─────────┐ ┌────────────┐',
+  '│ Pages │ │Documents│ │ Slideshows │',
+  '└───────┘ └─────────┘ └────────────┘',
+].join('\n');
+
 function base(): AsciiDiagram {
   return parseAsciiDiagram(TWO_BOX);
 }
@@ -82,6 +94,31 @@ describe('asciiDiagramOps', () => {
   it('renameNodeOp sanitizes and updates the label', () => {
     const next = renameNodeOp(base(), 'alpha', 'Gate │ way');
     expect(next.nodes.find((n) => n.id === 'alpha')?.label).toBe('Gate way');
+  });
+
+  it('renameNodeOp shifts crowded right-hand siblings so the wider box keeps its gap', () => {
+    const d = parseAsciiDiagram(ROW);
+    const next = renameNodeOp(d, 'b', 'Bravo and more');
+    const col = (id: string) => next.nodes.find((n) => n.id === id)?.col;
+    // `Bravo and more` renders 18 wide from col 8 → right edge 25, plus one gap.
+    expect(col('a')).toBe(0);
+    expect(col('c')).toBe(27);
+    expect(col('d')).toBe(d.nodes[3].col + (27 - d.nodes[2].col));
+  });
+
+  it('renameNodeOp leaves the layout alone when the wider box still fits', () => {
+    const d = parseAsciiDiagram(ROW);
+    const next = renameNodeOp(d, 'd', 'Delta and more');
+    expect(next.nodes.map((n) => n.col)).toEqual(d.nodes.map((n) => n.col));
+  });
+
+  it('renameNodeOp measures crowding from the drawn edge of a tight box', () => {
+    // `│Documents│` is drawn 11 wide but renders 13 (label + 4); growing it
+    // must also cover that pre-existing overhang into Slideshows.
+    const d = parseAsciiDiagram(TIGHT_ROW);
+    const next = renameNodeOp(d, 'documents', 'Documentsaa');
+    const slideshows = next.nodes.find((n) => n.id === 'slideshows');
+    expect(slideshows?.col).toBe(10 + 'Documentsaa'.length + 4 + 1);
   });
 
   it('addNodeOp picks a fresh label and inherits containment', () => {

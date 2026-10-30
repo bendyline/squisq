@@ -130,6 +130,50 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
     ],
   },
   {
+    // Hub at the far end, so every re-rendered branch jogs the same way
+    // through only three free rows (and `│Documents│` renders wider than drawn).
+    name: 'endHubFanout',
+    category: 'fan-out',
+    art: `┌───────────┐
+│ Publisher │
+└─────┬─────┘
+      │
+   ┌──┴───────┬─────────────┬────────────┐
+   ▼          ▼             ▼            ▼
+┌───────┐ ┌─────────┐ ┌────────────┐ ┌───────┐
+│ Pages │ │Documents│ │ Slideshows │ │ Video │
+└───────┘ └─────────┘ └────────────┘ └───────┘`,
+    nodes: ['publisher', 'pages', 'documents', 'slideshows', 'video'],
+    edges: [
+      ['publisher', 'pages'],
+      ['publisher', 'documents'],
+      ['publisher', 'slideshows'],
+      ['publisher', 'video'],
+    ],
+  },
+  {
+    // Mirror image: an upward fan-out whose branches all head left.
+    name: 'upwardEndHubFanout',
+    category: 'fan-out',
+    art: `┌───────┐ ┌──────┐ ┌───────┐ ┌───────┐
+│ Alpha │ │ Beta │ │ Gamma │ │ Delta │
+└───────┘ └──────┘ └───────┘ └───────┘
+    ▲        ▲         ▲         ▲
+    └────────┴─────────┴─────────┴──┐
+                                    │
+                                    │
+                              ┌─────┴─────┐
+                              │ Collector │
+                              └───────────┘`,
+    nodes: ['alpha', 'beta', 'gamma', 'delta', 'collector'],
+    edges: [
+      ['collector', 'alpha'],
+      ['collector', 'beta'],
+      ['collector', 'gamma'],
+      ['collector', 'delta'],
+    ],
+  },
+  {
     name: 'collectorFanin',
     category: 'fan-in',
     art: `┌────┐  ┌────┐  ┌────┐

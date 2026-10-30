@@ -38,6 +38,28 @@
   padding-left: 18px;
 }
 
+/* "Edit not applied" note. The live region stays mounted (empty) so screen
+ * readers announce it; it only takes space while it has a message. */
+.squisq-ascii-diagram-notice:not(:empty) {
+  margin-top: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--squisq-border);
+  border-left: 3px solid var(--squisq-accent);
+  border-radius: 6px;
+  background: var(--squisq-input-bg);
+  color: var(--squisq-text);
+  font-size: 13px;
+}
+
+/* Maximized view lays out as a flex row; float the note over the canvas. */
+.squisq-scene-block-max > .squisq-ascii-diagram-notice {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  max-width: min(560px, calc(100% - 48px));
+  z-index: 30;
+}
+
 /* "Repair as diagram" affordance on broken box-art fences. The fence stays
  * visible above this banner; clicking rewrites it to clean diagram art. */
 .squisq-repair-banner {

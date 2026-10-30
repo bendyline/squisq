@@ -445,6 +445,13 @@ function drawBox(canvas: Canvas, p: PlacedNode, vocab: StyleVocab): void {
 
 type Side = 'top' | 'bottom' | 'left' | 'right';
 
+const OPPOSITE_SIDE: Record<Side, Side> = {
+  top: 'bottom',
+  bottom: 'top',
+  left: 'right',
+  right: 'left',
+};
+
 interface RoutePlan {
   edge: AsciiDiagramEdge;
   sourceId: string;
@@ -504,9 +511,10 @@ function drawEdges(
   }
 
   const attachment = assignAttachments(plans, placed);
+  const staggers = assignJogStaggers(plans, placed, attachment);
   const sideLabelRequests: SideLabelRequest[] = [];
   plans.forEach((plan, i) =>
-    routeEdge(canvas, plan, i, placed, attachment, vocab, (candidates, label) =>
+    routeEdge(canvas, plan, i, placed, attachment, staggers[i], vocab, (candidates, label) =>
       sideLabelRequests.push({ candidates, label }),
     ),
   );
@@ -570,7 +578,8 @@ interface AttachmentSlot {
   pos: number;
   /** 0-based order within the (node, side) group + group size — used to
    * stagger Z-route jog rows so parallel routes never touch (touching
-   * turns would merge into one component on re-parse). */
+   * turns would merge into one component on re-parse); see
+   * `assignJogStaggers`. */
   index: number;
   count: number;
 }
@@ -673,26 +682,142 @@ function assignAttachments(
   return result;
 }
 
+interface JogLane {
+  /** +1 when the route runs toward higher rows/cols. */
+  dir: 1 | -1;
+  /** The jog line with no stagger (same rounding as drawVertical/Horizontal). */
+  mid: number;
+  /** Free lines beside the exit and enter borders; arrowheads land on `lastFree`. */
+  firstFree: number;
+  lastFree: number;
+}
+
+/** The rows (vertical route) or cols (horizontal) a route's jog can sit on. */
+function jogLane(plan: RoutePlan, s: Rect, t: Rect): JogLane {
+  const [exitLine, enterLine] =
+    plan.exitSide === 'bottom'
+      ? [s.r1, t.r0]
+      : plan.exitSide === 'top'
+        ? [s.r0, t.r1]
+        : plan.exitSide === 'right'
+          ? [s.c1, t.c0]
+          : [s.c0, t.c1];
+  const dir = plan.exitSide === 'bottom' || plan.exitSide === 'right' ? 1 : -1;
+  return {
+    dir,
+    mid: Math.floor((exitLine + enterLine) / 2),
+    firstFree: exitLine + dir,
+    lastFree: enterLine - dir,
+  };
+}
+
+/** A straight run fits when the exit cell also lies inside the target's side. */
+function straightRunFits(s: Rect, t: Rect, exitPos: number, vertical: boolean): boolean {
+  return vertical
+    ? exitPos >= t.c0 + 1 && exitPos <= t.c1 - 1 && exitPos >= s.c0 + 1 && exitPos <= s.c1 - 1
+    : exitPos >= t.r0 + 1 && exitPos <= t.r1 - 1 && exitPos >= s.r0 + 1 && exitPos <= s.r1 - 1;
+}
+
+/**
+ * Jog offsets for Z-routes that share a side, so sibling routes never touch
+ * on a shared mid-line. A route's offset is its slot's place in the side's
+ * attachment order around the midpoint, taken on whichever end has more
+ * attachments.
+ *
+ * Fan-outs (the source is that end) with 2+ routes heading the same way
+ * instead staircase them: the outermost route — attachment furthest toward
+ * where they head — jogs nearest the source, each inner sibling one line
+ * further out, so every jog clears its siblings' legs. Attachment order gets
+ * this backwards for half the headings (e.g. right-heading routes off a
+ * bottom side): their jogs cross the sibling legs right beside the source,
+ * and each crossing closes a rectangle with the border between two
+ * attachments (`┬─┬` over `┼─┼`) that re-parses as a phantom box. The
+ * staircase is centered on the midpoint, then slid to fit the free lines —
+ * clear of the arrowhead line when there's room. Opposite headings span
+ * disjoint ranges, so each staircases on its own; straight runs have no jog.
+ */
+function assignJogStaggers(
+  plans: RoutePlan[],
+  placed: Map<string, PlacedNode>,
+  attachment: Map<string, AttachmentSlot>,
+): number[] {
+  interface Jog {
+    planIdx: number;
+    /** Larger = further toward the heading. */
+    outerness: number;
+    lane: JogLane;
+  }
+  const staircases = new Map<string, Jog[]>();
+  const staggers = plans.map((plan, i) => {
+    const exit = attachment.get(`${i}:exit`) as AttachmentSlot;
+    const enter = attachment.get(`${i}:enter`) as AttachmentSlot;
+    const basis = enter.count > exit.count ? enter : exit;
+    const vertical = plan.exitSide === 'bottom' || plan.exitSide === 'top';
+    const s = (placed.get(plan.sourceId) as PlacedNode).rect;
+    const t = (placed.get(plan.targetId) as PlacedNode).rect;
+    const lane = jogLane(plan, s, t);
+    // Mirrors the Z-route test in drawVertical / drawHorizontal.
+    const zRoute =
+      plan.enterSide === OPPOSITE_SIDE[plan.exitSide] &&
+      (lane.lastFree - lane.firstFree) * lane.dir + 1 >= 2 &&
+      !straightRunFits(s, t, exit.pos, vertical);
+    if (basis === exit && zRoute) {
+      const heading = Math.sign(enter.pos - exit.pos);
+      const key = `${plan.sourceId}|${plan.exitSide}|${heading}`;
+      const jog: Jog = { planIdx: i, outerness: exit.pos * heading, lane };
+      staircases.set(key, [...(staircases.get(key) ?? []), jog]);
+    }
+    return basis.index - Math.floor((basis.count - 1) / 2);
+  });
+  for (const jogs of staircases.values()) {
+    if (jogs.length < 2) continue;
+    jogs.sort((a, b) => b.outerness - a.outerness || a.planIdx - b.planIdx);
+    const half = Math.floor((jogs.length - 1) / 2);
+    // Toward the source is against the route's direction.
+    const lines = jogs.map((jog, rank) => jog.lane.mid - jog.lane.dir * (half - rank));
+    const shift = staircaseShift(jogs, lines, true) ?? staircaseShift(jogs, lines, false) ?? 0;
+    jogs.forEach((jog, k) => {
+      staggers[jog.planIdx] = lines[k] + shift - jog.lane.mid;
+    });
+  }
+  return staggers;
+}
+
+/**
+ * The smallest uniform shift that puts every staircase line inside its
+ * lane's free lines (optionally sparing the arrowhead line), or null if the
+ * lanes are too short to hold the staircase.
+ */
+function staircaseShift(
+  jogs: ReadonlyArray<{ lane: JogLane }>,
+  lines: readonly number[],
+  spareArrowLine: boolean,
+): number | null {
+  let lo = -Infinity;
+  let hi = Infinity;
+  jogs.forEach(({ lane }, k) => {
+    const last = spareArrowLine ? lane.lastFree - lane.dir : lane.lastFree;
+    lo = Math.max(lo, Math.min(lane.firstFree, last) - lines[k]);
+    hi = Math.min(hi, Math.max(lane.firstFree, last) - lines[k]);
+    if ((last - lane.firstFree) * lane.dir < 0) hi = -Infinity;
+  });
+  return lo <= hi ? clamp(0, lo, hi) : null;
+}
+
 function routeEdge(
   canvas: Canvas,
   plan: RoutePlan,
   planIdx: number,
   placed: Map<string, PlacedNode>,
   attachment: Map<string, AttachmentSlot>,
+  stagger: number,
   vocab: StyleVocab,
   deferSideLabel: (candidates: Array<{ row: number; col: number }>, label: string) => void,
 ): void {
   const s = (placed.get(plan.sourceId) as PlacedNode).rect;
   const t = (placed.get(plan.targetId) as PlacedNode).rect;
-  const exitSlot = attachment.get(`${planIdx}:exit`) as AttachmentSlot;
-  const enterSlot = attachment.get(`${planIdx}:enter`) as AttachmentSlot;
-  const exitPos = exitSlot.pos;
-  const enterPos = enterSlot.pos;
-  // Deterministic jog stagger: routes sharing a side (either end — fan-outs
-  // AND fan-ins) each get a distinct mid-line so their turns/segments can
-  // never touch or overlap on the same row/column.
-  const basis = enterSlot.count > exitSlot.count ? enterSlot : exitSlot;
-  const stagger = basis.index - Math.floor((basis.count - 1) / 2);
+  const exitPos = (attachment.get(`${planIdx}:exit`) as AttachmentSlot).pos;
+  const enterPos = (attachment.get(`${planIdx}:enter`) as AttachmentSlot).pos;
 
   const junction = (r: number, c: number, side: Side): void => {
     const ch =
@@ -779,10 +904,7 @@ function drawVertical(
     for (let r = lo; r <= hi; r++) canvas.drawEdgeCell(r, col, vocab.v, 'line-v', vocab);
   };
 
-  const straightOk =
-    exitCol >= t.c0 + 1 && exitCol <= t.c1 - 1 && exitCol >= s.c0 + 1 && exitCol <= s.c1 - 1;
-
-  if (straightOk || gap < 2) {
+  if (straightRunFits(s, t, exitCol, true) || gap < 2) {
     // Straight (or no room to jog): one column, clamped onto both borders.
     const sCol = clamp(exitCol, s.c0 + 1, s.c1 - 1);
     const tCol = clamp(exitCol, t.c0 + 1, t.c1 - 1);
@@ -976,10 +1098,7 @@ function drawHorizontal(
     });
   };
 
-  const straightOk =
-    exitRow >= t.r0 + 1 && exitRow <= t.r1 - 1 && exitRow >= s.r0 + 1 && exitRow <= s.r1 - 1;
-
-  if (straightOk || gap < 2) {
+  if (straightRunFits(s, t, exitRow, false) || gap < 2) {
     const sRow = clamp(exitRow, s.r0 + 1, s.r1 - 1);
     const tRow = clamp(exitRow, t.r0 + 1, t.r1 - 1);
     junction(sRow, exitCol, dir === 1 ? 'right' : 'left');

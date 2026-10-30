@@ -26,7 +26,7 @@ import { Extension } from '@tiptap/core';
 import { Fragment, Slice, type Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, PluginKey, type EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
-import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { MediaEntry, MediaProvider } from '@bendyline/squisq/schemas';
 import { mediaMimeType } from './mediaDragMime';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 import {
@@ -324,8 +324,9 @@ export function pasteCopiedMedia(
 
 /**
  * Store a copied file in another document's media and return its path there:
- * `path` itself when it already holds the same bytes, else a name no existing
- * file uses. Null when the copy's bytes could not be read.
+ * a file that document already stores with the same bytes (`path` itself
+ * first), else a new file under a name no existing file uses. Null when the
+ * copy's bytes could not be read.
  */
 async function storeCopy(
   provider: MediaProvider,
@@ -348,9 +349,37 @@ async function storeCopy(
         }
       : null);
   if (!copied) return null;
-  const existing = await readStoredFile(provider, path);
-  if (existing && (await sameBytes(existing.data, copied.data))) return path;
+  const stored = await storedCopyOf(provider, path, copied.data);
+  if (stored) return stored;
   return provider.addMedia(await unusedName(provider, copied.name), copied.data, copied.mimeType);
+}
+
+/**
+ * A file `provider` itself stores with exactly `data`'s bytes, preferring
+ * `path`. Only listed media counts: a host may also resolve references a
+ * document does not store (DocBlocks reads `a_files/pic.png` beside `b.md`),
+ * and a paste pointing at one of those breaks once the other document is
+ * renamed, moved or deleted.
+ */
+async function storedCopyOf(
+  provider: MediaProvider,
+  path: string,
+  data: Blob,
+): Promise<string | null> {
+  let entries: MediaEntry[];
+  try {
+    entries = await provider.listMedia();
+  } catch {
+    return null;
+  }
+  const candidates = entries
+    .filter((entry) => entry.size === data.size)
+    .sort((a, b) => Number(b.name === path) - Number(a.name === path));
+  for (const { name } of candidates) {
+    const existing = await readStoredFile(provider, name);
+    if (existing && (await sameBytes(existing.data, data))) return name;
+  }
+  return null;
 }
 
 async function sameBytes(a: Blob, b: Blob): Promise<boolean> {
