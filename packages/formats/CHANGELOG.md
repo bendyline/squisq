@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.8.11](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.10...@bendyline/squisq-formats@2.8.11) (2026-10-30)
+
+### Bug Fixes
+
+* Small outside in and page template work ([#115](https://github.com/bendyline/squisq/issues/115)) ([4259651](https://github.com/bendyline/squisq/commit/4259651d95dc6154a00e6f055d9aa5b37b96f404))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.9
+
 ## @bendyline/squisq-formats [2.8.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.9...@bendyline/squisq-formats@2.8.10) (2026-10-29)
 
 ### Bug Fixes
