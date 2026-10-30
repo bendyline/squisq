@@ -111,6 +111,7 @@ description reached the `<head>`, and every relative link now works from the `po
 | `<slot></slot>` (no name)              | The document's body. A template needs exactly one.                                                                   |
 | `<slot name="title"></slot>`           | The document's title, as text                                                                                        |
 | `<slot name="author"></slot>`, …       | A value with that name from the publishing app — usually the document's frontmatter field of the same name — as text |
+| `<slot name="og-image"></slot>`        | The page's social preview picture, as an `<img>`, when the publishing app supplies one                               |
 | Content between `<slot>` and `</slot>` | Fallback, shown when the slot has no value                                                                           |
 | `<slot/>`                              | An empty slot, written the way Astro and JSX authors are used to                                                     |
 
@@ -141,6 +142,21 @@ document's values:
 
 A tag the template doesn't declare is not added, and a document with no description leaves the
 template's own description in place.
+
+**The social preview picture.** A publishing app can supply the picture a page shows when it is
+shared — DocBlocks draws one in the document's theme. With one, these tags get its values, and
+`<slot name="og-image">` shows it in the page:
+
+| Tag                                                                                     | Receives             |
+| --------------------------------------------------------------------------------------- | -------------------- |
+| `og:image`, `og:image:url`, `og:image:secure_url`, `twitter:image`, `twitter:image:src` | The picture's URL    |
+| `og:image:width`, `og:image:height`                                                     | Its size in pixels   |
+| `og:image:alt`, `twitter:image:alt`                                                     | Its text alternative |
+| `og:image:type`                                                                         | Its media type       |
+
+Without one, the template's own image stays, so a site logo in `og:image` is a sensible fallback.
+A picture drawn for sharing is usually landscape; set `twitter:card` to `summary_large_image` so X
+shows it full width rather than cropped to a square.
 
 **The CSS the content needs.** Some of a document's constructs need a little CSS of their own —
 side-by-side features, video players, inline SVG pictures, icons. It goes in a

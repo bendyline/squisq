@@ -76,6 +76,22 @@ describe('inspectHtmlPageTemplate', () => {
     expect(inspection.errors).toEqual([]);
     expect(inspection.defaultSlotCount).toBe(1);
     expect(inspection.namedSlots).toEqual(['title', 'date']);
+    expect(inspection.usesImage).toBe(false);
+  });
+
+  it('reports whether a social preview picture would appear in the page', () => {
+    expect(inspectHtmlPageTemplate('<slot name="og-image"></slot><slot/>').usesImage).toBe(true);
+    expect(
+      inspectHtmlPageTemplate('<meta property="og:image" content="x.png"><slot/>').usesImage,
+    ).toBe(true);
+    expect(inspectHtmlPageTemplate('<meta name="TWITTER:IMAGE"><slot/>').usesImage).toBe(true);
+    expect(
+      inspectHtmlPageTemplate('<meta property="og:image:alt" content="x"><slot/>').usesImage,
+    ).toBe(false);
+    expect(
+      inspectHtmlPageTemplate('<template><slot name="og-image"></slot></template><slot/>')
+        .usesImage,
+    ).toBe(false);
   });
 
   it('reports a missing, duplicated, nested, or unbalanced slot with its line', () => {
@@ -146,6 +162,77 @@ describe('applyHtmlPageTemplate', () => {
 
   it('leaves the template description alone when the document has none', () => {
     expect(fill(BLOG_TEMPLATE)).toContain('<meta name="description" content="A blog">');
+  });
+
+  it('fills the social image metadata the template declares', () => {
+    const template = `<head>
+  <meta property="og:image" content="https://example.com/logo.png">
+  <meta property="og:image:width" content="256">
+  <meta property="og:image:height" content="256">
+  <meta property="og:image:alt" content="Logo">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta name="twitter:image" content="https://example.com/logo.png">
+  <meta name="twitter:image:alt">
+</head><body><slot/></body>`;
+    const page = fill(template, {
+      image: {
+        url: 'https://example.com/posts/a_files/og-image.png?v=1&x=2',
+        src: 'a_files/og-image.png',
+        width: 1200,
+        height: 630,
+        alt: 'Hello "world"',
+        type: 'image/png',
+      },
+    });
+    expect(page).toContain(
+      '<meta property="og:image" content="https://example.com/posts/a_files/og-image.png?v=1&amp;x=2">',
+    );
+    expect(page).toContain('<meta property="og:image:width" content="1200">');
+    expect(page).toContain('<meta property="og:image:height" content="630">');
+    expect(page).toContain('<meta property="og:image:alt" content="Hello &quot;world&quot;">');
+    expect(page).toContain('<meta property="og:image:type" content="image/png">');
+    expect(page).toContain(
+      '<meta name="twitter:image" content="https://example.com/posts/a_files/og-image.png?v=1&amp;x=2">',
+    );
+    expect(page).toContain('<meta name="twitter:image:alt" content="Hello &quot;world&quot;">');
+  });
+
+  it('keeps the template social image when the page has no picture of its own', () => {
+    const template = '<meta property="og:image" content="logo.png"><slot/>';
+    expect(fill(template)).toContain('<meta property="og:image" content="logo.png">');
+  });
+
+  it('places the social image in an og-image slot, or keeps the slot fallback', () => {
+    const template =
+      '<header><slot name="og-image"><img src="../img/logo.png" alt=""></slot></header><slot/>';
+    const page = fill(
+      template,
+      {
+        values: { 'og-image': 'frontmatter value' },
+        image: {
+          url: 'https://example.com/a.png',
+          src: 'a_files/og-image.png',
+          width: 1200,
+          height: 630,
+          alt: 'A & B',
+        },
+      },
+      { templatePath: '_templates/post.html', outputPath: 'a.html' },
+    );
+    expect(page).toContain(
+      '<header><img src="a_files/og-image.png" alt="A &amp; B" width="1200" height="630"></header>',
+    );
+    expect(page).not.toContain('frontmatter value');
+    expect(fill(template, { image: { url: 'https://example.com/a.png' } })).toContain(
+      '<header><img src="https://example.com/a.png" alt=""></header>',
+    );
+    expect(
+      fill(
+        template,
+        { values: { 'og-image': 'x' } },
+        { templatePath: '_templates/post.html', outputPath: 'a.html' },
+      ),
+    ).toContain('<header><img src="img/logo.png" alt=""></header>');
   });
 
   it('adds a missing content attribute to a declared meta tag', () => {

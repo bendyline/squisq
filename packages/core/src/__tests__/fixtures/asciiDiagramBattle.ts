@@ -174,6 +174,49 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
     ],
   },
   {
+    // More same-way branches than free rows: the renderer inserts rows so
+    // each branch gets its own jog instead of doubling up on one.
+    name: 'wideEndHubFanout',
+    category: 'fan-out',
+    art: `┌───────────┐
+│ Publisher │
+└─────┬─────┘
+   ┌──┴───────┬─────────────┬────────────┬─────────┐
+   ▼          ▼             ▼            ▼         ▼
+┌───────┐ ┌─────────┐ ┌────────────┐ ┌───────┐ ┌───────┐
+│ Pages │ │Documents│ │ Slideshows │ │ Video │ │ Audio │
+└───────┘ └─────────┘ └────────────┘ └───────┘ └───────┘`,
+    nodes: ['publisher', 'pages', 'documents', 'slideshows', 'video', 'audio'],
+    edges: [
+      ['publisher', 'pages'],
+      ['publisher', 'documents'],
+      ['publisher', 'slideshows'],
+      ['publisher', 'video'],
+      ['publisher', 'audio'],
+    ],
+  },
+  {
+    // The trunk drops through the bar into the middle child (`┼`, not `┴`).
+    name: 'crossJunctionFanout',
+    category: 'fan-out',
+    art: `        ┌─────────────┐
+        │  Publisher  │
+        └──────┬──────┘
+               │
+    ┌──────────┼──────────────┬──────────────┐
+    ▼          ▼              ▼              ▼
+┌───────┐ ┌───────────┐ ┌────────────┐ ┌───────┐
+│ Pages │ │ Documents │ │ Slideshows │ │ Video │
+└───────┘ └───────────┘ └────────────┘ └───────┘`,
+    nodes: ['publisher', 'pages', 'documents', 'slideshows', 'video'],
+    edges: [
+      ['publisher', 'pages'],
+      ['publisher', 'documents'],
+      ['publisher', 'slideshows'],
+      ['publisher', 'video'],
+    ],
+  },
+  {
     name: 'collectorFanin',
     category: 'fan-in',
     art: `┌────┐  ┌────┐  ┌────┐
@@ -207,6 +250,46 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
       ['service1', 'shared-cache'],
       ['service2', 'shared-cache'],
       ['service3', 'shared-cache'],
+    ],
+  },
+  {
+    // Hub above its first source with two free rows: the nearest source's
+    // straight run would land on a sibling's attachment, and the staircase
+    // needs more rows than the gap has.
+    name: 'cornerHubFanin',
+    category: 'fan-in',
+    art: `┌───────┐
+│  Hub  │
+└───┬───┘
+    ▲
+    ├───────────┬─────────────┐
+┌───┴───┐ ┌─────┴─────┐ ┌─────┴──────┐
+│ Pages │ │ Documents │ │ Slideshows │
+└───────┘ └───────────┘ └────────────┘`,
+    nodes: ['hub', 'pages', 'documents', 'slideshows'],
+    edges: [
+      ['pages', 'hub'],
+      ['documents', 'hub'],
+      ['slideshows', 'hub'],
+    ],
+  },
+  {
+    // The bar crosses the middle source's drop (`┼`, not `┬`).
+    name: 'crossJunctionFanin',
+    category: 'fan-in',
+    art: `┌────┐  ┌────┐  ┌────┐
+│ S1 │  │ S2 │  │ S3 │
+└─┬──┘  └─┬──┘  └─┬──┘
+  └───────┼───────┘
+          ▼
+   ┌─────────────┐
+   │  Collector  │
+   └─────────────┘`,
+    nodes: ['s1', 's2', 's3', 'collector'],
+    edges: [
+      ['s1', 'collector'],
+      ['s2', 'collector'],
+      ['s3', 'collector'],
     ],
   },
   {
@@ -428,6 +511,21 @@ export const BATTLE_DIAGRAMS: BattleDiagram[] = [
 └────────┘          └────────┘`,
     nodes: ['nodea', 'nodeb'],
     edges: [['nodea', 'nodeb', undefined, false]],
+  },
+  {
+    // One free row between diagonal boxes: no room for the jog until the
+    // renderer inserts one (the arrowhead drawn on the border reads as a stem).
+    name: 'crampedDiagonal',
+    category: 'edges',
+    art: `┌───────┐
+│ Alpha │
+└───┬───┘
+    └────────┐
+         ┌───▼────┐
+         │  Beta  │
+         └────────┘`,
+    nodes: ['alpha', 'beta'],
+    edges: [['alpha', 'beta', undefined, false]],
   },
   {
     name: 'labeledTyped',

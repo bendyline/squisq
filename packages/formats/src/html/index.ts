@@ -261,6 +261,7 @@ export type { PlainHtmlExportOptions, PlainHtmlIcon, PlainHtmlParts } from './pl
 export {
   HTML_PAGE_TEMPLATE_CONTENT_END,
   HTML_PAGE_TEMPLATE_CONTENT_START,
+  HTML_PAGE_TEMPLATE_IMAGE_SLOT,
   HtmlPageTemplateError,
   applyHtmlPageTemplate,
   extractHtmlPageTemplateContent,
@@ -269,6 +270,7 @@ export {
 } from './pageTemplate.js';
 export type {
   HtmlPageTemplateContent,
+  HtmlPageTemplateImage,
   HtmlPageTemplateInspection,
   HtmlPageTemplateIssue,
   HtmlPageTemplateOptions,

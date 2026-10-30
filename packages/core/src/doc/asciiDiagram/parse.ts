@@ -1055,7 +1055,7 @@ function extractEdges(
   // cells always live on channel 0.
   const stateKey = (idx: number, channel: 0 | 1): number => idx * 2 + channel;
   const visited = new Set<number>();
-  const components: number[][] = [];
+  const found: Array<{ cells: number[]; states: number[] }> = [];
   const seeds: Array<[number, 0 | 1]> = [];
   for (const idx of cells.keys()) {
     seeds.push([idx, 0]);
@@ -1064,11 +1064,13 @@ function extractEdges(
   for (const [seedIdx, seedChannel] of seeds) {
     if (visited.has(stateKey(seedIdx, seedChannel))) continue;
     const componentCells = new Set<number>();
+    const states: number[] = [];
     const queue: Array<[number, 0 | 1]> = [[seedIdx, seedChannel]];
     visited.add(stateKey(seedIdx, seedChannel));
     while (queue.length > 0) {
       const [idx, channel] = queue.pop() as [number, 0 | 1];
       componentCells.add(idx);
+      states.push(stateKey(idx, channel));
       const r = Math.floor(idx / W);
       const c = idx % W;
       const neighbors: Array<[number, number]> =
@@ -1100,18 +1102,28 @@ function extractEdges(
         }
       }
     }
-    components.push([...componentCells].sort((a, b) => a - b));
+    found.push({ cells: [...componentCells].sort((a, b) => a - b), states });
   }
-  components.sort((a, b) => a[0] - b[0]);
+  found.sort((a, b) => a.cells[0] - b.cells[0]);
+  const componentOfState = new Map<number, number>();
+  found.forEach(({ states }, i) => states.forEach((key) => componentOfState.set(key, i)));
 
-  // -- Component → edges.
-  const edges: AsciiDiagramEdge[] = [];
-  const seen = new Set<string>();
-  let mergedParallel = false;
-  const looseComponents = new Set<number>();
-  const sideLabelCells = new Set<number>();
+  const nearestOwner = (r: number, c: number): number | null => {
+    const owners = perimeterOwners.get(r * W + c) ?? [];
+    if (owners.length === 0) return null;
+    return [...owners].sort(
+      (a, b) => boxes[a].r0 - boxes[b].r0 || boxes[a].c0 - boxes[b].c0 || a - b,
+    )[0];
+  };
 
-  for (const component of components) {
+  // -- Component → attachments (the boxes it touches, and whether by arrowhead).
+  interface Attachment {
+    boxIdx: number;
+    isArrowEnd: boolean;
+  }
+  const attachmentsOf = (
+    component: number[],
+  ): { byBox: Map<number, Attachment>; dangling: boolean } => {
     const inComponent = new Set(component);
     // Endpoints: ≤1 neighbor within the component, plus every arrow cell.
     const endpoints: number[] = [];
@@ -1132,10 +1144,6 @@ function extractEdges(
     }
 
     // Attachments: endpoint adjacent (Chebyshev ≤ 1) to a box perimeter.
-    interface Attachment {
-      boxIdx: number;
-      isArrowEnd: boolean;
-    }
     const attachmentsByBox = new Map<number, Attachment>();
     let dangling = false;
     for (const idx of endpoints) {
@@ -1154,14 +1162,6 @@ function extractEdges(
         attachmentsByBox.set(boxIdx, { boxIdx, isArrowEnd: info.arrow !== null });
       }
     }
-    const nearestOwner = (r: number, c: number): number | null => {
-      const owners = perimeterOwners.get(r * W + c) ?? [];
-      if (owners.length === 0) return null;
-      return [...owners].sort(
-        (a, b) => boxes[a].r0 - boxes[b].r0 || boxes[a].c0 - boxes[b].c0 || a - b,
-      )[0];
-    };
-
     // Junction cells touching a perimeter are attachments too — the
     // `┌──┴──┐` bus-split shape connects to the box it branched from even
     // though the junction cell has 2+ neighbors and no arrowhead.
@@ -1238,6 +1238,69 @@ function extractEdges(
       }
     }
 
+    return { byBox: attachmentsByBox, dangling };
+  };
+  const components = found.map(({ cells: componentCells }) => componentCells);
+  const infos = components.map(attachmentsOf);
+
+  // -- Bus junctions drawn as crosses. A `┼` normally passes two edges
+  // through each other, but AI art also uses it where a fan's trunk meets its
+  // bar (`───┼───` with the trunk dropping on into the middle child). Read as
+  // a crossing, the trunk becomes one edge and the bar a component with
+  // arrowheads but no source (or sources but no arrowhead), which yields no
+  // edges at all. So merge the bar into the trunk when the trunk is one
+  // simple edge (one source, one target, on opposite sides of the cross) and
+  // the bar can't stand alone, touching only boxes on the trunk's matching
+  // side — targets beyond the cross for a fan-out, sources before it for a
+  // fan-in. Two complete edges crossing never qualify, and neither does a
+  // line whose boxes straddle the cross.
+  const mergedInto = components.map((_, i) => i);
+  for (const idx of cells.keys()) {
+    if (!isCrossCell(idx)) continue;
+    const across = componentOfState.get(stateKey(idx, 0));
+    const along = componentOfState.get(stateKey(idx, 1));
+    if (across === undefined || along === undefined || across === along) continue;
+    const r = Math.floor(idx / W);
+    const c = idx % W;
+    for (const [trunk, bar, vertical] of [
+      [along, across, true],
+      [across, along, false],
+    ] as const) {
+      if (mergedInto[trunk] !== trunk || mergedInto[bar] !== bar) continue;
+      const trunkEnds = [...infos[trunk].byBox.values()];
+      const barEnds = [...infos[bar].byBox.values()];
+      const source = trunkEnds.find((a) => !a.isArrowEnd);
+      const target = trunkEnds.find((a) => a.isArrowEnd);
+      if (trunkEnds.length !== 2 || !source || !target || barEnds.length === 0) continue;
+      // -1 / +1: the box lies wholly before / after the cross on the trunk's axis.
+      const sideOf = (boxIdx: number): number => {
+        const b = boxes[boxIdx];
+        const [lo, hi, at] = vertical ? [b.r0, b.r1, r] : [b.c0, b.c1, c];
+        return hi < at ? -1 : lo > at ? 1 : 0;
+      };
+      const sourceSide = sideOf(source.boxIdx);
+      if (sourceSide === 0 || sideOf(target.boxIdx) !== -sourceSide) continue;
+      const fanOut = barEnds.every((a) => a.isArrowEnd && sideOf(a.boxIdx) === -sourceSide);
+      const fanIn = barEnds.every((a) => !a.isArrowEnd && sideOf(a.boxIdx) === sourceSide);
+      if (!fanOut && !fanIn) continue;
+      for (const a of barEnds) infos[trunk].byBox.set(a.boxIdx, a);
+      infos[trunk].dangling ||= infos[bar].dangling;
+      components[trunk] = [...components[trunk], ...components[bar]].sort((x, y) => x - y);
+      mergedInto[bar] = trunk;
+      break;
+    }
+  }
+
+  // -- Component → edges.
+  const edges: AsciiDiagramEdge[] = [];
+  const seen = new Set<string>();
+  let mergedParallel = false;
+  const looseComponents = new Set<number>();
+  const sideLabelCells = new Set<number>();
+
+  for (const [componentIdx, component] of components.entries()) {
+    if (mergedInto[componentIdx] !== componentIdx) continue;
+    const { byBox: attachmentsByBox, dangling } = infos[componentIdx];
     const attachments = [...attachmentsByBox.values()].sort(
       (a, b) => boxes[a.boxIdx].r0 - boxes[b.boxIdx].r0 || boxes[a.boxIdx].c0 - boxes[b.boxIdx].c0,
     );

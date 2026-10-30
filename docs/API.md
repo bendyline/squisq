@@ -3005,9 +3005,11 @@ interface PlainHtmlIcon {
 }
 
 // Page templates: an author's HTML page whose unnamed <slot> receives the body,
-// <slot name="title"> the title, and <slot name="KEY"> values[KEY] as text.
+// <slot name="title"> the title, <slot name="og-image"> the social preview
+// picture as an <img>, and <slot name="KEY"> values[KEY] as text.
 // Unfilled slots keep their fallback children; <title> slots are matched as
-// text; relative URLs are rebased from templatePath to outputPath; everything
+// text; declared og:/twitter: title, description, and image metas are filled;
+// relative URLs are rebased from templatePath to outputPath; everything
 // else is copied byte for byte. Throws HtmlPageTemplateError for an unusable template.
 function applyHtmlPageTemplate(
   template: string,
@@ -3016,10 +3018,19 @@ function applyHtmlPageTemplate(
     headHtml?: string;
     title: string;
     values?: Record<string, string | undefined>;
+    image?: HtmlPageTemplateImage; // social preview picture
   },
   options?: { templatePath?: string; outputPath?: string },
 ): string;
-function inspectHtmlPageTemplate(html: string): HtmlPageTemplateInspection; // slots + errors (with lines)
+interface HtmlPageTemplateImage {
+  url: string; // for og:image / twitter:image; absolute for social sites
+  src?: string; // for the og-image slot's <img>; default url
+  width?: number;
+  height?: number;
+  alt?: string;
+  type?: string; // og:image:type
+}
+function inspectHtmlPageTemplate(html: string): HtmlPageTemplateInspection; // slots, usesImage, errors (with lines)
 function isHtmlPageTemplate(html: string): boolean; // has a <slot> outside <template>
 function extractHtmlPageTemplateContent(html: string): string | null; // body between the content markers
 

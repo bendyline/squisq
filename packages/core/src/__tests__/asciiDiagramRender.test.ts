@@ -113,6 +113,61 @@ describe('renderAsciiDiagram — output shape', () => {
   });
 });
 
+describe('renderAsciiDiagram — room for routes', () => {
+  const box = (id: string, col: number, row: number, wCols = id.length + 4) => ({
+    id,
+    label: id,
+    col,
+    row,
+    wCols,
+    hRows: 3,
+  });
+  const fan = (hub: ReturnType<typeof box>, kids: Array<ReturnType<typeof box>>, into = false) =>
+    ({
+      nodes: [hub, ...kids],
+      edges: kids.map((k) => ({
+        source: into ? k.id : hub.id,
+        target: into ? hub.id : k.id,
+        directed: true,
+      })),
+      style: 'unicode',
+      warnings: [],
+    }) as AsciiDiagram;
+  // An arrowhead with line on both sides means two routes share a jog row.
+  const sharedJog = /─[▼▲]─/;
+  const rows = (art: string) => art.split('\n').length;
+
+  it('inserts rows when same-way branches outnumber the free rows', () => {
+    // Hub at the left end, four children: four jogs heading right, two free rows.
+    const kids = ['b', 'c', 'd', 'e'].map((id, i) => box(id, i * 7, 5));
+    const d = fan(box('a', 0, 0, 5), kids);
+    const art = renderAsciiDiagram(d);
+    expect(art).not.toMatch(sharedJog);
+    expect(rows(art)).toBeGreaterThan(8);
+    expect(semanticSnapshot(parseAsciiDiagram(art))).toEqual(semanticSnapshot(d));
+  });
+
+  it('gives a fan-in staircase rows clear of both the arrowheads and the sources', () => {
+    const kids = ['b', 'c', 'd'].map((id, i) => box(id, i * 8, 5));
+    const d = fan(box('hub', 0, 0, 9), kids, true);
+    const art = renderAsciiDiagram(d);
+    expect(art).not.toMatch(sharedJog);
+    expect(semanticSnapshot(parseAsciiDiagram(art))).toEqual(semanticSnapshot(d));
+  });
+
+  it('inserts a row for a jog that has only one free row', () => {
+    const d = fan(box('alpha', 0, 0), [box('beta', 12, 4)]);
+    const art = renderAsciiDiagram(d);
+    expect(semanticSnapshot(parseAsciiDiagram(art))).toEqual(semanticSnapshot(d));
+    expect(renderAsciiDiagram(parseAsciiDiagram(art))).toBe(art);
+  });
+
+  it('leaves routes that already fit untouched', () => {
+    const art = renderAsciiDiagram(parseAsciiDiagram(POSITIVE_FIXTURES.TWO_BOX_VERTICAL));
+    expect(rows(art)).toBe(rows(POSITIVE_FIXTURES.TWO_BOX_VERTICAL));
+  });
+});
+
 describe('renderAsciiDiagram ↔ parseAsciiDiagram fixpoint', () => {
   for (const [name, fixture] of Object.entries(POSITIVE_FIXTURES)) {
     it(`semantic fixpoint + byte idempotence: ${name}`, () => {
