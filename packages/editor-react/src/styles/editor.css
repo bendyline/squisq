@@ -5442,13 +5442,19 @@ button.squisq-view-menu-radio-row:focus-visible {
  * from `previewSettings.activeTheme.colors.primary`). Without a theme
  * mounted the fallback purple matches the original styling. Soft bg /
  * border tints are derived from the accent via `color-mix` so any
- * theme color produces a balanced, low-contrast surface. */
+ * theme color produces a balanced, low-contrast surface.
+ *
+ * The text keeps only a hint of the accent, mixed into the strongest ink.
+ * A theme's primary is chosen for its own pages, not for this chrome: used
+ * as text it fell to 1:1 against the tint (morning-light's brown on dark
+ * chrome, tech-dark's cyan on light). At 35% every built-in theme clears
+ * 4.5:1 in both color schemes, as e2e/accessibility.spec.ts checks. */
 .squisq-outline-template-chip {
   flex-shrink: 0;
   padding: 1px 6px;
   font-size: 10px;
   font-weight: 600;
-  color: var(--squisq-outline-accent);
+  color: color-mix(in oklch, var(--squisq-outline-accent) 35%, var(--squisq-text-strong));
   background: color-mix(in oklch, var(--squisq-outline-accent) 12%, transparent);
   border: 1px solid color-mix(in oklch, var(--squisq-outline-accent) 35%, transparent);
   border-radius: 8px;
@@ -5457,7 +5463,7 @@ button.squisq-view-menu-radio-row:focus-visible {
 
 .squisq-outline-row--current {
   background: color-mix(in oklch, var(--squisq-outline-accent) 14%, transparent);
-  color: var(--squisq-outline-accent);
+  color: color-mix(in oklch, var(--squisq-outline-accent) 35%, var(--squisq-text-strong));
 }
 
 /* ── Hover-revealed promote / demote arrows ─────────────────────
@@ -5581,17 +5587,25 @@ button.squisq-view-menu-radio-row:focus-visible {
 
 /* Dark mode keeps the same accent inheritance — but mixes the tint
  * toward a higher saturation since transparent overlays on a dark
- * surface read as much weaker than on light. Text color is lifted
- * toward white so the accent stays legible against dark chrome. */
+ * surface read as much weaker than on light. The text uses the shared mix
+ * above, which `--squisq-text-strong` flipping lifts toward white here. */
 .squisq-editor-shell[data-theme='dark'] .squisq-outline-template-chip {
-  color: color-mix(in oklch, var(--squisq-outline-accent) 55%, var(--squisq-text-strong));
   background: color-mix(in oklch, var(--squisq-outline-accent) 30%, transparent);
   border-color: color-mix(in oklch, var(--squisq-outline-accent) 55%, transparent);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-outline-row--current {
   background: color-mix(in oklch, var(--squisq-outline-accent) 32%, transparent);
-  color: color-mix(in oklch, var(--squisq-outline-accent) 55%, var(--squisq-text-on-accent));
+  /* Restated, not changed: the dark depth-4–6 tints above outrank the base
+     rule and would mute a current row at those levels. */
+  color: color-mix(in oklch, var(--squisq-outline-accent) 35%, var(--squisq-text-strong));
+}
+
+/* On the current row the chip's 30% tint would stack on the row's 32%, close
+   to a solid fill under a bright accent (tech-dark's cyan left "Title" at
+   3.9:1). The row's tint already marks it; the chip keeps its border. */
+.squisq-editor-shell[data-theme='dark'] .squisq-outline-row--current .squisq-outline-template-chip {
+  background: transparent;
 }
 
 /* (Dark-mode preview-gutter chrome flows through the custom-property
