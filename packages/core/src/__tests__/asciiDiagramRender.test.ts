@@ -162,6 +162,27 @@ describe('renderAsciiDiagram — room for routes', () => {
     expect(renderAsciiDiagram(parseAsciiDiagram(art))).toBe(art);
   });
 
+  it('orders a fan-in by column when its sources sit on different rows', () => {
+    // The left source sits lower. Ordering the shared side by row first gave
+    // it the RIGHT port, crossing the routes under the other edge's label.
+    const d = {
+      nodes: [box('parent', 14, 0), box('left', 0, 9), box('right', 23, 7)],
+      edges: ['left', 'right'].map((k) => ({
+        source: k,
+        target: 'parent',
+        directed: true,
+        label: 'born',
+      })),
+      style: 'unicode',
+      warnings: [],
+    } as AsciiDiagram;
+    const art = renderAsciiDiagram(d);
+    expect(art).not.toContain('┼');
+    expect(art).not.toMatch(/─│born/);
+    expect(semanticSnapshot(parseAsciiDiagram(art))).toEqual(semanticSnapshot(d));
+    expect(renderAsciiDiagram(parseAsciiDiagram(art))).toBe(art);
+  });
+
   it('leaves routes that already fit untouched', () => {
     const art = renderAsciiDiagram(parseAsciiDiagram(POSITIVE_FIXTURES.TWO_BOX_VERTICAL));
     expect(rows(art)).toBe(rows(POSITIVE_FIXTURES.TWO_BOX_VERTICAL));

@@ -728,12 +728,20 @@ function assignAttachments(
   for (const [sideKey, list] of [...bySide.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
     const [nodeId, side] = sideKey.split('|') as [string, Side];
     const node = placed.get(nodeId) as PlacedNode;
+    const horizontal = side === 'top' || side === 'bottom';
+    // Order by the far end's center ALONG this side (cols for top/bottom,
+    // rows for left/right), so routes fan out without crossing. Ordering a
+    // top/bottom side by row first crosses a fan-in whose sources sit on
+    // different rows (the left source takes the right port), and the
+    // crossing lands under a sibling's embedded label — `─│born` doesn't
+    // read back as one run, and the re-parse drops the edge.
     list.sort((a, b) => {
       const ra = (placed.get(a.otherId) as PlacedNode).rect;
       const rb = (placed.get(b.otherId) as PlacedNode).rect;
-      return ra.r0 - rb.r0 || ra.c0 - rb.c0 || a.otherId.localeCompare(b.otherId);
+      const along = horizontal ? ra.c0 + ra.c1 - (rb.c0 + rb.c1) : ra.r0 + ra.r1 - (rb.r0 + rb.r1);
+      const across = horizontal ? ra.r0 - rb.r0 : ra.c0 - rb.c0;
+      return along || across || a.otherId.localeCompare(b.otherId);
     });
-    const horizontal = side === 'top' || side === 'bottom';
     const from = horizontal ? node.rect.c0 + 1 : node.rect.r0 + 1;
     const to = horizontal ? node.rect.c1 - 1 : node.rect.r1 - 1;
     const inner = Math.max(1, to - from + 1);
