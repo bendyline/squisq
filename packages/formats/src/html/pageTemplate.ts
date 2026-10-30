@@ -10,6 +10,8 @@
  * - `<slot name="title">` receives the document title, and
  *   `<slot name="KEY">` the caller's value for `KEY` (typically a
  *   frontmatter field), inserted as text;
+ * - `<slot name="og-image">` receives the page's social preview picture, when
+ *   the caller supplies one, as an `<img>`;
  * - a slot with no value is replaced by its children — the standard fallback
  *   content — so a template opened directly in a browser previews with its
  *   placeholders.
@@ -19,7 +21,7 @@
  *
  * `<title>` cannot contain elements, so slots written inside it are matched
  * as text; a `<title>` without one is replaced by the document title.
- * Existing description and Open Graph / Twitter title and description
+ * Existing description and Open Graph / Twitter title, description, and image
  * `<meta>` tags receive the document's values. Relative URLs in the template
  * are rewritten so they still resolve from the generated page's location.
  *
@@ -36,6 +38,29 @@ import { normalizePath } from './plainHtmlBundle.js';
 export const HTML_PAGE_TEMPLATE_CONTENT_START = '<!-- squisq:content -->';
 /** Marks the end of the injected document body in a templated page. */
 export const HTML_PAGE_TEMPLATE_CONTENT_END = '<!-- /squisq:content -->';
+/** The named slot that receives the page's social preview picture. */
+export const HTML_PAGE_TEMPLATE_IMAGE_SLOT = 'og-image';
+
+/** A page's social preview picture: its Open Graph and Twitter card image. */
+export interface HtmlPageTemplateImage {
+  /**
+   * URL written to the image `<meta>` tags. Social sites expect an absolute
+   * URL; a relative one is written as given.
+   */
+  url: string;
+  /**
+   * URL the `og-image` slot's `<img>` loads, typically relative to the page
+   * so it also shows before the site is published. Default: {@link url}.
+   */
+  src?: string;
+  /** Size in pixels. */
+  width?: number;
+  height?: number;
+  /** Text alternative. */
+  alt?: string;
+  /** Media type, such as `image/png`. */
+  type?: string;
+}
 
 export interface HtmlPageTemplateContent {
   /** Rendered document body. Inserted as-is; the caller sanitizes it. */
@@ -50,9 +75,16 @@ export interface HtmlPageTemplateContent {
   title: string;
   /**
    * Text for named slots, keyed by slot name. `description` also fills
-   * description `<meta>` tags. `title` comes from {@link title}.
+   * description `<meta>` tags. `title` comes from {@link title}, and
+   * `og-image` from {@link image}.
    */
   values?: Readonly<Record<string, string | undefined>>;
+  /**
+   * The page's social preview picture. Fills the template's `og-image` slot
+   * and the Open Graph / Twitter image `<meta>` tags it declares; without
+   * one, both keep what the template wrote.
+   */
+  image?: HtmlPageTemplateImage;
 }
 
 export interface HtmlPageTemplateOptions {
@@ -82,6 +114,12 @@ export interface HtmlPageTemplateInspection {
   defaultSlotCount: number;
   /** Distinct named slots, in document order. */
   namedSlots: string[];
+  /**
+   * True when a supplied {@link HtmlPageTemplateContent.image} would appear
+   * in the page: the template has an `og-image` slot or an Open Graph /
+   * Twitter image `<meta>` tag. A host can skip drawing a picture otherwise.
+   */
+  usesImage: boolean;
   /** Problems that make {@link applyHtmlPageTemplate} refuse the template. */
   errors: HtmlPageTemplateIssue[];
 }
@@ -151,6 +189,12 @@ function analyzeTemplate(html: string): {
       isTemplate: tags.some(isLightSlot),
       defaultSlotCount: defaultSlots.length,
       namedSlots,
+      usesImage:
+        namedSlots.includes(HTML_PAGE_TEMPLATE_IMAGE_SLOT) ||
+        tags.some((tag) => {
+          if (tag.kind !== 'start' || tag.name !== 'meta' || tag.inert) return false;
+          return IMAGE_URL_META.has(metaKey(tag) ?? '');
+        }),
       errors: errors.sort((a, b) => a.line - b.line),
     },
   };
@@ -175,24 +219,30 @@ export function applyHtmlPageTemplate(
   if (inspection.errors.length > 0) throw new HtmlPageTemplateError(inspection.errors);
 
   const values = content.values ?? {};
+  const { image } = content;
   const valueFor = (name: string): string | undefined =>
-    name === 'title' ? content.title : values[name];
+    name === 'title'
+      ? content.title
+      : name === HTML_PAGE_TEMPLATE_IMAGE_SLOT
+        ? undefined
+        : values[name];
+  const slotMarkup = (name: string | null): string | undefined => {
+    if (name === null) {
+      return `${HTML_PAGE_TEMPLATE_CONTENT_START}\n${content.bodyHtml}\n${HTML_PAGE_TEMPLATE_CONTENT_END}`;
+    }
+    if (name === HTML_PAGE_TEMPLATE_IMAGE_SLOT) return image && imageElement(image);
+    const value = valueFor(name);
+    return value === undefined ? undefined : escapeHtml(value);
+  };
   const edits: Edit[] = [];
 
-  // Slots: the unnamed one becomes the marked body; a named one becomes its
-  // value as text, or its fallback children when it has no value.
+  // Slots: the unnamed one becomes the marked body, `og-image` the picture,
+  // and any other its value as text, or its fallback children without one.
   const replacements = new Set<Edit>();
   for (const slot of slots) {
-    const value = slot.name === null ? undefined : valueFor(slot.name);
-    if (slot.name === null || value !== undefined) {
-      const replacement: Edit = {
-        start: slot.start,
-        end: slot.end,
-        text:
-          slot.name === null
-            ? `${HTML_PAGE_TEMPLATE_CONTENT_START}\n${content.bodyHtml}\n${HTML_PAGE_TEMPLATE_CONTENT_END}`
-            : escapeHtml(value ?? ''),
-      };
+    const markup = slotMarkup(slot.name);
+    if (markup !== undefined) {
+      const replacement: Edit = { start: slot.start, end: slot.end, text: markup };
       edits.push(replacement);
       replacements.add(replacement);
     } else {
@@ -217,8 +267,8 @@ export function applyHtmlPageTemplate(
   // Page metadata the template already declares.
   for (const tag of tags) {
     if (tag.kind !== 'start' || tag.name !== 'meta' || tag.inert) continue;
-    const key = (attributeValue(tag, 'name') ?? attributeValue(tag, 'property'))?.toLowerCase();
-    const value = key ? metaValue(key, content.title, values.description) : undefined;
+    const key = metaKey(tag);
+    const value = key ? metaValue(key, content.title, values.description, image) : undefined;
     if (value === undefined) continue;
     const contentAttribute = tag.attributes.find((attribute) => attribute.name === 'content');
     const text = `content="${escapeAttr(value)}"`;
@@ -598,15 +648,46 @@ function fillTitleText(text: string, valueFor: (name: string) => string | undefi
 
 const TITLE_META = new Set(['og:title', 'twitter:title']);
 const DESCRIPTION_META = new Set(['description', 'og:description', 'twitter:description']);
+const IMAGE_URL_META = new Set([
+  'og:image',
+  'og:image:url',
+  'og:image:secure_url',
+  'twitter:image',
+  'twitter:image:src',
+]);
+const IMAGE_ALT_META = new Set(['og:image:alt', 'twitter:image:alt']);
+
+/** A `<meta>` tag's lowercase `name` or `property`. */
+function metaKey(tag: StartTag): string | undefined {
+  return (attributeValue(tag, 'name') ?? attributeValue(tag, 'property'))?.toLowerCase();
+}
 
 function metaValue(
   key: string,
   title: string,
   description: string | undefined,
+  image: HtmlPageTemplateImage | undefined,
 ): string | undefined {
   if (TITLE_META.has(key)) return title;
   if (DESCRIPTION_META.has(key)) return description;
+  if (!image) return undefined;
+  if (IMAGE_URL_META.has(key)) return image.url;
+  if (IMAGE_ALT_META.has(key)) return image.alt;
+  if (key === 'og:image:width' || key === 'og:image:height') {
+    const size = key === 'og:image:width' ? image.width : image.height;
+    return size === undefined ? undefined : String(size);
+  }
+  if (key === 'og:image:type') return image.type;
   return undefined;
+}
+
+/** The `<img>` an `og-image` slot becomes. */
+function imageElement(image: HtmlPageTemplateImage): string {
+  const size =
+    image.width !== undefined && image.height !== undefined
+      ? ` width="${String(image.width)}" height="${String(image.height)}"`
+      : '';
+  return `<img src="${escapeAttr(image.src ?? image.url)}" alt="${escapeAttr(image.alt ?? '')}"${size}>`;
 }
 
 /**

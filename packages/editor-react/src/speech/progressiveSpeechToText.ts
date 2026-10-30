@@ -8,10 +8,10 @@
  * first chunk, WebM/MP4 metadata may be missing. Progressive STT needs every
  * upload to stand alone, so this recorder stops and immediately replaces the
  * MediaRecorder at each boundary while keeping the same microphone stream.
- * Transcriptions are queued in capture order and receive a bounded tail of
- * earlier recognized text as Whisper's initial prompt. They are delivered as
- * new final fragments that the editor inserts without revising or duplicating
- * earlier dictation.
+ * Transcriptions are queued in capture order, and takes the activity gate heard
+ * speech in receive a bounded tail of earlier recognized text as Whisper's
+ * initial prompt. They are delivered as new final fragments that the editor
+ * inserts without revising or duplicating earlier dictation.
  */
 
 import {
@@ -182,6 +182,7 @@ export class ProgressiveSpeechToText {
       const type = recorder.mimeType || this.mimeType || 'audio/webm';
       const blob = new Blob(this.chunks, { type });
       const capturedMs = Math.max(0, Date.now() - this.segmentStartedAt);
+      const heardSpeech = this.segmentHasSpeech;
       this.chunks = [];
 
       // Start the next self-contained take before doing any STT work so the
@@ -190,7 +191,7 @@ export class ProgressiveSpeechToText {
       // The energy meter suggests clean phrase boundaries; it never decides
       // that audio is disposable. Quiet speech can fall below a local RMS
       // threshold while Whisper still understands it perfectly.
-      if (blob.size > 0) this.enqueueTranscription(blob, type, capturedMs);
+      if (blob.size > 0) this.enqueueTranscription(blob, type, capturedMs, heardSpeech);
       if (this.finalSegmentRequested) void this.finish();
     };
     recorder.start();
@@ -256,18 +257,23 @@ export class ProgressiveSpeechToText {
     if (!this.disposed) this.onPendingChange?.(next);
   }
 
-  private enqueueTranscription(blob: Blob, mimeType: string, capturedMs: number): void {
+  private enqueueTranscription(
+    blob: Blob,
+    mimeType: string,
+    capturedMs: number,
+    heardSpeech: boolean,
+  ): void {
     this.setPending(this.pending + 1);
     this.transcriptionQueue = this.transcriptionQueue.then(async () => {
       if (this.disposed) return;
       try {
+        // Given a prompt and no words, Whisper continues the prompt: a quiet
+        // take comes back as an echo of the last phrase. A take the gate never
+        // heard speech in is still transcribed, quiet speech and all, just
+        // without priming. With no gate running, any take may be speech.
+        const prompt = heardSpeech || !this.activityMonitorStarted ? this.recognitionPrompt : '';
         const text = normalizeSpeechTranscript(
-          await this.transcribe(
-            blob,
-            mimeType,
-            this.abortController.signal,
-            this.recognitionPrompt,
-          ),
+          await this.transcribe(blob, mimeType, this.abortController.signal, prompt),
         );
         if (this.disposed) return;
         if (text) {

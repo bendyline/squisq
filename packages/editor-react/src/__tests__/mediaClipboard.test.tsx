@@ -295,6 +295,62 @@ describe('copying an image, video or audio clip in the Write view', () => {
     expect(target.addMedia).not.toHaveBeenCalled();
   });
 
+  it('stores a copy even when the other document can read the original from where it is', async () => {
+    // A host may resolve references a document does not store, as DocBlocks
+    // reads `a_files/pic.png` beside `b.md`. Reusing that path would break the
+    // paste once the original's document is renamed, moved or deleted.
+    serveFetch();
+    const original = png(4, 5, 6);
+    const from = await mountWriteView(PHOTO, fakeProvider({ 'images/photo.png': original }));
+    const target = fakeProvider();
+    const ownResolve = target.resolveUrl;
+    target.resolveUrl = async (path) => {
+      if (path !== 'images/photo.png') return ownResolve(path);
+      servedFiles.set('blob:test/elsewhere/images/photo.png', original);
+      return 'blob:test/elsewhere/images/photo.png';
+    };
+    const to = await mountWriteView('Beside the original.', target);
+    selectMedia(from);
+    const data = copy(from);
+
+    caretAtEnd(to);
+    paste(to, data);
+
+    await waitFor(() => expect(mediaNodes(to)[0]?.node.attrs.src).toBe('media/photo.png'));
+    expect(target.addMedia).toHaveBeenCalledTimes(1);
+    expect([...new Uint8Array(await target.files.get('media/photo.png')!.arrayBuffer())]).toEqual([
+      4, 5, 6,
+    ]);
+  });
+
+  it('reuses the copy an earlier paste stored instead of storing the file again', async () => {
+    serveFetch();
+    const from = await mountWriteView(PHOTO, fakeProvider({ 'images/photo.png': png(3, 1, 4) }));
+    const target = fakeProvider();
+    const to = await mountWriteView('Pasted twice.', target);
+    selectMedia(from);
+    const data = copy(from);
+
+    caretAtEnd(to);
+    paste(to, data);
+    await waitFor(() => expect(mediaNodes(to)[0]?.node.attrs.src).toBe('media/photo.png'));
+    // Ending on the image would select it, and a paste then replaces it.
+    act(() => {
+      to.commands.insertContentAt(to.state.doc.content.size, '<p>And again:</p>');
+    });
+    caretAtEnd(to);
+    paste(to, data);
+
+    await waitFor(() => expect(mediaNodes(to)).toHaveLength(2));
+    await waitFor(() =>
+      expect(mediaNodes(to).map(({ node }) => node.attrs.src)).toEqual([
+        'media/photo.png',
+        'media/photo.png',
+      ]),
+    );
+    expect(target.addMedia).toHaveBeenCalledTimes(1);
+  });
+
   it('never overwrites a different file of the same name in the other document', async () => {
     serveFetch();
     const from = await mountWriteView(PHOTO, fakeProvider({ 'images/photo.png': png(1) }));

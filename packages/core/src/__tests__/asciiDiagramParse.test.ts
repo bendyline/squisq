@@ -156,6 +156,71 @@ describe('parseAsciiDiagram — edges', () => {
     ]);
   });
 
+  it('reads a ┼ where a trunk drops through its fan-out bar as a bus junction', () => {
+    const d = parseAsciiDiagram(
+      [
+        '        ┌──────┐',
+        '        │ Root │',
+        '        └──┬───┘',
+        '           │',
+        '    ┌──────┼──────┬──────┐',
+        '    ▼      ▼      ▼      ▼',
+        '┌──────┐┌─────┐┌─────┐┌──────┐',
+        '│ Ant  ││ Bee ││ Cat ││ Dog  │',
+        '└──────┘└─────┘└─────┘└──────┘',
+      ].join('\n'),
+    );
+    expect(d.edges.map((e) => `${e.source}>${e.target}`)).toEqual([
+      'root>ant',
+      'root>bee',
+      'root>cat',
+      'root>dog',
+    ]);
+    expect(d.warnings).not.toContain('ambiguous-bus');
+  });
+
+  it('reads a ┼ where a fan-in bar crosses the middle source as a bus junction', () => {
+    const d = parseAsciiDiagram(
+      [
+        '┌────┐  ┌────┐  ┌────┐',
+        '│ S1 │  │ S2 │  │ S3 │',
+        '└─┬──┘  └─┬──┘  └─┬──┘',
+        '  └───────┼───────┘',
+        '          ▼',
+        '   ┌─────────────┐',
+        '   │  Collector  │',
+        '   └─────────────┘',
+      ].join('\n'),
+    );
+    expect(d.edges).toEqual([
+      { source: 's1', target: 'collector', directed: true },
+      { source: 's2', target: 'collector', directed: true },
+      { source: 's3', target: 'collector', directed: true },
+    ]);
+  });
+
+  it('keeps a ┼ between two complete edges, or a line through the bar row, a crossing', () => {
+    const crossing = (rail: string) =>
+      parseAsciiDiagram(
+        [
+          '          ┌───┐',
+          '          │ A │',
+          '          └─┬─┘',
+          '┌───┐       │       ┌───┐',
+          `│ C ├${rail}┤ D │`,
+          '└───┘       │       └───┘',
+          '            ▼',
+          '          ┌───┐',
+          '          │ B │',
+          '          └───┘',
+        ].join('\n'),
+      ).edges.map((e) => `${e.source}${e.directed ? '>' : '-'}${e.target}`);
+    expect(crossing('───────┼──────►')).toEqual(['a>b', 'c>d']);
+    // An undirected C–D line has no arrowhead, but its boxes straddle the
+    // cross's row, so it is not a fan-in bar for A→B.
+    expect(crossing('───────┼───────')).toEqual(['a>b', 'c-d']);
+  });
+
   it('dedupes parallel identical lines to one edge with a warning', () => {
     const d = parseAsciiDiagram(PARALLEL_DUPES);
     expect(d.edges).toEqual([{ source: 'wide-a', target: 'wide-b', directed: true }]);

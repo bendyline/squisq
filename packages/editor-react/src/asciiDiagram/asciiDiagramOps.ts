@@ -162,15 +162,70 @@ export function removeEdgeOp(
  * Rename a node. The label drives the node's parse-derived id, so edges
  * and containment references are rewritten to the id the next parse will
  * produce. (Selection in the canvas drops after a rename — documented.)
+ *
+ * A longer label widens the box; when that would crowd a sibling on the
+ * same rows, everything to the right shifts over so the renderer never has
+ * to resolve the collision itself (it bumps the sibling down a row, and the
+ * rerouted edges can fail the command's re-parse check — a silent revert).
  */
 export function renameNodeOp(diagram: AsciiDiagram, nodeId: string, label: string): AsciiDiagram {
   const node = diagram.nodes.find((n) => n.id === nodeId);
   if (!node) return diagram;
   const clean = sanitizeAsciiLabel(label);
   if (clean.length === 0 || clean === node.label) return diagram;
-  return {
+  const renamed: AsciiDiagram = {
     ...diagram,
     nodes: diagram.nodes.map((n) => (n.id === nodeId ? { ...n, label: clean } : n)),
+  };
+  const isContainer = diagram.nodes.some((n) => n.containerId === nodeId);
+  const oldW = Math.max(node.wCols, labelBoxWidth(node.label, isContainer));
+  const newW = Math.max(node.wCols, labelBoxWidth(clean, isContainer));
+  return makeRoomToTheRight(renamed, node, oldW, newW);
+}
+
+/** Blank cells the renderer keeps between sibling boxes (`SIDE_MARGIN`). */
+const SIBLING_GAP = 1;
+
+/**
+ * Minimum width the renderer gives a label: `label + 4` inside a leaf, or a
+ * `── Title ──` top border (title + 6) on a container. Cells are code points,
+ * matching the codec's `cellWidth`.
+ */
+function labelBoxWidth(label: string, isContainer: boolean): number {
+  const lines = label.split('\n');
+  const widest = (ls: string[]) => ls.reduce((w, l) => Math.max(w, Array.from(l).length), 0);
+  if (!isContainer) return widest(lines) + 4;
+  return Math.max(widest(lines.slice(0, 1)) + 6, widest(lines.slice(1)) + 4);
+}
+
+/**
+ * Shift every node right of `node`'s drawn right edge so a box growing from
+ * `oldW` to `newW` keeps its gap to the nearest sibling on overlapping rows.
+ * (A tight `│Label│` box already renders wider than drawn, so the boundary is
+ * the drawn edge, not `oldW`.) Shifting the whole region, not just the
+ * crowded row, keeps columns aligned above/below it aligned. No-op when there
+ * is already room.
+ */
+function makeRoomToTheRight(
+  diagram: AsciiDiagram,
+  node: AsciiDiagramNode,
+  oldW: number,
+  newW: number,
+): AsciiDiagram {
+  if (newW <= oldW) return diagram;
+  const drawnRight = node.col + node.wCols - 1;
+  const newRight = node.col + newW - 1;
+  const r0 = node.row - SIBLING_GAP;
+  const r1 = node.row + node.hRows - 1 + SIBLING_GAP;
+  let shift = 0;
+  for (const n of diagram.nodes) {
+    if (n.col <= drawnRight || n.row > r1 || n.row + n.hRows - 1 < r0) continue;
+    shift = Math.max(shift, newRight + SIBLING_GAP + 1 - n.col);
+  }
+  if (shift === 0) return diagram;
+  return {
+    ...diagram,
+    nodes: diagram.nodes.map((n) => (n.col > drawnRight ? { ...n, col: n.col + shift } : n)),
   };
 }
 

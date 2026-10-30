@@ -13,7 +13,7 @@
  * would violate "the fence is the diagram".
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import { DiagramCanvas, type DiagramCommand } from '../diagram/DiagramCanvas';
 import { DIAGRAM_TOOLS, DIAGRAM_VIEWPORT } from '../diagram/diagramConstants';
@@ -36,6 +36,12 @@ import type { SceneTextChannel } from '../scene/text/sceneTextChannel';
 /** Smallest height the canvas can be dragged to (px). */
 const MIN_DIAGRAM_HEIGHT = 160;
 const DEFAULT_DIAGRAM_HEIGHT = 420;
+/** How long the "edit not applied" notice stays up (ms). */
+const REJECTED_NOTICE_MS = 6000;
+
+const REJECTED_EDIT_MESSAGE =
+  "That change wasn't applied: the diagram couldn't be redrawn without losing a box or " +
+  'connection. Try giving the boxes more room, or edit the ASCII source.';
 
 interface AsciiDiagramWidgetProps {
   editor: Editor;
@@ -75,12 +81,23 @@ export function AsciiDiagramWidget({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, canvasOffsetVersion]);
 
+  // A refused edit leaves the canvas exactly as it was; without a note it
+  // looks like the change silently reverted.
+  const [rejectedAt, setRejectedAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (rejectedAt === null) return;
+    const timer = setTimeout(() => setRejectedAt(null), REJECTED_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [rejectedAt]);
+
   const dispatch = useCallback(
     (cmd: DiagramCommand) => {
       const offset = canvasOffsetRef.current ?? { col: 0, row: 0 };
       const applied = applyAsciiDiagramCommand(editor, blockId, cmd, {
         diagramOffset: offset,
+        onRejected: () => setRejectedAt(Date.now()),
       });
+      if (applied) setRejectedAt(null);
       if (applied && (offset.col !== 0 || offset.row !== 0)) {
         // The same rewrite that applied the edit has now persisted the virtual
         // gutter. Drop the projection offset so the on-screen coordinates do
@@ -204,6 +221,13 @@ export function AsciiDiagramWidget({
       </details>
     ) : null;
 
+  // Always mounted so screen readers pick up the change in a live region.
+  const notice = (
+    <div className="squisq-ascii-diagram-notice" role="status" aria-live="polite">
+      {rejectedAt !== null && REJECTED_EDIT_MESSAGE}
+    </div>
+  );
+
   const canvas = (
     <DiagramCanvas
       textChannel={textChannel}
@@ -229,6 +253,7 @@ export function AsciiDiagramWidget({
           <div className="squisq-scene-block-max">
             {canvas}
             <div className="squisq-scene-side-toolbar">{toolbar}</div>
+            {notice}
           </div>
         </DiagramMaximizedOverlay>
       </div>
@@ -254,6 +279,7 @@ export function AsciiDiagramWidget({
           title="Drag to resize · double-click to reset"
         />
       </div>
+      {notice}
       {warnings}
     </div>
   );

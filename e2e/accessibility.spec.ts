@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { getAvailableThemes, resolveTheme } from '@bendyline/squisq/schemas';
 import { waitForAppReady } from './appReady';
 import { selectUseMode, switchView } from './view-tabs';
 
@@ -61,6 +62,73 @@ async function assertNoSeriousAxeViolations(page: Page, selector = 'body'): Prom
   expect(violations satisfies AxeViolation[]).toEqual([]);
 }
 
+/** Every built-in theme's primary: the outline tints its chrome with it. */
+const THEME_PRIMARIES = getAvailableThemes().flatMap((entry) => {
+  const theme = typeof entry === 'string' ? resolveTheme(entry) : entry;
+  return theme.colors?.primary ? [[theme.id, theme.colors.primary] as const] : [];
+});
+
+/**
+ * WCAG contrast of the outline's accent-tinted text (the current row and the
+ * template chips) for each accent, against the backgrounds actually painted
+ * behind it. The colors are `color-mix()` results, which axe cannot resolve,
+ * so each one is painted onto a canvas and read back as sRGB.
+ */
+async function outlineAccentContrast(
+  page: Page,
+  primaries: ReadonlyArray<readonly [string, string]>,
+): Promise<Array<{ theme: string; target: string; ratio: number }>> {
+  return page.locator('.squisq-outline').evaluate((outline, accents) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('2D canvas unavailable');
+    const paint = (layers: string[]): number[] => {
+      context.clearRect(0, 0, 1, 1);
+      for (const layer of layers) {
+        context.fillStyle = layer;
+        context.fillRect(0, 0, 1, 1);
+      }
+      return Array.from(context.getImageData(0, 0, 1, 1).data.slice(0, 3));
+    };
+    const luminance = (rgb: number[]): number => {
+      const [r, g, b] = rgb.map((channel) => {
+        const value = channel / 255;
+        return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    // Backgrounds from the outline pane down to the element, outermost first.
+    const backdrop = (element: Element): string[] => {
+      const layers: string[] = [];
+      for (let node: Element | null = element; node; node = node.parentElement) {
+        layers.unshift(getComputedStyle(node).backgroundColor);
+        if (node === outline) break;
+      }
+      return layers;
+    };
+    const targets = [
+      ...outline.querySelectorAll('.squisq-outline-row--current'),
+      ...outline.querySelectorAll('.squisq-outline-template-chip'),
+    ];
+    const results: Array<{ theme: string; target: string; ratio: number }> = [];
+    for (const [theme, primary] of accents) {
+      (outline as HTMLElement).style.setProperty('--squisq-outline-accent', primary);
+      for (const target of targets) {
+        const background = luminance(paint(backdrop(target)));
+        const text = luminance(paint([getComputedStyle(target).color]));
+        const [lighter, darker] = [background, text].sort((a, b) => b - a);
+        results.push({
+          theme,
+          target: `${target.className.split(' ')[0]} "${target.textContent?.trim().slice(0, 24)}"`,
+          ratio: Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100,
+        });
+      }
+    }
+    return results;
+  }, primaries);
+}
+
 test.describe('automated accessibility audit', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -81,6 +149,30 @@ test.describe('automated accessibility audit', () => {
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Export…', exact: true }).click();
     await assertNoSeriousAxeViolations(page, '[role="dialog"]');
+  });
+
+  test('outline highlights stay readable under every theme accent', async ({ page }) => {
+    // The default sample tags its headings, so the outline shows template chips.
+    await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: 'View options', exact: true }).click();
+    await page.getByRole('menuitemcheckbox', { name: 'Show outline' }).click();
+    await page.keyboard.press('Escape');
+    // The caret's section is the outline's current row.
+    await page.locator('.tiptap.ProseMirror :is(h1, h2)').first().click();
+    await expect(page.locator('.squisq-outline-row--current')).toHaveCount(1);
+    await expect(page.locator('.squisq-outline-template-chip').first()).toBeVisible();
+
+    for (const colorScheme of ['light', 'dark'] as const) {
+      await page.emulateMedia({ colorScheme });
+      await expect(page.locator('.squisq-editor-shell[data-host-mode]')).toHaveAttribute(
+        'data-theme',
+        colorScheme,
+      );
+      const results = await outlineAccentContrast(page, THEME_PRIMARIES);
+      expect(results.length).toBeGreaterThan(THEME_PRIMARIES.length);
+      const unreadable = results.filter((result) => result.ratio < 4.5);
+      expect(unreadable, `${colorScheme}: below 4.5:1`).toEqual([]);
+    }
   });
 
   test('failed imports focus their error dialog and can be dismissed with Escape', async ({

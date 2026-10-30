@@ -40,6 +40,12 @@ export interface ApplyAsciiDiagramCommandOptions {
    * folded into the source in the same transaction as the user's first edit.
    */
   diagramOffset?: { col: number; row: number };
+  /**
+   * Called when the edit is refused because its redrawn art would not read
+   * back as the same diagram (a box or connection would be lost), as opposed
+   * to a no-op. Lets the canvas say why the edit didn't stick.
+   */
+  onRejected?: () => void;
 }
 
 /**
@@ -108,7 +114,7 @@ function applyOp(
   editor: Editor,
   blockId: string,
   op: (diagram: AsciiDiagram) => AsciiDiagram,
-  diagramOffset?: { col: number; row: number },
+  { diagramOffset, onRejected }: ApplyAsciiDiagramCommandOptions,
 ): boolean {
   // Resolve the position at dispatch time — captured positions go stale
   // the moment anything above the block changes.
@@ -127,9 +133,15 @@ function applyOp(
   const rendered = renderAsciiDiagram(next);
 
   // Verify before committing: the rendered art must re-parse to the same
-  // node count, or we'd write art the canvas can't read back.
+  // node and edge counts, or we'd write art the canvas can't read back.
   const verification = parseAsciiDiagram(rendered);
-  if (verification.nodes.length !== next.nodes.length) return false;
+  if (
+    verification.nodes.length !== next.nodes.length ||
+    verification.edges.length !== next.edges.length
+  ) {
+    onRejected?.();
+    return false;
+  }
 
   // Promote the fence language to the explicit `diagram` tag so this block's
   // identity survives a later flatten → markdown → re-import round-trip.
@@ -148,7 +160,7 @@ export function applyAsciiDiagramCommand(
   if (!editor.isEditable) return false;
 
   const apply = (op: (diagram: AsciiDiagram) => AsciiDiagram) =>
-    applyOp(editor, blockId, op, options.diagramOffset);
+    applyOp(editor, blockId, op, options);
   switch (cmd.kind) {
     case 'moveNode': {
       const { col, row } = canvasToAsciiCell(cmd.x, cmd.y);

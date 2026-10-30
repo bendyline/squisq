@@ -180,6 +180,46 @@ describe('applyAsciiDiagramCommand', () => {
     expect(reparsed.edges).toEqual([{ source: 'gateway', target: 'beta', directed: true }]);
   });
 
+  it('renameNode commits on a fan-out whose hub sits at one end', () => {
+    // Re-rendering this art used to route the branches across each other
+    // under the hub; the crossings re-parsed as extra boxes, so the
+    // verification aborted every edit and the label silently reverted.
+    const fanout = [
+      '┌───────────┐',
+      '│ Publisher │',
+      '└─────┬─────┘',
+      '      │',
+      '   ┌──┴───────┬─────────────┬────────────┐',
+      '   ▼          ▼             ▼            ▼',
+      '┌───────┐ ┌─────────┐ ┌────────────┐ ┌───────┐',
+      '│ Pages │ │Documents│ │ Slideshows │ │ Video │',
+      '└───────┘ └─────────┘ └────────────┘ └───────┘',
+    ].join('\n');
+    const editor = makeEditor('```\n' + fanout + '\n```\n');
+    const id = firstBlockId(editor);
+    expect(
+      applyAsciiDiagramCommand(editor, id, {
+        kind: 'renameNode',
+        nodeId: 'documents',
+        newLabel: 'Documentsaa',
+      }),
+    ).toBe(true);
+    const reparsed = parseAsciiDiagram(fenceOf(editor).text);
+    expect(reparsed.nodes.map((n) => n.label).sort()).toEqual([
+      'Documentsaa',
+      'Pages',
+      'Publisher',
+      'Slideshows',
+      'Video',
+    ]);
+    expect(reparsed.edges.map((e) => `${e.source}>${e.target}`).sort()).toEqual([
+      'publisher>documentsaa',
+      'publisher>pages',
+      'publisher>slideshows',
+      'publisher>video',
+    ]);
+  });
+
   it('addNode / removeNode change the box count', () => {
     const editor = makeEditor('```\n' + ART + '\n```\n');
     const id = firstBlockId(editor);
