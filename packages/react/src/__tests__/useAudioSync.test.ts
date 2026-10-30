@@ -558,8 +558,24 @@ describe('useAudioSync play after ended', () => {
   });
 });
 
+/** Runs every retry wait (1 + 3 + 8 s) and lets the downloads between them settle. */
+async function exhaustLoadRetries(): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(13_000);
+  });
+}
+
 describe('useAudioSync unloadable segments', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+  });
+
   it('settles a cross-segment seek and still completes restart when loading fails', async () => {
+    vi.useFakeTimers();
     const audio = createAudioElement();
     vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network down'));
     const play = vi.spyOn(audio, 'play').mockResolvedValue(undefined);
@@ -569,8 +585,22 @@ describe('useAudioSync unloadable segments', () => {
         { src: 'b.mp3', name: 'b', duration: 2, startTime: 2 },
       ],
     };
-    const { result } = renderHook(() => useAudioSync({ current: audio }, twoSegments));
-    await waitFor(() => expect(result.current.isAvailable).toBe(false));
+    // A stable ref, as a component's useRef is: a new object each render would
+    // re-run the load (and its retries) on every re-render.
+    const audioRef = { current: audio };
+    const { result } = renderHook(() => useAudioSync(audioRef, twoSegments));
+    // Every retry fails as well: only then is the narration unavailable.
+    expect(result.current.isAvailable).toBe(true);
+    await exhaustLoadRetries();
+    expect(result.current.isAvailable).toBe(false);
+    // The first download and three retries (the mount's own preload may add one)…
+    const attempts = vi.mocked(globalThis.fetch).mock.calls.length;
+    expect(attempts).toBeGreaterThanOrEqual(4);
+    // …and then it stops asking.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(vi.mocked(globalThis.fetch).mock.calls.length).toBe(attempts);
 
     // A failed fetch yields no source, so `canplay` never fires. The seek must
     // still settle rather than hang the caller forever. Kick the call off in a
@@ -580,6 +610,7 @@ describe('useAudioSync unloadable segments', () => {
     act(() => {
       seekPromise = result.current.seekTo(2.5);
     });
+    await exhaustLoadRetries();
     await act(async () => {
       await seekPromise;
     });
@@ -592,11 +623,87 @@ describe('useAudioSync unloadable segments', () => {
     act(() => {
       restartPromise = result.current.restart();
     });
+    await exhaustLoadRetries();
     await act(async () => {
       await restartPromise;
     });
     expect(play).toHaveBeenCalled();
     expect(result.current.currentSegment).toBe(0);
+  });
+
+  it('retries a failed segment download before reporting the narration unavailable', async () => {
+    vi.useFakeTimers();
+    const audio = createAudioElement();
+    let calls = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      calls += 1;
+      if (calls <= 2) throw new TypeError('Failed to fetch');
+      return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'audio/mpeg' } });
+    });
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(() => 'blob:a.mp3');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const { result } = renderHook(() => useAudioSync({ current: audio }, track));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4_500);
+    });
+    expect(calls).toBe(3);
+    expect(audio.src).toBe('blob:a.mp3');
+    expect(result.current.isAvailable).toBe(true);
+  });
+
+  it('waits for a hidden page to come back before retrying, then plays on', async () => {
+    // A phone app in the background: the segment boundary arrives, its download
+    // fails, and the listener returns later. Playback picks up where it was.
+    vi.useFakeTimers();
+    const audio = createAudioElement();
+    const play = vi.spyOn(audio, 'play').mockResolvedValue(undefined);
+    let offline = false;
+    const requested: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const name = String(input).split('/').pop() ?? '';
+      requested.push(name);
+      if (offline) throw new TypeError('Failed to fetch');
+      return new Response(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'audio/mpeg' } });
+    });
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(
+      () => `blob:${requested[requested.length - 1]}`,
+    );
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const { result } = renderHook(() => useAudioSync({ current: audio }, twoSegmentTrack));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(audio.src).toBe('blob:a.mp3');
+
+    // Hidden, with no network, as segment a ends.
+    offline = true;
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    await act(async () => {
+      audio.dispatchEvent(new Event('ended'));
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(requested.filter((name) => name === 'b.mp3')).toHaveLength(1);
+    expect(result.current.isAvailable).toBe(true);
+
+    // Back in the app: the retry runs a second later and narration continues.
+    offline = false;
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(1_100);
+    });
+    expect(audio.src).toBe('blob:b.mp3');
+    await act(async () => {
+      audio.dispatchEvent(new Event('canplay'));
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(play).toHaveBeenCalled();
+    expect(result.current.isAvailable).toBe(true);
+    expect(result.current.currentSegment).toBe(1);
   });
 
   it('settles a pending seek when the media element reports an error', async () => {

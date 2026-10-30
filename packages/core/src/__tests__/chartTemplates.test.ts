@@ -202,12 +202,14 @@ describe('chart templates from markdown tables', () => {
     }
   });
 
-  it('showValues prints formatted value labels', () => {
+  it('showValues prints each value exactly on its mark', () => {
     const layers = materializeLayers(
       chartBlock('columnChart', 'showValues=true valueColumns="Q1"'),
     );
     const textContents = texts(layers);
-    expect(textContents).toContain('1.2K');
+    // A value label is the datum (ticks may still read "1K").
+    expect(textContents).toContain('1,200');
+    expect(textContents).not.toContain('1.2K');
   });
 
   it('stays in bounds in portrait viewports', () => {

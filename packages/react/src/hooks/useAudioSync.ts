@@ -27,6 +27,11 @@
  * seeking after it crosses a chapter boundary), because the element still
  * holds the previous segment. The next segment is downloaded shortly before the
  * current one ends, so chapter boundaries do not stall on a fresh download.
+ *
+ * A segment whose download fails is retried a few times before the narration
+ * is reported unavailable, and the waits only count while the page is visible
+ * and online. A phone app in the background can lose its network; the segment
+ * that failed there now loads, and plays on, when the listener comes back.
  */
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
@@ -69,6 +74,47 @@ const NEXT_SEGMENT_WARM_LEAD_SECONDS = 30;
 function isBenignPlayRejection(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   return error.name === 'NotAllowedError' || error.name === 'AbortError';
+}
+
+/**
+ * Waits before each retry of a segment download that failed, in milliseconds.
+ * The narration only counts as unavailable once every retry has failed too.
+ */
+const LOAD_RETRY_DELAYS_MS = [1_000, 3_000, 8_000];
+
+/**
+ * Resolves once `delayMs` has passed with the page visible and the device
+ * online, or as soon as `signal` aborts. Time spent hidden or offline does not
+ * count: a page in the background (a phone app the listener left) often has no
+ * network at all, and its download can only succeed once the page returns.
+ */
+function waitToRetry(delayMs: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const hasDocument = typeof document !== 'undefined';
+    const ready = () =>
+      (!hasDocument || document.visibilityState !== 'hidden') &&
+      (typeof navigator === 'undefined' || navigator.onLine !== false);
+    const finish = () => {
+      clearTimeout(timer);
+      if (hasDocument) document.removeEventListener('visibilitychange', check);
+      if (typeof window !== 'undefined') window.removeEventListener('online', check);
+      signal.removeEventListener('abort', finish);
+      resolve();
+    };
+    function check() {
+      clearTimeout(timer);
+      timer = ready() ? setTimeout(finish, delayMs) : undefined;
+    }
+    signal.addEventListener('abort', finish);
+    if (hasDocument) document.addEventListener('visibilitychange', check);
+    if (typeof window !== 'undefined') window.addEventListener('online', check);
+    check();
+  });
 }
 
 function resolveAudioUrl(src: string, basePath: string): string {
@@ -455,12 +501,26 @@ export function useAudioSync(
 
     let cancelled = false;
     let handleCanPlay: (() => void) | null = null;
+    const retryAbort = new AbortController();
 
     if (!isSameSource) {
       // Need to load new source - use preloaded blob URL
       const loadAndPlay = async () => {
         loadingSegment.current = segment.src;
-        const blobUrl = await preloadAudio(segment.src);
+        let blobUrl = await preloadAudio(segment.src);
+        // A failed download is retried (waitToRetry) before the narration
+        // counts as unavailable; a policy-blocked URL is not. Play intent and
+        // a pending seek carry over, so playback resumes once it arrives.
+        const fetchable = isResourceUrlAllowed(
+          resolveAudioUrl(segment.src, basePath),
+          resourcePolicy,
+        );
+        for (const delay of LOAD_RETRY_DELAYS_MS) {
+          if (blobUrl || cancelled || !fetchable) break;
+          await waitToRetry(delay, retryAbort.signal);
+          if (cancelled) return;
+          blobUrl = await preloadAudio(segment.src);
+        }
         // A cancelled run leaves the marker to the run that replaced it.
         if (cancelled) return;
         loadingSegment.current = null;
@@ -528,9 +588,20 @@ export function useAudioSync(
 
     return () => {
       cancelled = true;
+      retryAbort.abort();
       if (handleCanPlay) audio.removeEventListener('canplay', handleCanPlay);
     };
-  }, [audioRef, currentSegment, audioTrack, preloadAudio, enabled, mode, isBoundTo]);
+  }, [
+    audioRef,
+    currentSegment,
+    audioTrack,
+    preloadAudio,
+    enabled,
+    mode,
+    isBoundTo,
+    basePath,
+    resourcePolicy,
+  ]);
 
   const seekTo = useCallback(
     async (time: number): Promise<void> => {

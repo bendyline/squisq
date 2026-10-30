@@ -84,6 +84,19 @@ export function formatChartValue(value: number, unit?: string): string {
   return unit ? `${text} ${unit}` : text;
 }
 
+/**
+ * Format a value printed on its own mark (`showValues`): exact below 10,000
+ * ("1,320", as a narrator reads it), compact above. Ticks may round because
+ * they are a scale; a value label is the datum, and "2K" for both 1,990 and
+ * 2,050 says two different bars are equal.
+ */
+export function formatChartDataValue(value: number, unit?: string): string {
+  if (!Number.isFinite(value) || Math.abs(value) >= 10_000) return formatChartValue(value, unit);
+  const sign = value < 0 ? '-' : '';
+  const text = `${sign}${Math.abs(value).toLocaleString('en-US', { maximumFractionDigits: 2 })}`;
+  return unit ? `${text} ${unit}` : text;
+}
+
 function trimTrailingZero(text: string): string {
   return text.replace(/\.0$/, '');
 }

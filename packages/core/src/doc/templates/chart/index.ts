@@ -8,7 +8,7 @@ export {
   buildChartData,
   normalizeChartTable,
 } from './parse.js';
-export { niceTicks, formatChartValue, type NiceTicks } from './scale.js';
+export { niceTicks, formatChartValue, formatChartDataValue, type NiceTicks } from './scale.js';
 export { arcPath, polylinePath, areaPath, pointOnCircle, type ChartPoint } from './geometry.js';
 export {
   computeChartFrame,
