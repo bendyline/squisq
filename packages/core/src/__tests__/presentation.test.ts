@@ -7,10 +7,12 @@ import {
   usesDynamicPresentation,
   DYNAMIC_PRESENTATION_STYLE,
   PRESENTATION_HINTS_KEY,
+  presentationPassageKey,
+  type PresentationHints,
 } from '../transform/presentationHints.js';
 import { parseMarkdown, setFrontmatterValues } from '../markdown/index.js';
-import { markdownToDoc } from '../doc/markdownToDoc.js';
-import { buildPreviewDoc } from '../doc/buildPreviewDoc.js';
+import { flattenRenderableBlocks, markdownToDoc } from '../doc/markdownToDoc.js';
+import { buildPreviewDoc, previewBlockTemplate } from '../doc/buildPreviewDoc.js';
 import { resolveAudioMapping } from '../doc/audioMapping.js';
 import { expandDocBlocks } from '../doc/templates/index.js';
 import { buildNarrationScript } from '../narration/script.js';
@@ -23,6 +25,7 @@ import {
   parsePresentationPlan,
   serializePresentationPlan,
   PRESENTATION_KEY,
+  type PresentationBeatLayout,
 } from '../transform/presentationPlan.js';
 import { extractEmbeddedVideos } from '../doc/templateInputs.js';
 import { resolveMediaSchedule } from '../schemas/Media.js';
@@ -256,6 +259,33 @@ describe('dynamic slide summarization', () => {
     hints.blocks.push({ blockId: presentationSections(doc)[1].blockId, inbetweens: false });
     expect(createPresentationPlan(doc, hints).beats.length).toBe(plain.beats.length);
   });
+  it('makes exactly one slide per section, timed to its narration, when asked', async () => {
+    const text = source.replace(
+      'First organize your points. Then add diagrams. Finally share your presentation.',
+      'Good slides start from a plan you can follow. First organize all your ideas into a clear sequence of points. Then add diagrams to explain how the different pieces fit together. Finally share your presentation. ' +
+        'Each slide should carry one idea that the narration explains in more depth. '.repeat(4),
+    );
+    const { doc } = await narrated(text);
+    const hints = { ...defaultPresentationHints(), density: 'section' as const };
+    expect(parsePresentationHints(serializePresentationHints(hints))).toEqual(hints);
+    expect(
+      createPresentationPlan(doc, { ...hints, density: 'concise' }).beats.length,
+    ).toBeGreaterThan(4);
+    // Neither long passages nor a steps introduction split a section.
+    const plan = createPresentationPlan(doc, hints);
+    const sections = presentationSections(doc);
+    expect(plan.beats.map((beat) => sectionAt(doc, beat.sourceStart))).toEqual(
+      sections.map((section) => section.blockId),
+    );
+    for (const [index, beat] of plan.beats.entries())
+      expect(plan.sourceText.slice(beat.sourceStart, beat.sourceEnd)).toBe(
+        sections[index]!.text.trim(),
+      );
+    expect(plan.beats[1]!.layout).toBe('steps');
+    expect(compilePresentationPlan(doc, plan).blocks.map((block) => block.startTime)).toEqual([
+      0, 20, 40,
+    ]);
+  });
   it('never shows a headline again as its body, or the same slide twice in a row', () => {
     const doc = parse(
       [
@@ -437,6 +467,37 @@ describe('dynamic slides with embedded videos and diagrams', () => {
     expect(layers(timed[0]!.id, 'video')[0]!.content.clipEnd).toBe(50);
   });
 
+  it('gives a hidden slide’s visuals to the shown slides and keeps its section’s audio bed', async () => {
+    const { doc } = await narrated(demo, [0, 10, 70, 90]);
+    const plan = createPresentationPlan(doc, concise);
+    const demoBeats = plan.beats.filter((beat) => sectionAt(doc, beat.sourceStart) === 'demo');
+    const hide = (beats: typeof demoBeats) => ({
+      ...concise,
+      blocks: [
+        {
+          blockId: 'demo',
+          hidden: beats.map((beat) =>
+            presentationPassageKey(plan.sourceText.slice(beat.sourceStart, beat.sourceEnd)),
+          ),
+        },
+      ],
+    });
+    const fewer = createPresentationPlan(doc, hide(demoBeats.slice(0, 1)));
+    const shownDemo = fewer.beats.filter(
+      (beat) => sectionAt(doc, beat.sourceStart) === 'demo' && !beat.hidden,
+    );
+    expect(fewer.beats[1]).toMatchObject({ hidden: true });
+    expect(fewer.beats[1]!.media).toBeUndefined();
+    expect(shownDemo.every((beat) => beat.media?.join() === 'demo#0')).toBe(true);
+
+    // With the whole section hidden, the opening slide stays up and the bed still plays.
+    const none = compilePresentationPlan(doc, createPresentationPlan(doc, hide(demoBeats)));
+    expect(none.blocks.filter((block) => block.sourceBlockId === 'demo')).toHaveLength(0);
+    expect(none.blocks[0]).toMatchObject({ startTime: 0, duration: 70 });
+    const bed = resolveMediaSchedule(none).filter((clip) => clip.src === 'audio/bed.mp3');
+    expect(bed.map((clip) => [clip.absoluteStart, clip.absoluteEnd])).toEqual([[10, 70]]);
+  });
+
   it('keeps a section audio bed playing until that section ends', async () => {
     const { doc } = await narrated(demo, [0, 10, 70, 90]);
     const compiled = compilePresentationPlan(doc, createPresentationPlan(doc, concise));
@@ -457,6 +518,226 @@ describe('dynamic slides with embedded videos and diagrams', () => {
     const plan = createPresentationPlan(doc, concise);
     const withoutVideo = (await narrated(demo.replace(/<video[^\n]*/u, ''), [0, 10, 70, 90])).doc;
     expect(() => compilePresentationPlan(withoutVideo, plan)).toThrow('video or diagram');
+  });
+});
+
+describe('authored sections and summary layouts', () => {
+  const report = [
+    '# Results',
+    '',
+    'Revenue grew 40% last year. Most of it came from new customers.',
+    '',
+    '## By region {[barChart]}',
+    '',
+    'North led every quarter.',
+    '',
+    '| Region | Sales |',
+    '| --- | --- |',
+    '| North | 40 |',
+    '| South | 25 |',
+    '',
+    '## Terms',
+    '',
+    'A ledger records every sale. It never loses an entry.',
+  ].join('\n');
+  const prefer = (section: string, layout: PresentationBeatLayout) => {
+    const hints = defaultPresentationHints();
+    hints.blocks.push({ blockId: section, layout });
+    return hints;
+  };
+  /** The section's first slide in `plan` and the block it compiles to. */
+  const slide = (doc: Doc, hints: PresentationHints, section: string) => {
+    const plan = createPresentationPlan(doc, hints);
+    const beat = plan.beats.find((item) => sectionAt(doc, item.sourceStart) === section)!;
+    const block = compilePresentationPlan(doc, plan).blocks.find((item) => item.id === beat.id)!;
+    return { plan, beat, block };
+  };
+
+  it('shows an authored section as its own block for its whole narration', async () => {
+    const { doc } = await narrated(report, [0, 20, 40, 60]);
+    const { plan, beat, block } = slide(doc, prefer('by-region', 'authored'), 'by-region');
+    expect(plan.beats.filter((item) => sectionAt(doc, item.sourceStart) === 'by-region')).toEqual([
+      beat,
+    ]);
+    expect(beat).toMatchObject({ layout: 'authored', headline: 'By region', points: [] });
+    const section = presentationSections(doc).find((item) => item.blockId === 'by-region')!;
+    expect(plan.sourceText.slice(beat.sourceStart, beat.sourceEnd)).toBe(section.text.trim());
+    expect(block).toMatchObject({ template: 'barChart', startTime: 20, duration: 20 });
+    expect(block.sourceBlockId).toBe('by-region');
+    expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+
+    // The deck draws it with the template the author picked, from its own table.
+    const authored = flattenRenderableBlocks(doc.blocks).find((item) => item.id === 'by-region')!;
+    expect(previewBlockTemplate(authored, doc)).toBe('barChart');
+    const deck = buildPreviewDoc({
+      ...doc,
+      frontmatter: {
+        'squisq-transform': DYNAMIC_PRESENTATION_STYLE,
+        [PRESENTATION_HINTS_KEY]: serializePresentationHints(prefer('by-region', 'authored')),
+      },
+    });
+    expect(deck.diagnostics?.some((item) => item.code === 'presentation-invalid')).not.toBe(true);
+    expect(deck.blocks.find((item) => item.id === beat.id)?.template).toBe('barChart');
+    expect(JSON.stringify(deck.blocks.find((item) => item.id === beat.id))).toContain('South');
+  });
+
+  it('never repeats a nested section or takes AI wording on an authored slide', () => {
+    const doc = parse(report);
+    const hints = prefer('results', 'authored');
+    const { plan, beat } = slide(doc, hints, 'results');
+    hints.blocks[0]!.ai = [
+      {
+        source: plan.sourceText.slice(beat.sourceStart, beat.sourceEnd),
+        layout: 'statement',
+        headline: 'Revenue up',
+        points: [],
+      },
+    ];
+    const { block } = slide(doc, hints, 'results');
+    expect(block.children).toBeUndefined();
+    const deck = buildPreviewDoc(compilePresentationPlan(doc, createPresentationPlan(doc, hints)));
+    expect(deck.blocks.find((item) => item.id === block.id)?.template).toBe('content');
+    expect(deck.blocks.filter((item) => item.sourceBlockId === 'by-region')).toHaveLength(1);
+    expect(JSON.stringify(deck.blocks)).not.toContain('Revenue up');
+    // An un-annotated heading previews as content, not a bare section header.
+    const results = flattenRenderableBlocks(doc.blocks)[0]!;
+    expect(results.template).toBe('sectionHeader');
+    expect(previewBlockTemplate(results)).toBe('content');
+  });
+
+  it('fills each additional summary layout from the passage', () => {
+    const doc = parse(report);
+    expect(slide(doc, prefer('results', 'stat'), 'results').block).toMatchObject({
+      template: 'statHighlight',
+      stat: '40%',
+      description: 'Revenue grew 40% last year.',
+      detail: 'Most of it came from new customers.',
+    });
+    expect(slide(doc, prefer('terms', 'quote'), 'terms').block).toMatchObject({
+      template: 'fullBleedQuote',
+      text: 'A ledger records every sale.',
+    });
+    expect(slide(doc, prefer('terms', 'emphasis'), 'terms').block).toMatchObject({
+      template: 'bigText',
+      title: 'Terms',
+    });
+    expect(slide(doc, prefer('terms', 'definition'), 'terms').block).toMatchObject({
+      template: 'definitionCard',
+      term: 'Terms',
+      definition: 'A ledger records every sale.\n\nIt never loses an entry.',
+    });
+    expect(slide(doc, prefer('terms', 'divider'), 'terms').block).toMatchObject({
+      template: 'sectionHeader',
+      title: 'Terms',
+    });
+    // A layout the passage cannot fill keeps the automatic choice.
+    expect(slide(doc, prefer('terms', 'stat'), 'terms').beat.layout).not.toBe('stat');
+    // A pull quote shows only the document's own words.
+    const reworded = prefer('terms', 'quote');
+    const terms = presentationSections(doc).find((item) => item.blockId === 'terms')!;
+    reworded.blocks[0]!.wording = { source: terms.text, headline: 'Ledgers are forever' };
+    expect(slide(doc, reworded, 'terms').beat).toMatchObject({
+      layout: 'statement',
+      headline: 'Ledgers are forever',
+    });
+  });
+
+  it('validates layout content and authored choices in hints and saved plans', () => {
+    const quote = (headline: string, layout = 'quote') => ({
+      ...defaultPresentationHints(),
+      blocks: [
+        {
+          blockId: 'terms',
+          ai: [{ source: 'A ledger records every sale.', layout, headline, points: [] }],
+        },
+      ],
+    });
+    expect(parsePresentationHints(quote('A ledger records every sale.'))).not.toBeNull();
+    expect(parsePresentationHints(quote('Ledgers never forget'))).toBeNull();
+    expect(parsePresentationHints(quote('A ledger', 'authored'))).toBeNull();
+    expect(parsePresentationHints(quote('A ledger', 'stat'))).toBeNull();
+    expect(
+      parsePresentationHints({
+        ...defaultPresentationHints(),
+        blocks: [{ blockId: 'terms', layout: 'authored' }],
+      }),
+    ).not.toBeNull();
+    const plan = createPresentationPlan(parse(report));
+    const first = plan.beats[0]!;
+    expect(
+      parsePresentationPlan({
+        ...plan,
+        beats: [{ ...first, layout: 'authored' }, ...plan.beats.slice(1)],
+      }),
+    ).toBeNull();
+    expect(
+      parsePresentationPlan({
+        ...plan,
+        beats: [{ ...first, layout: 'authored', points: [] }, ...plan.beats.slice(1)],
+      }),
+    ).not.toBeNull();
+  });
+});
+
+describe('hidden slides', () => {
+  const keyOf = (plan: ReturnType<typeof createPresentationPlan>, index: number) =>
+    presentationPassageKey(
+      plan.sourceText.slice(plan.beats[index]!.sourceStart, plan.beats[index]!.sourceEnd),
+    );
+  const hiding = (doc: Doc, entries: Array<[number, string[]]>): PresentationHints => ({
+    ...defaultPresentationHints(),
+    blocks: entries.map(([section, hidden]) => ({
+      blockId: presentationSections(doc)[section]!.blockId,
+      hidden,
+    })),
+  });
+
+  it('leaves a hidden slide out while the shown slide before it covers its narration', async () => {
+    const { doc } = await narrated(source, [0, 20, 40, 60]);
+    const plan = createPresentationPlan(doc);
+    const hidden = createPresentationPlan(doc, hiding(doc, [[1, [keyOf(plan, 1)]]]));
+    expect(hidden.beats.map((beat) => beat.hidden)).toEqual([undefined, true, undefined]);
+    expect(parsePresentationPlan(serializePresentationPlan(hidden))).toEqual(hidden);
+    const deck = compilePresentationPlan(doc, hidden);
+    expect(deck.duration).toBe(60);
+    expect(deck.blocks.map((block) => [block.id, block.startTime, block.duration])).toEqual([
+      [plan.beats[0]!.id, 0, 40],
+      [plan.beats[2]!.id, 40, 20],
+    ]);
+    // Without the opener, the next shown slide opens the deck.
+    const opener = compilePresentationPlan(
+      doc,
+      createPresentationPlan(doc, hiding(doc, [[0, [keyOf(plan, 0)]]])),
+    );
+    expect(opener.blocks.map((block) => [block.id, block.startTime, block.duration])).toEqual([
+      [plan.beats[1]!.id, 0, 40],
+      [plan.beats[2]!.id, 40, 20],
+    ]);
+    const all = createPresentationPlan(
+      doc,
+      hiding(
+        doc,
+        plan.beats.map((_, index) => [index, [keyOf(plan, index)]]),
+      ),
+    );
+    expect(() => compilePresentationPlan(doc, all)).toThrow('Every slide is hidden');
+  });
+
+  it('shows a slide again once its passage changes, and validates saved keys', () => {
+    const doc = parse(source);
+    const plan = createPresentationPlan(doc);
+    const hints = hiding(doc, [[2, [keyOf(plan, 2)]]]);
+    expect(parsePresentationHints(serializePresentationHints(hints))).toEqual(hints);
+    expect(createPresentationPlan(doc, hints).beats[2]!.hidden).toBe(true);
+    const edited = parse(source.replace('runs locally', 'runs on your computer'));
+    expect(createPresentationPlan(edited, hints).beats[2]!.hidden).toBeUndefined();
+    for (const hidden of [[], ['Narration runs locally.'], ['ab-1', 'ab-1'], [7]])
+      expect(
+        parsePresentationHints({
+          ...defaultPresentationHints(),
+          blocks: [{ blockId: 'x', hidden }],
+        }),
+      ).toBeNull();
   });
 });
 

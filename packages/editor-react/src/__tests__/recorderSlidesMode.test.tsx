@@ -185,6 +185,80 @@ describe('RecorderModal — slides mode', () => {
   });
 });
 
+// A slide's clip must roll like playback rolls it: from its in-point when the
+// slide comes up, and from 0 again when a take starts on it. jsdom never
+// advances a <video> on its own, so `currentTime` only moves when the slide
+// clock re-syncs it — which makes it a direct readout of that clock.
+describe('RecorderModal — slide clips', { timeout: 30_000 }, () => {
+  const CLIP_MD = `# Intro
+
+Alpha beta gamma words for the intro.
+
+# Demo {[mediaOnly duration=12]}
+
+<video src="demo.webm" controls width="480"></video>
+`;
+  const clipDoc: Doc = markdownToDoc(parseMarkdown(CLIP_MD));
+  let played: HTMLMediaElement[];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubRecorderGlobals();
+    vi.useFakeTimers();
+    played = [];
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      played.push(this);
+      return Promise.resolve();
+    });
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /** The slide's own clip — the dialog's camera previews are <video>s too. */
+  function slideVideo(): HTMLVideoElement | null {
+    return screen.getByTestId('recorder-slides-panel').querySelector('video');
+  }
+
+  it('plays the clip muted from when its slide comes up, and restarts it with the take', async () => {
+    render(
+      <RecorderModal
+        mediaProvider={mediaProvider}
+        onClose={vi.fn()}
+        slides={{ doc: clipDoc, theme: resolveThemeForDoc(clipDoc), captureTimings: false }}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(checkbox('Show slides mode'));
+    });
+    expect(slideVideo()).toBeNull();
+
+    await click('Next slide');
+    const video = slideVideo()!;
+    expect(video).toBeTruthy();
+    expect(video.muted).toBe(true);
+    expect(played).toContain(video);
+
+    await advanceClock(5_000);
+    expect(video.currentTime).toBeGreaterThan(4.7);
+    expect(video.currentTime).toBeLessThanOrEqual(5);
+
+    await click('Start preview');
+    await click('Record');
+    await advanceClock(1_000);
+    expect(slideVideo()).toBe(video);
+    expect(video.currentTime).toBeGreaterThan(0.7);
+    expect(video.currentTime).toBeLessThanOrEqual(1);
+  });
+});
+
 // Every case records a ~30 s take through `advanceTimersByTimeAsync`, which
 // spends a real event-loop turn on each fake timer it fires — and with
 // narration on, the teleprompter's two rAF loops add ~3,900 frames. That is
