@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.8...@bendyline/squisq@2.13.9) (2026-10-30)
+
+### Bug Fixes
+
+* Small outside in and page template work ([#115](https://github.com/bendyline/squisq/issues/115)) ([4259651](https://github.com/bendyline/squisq/commit/4259651d95dc6154a00e6f055d9aa5b37b96f404))
+
 ## @bendyline/squisq [2.13.8](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.7...@bendyline/squisq@2.13.8) (2026-10-29)
 
 ### Bug Fixes
