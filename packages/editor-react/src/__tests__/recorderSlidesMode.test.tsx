@@ -185,6 +185,80 @@ describe('RecorderModal — slides mode', () => {
   });
 });
 
+// A slide's clip must roll like playback rolls it: from its in-point when the
+// slide comes up, and from 0 again when a take starts on it. jsdom never
+// advances a <video> on its own, so `currentTime` only moves when the slide
+// clock re-syncs it — which makes it a direct readout of that clock.
+describe('RecorderModal — slide clips', { timeout: 30_000 }, () => {
+  const CLIP_MD = `# Intro
+
+Alpha beta gamma words for the intro.
+
+# Demo {[mediaOnly duration=12]}
+
+<video src="demo.webm" controls width="480"></video>
+`;
+  const clipDoc: Doc = markdownToDoc(parseMarkdown(CLIP_MD));
+  let played: HTMLMediaElement[];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubRecorderGlobals();
+    vi.useFakeTimers();
+    played = [];
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockImplementation(function (
+      this: HTMLMediaElement,
+    ) {
+      played.push(this);
+      return Promise.resolve();
+    });
+    vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  /** The slide's own clip — the dialog's camera previews are <video>s too. */
+  function slideVideo(): HTMLVideoElement | null {
+    return screen.getByTestId('recorder-slides-panel').querySelector('video');
+  }
+
+  it('plays the clip muted from when its slide comes up, and restarts it with the take', async () => {
+    render(
+      <RecorderModal
+        mediaProvider={mediaProvider}
+        onClose={vi.fn()}
+        slides={{ doc: clipDoc, theme: resolveThemeForDoc(clipDoc), captureTimings: false }}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(checkbox('Show slides mode'));
+    });
+    expect(slideVideo()).toBeNull();
+
+    await click('Next slide');
+    const video = slideVideo()!;
+    expect(video).toBeTruthy();
+    expect(video.muted).toBe(true);
+    expect(played).toContain(video);
+
+    await advanceClock(5_000);
+    expect(video.currentTime).toBeGreaterThan(4.7);
+    expect(video.currentTime).toBeLessThanOrEqual(5);
+
+    await click('Start preview');
+    await click('Record');
+    await advanceClock(1_000);
+    expect(slideVideo()).toBe(video);
+    expect(video.currentTime).toBeGreaterThan(0.7);
+    expect(video.currentTime).toBeLessThanOrEqual(1);
+  });
+});
+
 // Every case records a ~30 s take through `advanceTimersByTimeAsync`, which
 // spends a real event-loop turn on each fake timer it fires — and with
 // narration on, the teleprompter's two rAF loops add ~3,900 frames. That is
@@ -431,5 +505,104 @@ describe('RecorderModal — slide timing capture', { timeout: 30_000 }, () => {
     const timing = await readSidecar(result.slideTiming!.sidecarPath);
     expect(timing.blocks[0].startSec).toBe(0);
     expect(timing.blocks[1].startSec).toBe(timing.blocks[1].endSec);
+  });
+});
+
+describe('RecorderModal — summarized presentation slides', { timeout: 30_000 }, () => {
+  // Dynamic slides split "Make it visual" into an introduction and a steps
+  // diagram. The existing take must not keep the presentation from showing.
+  const SUMMARIZED = `---
+squisq-transform: dynamic-slides
+---
+{[audio src=audio/old.webm anchor=document]}
+
+# Start with an idea
+
+Write a few bullet points. Build a document with a clear story.
+
+## Make it visual
+
+Good slides start from a plan you can follow. First organize all your ideas into a clear sequence of points. Then add diagrams to explain how the different pieces fit together. Finally share your presentation.
+
+## Keep your voice
+
+Narration runs locally. Turn the same document into a narrated video.
+`;
+  const summarized = markdownToDoc(parseMarkdown(SUMMARIZED));
+  let container: MemoryContentContainer;
+  let onSave: ReturnType<typeof vi.fn<(result: RecorderSaveResult) => void>>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubRecorderGlobals();
+    container = new MemoryContentContainer();
+    onSave = vi.fn<(result: RecorderSaveResult) => void>();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function renderSummarized() {
+    render(
+      <RecorderModal
+        mediaProvider={mediaProvider}
+        container={container}
+        initialMode="mic"
+        onClose={vi.fn()}
+        onSave={onSave}
+        slides={{ doc: summarized, theme: resolveThemeForDoc(summarized), captureTimings: true }}
+      />,
+    );
+  }
+
+  it('shows the summarized slides, each above its whole source section', async () => {
+    renderSummarized();
+    await act(async () => {
+      fireEvent.click(checkbox('Show slides mode'));
+    });
+    expect(screen.getByText('Slide 1 of 4')).toBeTruthy();
+
+    const notes = () => screen.getByTestId('recorder-slide-notes').textContent ?? '';
+    await click('Next slide');
+    expect(notes()).toContain('Make it visual');
+    expect(notes()).toContain('Good slides start from a plan you can follow.');
+    expect(notes()).toContain('Finally share your presentation.');
+    await click('Next slide');
+    expect(screen.getByText('Slide 3 of 4')).toBeTruthy();
+    // The steps slide summarizes the same section, so its notes are unchanged.
+    expect(notes()).toContain('Good slides start from a plan you can follow.');
+  });
+
+  it('times each summarized slide, and its section, from its first showing', async () => {
+    vi.useFakeTimers();
+    renderSummarized();
+    await act(async () => {
+      fireEvent.click(checkbox('Show slides mode'));
+    });
+    await click('Start preview');
+    await click('Record');
+    for (const wait of [10_000, 12_000, 8_000]) {
+      await advanceClock(wait);
+      await click('Next slide');
+    }
+    await advanceClock(10_000);
+    await click('Stop');
+    await click('Save to document');
+
+    const result = onSave.mock.calls[0][0];
+    const bytes = await container.readFile(result.slideTiming!.sidecarPath);
+    const timing = JSON.parse(new TextDecoder().decode(bytes!)) as NarrationTimingJsonV3;
+    expect(timing.slides?.map((mark) => mark.time)).toEqual([0, 10, 22, 30]);
+    expect(new Set(timing.slides?.map((mark) => mark.charOffset)).size).toBe(4);
+    // The section the two middle slides summarize runs from the first of them.
+    expect(timing.blocks.map((block) => [block.startSec, block.endSec])).toEqual([
+      [0, 10],
+      [10, 30],
+      [30, 40],
+    ]);
   });
 });

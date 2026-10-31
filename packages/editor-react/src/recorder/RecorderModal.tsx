@@ -37,10 +37,13 @@ import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import {
   EMPTY_ADVANCE_LOG,
+  EMPTY_SLIDE_MARK_LOG,
   advanceCoverage,
   buildAdvanceTimingJson,
+  recordSlideMark,
   recordSlideShown,
   type SlideAdvanceLog,
+  type SlideMarkLog,
 } from '@bendyline/squisq/narration';
 import { useMediaRecorder, type RecorderSource } from './hooks/useMediaRecorder.js';
 import { formatRecordingBytes } from './recordingLimits.js';
@@ -879,6 +882,11 @@ export function RecorderModal({
     [recorder],
   );
   const [advanceLog, setAdvanceLog] = useState<SlideAdvanceLog>(EMPTY_ADVANCE_LOG);
+  // First showings of presentation slides, which time the slides themselves;
+  // `advanceLog` times the blocks they summarize.
+  const [slideMarks, setSlideMarks] = useState<SlideMarkLog>(EMPTY_SLIDE_MARK_LOG);
+  const slideMarksRef = useRef(slideMarks);
+  slideMarksRef.current = slideMarks;
   const [applySlideTimings, setApplySlideTimings] = useState(true);
   // The index is read from an event handler that fires during a take, so it
   // must not be a stale closure over a render.
@@ -905,9 +913,11 @@ export function RecorderModal({
       const clamped = clampSlideIndex(next, slideDeckRef.current.length);
       setSlideIndex(clamped);
       const elapsedMs = recorder.getElapsedMs();
-      const blockId = slideDeckRef.current[clamped]?.blockId;
-      if (elapsedMs === null || !blockId) return;
-      setAdvanceLog((log) => recordSlideShown(log, blockId, elapsedMs));
+      const slide = slideDeckRef.current[clamped];
+      if (elapsedMs === null || !slide?.blockId) return;
+      setAdvanceLog((log) => recordSlideShown(log, slide.blockId, elapsedMs));
+      const offset = slide.sourceCharOffset;
+      if (offset !== undefined) setSlideMarks((log) => recordSlideMark(log, offset, elapsedMs));
     },
     [recorder],
   );
@@ -918,10 +928,12 @@ export function RecorderModal({
   // Keyed on the ID LIST, not on the deck's object identity: the editor
   // reparses on a debounce, so the deck is rebuilt whenever anything at all in
   // the document changes. Resetting on identity would silently discard a
-  // rolling take's advances because the presenter fixed a typo.
-  const slideDeckKey = slideDeck.map((slide) => slide.blockId).join('\x00');
+  // rolling take's advances because the presenter fixed a typo. A summarized
+  // deck lists a block once per slide; its blocks, in order, are the key.
+  const slideDeckKey = [...new Set(slideDeck.map((slide) => slide.blockId))].join('\x00');
   useEffect(() => {
     setAdvanceLog(EMPTY_ADVANCE_LOG);
+    setSlideMarks(EMPTY_SLIDE_MARK_LOG);
     setBuildLog([]);
     setSlideIndex(0);
   }, [slidesOn, slideDeckKey]);
@@ -1152,6 +1164,7 @@ export function RecorderModal({
       previousKeyRef.current = captureKey;
       dualSaveProgressRef.current = {};
       setAdvanceLog(EMPTY_ADVANCE_LOG);
+      setSlideMarks(EMPTY_SLIDE_MARK_LOG);
       recorder.cancel();
     }
   }, [captureKey, recorder]);
@@ -1223,8 +1236,15 @@ export function RecorderModal({
     // Seed the log with whatever slide is already on screen, at t=0. Without
     // this the first block would have no observation and would collapse to a
     // zero-length range — the take begins on the slide the presenter chose.
-    const blockId = slideDeckRef.current[slideIndexRef.current]?.blockId;
-    setAdvanceLog(blockId ? recordSlideShown(EMPTY_ADVANCE_LOG, blockId, 0) : EMPTY_ADVANCE_LOG);
+    const slide = slideDeckRef.current[slideIndexRef.current];
+    setAdvanceLog(
+      slide?.blockId ? recordSlideShown(EMPTY_ADVANCE_LOG, slide.blockId, 0) : EMPTY_ADVANCE_LOG,
+    );
+    setSlideMarks(
+      slide?.sourceCharOffset !== undefined
+        ? recordSlideMark(EMPTY_SLIDE_MARK_LOG, slide.sourceCharOffset, 0)
+        : EMPTY_SLIDE_MARK_LOG,
+    );
   }, [narrationOn, recorder]);
 
   const handleStop = useCallback(async () => {
@@ -1256,7 +1276,7 @@ export function RecorderModal({
       if (log.length === 0) return null;
 
       const timing = {
-        ...buildAdvanceTimingJson(doc, log, durationSec),
+        ...buildAdvanceTimingJson(doc, log, durationSec, { slides: slideMarksRef.current }),
         builds: buildLogRef.current,
       };
       const encoded = encodeNarrationTimingJson(timing);
@@ -1463,6 +1483,7 @@ export function RecorderModal({
   const handleDiscard = useCallback(() => {
     dualSaveProgressRef.current = {};
     setAdvanceLog(EMPTY_ADVANCE_LOG);
+    setSlideMarks(EMPTY_SLIDE_MARK_LOG);
     recorder.reset();
     if (narrationOn) stageRef.current.controller.restart();
   }, [narrationOn, recorder]);
@@ -1519,7 +1540,7 @@ export function RecorderModal({
     const encoded =
       slidesOn && slidesCaptureTimings && applySlideTimings && slides?.doc && advanceLog.length > 0
         ? encodeNarrationTimingJson({
-            ...buildAdvanceTimingJson(slides.doc, advanceLog, duration),
+            ...buildAdvanceTimingJson(slides.doc, advanceLog, duration, { slides: slideMarks }),
             builds: buildLog,
           })
         : source === 'mic'
@@ -1544,6 +1565,7 @@ export function RecorderModal({
     applySlideTimings,
     slides?.doc,
     advanceLog,
+    slideMarks,
     source,
     sourceText,
   ]);

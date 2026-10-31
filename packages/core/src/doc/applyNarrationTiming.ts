@@ -363,6 +363,13 @@ export async function applyNarrationTiming(
             ? [{ ...event, time: clip.startAt + time }]
             : [];
         }),
+        // A slide shown inside a trimmed span appears where playback resumes.
+        slides: timing.slides?.flatMap((mark) => {
+          const time = timeMap ? timeMap.snapSourceToPlayed(mark.time) : mark.time;
+          return time >= 0 && time <= playedDuration
+            ? [{ charOffset: mark.charOffset, time: clip.startAt + time }]
+            : [];
+        }),
         bookmarks: timing.bookmarks.flatMap((bookmark) => {
           const time = timeMap ? timeMap.sourceToPlayed(bookmark.time) : bookmark.time;
           return time !== null && time >= 0 && time <= playedDuration

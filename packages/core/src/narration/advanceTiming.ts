@@ -79,12 +79,42 @@ export function recordSlideShown(
   return [...log, { blockId, atMs: Math.max(atMs, floor, 0) }];
 }
 
+/**
+ * A presentation slide the presenter put on screen for the first time, keyed
+ * by where its passage begins in the narration script.
+ */
+export interface SlideMarkAdvance {
+  charOffset: number;
+  atMs: number;
+}
+
+/** First-shown-only slide marks, with the same invariants as {@link SlideAdvanceLog}. */
+export type SlideMarkLog = readonly SlideMarkAdvance[];
+
+export const EMPTY_SLIDE_MARK_LOG: SlideMarkLog = Object.freeze([]);
+
+/**
+ * Append a slide's first showing. Like {@link recordSlideShown}, a revisit or
+ * an unusable stamp returns the same reference.
+ */
+export function recordSlideMark(log: SlideMarkLog, charOffset: number, atMs: number): SlideMarkLog {
+  if (!Number.isInteger(charOffset) || charOffset < 0 || !Number.isFinite(atMs)) return log;
+  if (log.some((entry) => entry.charOffset === charOffset)) return log;
+  const floor = log.length > 0 ? log[log.length - 1].atMs : 0;
+  return [...log, { charOffset, atMs: Math.max(atMs, floor, 0) }];
+}
+
 export interface BuildAdvanceTimingOptions {
   /**
    * Forwarded to `buildNarrationScript`. Must match whatever produced the
    * script the sidecar's `sourceText` will be compared against.
    */
   script?: BuildScriptOptions;
+  /**
+   * First showings of presentation slides. Written as the sidecar's `slides`
+   * so the presentation starts each slide where the presenter showed it.
+   */
+  slides?: SlideMarkLog;
   /** `generator.name` written into provenance. Defaults to `'squisq-recorder'`. */
   generatorName?: string;
 }
@@ -188,6 +218,16 @@ export function buildAdvanceTimingJson(
     });
   }
 
+  // Seconds, clamped monotonic and into the take; the first is the take's start.
+  let slideCursor = 0;
+  const slides = (options?.slides ?? [])
+    .filter((mark) => mark.charOffset < script.sourceText.length)
+    .map((mark, index) => {
+      const time = index === 0 ? 0 : Math.min(duration, Math.max(slideCursor, mark.atMs / 1000));
+      slideCursor = time;
+      return { charOffset: mark.charOffset, time };
+    });
+
   return {
     version: 3,
     sourceText: script.sourceText,
@@ -197,6 +237,7 @@ export function buildAdvanceTimingJson(
     // them with block starts would misreport what was measured.
     bookmarks: [],
     blocks,
+    ...(slides.length ? { slides } : {}),
     // `cameraOffsetSec` is deliberately omitted: a dual take already encodes
     // its skew in the camera clip's `startAt`/`clipStart` attributes, and a
     // second copy here invites a double correction.

@@ -5,6 +5,7 @@
 import {
   defaultPresentationHints,
   parsePresentationHints,
+  presentationPassageKey,
   type PresentationHints,
 } from './presentationHints.js';
 import type { Doc } from '../schemas/Doc.js';
@@ -15,8 +16,11 @@ import { extractDocImages } from './blockAnalyzer.js';
 import { transformNarratedSegment } from './narratedSegment.js';
 import { collectPresentationMedia } from './presentationMedia.js';
 import {
+  AUTHORED_PRESENTATION_LAYOUT,
   PRESENTATION_LIMITS,
+  presentationLayoutFits,
   type PresentationBeat,
+  type PresentationLayout,
   type PresentationPlan,
 } from './presentationPlan.js';
 
@@ -144,15 +148,37 @@ export function createPresentationPlan(
   );
   const beats: PresentationBeat[] = [];
   const supportingOpeners = new Set<string>();
-  const wordLimit = { concise: 28, balanced: 42, detailed: 64 }[hints.density];
+  /** The whole sentence each slide would show as a quote. */
+  const quotes = new Map<string, string>();
+  // One slide per section covers the whole passage and adds no supporting slides.
+  const perSection = hints.density === 'section';
+  const wordLimit = { concise: 28, balanced: 42, detailed: 64, section: Infinity }[hints.density];
   for (const block of script.blocks) {
     const source = script.sourceText.slice(block.charStart, block.charEnd);
     const words = [...source.matchAll(/\S+/gu)];
     const hint = hints.blocks.find((item) => item.blockId === block.blockId);
     const wording = hint?.wording?.source === source ? hint.wording : undefined;
-    const inbetweens = hint?.inbetweens ?? hints.inbetweens;
+    const inbetweens = !perSection && (hint?.inbetweens ?? hints.inbetweens);
     const heading = block.heading?.trim();
     const headingEnd = block.charStart + (heading?.length ?? 0);
+    // An authored section is one slide for its whole narration: its own block,
+    // never summarized, split, or given the section's media a second time.
+    if (hint?.layout === AUTHORED_PRESENTATION_LAYOUT) {
+      if (!words.length) continue;
+      const start = block.charStart + words[0]!.index;
+      const last = words[words.length - 1]!;
+      const end = block.charStart + last.index + last[0].length;
+      beats.push({
+        id: `beat-${beats.length + 1}`,
+        sourceStart: start,
+        sourceEnd: end,
+        layout: AUTHORED_PRESENTATION_LAYOUT,
+        headline: headlineText(heading || sentencesIn(script.sourceText, start, end)[0]!.text),
+        points: [],
+      });
+      continue;
+    }
+    const preferred: PresentationLayout | undefined = hint?.layout;
     const chunks = chunkWords(words, wordLimit);
     // A section's images go on its closing slides, never on the deck's opening title.
     const images = sectionImages.get(block.blockId) ?? [];
@@ -207,35 +233,42 @@ export function createPresentationPlan(
         : textPoints;
       const custom = chunk === 0 ? wording : undefined;
       if (custom?.headline) headline = custom.headline;
-      const pointsFor = (layout: PresentationBeat['layout']) =>
+      const pointsFor = (layout: PresentationLayout) =>
         custom?.points ?? (layout === 'steps' ? stepPoints : textPoints);
-      let layout: PresentationBeat['layout'] =
+      // A quote shows one of the passage's own sentences, whole.
+      const quote = custom?.headline
+        ? undefined
+        : body.find((sentence) => sentence.text.length <= 110)?.text;
+      const headlineFor = (layout: PresentationLayout) =>
+        layout === 'quote' && quote ? quote : headline;
+      let layout: PresentationLayout =
         index === 0 ? 'title' : textPoints.length >= 2 && index % 3 === 1 ? 'list' : 'statement';
       if (sequence) layout = 'steps';
       else if (textPoints.length === 2 && /\b(versus|whereas|compared|instead)\b/iu.test(passage))
         layout = 'comparison';
       if (image) layout = 'image';
-      if (hint?.layout) {
-        const count = pointsFor(hint.layout).length;
-        const eligible =
-          hint.layout === 'image'
-            ? !!image
-            : hint.layout === 'comparison'
-              ? count === 2
-              : ['steps', 'list'].includes(hint.layout)
-                ? count >= 2
-                : true;
-        if (eligible) layout = hint.layout;
-      }
+      if (
+        preferred &&
+        (preferred === 'image'
+          ? !!image
+          : presentationLayoutFits(
+              preferred,
+              headlineFor(preferred),
+              pointsFor(preferred),
+              passage,
+            ))
+      )
+        layout = preferred;
       const beat: PresentationBeat = {
         id: `beat-${index + 1}`,
         sourceStart: start,
         sourceEnd: end,
         layout,
-        headline,
+        headline: headlineFor(layout),
         points: pointsFor(layout),
         ...(layout === 'image' && image ? { imageSrc: image.src } : {}),
       };
+      if (quote) quotes.set(beat.id, quote);
       // An optional supporting visual shares the passage's narration span and
       // takes over at a spoken sentence start, so each slide shows different
       // material: an introduction before its steps diagram, or the opening
@@ -293,6 +326,21 @@ export function createPresentationPlan(
     throw new Error(
       'This document has too many sections for one presentation. Split it into shorter documents.',
     );
+  // A hidden slide stays in the plan so the designer can show it again; the
+  // deck leaves it out, so it carries none of the section's visuals.
+  for (const block of script.blocks) {
+    const hidden = hints.blocks.find((item) => item.blockId === block.blockId)?.hidden;
+    if (!hidden) continue;
+    for (const beat of beats)
+      if (
+        beat.sourceStart >= block.charStart &&
+        beat.sourceStart < block.charEnd &&
+        hidden.includes(
+          presentationPassageKey(script.sourceText.slice(beat.sourceStart, beat.sourceEnd)),
+        )
+      )
+        beat.hidden = true;
+  }
   // A section's videos and diagrams accompany its slides in source order. The
   // slides are shared out so every visual is shown; one that can resume stays
   // on screen across consecutive slides, and the deck's opener and image
@@ -305,8 +353,13 @@ export function createPresentationPlan(
     const items = sectionMedia.get(block.blockId);
     if (!items?.length) continue;
     const own = beats.filter(
-      (beat) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
+      (beat) =>
+        beat.sourceStart >= block.charStart &&
+        beat.sourceStart < block.charEnd &&
+        beat.layout !== AUTHORED_PRESENTATION_LAYOUT &&
+        !beat.hidden,
     );
+    if (!own.length) continue;
     const open = own.filter((beat) => beat !== beats[0] && beat.layout !== 'image');
     const slots = open.length ? open : own;
     const shown = new Set<string>();
@@ -340,28 +393,33 @@ export function createPresentationPlan(
     closing.layout = 'title';
   let origin: PresentationPlan['origin'] = 'automatic';
   for (const beat of beats) {
+    if (beat.layout === AUTHORED_PRESENTATION_LAYOUT) continue;
     const section = script.blocks.find(
       (block) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
     );
     const hint = hints.blocks.find((item) => item.blockId === section?.blockId);
-    const cached = hint?.ai?.find(
-      (item) => item.source === script.sourceText.slice(beat.sourceStart, beat.sourceEnd),
-    );
+    const passage = script.sourceText.slice(beat.sourceStart, beat.sourceEnd);
+    const cached = hint?.ai?.find((item) => item.source === passage);
     if (cached && (cached.layout !== 'image' || beat.imageSrc)) {
       beat.headline = cached.headline;
       beat.points = [...cached.points];
       beat.layout = cached.layout;
       origin = 'ai';
     }
-    // A deliberate author choice takes precedence over an AI suggestion.
-    if (
-      hint?.layout &&
-      !supportingOpeners.has(beat.id) &&
-      (hint.layout !== 'image' || beat.imageSrc) &&
-      (hint.layout !== 'comparison' || beat.points.length === 2) &&
-      (!['steps', 'list'].includes(hint.layout) || beat.points.length >= 2)
-    )
-      beat.layout = hint.layout;
+    // A deliberate author choice takes precedence over an AI suggestion; a
+    // quote then shows the passage's own sentence, not the AI's wording.
+    const preferred = hint?.layout === AUTHORED_PRESENTATION_LAYOUT ? undefined : hint?.layout;
+    if (preferred && !supportingOpeners.has(beat.id)) {
+      const headline = (preferred === 'quote' && quotes.get(beat.id)) || beat.headline;
+      if (
+        preferred === 'image'
+          ? !!beat.imageSrc
+          : presentationLayoutFits(preferred, headline, beat.points, passage)
+      ) {
+        beat.layout = preferred;
+        beat.headline = headline;
+      }
+    }
     if (
       section &&
       beat.sourceStart === section.charStart &&
@@ -372,10 +430,12 @@ export function createPresentationPlan(
     }
     // A steps diagram leaves a video or diagram only a small inset, while the
     // text layouts pair them side by side; an explicit section choice stands.
-    if (beat.media && beat.layout === 'steps' && hint?.layout !== 'steps') beat.layout = 'list';
+    if (beat.media && beat.layout === 'steps' && preferred !== 'steps') beat.layout = 'list';
+    // Custom wording can leave a layout without what it shows (two sides of a
+    // comparison, a number, the passage's exact words); say it plainly instead.
     if (
-      ['steps', 'list', 'comparison'].includes(beat.layout) &&
-      (beat.points.length < 2 || (beat.layout === 'comparison' && beat.points.length !== 2))
+      beat.layout !== 'image' &&
+      !presentationLayoutFits(beat.layout, beat.headline, beat.points, passage)
     )
       beat.layout = 'statement';
     if (beat.layout !== 'image') delete beat.imageSrc;

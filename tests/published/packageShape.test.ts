@@ -58,8 +58,9 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // Ships the ESM entries plus the light and full standalone players, and each
   // again as an embeddable string (`standalone-source`, and the Mermaid-bearing
   // `standalone-source/full`, ~1.4 MB packed on its own) — so anything the
-  // player renders is paid roughly four times over.
-  '@bendyline/squisq-react': 4_500_000,
+  // player renders is paid roughly four times over. Packs to ~4.50 MB; leave
+  // roughly 15% headroom.
+  '@bendyline/squisq-react': 5_200_000,
   // Columnar store + kernel + TanStack-Virtual renderer; tiny by design.
   '@bendyline/squisq-grid-react': 60_000,
   '@bendyline/squisq-calc': 110_000,

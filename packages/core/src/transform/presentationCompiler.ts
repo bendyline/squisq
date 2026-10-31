@@ -17,10 +17,14 @@ import { extractDocImages } from './blockAnalyzer.js';
 import { collectPresentationMedia, presentationMediaNode } from './presentationMedia.js';
 import type { MarkdownBlockNode } from '../markdown/types.js';
 import type { MediaClip } from '../schemas/Media.js';
+import { isContainerTemplate } from '../doc/templates/templateNames.js';
 import {
+  AUTHORED_PRESENTATION_LAYOUT,
   PRESENTATION_KEY,
   parsePresentationPlan,
+  presentationStat,
   type PresentationBeat,
+  type PresentationLayout,
   type PresentationPlan,
 } from './presentationPlan.js';
 
@@ -85,11 +89,44 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
         word.charOffset < script.sourceText.length,
     )
     .sort((a, b) => a.charOffset - b.charOffset);
+  // Slides the presenter showed while recording start where they were shown.
+  // Between two marks (a slide the plan added since), time runs with the text.
+  const marks = (narration?.slides ?? []).filter(
+    (mark) =>
+      Number.isFinite(mark.time) &&
+      mark.time >= 0 &&
+      mark.time <= duration &&
+      Number.isInteger(mark.charOffset) &&
+      mark.charOffset >= 0 &&
+      mark.charOffset < script.sourceText.length,
+  );
+  const tokensBefore = (offset: number) =>
+    script.tokens.filter((token) => token.charOffset < offset).length;
+  const markedTime = (offset: number): number | undefined => {
+    if (!narration || !marks.length) return undefined;
+    const exact = marks.find((mark) => mark.charOffset === offset);
+    if (exact) return exact.time;
+    if (bookmarks.length) return undefined;
+    const anchors = [
+      { charOffset: 0, time: narration.startTime },
+      ...[...marks].sort((a, b) => a.charOffset - b.charOffset),
+      { charOffset: script.sourceText.length, time: duration },
+    ];
+    const after = anchors.findIndex((anchor) => anchor.charOffset > offset);
+    const from = anchors[Math.max(0, after - 1)]!;
+    const to = anchors[after] ?? from;
+    const span = tokensBefore(to.charOffset) - tokensBefore(from.charOffset);
+    const share = span > 0 ? (tokensBefore(offset) - tokensBefore(from.charOffset)) / span : 0;
+    return from.time + share * Math.max(0, to.time - from.time);
+  };
   let previous = 0;
   const starts = checked.beats.map((beat, index) => {
     if (!index) return 0;
     let time: number;
-    if (narration && bookmarks.length) {
+    const marked = markedTime(beat.sourceStart);
+    if (marked !== undefined) {
+      time = marked;
+    } else if (narration && bookmarks.length) {
       // Match the first spoken token in this span; clipped-away spans collapse.
       time = bookmarks.find((word) => word.charOffset >= beat.sourceStart)?.time ?? duration;
     } else {
@@ -114,13 +151,55 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     const section = sourceOf(beat)?.blockId;
     if (section) sectionEnds.set(section, starts[index + 1] ?? duration);
   });
+  // A hidden slide is left out of the deck. The narration still speaks its
+  // passage, so the shown slide before it stays on screen (at the very start,
+  // the first shown slide opens the deck instead).
+  const shown = checked.beats.flatMap((beat, index) => (beat.hidden ? [] : [index]));
+  if (!shown.length) throw new Error('Every slide is hidden. Show at least one slide.');
+  const windows = shown
+    .map((index, position) => ({
+      index,
+      start: position ? starts[index]! : 0,
+      end: position + 1 < shown.length ? starts[shown[position + 1]!]! : duration,
+    }))
+    .filter((window) => window.end > window.start);
+  /** The shown slide on screen at `time`. */
+  const onScreen = (time: number) =>
+    windows.reduce((found, window) => (window.start <= time ? window : found), windows[0]!);
+  // A section's clips go on whichever slide is on screen when the section begins.
   const clipsPlaced = new Set<string>();
-  const mediaStarts = new Map<string, number>();
-  const blocks: Block[] = [];
+  const sectionClips = new Map<number, MediaClip[]>();
   checked.beats.forEach((beat, index) => {
     const start = starts[index]!;
     const end = starts[index + 1] ?? duration;
-    if (end <= start) return;
+    const source = sourceOf(beat);
+    if (end <= start || !source || clipsPlaced.has(source.blockId) || !windows.length) return;
+    clipsPlaced.add(source.blockId);
+    const sectionEnd = sectionEnds.get(source.blockId) ?? end;
+    const host = onScreen(start);
+    const shift = (clip: MediaClip) =>
+      start === host.start ? clip : { ...clip, startAt: clip.startAt + start - host.start };
+    const clips = (
+      authoredBlocks.find((block) => block.id === source.blockId)?.media ?? []
+    ).flatMap((clip) => {
+      if (clip.spillover) return [shift(clip)];
+      const room = sectionEnd - start - clip.startAt;
+      if (room <= 0) return [];
+      const clipStart = clip.clipStart ?? 0;
+      return [
+        shift({
+          ...clip,
+          spillover: true,
+          clipEnd: Math.min(clip.clipEnd ?? Infinity, clipStart + room),
+        }),
+      ];
+    });
+    sectionClips.set(host.index, [...(sectionClips.get(host.index) ?? []), ...clips]);
+  });
+  const mediaStarts = new Map<string, number>();
+  const blocks: Block[] = [];
+  for (const { index, start, end } of windows) {
+    const beat = checked.beats[index]!;
     const source = sourceOf(beat);
     const build =
       buildHints?.blocks.find((hint) => hint.blockId === source?.blockId)?.build ??
@@ -131,26 +210,8 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
       const node = presentationMediaNode(media.get(ref)!, start - first);
       return node ? [node] : [];
     });
-    let clips: MediaClip[] = [];
-    if (source && !clipsPlaced.has(source.blockId)) {
-      clipsPlaced.add(source.blockId);
-      const sectionEnd = sectionEnds.get(source.blockId) ?? end;
-      clips = (authoredBlocks.find((block) => block.id === source.blockId)?.media ?? []).flatMap(
-        (clip) => {
-          if (clip.spillover) return [clip];
-          const room = sectionEnd - start - clip.startAt;
-          if (room <= 0) return [];
-          const clipStart = clip.clipStart ?? 0;
-          return [
-            {
-              ...clip,
-              spillover: true,
-              clipEnd: Math.min(clip.clipEnd ?? Infinity, clipStart + room),
-            },
-          ];
-        },
-      );
-    }
+    const authored = authoredBlocks.find((block) => block.id === source?.blockId);
+    const clips = sectionClips.get(index) ?? [];
     const base = {
       ...(build ? { build } : {}),
       ...(contents.length ? { contents } : {}),
@@ -166,9 +227,22 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
       sourceCharOffset: beat.sourceStart,
       transition: { type: 'fade' as const, duration: Math.min(0.3, (end - start) / 5) },
     };
-    const block: TemplateBlock = visualBlock(beat, base, index);
+    if (beat.layout === AUTHORED_PRESENTATION_LAYOUT) {
+      if (!authored) throw new Error('A section shown as authored is no longer in the document.');
+      // Nested sections get their own slides; only a container template (a
+      // diagram or drawing) draws its children itself.
+      const { children, media: _media, ...own } = authored;
+      blocks.push({
+        ...own,
+        ...base,
+        ...(children && isContainerTemplate(authored.template) ? { children } : {}),
+        transition: authored.transition ?? base.transition,
+      });
+      continue;
+    }
+    const block: TemplateBlock = visualBlock(beat, beat.layout, base, index);
     blocks.push(block as unknown as Block);
-  });
+  }
   return {
     ...doc,
     blocks,
@@ -183,13 +257,41 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
 }
 function visualBlock(
   beat: PresentationBeat,
+  layout: PresentationLayout,
   base: { id: string; duration: number; audioSegment: number },
   index: number,
 ): TemplateBlock {
   const colorScheme = ['blue', 'green', 'orange'][index % 3]!;
-  switch (beat.layout) {
+  switch (layout) {
     case 'title':
       return { ...base, template: 'title', title: beat.headline, subtitle: beat.points[0] ?? '' };
+    case 'divider':
+      return { ...base, template: 'sectionHeader', title: beat.headline, colorScheme };
+    case 'emphasis':
+      return { ...base, template: 'bigText', title: beat.headline };
+    case 'quote':
+      return { ...base, template: 'fullBleedQuote', text: beat.headline, colorScheme };
+    case 'stat': {
+      // The plan only holds key-number slides that state a prominent number.
+      const { match, line, index: at } = presentationStat(beat.headline, beat.points)!;
+      const detail = beat.points.find((_, i) => i !== at) ?? (at < 0 ? undefined : beat.headline);
+      return {
+        ...base,
+        template: 'statHighlight',
+        stat: match.value,
+        description: line,
+        ...(detail ? { detail } : {}),
+        colorScheme,
+      };
+    }
+    case 'definition':
+      return {
+        ...base,
+        template: 'definitionCard',
+        term: beat.headline,
+        definition: beat.points.join('\n\n'),
+        colorScheme,
+      };
     case 'statement':
       return {
         ...base,

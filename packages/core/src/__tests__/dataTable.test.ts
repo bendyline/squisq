@@ -168,4 +168,17 @@ describe('dataTable template', () => {
     expect(largeTableLayer.content.maxVisibleRows).toBe(10);
     expect(largeTableLayer.position.height).toBe(tenRowLayer.position.height);
   });
+
+  it('sizes the table band to hold its rows and their rules without scrolling', () => {
+    const rows = Array.from({ length: 6 }, (_, index) => [`Row ${index + 1}`, `${index + 1}`]);
+    const layers = materializeLayers(makeDataTableBlock({ rows }), defaultContext);
+    const table = layers.find((l) => l.type === 'table') as TableLayer;
+    const viewportHeight = VIEWPORT_PRESETS.landscape.height;
+    const bandHeight = (parseFloat(String(table.position.height)) / 100) * viewportHeight;
+
+    // TableLayer: 2.4em per row, a 2px header rule, 1px between the six body
+    // rows, and a 1px frame top and bottom.
+    const rendered = 7 * table.content.style.fontSize * 2.4 + 2 + 5 + 2;
+    expect(bandHeight).toBeGreaterThanOrEqual(rendered);
+  });
 });

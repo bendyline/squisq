@@ -149,11 +149,16 @@ describe('cutSpeechPieces', () => {
 describe('updateNarrationTimingsFromAudio', () => {
   it('writes a sidecar the narration and presentation pipelines accept', async () => {
     const container = await containerWithTake();
-    // A camera skew recorded with the original take must survive the update.
+    // A camera skew and the slides shown during the original take must survive
+    // the update: only the recording knew them.
+    const slides = [
+      { charOffset: 0, time: 0 },
+      { charOffset: 2, time: 12 },
+    ];
     await container.writeFile(
       `${SRC}.timing.json`,
       new TextEncoder().encode(
-        JSON.stringify({ sourceText: 'old', duration: 70, cameraOffsetSec: -0.25 }),
+        JSON.stringify({ sourceText: 'old', duration: 70, cameraOffsetSec: -0.25, slides }),
       ),
     );
     const provider = fakeRecognizer();
@@ -181,6 +186,7 @@ describe('updateNarrationTimingsFromAudio', () => {
     const sidecar = parseNarrationTimingJson((await container.readFile(result.sidecarPath))!)!;
     expect(sidecar.generator).toEqual({ name: 'fake-whisper', method: 'transcript-align' });
     expect(sidecar.cameraOffsetSec).toBe(-0.25);
+    expect(sidecar.slides).toEqual(slides);
     expect(sidecar.duration).toBe(TAKE_SEC);
     expect(sidecar.blocks.map((block) => Math.round(block.startSec))).toEqual([0, 30, 55]);
 

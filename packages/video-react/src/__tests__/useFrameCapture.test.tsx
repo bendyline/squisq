@@ -270,6 +270,31 @@ describe('capture media resolution', () => {
     expect(video.getAttribute('src')).toBe('blob:recorder');
   });
 
+  it('waits for an image still showing the empty URL useMediaUrl renders while pending', async () => {
+    const tracker = createCaptureMediaResolutionTracker({
+      resolveUrl: vi.fn(async (path: string) => (path === 'hero.png' ? 'blob:hero' : path)),
+      listMedia: async () => [],
+      addMedia: async () => {
+        throw new Error('Read-only');
+      },
+      removeMedia: async () => undefined,
+      dispose: vi.fn(),
+    });
+    const root = document.createElement('div');
+    root.innerHTML = '<img src="">';
+    const image = root.querySelector('img')!;
+    // An animation frame can run before React's commit task; decoding the
+    // empty src then fails the export with an EncodingError.
+    stubAnimationFrames((frame) => {
+      if (frame === 3) image.setAttribute('src', 'blob:hero');
+    });
+
+    await tracker.provider.resolveUrl('hero.png');
+    await waitForCaptureMediaResolutions(tracker, root);
+
+    expect(image.getAttribute('src')).toBe('blob:hero');
+  });
+
   it('does not wait on a path the provider left unresolved', async () => {
     const tracker = recorderTracker();
     const root = document.createElement('div');
@@ -320,16 +345,18 @@ describe('waitForCaptureAssets', () => {
 
   it('surfaces image decode failures instead of capturing a blank asset', async () => {
     const root = document.createElement('div');
-    root.innerHTML = '<img src="broken.png">';
+    root.innerHTML = '<img src="broken.png" alt="Quarterly chart">';
     const image = root.querySelector('img')!;
     Object.defineProperty(image, 'decode', {
       configurable: true,
       value: vi.fn(async () => {
-        throw new Error('decode failed');
+        throw new DOMException('The source image cannot be decoded.', 'EncodingError');
       }),
     });
 
-    await expect(waitForCaptureAssets(root)).rejects.toThrow('decode failed');
+    await expect(waitForCaptureAssets(root)).rejects.toThrow(
+      'Image "Quarterly chart" could not be decoded: The source image cannot be decoded.',
+    );
   });
 });
 
@@ -701,6 +728,33 @@ describe('capture clone raster lifetime', () => {
     expect(canvas.style.opacity).toBe('0.5');
     expect(canvas.style.animation).toBe('none');
     expect(originalRoot.querySelector('svg')!.style.animationName).toBe('fadeIn');
+  });
+
+  it('lets foreignObject HTML paint its own color and never paints scroll bars', async () => {
+    const originalRoot = document.createElement('div');
+    // html2canvas copies computed styles onto SVG clones, freezing the host
+    // page's text fill; a table cell's own color must still win.
+    originalRoot.innerHTML =
+      '<svg class="block-svg" viewBox="0 0 640 360" style="-webkit-text-fill-color: rgb(0, 0, 0)">' +
+      '<foreignObject width="640" height="360" style="-webkit-text-fill-color: rgb(0, 0, 0)">' +
+      '<div xmlns="http://www.w3.org/1999/xhtml" style="overflow: auto">' +
+      '<table><tr><td style="color: rgb(243, 237, 224)">Cell</td></tr></table>' +
+      '</div></foreignObject></svg>';
+    const clone = originalRoot.cloneNode(true) as HTMLElement;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      clearRect: vi.fn(),
+      drawImage: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    let serialized = '';
+    stubImageDecode(async (image) => {
+      serialized = decodeURIComponent(image.src.split(',')[1]);
+    });
+
+    await rasterizeCaptureSvgClones(originalRoot, clone);
+
+    expect(serialized).toContain('rgb(243, 237, 224)');
+    expect(serialized).not.toContain('-webkit-text-fill-color');
+    expect(serialized).toContain('*{scrollbar-width:none!important}');
   });
 
   it('reuses an unchanged slide raster while per-frame overlays advance', async () => {
