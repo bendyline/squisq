@@ -3,8 +3,10 @@ import { parseMarkdown } from '../markdown/parse';
 import { markdownToDoc, flattenRenderableBlocks } from '../doc/markdownToDoc';
 import {
   EMPTY_ADVANCE_LOG,
+  EMPTY_SLIDE_MARK_LOG,
   advanceCoverage,
   buildAdvanceTimingJson,
+  recordSlideMark,
   recordSlideShown,
   type SlideAdvanceLog,
 } from '../narration/advanceTiming';
@@ -276,5 +278,46 @@ describe('advanceCoverage', () => {
       unshown: 0,
       unshownHeadings: [],
     });
+  });
+});
+
+describe('presentation slide marks', () => {
+  it('keeps each slide’s first showing, monotonic, and ignores unusable stamps', () => {
+    let log = recordSlideMark(EMPTY_SLIDE_MARK_LOG, 0, 0);
+    log = recordSlideMark(log, 40, 5000);
+    const revisit = recordSlideMark(log, 0, 9000);
+    expect(revisit).toBe(log);
+    expect(recordSlideMark(log, 1.5, 9000)).toBe(log);
+    expect(recordSlideMark(log, 60, Number.NaN)).toBe(log);
+    // A slide reached by going back still gets its own, later, first showing.
+    log = recordSlideMark(log, 20, 3000);
+    expect(log).toEqual([
+      { charOffset: 0, atMs: 0 },
+      { charOffset: 40, atMs: 5000 },
+      { charOffset: 20, atMs: 5000 },
+    ]);
+  });
+
+  it('writes the marks as take-relative seconds that survive a parse', () => {
+    const doc = makeDoc();
+    let marks = recordSlideMark(EMPTY_SLIDE_MARK_LOG, 0, 400);
+    marks = recordSlideMark(marks, 12, 2500);
+    marks = recordSlideMark(marks, 30, 99_000);
+    marks = recordSlideMark(marks, 1_000_000, 4000);
+    const timing = buildAdvanceTimingJson(doc, EMPTY_ADVANCE_LOG, 10, { slides: marks });
+
+    // The first mark is the take's start, a late one is clamped into the
+    // take, and an offset past the script is dropped.
+    expect(timing.slides).toEqual([
+      { charOffset: 0, time: 0 },
+      { charOffset: 12, time: 2.5 },
+      { charOffset: 30, time: 10 },
+    ]);
+    const parsed = parseNarrationTimingJson(JSON.stringify(timing));
+    expect(parsed?.slides).toEqual(timing.slides);
+  });
+
+  it('omits the field when no presentation slides were shown', () => {
+    expect(buildAdvanceTimingJson(makeDoc(), EMPTY_ADVANCE_LOG, 10)).not.toHaveProperty('slides');
   });
 });

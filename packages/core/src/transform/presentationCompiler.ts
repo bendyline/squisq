@@ -89,11 +89,44 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
         word.charOffset < script.sourceText.length,
     )
     .sort((a, b) => a.charOffset - b.charOffset);
+  // Slides the presenter showed while recording start where they were shown.
+  // Between two marks (a slide the plan added since), time runs with the text.
+  const marks = (narration?.slides ?? []).filter(
+    (mark) =>
+      Number.isFinite(mark.time) &&
+      mark.time >= 0 &&
+      mark.time <= duration &&
+      Number.isInteger(mark.charOffset) &&
+      mark.charOffset >= 0 &&
+      mark.charOffset < script.sourceText.length,
+  );
+  const tokensBefore = (offset: number) =>
+    script.tokens.filter((token) => token.charOffset < offset).length;
+  const markedTime = (offset: number): number | undefined => {
+    if (!narration || !marks.length) return undefined;
+    const exact = marks.find((mark) => mark.charOffset === offset);
+    if (exact) return exact.time;
+    if (bookmarks.length) return undefined;
+    const anchors = [
+      { charOffset: 0, time: narration.startTime },
+      ...[...marks].sort((a, b) => a.charOffset - b.charOffset),
+      { charOffset: script.sourceText.length, time: duration },
+    ];
+    const after = anchors.findIndex((anchor) => anchor.charOffset > offset);
+    const from = anchors[Math.max(0, after - 1)]!;
+    const to = anchors[after] ?? from;
+    const span = tokensBefore(to.charOffset) - tokensBefore(from.charOffset);
+    const share = span > 0 ? (tokensBefore(offset) - tokensBefore(from.charOffset)) / span : 0;
+    return from.time + share * Math.max(0, to.time - from.time);
+  };
   let previous = 0;
   const starts = checked.beats.map((beat, index) => {
     if (!index) return 0;
     let time: number;
-    if (narration && bookmarks.length) {
+    const marked = markedTime(beat.sourceStart);
+    if (marked !== undefined) {
+      time = marked;
+    } else if (narration && bookmarks.length) {
       // Match the first spoken token in this span; clipped-away spans collapse.
       time = bookmarks.find((word) => word.charOffset >= beat.sourceStart)?.time ?? duration;
     } else {

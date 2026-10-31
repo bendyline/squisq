@@ -16,6 +16,12 @@ import { buildPreviewDoc, previewBlockTemplate } from '../doc/buildPreviewDoc.js
 import { resolveAudioMapping } from '../doc/audioMapping.js';
 import { expandDocBlocks } from '../doc/templates/index.js';
 import { buildNarrationScript } from '../narration/script.js';
+import {
+  EMPTY_ADVANCE_LOG,
+  EMPTY_SLIDE_MARK_LOG,
+  buildAdvanceTimingJson,
+  recordSlideMark,
+} from '../narration/advanceTiming.js';
 import { MemoryContentContainer } from '../storage/ContentContainer.js';
 import { applyTransform } from '../transform/applyTransform.js';
 import { createPresentationPlan } from '../transform/presentationPlanner.js';
@@ -747,3 +753,49 @@ function sectionAt(doc: Doc, offset: number): string | undefined {
     (block) => offset >= block.charStart && offset < block.charEnd,
   )?.blockId;
 }
+
+describe('presentation slides timed by the presenter', () => {
+  const text = source.replace(
+    'First organize your points. Then add diagrams. Finally share your presentation.',
+    'Good slides start from a plan you can follow. First organize all your ideas into a clear sequence of points. Then add diagrams to explain how the different pieces fit together. Finally share your presentation.',
+  );
+  /** A dynamic-slides doc whose presenter-advance take showed each slide at `times`. */
+  async function presented(times: Array<number | undefined>) {
+    const md = setFrontmatterValues(`{[audio src=audio/take.webm anchor=document]}\n\n${text}`, {
+      'squisq-transform': DYNAMIC_PRESENTATION_STYLE,
+    });
+    const doc = parse(md);
+    const plan = createPresentationPlan(doc, defaultPresentationHints());
+    let marks = EMPTY_SLIDE_MARK_LOG;
+    plan.beats.forEach((beat, index) => {
+      const time = times[index];
+      if (time !== undefined) marks = recordSlideMark(marks, beat.sourceStart, time * 1000);
+    });
+    const timing = buildAdvanceTimingJson(doc, EMPTY_ADVANCE_LOG, 60, { slides: marks });
+    const container = new MemoryContentContainer();
+    await container.writeFile('audio/take.webm', new Uint8Array([1]), 'audio/webm');
+    await container.writeFile(
+      'audio/take.webm.timing.json',
+      new TextEncoder().encode(JSON.stringify(timing)),
+      'application/json',
+    );
+    return { plan, deck: buildPreviewDoc(await resolveAudioMapping(doc, container)) };
+  }
+
+  it('starts each summarized slide where the presenter first showed it', async () => {
+    const { plan, deck } = await presented([0, 7, 19, 33]);
+    expect(plan.beats).toHaveLength(4);
+    expect(deck.presentationApplied).toBe(true);
+    expect(deck.blocks.map((block) => block.startTime)).toEqual([0, 7, 19, 33]);
+    const last = deck.blocks[deck.blocks.length - 1]!;
+    expect(last.startTime + last.duration).toBe(60);
+  });
+
+  it('places a slide the take did not mark between the marks around it', async () => {
+    const { deck } = await presented([0, undefined, 19, 33]);
+    const [, unmarked, next] = deck.blocks.map((block) => block.startTime);
+    expect(unmarked).toBeGreaterThan(0);
+    expect(unmarked).toBeLessThan(19);
+    expect(next).toBe(19);
+  });
+});

@@ -221,7 +221,8 @@ export async function updateNarrationTimingsFromAudio(
 
   report('saving', 0.98);
   const sidecarPath = timingPathFor(src);
-  // Keep what only the original recording knew: camera skew and build steps.
+  // Keep what only the original recording knew: camera skew, build steps, and
+  // when the presenter showed each slide.
   const existing = await container.readFile(sidecarPath);
   const previous = existing ? parseNarrationTimingJson(existing) : null;
   const payload = buildNarrationTimingJson(script, alignment, durationSec, {
@@ -233,7 +234,11 @@ export async function updateNarrationTimingsFromAudio(
   signal.throwIfAborted();
   await container.writeFile(
     sidecarPath,
-    encodeNarrationTimingJson(previous?.builds ? { ...payload, builds: previous.builds } : payload),
+    encodeNarrationTimingJson({
+      ...payload,
+      ...(previous?.builds ? { builds: previous.builds } : {}),
+      ...(previous?.slides ? { slides: previous.slides } : {}),
+    }),
     'application/json',
   );
   return {

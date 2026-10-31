@@ -99,11 +99,15 @@ export {
 
 export {
   recordSlideShown,
+  recordSlideMark,
   buildAdvanceTimingJson,
   advanceCoverage,
   EMPTY_ADVANCE_LOG,
+  EMPTY_SLIDE_MARK_LOG,
   type SlideAdvance,
   type SlideAdvanceLog,
+  type SlideMarkAdvance,
+  type SlideMarkLog,
   type AdvanceCoverage,
   type BuildAdvanceTimingOptions,
 } from './advanceTiming.js';

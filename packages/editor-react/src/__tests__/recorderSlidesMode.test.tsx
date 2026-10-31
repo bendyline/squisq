@@ -507,3 +507,102 @@ describe('RecorderModal — slide timing capture', { timeout: 30_000 }, () => {
     expect(timing.blocks[1].startSec).toBe(timing.blocks[1].endSec);
   });
 });
+
+describe('RecorderModal — summarized presentation slides', { timeout: 30_000 }, () => {
+  // Dynamic slides split "Make it visual" into an introduction and a steps
+  // diagram. The existing take must not keep the presentation from showing.
+  const SUMMARIZED = `---
+squisq-transform: dynamic-slides
+---
+{[audio src=audio/old.webm anchor=document]}
+
+# Start with an idea
+
+Write a few bullet points. Build a document with a clear story.
+
+## Make it visual
+
+Good slides start from a plan you can follow. First organize all your ideas into a clear sequence of points. Then add diagrams to explain how the different pieces fit together. Finally share your presentation.
+
+## Keep your voice
+
+Narration runs locally. Turn the same document into a narrated video.
+`;
+  const summarized = markdownToDoc(parseMarkdown(SUMMARIZED));
+  let container: MemoryContentContainer;
+  let onSave: ReturnType<typeof vi.fn<(result: RecorderSaveResult) => void>>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    stubRecorderGlobals();
+    container = new MemoryContentContainer();
+    onSave = vi.fn<(result: RecorderSaveResult) => void>();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function renderSummarized() {
+    render(
+      <RecorderModal
+        mediaProvider={mediaProvider}
+        container={container}
+        initialMode="mic"
+        onClose={vi.fn()}
+        onSave={onSave}
+        slides={{ doc: summarized, theme: resolveThemeForDoc(summarized), captureTimings: true }}
+      />,
+    );
+  }
+
+  it('shows the summarized slides, each above its whole source section', async () => {
+    renderSummarized();
+    await act(async () => {
+      fireEvent.click(checkbox('Show slides mode'));
+    });
+    expect(screen.getByText('Slide 1 of 4')).toBeTruthy();
+
+    const notes = () => screen.getByTestId('recorder-slide-notes').textContent ?? '';
+    await click('Next slide');
+    expect(notes()).toContain('Make it visual');
+    expect(notes()).toContain('Good slides start from a plan you can follow.');
+    expect(notes()).toContain('Finally share your presentation.');
+    await click('Next slide');
+    expect(screen.getByText('Slide 3 of 4')).toBeTruthy();
+    // The steps slide summarizes the same section, so its notes are unchanged.
+    expect(notes()).toContain('Good slides start from a plan you can follow.');
+  });
+
+  it('times each summarized slide, and its section, from its first showing', async () => {
+    vi.useFakeTimers();
+    renderSummarized();
+    await act(async () => {
+      fireEvent.click(checkbox('Show slides mode'));
+    });
+    await click('Start preview');
+    await click('Record');
+    for (const wait of [10_000, 12_000, 8_000]) {
+      await advanceClock(wait);
+      await click('Next slide');
+    }
+    await advanceClock(10_000);
+    await click('Stop');
+    await click('Save to document');
+
+    const result = onSave.mock.calls[0][0];
+    const bytes = await container.readFile(result.slideTiming!.sidecarPath);
+    const timing = JSON.parse(new TextDecoder().decode(bytes!)) as NarrationTimingJsonV3;
+    expect(timing.slides?.map((mark) => mark.time)).toEqual([0, 10, 22, 30]);
+    expect(new Set(timing.slides?.map((mark) => mark.charOffset)).size).toBe(4);
+    // The section the two middle slides summarize runs from the first of them.
+    expect(timing.blocks.map((block) => [block.startSec, block.endSec])).toEqual([
+      [0, 10],
+      [10, 30],
+      [30, 40],
+    ]);
+  });
+});

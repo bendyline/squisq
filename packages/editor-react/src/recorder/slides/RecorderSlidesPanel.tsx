@@ -213,7 +213,7 @@ export function RecorderSlidesPanel({
         <span style={dotsStyle} aria-hidden="true">
           {slides.map((slide, i) => (
             <span
-              key={slide.blockId}
+              key={slide.id}
               style={{
                 width: 6,
                 height: 6,
@@ -264,7 +264,7 @@ export function RecorderSlidesPanel({
         >
           {active.visual ? (
             <RecorderSlideStage
-              key={active.blockId}
+              key={active.id}
               visual={active.visual}
               buildPlayback={builds.cursor}
               viewport={viewport}
