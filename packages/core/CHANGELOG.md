@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.9...@bendyline/squisq@2.13.10) (2026-11-01)
+
+### Bug Fixes
+
+* More updates and fixes ([#116](https://github.com/bendyline/squisq/issues/116)) ([c0e631b](https://github.com/bendyline/squisq/commit/c0e631be6e552b3677a56ee4ecb11c57e812c12e))
+
 ## @bendyline/squisq [2.13.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.8...@bendyline/squisq@2.13.9) (2026-10-30)
 
 ### Bug Fixes
