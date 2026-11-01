@@ -1,4 +1,4 @@
-import { useBuildNavigation } from '@bendyline/squisq-react';
+import { BlockRenderer, MediaContext, useBuildNavigation } from '@bendyline/squisq-react';
 import { blockBuildSteps, buildSourceText } from '@bendyline/squisq/doc';
 /**
  * RecorderSlidesPanel — the recorder dialog's right column in slides mode.
@@ -18,11 +18,23 @@ import { blockBuildSteps, buildSourceText } from '@bendyline/squisq/doc';
  * a bounded flex height. Every level here therefore carries `minHeight: 0`,
  * and only the notes region is allowed to scroll — otherwise the slide card
  * grows past the viewport and the whole column starts scrolling instead.
+ *
+ * ## The slide is live, not a thumbnail
+ *
+ * The presenter talks over what playback will show, so the slide runs on its
+ * own block clock: video clips roll from their in-point when the slide comes
+ * up, and count-ups count. See `RecorderSlideStage`.
  */
 
-import { useCallback, useEffect, type CSSProperties, type KeyboardEvent } from 'react';
-import type { MediaProvider, ViewportConfig } from '@bendyline/squisq/schemas';
-import { BlockThumbnail } from '../../TimelineBlockPreview.js';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react';
+import type { Block, BuildCursor, MediaProvider, ViewportConfig } from '@bendyline/squisq/schemas';
 import { Icon } from '../../Icon.js';
 import { clampSlideIndex, slideStepForKey } from '../slidesModePolicy.js';
 import type { RecorderSlide } from './slideDeck.js';
@@ -201,7 +213,7 @@ export function RecorderSlidesPanel({
         <span style={dotsStyle} aria-hidden="true">
           {slides.map((slide, i) => (
             <span
-              key={slide.blockId}
+              key={slide.id}
               style={{
                 width: 6,
                 height: 6,
@@ -251,12 +263,14 @@ export function RecorderSlidesPanel({
           }}
         >
           {active.visual ? (
-            <BlockThumbnail
+            <RecorderSlideStage
+              key={active.id}
               visual={active.visual}
               buildPlayback={builds.cursor}
               viewport={viewport}
               basePath={basePath}
               mediaProvider={mediaProvider}
+              recording={recording}
             />
           ) : (
             <div
@@ -294,4 +308,85 @@ export function RecorderSlidesPanel({
       </div>
     </div>
   );
+}
+
+interface RecorderSlideStageProps {
+  visual: Block;
+  buildPlayback: BuildCursor;
+  viewport: ViewportConfig;
+  basePath: string;
+  mediaProvider: MediaProvider | null;
+  recording: boolean;
+}
+
+/**
+ * The slide on screen. Keyed by block at the call site, so arriving on a slide
+ * mounts it fresh — its clock, clips and entrance animations start over, as
+ * they do when playback reaches the block.
+ *
+ * Clips play muted: the microphone is live in this dialog, and a clip's own
+ * sound already plays with the doc — heard here, it would land in the take
+ * as well.
+ */
+function RecorderSlideStage({
+  visual,
+  buildPlayback,
+  viewport,
+  basePath,
+  mediaProvider,
+  recording,
+}: RecorderSlideStageProps) {
+  const blockTime = useSlideClock(readsBlockClock(visual), recording);
+  return (
+    <MediaContext.Provider value={mediaProvider}>
+      <BlockRenderer
+        block={visual}
+        buildPlayback={buildPlayback}
+        blockTime={blockTime}
+        isPlaying
+        muted
+        basePath={basePath}
+        viewport={viewport}
+      />
+    </MediaContext.Provider>
+  );
+}
+
+/**
+ * Whether anything on the slide follows `blockTime`. Entrance animations are
+ * CSS and run from mount on their own; clips and count-ups are the layers
+ * that sit on their first frame until the block clock moves.
+ */
+function readsBlockClock(visual: Block): boolean {
+  return (visual.layers ?? []).some(
+    (layer) => layer.type === 'video' || layer.animation?.type === 'countUp',
+  );
+}
+
+/**
+ * Seconds since the slide came up. Ticks only when `running`, so a still
+ * slide never re-renders per frame while a take encodes.
+ *
+ * A take restarts it: the slide on screen at Record is the take's first
+ * block, so playback starts its clips at the take's t=0, and so does this.
+ */
+function useSlideClock(running: boolean, recording: boolean): number {
+  const [seconds, setSeconds] = useState(0);
+  const originRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (recording) originRef.current = null;
+  }, [recording]);
+
+  useEffect(() => {
+    if (!running) return;
+    let frame = requestAnimationFrame(function tick(now) {
+      const origin = (originRef.current ??= now);
+      setSeconds((now - origin) / 1000);
+      frame = requestAnimationFrame(tick);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [running]);
+
+  return seconds;
 }

@@ -2,14 +2,30 @@ import { parseBuildSpec, type BuildSpec } from '../schemas/Build.js';
 /** Durable author intent. Generated slides and their source offsets are never saved here. */
 import type { Doc } from '../schemas/Doc.js';
 import { buildNarrationScript } from '../narration/script.js';
-import { PRESENTATION_LAYOUTS, type PresentationLayout } from './presentationPlan.js';
+import { hashString } from '../random/SeededRandom.js';
+import {
+  AUTHORED_PRESENTATION_LAYOUT,
+  PRESENTATION_LAYOUTS,
+  presentationLayoutFits,
+  type PresentationBeatLayout,
+  type PresentationLayout,
+} from './presentationPlan.js';
 export const PRESENTATION_HINTS_KEY = 'squisq-presentation-hints';
 export const DYNAMIC_PRESENTATION_STYLE = 'dynamic-slides';
+/** A short, stable name for one slide's exact source passage. Saving it rather
+ * than the passage keeps the document text out of the hints. */
+export function presentationPassageKey(passage: string): string {
+  return `${hashString(passage).toString(36)}-${passage.length.toString(36)}`;
+}
 export interface PresentationBlockHint {
   build?: BuildSpec;
   blockId: string;
-  layout?: PresentationLayout;
+  /** A summary layout to prefer, or `authored` to show the section's own block. */
+  layout?: PresentationBeatLayout;
   inbetweens?: boolean;
+  /** Slides left out of the deck, by `presentationPassageKey` of their passage.
+   * Changing a passage, or how the section is split, shows its slide again. */
+  hidden?: string[];
   /** Optional AI-authored display text, keyed to the exact passage it summarizes. */
   ai?: Array<{ source: string; layout: PresentationLayout; headline: string; points: string[] }>;
   /** Explicit user wording, applied only while this section's source still matches. */
@@ -17,7 +33,9 @@ export interface PresentationBlockHint {
 }
 export interface PresentationHints {
   version: 1;
-  density: 'concise' | 'balanced' | 'detailed';
+  /** How much of a section each slide covers; `section` is one slide per section,
+   * with no supporting slides. */
+  density: 'concise' | 'balanced' | 'detailed' | 'section';
   inbetweens: boolean;
   blocks: PresentationBlockHint[];
 }
@@ -59,7 +77,7 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
     !record(value) ||
     !exact(value, ['version', 'density', 'inbetweens', 'blocks']) ||
     value.version !== 1 ||
-    !['concise', 'balanced', 'detailed'].includes(String(value.density)) ||
+    !['concise', 'balanced', 'detailed', 'section'].includes(String(value.density)) ||
     typeof value.inbetweens !== 'boolean' ||
     !Array.isArray(value.blocks) ||
     value.blocks.length > 80
@@ -70,12 +88,21 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
   for (const entry of value.blocks) {
     if (
       !record(entry) ||
-      !exact(entry, ['blockId'], ['layout', 'inbetweens', 'wording', 'ai', 'build']) ||
+      !exact(entry, ['blockId'], ['layout', 'inbetweens', 'wording', 'ai', 'build', 'hidden']) ||
       !text(entry.blockId, 1024) ||
       ids.has(entry.blockId) ||
       (entry.layout !== undefined &&
+        entry.layout !== AUTHORED_PRESENTATION_LAYOUT &&
         !PRESENTATION_LAYOUTS.includes(entry.layout as PresentationLayout)) ||
-      (entry.inbetweens !== undefined && typeof entry.inbetweens !== 'boolean')
+      (entry.inbetweens !== undefined && typeof entry.inbetweens !== 'boolean') ||
+      (entry.hidden !== undefined &&
+        (!Array.isArray(entry.hidden) ||
+          !entry.hidden.length ||
+          entry.hidden.length > 80 ||
+          new Set(entry.hidden).size !== entry.hidden.length ||
+          !entry.hidden.every(
+            (key) => typeof key === 'string' && /^[0-9a-z]{1,7}-[0-9a-z]{1,4}$/u.test(key),
+          )))
     )
       return null;
     const hint: PresentationBlockHint = { blockId: entry.blockId };
@@ -84,8 +111,9 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
       if (!build) return null;
       hint.build = build;
     }
-    if (entry.layout !== undefined) hint.layout = entry.layout as PresentationLayout;
+    if (entry.layout !== undefined) hint.layout = entry.layout as PresentationBeatLayout;
     if (entry.inbetweens !== undefined) hint.inbetweens = entry.inbetweens as boolean;
+    if (entry.hidden !== undefined) hint.hidden = [...(entry.hidden as string[])];
     if (entry.ai !== undefined) {
       if (!Array.isArray(entry.ai) || entry.ai.length > 80) return null;
       hint.ai = [];
@@ -99,8 +127,12 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
           !Array.isArray(item.points) ||
           item.points.length > 4 ||
           !item.points.every((point) => text(point, 180)) ||
-          (['list', 'steps'].includes(String(item.layout)) && item.points.length < 2) ||
-          (item.layout === 'comparison' && item.points.length !== 2)
+          !presentationLayoutFits(
+            item.layout as PresentationLayout,
+            item.headline,
+            item.points as string[],
+            item.source,
+          )
         )
           return null;
         hint.ai.push({

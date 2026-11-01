@@ -113,6 +113,8 @@ export interface Doc {
     duration: number;
     bookmarks: AudioBookmark[];
     builds?: BuildAdvance[];
+    /** When the presenter first showed each presentation slide during the take. */
+    slides?: PresentationSlideMark[];
   };
   /** Projection-only guard: never compile an accepted plan twice. */
   presentationApplied?: boolean;
@@ -1292,6 +1294,18 @@ export interface AudioBookmark {
   charOffset: number;
   /** The word text at this position */
   textFragment?: string;
+}
+
+/**
+ * A presentation slide the presenter put on screen while recording, keyed by
+ * where its passage begins in the narration script. Unlike a bookmark it marks
+ * a click, not a spoken word.
+ */
+export interface PresentationSlideMark {
+  /** Character offset in the narration script where the slide's passage begins. */
+  charOffset: number;
+  /** Seconds: take-relative in a timing sidecar, document time once applied. */
+  time: number;
 }
 
 /**

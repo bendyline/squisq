@@ -22,6 +22,35 @@ const editor = (page: Page) => page.locator('.tiptap.ProseMirror');
 const caption = (page: Page) => editor(page).locator('p', { hasText: 'Caption line.' });
 const readyImages = (page: Page) => page.locator('.tiptap figure[data-image-state="ready"] img');
 
+/** The part of ProseMirror's view read here, from the editor Tiptap keeps on its element. */
+type TiptapElement = HTMLElement & {
+  editor: {
+    view: { state: { selection: { head: number } }; posAtDOM(node: Node, offset: number): number };
+  };
+};
+
+/**
+ * Wait until ProseMirror's caret is where the browser's is. A click or a caret
+ * key moves the DOM selection at once, but ProseMirror adopts it only on a later
+ * `selectionchange`, and a key pressed within a few milliseconds acts at the old
+ * caret: in a just-loaded editor that is the start, where Enter split "Tiny"
+ * and the caption landed above it as a heading.
+ */
+async function waitForCaret(page: Page) {
+  await expect
+    .poll(() =>
+      editor(page).evaluate((element) => {
+        const { view } = (element as TiptapElement).editor;
+        const selection = window.getSelection();
+        if (!selection?.focusNode) return false;
+        return (
+          view.posAtDOM(selection.focusNode, selection.focusOffset) === view.state.selection.head
+        );
+      }),
+    )
+    .toBe(true);
+}
+
 async function loadTinySample(page: Page) {
   await page.goto('/');
   await waitForAppReady(page);
@@ -31,6 +60,7 @@ async function loadTinySample(page: Page) {
   await expect(editor(page)).toContainText('Tiny');
   await editor(page).click();
   await page.keyboard.press('ControlOrMeta+End');
+  await waitForCaret(page);
   await page.keyboard.press('Enter');
   await page.keyboard.type('Caption line.');
 }
@@ -77,6 +107,8 @@ async function chooseFromContextMenu(
 async function clickEndOfCaption(page: Page) {
   await caption(page).click();
   await page.keyboard.press('End');
+  // Until then the paste would replace the image the Copy left selected.
+  await waitForCaret(page);
 }
 
 test('right-click Copy puts the picture on the clipboard, and a paste in the document reuses its file', async ({

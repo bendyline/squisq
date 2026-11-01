@@ -402,6 +402,21 @@ describe('Minimal content summaries', () => {
     expect(JSON.stringify(doc)).toBe(before);
   });
 
+  it('keeps a pasted picture once and never prints its file-name alt text', () => {
+    const doc = source(
+      '## Night shift\n\nToday we cover indexing.\n\n![pasted 05fcd684](notes_files/pasted-05fcd684.png)',
+    );
+    const [slide] = buildPreviewDoc(applyTransform(doc, 'minimal').doc).blocks;
+    const pictures = (slide.contents ?? []).filter((node) =>
+      JSON.stringify(node).includes('pasted-05fcd684.png'),
+    );
+    expect(pictures).toHaveLength(1);
+    const slideLayers = layers(slide);
+    expect(slideLayers.filter((layer) => layer.type === 'image')).toHaveLength(1);
+    const body = slideLayers.find((layer) => layer.type === 'text' && layer.id === 'body');
+    expect(JSON.stringify(body)).not.toContain('pasted 05fcd684');
+  });
+
   it('bounds promoted quotes and stat descriptions as well as unselected prose', () => {
     const words = 'carefully chosen words '.repeat(35);
     const doc = source(

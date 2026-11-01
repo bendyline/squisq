@@ -104,6 +104,7 @@ const RENDER_TIME_EPSILON_SECONDS = 0.000_001;
 const POTENTIALLY_ANIMATED_IMAGE_URL =
   /(?:^data:image\/(?:gif|webp|avif)[;,]|\.(?:gif|webp|avif)(?:[?#]|$))/i;
 const CAPTURE_SVG_SELECTOR = 'svg.block-svg';
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 const CAPTURE_VIDEO_READINESS_POLL_MS = 16;
 const CAPTURE_VIDEO_END_PROBE_TIME = 1e101;
 const SCHEDULED_MEDIA_SELECTOR = '.doc-player__media-clips';
@@ -193,7 +194,13 @@ export async function waitForCaptureAssets(
   );
   await Promise.all(
     pendingImages.map(async (image) => {
-      await waitForImageDecode(image);
+      try {
+        await waitForImageDecode(image);
+      } catch (error) {
+        // Chromium's decode() EncodingError never says which image failed.
+        if (!(error instanceof DOMException) || !image.alt) throw error;
+        throw new Error(`Image "${image.alt}" could not be decoded: ${error.message}`);
+      }
       decodedImages.add(image);
     }),
   );
@@ -433,9 +440,9 @@ export function createInlineProvider(images: Map<string, ArrayBuffer>): MediaPro
 
 /**
  * Track provider-backed URL resolution without taking ownership of the caller's
- * provider. Image layers first render their relative fallback and replace it
- * from a React effect; frame capture must not decode that fallback while the
- * provider operation is still in flight.
+ * provider. Image layers first render an empty URL and replace it from a React
+ * effect; frame capture must not decode that placeholder while the provider
+ * operation is still in flight.
  */
 export function createCaptureMediaResolutionTracker(
   provider: MediaProvider,
@@ -489,9 +496,9 @@ function stripRelativePrefix(path: string): string {
 }
 
 /**
- * Whether a media element under `root` still shows the relative fallback of a
- * path the provider has already mapped to another URL, i.e. React has not yet
- * committed that resolution.
+ * Whether a media element under `root` may still be waiting for React to
+ * commit a URL the provider has already mapped. `useMediaUrl` renders an empty
+ * URL until then; other consumers show the relative fallback.
  */
 function showsUncommittedMediaUrl(
   root: HTMLElement,
@@ -503,7 +510,10 @@ function showsUncommittedMediaUrl(
   }
   if (mapped.size === 0) return false;
   return Array.from(root.querySelectorAll('img[src], video[src], audio[src], source[src]')).some(
-    (element) => mapped.has(stripRelativePrefix(element.getAttribute('src') ?? '')),
+    (element) => {
+      const src = element.getAttribute('src') ?? '';
+      return src === '' || mapped.has(stripRelativePrefix(src));
+    },
   );
 }
 
@@ -513,12 +523,12 @@ function showsUncommittedMediaUrl(
  *
  * A settled provider promise is not a committed DOM: the consuming component
  * stores the URL in state, and React commits that update in a scheduler task
- * that can run after the next animation frame. Until then the element shows
- * its relative fallback, so decoding or binding it would read the wrong
- * resource (a recorder WebM missed this way falls back to slow element
- * capture). When `captureRoot` is given and new URLs resolved, wait a few
- * frames for them to appear; a fallback that never commits is left to the
- * caller rather than stalling every capture.
+ * that can run after the next animation frame. Until then the element shows an
+ * empty URL or its relative fallback, so decoding or binding it would read the
+ * wrong resource (an empty image fails to decode; a recorder WebM missed this
+ * way falls back to slow element capture). When `captureRoot` is given and new
+ * URLs resolved, wait a few frames for them to appear; a placeholder that never
+ * commits is left to the caller rather than stalling every capture.
  */
 export async function waitForCaptureMediaResolutions(
   tracker: CaptureMediaResolutionTracker | null,
@@ -1046,11 +1056,21 @@ export async function rasterizeCaptureSvgClones(
         if (!element.style) continue;
         element.style.setProperty('animation', 'none', 'important');
         element.style.setProperty('transition', 'none', 'important');
+        // That copy also freezes the host page's inherited text fill (live, it
+        // follows each element's `color`). It overrides `color` when text
+        // paints, so HTML in a foreignObject would draw in the host's color.
+        if (element.namespaceURI === SVG_NAMESPACE) {
+          element.style.removeProperty('-webkit-text-fill-color');
+        }
       }
+      // A video frame cannot be scrolled: never paint scroll bars into it.
+      const noScrollbars = svg.ownerDocument.createElementNS(SVG_NAMESPACE, 'style');
+      noScrollbars.textContent = '*{scrollbar-width:none!important}';
+      svg.prepend(noScrollbars);
       const { width, height } = captureSvgRasterSize(svg, originalSvg);
       const cacheKey = captureSvgRasterCacheKey(originalSvg ?? svg, index);
       activeCacheKeys.add(cacheKey);
-      svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      svg.setAttribute('xmlns', SVG_NAMESPACE);
       svg.setAttribute('width', String(width));
       svg.setAttribute('height', String(height));
 

@@ -221,6 +221,45 @@ describe('parseAsciiDiagram — edges', () => {
     expect(crossing('───────┼───────')).toEqual(['a>b', 'c-d']);
   });
 
+  it('reads an ASCII arrowhead right under a + turn, as the renderer draws a tight lane', () => {
+    const edgesOf = (lines: string[]) =>
+      parseAsciiDiagram(lines.join('\n')).edges.map(
+        (e) => `${e.source}${e.directed ? '>' : '-'}${e.target}`,
+      );
+    expect(
+      edgesOf([
+        '+---+',
+        '| A |',
+        '+-+-+',
+        '  |',
+        '  +----+',
+        '       v',
+        '    +-----+',
+        '    |  B  |',
+        '    +-----+',
+      ]),
+    ).toEqual(['a>b']);
+    expect(
+      edgesOf([
+        '     +---+',
+        '     | A |',
+        '     +-+-+',
+        '       |',
+        '  +----+',
+        '  v',
+        '+---+',
+        '| B |',
+        '+---+',
+      ]),
+    ).toEqual(['a>b']);
+  });
+
+  it('keeps a caption starting with v under a box corner as text, not an arrowhead', () => {
+    const d = parseAsciiDiagram(['+-------+', '|  App  |', '+-------+', 'version 2'].join('\n'));
+    expect(d.nodes.map((n) => n.label)).toEqual(['App']);
+    expect(d.edges).toEqual([]);
+  });
+
   it('dedupes parallel identical lines to one edge with a warning', () => {
     const d = parseAsciiDiagram(PARALLEL_DUPES);
     expect(d.edges).toEqual([{ source: 'wide-a', target: 'wide-b', directed: true }]);

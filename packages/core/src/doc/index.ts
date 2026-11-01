@@ -20,7 +20,11 @@ export {
 } from './markdownToDoc.js';
 export type { MarkdownToDocOptions } from './markdownToDoc.js';
 export { docToMarkdown } from './docToMarkdown.js';
-export { buildPreviewDoc, documentTitleFromFileName } from './buildPreviewDoc.js';
+export {
+  buildPreviewDoc,
+  documentTitleFromFileName,
+  previewBlockTemplate,
+} from './buildPreviewDoc.js';
 export type { BuildPreviewDocOptions } from './buildPreviewDoc.js';
 export {
   readCustomTemplatesFromFrontmatter,

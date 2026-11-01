@@ -15,7 +15,7 @@ import { recordBuildAdvance, type BuildAdvance } from '../schemas/Build.js';
  * them with empty `blocks`.
  */
 
-import type { AudioBookmark } from '../schemas/Doc.js';
+import type { AudioBookmark, PresentationSlideMark } from '../schemas/Doc.js';
 import type { NarrationAlignment, NarrationScript } from './types.js';
 
 /** Narration time range of one doc block at record time. */
@@ -37,6 +37,11 @@ export interface NarrationTimingBlock {
 export interface NarrationTimingJsonV3 {
   /** Optional first-show build observations, source guarded. */
   builds?: readonly BuildAdvance[];
+  /**
+   * Optional first showings of presentation slides, in take-relative seconds.
+   * A presentation starts each slide at its mark rather than estimating it.
+   */
+  slides?: readonly PresentationSlideMark[];
   version: 3;
   /** EXACTLY the NarrationScript.sourceText of the take. */
   sourceText: string;
@@ -258,8 +263,26 @@ export function parseNarrationTimingJson(
           });
         }
       }
+    // One mark per slide (its first showing), in the order they were shown.
+    const slides: PresentationSlideMark[] = [];
+    if (Array.isArray(raw.slides))
+      for (const item of raw.slides) {
+        if (!item || typeof item !== 'object') continue;
+        const mark = item as Record<string, unknown>;
+        if (
+          Number.isInteger(mark.charOffset) &&
+          finiteNonNegative(mark.charOffset) &&
+          mark.charOffset < raw.sourceText.length &&
+          finiteNonNegative(mark.time) &&
+          mark.time <= raw.duration &&
+          !slides.some((slide) => slide.charOffset === mark.charOffset)
+        )
+          slides.push({ charOffset: mark.charOffset, time: mark.time });
+      }
+    slides.sort((a, b) => a.time - b.time);
     return {
       ...(builds.length ? { builds } : {}),
+      ...(slides.length ? { slides } : {}),
       version: 3,
       sourceText: raw.sourceText,
       duration: raw.duration,

@@ -45,11 +45,18 @@ export function dataTable(input: DataTableInput, context: TemplateContext): Laye
   // group — a full-height band left a ~200px orphan gap under the title.
   // `rows` is required by the schema but may be missing on partially-
   // authored blocks in live preview; treat it as empty rather than throwing.
-  const rowCount = Math.max(
-    1,
-    Math.min(resolvedRows.length, MAX_VISIBLE_ROWS) + (resolvedHeaders.length > 0 ? 1 : 0),
+  const visibleRows = Math.min(resolvedRows.length, MAX_VISIBLE_ROWS);
+  const hasHeader = resolvedHeaders.length > 0;
+  const rowCount = Math.max(1, visibleRows + (hasHeader ? 1 : 0));
+  // TableLayer's rules add to the row boxes: a 2px rule under the header, 1px
+  // between body rows, and the 1px frame. Leaving them out overflowed the band
+  // by a few pixels, which scrolled the table and clipped its last row. The
+  // extra pixel absorbs sub-pixel row rounding.
+  const ruleHeight = (hasHeader ? 2 : 0) + Math.max(0, visibleRows - 1) + 2 + 1;
+  const naturalTableHPct = Math.min(
+    74,
+    ((rowCount * tableFontSize * 2.4 + ruleHeight) / viewport.height) * 100,
   );
-  const naturalTableHPct = Math.min(74, ((rowCount * tableFontSize * 2.4) / viewport.height) * 100);
   const titleBandPct = title ? (titleFontSize * 2.2 * 100) / viewport.height : 0;
   const groupTopPct = Math.max(8, (100 - titleBandPct - naturalTableHPct) / 2);
 
