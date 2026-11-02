@@ -75,7 +75,11 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // external dependency), plus the audio-file encoder's audio-only MP4
   // writer (loaded lazily, ~287 KB packed in total at release B).
   '@bendyline/squisq-video-react': 300_000,
-  '@bendyline/squisq-editor-react': 1_000_000,
+  // Also ships the background markdown parser as one self-contained worker
+  // file (loaded by URL, so it cannot share core's copy): remark, parse5 for
+  // inline HTML, and the icon catalog for {[icon]} tokens, minified to ~240 KB
+  // packed. Packs to ~1.24 MB; leave roughly 15% headroom.
+  '@bendyline/squisq-editor-react': 1_420_000,
   // Includes compressed light and full standalone players plus one shared
   // Font Awesome webfont payload so CLI video export remains self-contained
   // without duplicating the fonts into both player variants.
