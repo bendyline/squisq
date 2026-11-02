@@ -1,3 +1,9 @@
+## @bendyline/squisq-editor-react [2.13.17](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.16...@bendyline/squisq-editor-react@2.13.17) (2026-11-02)
+
+### Bug Fixes
+
+* Allow background processing ([#117](https://github.com/bendyline/squisq/issues/117)) ([d2a0284](https://github.com/bendyline/squisq/commit/d2a0284bdbbf2527b0ed0997e1d9a853388db02d))
+
 ## @bendyline/squisq-editor-react [2.13.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.15...@bendyline/squisq-editor-react@2.13.16) (2026-11-01)
 
 ### Bug Fixes
