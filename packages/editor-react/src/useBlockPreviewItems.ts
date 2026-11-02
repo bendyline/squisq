@@ -16,13 +16,16 @@ export interface BlockPreviewItem {
   id: string;
   template: string;
   headingText: string;
-  /** The block as the preview renders it. */
-  block: Block;
+  /** The rendered block, or null while its offscreen preview is deferred. */
+  block: Block | null;
   /** The block with its source heading and positions, for positioning and navigation. */
   sourceBlock: Block;
 }
 
-export function useBlockPreviewItems(viewport: ViewportConfig): BlockPreviewItem[] {
+export function useBlockPreviewItems(
+  viewport: ViewportConfig,
+  visibleIds?: ReadonlySet<string> | null,
+): BlockPreviewItem[] {
   const { doc, workspaceContainer, fileName, mediaRevision } = useEditorContext();
   const projection = usePreviewProjection(doc, '', workspaceContainer, fileName, mediaRevision);
   const previewDoc = projection?.contentDoc ?? doc;
@@ -43,14 +46,23 @@ export function useBlockPreviewItems(viewport: ViewportConfig): BlockPreviewItem
     const result: BlockPreviewItem[] = [];
 
     flat.forEach((block, index) => {
-      const visual = resolveBlockVisual(previewDoc, block, activeTheme, viewport, {
-        blockIndex: index,
-        totalBlocks: flat.length,
-      });
-      if (!visual) return;
+      // Materializing every offscreen block also clones/resolves its theme and
+      // lays out its contents. Keep cheap descriptors for positioning and wait
+      // until a card approaches the viewport before doing that work.
+      const shouldResolve = visibleIds == null || visibleIds.has(block.id);
+      const visual = shouldResolve
+        ? resolveBlockVisual(previewDoc, block, activeTheme, viewport, {
+            blockIndex: index,
+            totalBlocks: flat.length,
+          })
+        : null;
+      // Lazy cards retain their descriptor even if rendering fails. Removing
+      // one would unobserve it, then recreate it as an offscreen descriptor on
+      // the next visibility update, endlessly repeating the failed render.
+      if (visibleIds == null && !visual) return;
       result.push({
         id: block.id,
-        template: visual.template ?? 'content',
+        template: visual?.template ?? block.template ?? 'content',
         headingText: block.sourceHeading ? extractPlainText(block.sourceHeading) : '',
         block: visual,
         sourceBlock: block,
@@ -58,5 +70,5 @@ export function useBlockPreviewItems(viewport: ViewportConfig): BlockPreviewItem
     });
 
     return result;
-  }, [previewDoc, viewport, activeTheme]);
+  }, [previewDoc, viewport, activeTheme, visibleIds]);
 }
