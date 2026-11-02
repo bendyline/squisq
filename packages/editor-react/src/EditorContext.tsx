@@ -8,6 +8,7 @@
  */
 
 import { EditorInsertMenuProvider } from './InsertMenuItems';
+import { BackgroundMarkdownParser } from './backgroundMarkdownParser';
 import {
   createContext,
   useContext,
@@ -1263,11 +1264,18 @@ export function EditorProvider({
   // Debounced parse on markdown source change
   const parseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipInitialDebouncedParseRef = useRef(Boolean(initialMarkdown));
+  const backgroundParserRef = useRef<BackgroundMarkdownParser | null>(null);
+  useEffect(
+    () => () => {
+      backgroundParserRef.current?.dispose();
+      backgroundParserRef.current = null;
+    },
+    [],
+  );
 
-  const doParse = useCallback((source: string) => {
+  const doParse = useCallback((source: string, background = false) => {
     setIsParsing(true);
-    try {
-      const parsed = parseMarkdown(source);
+    const applyParsed = (parsed: MarkdownDocument) => {
       setMarkdownDocState(parsed);
       setParseError(null);
 
@@ -1283,12 +1291,33 @@ export function EditorProvider({
         setDoc(null);
         console.warn('Doc generation failed:', docErr instanceof Error ? docErr.message : docErr);
       }
-    } catch (err: unknown) {
-      setParseError(err instanceof Error ? err.message : 'Parse error');
+      setIsParsing(false);
+    };
+    const applyError = (error: string) => {
+      setParseError(error);
       setMarkdownDocState(null);
       setDoc(null);
-    } finally {
       setIsParsing(false);
+    };
+    const synchronous = () => {
+      try {
+        applyParsed(parseMarkdown(source));
+      } catch (error) {
+        applyError(error instanceof Error ? error.message : 'Parse error');
+      }
+    };
+    // Initial rendering and small documents keep the existing synchronous path.
+    // Large-document background parses must not monopolize the UI thread when
+    // the next key arrives. Saving still uses markdownSource synchronously.
+    if (background && source.length >= 32_768 && typeof Worker !== 'undefined') {
+      backgroundParserRef.current ??= new BackgroundMarkdownParser();
+      backgroundParserRef.current.parse(source, (result) => {
+        if (result === null) synchronous();
+        else if (result.markdown) applyParsed(result.markdown);
+        else applyError(result.error);
+      });
+    } else {
+      synchronous();
     }
   }, []);
 
@@ -1344,14 +1373,15 @@ export function EditorProvider({
     }
     setIsParsing(true);
     parseTimeoutRef.current = setTimeout(() => {
-      doParse(markdownSource);
+      doParse(markdownSource, true);
     }, 150);
     return () => {
       if (parseTimeoutRef.current) {
         clearTimeout(parseTimeoutRef.current);
       }
+      backgroundParserRef.current?.cancel();
     };
-  }, [markdownSource, doParse, editorMode]);
+  }, [markdownSource, doParse, editorMode, articleId, fileName]);
 
   // Initial parse
   useEffect(() => {

@@ -86,8 +86,8 @@
     }
   },
   "scripts": {
-    "build": "tsup && node ../../scripts/build-styles.mjs && node ../../scripts/generate-bundle-licenses.mjs . @fortawesome/fontawesome-free && node ../../scripts/remove-empty-chunks.mjs dist",
-    "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
+    "build": "tsup && tsup --config tsup.worker.config.ts && node ../../scripts/build-styles.mjs && node ../../scripts/generate-bundle-licenses.mjs . @fortawesome/fontawesome-free && node ../../scripts/remove-empty-chunks.mjs dist",
+    "dev": "concurrently -n js,dts,parser -c blue,gray,cyan -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\" \"tsup --config tsup.worker.config.ts --watch\"",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {

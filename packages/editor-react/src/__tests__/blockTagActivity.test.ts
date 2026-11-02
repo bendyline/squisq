@@ -161,6 +161,31 @@ describe('block-tag activity', () => {
     expect(secondHeading.classList.contains(BLOCK_TAG_HOVERED_CLASS)).toBe(true);
   });
 
+  it('keeps a native caret move that ProseMirror has not read yet when hover changes', async () => {
+    // Ctrl+End moves the caret natively and scrolls; the scroll fires
+    // `mouseover` before the asynchronous `selectionchange` reaches ProseMirror.
+    const editor = makeEditor();
+    editor.view.focus();
+    editor.commands.setTextSelection(positionInsideTopLevelNode(editor, 'First body.'));
+    await waitForDomReconciliation();
+    expect(editor.view.hasFocus()).toBe(true);
+
+    const secondBody = elementWithExactText(editor, 'p', 'Second body.');
+    const secondBodyText = secondBody.firstChild as Text;
+    document.getSelection()?.setBaseAndExtent(secondBodyText, 6, secondBodyText, 6);
+
+    secondBody.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    await waitForDomReconciliation();
+
+    const [, secondHeading] = headings(editor);
+    expect(secondHeading.classList.contains(BLOCK_TAG_HOVERED_CLASS)).toBe(true);
+    expect(editor.state.selection.from).toBe(
+      positionInsideTopLevelNode(editor, 'Second body.') + 6,
+    );
+    expect(document.getSelection()?.anchorNode).toBe(secondBodyText);
+    expect(document.getSelection()?.anchorOffset).toBe(6);
+  });
+
   it('clears block hover below the final content node', async () => {
     const editor = makeEditor();
     await waitForDomReconciliation();
