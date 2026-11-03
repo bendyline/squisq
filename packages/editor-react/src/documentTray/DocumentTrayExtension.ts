@@ -19,6 +19,7 @@ export interface DocumentTrayState {
 
 export const DOCUMENT_TRAY_KEY = new PluginKey<DocumentTrayState>('squisq-document-tray');
 export const DOCUMENT_TRAY_ATTRIBUTE = 'data-squisq-document-tray';
+export const DOCUMENT_TRAY_BODY_START_CLASS = 'squisq-document-tray-body-start';
 
 /** Node views must not mount a second player behind the hidden source node. */
 export function isDocumentTrayDecoration(decorations: readonly Decoration[]): boolean {
@@ -42,9 +43,25 @@ function startBody(state: EditorState): Transaction {
   return tr.setSelection(TextSelection.create(tr.doc, pos + 1));
 }
 
+/** Every top-level node is a hidden attachment, so the page has nowhere to click. */
+function bodyIsEmpty(state: EditorState): boolean {
+  const items = DOCUMENT_TRAY_KEY.getState(state)?.items ?? [];
+  return items.length > 0 && items.length === state.doc.childCount;
+}
+
+function bodyStartLine(placeholder: string): () => HTMLElement {
+  return () => {
+    const line = document.createElement('p');
+    line.className = DOCUMENT_TRAY_BODY_START_CLASS;
+    line.dataset.placeholder = placeholder;
+    return line;
+  };
+}
+
 function buildState(
   doc: PMNode,
   enabled: boolean,
+  placeholder: string,
   prev?: DocumentTrayState,
   tr?: Transaction,
 ): DocumentTrayState {
@@ -62,43 +79,46 @@ function buildState(
         id: mapped.get(item.pos) ?? `document-media-${++seq}`,
       }))
     : [];
-  return {
-    enabled,
-    items,
-    seq,
-    decorations: DecorationSet.create(
-      doc,
-      items.map((item) =>
-        Decoration.node(
-          item.pos,
-          item.pos + item.node.nodeSize,
-          { [DOCUMENT_TRAY_ATTRIBUTE]: item.id, class: 'squisq-document-tray-source' },
-          { documentTray: true },
-        ),
-      ),
+  const decorations = items.map((item) =>
+    Decoration.node(
+      item.pos,
+      item.pos + item.node.nodeSize,
+      { [DOCUMENT_TRAY_ATTRIBUTE]: item.id, class: 'squisq-document-tray-source' },
+      { documentTray: true },
     ),
-  };
+  );
+  // With every node in the tray the page renders nothing at all. Stand in for
+  // the empty first paragraph a blank document would show; it is view-only.
+  if (items.length && items.length === doc.childCount) {
+    decorations.push(
+      Decoration.widget(doc.content.size, bodyStartLine(placeholder), {
+        side: 1,
+        key: `${DOCUMENT_TRAY_BODY_START_CLASS}:${placeholder}`,
+      }),
+    );
+  }
+  return { enabled, items, seq, decorations: DecorationSet.create(doc, decorations) };
 }
 
-export const DocumentTrayExtension = Extension.create<{ enabled: boolean }>({
+export const DocumentTrayExtension = Extension.create<{ enabled: boolean; placeholder: string }>({
   name: 'squisqDocumentTray',
   // The hosted-video plugin reads this state to avoid mounting duplicate iframes.
   priority: 110,
   addOptions() {
-    return { enabled: true };
+    return { enabled: true, placeholder: '' };
   },
   addProseMirrorPlugins() {
-    const enabled = this.options.enabled;
+    const { enabled, placeholder } = this.options;
     return [
       new Plugin<DocumentTrayState>({
         key: DOCUMENT_TRAY_KEY,
         state: {
-          init: (_config, state) => buildState(state.doc, enabled),
+          init: (_config, state) => buildState(state.doc, enabled, placeholder),
           apply: (tr, prev) => {
             const setting: unknown = tr.getMeta(DOCUMENT_TRAY_KEY);
             const active = typeof setting === 'boolean' ? setting : prev.enabled;
             return tr.docChanged || active !== prev.enabled
-              ? buildState(tr.doc, active, prev, tr)
+              ? buildState(tr.doc, active, placeholder, prev, tr)
               : prev;
           },
         },
@@ -141,6 +161,17 @@ export const DocumentTrayExtension = Extension.create<{ enabled: boolean }>({
             if (!rangeInTray(view.state, from, to)) return false;
             view.dispatch(startBody(view.state).replaceSelection(slice).scrollIntoView());
             return true;
+          },
+          handleDOMEvents: {
+            // The browser cannot place a caret among hidden nodes, so a click
+            // on the empty page starts the body exactly as Enter does.
+            mousedown: (view, event) => {
+              if (event.button !== 0 || !view.editable || !bodyIsEmpty(view.state)) return false;
+              event.preventDefault();
+              view.dispatch(startBody(view.state).scrollIntoView());
+              view.focus();
+              return true;
+            },
           },
           // Backspace at the first body paragraph must not silently delete an
           // invisible attachment. Tray removal has an explicit, undoable action.

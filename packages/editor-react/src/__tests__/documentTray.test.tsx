@@ -35,7 +35,7 @@ async function mount(markdown: string, enabled = true, editable = true) {
       TiptapAudio,
       TiptapVideo,
       VideoEmbedExtension,
-      DocumentTrayExtension.configure({ enabled }),
+      DocumentTrayExtension.configure({ enabled, placeholder: 'Start writing…' }),
     ],
     content: markdownToTiptap(markdown),
     editable,
@@ -254,6 +254,56 @@ describe('document tray', () => {
       editor.commands.undo();
     });
     expect(tiptapToMarkdown(editor.getHTML()).trim()).toBe(annotation);
+  });
+
+  it('offers a visible body line in a media-only document and starts the body on click, undoably', async () => {
+    const { editor, container, onUpdate } = await mount(`${VIDEO}\n`);
+    const line = () => container.querySelector<HTMLElement>('.squisq-document-tray-body-start');
+    expect(line()?.dataset.placeholder).toBe('Start writing…');
+    expect(onUpdate).not.toHaveBeenCalled();
+    act(() => {
+      fireEvent.mouseDown(line()!, { button: 0 });
+    });
+    expect(items(editor)).toHaveLength(1);
+    expect(editor.state.doc.lastChild?.type.name).toBe('paragraph');
+    expect(editor.state.selection.$from.parent).toBe(editor.state.doc.lastChild);
+    expect(line()).toBeNull();
+    act(() => {
+      editor.commands.insertContent('Hello');
+    });
+    expect(tiptapToMarkdown(editor.getHTML())).toBe(`${VIDEO}\n\nHello\n`);
+    act(() => {
+      editor.commands.undo();
+    });
+    expect(editor.state.doc.childCount).toBe(1);
+    expect(line()).not.toBeNull();
+  });
+
+  it.each([
+    ['body text', `${VIDEO}\n\nBody.\n`],
+    ['a blank caret line', `\n${VIDEO}\n`],
+    ['an opening heading', `# Title\n\n${VIDEO}\n`],
+  ])('offers no stand-in body line beside %s', async (_label, markdown) => {
+    const { container } = await mount(markdown);
+    expect(container.querySelector('.squisq-document-tray-body-start')).toBeNull();
+  });
+
+  it('never starts a body from a click on a read-only or untrayed media-only document', async () => {
+    const click = (editor: Editor, button = 0) =>
+      editor.view.someProp('handleDOMEvents', (handlers) =>
+        handlers.mousedown?.(editor.view, new MouseEvent('mousedown', { button })),
+      ) ?? false;
+    const readOnly = await mount(VIDEO, true, false);
+    expect(click(readOnly.editor)).toBe(false);
+    expect(readOnly.editor.state.doc.childCount).toBe(1);
+    readOnly.unmount();
+    const untrayed = await mount(VIDEO, false);
+    expect(untrayed.container.querySelector('.squisq-document-tray-body-start')).toBeNull();
+    expect(click(untrayed.editor)).toBe(false);
+    untrayed.unmount();
+    const secondary = await mount(VIDEO);
+    expect(click(secondary.editor, 2)).toBe(false);
+    expect(secondary.editor.state.doc.childCount).toBe(1);
   });
 
   it.each(['type', 'paste', 'enter'] as const)(

@@ -494,7 +494,10 @@ export function WysiwygEditor({
       ImageWithMediaProvider.configure({ inline: false }),
       TiptapVideo,
       TiptapAudio,
-      DocumentTrayExtension.configure({ enabled: layoutMode === 'document' }),
+      DocumentTrayExtension.configure({
+        enabled: layoutMode === 'document',
+        placeholder: resolvedPlaceholder,
+      }),
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
