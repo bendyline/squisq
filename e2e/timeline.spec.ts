@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { switchView } from './view-tabs';
+import { selectWriteMode, switchView } from './view-tabs';
 
 /**
  * E2E tests for the Timeline view: block bars render, selecting a block in the
@@ -16,9 +16,7 @@ async function loadFeaturesSample(page: Page) {
 }
 
 async function enterTimelineMode(page: Page) {
-  await page.getByRole('button', { name: 'View options' }).click();
-  await page.getByRole('menuitemradio', { name: 'Timeline' }).click();
-  await page.keyboard.press('Escape');
+  await selectWriteMode(page, 'Timeline');
   await page.locator('[data-testid="timeline-track"]').waitFor({ state: 'visible' });
 }
 
@@ -105,9 +103,7 @@ test.describe('Timeline view', () => {
     await enterTimelineMode(page);
     await expect(page.locator('.tiptap.ProseMirror video')).toHaveCount(1);
 
-    await page.getByRole('button', { name: 'View options' }).click();
-    await page.getByRole('menuitemradio', { name: 'Document' }).click();
-    await page.keyboard.press('Escape');
+    await selectWriteMode(page, 'Write');
     await expect(page.locator('[data-testid="timeline-track"]')).toHaveCount(0);
     await expect(page.locator('.tiptap.ProseMirror video')).toHaveCount(1);
 
@@ -199,9 +195,7 @@ test.describe('Timeline view', () => {
       'preserved',
     );
 
-    await page.getByRole('button', { name: 'View options' }).click();
-    await page.getByRole('menuitemradio', { name: 'Document' }).click();
-    await page.keyboard.press('Escape');
+    await selectWriteMode(page, 'Write');
     await expect(page.locator('[data-testid="timeline-track"]')).toHaveCount(0);
     await expect(page.locator('.tiptap.ProseMirror video')).toHaveCount(1);
     await expect(page.locator('.tiptap.ProseMirror video')).toHaveAttribute(
@@ -220,10 +214,8 @@ test.describe('Timeline view', () => {
     await page.locator('select').first().selectOption('hello-world');
     await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible', timeout: 5_000 });
 
-    // Switch to Block-at-a-time mode.
-    await page.getByRole('button', { name: 'View options' }).click();
-    await page.getByRole('menuitemradio', { name: 'Block-at-a-time' }).click();
-    await page.keyboard.press('Escape');
+    // Switch to the Blocks layout.
+    await selectWriteMode(page, 'Blocks');
     await page.locator('[data-testid="block-card-view"]').waitFor({ state: 'visible' });
 
     // Put the caret at the very start of the body paragraph and type.

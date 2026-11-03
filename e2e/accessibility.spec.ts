@@ -264,10 +264,12 @@ test.describe('automated accessibility audit', () => {
     const trigger = page.getByRole('button', { name: 'View options', exact: true });
     await trigger.press('ArrowDown');
     const menu = page.getByRole('menu', { name: 'View options', exact: true });
-    await expect(menu.getByRole('menuitemradio', { name: 'Document', exact: true })).toBeFocused();
+    await expect(
+      menu.getByRole('menuitemcheckbox', { name: 'Show outline', exact: true }),
+    ).toBeFocused();
     await page.keyboard.press('ArrowDown');
     await expect(
-      menu.getByRole('menuitemradio', { name: 'Block-at-a-time', exact: true }),
+      menu.getByRole('menuitemcheckbox', { name: 'Show block previews', exact: true }),
     ).toBeFocused();
     await assertNoSeriousAxeViolations(page, '.squisq-view-menu-popover');
     await page.keyboard.press('End');

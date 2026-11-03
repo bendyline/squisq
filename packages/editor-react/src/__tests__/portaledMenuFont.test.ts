@@ -21,7 +21,7 @@ const PORTALED_MENUS = [
   'squisq-transition-flyout',
   'squisq-view-menu-popover',
   'squisq-timeline-item-menu',
-  'squisq-use-mode-menu',
+  'squisq-view-mode-menu',
   'squisq-cover-slide-menu',
   'squisq-mention-popover',
   'squisq-tooltip',

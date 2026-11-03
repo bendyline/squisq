@@ -1872,18 +1872,8 @@
   border-bottom-color: var(--squisq-accent);
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-use-tab--active {
+.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-mode-tab--active {
   border-bottom-color: var(--squisq-accent);
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-use-mode-trigger {
-  color: var(--squisq-text-soft);
-}
-
-.squisq-editor-shell[data-theme='dark'] .squisq-use-mode-trigger:hover,
-.squisq-editor-shell[data-theme='dark'] .squisq-use-mode-trigger--open,
-.squisq-editor-shell[data-theme='dark'] .squisq-toolbar-use-tab--active .squisq-use-mode-trigger {
-  color: var(--squisq-accent-strong);
 }
 
 .squisq-editor-shell[data-theme='dark'] .squisq-toolbar-button {
