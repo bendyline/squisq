@@ -1,3 +1,18 @@
+## @bendyline/squisq-editor-react [2.13.18](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.17...@bendyline/squisq-editor-react@2.13.18) (2026-11-04)
+
+### Bug Fixes
+
+* Add body-start placeholder to document tray ([#118](https://github.com/bendyline/squisq/issues/118)) ([3edc74b](https://github.com/bendyline/squisq/commit/3edc74bc552175fd809e83073029fa3798803734))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.11
+* **@bendyline/squisq-formats:** upgraded to 2.8.13
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.40
+* **@bendyline/squisq-react:** upgraded to 2.12.23
+* **@bendyline/squisq-video-react:** upgraded to 2.5.24
+
 ## @bendyline/squisq-editor-react [2.13.17](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.16...@bendyline/squisq-editor-react@2.13.17) (2026-11-02)
 
 ### Bug Fixes

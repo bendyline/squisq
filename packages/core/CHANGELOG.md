@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.11](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.10...@bendyline/squisq@2.13.11) (2026-11-04)
+
+### Bug Fixes
+
+* Add body-start placeholder to document tray ([#118](https://github.com/bendyline/squisq/issues/118)) ([3edc74b](https://github.com/bendyline/squisq/commit/3edc74bc552175fd809e83073029fa3798803734))
+
 ## @bendyline/squisq [2.13.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.9...@bendyline/squisq@2.13.10) (2026-11-01)
 
 ### Bug Fixes
