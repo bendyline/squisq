@@ -31,7 +31,7 @@ import type {
 import { parseTimeSeconds } from '../markdown/annotationCoercion.js';
 import { mediaKindForUrl } from '../markdown/mediaReference.js';
 import { sanitizeUrl } from '../markdown/sanitize.js';
-import { extractPlainText } from '../markdown/utils.js';
+import { extractPlainText, isHtmlLineBreak } from '../markdown/utils.js';
 import { isSvgIslandLang } from '../markdown/svgIsland.js';
 import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
@@ -231,6 +231,9 @@ function renderInlineHtml(nodes: MarkdownInlineNode[]): string {
         case 'inlineIcon':
           return `<i class="fa-${node.family} fa-${node.name}" aria-hidden="true"></i>`;
         case 'htmlInline':
+          // A `<br>` tag is a line break — the only one a table cell can hold,
+          // and the one the editor writes there for Enter.
+          if (isHtmlLineBreak(node.rawHtml)) return '<br>';
           // A clip plays as its own layer; its markup printed as text says
           // nothing (a recording inside a list item lands here).
           return INLINE_MEDIA_TAG_RE.test(node.rawHtml.trim())

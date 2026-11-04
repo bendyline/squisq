@@ -1649,6 +1649,20 @@
   color: var(--squisq-danger);
 }
 
+/* Why a dynamic deck is playing its sections as written (the player keeps
+   working underneath, so this is a note, not an error screen). */
+.squisq-preview-notice {
+  flex: none;
+  margin: 8px 12px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--squisq-border);
+  border-left: 3px solid var(--squisq-accent);
+  border-radius: 6px;
+  background: var(--squisq-input-bg);
+  color: var(--squisq-text);
+  font-size: 13px;
+}
+
 /* Canvas presentation promotes the EditorShell above its host so the active
    Use surface owns the complete renderer canvas. Native fullscreen uses the
    same chrome suppression, then lets the Fullscreen API size the shell. */
