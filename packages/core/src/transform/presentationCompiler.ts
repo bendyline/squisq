@@ -44,7 +44,7 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     );
   if (narration && narration.sourceText !== checked.sourceText)
     throw new Error(
-      'The narration no longer matches the document. Generate narration again before presenting.',
+      'The narration no longer matches the document. Record or generate narration again before presenting.',
     );
   if (
     narration &&

@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { switchView } from './view-tabs';
+import { selectWriteMode, switchView } from './view-tabs';
 
 /**
  * E2E for the data-sidecar grid (Phase 2): uploading a CSV lands it as a
@@ -29,9 +29,7 @@ test.describe('data grid', () => {
     });
     await switchView(page, 'Editor');
 
-    await page.getByRole('button', { name: 'View options' }).click();
-    await page.getByRole('menuitemradio', { name: 'Block-at-a-time' }).click();
-    await page.keyboard.press('Escape');
+    await selectWriteMode(page, 'Blocks');
 
     const card = page.locator('.squisq-data-card');
     const grid = page.locator('.squisq-data-card-grid [role="grid"]');

@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAnchoredPopover } from './useAnchoredPopover';
-import { useEditorContext, type ThemeInheritance, type LayoutMode } from './EditorContext';
+import { useEditorContext, type ThemeInheritance } from './EditorContext';
 import { Icon } from './Icon';
 import { useEscapeDismissal } from './useEscapeDismissal';
 import { useProofingState } from './proofing/ProofingContext';
@@ -31,8 +31,6 @@ export function ViewMenuPanel() {
     themeInheritance,
     setThemeInheritance,
     colorScheme,
-    layoutMode,
-    setLayoutMode,
   } = useEditorContext();
   const proofingState = useProofingState();
   const [open, setOpen] = useState(false);
@@ -136,17 +134,6 @@ export function ViewMenuPanel() {
               items[next]?.focus();
             }}
           >
-            <MenuRadioGroup
-              label="View"
-              value={layoutMode}
-              onChange={(v) => setLayoutMode(v as LayoutMode)}
-              options={[
-                { value: 'document', label: 'Document' },
-                { value: 'block', label: 'Block-at-a-time' },
-                { value: 'timeline', label: 'Timeline' },
-              ]}
-            />
-            <div className="squisq-view-menu-separator" role="separator" />
             <MenuToggle label="Show outline" checked={outlineVisible} onChange={toggleOutline} />
             <MenuToggle
               label="Show block previews"

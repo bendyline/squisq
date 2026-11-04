@@ -159,6 +159,40 @@ describe('source-preserving presentations', () => {
     const invalid = buildPreviewDoc({ ...doc, frontmatter: { [PRESENTATION_KEY]: '{}' } });
     expect(invalid.diagnostics?.some((item) => item.code === 'presentation-invalid')).toBe(true);
   });
+  it('keeps following a take after small edits, but not after a rewrite', async () => {
+    const recorded = `Opening words before any heading.\n\n${source}`;
+    const { container } = await narrated(recorded, [0, 10, 20, 40, 60]);
+    const resolve = (text: string) =>
+      resolveAudioMapping(
+        parse(`{[audio src=audio/take.webm anchor=document]}\n\n${text}`),
+        container,
+      );
+    // A title given to the opening and a heading reworded after recording.
+    const edited = await resolve(
+      `## Titled after recording\n\n${recorded.replace('## Make it visual', '## Make it more visual')}`,
+    );
+    expect(edited.presentationNarration?.sourceText).toBe(buildNarrationScript(edited).sourceText);
+    const deck = buildPreviewDoc({
+      ...edited,
+      frontmatter: { 'squisq-transform': DYNAMIC_PRESENTATION_STYLE },
+    });
+    expect(deck.diagnostics?.some((item) => item.code === 'presentation-invalid')).not.toBe(true);
+    // Each section still starts where the voice reaches it.
+    const sections = compilePresentationPlan(
+      edited,
+      createPresentationPlan(edited, { ...defaultPresentationHints(), density: 'section' }),
+    );
+    expect(sections.blocks.map((block) => block.startTime)).toEqual([0, 10, 20, 40]);
+    const rewritten = await resolve(
+      recorded.replace(
+        'Narration runs locally. Turn the same document into a narrated video.',
+        'Record once, then publish everywhere your audience already listens and watches.',
+      ),
+    );
+    expect(() => compilePresentationPlan(rewritten, createPresentationPlan(rewritten))).toThrow(
+      'narration no longer matches',
+    );
+  });
   it('rejects unknown fields, gaps, overlaps, malformed shapes and oversized input', () => {
     const plan = createPresentationPlan(parse());
     for (const value of [

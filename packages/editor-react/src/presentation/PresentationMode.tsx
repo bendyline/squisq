@@ -710,7 +710,7 @@ export function PresentationModeControl() {
         ? createPortal(
             <div
               ref={menuRef}
-              className="squisq-use-mode-menu squisq-presentation-menu"
+              className="squisq-view-mode-menu squisq-presentation-menu"
               data-theme={colorScheme}
               role="menu"
               aria-label="Presentation options"
@@ -748,7 +748,7 @@ export function PresentationModeControl() {
                   <button
                     key={option.target}
                     type="button"
-                    className={`squisq-use-mode-menu-item squisq-presentation-menu-item${isSelected ? ' squisq-use-mode-menu-item--selected squisq-presentation-menu-item--selected' : ''}`}
+                    className={`squisq-view-mode-menu-item squisq-presentation-menu-item${isSelected ? ' squisq-view-mode-menu-item--selected squisq-presentation-menu-item--selected' : ''}`}
                     role="menuitemradio"
                     aria-checked={isSelected}
                     tabIndex={isSelected ? 0 : -1}
@@ -766,21 +766,21 @@ export function PresentationModeControl() {
                     }}
                   >
                     <span
-                      className="squisq-use-mode-menu-icon squisq-presentation-menu-icon"
+                      className="squisq-view-mode-menu-icon squisq-presentation-menu-icon"
                       aria-hidden="true"
                     >
                       <Icon icon={option.icon} />
                     </span>
-                    <span className="squisq-use-mode-menu-copy squisq-presentation-menu-copy">
-                      <span className="squisq-use-mode-menu-label squisq-presentation-menu-label">
+                    <span className="squisq-view-mode-menu-copy squisq-presentation-menu-copy">
+                      <span className="squisq-view-mode-menu-label squisq-presentation-menu-label">
                         {option.label}
                       </span>
-                      <span className="squisq-use-mode-menu-summary squisq-presentation-menu-summary">
+                      <span className="squisq-view-mode-menu-summary squisq-presentation-menu-summary">
                         {disabled ? 'Full screen is unavailable.' : option.summary}
                       </span>
                     </span>
                     <span
-                      className="squisq-use-mode-menu-check squisq-presentation-menu-check"
+                      className="squisq-view-mode-menu-check squisq-presentation-menu-check"
                       aria-hidden="true"
                     >
                       {isSelected && <Icon icon="fa-solid fa-check" />}

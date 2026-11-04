@@ -101,6 +101,23 @@ describe('slide rich-text projection', () => {
     expect(html).toContain('<th align="center">Note</th>');
     expect(html).toContain('<td align="right">100</td>');
   });
+
+  it('renders a <br> in a table cell as a line break, not as text', () => {
+    const nodes = parseMarkdown(
+      '| Device | Speed |\n| --- | --- |\n| Mac<br>M5 Max<BR/>MLX | 28.0 |',
+    ).children;
+
+    const html = renderMarkdownBlocksHtml(nodes);
+
+    expect(html).toContain('<td>Mac<br>M5 Max<br>MLX</td>');
+    expect(html).not.toContain('&lt;br');
+  });
+
+  it('still escapes other raw inline HTML', () => {
+    const html = renderMarkdownBlocksHtml(parseMarkdown('a <span>b</span> c').children);
+
+    expect(html).toContain('&lt;span&gt;');
+  });
 });
 
 describe('transcript template input derivation', () => {
