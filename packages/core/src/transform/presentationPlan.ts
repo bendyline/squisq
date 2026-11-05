@@ -18,6 +18,9 @@ export const PRESENTATION_LAYOUTS = [
   'comparison',
   'steps',
   'image',
+  'cards',
+  'process',
+  'cycle',
 ] as const;
 export type PresentationLayout = (typeof PRESENTATION_LAYOUTS)[number];
 /** Shows a section's own block, with the template its author chose, instead of
@@ -38,8 +41,8 @@ export function presentationStat(
   }
   return null;
 }
-/** Whether a summary can fill a layout: enough points for a list, steps or a
- * comparison; a prominent number for a key number; a short headline for a big
+/** Whether a summary can fill a layout: enough points for a list, steps,
+ * cards, a process, a cycle (three) or a comparison; a prominent number for a key number; a short headline for a big
  * statement; and, for a quote, a headline found word for word in
  * `passage`, the source text the slide summarizes. An image slide also needs a
  * picture, which callers check. */
@@ -52,7 +55,11 @@ export function presentationLayoutFits(
   switch (layout) {
     case 'list':
     case 'steps':
+    case 'cards':
+    case 'process':
       return points.length >= 2;
+    case 'cycle':
+      return points.length >= 3;
     case 'comparison':
       return points.length === 2;
     case 'definition':

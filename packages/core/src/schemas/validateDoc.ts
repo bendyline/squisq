@@ -202,6 +202,7 @@ function validateLayerContent(
       optionalFiniteNumber(content, 'maxVisibleRows', `${path}.maxVisibleRows`, issues, {
         min: 1,
       });
+      optionalBoolean(content, 'wrap', `${path}.wrap`, issues);
       requiredRecord(content, 'style', `${path}.style`, issues);
       break;
     case 'tree':

@@ -393,6 +393,58 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
     ),
   },
   {
+    name: 'cards',
+    label: 'Cards',
+    description: 'Shows two to six parallel ideas side by side as cards, each revealed in turn.',
+    icon: (
+      <TemplateIcon>
+        <rect x={4} y={5} width={30} height={4} rx={1} fill={F2} />
+        {[4, 22, 40].map((x) => (
+          <g key={x}>
+            <rect x={x} y={14} width={14} height={20} rx={2} fill={F2} opacity={0.35} />
+            <rect x={x + 2} y={17} width={6} height={2} rx={1} fill={FA} />
+            <rect x={x + 2} y={22} width={10} height={3} rx={1} fill={F2} />
+          </g>
+        ))}
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'process',
+    label: 'Process',
+    description: 'Shows an ordered process as numbered stages joined by arrows.',
+    icon: (
+      <TemplateIcon>
+        <rect x={4} y={5} width={30} height={4} rx={1} fill={F2} />
+        <rect x={13} y={20.5} width={30} height={1.5} fill={FA} opacity={0.6} />
+        {[9, 28, 47].map((x) => (
+          <g key={x}>
+            <circle cx={x} cy={21} r={5} fill={FA} />
+            <rect x={x - 6} y={29} width={12} height={3} rx={1} fill={F2} />
+          </g>
+        ))}
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'cycle',
+    label: 'Cycle',
+    description: 'Arranges the stages of a cycle on a ring, the last leading back to the first.',
+    icon: (
+      <TemplateIcon>
+        <circle cx={28} cy={21} r={11} fill="none" stroke={FA} strokeWidth={1.5} opacity={0.6} />
+        {[
+          [28, 10],
+          [39, 21],
+          [28, 32],
+          [17, 21],
+        ].map(([x, y]) => (
+          <circle key={`${x}-${y}`} cx={x} cy={y} r={4} fill={FA} />
+        ))}
+      </TemplateIcon>
+    ),
+  },
+  {
     name: 'photoGrid',
     label: 'Photo Grid',
     description: 'Arranges up to four photos in a mosaic grid.',

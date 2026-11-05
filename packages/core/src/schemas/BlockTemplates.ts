@@ -506,6 +506,34 @@ export interface ListBlockInput extends BaseTemplateBlock {
 }
 
 /**
+ * Shared shape of the concept blocks (`cards`, `process`, `cycle`): a
+ * headline over 2–6 related ideas, each `Label: detail` or plain text.
+ */
+interface ConceptBlockBase extends BaseTemplateBlock {
+  /** The ideas, in order; `Label: detail` sets the label bold above its detail. */
+  items: string[];
+  /** Optional headline above the ideas */
+  title?: string;
+  /** Accent color scheme (default: the theme's highlight) */
+  colorScheme?: ColorScheme;
+}
+
+/** Parallel ideas side by side as cards. */
+export interface CardsBlockInput extends ConceptBlockBase {
+  template: 'cards';
+}
+
+/** An ordered process: numbered stages joined by arrows. */
+export interface ProcessBlockInput extends ConceptBlockBase {
+  template: 'process';
+}
+
+/** A cycle: stages on a ring, the last leading back to the first. */
+export interface CycleBlockInput extends ConceptBlockBase {
+  template: 'cycle';
+}
+
+/**
  * Tree block — renders a hierarchical filesystem-style treeview from an
  * ASCII tree fence (file trees, dependency trees, outlines). The nested
  * `items` arrive via `templateData`, derived from the fence by the pipeline
@@ -961,6 +989,9 @@ export type TemplateBlock =
   | MapBlockInput
   | FullBleedQuoteInput
   | ListBlockInput
+  | CardsBlockInput
+  | ProcessBlockInput
+  | CycleBlockInput
   | PhotoGridInput
   | DefinitionCardInput
   | ComparisonBarInput

@@ -74,15 +74,20 @@ export function TableLayer({
   };
 
   const borderRadius = style.borderRadius ?? 8;
+  const frame = `1px solid ${style.borderColor}`;
   // Keep the layout heuristic in the dataTable template and the rendered row
   // box in sync: 1.2 line-height + 0.6em padding above and below = 2.4em.
   const verticalCellPadding = style.fontSize * 0.6;
   const horizontalCellPadding = style.fontSize * 0.75;
+  // A wrapping table fits its box's width; each cell keeps its own line breaks.
+  const cellWrap: React.CSSProperties = content.wrap
+    ? { whiteSpace: 'pre-line', overflowWrap: 'break-word', verticalAlign: 'top' }
+    : { whiteSpace: 'nowrap' };
 
   const nativeTable = (
     <table
       style={{
-        width: 'max-content',
+        width: content.wrap ? '100%' : 'max-content',
         minWidth: '100%',
         borderCollapse: 'separate',
         borderSpacing: 0,
@@ -106,7 +111,7 @@ export function TableLayer({
                   position: 'sticky',
                   top: 0,
                   zIndex: 1,
-                  whiteSpace: 'nowrap',
+                  ...cellWrap,
                   borderBottom: `2px solid ${style.borderColor}`,
                   borderRight:
                     ci < headers.length - 1 ? `1px solid ${style.borderColor}` : undefined,
@@ -130,7 +135,7 @@ export function TableLayer({
                     background: style.cellBackground,
                     color: style.cellColor,
                     padding: `${verticalCellPadding}px ${horizontalCellPadding}px`,
-                    whiteSpace: 'nowrap',
+                    ...cellWrap,
                     borderBottom:
                       ri < rows.length - 1 ? `1px solid ${style.borderColor}` : undefined,
                     borderRight: ci < row.length - 1 ? `1px solid ${style.borderColor}` : undefined,
@@ -173,10 +178,10 @@ export function TableLayer({
             boxSizing: 'border-box',
             overflow: ContentRenderer ? 'hidden' : 'auto',
             overscrollBehavior: 'contain',
-            scrollbarGutter: 'stable',
-            border: ContentRenderer ? undefined : `1px solid ${style.borderColor}`,
+            scrollbarGutter: content.wrap ? 'auto' : 'stable',
+            border: ContentRenderer || content.wrap ? undefined : frame,
             borderRadius: `${borderRadius}px`,
-            background: ContentRenderer ? 'transparent' : style.cellBackground,
+            background: ContentRenderer || content.wrap ? 'transparent' : style.cellBackground,
           }}
         >
           {ContentRenderer ? (
@@ -187,6 +192,12 @@ export function TableLayer({
               height={height}
               fallback={nativeTable}
             />
+          ) : content.wrap ? (
+            // A fitted table is framed at its own height, so the spare room its
+            // box keeps for the type estimate stays invisible.
+            <div style={{ border: frame, borderRadius: `${borderRadius}px`, overflow: 'hidden' }}>
+              {nativeTable}
+            </div>
           ) : (
             nativeTable
           )}

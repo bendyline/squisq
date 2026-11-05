@@ -27,6 +27,9 @@ import type {
   ImageWithCaptionInput,
   LeftFeatureInput,
   ListBlockInput,
+  CardsBlockInput,
+  ProcessBlockInput,
+  CycleBlockInput,
   PhotoGridInput,
   PullQuoteInput,
   QuoteBlockInput,
@@ -44,6 +47,7 @@ import { extractPlainText } from '../../markdown/utils.js';
 import { isVideoEmbedUrl } from '../../markdown/videoEmbed.js';
 import { extractRichListItems } from '../templateInputs.js';
 import { buildChartData } from '../templates/chart/parse.js';
+import { splitConceptItem } from '../templates/conceptBlocks.js';
 import type { PageEmphasis } from '../../schemas/PageStyle.js';
 import type { PageMedia, PageRichText, PageSection, PageSpatialKind } from './PageSection.js';
 
@@ -336,6 +340,22 @@ const list: SectionExtractor = (input) => {
   };
 };
 
+/** Cards, a process or a cycle reads on a page as a list of titled items. */
+const concept: SectionExtractor = (input) => {
+  const c = input as CardsBlockInput | ProcessBlockInput | CycleBlockInput;
+  return {
+    kind: 'item-list',
+    slots: {
+      title: c.title,
+      items: (c.items ?? []).map((item) => {
+        const { label, detail } = splitConceptItem(item);
+        return label ? { title: label, body: detail } : { body: detail };
+      }),
+    },
+    colorScheme: c.colorScheme,
+  };
+};
+
 const photoGrid: SectionExtractor = (input) => {
   const p = input as PhotoGridInput;
   const images = p.images ?? [];
@@ -547,6 +567,9 @@ export const sectionExtractors: Record<string, SectionExtractor> = {
   map,
   fullBleedQuote,
   list,
+  cards: concept,
+  process: concept,
+  cycle: concept,
   photoGrid,
   definitionCard,
   comparisonBar,

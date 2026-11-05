@@ -10,7 +10,7 @@ import {
 } from '../doc/templates/mediaLayoutPolicy.js';
 import { templateRegistry } from '../doc/templates/registry.js';
 
-const SHAPES: readonly SupplementalMediaShape[] = ['wide', 'tall', 'square', 'multiple'];
+const SHAPES: readonly SupplementalMediaShape[] = ['wide', 'tall', 'square', 'multiple', 'table'];
 const VIEWPORTS = [
   VIEWPORT_PRESETS.landscape,
   VIEWPORT_PRESETS.standard,
@@ -40,8 +40,11 @@ const nativeImage: ImageLayer = {
 function shapeInput(shape: SupplementalMediaShape): {
   count: number;
   aspects: (number | undefined)[];
+  table?: boolean;
 } {
   switch (shape) {
+    case 'table':
+      return { count: 1, aspects: [3], table: true };
     case 'tall':
       return { count: 1, aspects: [0.5] };
     case 'square':
@@ -107,7 +110,7 @@ describe('BLOCK_MEDIA_LAYOUT_POLICIES', () => {
       const policy = rawPolicy as BlockMediaLayoutPolicy;
       for (const viewport of VIEWPORTS) {
         for (const shape of SHAPES) {
-          const { count, aspects } = shapeInput(shape);
+          const { count, aspects, table } = shapeInput(shape);
           const nativeLayers =
             policy.ownership === 'supplemental'
               ? [background, foreground]
@@ -118,6 +121,7 @@ describe('BLOCK_MEDIA_LAYOUT_POLICIES', () => {
             viewport,
             count,
             aspects,
+            { table },
           );
 
           expect(result.framed, `${template}/${viewport.name}/${shape}`).toBe(true);

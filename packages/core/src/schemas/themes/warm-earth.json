@@ -14,7 +14,7 @@
     "warning": "#e53e3e"
   },
   "typography": {
-    "bodyFont": { "stackId": "pt-serif" },
+    "bodyFont": { "stackId": "dm-sans" },
     "titleFont": { "stackId": "pt-serif" },
     "captionFont": { "stackId": "pt-sans" },
     "captionCase": "as-written",

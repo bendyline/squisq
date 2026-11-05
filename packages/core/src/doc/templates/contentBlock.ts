@@ -23,13 +23,19 @@ import { createBackgroundLayer } from './captionUtils.js';
 
 function bodyNodes(context: TemplateContext): MarkdownBlockNode[] {
   if (context.block?.summaryMode === 'headings-and-features') return [];
+  // A summary's tables and diagram fences are its features, drawn beside its
+  // words (`appendRichContentLayers`), never repeated as body text.
+  const summary = !!context.block?.summaryMode;
   return (context.block?.contents ?? []).filter(
     // Mermaid source, hosted-video links and picture-only paragraphs are
     // already materialized as visual layers (a diagram, a player, the picture
     // itself). Repeating them as prose makes the loss-averse default noisy
     // without preserving any additional meaning — a pasted picture's alt text
     // is just its generated file name.
-    (node) => !isMaterializedMediaNode(node) && !isPictureParagraph(node),
+    (node) =>
+      !isMaterializedMediaNode(node) &&
+      !isPictureParagraph(node) &&
+      !(summary && (node.type === 'table' || node.type === 'code')),
   );
 }
 

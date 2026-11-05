@@ -24,6 +24,7 @@ import { bottomFeature, mediaOnly, topFeature } from './mediaFeatureBlock.js';
 import { mapBlock } from './mapBlock.js';
 import { fullBleedQuote } from './fullBleedQuote.js';
 import { listBlock } from './listBlock.js';
+import { cardsBlock, cycleBlock, processBlock } from './conceptBlocks.js';
 import { photoGrid } from './photoGrid.js';
 import { definitionCard } from './definitionCard.js';
 import { comparisonBar } from './comparisonBar.js';
@@ -98,6 +99,9 @@ export const templateRegistry: TemplateRegistry = {
   map: mapBlock,
   fullBleedQuote,
   list: listBlock,
+  cards: cardsBlock,
+  process: processBlock,
+  cycle: cycleBlock,
   photoGrid,
   definitionCard,
   comparisonBar,

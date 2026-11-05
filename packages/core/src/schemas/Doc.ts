@@ -477,6 +477,13 @@ interface BaseLayer {
 
   /** Animation to apply */
   animation?: Animation;
+
+  /**
+   * The build step this layer reveals with, when its block builds: layers
+   * sharing an index (a card's shape and words) appear together, in index
+   * order. Their text names the step (`blockBuildSteps`).
+   */
+  buildStep?: number;
 }
 
 /**
@@ -853,6 +860,11 @@ export interface TableLayer extends BaseLayer {
     maxVisibleRows?: number;
     /** Per-column alignment */
     align?: (('left' | 'right' | 'center') | null)[];
+    /**
+     * Fit the layer's width: cells wrap and keep their own line breaks
+     * instead of running on one line and scrolling sideways.
+     */
+    wrap?: boolean;
     /** Visual styling */
     style: TableLayerStyle;
   };

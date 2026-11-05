@@ -383,25 +383,35 @@ export function BlockRenderer({
 
       {/* All layers clipped to viewBox bounds */}
       <g clipPath={`url(#${clipId})`}>
-        {(block.layers ?? []).map((layer) => (
-          <LayerRenderer
-            key={layer.id}
-            block={block}
-            layer={layer}
-            basePath={basePath}
-            viewport={viewport}
-            blockTime={blockTime}
-            isPlaying={isPlaying}
-            muted={muted}
-            animationsEnabled={animationsEnabled}
-            theme={theme}
-            tableContentRenderer={tableContentRenderer}
-            textScale={textScale}
-            videoEmbeds={videoEmbeds}
-            videoClips={videoClips}
-            staticMedia={staticMedia || reducedMotion || !animationsEnabled}
-          />
-        ))}
+        {(block.layers ?? []).map((layer) => {
+          const rendered = (
+            <LayerRenderer
+              key={layer.id}
+              block={block}
+              layer={layer}
+              basePath={basePath}
+              viewport={viewport}
+              blockTime={blockTime}
+              isPlaying={isPlaying}
+              muted={muted}
+              animationsEnabled={animationsEnabled}
+              theme={theme}
+              tableContentRenderer={tableContentRenderer}
+              textScale={textScale}
+              videoEmbeds={videoEmbeds}
+              videoClips={videoClips}
+              staticMedia={staticMedia || reducedMotion || !animationsEnabled}
+            />
+          );
+          // A layer that belongs to a build step reveals with it (see `blockBuildSteps`).
+          return layer.buildStep === undefined ? (
+            rendered
+          ) : (
+            <g key={layer.id} data-squisq-build-step={layer.buildStep}>
+              {rendered}
+            </g>
+          );
+        })}
       </g>
     </svg>
   );

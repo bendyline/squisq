@@ -75,10 +75,19 @@ const DESC_LINE_HEIGHT = 1.5;
 const DETAIL_LINE_HEIGHT = 1.4;
 
 export function statHighlight(input: StatHighlightInput, context: TemplateContext): Layer[] {
-  const { stat, colorScheme = 'blue' } = input;
+  const { stat, colorScheme } = input;
   const { theme, viewport } = context;
   const accentImage = accentForViewport(input.accentImage, viewport);
-  const colors = resolveColorScheme(context, colorScheme);
+  // Without a chosen scheme the figure takes the theme's own highlight and the
+  // detail its text color, rather than an off-palette default scheme.
+  const colors = colorScheme
+    ? resolveColorScheme(context, colorScheme)
+    : {
+        ...resolveColorScheme(context, 'blue'),
+        text: theme.colors.highlight || theme.colors.primary,
+        detail: theme.colors.text,
+      };
+  const detailColor = 'detail' in colors ? colors.detail : colors.text;
 
   // Input derivation falls back to the heading for a missing body, which
   // would print the stat twice; an echo of the stat is treated as no body.
@@ -91,8 +100,8 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
 
   // Scale font sizes — stat is dramatically large, description is understated
   const statFontSize = themedFontSize(148, context, true);
-  const descFontSize = themedFontSize(32, context, false);
-  const detailFontSize = themedFontSize(26, context, false);
+  const descFontSize = themedFontSize(40, context, false);
+  const detailFontSize = themedFontSize(30, context, false);
 
   const layers: Layer[] = [createBackgroundLayer('bg', themedSurfaceGradient(context, 180))];
 
@@ -256,7 +265,7 @@ export function statHighlight(input: StatHighlightInput, context: TemplateContex
           // Scheme *text* rather than *accent*: accents in the built-in
           // schemes are tuned as chart/fill colors and drop below legible
           // contrast as body copy on light surfaces.
-          color: colors.text,
+          color: detailColor,
           textAlign: 'left',
           lineHeight: DETAIL_LINE_HEIGHT,
           shadow: shouldUseShadow(context),

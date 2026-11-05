@@ -15,7 +15,7 @@
   },
   "typography": {
     "bodyFont": {
-      "stackId": "source-serif"
+      "stackId": "inter"
     },
     "titleFont": {
       "stackId": "playfair"

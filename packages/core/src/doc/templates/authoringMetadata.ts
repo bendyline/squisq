@@ -143,6 +143,24 @@ export const TEMPLATE_AUTHORING_METADATA = {
     safeForContentFirst: false,
     placement: 'heading',
   },
+  cards: {
+    role: 'content',
+    bodyPolicy: 'derived',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  process: {
+    role: 'content',
+    bodyPolicy: 'derived',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  cycle: {
+    role: 'content',
+    bodyPolicy: 'derived',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
   photoGrid: {
     role: 'media',
     bodyPolicy: 'structured',

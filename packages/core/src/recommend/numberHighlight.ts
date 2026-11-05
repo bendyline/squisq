@@ -3,8 +3,9 @@
  * on currency prefixes, common unit suffixes, and standalone large numbers.
  * Plain small numbers (`42`) intentionally do not qualify.
  */
+// A unit must end its word: "62 by 70 miles" is not "62 b(illion)".
 const NUMBER_HIGHLIGHT_RE =
-  /(?:[$€£¥]\s?\d+(?:[.,]\d+)*(?:\s?(?:[MBK]|million|billion|thousand))?|\d+(?:[.,]\d+)*\s?(?:%|‰|x|×|[MBK]|million|billion|thousand|percent|years?|days?|hours?)|\d{3,}(?:[.,]\d+)*)/i;
+  /(?:[$€£¥]\s?\d+(?:[.,]\d+)*(?:\s?(?:[MBK]|million|billion|thousand)(?![a-z]))?|\d+(?:[.,]\d+)*\s?(?:%|‰|x|×|[MBK]|million|billion|thousand|percent|years?|days?|hours?)(?![a-z])|\d{3,}(?:[.,]\d+)*)/i;
 
 /** A prominent number found inside a short stat-like string. */
 export interface NumberHighlightMatch {

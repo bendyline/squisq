@@ -46,14 +46,26 @@ export function planContentBuilds(
   return { steps, targets };
 }
 
-/** All targets in a block share one step index space. */
+/** All targets in a block share one step index space. A template that tags
+ * whole layers (`Layer.buildStep`: a card, a process stage) names each step by
+ * the text of its layers; otherwise steps come from rich text fragments. */
 export function blockBuildSteps(block: { layers?: Layer[]; build?: BuildSpec }): BuildStep[] {
   if (!block.build || block.build.mode === 'off') return [];
-  return (
-    block.layers?.flatMap((layer) =>
-      layer.type === 'text' ? (layer.content.buildSteps ?? []) : [],
-    ) ?? []
-  );
+  const layers = block.layers ?? [];
+  const tagged = layers.filter((layer) => layer.buildStep !== undefined);
+  if (tagged.length) {
+    const count = Math.max(...tagged.map((layer) => layer.buildStep!)) + 1;
+    return Array.from({ length: count }, (_, index) => ({
+      id: `build-${index}`,
+      text: tagged
+        .flatMap((layer) =>
+          layer.buildStep === index && layer.type === 'text' ? [layer.content.text] : [],
+        )
+        .join(' ')
+        .trim(),
+    }));
+  }
+  return layers.flatMap((layer) => (layer.type === 'text' ? (layer.content.buildSteps ?? []) : []));
 }
 
 export function buildSourceText(steps: readonly BuildStep[]): string {

@@ -742,6 +742,13 @@ export { coverBlock, expandCoverBlock } from './coverBlock.js';
 export type { CoverBlockInput } from './coverBlock.js';
 export { fullBleedQuote } from './fullBleedQuote.js';
 export { listBlock } from './listBlock.js';
+export {
+  cardsBlock,
+  conceptBuildStepTexts,
+  cycleBlock,
+  processBlock,
+  splitConceptItem,
+} from './conceptBlocks.js';
 export { photoGrid } from './photoGrid.js';
 export { definitionCard } from './definitionCard.js';
 export { comparisonBar } from './comparisonBar.js';

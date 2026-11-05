@@ -112,9 +112,12 @@ describe('source-preserving presentations', () => {
       [1.5, 38.5],
       [40, 20],
     ]);
-    const diagramBackground = expanded[1]!.layers?.[0];
-    expect(diagramBackground?.id).toBe('diagram-bg');
-    expect(diagramBackground?.position).toMatchObject({ width: '100%', height: '100%' });
+    // An ordered passage draws as a process: numbered stages joined by arrows.
+    expect((expanded[1] as { template?: string }).template).toBe('process');
+    const processBackground = expanded[1]!.layers?.[0];
+    expect(processBackground?.id).toBe('bg');
+    expect(processBackground?.position).toMatchObject({ width: '100%', height: '100%' });
+    expect(expanded[1]!.layers!.filter((layer) => layer.id.endsWith('-arrow'))).toHaveLength(2);
     for (const style of ['minimal', 'documentary', 'narrative', 'magazine']) {
       const throughStyle = buildPreviewDoc(
         applyTransform({ ...doc, frontmatter: projected.frontmatter }, style).doc,
@@ -283,7 +286,8 @@ describe('dynamic slide summarization', () => {
     });
     expect(plan.beats[2]!.layout).toBe('steps');
     expect(plan.beats[2]!.points).toHaveLength(3);
-    expect(plan.beats[2]!.points[0]).toMatch(/^First organize/);
+    // A stage's number shows its order, so the ordinal word is dropped.
+    expect(plan.beats[2]!.points[0]).toMatch(/^Organize all your ideas/);
     expect(plain.beats[1]!.layout).toBe('steps');
     const projected = compilePresentationPlan(doc, plan);
     expect(projected.duration).toBe(doc.presentationNarration!.duration);
@@ -492,13 +496,13 @@ describe('dynamic slides with embedded videos and diagrams', () => {
         content: { clipStart: number; clipEnd: number };
       }>;
     expect(layers(fits[0]!.id, 'mermaid')).toHaveLength(1);
-    // Summary points are bulleted, not numbered from 1 again on every slide.
-    const markers = expanded
-      .find((block) => block.id === fits[0]!.id)!
-      .layers!.filter((layer) => layer.id?.endsWith('-marker'))
-      .map((layer) => (layer.type === 'text' ? layer.content.text : ''));
-    expect(markers.length).toBeGreaterThan(1);
-    expect(new Set(markers)).toEqual(new Set(['•']));
+    // Summary points are cards beside the diagram, not a list numbered from 1
+    // again on every slide.
+    const fitted = expanded.find((block) => block.id === fits[0]!.id)!;
+    expect((fitted as { template?: string }).template).toBe('cards');
+    expect(fitted.layers!.filter((layer) => /^card-\d+$/u.test(layer.id))).toHaveLength(
+      fits[0]!.points.length,
+    );
     // The recording plays on across the section's slides rather than restarting.
     const timed = compiled.blocks.filter((block) => demoBeats.some((beat) => beat.id === block.id));
     expect(timed.map((block) => layers(block.id, 'video')[0]!.content.clipStart)).toEqual(
@@ -558,6 +562,139 @@ describe('dynamic slides with embedded videos and diagrams', () => {
     const plan = createPresentationPlan(doc, concise);
     const withoutVideo = (await narrated(demo.replace(/<video[^\n]*/u, ''), [0, 10, 70, 90])).doc;
     expect(() => compilePresentationPlan(withoutVideo, plan)).toThrow('video or diagram');
+  });
+});
+
+describe('dynamic slides that feature a section’s tables and pictures', () => {
+  const speeds = [
+    '# Results',
+    '',
+    'We timed three computers on the same tasks. Each one ran every test three times.',
+    '',
+    '## Speed',
+    '',
+    'The desktop led every model by a wide margin, reaching about twice the decode speed of the laptops on the larger model. ' +
+      'The two laptops were close to one another on both models.',
+    '',
+    '| Device | Small model | Large model |',
+    '| --- | --- | --- |',
+    '| Desktop<br>Vulkan | 129.4 | 57.1 |',
+    '| Laptop A | 66.2 | 26.4 |',
+    '| Laptop B | 71.8 | 28.5 |',
+    '',
+    'Prefill told the same story on every machine we tried.',
+    '',
+    '## Wrap up',
+    '',
+    'Buy enough memory first. Speed comes second.',
+  ].join('\n');
+  const prefer = (
+    layout?: PresentationBeatLayout,
+    density: PresentationHints['density'] = 'section',
+  ): PresentationHints => ({
+    ...defaultPresentationHints(),
+    density,
+    blocks: layout ? [{ blockId: 'speed', layout }] : [],
+  });
+  /** The section's first slide as the player draws it. */
+  const expandedSlide = (doc: Doc, hints: PresentationHints) => {
+    const plan = createPresentationPlan(doc, hints);
+    const deck = buildPreviewDoc(compilePresentationPlan(doc, plan));
+    const beat = plan.beats.find((item) => sectionAt(doc, item.sourceStart) === 'speed')!;
+    const [block] = expandDocBlocks([deck.blocks.find((item) => item.id === beat.id)!]);
+    return { plan, beat, block: block! };
+  };
+
+  it('keeps the table on the section’s slides at every density and layout, never as points', () => {
+    const doc = parse(speeds);
+    const script = buildNarrationScript(doc);
+    const cellsStart = script.sourceText.indexOf('Device Small model');
+    const cellsEnd = script.sourceText.indexOf('28.5') + 4;
+    for (const density of ['section', 'detailed', 'balanced', 'concise'] as const)
+      for (const layout of [undefined, 'list', 'statement', 'steps', 'quote'] as const) {
+        const plan = createPresentationPlan(doc, prefer(layout, density));
+        const speed = plan.beats.filter((beat) => sectionAt(doc, beat.sourceStart) === 'speed');
+        const label = `${density}/${layout ?? 'automatic'}`;
+        expect(speed.length, label).toBeGreaterThan(0);
+        for (const beat of speed) {
+          expect(beat.media, label).toEqual(['speed#table-0']);
+          // The table shows its own cells; the words beside it summarize the prose.
+          for (const text of [beat.headline, ...beat.points])
+            expect(text, label).not.toMatch(/129\.4|Laptop A|Small model/u);
+          expect(beat.points.length, label).toBeLessThanOrEqual(2);
+          for (const point of beat.points) expect(point.length, label).toBeLessThanOrEqual(101);
+          // Its cells never open or close a slide of their own.
+          expect(beat.sourceStart <= cellsStart || beat.sourceStart >= cellsEnd, label).toBe(true);
+          expect(beat.sourceEnd <= cellsStart || beat.sourceEnd >= cellsEnd, label).toBe(true);
+        }
+        expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+      }
+    // A long sentence beside the table is cut at its clause, not mid-phrase.
+    const [speed] = createPresentationPlan(doc, prefer()).beats.filter(
+      (beat) => sectionAt(doc, beat.sourceStart) === 'speed',
+    );
+    expect(speed!.points[0]).toBe('The desktop led every model by a wide margin…');
+  });
+
+  it('draws the whole table full width under the summary, its cells wrapping', () => {
+    const doc = parse(speeds);
+    for (const layout of [undefined, 'list'] as const) {
+      const { block } = expandedSlide(doc, prefer(layout));
+      const tables = block.layers!.filter((layer) => layer.type === 'table');
+      expect(tables).toHaveLength(1);
+      const table = tables[0]!;
+      expect(table.content).toMatchObject({
+        wrap: true,
+        headers: ['Device', 'Small model', 'Large model'],
+        rows: [
+          ['Desktop\nVulkan', '129.4', '57.1'],
+          ['Laptop A', '66.2', '26.4'],
+          ['Laptop B', '71.8', '28.5'],
+        ],
+      });
+      // Stacked under the words at nearly the slide's width, not squeezed beside them.
+      expect(Number(table.position.width)).toBeGreaterThan(1920 * 0.8);
+      const words = block.layers!.filter((layer) => layer.type === 'text');
+      expect(words.length).toBeGreaterThan(0);
+      for (const layer of words) {
+        expect(layer.content.text).not.toContain('129.4');
+        expect(Number(layer.position.y)).toBeLessThan(Number(table.position.y));
+      }
+    }
+  });
+
+  it('leaves an authored section’s table in its own body', () => {
+    const doc = parse(speeds);
+    const plan = createPresentationPlan(doc, prefer('authored'));
+    const beat = plan.beats.find((item) => sectionAt(doc, item.sourceStart) === 'speed')!;
+    expect(beat).toMatchObject({ layout: 'authored', points: [] });
+    expect(beat.media).toBeUndefined();
+    const deck = buildPreviewDoc(compilePresentationPlan(doc, plan));
+    const slide = deck.blocks.find((block) => block.id === beat.id)!;
+    expect(slide.template).toBe('content');
+    const [block] = expandDocBlocks([slide]);
+    expect(block!.layers!.some((layer) => layer.type === 'table')).toBe(false);
+    expect(JSON.stringify(block!.layers)).toContain('<table');
+  });
+
+  it('carries a picture beside the words when no slide shows it full-bleed', () => {
+    const doc = parse(
+      speeds.replace('Prefill told', '![The test bench](images/bench.png)\n\nPrefill told'),
+    );
+    // Left to itself the section's picture gets its own image slide.
+    const automatic = createPresentationPlan(doc, prefer(undefined, 'balanced'));
+    expect(automatic.beats.filter((beat) => beat.imageSrc === 'images/bench.png')).toHaveLength(1);
+    expect(automatic.beats.some((beat) => beat.media?.includes('speed#image-0'))).toBe(false);
+    // A layout preference that leaves no image slide still shows it.
+    const { beat, block } = expandedSlide(doc, prefer('list'));
+    expect(beat.imageSrc).toBeUndefined();
+    expect(beat.media).toEqual(['speed#table-0', 'speed#image-0']);
+    expect(
+      block.layers!.some(
+        (layer) => layer.type === 'image' && layer.content.src === 'images/bench.png',
+      ),
+    ).toBe(true);
+    expect(block.layers!.some((layer) => layer.type === 'table')).toBe(true);
   });
 });
 
@@ -661,10 +798,11 @@ describe('authored sections and summary layouts', () => {
       template: 'bigText',
       title: 'Terms',
     });
+    // A definition's term heads the slide, its defining sentences beneath it.
     expect(slide(doc, prefer('terms', 'definition'), 'terms').block).toMatchObject({
-      template: 'definitionCard',
-      term: 'Terms',
-      definition: 'A ledger records every sale.\n\nIt never loses an entry.',
+      template: 'cards',
+      title: 'Terms',
+      items: ['A ledger records every sale.', 'It never loses an entry.'],
     });
     expect(slide(doc, prefer('terms', 'divider'), 'terms').block).toMatchObject({
       template: 'sectionHeader',
@@ -676,8 +814,9 @@ describe('authored sections and summary layouts', () => {
     const reworded = prefer('terms', 'quote');
     const terms = presentationSections(doc).find((item) => item.blockId === 'terms')!;
     reworded.blocks[0]!.wording = { source: terms.text, headline: 'Ledgers are forever' };
+    // Its two sentences keep the automatic layout: cards.
     expect(slide(doc, reworded, 'terms').beat).toMatchObject({
-      layout: 'statement',
+      layout: 'cards',
       headline: 'Ledgers are forever',
     });
   });

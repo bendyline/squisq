@@ -52,6 +52,35 @@ describe('slide and video builds', () => {
     expect(fragments()[1]!.querySelector('a')?.textContent).toBe('Interview');
   });
 
+  it('reveals a concept block card by card, each card’s shape and words together', () => {
+    const block = expandDocBlocks(
+      markdownToDoc(
+        parseMarkdown(
+          '## Kinds {[cards build=items buildEffect=appear duration=12]}\n\n- Live: two doses\n- Non-live: three or more\n- Updated: every year\n',
+        ),
+      ).blocks as DocBlock[],
+    )[0]!;
+    const view = render(
+      <BlockRenderer
+        block={block}
+        blockTime={0}
+        basePath="."
+        buildPlayback={{ revealed: 1, progress: 1 }}
+      />,
+    );
+    const groups = [...view.container.querySelectorAll<SVGGElement>('g[data-squisq-build-step]')];
+    // Each card's shape, rule, label and detail are separate layers in one step.
+    expect(groups.length).toBeGreaterThan(3);
+    const shown = groups.filter((group) => group.style.visibility === 'visible');
+    expect(new Set(shown.map((group) => group.dataset.squisqBuildStep))).toEqual(new Set(['0']));
+    expect(shown.map((group) => group.textContent).join(' ')).toContain('Live');
+    expect(
+      groups
+        .filter((group) => group.dataset.squisqBuildStep === '1')
+        .every((group) => group.style.visibility === 'hidden'),
+    ).toBe(true);
+  });
+
   it('Next and Previous traverse steps before slides, including the last slide', async () => {
     const view = render(
       <DocPlayer

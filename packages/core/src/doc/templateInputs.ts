@@ -920,6 +920,31 @@ export function deriveTemplateInputs(
       }
       return placeholders ? { items: ['Item 1', 'Item 2', 'Item 3'] } : null;
     }
+    case 'cards':
+    case 'process':
+    case 'cycle': {
+      // Each list item is an idea; without a list, each paragraph is one.
+      const listed = extractListItems(contents);
+      const items = listed.length
+        ? listed
+        : (contents ?? [])
+            .filter((node) => node.type === 'paragraph' && !isPictureParagraph(node))
+            .map((node) => extractPlainText(node).trim())
+            .filter(Boolean);
+      if (items.length > 0) return { items, ...(headingText ? { title: headingText } : {}) };
+      return placeholders
+        ? {
+            items:
+              templateName === 'cards'
+                ? [
+                    'First idea: what makes it matter',
+                    'Second idea: how it differs',
+                    'Third idea: why it helps',
+                  ]
+                : ['Begin: the first stage', 'Grow: what happens next', 'Finish: where it leads'],
+          }
+        : null;
+    }
     case 'definitionCard':
       return { term: headingText, definition: bodyText };
     case 'dateEvent':

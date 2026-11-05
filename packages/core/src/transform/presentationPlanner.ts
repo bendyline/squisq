@@ -9,12 +9,10 @@ import {
   type PresentationHints,
 } from './presentationHints.js';
 import type { Doc } from '../schemas/Doc.js';
-import type { TransformImage } from './types.js';
 import { buildNarrationScript } from '../narration/script.js';
-import { flattenRenderableBlocks } from '../doc/markdownToDoc.js';
-import { extractDocImages } from './blockAnalyzer.js';
+import { extractPlainText } from '../markdown/utils.js';
 import { transformNarratedSegment } from './narratedSegment.js';
-import { collectPresentationMedia } from './presentationMedia.js';
+import { collectPresentationMedia, type PresentationMediaItem } from './presentationMedia.js';
 import {
   AUTHORED_PRESENTATION_LAYOUT,
   PRESENTATION_LIMITS,
@@ -29,7 +27,31 @@ const SENTENCE_END = /[.!?][”"')\]]?$/u;
 const SENTENCE_START = /^[\p{Lu}\p{N}"“‘'([]/u;
 /** A sentence that opens with an ordering word reads as one step of a sequence. */
 const SEQUENCE_CUE =
-  /^(?:(?:first|second|third|fourth)(?:ly)?|then|next|after that|afterwards|finally|lastly)\b|^\d+[.)]\s/iu;
+  /^(?:(?:first|second|third|fourth)(?:ly)?|then|next|after\b|afterwards|at that point|eventually|finally|lastly)\b|^\d+[.)]\s/iu;
+/** The ordinal word a numbered stage no longer needs ("First, …", "Then …"). */
+const ORDINAL_OPENER =
+  /^(?:(?:first|second|third|fourth)(?:ly)?|then|next|after that|afterwards|finally|lastly),?\s+/iu;
+/** A stage's words: its sentence without the ordinal its number now shows. */
+function stagePoint(sentence: string): string {
+  const rest = sentence.replace(ORDINAL_OPENER, '');
+  return pointText(rest === sentence ? sentence : `${rest[0]!.toUpperCase()}${rest.slice(1)}`);
+}
+/** A passage that says its sequence comes round again. */
+const CYCLE_CUE = /\b(?:cycles?|cyclical|repeats?|over and over|again and again|loop)\b/iu;
+/** A sentence that defines its subject: "Antibodies are proteins produced by…". */
+const DEFINES =
+  /^(?:the |an? )?((?:[\p{Lu}][\p{L}'’-]*|[\p{Ll}][\p{L}'’-]*)(?: [\p{L}'’()-]+){0,3}?) (?:is|are|was|were) (?:an? |the )?(.{12,})$/u;
+const PRONOUN =
+  /^(?:it|its|this|that|these|those|there|they|their|he|his|she|her|we|our|you|your|i|my|which|one|each|some|to|so|but|and|or)$/iu;
+/** A card's text: a defining sentence labelled by its subject, otherwise the sentence. */
+function labelledPoint(sentence: string): string {
+  const match = sentence.replace(/\s+/gu, ' ').trim().match(DEFINES);
+  if (match && !PRONOUN.test(match[1]!.split(' ')[0]!)) {
+    const label = match[1]!;
+    return clip(`${label[0]!.toUpperCase()}${label.slice(1)}: ${match[2]!}`, Infinity, 160);
+  }
+  return clip(sentence, Infinity, 160);
+}
 interface Sentence {
   text: string;
   start: number;
@@ -50,6 +72,22 @@ function clip(text: string, words: number, characters: number): string {
 const headlineText = (text: string) => clip(text, 12, 110);
 const pointText = (text: string) => clip(text, Infinity, 180);
 const captionText = (text: string) => clip(text, 18, 110);
+/** A slide that shows a table, picture, video or diagram keeps its words
+ * short so the feature has the room: two points of about a line each. */
+const FEATURE_POINTS = 2;
+const FEATURE_POINT_CHARACTERS = 100;
+/** A feature slide's point: the sentence, cut at a clause break when it runs long. */
+function featurePointText(text: string): string {
+  const clean = text.replace(/\s+/gu, ' ').trim();
+  if (clean.length <= FEATURE_POINT_CHARACTERS) return clean;
+  const head = clean.slice(0, FEATURE_POINT_CHARACTERS);
+  const clause = Math.max(
+    ...[',', ';', ':', ' –', ' —', ' - '].map((mark) => head.lastIndexOf(mark)),
+  );
+  return clause > FEATURE_POINT_CHARACTERS * 0.4
+    ? clean.slice(0, clause).replace(/[\s,;:–—-]+$/u, '') + '…'
+    : clip(clean, Infinity, FEATURE_POINT_CHARACTERS);
+}
 /** Sentences (and lines) of one span, with their offsets in the script. */
 function sentencesIn(sourceText: string, start: number, end: number): Sentence[] {
   const passage = sourceText.slice(start, end);
@@ -103,28 +141,45 @@ function chunkWords(words: RegExpMatchArray[], limit: number): Array<[number, nu
   }
   return chunks;
 }
-/** Each document image is shown once, in the narrated section that contains it
- * (or the nearest narrated section before it). */
-function imagesBySection(doc: Doc, sectionIds: string[]): Map<string, TransformImage[]> {
-  const flat = flattenRenderableBlocks(doc.blocks);
-  // Children follow their parent in the flattened order, so claim images
-  // children-first; a container template keeps the images of its nested parts.
-  const own = new Map<string, TransformImage[]>();
-  const seen = new Set<string>();
-  for (const block of [...flat].reverse()) {
-    const images = extractDocImages([block]).filter((image) => !seen.has(image.src));
-    for (const image of images) seen.add(image.src);
-    own.set(block.id, images);
+/** Word spans of one passage that never begin or end inside a feature's own
+ * words (`feature`): a table's cells stay with the slide before them, or the
+ * slide after when they open the passage, and that slide shows the table. */
+function chunkPassage(
+  words: RegExpMatchArray[],
+  limit: number,
+  feature: (word: RegExpMatchArray) => boolean,
+): Array<[number, number]> {
+  const prose = words.flatMap((word, index) => (feature(word) ? [] : [index]));
+  if (!prose.length) return words.length ? [[0, words.length]] : [];
+  const chunks = chunkWords(
+    prose.map((index) => words[index]!),
+    limit,
+  ).map(([first, last]): [number, number] => [prose[first]!, prose[last - 1]! + 1]);
+  chunks[0]![0] = 0;
+  chunks.forEach((chunk, index) => {
+    chunk[1] = chunks[index + 1]?.[0] ?? words.length;
+  });
+  return chunks;
+}
+/** Where a section's tables and diagrams are spoken in the script. Slides show
+ * those features themselves, so their words never become summary text. */
+function featureSpans(
+  sourceText: string,
+  from: number,
+  to: number,
+  items: readonly PresentationMediaItem[],
+): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  let cursor = from;
+  for (const item of items) {
+    if (item.kind === 'image') continue;
+    const text = extractPlainText(item.node).trim();
+    const at = text ? sourceText.indexOf(text, cursor) : -1;
+    if (at < 0 || at + text.length > to) continue;
+    spans.push([at, at + text.length]);
+    cursor = at + text.length;
   }
-  const sections = new Set(sectionIds);
-  const result = new Map<string, TransformImage[]>();
-  let owner = sectionIds[0];
-  for (const block of flat) {
-    if (sections.has(block.id)) owner = block.id;
-    if (!owner) continue;
-    result.set(owner, [...(result.get(owner) ?? []), ...(own.get(block.id) ?? [])]);
-  }
-  return result;
+  return spans;
 }
 function field(block: unknown, key: string): string | undefined {
   if (!block || typeof block !== 'object') return undefined;
@@ -142,7 +197,10 @@ export function createPresentationPlan(
     throw new Error(
       'This document is too long for one presentation. Split it into shorter documents.',
     );
-  const sectionImages = imagesBySection(
+  // A section's features (tables, pictures, videos and diagrams) accompany its
+  // slides; each picture is shown once, in the narrated section that contains
+  // it (or the nearest narrated section before it).
+  const sectionMedia = collectPresentationMedia(
     doc,
     script.blocks.map((block) => block.blockId),
   );
@@ -179,9 +237,23 @@ export function createPresentationPlan(
       continue;
     }
     const preferred: PresentationLayout | undefined = hint?.layout;
-    const chunks = chunkWords(words, wordLimit);
+    const media = sectionMedia.get(block.blockId) ?? [];
+    const spans = featureSpans(script.sourceText, block.charStart, block.charEnd, media);
+    const inFeature = (from: number, to: number) => spans.some(([s, e]) => from < e && to > s);
+    const chunks = chunkPassage(words, wordLimit, (word) =>
+      inFeature(block.charStart + word.index!, block.charStart + word.index! + word[0].length),
+    );
+    // A sequence ("First… Then… After…") stays on one slide, so it can show as
+    // a process, unless that would make the slide twice as long as the rest.
+    for (let k = chunks.length - 1; k > 0; k--) {
+      const opening = script.sourceText.slice(block.charStart + words[chunks[k]![0]]!.index!);
+      if (SEQUENCE_CUE.test(opening) && chunks[k]![1] - chunks[k - 1]![0] <= wordLimit * 2) {
+        chunks[k - 1]![1] = chunks[k]![1];
+        chunks.splice(k, 1);
+      }
+    }
     // A section's images go on its closing slides, never on the deck's opening title.
-    const images = sectionImages.get(block.blockId) ?? [];
+    const images = media.filter((item) => item.kind === 'image');
     const opensDeck = beats.length === 0;
     for (const [chunk, [first, last]] of chunks.entries()) {
       const fromEnd = chunks.length - 1 - chunk;
@@ -189,8 +261,19 @@ export function createPresentationPlan(
       const start = block.charStart + words[first]!.index;
       const end = block.charStart + words[last - 1]!.index + words[last - 1]![0].length;
       const passage = script.sourceText.slice(start, end);
+      // The passage without the cells and diagram source its features show.
+      let prose = '';
+      let cursor = start;
+      for (const [s, e] of spans) {
+        if (e <= cursor || s >= end) continue;
+        prose += script.sourceText.slice(cursor, Math.max(cursor, s)) + '\n';
+        cursor = Math.min(end, e);
+      }
+      prose = (prose + script.sourceText.slice(cursor, end)).trim() || passage;
       const index = beats.length;
-      const sentences = sentencesIn(script.sourceText, start, end);
+      const sentences = sentencesIn(script.sourceText, start, end).filter(
+        (sentence) => !inFeature(sentence.start, sentence.end),
+      );
       const body = sentences.filter((sentence) => sentence.start >= headingEnd);
       // The section heading titles each of its slides, so every body sentence
       // can be shown. Without a heading the headline comes from the passage,
@@ -206,7 +289,7 @@ export function createPresentationPlan(
             articleId: doc.articleId,
             segmentId: `presentation-${index}`,
             title: '',
-            text: passage,
+            text: prose,
             duration: Math.max(4, (last - first) / 2.5),
             audioSrc: '',
             includeTitleBlock: false,
@@ -218,9 +301,9 @@ export function createPresentationPlan(
             field(suggested, 'description') ??
             field(suggested, 'quote') ??
             sentences[0]?.text ??
-            passage,
+            prose,
         );
-        if (!headline) headline = headlineText(passage);
+        if (!headline) headline = headlineText(prose);
         shown = body.filter((sentence) => !repeats(sentence.text, headline));
       }
       // A steps diagram shows only the sentences that open with an ordering
@@ -229,22 +312,32 @@ export function createPresentationPlan(
       const sequence = steps.length >= 2;
       const textPoints = shown.slice(0, 3).map((item) => pointText(item.text));
       const stepPoints = sequence
-        ? steps.slice(0, 3).map((item) => pointText(item.text))
+        ? steps.slice(0, 4).map((item) => stagePoint(item.text))
         : textPoints;
+      // Cards show up to four of the passage's sentences, a defined term
+      // ("Antibodies are proteins…") set as its card's label.
+      const cardPoints = shown.slice(0, 4).map((item) => labelledPoint(item.text));
       const custom = chunk === 0 ? wording : undefined;
       if (custom?.headline) headline = custom.headline;
       const pointsFor = (layout: PresentationLayout) =>
-        custom?.points ?? (layout === 'steps' ? stepPoints : textPoints);
+        custom?.points ??
+        (['steps', 'process', 'cycle'].includes(layout)
+          ? stepPoints
+          : layout === 'cards'
+            ? cardPoints
+            : textPoints);
       // A quote shows one of the passage's own sentences, whole.
       const quote = custom?.headline
         ? undefined
         : body.find((sentence) => sentence.text.length <= 110)?.text;
       const headlineFor = (layout: PresentationLayout) =>
         layout === 'quote' && quote ? quote : headline;
+      // Several ideas become cards; an ordered passage a process, or a cycle
+      // when it says the sequence comes round again.
       let layout: PresentationLayout =
-        index === 0 ? 'title' : textPoints.length >= 2 && index % 3 === 1 ? 'list' : 'statement';
-      if (sequence) layout = 'steps';
-      else if (textPoints.length === 2 && /\b(versus|whereas|compared|instead)\b/iu.test(passage))
+        index === 0 ? 'title' : textPoints.length >= 2 ? 'cards' : 'statement';
+      if (sequence) layout = steps.length >= 3 && CYCLE_CUE.test(prose) ? 'cycle' : 'steps';
+      else if (textPoints.length === 2 && /\b(versus|whereas|compared|instead)\b/iu.test(prose))
         layout = 'comparison';
       if (image) layout = 'image';
       if (
@@ -266,7 +359,7 @@ export function createPresentationPlan(
         layout,
         headline: headlineFor(layout),
         points: pointsFor(layout),
-        ...(layout === 'image' && image ? { imageSrc: image.src } : {}),
+        ...(layout === 'image' && image?.src ? { imageSrc: image.src } : {}),
       };
       if (quote) quotes.set(beat.id, quote);
       // An optional supporting visual shares the passage's narration span and
@@ -341,40 +434,6 @@ export function createPresentationPlan(
       )
         beat.hidden = true;
   }
-  // A section's videos and diagrams accompany its slides in source order. The
-  // slides are shared out so every visual is shown; one that can resume stays
-  // on screen across consecutive slides, and the deck's opener and image
-  // slides keep their own visual whenever the section has other slides.
-  const sectionMedia = collectPresentationMedia(
-    doc,
-    script.blocks.map((block) => block.blockId),
-  );
-  for (const block of script.blocks) {
-    const items = sectionMedia.get(block.blockId);
-    if (!items?.length) continue;
-    const own = beats.filter(
-      (beat) =>
-        beat.sourceStart >= block.charStart &&
-        beat.sourceStart < block.charEnd &&
-        beat.layout !== AUTHORED_PRESENTATION_LAYOUT &&
-        !beat.hidden,
-    );
-    if (!own.length) continue;
-    const open = own.filter((beat) => beat !== beats[0] && beat.layout !== 'image');
-    const slots = open.length ? open : own;
-    const shown = new Set<string>();
-    slots.forEach((beat, slot) => {
-      const from = Math.floor((slot * items.length) / slots.length);
-      const to = Math.max(from + 1, Math.floor(((slot + 1) * items.length) / slots.length));
-      const refs = items
-        .slice(from, to)
-        .filter((item) => item.continuous || !shown.has(item.ref))
-        .slice(0, PRESENTATION_LIMITS.mediaPerBeat)
-        .map((item) => item.ref);
-      for (const ref of refs) shown.add(ref);
-      if (refs.length) beat.media = refs;
-    });
-  }
   const closing = beats[beats.length - 1];
   if (
     beats.length > 2 &&
@@ -391,19 +450,27 @@ export function createPresentationPlan(
     )
   )
     closing.layout = 'title';
+  const sectionOf = (beat: PresentationBeat) =>
+    script.blocks.find(
+      (block) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
+    );
+  const hintFor = (beat: PresentationBeat) =>
+    hints.blocks.find((item) => item.blockId === sectionOf(beat)?.blockId);
+  /** Slides whose points the author typed (never shortened) or an AI suggested. */
+  const worded = new Set<string>();
+  const suggested = new Set<string>();
   let origin: PresentationPlan['origin'] = 'automatic';
   for (const beat of beats) {
     if (beat.layout === AUTHORED_PRESENTATION_LAYOUT) continue;
-    const section = script.blocks.find(
-      (block) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
-    );
-    const hint = hints.blocks.find((item) => item.blockId === section?.blockId);
+    const section = sectionOf(beat);
+    const hint = hintFor(beat);
     const passage = script.sourceText.slice(beat.sourceStart, beat.sourceEnd);
     const cached = hint?.ai?.find((item) => item.source === passage);
     if (cached && (cached.layout !== 'image' || beat.imageSrc)) {
       beat.headline = cached.headline;
       beat.points = [...cached.points];
       beat.layout = cached.layout;
+      suggested.add(beat.id);
       origin = 'ai';
     }
     // A deliberate author choice takes precedence over an AI suggestion; a
@@ -427,10 +494,8 @@ export function createPresentationPlan(
     ) {
       beat.headline = hint.wording.headline ?? beat.headline;
       beat.points = hint.wording.points ?? beat.points;
+      if (hint.wording.points) worded.add(beat.id);
     }
-    // A steps diagram leaves a video or diagram only a small inset, while the
-    // text layouts pair them side by side; an explicit section choice stands.
-    if (beat.media && beat.layout === 'steps' && preferred !== 'steps') beat.layout = 'list';
     // Custom wording can leave a layout without what it shows (two sides of a
     // comparison, a number, the passage's exact words); say it plainly instead.
     if (
@@ -439,6 +504,63 @@ export function createPresentationPlan(
     )
       beat.layout = 'statement';
     if (beat.layout !== 'image') delete beat.imageSrc;
+  }
+  // A section's features accompany its slides in source order. The slides are
+  // shared out so every feature is shown, whatever layout the section prefers;
+  // one that can resume stays on screen across consecutive slides, and the
+  // deck's opener and image slides keep their own visual whenever the section
+  // has other slides. A picture rides along only where no slide shows it
+  // full-bleed (a hidden image slide's picture stays hidden with it).
+  const fullBleed = new Set(beats.flatMap((beat) => (beat.imageSrc ? [beat.imageSrc] : [])));
+  for (const block of script.blocks) {
+    const items = (sectionMedia.get(block.blockId) ?? []).filter(
+      (item) => item.kind !== 'image' || !fullBleed.has(item.src!),
+    );
+    if (!items.length) continue;
+    const own = beats.filter(
+      (beat) =>
+        beat.sourceStart >= block.charStart &&
+        beat.sourceStart < block.charEnd &&
+        beat.layout !== AUTHORED_PRESENTATION_LAYOUT &&
+        !beat.hidden,
+    );
+    if (!own.length) continue;
+    const open = own.filter((beat) => beat !== beats[0] && beat.layout !== 'image');
+    const slots = open.length ? open : own;
+    const shown = new Set<string>();
+    slots.forEach((beat, slot) => {
+      const from = Math.floor((slot * items.length) / slots.length);
+      const to = Math.max(from + 1, Math.floor(((slot + 1) * items.length) / slots.length));
+      const refs = items
+        .slice(from, to)
+        .filter((item) => item.continuous || !shown.has(item.ref))
+        .slice(0, PRESENTATION_LIMITS.mediaPerBeat)
+        .map((item) => item.ref);
+      for (const ref of refs) shown.add(ref);
+      if (refs.length) beat.media = refs;
+    });
+  }
+  for (const beat of beats) {
+    if (!beat.media) continue;
+    // A feature needs the room, so the words beside it are fewer and shorter;
+    // points the author typed stand as written.
+    if (!worded.has(beat.id)) {
+      const points = beat.points.slice(0, FEATURE_POINTS);
+      beat.points = suggested.has(beat.id) ? points : points.map(featurePointText);
+    }
+    // A steps diagram leaves a feature only a small inset, while the text
+    // layouts pair them side by side; an explicit section choice stands.
+    if (beat.layout === 'steps' && hintFor(beat)?.layout !== 'steps') beat.layout = 'list';
+    const passage = script.sourceText.slice(beat.sourceStart, beat.sourceEnd);
+    if (
+      !presentationLayoutFits(
+        beat.layout as PresentationLayout,
+        beat.headline,
+        beat.points,
+        passage,
+      )
+    )
+      beat.layout = 'statement';
   }
   return { version: 1, sourceText: script.sourceText, origin, beats };
 }
