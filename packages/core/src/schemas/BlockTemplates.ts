@@ -265,6 +265,11 @@ export interface StatHighlightInput extends BaseTemplateBlock {
   description: string;
   /** Additional detail or context */
   detail?: string;
+  /**
+   * Optional deck headline. With one, the slide takes the concept blocks'
+   * lockup: accent rule and headline above, the figure beside what it means.
+   */
+  headline?: string;
   /** Color scheme for the stat */
   colorScheme?: ColorScheme;
   /** Optional accent image to complement the text */
@@ -503,6 +508,41 @@ export interface ListBlockInput extends BaseTemplateBlock {
   colorScheme?: ColorScheme;
   /** Optional accent image */
   accentImage?: AccentImage;
+}
+
+/**
+ * Shared shape of the concept blocks (`cards`, `process`, `cycle`): a
+ * headline over 2–6 related ideas, each `Label: detail` or plain text.
+ */
+interface ConceptBlockBase extends BaseTemplateBlock {
+  /** The ideas, in order; `Label: detail` sets the label bold above its detail. */
+  items: string[];
+  /** Optional headline above the ideas */
+  title?: string;
+  /** Accent color scheme (default: the theme's highlight) */
+  colorScheme?: ColorScheme;
+}
+
+/** Parallel ideas side by side as cards. */
+export interface CardsBlockInput extends ConceptBlockBase {
+  template: 'cards';
+  /** Two ideas set against each other: two panels with a "vs" mark between them. */
+  versus?: boolean;
+}
+
+/** An ordered process: numbered stages joined by arrows. */
+export interface ProcessBlockInput extends ConceptBlockBase {
+  template: 'process';
+}
+
+/** A cycle: stages on a ring, the last leading back to the first. */
+export interface CycleBlockInput extends ConceptBlockBase {
+  template: 'cycle';
+}
+
+/** Nested parts, innermost first: concentric rings, each part called out beside them. */
+export interface LayersBlockInput extends ConceptBlockBase {
+  template: 'layers';
 }
 
 /**
@@ -961,6 +1001,10 @@ export type TemplateBlock =
   | MapBlockInput
   | FullBleedQuoteInput
   | ListBlockInput
+  | CardsBlockInput
+  | ProcessBlockInput
+  | CycleBlockInput
+  | LayersBlockInput
   | PhotoGridInput
   | DefinitionCardInput
   | ComparisonBarInput

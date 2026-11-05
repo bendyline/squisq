@@ -511,8 +511,11 @@ describe('RecorderModal — slide timing capture', { timeout: 30_000 }, () => {
 describe('RecorderModal — summarized presentation slides', { timeout: 30_000 }, () => {
   // Dynamic slides split "Make it visual" into an introduction and a steps
   // diagram. The existing take must not keep the presentation from showing.
+  // The steps slide would reveal its stages one Next at a time; these tests
+  // walk whole slides, so that section opts out of the reveal.
   const SUMMARIZED = `---
 squisq-transform: dynamic-slides
+squisq-presentation-hints: {"version":1,"density":"balanced","inbetweens":true,"blocks":[{"blockId":"make-it-visual","build":{"mode":"off"}}]}
 ---
 {[audio src=audio/old.webm anchor=document]}
 

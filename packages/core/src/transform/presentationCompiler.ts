@@ -18,6 +18,8 @@ import { collectPresentationMedia, presentationMediaNode } from './presentationM
 import type { MarkdownBlockNode } from '../markdown/types.js';
 import type { MediaClip } from '../schemas/Media.js';
 import { isContainerTemplate } from '../doc/templates/templateNames.js';
+import { conceptBuildStepTexts } from '../doc/templates/conceptBlocks.js';
+import { buildSourceText } from '../doc/builds.js';
 import {
   AUTHORED_PRESENTATION_LAYOUT,
   PRESENTATION_KEY,
@@ -73,7 +75,7 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
   );
   if (checked.beats.some((beat) => beat.media?.some((ref) => !media.has(ref))))
     throw new Error(
-      'A presentation video or diagram is no longer in the document. Make the presentation again.',
+      'A presentation table, picture, video or diagram is no longer in the document. Make the presentation again.',
     );
   const duration = narration
     ? narration.startTime + narration.duration
@@ -119,23 +121,22 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     const share = span > 0 ? (tokensBefore(offset) - tokensBefore(from.charOffset)) / span : 0;
     return from.time + share * Math.max(0, to.time - from.time);
   };
+  /** When the narration reaches a script offset. */
+  const timeAt = (offset: number): number => {
+    const marked = markedTime(offset);
+    if (marked !== undefined) return marked;
+    // Match the first spoken token in this span; clipped-away spans collapse.
+    if (narration && bookmarks.length)
+      return bookmarks.find((word) => word.charOffset >= offset)?.time ?? duration;
+    return (
+      (narration?.startTime ?? 0) +
+      (tokensBefore(offset) / Math.max(1, script.tokens.length)) * (narration?.duration ?? duration)
+    );
+  };
   let previous = 0;
   const starts = checked.beats.map((beat, index) => {
     if (!index) return 0;
-    let time: number;
-    const marked = markedTime(beat.sourceStart);
-    if (marked !== undefined) {
-      time = marked;
-    } else if (narration && bookmarks.length) {
-      // Match the first spoken token in this span; clipped-away spans collapse.
-      time = bookmarks.find((word) => word.charOffset >= beat.sourceStart)?.time ?? duration;
-    } else {
-      const before = script.tokens.filter((token) => token.charOffset < beat.sourceStart).length;
-      time =
-        (narration?.startTime ?? 0) +
-        (before / Math.max(1, script.tokens.length)) * (narration?.duration ?? duration);
-    }
-    previous = Math.min(duration, Math.max(previous, time));
+    previous = Math.min(duration, Math.max(previous, timeAt(beat.sourceStart)));
     return previous;
   });
   const authoredBlocks = flattenRenderableBlocks(doc.blocks);
@@ -240,8 +241,23 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
       });
       continue;
     }
-    const block: TemplateBlock = visualBlock(beat, beat.layout, base, index);
-    blocks.push(block as unknown as Block);
+    const table =
+      beat.layout !== 'image' && (beat.media ?? []).some((ref) => media.get(ref)!.kind === 'table');
+    const block: TemplateBlock = table
+      ? tableFeatureBlock(beat, beat.layout, base, contents)
+      : visualBlock(beat, beat.layout, base, index);
+    const concept = conceptTemplate(block.template);
+    // A summary that carries its section's features: the materializer lays
+    // its tables and pictures out beside the words, not as decoration.
+    blocks.push({
+      ...block,
+      ...(contents.length ? { summaryMode: 'brief' } : {}),
+      // A concept slide reveals its ideas one at a time, each as the narration
+      // reaches the sentence it summarizes (`conceptReveal`).
+      ...(concept && !build
+        ? conceptReveal(concept, beat, start, end, script.sourceText, timeAt)
+        : {}),
+    } as unknown as Block);
   }
   return {
     ...doc,
@@ -254,6 +270,98 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
       ? doc.audio
       : { segments: [{ src: '', name: 'presentation-clock', startTime: 0, duration }] },
   };
+}
+const CONCEPT_TEMPLATES = ['cards', 'process', 'cycle', 'layers'] as const;
+function conceptTemplate(template: string): (typeof CONCEPT_TEMPLATES)[number] | undefined {
+  return CONCEPT_TEMPLATES.find((name) => name === template);
+}
+/** Distinctive words, compared by their opening letters so "multiply" matches "multiplying". */
+function stems(text: string): string[] {
+  return (text.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) ?? [])
+    .filter((word) => word.length >= 4)
+    .map((word) => word.slice(0, 5));
+}
+/**
+ * A concept slide's build: each idea appears when the narration reaches the
+ * sentence of the slide's passage it shares the most words with. Ideas that
+ * cannot be placed in order (reworded beyond recognition) fall back to
+ * reveals spread evenly over the slide.
+ */
+function conceptReveal(
+  template: (typeof CONCEPT_TEMPLATES)[number],
+  beat: PresentationBeat,
+  start: number,
+  end: number,
+  sourceText: string,
+  timeAt: (offset: number) => number,
+): Pick<Block, 'build' | 'buildTiming'> {
+  const build = { mode: 'items' as const, effect: 'fadeInUp' as const, previous: 'keep' as const };
+  const steps = conceptBuildStepTexts(template, beat.points);
+  const passage = sourceText.slice(beat.sourceStart, beat.sourceEnd);
+  const sentences = [...passage.matchAll(/[^.!?\n]+[.!?]*/gu)].map((match) => ({
+    offset: beat.sourceStart + match.index,
+    words: new Set(stems(match[0])),
+  }));
+  let last = -1;
+  const offsets: number[] = [];
+  for (const point of beat.points.slice(0, steps.length)) {
+    const words = stems(point);
+    let best: { offset: number; shared: number } | undefined;
+    for (const sentence of sentences) {
+      const shared = words.filter((word) => sentence.words.has(word)).length;
+      if (shared > (best?.shared ?? 1)) best = { offset: sentence.offset, shared };
+    }
+    if (!best || best.offset < last) return { build };
+    offsets.push((last = best.offset));
+  }
+  if (offsets.length !== steps.length) return { build };
+  const lead = Math.min(0.5, (end - start) / 8);
+  const starts = offsets.map((offset) =>
+    Math.min(Math.max(0, end - start - 0.1), Math.max(lead, timeAt(offset) - start)),
+  );
+  // The first idea lands as the headline settles even when its sentence comes
+  // later, so a slide never sits on its headline alone while the passage opens.
+  starts[0] = Math.min(starts[0]!, Math.max(lead, Math.min(1, (end - start) / 6)));
+  return {
+    build,
+    buildTiming: {
+      sourceText: buildSourceText(steps.map((text, index) => ({ id: `build-${index}`, text }))),
+      starts,
+    },
+  };
+}
+/**
+ * A slide that features a table. A table needs the slide's full width and
+ * most of its height, so whatever the layout, its headline and points sit in
+ * a band sized to them above the table (`bottomFeature`); points that make a
+ * list stay bulleted.
+ */
+function tableFeatureBlock(
+  beat: PresentationBeat,
+  layout: PresentationLayout,
+  base: { id: string; duration: number; audioSegment: number },
+  features: MarkdownBlockNode[],
+): TemplateBlock {
+  const paragraph = (text: string) => ({
+    type: 'paragraph' as const,
+    children: [{ type: 'text' as const, value: text }],
+  });
+  const words: MarkdownBlockNode[] =
+    ['list', 'steps', 'comparison'].includes(layout) && beat.points.length > 1
+      ? [
+          {
+            type: 'list',
+            ordered: false,
+            children: beat.points.map((point) => ({
+              type: 'listItem' as const,
+              children: [paragraph(point)],
+            })),
+          },
+        ]
+      : beat.points.map(paragraph);
+  const block: TemplateBlock = { ...base, template: 'bottomFeature', title: beat.headline };
+  // The words and the features are the slide's body (`contentBlock`).
+  return Object.assign(block, { contents: [...words, ...features] });
 }
 function visualBlock(
   beat: PresentationBeat,
@@ -268,55 +376,55 @@ function visualBlock(
     case 'divider':
       return { ...base, template: 'sectionHeader', title: beat.headline, colorScheme };
     case 'emphasis':
-      return { ...base, template: 'bigText', title: beat.headline };
+      // One untitled idea: a display statement in the deck's headline face.
+      return { ...base, template: 'cards', items: [beat.headline] };
     case 'quote':
       return { ...base, template: 'fullBleedQuote', text: beat.headline, colorScheme };
     case 'stat': {
       // The plan only holds key-number slides that state a prominent number.
       const { match, line, index: at } = presentationStat(beat.headline, beat.points)!;
-      const detail = beat.points.find((_, i) => i !== at) ?? (at < 0 ? undefined : beat.headline);
+      // The headline heads the slide in the deck's lockup; the figure sits
+      // beside the point that states it, or the points that follow a headline
+      // that states it.
+      const others = beat.points.filter((_, i) => i !== at);
+      const [description, detail] = at < 0 ? others : [line, others[0]];
       return {
         ...base,
         template: 'statHighlight',
+        headline: beat.headline,
         stat: match.value,
-        description: line,
+        description: description ?? '',
         ...(detail ? { detail } : {}),
-        colorScheme,
       };
     }
     case 'definition':
+      // The term is the headline and its definition reads as one lead
+      // paragraph under it: points that define one term are one thought.
       return {
         ...base,
-        template: 'definitionCard',
-        term: beat.headline,
-        definition: beat.points.join('\n\n'),
-        colorScheme,
+        template: 'cards',
+        title: beat.headline,
+        items: beat.points.length
+          ? [beat.points.map((point) => point.trim().replace(/([^.!?])$/u, '$1.')).join(' ')]
+          : [],
       };
     case 'statement':
-      return {
-        ...base,
-        template: 'factCard',
-        fact: beat.headline,
-        explanation: beat.points.join('\n\n'),
-      };
+      // A statement shares the deck's lockup: its sentences set as a lead
+      // paragraph (one) or cards (several) under the headline.
+      return beat.points.length
+        ? { ...base, template: 'cards', title: beat.headline, items: beat.points }
+        : { ...base, template: 'factCard', fact: beat.headline, explanation: '' };
     case 'list':
-      // Summary points are not a sequence, and a numbered process split across
-      // slides would restart at 1 on each, so the deck's lists are bulleted.
+      // Summary points are not a sequence, so a list sets as cards, in the deck's lockup.
+      return { ...base, template: 'cards', title: beat.headline, items: beat.points };
+    case 'comparison':
+      // A comparison's two sides stand against each other across a "vs" mark.
       return {
         ...base,
-        template: 'list',
+        template: 'cards',
         title: beat.headline,
         items: beat.points,
-        ordered: false,
-        colorScheme,
-      };
-    case 'comparison':
-      return {
-        ...base,
-        template: 'twoColumn',
-        header: beat.headline,
-        left: { label: beat.points[0]! },
-        right: { label: beat.points[1]! },
+        ...(beat.points.length === 2 ? { versus: true } : {}),
       };
     case 'image':
       return {
@@ -329,24 +437,14 @@ function visualBlock(
         ambientMotion: 'zoomIn',
       };
     case 'steps':
-      return {
-        ...base,
-        template: 'diagram',
-        background: 'surface',
-        title: beat.headline,
-        colorScheme,
-        nodes: beat.points.map((point, i) => ({
-          id: `step-${i}`,
-          label: point,
-          x: i * 320,
-          y: 0,
-          w: 260,
-          h: 180,
-        })),
-        edges: beat.points
-          .slice(1)
-          .map((_, i) => ({ source: `step-${i}`, target: `step-${i + 1}`, directed: true })),
-      };
+    case 'process':
+      return { ...base, template: 'process', title: beat.headline, items: beat.points };
+    case 'cards':
+      return { ...base, template: 'cards', title: beat.headline, items: beat.points };
+    case 'cycle':
+      return { ...base, template: 'cycle', title: beat.headline, items: beat.points };
+    case 'layers':
+      return { ...base, template: 'layers', title: beat.headline, items: beat.points };
   }
 }
 export function applySavedPresentation(doc: Doc): Doc {

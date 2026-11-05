@@ -164,7 +164,10 @@ function rect(
 function mediaShape(
   mediaCount: number,
   aspectRatios: readonly (number | undefined)[],
+  table = false,
 ): SupplementalMediaShape {
+  // A table reads across, so it always gets the slide's full width.
+  if (table) return 'table';
   if (mediaCount > 1) return 'multiple';
   const aspect = aspectRatios[0] ?? 16 / 9;
   if (aspect < 0.8) return 'tall';
@@ -242,6 +245,7 @@ function overlayMediaRect(viewport: ViewportConfig, shape: SupplementalMediaShap
       case 'square':
         return rect(viewport, 0.49, 0.58, 0.44, 0.35);
       case 'multiple':
+      case 'table':
         return rect(viewport, 0.07, 0.67, 0.86, 0.27);
       case 'wide':
         return rect(viewport, 0.07, 0.71, 0.86, 0.23);
@@ -254,6 +258,7 @@ function overlayMediaRect(viewport: ViewportConfig, shape: SupplementalMediaShap
       case 'square':
         return rect(viewport, 0.55, 0.52, 0.4, 0.4);
       case 'multiple':
+      case 'table':
         return rect(viewport, 0.08, 0.62, 0.84, 0.31);
       case 'wide':
         return rect(viewport, 0.08, 0.68, 0.84, 0.27);
@@ -265,6 +270,7 @@ function overlayMediaRect(viewport: ViewportConfig, shape: SupplementalMediaShap
     case 'square':
       return rect(viewport, 0.62, 0.22, 0.34, 0.56);
     case 'multiple':
+    case 'table':
       return rect(viewport, 0.52, 0.5, 0.44, 0.42);
     case 'wide':
       return rect(viewport, 0.54, 0.58, 0.42, 0.34);
@@ -893,10 +899,12 @@ export function resolveSupplementalMediaLayout(
     stackColumns?: boolean;
     /** Per item: its measured or authored shape, undefined where only guessed. */
     knownAspectRatios?: readonly (number | undefined)[];
+    /** One of the items is a table. */
+    table?: boolean;
   } = {},
 ): SupplementalMediaLayout {
   const policy = getBlockMediaLayoutPolicy(template);
-  const shape = mediaShape(mediaCount, aspectRatios);
+  const shape = mediaShape(mediaCount, aspectRatios, featureOptions.table);
   const alreadyOwnsMedia = layers.some(
     (layer) =>
       layer.type === 'image' ||

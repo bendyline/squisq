@@ -1,0 +1,34 @@
+body {
+  margin: 0;
+  background: #e9e9ee;
+  font-family: system-ui, sans-serif;
+}
+
+.deck-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.deck-label {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: #444;
+}
+
+.deck-slide {
+  position: relative;
+  overflow: hidden;
+}
+
+.deck-slide > svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.deck-error {
+  padding: 16px;
+  color: #a00;
+}

@@ -69,6 +69,49 @@ const W_RPR_SEQUENCE = [
 ];
 
 /**
+ * ECMA-376 Part 1, `CT_PPrBase` (the child sequence of `CT_PPr`), in order,
+ * followed by `CT_PPr`'s own trailing `rPr` / `sectPr` / `pPrChange`.
+ */
+const W_PPR_SEQUENCE = [
+  'pStyle',
+  'keepNext',
+  'keepLines',
+  'pageBreakBefore',
+  'framePr',
+  'widowControl',
+  'numPr',
+  'suppressLineNumbers',
+  'pBdr',
+  'shd',
+  'tabs',
+  'suppressAutoHyphens',
+  'kinsoku',
+  'wordWrap',
+  'overflowPunct',
+  'topLinePunct',
+  'autoSpaceDE',
+  'autoSpaceDN',
+  'bidi',
+  'adjustRightInd',
+  'snapToGrid',
+  'spacing',
+  'ind',
+  'contextualSpacing',
+  'mirrorIndents',
+  'suppressOverlap',
+  'jc',
+  'textDirection',
+  'textAlignment',
+  'textboxTightWrap',
+  'outlineLvl',
+  'divId',
+  'cnfStyle',
+  'rPr',
+  'sectPr',
+  'pPrChange',
+];
+
+/**
  * ECMA-376 Part 1, `CT_TextCharacterProperties` child sequence, in order.
  * The `EG_FillProperties` group (`solidFill`, …) precedes `latin`.
  */
@@ -207,6 +250,14 @@ describe('DOCX w:rPr child order (ECMA-376 EG_RPrBase)', () => {
     const xml = await zip.file('word/styles.xml')!.async('text');
 
     expect(collectViolations(xml, ['w:rPr'], W_RPR_SEQUENCE)).toEqual([]);
+  });
+
+  it('emits every w:pPr in styles.xml in schema sequence order', async () => {
+    const buffer = await markdownDocToDocx(RICH_DOC);
+    const zip = await JSZip.loadAsync(buffer);
+    const xml = await zip.file('word/styles.xml')!.async('text');
+
+    expect(collectViolations(xml, ['w:pPr'], W_PPR_SEQUENCE)).toEqual([]);
   });
 
   it('puts w:rFonts before w:b/w:i/w:color on a bold inline-code run', async () => {

@@ -52,6 +52,80 @@ describe('slide and video builds', () => {
     expect(fragments()[1]!.querySelector('a')?.textContent).toBe('Interview');
   });
 
+  it('reveals a concept block card by card, each card’s shape and words together', () => {
+    const block = expandDocBlocks(
+      markdownToDoc(
+        parseMarkdown(
+          '## Kinds {[cards build=items buildEffect=appear duration=12]}\n\n- Live: two doses\n- Non-live: three or more\n- Updated: every year\n',
+        ),
+      ).blocks as DocBlock[],
+    )[0]!;
+    const view = render(
+      <BlockRenderer
+        block={block}
+        blockTime={0}
+        basePath="."
+        buildPlayback={{ revealed: 1, progress: 1 }}
+      />,
+    );
+    const groups = [...view.container.querySelectorAll<SVGGElement>('g[data-squisq-build-step]')];
+    // Each card's shape, rule, label and detail are separate layers in one step.
+    expect(groups.length).toBeGreaterThan(3);
+    const shown = groups.filter((group) => group.style.visibility === 'visible');
+    expect(new Set(shown.map((group) => group.dataset.squisqBuildStep))).toEqual(new Set(['0']));
+    expect(shown.map((group) => group.textContent).join(' ')).toContain('Live');
+    expect(
+      groups
+        .filter((group) => group.dataset.squisqBuildStep === '1')
+        .every((group) => group.style.visibility === 'hidden'),
+    ).toBe(true);
+  });
+
+  it('times a building step’s entrances from its reveal, keeping their order within it', () => {
+    const [block] = expandDocBlocks(
+      [
+        {
+          id: 'kinds',
+          template: 'cards',
+          title: 'Kinds',
+          items: ['Live: two doses', 'Non-live: three or more'],
+          startTime: 0,
+          duration: 12,
+          audioSegment: 0,
+          build: { mode: 'items', effect: 'fadeInUp' },
+          buildTiming: { sourceText: '', starts: [] },
+        } as unknown as DocBlock,
+      ],
+      { motion: 'documentary' },
+    );
+    const steps = [0, 1].map((index) =>
+      Math.min(
+        ...block!.layers!.filter((l) => l.buildStep === index).map((l) => l.animation!.delay!),
+      ),
+    );
+    const view = render(
+      <BlockRenderer block={block!} blockTime={9} basePath="." buildPlayback="timed" />,
+    );
+    const offsets = [0, 1].map((index) => {
+      const group = view.container.querySelector<SVGGElement>(
+        `g[data-squisq-build-step="${index}"]`,
+      )!;
+      return parseFloat(group.style.getPropertyValue('--squisq-step-offset'));
+    });
+    // Each step's earliest entrance starts at its reveal; the rest follow at
+    // their authored spacing, since the offset shifts the whole step.
+    const starts = [0, 1].map((index) => offsets[index]! + steps[index]!);
+    expect(starts[0]).toBeGreaterThanOrEqual(0);
+    expect(starts[1]).toBeGreaterThan(starts[0]!);
+    expect(starts[1]).toBeLessThan(12);
+    // A step whose layers enter on their own is not also moved as a group.
+    const shown = view.container.querySelector<SVGGElement>('g[data-squisq-build-step="0"]')!;
+    expect(shown.style.transform).toBe('translate(0px, 0px)');
+    // Played without a build, the template's own stagger stands.
+    view.rerender(<BlockRenderer block={block!} blockTime={9} basePath="." />);
+    expect(shown.style.getPropertyValue('--squisq-step-offset')).toBe('');
+  });
+
   it('Next and Previous traverse steps before slides, including the last slide', async () => {
     const view = render(
       <DocPlayer

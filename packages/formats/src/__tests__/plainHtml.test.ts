@@ -485,9 +485,9 @@ describe('markdownDocToPlainHtml', () => {
     it('resolves the theme typography to CSS family strings', () => {
       const theme = resolveTheme('documentary');
       const html = render('# Hello', { theme });
-      // documentary uses playfair (title) + source-serif (body)
+      // documentary uses playfair (title) + inter (body)
       expect(html).toContain('--plain-title-font: "Playfair Display"');
-      expect(html).toContain('--plain-body-font: "Source Serif 4"');
+      expect(html).toContain('--plain-body-font: "Inter"');
     });
 
     it('does not emit Google Fonts for a self-contained export by default', () => {
@@ -502,7 +502,7 @@ describe('markdownDocToPlainHtml', () => {
       expect(html).toContain('<link rel="preconnect" href="https://fonts.googleapis.com">');
       expect(html).toContain('https://fonts.googleapis.com/css2?');
       expect(html).toContain('family=Playfair+Display:wght@400;700');
-      expect(html).toContain('family=Source+Serif+4:wght@400;700');
+      expect(html).toContain('family=Inter:wght@400;700');
       expect(html).toContain('display=swap');
     });
 

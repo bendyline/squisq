@@ -15,7 +15,7 @@
   },
   "typography": {
     "bodyFont": {
-      "stackId": "lora"
+      "stackId": "dm-sans"
     },
     "titleFont": {
       "stackId": "merriweather"

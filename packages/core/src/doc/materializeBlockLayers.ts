@@ -31,7 +31,7 @@ import type { MotionSpec } from '../schemas/Motion.js';
 import type { CustomTemplateDefinition } from '../schemas/CustomTemplates.js';
 import type { Theme } from '../schemas/Theme.js';
 import type { ViewportConfig } from '../schemas/Viewport.js';
-import type { MarkdownCodeBlock } from '../markdown/types.js';
+import type { MarkdownCodeBlock, MarkdownTable } from '../markdown/types.js';
 import { createTemplateContext, isTemplateBlock } from '../schemas/BlockTemplates.js';
 import { DEFAULT_THEME } from '../schemas/themeLibrary.js';
 import { VIEWPORT_PRESETS } from '../schemas/Viewport.js';
@@ -41,7 +41,9 @@ import { applyRenderStyleToLayers } from './utils/applyRenderStyle.js';
 import { coerceTemplateParams } from './templates/inputDescriptors.js';
 import { fallbackBlockLayers } from './templates/fallbackBlock.js';
 import { expandPersistentLayers, wrapWithPersistentLayers } from './templates/persistentLayers.js';
-import { resolveTemplateName } from './templates/templateNames.js';
+import { resolveTemplateName, TABLE_FED_TEMPLATES } from './templates/templateNames.js';
+import { extractTableData, type ExtractedTableData } from './structuredData.js';
+import { featureTableAspect, featureTableLayer } from './featureTable.js';
 import {
   deriveTemplateInputs,
   extractEmbeddedVideos,
@@ -356,12 +358,27 @@ type RichMediaItem =
   | { kind: 'videoEmbed'; url: string; title: string | null; aspectRatio: number }
   | { kind: 'mermaid'; source: string; aspectRatio: number }
   | { kind: 'svg'; source: string; aspectRatio: number }
+  | { kind: 'table'; table: ExtractedTableData; aspectRatio: number }
   | {
       kind: 'spatial';
       template: 'diagram' | 'tree' | 'timeline';
       data: Record<string, unknown>;
       aspectRatio: number;
     };
+
+/**
+ * Body tables a summary slide shows as features. Only a summary carries its
+ * section's tables this way; an authored slide shows them in its own body,
+ * and a table-fed template (a data table, a chart) draws them itself.
+ */
+function featureTables(layers: readonly Layer[], block: Block): ExtractedTableData[] {
+  if (!block.summaryMode || layers.some((layer) => layer.type === 'table')) return [];
+  if (block.template && TABLE_FED_TEMPLATES.has(resolveTemplateName(block.template))) return [];
+  return (block.contents ?? [])
+    .filter((node): node is MarkdownTable => node.type === 'table')
+    .map(extractTableData)
+    .filter((table) => table.headers.length > 0 || table.rows.length > 0);
+}
 
 /** Detect spatial fences that an explicitly different outer template did not consume. */
 function embeddedSpatialMedia(block: Block): RichMediaItem[] {
@@ -487,6 +504,11 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
       source,
       aspectRatio: svgIslandAspectRatio(source),
     })),
+    ...featureTables(layers, block).map((table): RichMediaItem => ({
+      kind: 'table',
+      table,
+      aspectRatio: featureTableAspect(table),
+    })),
     ...embeddedSpatialMedia(block),
   ];
 }
@@ -536,6 +558,7 @@ function richMediaLayers(
   position: LayerRect,
   block: Block,
   theme: Theme,
+  viewport: ViewportConfig,
   kindIndex: number,
 ): Layer[] {
   if (item.kind === 'image') {
@@ -607,6 +630,16 @@ function richMediaLayers(
         position,
         content: { source: item.source, color: theme.colors.text },
       },
+    ];
+  }
+  if (item.kind === 'table') {
+    return [
+      featureTableLayer(
+        `${block.id}-table-${kindIndex}`,
+        item.table,
+        position,
+        createTemplateContext(theme, 0, 1, viewport),
+      ),
     ];
   }
 
@@ -695,7 +728,8 @@ function appendRichContentLayers(
           : undefined;
     const intrinsic = key ? mediaAspectRatios?.[key] : undefined;
     if (intrinsic && Number.isFinite(intrinsic) && intrinsic > 0) return intrinsic;
-    return item.kind === 'video' ? undefined : item.aspectRatio;
+    // A table reflows to the box it is given, so it has no shape of its own.
+    return item.kind === 'video' || item.kind === 'table' ? undefined : item.aspectRatio;
   });
   const aspects = items.map((item, index) => knownAspects[index] ?? item.aspectRatio);
   const layout =
@@ -713,6 +747,7 @@ function appendRichContentLayers(
               !timedLayers.some((layer) => layer.id === 'feature-body'),
             stackColumns: createTemplateContext(theme, 0, 1, viewport).layout.stackColumns,
             knownAspectRatios: knownAspects,
+            table: items.some((item) => item.kind === 'table'),
           },
         );
   const cells = gridCells(layout.mediaRect, items.length, viewport, layout.framed);
@@ -722,11 +757,12 @@ function appendRichContentLayers(
     videoEmbed: 0,
     mermaid: 0,
     svg: 0,
+    table: 0,
     spatial: 0,
   };
   const mediaLayers = items.flatMap((item, index) => {
     counters[item.kind] += 1;
-    return richMediaLayers(item, cells[index], block, theme, counters[item.kind]);
+    return richMediaLayers(item, cells[index], block, theme, viewport, counters[item.kind]);
   });
   const frame: ShapeLayer | undefined = layout.framed
     ? {

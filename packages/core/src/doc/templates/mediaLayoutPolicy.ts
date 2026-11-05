@@ -15,8 +15,12 @@ import type { ViewportOrientation } from '../../schemas/Viewport.js';
 
 export type BuiltInTemplateName = TemplateBlock['template'];
 
-/** Shape of the supplemental media set after extraction. */
-export type SupplementalMediaShape = 'wide' | 'tall' | 'square' | 'multiple';
+/**
+ * Shape of the supplemental media set after extraction. A set with a table is
+ * `table` whatever its other items: a table reads across, so it is stacked
+ * under the text at the slide's full width rather than set beside it.
+ */
+export type SupplementalMediaShape = 'wide' | 'tall' | 'square' | 'multiple' | 'table';
 
 /** Designed compositions understood by the framework-free layout resolver. */
 export type SupplementalMediaLayoutVariant = 'title-stack' | 'split' | 'text-stack' | 'dense-stack';
@@ -82,18 +86,21 @@ const TITLE_VARIANTS: SupplementalMediaVariantMatrix = {
     tall: 'split',
     square: 'title-stack',
     multiple: 'title-stack',
+    table: 'title-stack',
   },
   square: {
     wide: 'title-stack',
     tall: 'split',
     square: 'title-stack',
     multiple: 'title-stack',
+    table: 'title-stack',
   },
   portrait: {
     wide: 'title-stack',
     tall: 'title-stack',
     square: 'title-stack',
     multiple: 'title-stack',
+    table: 'title-stack',
   },
 };
 
@@ -103,18 +110,21 @@ const TEXT_VARIANTS: SupplementalMediaVariantMatrix = {
     tall: 'split',
     square: 'split',
     multiple: 'split',
+    table: 'text-stack',
   },
   square: {
     wide: 'text-stack',
     tall: 'split',
     square: 'text-stack',
     multiple: 'text-stack',
+    table: 'text-stack',
   },
   portrait: {
     wide: 'text-stack',
     tall: 'text-stack',
     square: 'text-stack',
     multiple: 'text-stack',
+    table: 'text-stack',
   },
 };
 
@@ -124,18 +134,21 @@ const DENSE_VARIANTS: SupplementalMediaVariantMatrix = {
     tall: 'dense-stack',
     square: 'dense-stack',
     multiple: 'dense-stack',
+    table: 'dense-stack',
   },
   square: {
     wide: 'dense-stack',
     tall: 'dense-stack',
     square: 'dense-stack',
     multiple: 'dense-stack',
+    table: 'dense-stack',
   },
   portrait: {
     wide: 'dense-stack',
     tall: 'dense-stack',
     square: 'dense-stack',
     multiple: 'dense-stack',
+    table: 'dense-stack',
   },
 };
 
@@ -314,6 +327,34 @@ export const BLOCK_MEDIA_LAYOUT_POLICIES = {
     nativeLayout: 'accent-strip-or-inset',
     additionalMediaLayout: 'overlay-inset',
     unconsumedMedia: 'reserve-when-no-native-media',
+    variants: TEXT_VARIANTS,
+  },
+  cards: {
+    summary: 'Text-only cards by default; supplemental media is paired with the cards.',
+    noMedia: 'template-default',
+    ownership: 'supplemental',
+    unconsumedMedia: 'reserved-slot',
+    variants: DENSE_VARIANTS,
+  },
+  process: {
+    summary: 'A drawn process by default; supplemental media is paired with the stages.',
+    noMedia: 'template-default',
+    ownership: 'supplemental',
+    unconsumedMedia: 'reserved-slot',
+    variants: DENSE_VARIANTS,
+  },
+  cycle: {
+    summary: 'A drawn cycle by default; supplemental media is paired with the ring.',
+    noMedia: 'template-default',
+    ownership: 'supplemental',
+    unconsumedMedia: 'reserved-slot',
+    variants: TEXT_VARIANTS,
+  },
+  layers: {
+    summary: 'Drawn concentric layers by default; supplemental media is paired with the rings.',
+    noMedia: 'template-default',
+    ownership: 'supplemental',
+    unconsumedMedia: 'reserved-slot',
     variants: TEXT_VARIANTS,
   },
   photoGrid: {

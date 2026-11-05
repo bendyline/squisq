@@ -170,6 +170,25 @@ describe('TableLayer', () => {
     expect(cell?.textContent).toBe('Alice');
   });
 
+  it('wraps a fitted table to its box, keeping each cell’s own line breaks', () => {
+    const layer = makeTableLayer();
+    layer.content = {
+      ...layer.content,
+      rows: [['Desktop\nVulkan', '129.4', 'Seattle']],
+      wrap: true,
+    };
+    const { container } = renderTableLayer(layer);
+    const table = container.querySelector<HTMLTableElement>('table');
+    const header = container.querySelector<HTMLTableCellElement>('th');
+    const cell = container.querySelector<HTMLTableCellElement>('td');
+
+    expect(table?.style.width).toBe('100%');
+    expect(header?.style.whiteSpace).toBe('pre-line');
+    expect(cell?.style.whiteSpace).toBe('pre-line');
+    expect(cell?.style.verticalAlign).toBe('top');
+    expect(cell?.textContent).toBe('Desktop\nVulkan');
+  });
+
   it('lets an owning block provide interactive table content with the native table as fallback', () => {
     const renderer = vi.fn(
       ({

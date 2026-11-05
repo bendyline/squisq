@@ -36,6 +36,10 @@ If none of these finds a number, the heading itself is shown as the big figure.
 - **Heading** — when the body supplies both the number and its description, the heading isn't
   drawn on the slide. Write it for your outline and for readers of the Markdown.
 - **`detail=`** — an optional smaller line under the description, such as a source or a date.
+- **`headline=`** — an optional headline above the figure. With one, the slide takes the
+  headline and accent rule of [Cards](cards.md), [Process](process.md) and the other concept
+  blocks, with the figure on the left and what it means beside it, so a key number sits in a
+  deck of them as one design. Dynamic-slides decks set it on their key-number slides.
 - **An image** — the first one in the body becomes an accent strip down the left edge (along the
   bottom on a portrait stage).
 

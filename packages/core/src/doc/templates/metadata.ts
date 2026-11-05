@@ -101,6 +101,22 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     label: 'List',
     description: 'Renders a bulleted or numbered list in a clean, card-style layout.',
   },
+  cards: {
+    label: 'Cards',
+    description: 'Shows two to six parallel ideas side by side as cards, each revealed in turn.',
+  },
+  process: {
+    label: 'Process',
+    description: 'Shows an ordered process as numbered stages joined by arrows.',
+  },
+  cycle: {
+    label: 'Cycle',
+    description: 'Arranges the stages of a cycle on a ring, the last leading back to the first.',
+  },
+  layers: {
+    label: 'Layers',
+    description: 'Draws nested parts as concentric rings, innermost first, each one called out.',
+  },
   photoGrid: {
     label: 'Photo Grid',
     description: 'Arranges up to four photos in a mosaic grid.',
