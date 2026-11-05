@@ -794,15 +794,15 @@ describe('authored sections and summary layouts', () => {
       template: 'fullBleedQuote',
       text: 'A ledger records every sale.',
     });
-    expect(slide(doc, prefer('terms', 'emphasis'), 'terms').block).toMatchObject({
-      template: 'bigText',
-      title: 'Terms',
-    });
-    // A definition's term heads the slide, its defining sentences beneath it.
+    // A big statement stands alone, in the deck's headline face.
+    const emphasis = slide(doc, prefer('terms', 'emphasis'), 'terms').block;
+    expect(emphasis).toMatchObject({ template: 'cards', items: ['Terms'] });
+    expect(emphasis.title).toBeUndefined();
+    // A definition's term heads the slide, its defining sentences one paragraph beneath it.
     expect(slide(doc, prefer('terms', 'definition'), 'terms').block).toMatchObject({
       template: 'cards',
       title: 'Terms',
-      items: ['A ledger records every sale.', 'It never loses an entry.'],
+      items: ['A ledger records every sale. It never loses an entry.'],
     });
     expect(slide(doc, prefer('terms', 'divider'), 'terms').block).toMatchObject({
       template: 'sectionHeader',

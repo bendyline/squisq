@@ -922,7 +922,8 @@ export function deriveTemplateInputs(
     }
     case 'cards':
     case 'process':
-    case 'cycle': {
+    case 'cycle':
+    case 'layers': {
       // Each list item is an idea; without a list, each paragraph is one.
       const listed = extractListItems(contents);
       const items = listed.length
@@ -941,7 +942,13 @@ export function deriveTemplateInputs(
                     'Second idea: how it differs',
                     'Third idea: why it helps',
                   ]
-                : ['Begin: the first stage', 'Grow: what happens next', 'Finish: where it leads'],
+                : templateName === 'layers'
+                  ? [
+                      'Core: the innermost part',
+                      'Middle: what surrounds it',
+                      'Outer: the outermost layer',
+                    ]
+                  : ['Begin: the first stage', 'Grow: what happens next', 'Finish: where it leads'],
           }
         : null;
     }

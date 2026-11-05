@@ -2967,55 +2967,58 @@
 }
 
 .anim-fadeIn {
-  animation: fadeIn var(--anim-duration, 1s) var(--anim-easing, ease-out) var(--anim-delay, 0s) both;
+  animation: fadeIn var(--anim-duration, 1s) var(--anim-easing, ease-out)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-fadeOut {
-  animation: fadeOut var(--anim-duration, 1s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    both;
+  animation: fadeOut var(--anim-duration, 1s) var(--anim-easing, ease-out)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-fadeInUp {
-  animation: fadeInUp var(--anim-duration, 0.6s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    both;
+  animation: fadeInUp var(--anim-duration, 0.6s) var(--anim-easing, ease-out)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-slowZoom-in {
-  animation: slowZoomIn var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s)
-    both;
+  animation: slowZoomIn var(--anim-duration, 8s) var(--anim-easing, linear)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-slowZoom-out {
-  animation: slowZoomOut var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s)
-    both;
+  animation: slowZoomOut var(--anim-duration, 8s) var(--anim-easing, linear)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-slowZoom-panLeft {
   animation: slowZoomCombinedPanLeft var(--anim-duration, 8s) var(--anim-easing, linear)
-    var(--anim-delay, 0s) both;
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-slowZoom-panRight {
   animation: slowZoomCombinedPanRight var(--anim-duration, 8s) var(--anim-easing, linear)
-    var(--anim-delay, 0s) both;
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-zoomIn {
-  animation: zoomIn var(--anim-duration, 0.5s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    both;
+  animation: zoomIn var(--anim-duration, 0.5s) var(--anim-easing, ease-out)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-zoomOut {
-  animation: zoomOut var(--anim-duration, 0.5s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    both;
+  animation: zoomOut var(--anim-duration, 0.5s) var(--anim-easing, ease-out)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-panLeft {
-  animation: panLeft var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) both;
+  animation: panLeft var(--anim-duration, 8s) var(--anim-easing, linear)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-panRight {
-  animation: panRight var(--anim-duration, 8s) var(--anim-easing, linear) var(--anim-delay, 0s) both;
+  animation: panRight var(--anim-duration, 8s) var(--anim-easing, linear)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .squisq-image--portrait-pan-right {
@@ -3032,7 +3035,7 @@
 
 .anim-typewriter {
   animation: typewriter var(--anim-duration, 2s) var(--anim-easing, steps(40, end))
-    var(--anim-delay, 0s) both;
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 /* ============================================
@@ -3056,94 +3059,105 @@
 
 .anim-slideIn-left {
   animation: layerSlideInLeft var(--anim-duration, 0.7s)
-    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-slideIn-right {
   animation: layerSlideInRight var(--anim-duration, 0.7s)
-    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-slideIn-top {
   animation: layerSlideInTop var(--anim-duration, 0.7s)
-    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-slideIn-bottom {
   animation: layerSlideInBottom var(--anim-duration, 0.7s)
-    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-grow {
   animation: growIn var(--anim-duration, 1s) var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
-    var(--anim-delay, 0s) both;
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-grow-x {
   animation: growX var(--anim-duration, 1s) var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
-    var(--anim-delay, 0s) both;
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-grow-y {
   animation: growY var(--anim-duration, 1s) var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
-    var(--anim-delay, 0s) both;
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 /* The path itself draws (pathLength="1" makes one dash unit the whole path);
    endpoint markers sit on a stroke-less twin that appears as the line lands. */
 .anim-drawOn [data-squisq-draw='stroke'] {
   stroke-dasharray: 1;
-  animation: drawOn var(--anim-duration, 1s) var(--anim-easing, ease-in-out) var(--anim-delay, 0s)
-    both;
+  animation: drawOn var(--anim-duration, 1s) var(--anim-easing, ease-in-out)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-drawOn [data-squisq-draw='markers'] {
-  animation: drawOnMarkers var(--anim-duration, 1s) linear var(--anim-delay, 0s) both;
+  animation: drawOnMarkers var(--anim-duration, 1s) linear
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-reveal-left {
   animation: revealFromLeft var(--anim-duration, 0.7s)
-    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-reveal-right {
   animation: revealFromRight var(--anim-duration, 0.7s)
-    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-reveal-top {
   animation: revealFromTop var(--anim-duration, 0.7s)
-    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-reveal-bottom {
   animation: revealFromBottom var(--anim-duration, 0.7s)
-    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-reveal-iris {
   animation: revealIris var(--anim-duration, 0.9s)
-    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1)) var(--anim-delay, 0s) both;
+    var(--anim-easing, cubic-bezier(0.22, 1, 0.36, 1))
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 /* Words carry their own --anim-delay (see TextLayer); the group only hosts vars. */
 .anim-wordReveal .anim-word {
-  animation: wordIn var(--anim-duration, 0.4s) var(--anim-easing, ease-out) var(--anim-delay, 0s)
-    both;
+  animation: wordIn var(--anim-duration, 0.4s) var(--anim-easing, ease-out)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 /* Digits come from the block clock; the class only softens the arrival. */
 .anim-countUp {
-  animation: fadeIn 0.3s ease-out var(--anim-delay, 0s) both;
+  animation: fadeIn 0.3s ease-out calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 .anim-drift {
-  animation: drift var(--anim-duration, 12s) ease-in-out var(--anim-delay, 0s) infinite;
+  animation: drift var(--anim-duration, 12s) ease-in-out
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) infinite;
 }
 
 .anim-tween {
-  animation: tween var(--anim-duration, 1s) var(--anim-easing, ease-in-out) var(--anim-delay, 0s)
-    both;
+  animation: tween var(--anim-duration, 1s) var(--anim-easing, ease-in-out)
+    calc(var(--anim-delay, 0s) + var(--squisq-step-offset, 0s)) both;
 }
 
 /* Offline capture repositions animations by seeking their timeline; CSS

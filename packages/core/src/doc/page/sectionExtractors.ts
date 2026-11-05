@@ -30,6 +30,7 @@ import type {
   CardsBlockInput,
   ProcessBlockInput,
   CycleBlockInput,
+  LayersBlockInput,
   PhotoGridInput,
   PullQuoteInput,
   QuoteBlockInput,
@@ -340,9 +341,9 @@ const list: SectionExtractor = (input) => {
   };
 };
 
-/** Cards, a process or a cycle reads on a page as a list of titled items. */
+/** Cards, a process, a cycle or layers read on a page as a list of titled items. */
 const concept: SectionExtractor = (input) => {
-  const c = input as CardsBlockInput | ProcessBlockInput | CycleBlockInput;
+  const c = input as CardsBlockInput | ProcessBlockInput | CycleBlockInput | LayersBlockInput;
   return {
     kind: 'item-list',
     slots: {
@@ -570,6 +571,7 @@ export const sectionExtractors: Record<string, SectionExtractor> = {
   cards: concept,
   process: concept,
   cycle: concept,
+  layers: concept,
   photoGrid,
   definitionCard,
   comparisonBar,

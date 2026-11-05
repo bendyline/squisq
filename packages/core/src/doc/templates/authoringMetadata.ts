@@ -161,6 +161,12 @@ export const TEMPLATE_AUTHORING_METADATA = {
     safeForContentFirst: false,
     placement: 'heading',
   },
+  layers: {
+    role: 'content',
+    bodyPolicy: 'derived',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
   photoGrid: {
     role: 'media',
     bodyPolicy: 'structured',

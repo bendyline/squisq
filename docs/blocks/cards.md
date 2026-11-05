@@ -31,7 +31,10 @@ Choose it over [List](list.md) when each point has a name and a short explanatio
   words each; five or six sit three to a row. On a portrait stage the cards stack.
 - **Type** — every card on a slide sets in the same sizes, which grow when the ideas are short and
   step down when they run long, without ever breaking a word.
-- **A single unlabelled item** — sets as a lead paragraph beside an accent bar instead of one card.
+- **A single unlabelled item** — sets as a lead paragraph beside an accent bar instead of one card;
+  without a heading, it is a display statement in the headline's face instead.
+- **`versus=true`** — two items stand against each other: a panel each, with a "vs" mark on the
+  seam between them. Dynamic-slides decks draw their two-sided comparisons this way.
 
 ## Revealed one at a time
 

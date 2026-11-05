@@ -265,6 +265,11 @@ export interface StatHighlightInput extends BaseTemplateBlock {
   description: string;
   /** Additional detail or context */
   detail?: string;
+  /**
+   * Optional deck headline. With one, the slide takes the concept blocks'
+   * lockup: accent rule and headline above, the figure beside what it means.
+   */
+  headline?: string;
   /** Color scheme for the stat */
   colorScheme?: ColorScheme;
   /** Optional accent image to complement the text */
@@ -521,6 +526,8 @@ interface ConceptBlockBase extends BaseTemplateBlock {
 /** Parallel ideas side by side as cards. */
 export interface CardsBlockInput extends ConceptBlockBase {
   template: 'cards';
+  /** Two ideas set against each other: two panels with a "vs" mark between them. */
+  versus?: boolean;
 }
 
 /** An ordered process: numbered stages joined by arrows. */
@@ -531,6 +538,11 @@ export interface ProcessBlockInput extends ConceptBlockBase {
 /** A cycle: stages on a ring, the last leading back to the first. */
 export interface CycleBlockInput extends ConceptBlockBase {
   template: 'cycle';
+}
+
+/** Nested parts, innermost first: concentric rings, each part called out beside them. */
+export interface LayersBlockInput extends ConceptBlockBase {
+  template: 'layers';
 }
 
 /**
@@ -992,6 +1004,7 @@ export type TemplateBlock =
   | CardsBlockInput
   | ProcessBlockInput
   | CycleBlockInput
+  | LayersBlockInput
   | PhotoGridInput
   | DefinitionCardInput
   | ComparisonBarInput

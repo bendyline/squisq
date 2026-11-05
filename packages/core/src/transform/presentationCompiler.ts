@@ -271,7 +271,7 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
       : { segments: [{ src: '', name: 'presentation-clock', startTime: 0, duration }] },
   };
 }
-const CONCEPT_TEMPLATES = ['cards', 'process', 'cycle'] as const;
+const CONCEPT_TEMPLATES = ['cards', 'process', 'cycle', 'layers'] as const;
 function conceptTemplate(template: string): (typeof CONCEPT_TEMPLATES)[number] | undefined {
   return CONCEPT_TEMPLATES.find((name) => name === template);
 }
@@ -319,6 +319,9 @@ function conceptReveal(
   const starts = offsets.map((offset) =>
     Math.min(Math.max(0, end - start - 0.1), Math.max(lead, timeAt(offset) - start)),
   );
+  // The first idea lands as the headline settles even when its sentence comes
+  // later, so a slide never sits on its headline alone while the passage opens.
+  starts[0] = Math.min(starts[0]!, Math.max(lead, Math.min(1, (end - start) / 6)));
   return {
     build,
     buildTiming: {
@@ -373,25 +376,38 @@ function visualBlock(
     case 'divider':
       return { ...base, template: 'sectionHeader', title: beat.headline, colorScheme };
     case 'emphasis':
-      return { ...base, template: 'bigText', title: beat.headline };
+      // One untitled idea: a display statement in the deck's headline face.
+      return { ...base, template: 'cards', items: [beat.headline] };
     case 'quote':
       return { ...base, template: 'fullBleedQuote', text: beat.headline, colorScheme };
     case 'stat': {
       // The plan only holds key-number slides that state a prominent number.
       const { match, line, index: at } = presentationStat(beat.headline, beat.points)!;
-      const detail = beat.points.find((_, i) => i !== at) ?? (at < 0 ? undefined : beat.headline);
+      // The headline heads the slide in the deck's lockup; the figure sits
+      // beside the point that states it, or the points that follow a headline
+      // that states it.
+      const others = beat.points.filter((_, i) => i !== at);
+      const [description, detail] = at < 0 ? others : [line, others[0]];
       return {
         ...base,
         template: 'statHighlight',
+        headline: beat.headline,
         stat: match.value,
-        description: line,
+        description: description ?? '',
         ...(detail ? { detail } : {}),
       };
     }
     case 'definition':
-      // The term is the headline and its defining points sit under it in the
-      // deck's lockup (a lead paragraph, or cards when there are several).
-      return { ...base, template: 'cards', title: beat.headline, items: beat.points };
+      // The term is the headline and its definition reads as one lead
+      // paragraph under it: points that define one term are one thought.
+      return {
+        ...base,
+        template: 'cards',
+        title: beat.headline,
+        items: beat.points.length
+          ? [beat.points.map((point) => point.trim().replace(/([^.!?])$/u, '$1.')).join(' ')]
+          : [],
+      };
     case 'statement':
       // A statement shares the deck's lockup: its sentences set as a lead
       // paragraph (one) or cards (several) under the headline.
@@ -399,10 +415,17 @@ function visualBlock(
         ? { ...base, template: 'cards', title: beat.headline, items: beat.points }
         : { ...base, template: 'factCard', fact: beat.headline, explanation: '' };
     case 'list':
-    case 'comparison':
-      // Summary points are not a sequence, so a list sets as cards, in the
-      // deck's lockup; a comparison's two sides stand side by side as two.
+      // Summary points are not a sequence, so a list sets as cards, in the deck's lockup.
       return { ...base, template: 'cards', title: beat.headline, items: beat.points };
+    case 'comparison':
+      // A comparison's two sides stand against each other across a "vs" mark.
+      return {
+        ...base,
+        template: 'cards',
+        title: beat.headline,
+        items: beat.points,
+        ...(beat.points.length === 2 ? { versus: true } : {}),
+      };
     case 'image':
       return {
         ...base,
@@ -420,6 +443,8 @@ function visualBlock(
       return { ...base, template: 'cards', title: beat.headline, items: beat.points };
     case 'cycle':
       return { ...base, template: 'cycle', title: beat.headline, items: beat.points };
+    case 'layers':
+      return { ...base, template: 'layers', title: beat.headline, items: beat.points };
   }
 }
 export function applySavedPresentation(doc: Doc): Doc {

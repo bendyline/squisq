@@ -445,6 +445,20 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
     ),
   },
   {
+    name: 'layers',
+    label: 'Layers',
+    description: 'Draws nested parts as concentric rings, innermost first, each one called out.',
+    icon: (
+      <TemplateIcon>
+        <circle cx={22} cy={21} r={13} fill={FA} opacity={0.3} />
+        <circle cx={22} cy={21} r={8.5} fill={FA} opacity={0.55} />
+        <circle cx={22} cy={21} r={4} fill={FA} />
+        <rect x={39} y={13} width={12} height={3} rx={1} fill={F2} />
+        <rect x={39} y={26} width={12} height={3} rx={1} fill={F2} />
+      </TemplateIcon>
+    ),
+  },
+  {
     name: 'photoGrid',
     label: 'Photo Grid',
     description: 'Arranges up to four photos in a mosaic grid.',

@@ -68,6 +68,7 @@ export const TEMPLATE_TOKEN_NAMES: ReadonlySet<string> = new Set([
   'cards',
   'process',
   'cycle',
+  'layers',
   'photoGrid',
   'definitionCard',
   'comparisonBar',

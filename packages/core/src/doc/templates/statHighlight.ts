@@ -48,6 +48,7 @@ import {
   DEFAULT_LAYOUT,
 } from './accentImage.js';
 import { createBackgroundLayer, fitProse } from './captionUtils.js';
+import { figureLockup } from './conceptBlocks.js';
 
 /**
  * Hint schema published for the theme validator + future customizer hint UI.
@@ -75,6 +76,8 @@ const DESC_LINE_HEIGHT = 1.5;
 const DETAIL_LINE_HEIGHT = 1.4;
 
 export function statHighlight(input: StatHighlightInput, context: TemplateContext): Layer[] {
+  // With a headline the figure joins the concept slides' lockup.
+  if (input.headline?.trim() && !input.accentImage) return figureLockup(input, context);
   const { stat, colorScheme } = input;
   const { theme, viewport } = context;
   const accentImage = accentForViewport(input.accentImage, viewport);

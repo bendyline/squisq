@@ -21,6 +21,7 @@ export const PRESENTATION_LAYOUTS = [
   'cards',
   'process',
   'cycle',
+  'layers',
 ] as const;
 export type PresentationLayout = (typeof PRESENTATION_LAYOUTS)[number];
 /** Shows a section's own block, with the template its author chose, instead of
@@ -59,6 +60,7 @@ export function presentationLayoutFits(
     case 'process':
       return points.length >= 2;
     case 'cycle':
+    case 'layers':
       return points.length >= 3;
     case 'comparison':
       return points.length === 2;

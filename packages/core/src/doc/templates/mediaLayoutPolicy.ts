@@ -350,6 +350,13 @@ export const BLOCK_MEDIA_LAYOUT_POLICIES = {
     unconsumedMedia: 'reserved-slot',
     variants: TEXT_VARIANTS,
   },
+  layers: {
+    summary: 'Drawn concentric layers by default; supplemental media is paired with the rings.',
+    noMedia: 'template-default',
+    ownership: 'supplemental',
+    unconsumedMedia: 'reserved-slot',
+    variants: TEXT_VARIANTS,
+  },
   photoGrid: {
     summary: 'Requires a primary image collection and owns the complete tiled media field.',
     noMedia: 'unsupported',

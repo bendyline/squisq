@@ -7,11 +7,22 @@
  * `expandDocBlocks`), renders every slide as it settles, measures each frame,
  * and publishes the plan and metrics on `window.__SQUISQ_DECK_REVIEW__` for
  * the driver to screenshot and score.
+ *
+ * With `&film=1` it instead draws each slide at the moments its motion plays
+ * (its opening entrances, each build step as it reveals, its settled end),
+ * builds timed and every animation seeked to that moment as video export
+ * seeks them, so a reviewer can judge the motion from a filmstrip.
  */
 import { useEffect, useState } from 'react';
 import { BlockRenderer } from '@bendyline/squisq-react';
 import { parseMarkdown, setFrontmatterValues } from '@bendyline/squisq/markdown';
-import { buildPreviewDoc, expandDocBlocks, markdownToDoc } from '@bendyline/squisq/doc';
+import {
+  blockBuildSteps,
+  buildPreviewDoc,
+  expandDocBlocks,
+  markdownToDoc,
+  resolveBuildTimeline,
+} from '@bendyline/squisq/doc';
 import {
   DYNAMIC_PRESENTATION_STYLE,
   PRESENTATION_HINTS_KEY,
@@ -38,6 +49,8 @@ export interface DeckReviewSlide {
   points?: string[];
   media?: string[];
   metrics?: SwatchMetrics;
+  /** Film mode: the seconds into the slide each frame shows. */
+  frames?: number[];
 }
 
 export interface DeckReviewState {
@@ -68,7 +81,11 @@ interface Deck {
   density: string;
 }
 
-async function buildDeck(name: string, themeId: string | null, density: string | null): Promise<Deck> {
+async function buildDeck(
+  name: string,
+  themeId: string | null,
+  density: string | null,
+): Promise<Deck> {
   const response = await fetch(`/deck-review-docs/${encodeURIComponent(name)}`);
   if (!response.ok) throw new Error(`Document "${name}" is not served (${response.status}).`);
   const markdown = await response.text();
@@ -123,6 +140,35 @@ async function buildDeck(name: string, themeId: string | null, density: string |
   };
 }
 
+/**
+ * Moments worth seeing on a slide: its opening entrances, each build step
+ * just after it reveals and once it has settled, and the slide's end.
+ */
+function filmTimes(block: Block): number[] {
+  const end = Math.max(0.1, block.duration - 0.05);
+  const times = [0.2, 0.6, 1.2];
+  const steps = blockBuildSteps(block);
+  if (block.build && block.build.mode !== 'off' && steps.length) {
+    const timeline = resolveBuildTimeline(steps, block.build, block.duration, block.buildTiming);
+    for (const start of timeline.starts) times.push(start + 0.15, start + 0.45);
+  }
+  times.push(end);
+  return [...new Set(times.filter((t) => t <= end).map((t) => Number(t.toFixed(2))))].sort(
+    (a, b) => a - b,
+  );
+}
+
+/** Pause every animation in each film frame at the frame's moment, as video export seeks them. */
+function seekFilmFrames(): void {
+  for (const frame of document.querySelectorAll<HTMLElement>('section.deck-frame')) {
+    const time = Number(frame.dataset.time) * 1000;
+    for (const animation of frame.getAnimations({ subtree: true })) {
+      animation.pause();
+      animation.currentTime = time;
+    }
+  }
+}
+
 const twoFrames = (): Promise<void> =>
   new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
 
@@ -132,7 +178,9 @@ function waitForMermaid(deadlineMs: number): Promise<void> {
   return new Promise((resolve) => {
     const started = performance.now();
     const tick = () => {
-      const settled = frames.every((f) => f.querySelector('svg') || f.querySelector('[data-error]'));
+      const settled = frames.every(
+        (f) => f.querySelector('svg') || f.querySelector('[data-error]'),
+      );
       if (settled || performance.now() - started > deadlineMs) resolve();
       else window.setTimeout(tick, 100);
     };
@@ -144,6 +192,7 @@ export function DeckReviewApp() {
   const name = query('doc');
   const themeId = query('theme');
   const density = query('density');
+  const film = query('film') === '1';
   /** Seconds into each slide to draw: late enough for every entrance to settle. */
   const at = Number(query('at') ?? '30');
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -170,12 +219,17 @@ export function DeckReviewApp() {
       .then(() => new Promise((resolve) => window.setTimeout(resolve, 150)))
       .then(twoFrames)
       .then(() => {
+        if (film) seekFilmFrames();
+      })
+      .then(twoFrames)
+      .then(() => {
         if (cancelled) return;
         const viewport = VIEWPORT_PRESETS.landscape;
         const slides = deck.slides.map((slide) => {
           const frame = document.querySelector<HTMLElement>(
             `section.deck-slide[data-index="${slide.index}"]`,
           );
+          if (film) return { ...slide, frames: filmTimes(deck.blocks[slide.index]!) };
           return frame ? { ...slide, metrics: measureFrame(frame, viewport, []) } : slide;
         });
         publish({
@@ -190,11 +244,44 @@ export function DeckReviewApp() {
     return () => {
       cancelled = true;
     };
-  }, [deck, name]);
+  }, [deck, name, film]);
 
-  if (!name) return <p className="deck-label">Add ?doc=&lt;name&gt;&amp;theme=&lt;id&gt; to render.</p>;
+  if (!name)
+    return <p className="deck-label">Add ?doc=&lt;name&gt;&amp;theme=&lt;id&gt; to render.</p>;
   if (error) return <section className="deck-error">{error}</section>;
   if (!deck) return <p className="deck-label">Building {name}…</p>;
+  if (film)
+    return (
+      <main className="deck-page">
+        {deck.blocks.map((block, index) =>
+          filmTimes(block).map((time, frame) => (
+            <section
+              key={`${block.id}-${frame}`}
+              className="deck-slide deck-frame"
+              data-index={index}
+              data-frame={frame}
+              data-time={time}
+              style={{
+                width: CSS.width,
+                height: CSS.height,
+                background: deck.theme.colors.background,
+              }}
+            >
+              <BlockRenderer
+                block={block}
+                blockTime={time}
+                basePath="/"
+                viewport={VIEWPORT_PRESETS.landscape}
+                isPlaying={false}
+                respectReducedMotion={false}
+                buildPlayback="timed"
+                theme={deck.theme}
+              />
+            </section>
+          )),
+        )}
+      </main>
+    );
   return (
     <main className="deck-page">
       {deck.blocks.map((block, index) => (
@@ -206,7 +293,11 @@ export function DeckReviewApp() {
           <section
             className="deck-slide"
             data-index={index}
-            style={{ width: CSS.width, height: CSS.height, background: deck.theme.colors.background }}
+            style={{
+              width: CSS.width,
+              height: CSS.height,
+              background: deck.theme.colors.background,
+            }}
           >
             <BlockRenderer
               block={block}

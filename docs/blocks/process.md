@@ -28,6 +28,9 @@ process ends rather than starting again.
 - **No list** — each paragraph becomes a stage.
 - **Layout** — up to four short stages run across the slide, words beneath each number; more
   stages, longer ones, or a portrait stage stack down a rail with the words beside each number.
+- **Dates** — when every stage opens with a date in order (`1859 Carrington Event: …`,
+  `July 1969: …`), the stages are stations on a timeline instead: each date above its station,
+  the track drawing forward through time and running on past the last.
 
 ## Revealed one at a time
 

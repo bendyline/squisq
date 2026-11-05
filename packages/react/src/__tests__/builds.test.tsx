@@ -81,6 +81,51 @@ describe('slide and video builds', () => {
     ).toBe(true);
   });
 
+  it('times a building step’s entrances from its reveal, keeping their order within it', () => {
+    const [block] = expandDocBlocks(
+      [
+        {
+          id: 'kinds',
+          template: 'cards',
+          title: 'Kinds',
+          items: ['Live: two doses', 'Non-live: three or more'],
+          startTime: 0,
+          duration: 12,
+          audioSegment: 0,
+          build: { mode: 'items', effect: 'fadeInUp' },
+          buildTiming: { sourceText: '', starts: [] },
+        } as unknown as DocBlock,
+      ],
+      { motion: 'documentary' },
+    );
+    const steps = [0, 1].map((index) =>
+      Math.min(
+        ...block!.layers!.filter((l) => l.buildStep === index).map((l) => l.animation!.delay!),
+      ),
+    );
+    const view = render(
+      <BlockRenderer block={block!} blockTime={9} basePath="." buildPlayback="timed" />,
+    );
+    const offsets = [0, 1].map((index) => {
+      const group = view.container.querySelector<SVGGElement>(
+        `g[data-squisq-build-step="${index}"]`,
+      )!;
+      return parseFloat(group.style.getPropertyValue('--squisq-step-offset'));
+    });
+    // Each step's earliest entrance starts at its reveal; the rest follow at
+    // their authored spacing, since the offset shifts the whole step.
+    const starts = [0, 1].map((index) => offsets[index]! + steps[index]!);
+    expect(starts[0]).toBeGreaterThanOrEqual(0);
+    expect(starts[1]).toBeGreaterThan(starts[0]!);
+    expect(starts[1]).toBeLessThan(12);
+    // A step whose layers enter on their own is not also moved as a group.
+    const shown = view.container.querySelector<SVGGElement>('g[data-squisq-build-step="0"]')!;
+    expect(shown.style.transform).toBe('translate(0px, 0px)');
+    // Played without a build, the template's own stagger stands.
+    view.rerender(<BlockRenderer block={block!} blockTime={9} basePath="." />);
+    expect(shown.style.getPropertyValue('--squisq-step-offset')).toBe('');
+  });
+
   it('Next and Previous traverse steps before slides, including the last slide', async () => {
     const view = render(
       <DocPlayer

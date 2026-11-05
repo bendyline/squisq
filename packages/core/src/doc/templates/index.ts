@@ -746,6 +746,7 @@ export {
   cardsBlock,
   conceptBuildStepTexts,
   cycleBlock,
+  layersBlock,
   processBlock,
   splitConceptItem,
 } from './conceptBlocks.js';

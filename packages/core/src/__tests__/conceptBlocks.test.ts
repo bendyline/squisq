@@ -90,6 +90,101 @@ describe('concept blocks', () => {
     expect(layers.some((layer) => layer.id === 'lead')).toBe(true);
     expect(layers.some((layer) => layer.id.startsWith('card-'))).toBe(false);
   });
+
+  it('draws dated stages as a timeline, and undated or backward ones as numbered stages', () => {
+    const events = [
+      '1859 Carrington Event: telegraphs failed and auroras lit the sky',
+      'July 1969: Apollo 11 lands on the Moon',
+      '1989 Quebec blackout: six million people lost power',
+    ];
+    const layers = layersOf(block('process', events));
+    expect(layers.filter((layer) => /^station-\d$/u.test(layer.id))).toHaveLength(3);
+    const when = layers.find((layer) => layer.id === 'station-1-when');
+    expect(when?.type === 'text' && when.content.text).toBe('July 1969');
+    const label = layers.find((layer) => layer.id === 'station-0-label');
+    expect(label?.type === 'text' && label.content.text).toBe('Carrington Event');
+    // The compiler names a timeline's steps as it draws them.
+    const steps = blockBuildSteps({ layers, build: { mode: 'items' } });
+    expect(steps.map((s) => s.text)).toEqual(conceptBuildStepTexts('process', events));
+    // Dates that run backward, or figures that only look like years, stay a process.
+    for (const items of [
+      [...events].reverse(),
+      ['330,000 Earths: its mass', '1.3 million: its volume'],
+    ])
+      expect(layersOf(block('process', items)).some((layer) => layer.id === 'station-0')).toBe(
+        false,
+      );
+  });
+
+  it('sets two contrasting sides across a "vs" mark that belongs to neither', () => {
+    const sides = ['Mac: 128 GB preferred', 'Windows: 64 GB RTX Spark'];
+    const layers = layersOf({ ...block('cards', sides), versus: true } as unknown as Block);
+    const mark = layers.find((layer) => layer.id === 'versus-mark-text');
+    expect(mark).toBeDefined();
+    expect(mark?.buildStep).toBeUndefined();
+    expect(layers.filter((layer) => /^side-\d$/u.test(layer.id))).toHaveLength(2);
+    const steps = blockBuildSteps({ layers, build: { mode: 'items' } });
+    expect(steps.map((s) => s.text)).toEqual(conceptBuildStepTexts('cards', sides));
+  });
+
+  it('draws nested parts as rings, innermost on top, each called out in its own step', () => {
+    const parts = [
+      'Core: fuses hydrogen into helium',
+      'Radiative zone: light bounces outward',
+      'Convection zone: hot plasma rises',
+    ];
+    const layers = layersOf(block('layers', parts));
+    const rings = layers.filter((layer) => /^layer-\d$/u.test(layer.id));
+    // Outermost first in the stack, so each inner ring sits on the ones around it.
+    expect(rings.map((ring) => ring.id)).toEqual(['layer-2', 'layer-1', 'layer-0']);
+    expect(Number(rings[0]!.position.width)).toBeGreaterThan(Number(rings[2]!.position.width));
+    const steps = blockBuildSteps({ layers, build: { mode: 'items' } });
+    expect(steps.map((s) => s.text)).toEqual(conceptBuildStepTexts('layers', parts));
+    expect(layers.find((layer) => layer.id === 'layer-0')?.buildStep).toBe(0);
+  });
+
+  it('assembles each idea as it arrives: connectors draw, badges pop, words rise', () => {
+    const [documentary] = expandDocBlocks([block('process', water.slice(0, 3))], {
+      motion: 'documentary',
+    });
+    const animation = (id: string) =>
+      documentary!.layers!.find((layer) => layer.id === id)?.animation;
+    expect(animation('step-1-arrow')?.type).toBe('drawOn');
+    expect(animation('step-1')).toMatchObject({ type: 'grow', origin: 'center' });
+    expect(animation('step-1-label')?.type).toBe('fadeInUp');
+    // Within an item: the arrow, then the badge at its head, then the words.
+    expect(animation('step-1')!.delay!).toBeGreaterThan(animation('step-1-arrow')!.delay!);
+    expect(animation('step-1-label')!.delay!).toBeGreaterThan(animation('step-1')!.delay!);
+    // Calm fades everything in.
+    const [calm] = expandDocBlocks([block('process', water.slice(0, 3))], { motion: 'calm' });
+    expect(calm!.layers!.find((layer) => layer.id === 'step-1-arrow')?.animation?.type).toBe(
+      'fadeIn',
+    );
+  });
+
+  it('sets a key number with a headline in the deck lockup, its scale beneath it', () => {
+    const [stat] = expandDocBlocks([
+      {
+        id: 'corona',
+        template: 'statHighlight',
+        headline: 'The corona is far hotter than the surface',
+        stat: '3.5 million',
+        description: 'The corona heats up to 3.5 million degrees',
+        detail: 'Its heating source is a major unsolved puzzle',
+        startTime: 0,
+        duration: 8,
+        audioSegment: 0,
+      } as unknown as Block,
+    ]);
+    const text = (id: string) => {
+      const layer = stat!.layers!.find((item) => item.id === id);
+      return layer?.type === 'text' ? layer.content.text : undefined;
+    };
+    expect(stat!.layers!.some((layer) => layer.id === 'accent-rule')).toBe(true);
+    expect(text('title')).toBe('The corona is far hotter than the surface');
+    expect(text('stat')).toBe('3.5');
+    expect(text('stat-unit')).toBe('million');
+  });
 });
 
 describe('dynamic slides drawn as concepts', () => {
@@ -133,6 +228,8 @@ describe('dynamic slides drawn as concepts', () => {
     expect(starts).toHaveLength(4);
     for (let i = 1; i < starts.length; i++) expect(starts[i]!).toBeGreaterThan(starts[i - 1]!);
     expect(starts[starts.length - 1]!).toBeLessThan(cycle.duration);
+    // The first idea lands as the headline settles, never leaving the headline alone.
+    expect(starts[0]!).toBeLessThanOrEqual(1);
     // The timing names the same steps the drawn block reveals.
     const steps = blockBuildSteps(expandDocBlocks([cycle])[0]!);
     expect(cycle.buildTiming!.sourceText).toBe(buildSourceText(steps));
@@ -145,5 +242,11 @@ describe('key-number matching', () => {
     expect(matchNumberHighlight('a flight of 195 hours')?.value).toBe('195 hours');
     expect(matchNumberHighlight('natural gas is 70% methane')?.value).toBe('70%');
     expect(matchNumberHighlight('raised $3 million')?.value).toBe('$3 million');
+  });
+
+  it('never takes one side of a dimension as the figure', () => {
+    expect(matchNumberHighlight('its first orbit was 69 by 190 miles')).toBeNull();
+    expect(matchNumberHighlight('a 1920 x 1080 frame')).toBeNull();
+    expect(matchNumberHighlight('it weighs 2,400 pounds')?.value).toBe('2,400');
   });
 });

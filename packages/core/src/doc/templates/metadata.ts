@@ -113,6 +113,10 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     label: 'Cycle',
     description: 'Arranges the stages of a cycle on a ring, the last leading back to the first.',
   },
+  layers: {
+    label: 'Layers',
+    description: 'Draws nested parts as concentric rings, innermost first, each one called out.',
+  },
   photoGrid: {
     label: 'Photo Grid',
     description: 'Arranges up to four photos in a mosaic grid.',

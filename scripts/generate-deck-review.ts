@@ -8,6 +8,7 @@
  *   npm run screenshots:decks -- --theme warm-earth,documentary --density section
  *   npm run screenshots:decks -- --doc reports/deck-review/corpus-local/tonga.md
  *   npm run screenshots:decks -- --out reports/deck-review/after-typography
+ *   npm run screenshots:decks -- --film --doc scripts/deck-review/corpus/our-sun.md
  *
  * Documents default to the public-domain corpus in scripts/deck-review/corpus
  * plus any local documents in reports/deck-review/corpus-local (gitignored).
@@ -20,6 +21,8 @@
  *   <doc>/<theme>/contact.png       the deck at a glance
  *   <doc>/<theme>/deck.json         the plan, templates and measurements
  *   summary.md                      per-deck measurements: type sizes, issues
+ *   <doc>/<theme>/film-NN.png       with --film: slide NN at the moments its
+ *                                   motion plays, builds timed to the narration
  *
  * Like the swatch harness, pages render workspace source through Vite aliases
  * (scripts/harness-server.ts), so planner, template and theme edits show on the
@@ -47,6 +50,8 @@ interface Options {
   /** Folder of `<doc>.hints.json` files, instead of the ones beside each doc. */
   hintsDir?: string;
   outDir: string;
+  /** Also draw each slide's motion as a filmstrip. */
+  film: boolean;
   help: boolean;
 }
 
@@ -66,6 +71,7 @@ interface DeckSlide {
   points?: string[];
   media?: string[];
   metrics?: SlideMetrics;
+  frames?: number[];
 }
 
 interface DeckState {
@@ -87,6 +93,7 @@ function usage(): string {
   --density <d>          concise | balanced | detailed | section (default: each doc's own)
   --hints <dir>          read <doc>.hints.json from this folder (e.g. AI suggestions)
   --out <dir>            output folder (default: ${DEFAULT_OUT_DIR})
+  --film                 also write film-NN.png: each slide's motion, frame by frame
 `;
 }
 
@@ -95,6 +102,7 @@ function parseArgs(argv: string[]): Options {
     docs: [],
     themes: DEFAULT_THEMES,
     outDir: DEFAULT_OUT_DIR,
+    film: false,
     help: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -109,6 +117,7 @@ function parseArgs(argv: string[]): Options {
     else if (arg === '--theme') options.themes = value().split(',').filter(Boolean);
     else if (arg === '--density') options.density = value();
     else if (arg === '--out') options.outDir = value();
+    else if (arg === '--film') options.film = true;
     else if (arg === '--hints') options.hintsDir = path.resolve(REPO_ROOT, value());
     else throw new Error(`Unknown option ${arg}\n\n${usage()}`);
   }
@@ -200,6 +209,57 @@ figcaption{padding:2px 0 6px;color:#aaa}
 </style><h1>${escapeHtml(title)}</h1><main>${cells}</main>`;
 }
 
+function filmStripHtml(title: string, slide: DeckSlide): string {
+  const cells = (slide.frames ?? [])
+    .map(
+      (time, frame) =>
+        `<figure><img src="film/${String(slide.index + 1).padStart(2, '0')}-${String(frame).padStart(2, '0')}.png"><figcaption>${time.toFixed(2)} s</figcaption></figure>`,
+    )
+    .join('');
+  return `<!doctype html><meta charset="utf-8"><style>
+body{margin:0;padding:12px;background:#1b1b1f;font:13px system-ui;color:#ddd;width:1640px}
+h1{font-size:16px;margin:0 0 10px}
+main{display:grid;grid-template-columns:repeat(4,404px);gap:6px}
+figure{margin:0}img{width:404px;height:227px;display:block;border:1px solid #333}
+figcaption{padding:2px 0 4px;color:#aaa}
+</style><h1>${escapeHtml(title)}</h1><main>${cells}</main>`;
+}
+
+/** Render a deck's filmstrips: every slide at the moments its motion plays. */
+async function renderFilm(
+  page: Page,
+  sheet: Page,
+  baseUrl: string,
+  params: URLSearchParams,
+  deckDir: string,
+  label: string,
+): Promise<void> {
+  const film = new URLSearchParams(params);
+  film.set('film', '1');
+  const state = await renderDeck(page, `${baseUrl}${HARNESS_PATH}?${film}`);
+  if (state.error || !state.slides) return;
+  await fs.mkdir(path.join(deckDir, 'film'), { recursive: true });
+  for (const slide of state.slides) {
+    const nn = String(slide.index + 1).padStart(2, '0');
+    for (let frame = 0; frame < (slide.frames ?? []).length; frame++) {
+      await page
+        .locator(`section.deck-frame[data-index="${slide.index}"][data-frame="${frame}"]`)
+        .screenshot({
+          path: path.join(deckDir, 'film', `${nn}-${String(frame).padStart(2, '0')}.png`),
+        });
+    }
+    const strip = path.join(deckDir, `film-${nn}.html`);
+    await fs.writeFile(
+      strip,
+      filmStripHtml(`${label} · slide ${slide.index + 1} · ${slide.template}`, slide),
+    );
+    await sheet.goto(`${baseUrl}/${path.relative(REPO_ROOT, strip).split(path.sep).join('/')}`, {
+      waitUntil: 'load',
+    });
+    await sheet.screenshot({ path: path.join(deckDir, `film-${nn}.png`), fullPage: true });
+  }
+}
+
 async function run(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -248,6 +308,8 @@ async function run(): Promise<void> {
           },
         );
         await sheet.screenshot({ path: path.join(deckDir, 'contact.png'), fullPage: true });
+        if (options.film)
+          await renderFilm(page, sheet, baseUrl, params, deckDir, `${name} · ${theme}`);
         await sheet.close();
         await fs.writeFile(path.join(deckDir, 'deck.json'), JSON.stringify(state, null, 2));
 
