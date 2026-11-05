@@ -729,3 +729,51 @@ describe('<br> in a table cell', () => {
     expect(xml).toMatch(/second row<\/w:t><\/w:r><w:r><w:br\/><\/w:r><w:r><w:t[^>]*>continued/);
   });
 });
+
+describe('paragraph spacing', () => {
+  async function stylesDoc(zip: JSZip): Promise<Document> {
+    const text = await zip.file('word/styles.xml')!.async('text');
+    return new DOMParser().parseFromString(text, 'application/xml');
+  }
+
+  function paragraphStyle(styles: Document, styleId: string): Element {
+    const style = Array.from(styles.getElementsByTagName('w:style')).find(
+      (el) => el.getAttribute('w:styleId') === styleId,
+    );
+    expect(style, `${styleId} style`).toBeDefined();
+    return style!;
+  }
+
+  it('puts Word’s 8pt gap between blocks instead of stacking them flush', async () => {
+    const zip = await exportAndParse(parseMarkdown('**Role**\n\nJan 2021 – Dec 2023\n'));
+    const styles = await stylesDoc(zip);
+    const defaults = styles.getElementsByTagName('w:pPrDefault')[0]!;
+    const spacing = defaults.getElementsByTagName('w:spacing')[0];
+    expect(spacing?.getAttribute('w:after')).toBe('160');
+    // On Normal it would outrank the table cells' and lists' own spacing.
+    expect(paragraphStyle(styles, 'Normal').getElementsByTagName('w:spacing')).toHaveLength(0);
+  });
+
+  it('keeps list items and code lines together, spacing only the block', async () => {
+    const zip = await exportAndParse(parseMarkdown('- one\n- two\n\n```\na\nb\n```\n'));
+    const styles = await stylesDoc(zip);
+    for (const styleId of ['ListParagraph', 'Code']) {
+      expect(
+        paragraphStyle(styles, styleId).getElementsByTagName('w:contextualSpacing'),
+        styleId,
+      ).toHaveLength(1);
+    }
+  });
+
+  it('leaves table cells unpadded', async () => {
+    const zip = await exportAndParse(parseMarkdown('| A | B |\n| --- | :-: |\n| 1 | 2 |\n'));
+    const xml = await getDocumentXml(zip);
+    const cells = Array.from(xml.getElementsByTagName('w:tc'));
+    expect(cells).toHaveLength(4);
+    for (const cell of cells) {
+      const spacing = cell.getElementsByTagName('w:spacing')[0];
+      expect(spacing?.getAttribute('w:after')).toBe('0');
+    }
+    expect(cells[3]!.getElementsByTagName('w:jc')[0]?.getAttribute('w:val')).toBe('center');
+  });
+});
