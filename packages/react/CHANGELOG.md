@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.12.24](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.23...@bendyline/squisq-react@2.12.24) (2026-11-05)
+
+### Bug Fixes
+
+* Add concept templates and deck review harness ([#119](https://github.com/bendyline/squisq/issues/119)) ([586ae1d](https://github.com/bendyline/squisq/commit/586ae1dbaef77edfb692cc738c9950f65d87f431))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.12
+
 ## @bendyline/squisq-react [2.12.23](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.22...@bendyline/squisq-react@2.12.23) (2026-11-04)
 
 

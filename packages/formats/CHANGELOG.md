@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.8.14](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.13...@bendyline/squisq-formats@2.8.14) (2026-11-05)
+
+### Bug Fixes
+
+* Add concept templates and deck review harness ([#119](https://github.com/bendyline/squisq/issues/119)) ([586ae1d](https://github.com/bendyline/squisq/commit/586ae1dbaef77edfb692cc738c9950f65d87f431))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.12
+
 ## @bendyline/squisq-formats [2.8.13](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.12...@bendyline/squisq-formats@2.8.13) (2026-11-04)
 
 

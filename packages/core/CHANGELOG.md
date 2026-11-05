@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.12](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.11...@bendyline/squisq@2.13.12) (2026-11-05)
+
+### Bug Fixes
+
+* Add concept templates and deck review harness ([#119](https://github.com/bendyline/squisq/issues/119)) ([586ae1d](https://github.com/bendyline/squisq/commit/586ae1dbaef77edfb692cc738c9950f65d87f431))
+
 ## @bendyline/squisq [2.13.11](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.10...@bendyline/squisq@2.13.11) (2026-11-04)
 
 ### Bug Fixes

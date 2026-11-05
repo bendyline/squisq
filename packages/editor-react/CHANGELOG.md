@@ -1,3 +1,18 @@
+## @bendyline/squisq-editor-react [2.13.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.18...@bendyline/squisq-editor-react@2.13.19) (2026-11-05)
+
+### Bug Fixes
+
+* Add concept templates and deck review harness ([#119](https://github.com/bendyline/squisq/issues/119)) ([586ae1d](https://github.com/bendyline/squisq/commit/586ae1dbaef77edfb692cc738c9950f65d87f431))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.12
+* **@bendyline/squisq-formats:** upgraded to 2.8.14
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.41
+* **@bendyline/squisq-react:** upgraded to 2.12.24
+* **@bendyline/squisq-video-react:** upgraded to 2.5.25
+
 ## @bendyline/squisq-editor-react [2.13.18](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.17...@bendyline/squisq-editor-react@2.13.18) (2026-11-04)
 
 ### Bug Fixes
