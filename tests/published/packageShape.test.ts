@@ -80,10 +80,12 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // inline HTML, and the icon catalog for {[icon]} tokens, minified to ~240 KB
   // packed. Packs to ~1.24 MB; leave roughly 15% headroom.
   '@bendyline/squisq-editor-react': 1_420_000,
-  // Includes compressed light and full standalone players plus one shared
-  // Font Awesome webfont payload so CLI video export remains self-contained
-  // without duplicating the fonts into both player variants.
-  '@bendyline/squisq-cli': 2_250_000,
+  // Includes the light and full (Mermaid-bearing, ~1.42 MB packed on its own)
+  // standalone players plus one shared Font Awesome webfont payload so CLI
+  // video export remains self-contained without duplicating the fonts into
+  // both player variants. Grows with every template the player renders.
+  // Packs to ~2.26 MB; leave roughly 15% headroom.
+  '@bendyline/squisq-cli': 2_600_000,
 };
 
 function dryRunPack(directory: string, cache: string): PackResult {
