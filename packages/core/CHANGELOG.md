@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.14](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.13...@bendyline/squisq@2.13.14) (2026-11-07)
+
+### Bug Fixes
+
+* Misc updates for doc support ([#121](https://github.com/bendyline/squisq/issues/121)) ([7fb79a8](https://github.com/bendyline/squisq/commit/7fb79a894afa73a75cfc1e8674b1373f62d5329a))
+
 ## @bendyline/squisq [2.13.13](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.12...@bendyline/squisq@2.13.13) (2026-11-07)
 
 ### Bug Fixes
