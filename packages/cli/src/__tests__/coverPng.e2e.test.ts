@@ -7,6 +7,8 @@
  */
 import { before, describe, it } from 'mocha';
 import { expect } from 'chai';
+import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import { renderDocCoverToPng } from '../api.js';
@@ -64,5 +66,36 @@ describe('native managed-cover PNG e2e', function () {
     ]);
     expect(readUint32BE(result.bytes, 16)).to.equal(320);
     expect(readUint32BE(result.bytes, 20)).to.equal(180);
+  });
+
+  it('draws the theme fonts from embedded font files', async () => {
+    // A monospace face under warm-earth's font names looks nothing like PT Serif,
+    // DM Sans or any fallback, so the cover only matches the plain render if
+    // the embedded files were ignored.
+    const mono = await readFile(
+      createRequire(import.meta.url).resolve('dejavu-fonts-ttf/ttf/DejaVuSansMono.ttf'),
+    );
+    const doc: Doc = {
+      articleId: 'cover-fonts-e2e',
+      themeId: 'warm-earth',
+      duration: 0,
+      blocks: [],
+      audio: { segments: [] },
+      startBlock: { title: 'Embedded Faces', subtitle: 'Drawn from the supplied files' },
+    };
+    const size = { width: 480, height: 270 };
+    const plain = await renderDocCoverToPng(doc, new MemoryContentContainer(), size);
+    const embedded = await renderDocCoverToPng(doc, new MemoryContentContainer(), {
+      ...size,
+      fonts: ['PT Serif', 'DM Sans'].map((family) => ({
+        family,
+        data: mono,
+        format: 'truetype' as const,
+        weight: '100 900',
+      })),
+    });
+    const again = await renderDocCoverToPng(doc, new MemoryContentContainer(), size);
+    expect(Buffer.from(again.bytes).equals(Buffer.from(plain.bytes))).to.equal(true);
+    expect(Buffer.from(embedded.bytes).equals(Buffer.from(plain.bytes))).to.equal(false);
   });
 });

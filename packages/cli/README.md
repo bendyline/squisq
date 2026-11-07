@@ -256,6 +256,27 @@ console.log(`Rendered ${result.frameCount} frames (${result.duration}s) → ${re
 
 The container's audio segments become the MP4's audio track; timed media clips and block videos found in the doc are embedded and mixed at their scheduled positions.
 
+The capture page loads nothing from the network, so a theme font the rendering
+machine lacks (any Google Fonts stack, such as warm-earth's `DM Sans` body)
+renders in a fallback face. Pass the font files as `fonts`, one entry per file;
+every renderer here (MP4, GIF, cover and dashboard PNG) accepts them:
+
+```ts
+const fonts: RenderFontFace[] = [
+  { family: 'DM Sans', data: await readFile('DMSans-Variable.woff2'), weight: '100 1000' },
+  {
+    family: 'DM Sans',
+    data: await readFile('DMSans-VariableItalic.woff2'),
+    weight: '100 1000',
+    style: 'italic',
+  },
+];
+await renderDocToMp4(doc, container, { outputPath: './output.mp4', fonts });
+```
+
+`format` defaults to `'woff2'` (also `'woff'`, `'truetype'`, `'opentype'`), and
+`unicodeRange` takes a CSS `unicode-range` for a file holding one subset.
+
 ### `renderDocToGif`
 
 ```ts

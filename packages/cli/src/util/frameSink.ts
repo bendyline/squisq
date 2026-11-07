@@ -29,7 +29,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { Doc } from '@bendyline/squisq/schemas';
-import type { VideoQuality } from '@bendyline/squisq-video';
+import type { RenderFontFace, VideoQuality } from '@bendyline/squisq-video';
 import {
   audioBitrateArg,
   ffmpegAudioMuxArgs,
@@ -232,11 +232,24 @@ export interface FrameManifest {
   animationsEnabled: boolean;
   coverPreRoll: number;
   captureFormat: CaptureFormat;
+  /** Digest of the embedded font files; absent when the render embedded none. */
+  fontsHash?: string;
 }
 
 /** Stable digest of a Doc's render-relevant content for spool manifests. */
 export function docRenderHash(doc: Doc): string {
   return createHash('sha256').update(JSON.stringify(doc)).digest('hex');
+}
+
+/** Stable digest of the font files a render embeds, so a font change invalidates a spool. */
+export function fontsRenderHash(fonts: readonly RenderFontFace[]): string {
+  const hash = createHash('sha256');
+  for (const font of fonts) {
+    const { data, ...face } = font;
+    hash.update(JSON.stringify(face));
+    hash.update(data instanceof Uint8Array ? data : new Uint8Array(data));
+  }
+  return hash.digest('hex');
 }
 
 /** Spool directory holding one still per output frame plus its manifest. */
