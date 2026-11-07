@@ -824,6 +824,12 @@ This is the single most error-prone mechanical change in the codebase. **All nin
 
 Four more registries must also gain the new id; each has a 1:1 guard test that fails without it: `TEMPLATE_AUTHORING_METADATA` (`templates/authoringMetadata.ts` — role and body policy; `templateAuthoringMetadata.test.ts`), `TEMPLATE_TOKEN_NAMES` (`templates/templateNames.ts`; `templateTokenNames.test.ts`), `BLOCK_MEDIA_LAYOUT_POLICIES` (`templates/mediaLayoutPolicy.ts`; `mediaLayoutPolicy.test.ts`), and `sectionExtractors` (`core/src/doc/page/sectionExtractors.ts` — its Page-mode section; `materializePageSections.test.ts`).
 
+When an AI author should be able to choose the template, give it a `TEMPLATE_GUIDES` entry in
+`templates/authoringGuide.ts` (the fields as an author writes them, and when it earns its place),
+and add any craft worth sharing to `AUTHORING_TRICKS` there. Products that let a model write slides
+(Qualla's video director, DocBlocks' presentation refiner) render their prompts from those tables
+and hold the output to `transform/grounding.ts`; see `docs/ai-authoring.md`.
+
 If the template replaces an older name, add it to the internal `TEMPLATE_ALIASES` in `templates/templateNames.ts` so legacy documents still resolve. After adding, update the template count in this file's "Subpath Exports" → `@bendyline/squisq/doc` line.
 
 ## Documentation site

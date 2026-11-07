@@ -33,7 +33,7 @@ import { contentBlock } from '../contentBlock.js';
 import { extractTableFromContents } from '../../templateInputs.js';
 import type { ChartData, ChartKind, ChartRenderInput } from './types.js';
 import { buildChartData, normalizeChartTable } from './parse.js';
-import { formatChartValue, niceTicks, type NiceTicks } from './scale.js';
+import { formatChartDataValue, formatChartValue, niceTicks, type NiceTicks } from './scale.js';
 import { arcPath, areaPath, polylinePath, type ChartPoint } from './geometry.js';
 import {
   categoryLabelStep,
@@ -561,7 +561,7 @@ function paintBars(paint: Paint): Layer[] {
   // gridlines, and bars on one consistent scale.
   const labelGap = axisFontSize * 0.6;
   const labelWidthPx = (value: number): number =>
-    formatChartValue(value, input.unit).length * axisFontSize * CHART_CHAR_WIDTH_EM;
+    formatChartDataValue(value, input.unit).length * axisFontSize * CHART_CHAR_WIDTH_EM;
   const showValueLabels = input.showValues === true && !(input.stacked === true);
   const reservedForLabels = showValueLabels
     ? data.series
@@ -967,7 +967,7 @@ function valueLabel(
     type: 'text',
     id,
     content: {
-      text: formatChartValue(value, paint.input.unit),
+      text: formatChartDataValue(value, paint.input.unit),
       style: {
         fontSize: paint.axisFontSize,
         fontFamily: paint.bodyFont,

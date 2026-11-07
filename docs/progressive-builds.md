@@ -72,8 +72,9 @@ estimated timing so they still appear.
 
 Builds fit within the resolved block duration. Short intervals shorten entrances
 and may combine reveals; `resolveBuildTimeline().compressed` reports inadequate
-reading time. A deck containing builds bypasses the automatic split/merge pacing
-passes so those passes cannot replay or remove steps. Builds never extend audio.
+reading time. An audio segment containing builds bypasses the automatic
+split/merge pacing passes so those passes cannot replay or remove steps; other
+segments of the same deck keep their pacing. Builds never extend audio.
 
 ## Rendering and extension points
 
@@ -82,6 +83,14 @@ Core exports `BuildSpec`, `BuildStep`, `BuildCursor`, and `BuildTiming` from
 `@bendyline/squisq/doc`: `planContentBuilds`, `blockBuildSteps`,
 `resolveBuildTimeline`, `buildCursorAtTime`, `buildTargetState`, and
 `resolveDocBuildTiming`.
+
+Concept slides (`cards`, `process`, `cycle`, `layers`) reveal one item per step.
+A host with its own script format can time them to its narration with
+`@bendyline/squisq/transform`: `matchPointsToSentences` finds the sentence that
+says each item, and `conceptRevealTiming` turns spoken times into the block's
+`build` and `buildTiming`, named from the same step texts the template draws.
+`@bendyline/squisq/timing` answers when a phrase or character is spoken
+(`phraseStartTime`, `wordTimeAt`) from any `{ sourceText, bookmarks }` timing.
 
 The typed block setting is serialized through normal heading metadata. Generated
 steps, source anchors, and resolved timing are projection-only. Templates expose

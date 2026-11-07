@@ -19,7 +19,13 @@ import type { MarkdownBlockNode } from '../markdown/types.js';
 import type { MediaClip } from '../schemas/Media.js';
 import { isContainerTemplate } from '../doc/templates/templateNames.js';
 import { conceptBuildStepTexts } from '../doc/templates/conceptBlocks.js';
-import { buildSourceText } from '../doc/builds.js';
+import {
+  conceptRevealTiming,
+  conceptTemplate,
+  matchPointsToSentences,
+  type ConceptTemplate,
+} from './conceptReveal.js';
+import { wordTimeAt } from '../timing/wordTiming.js';
 import {
   AUTHORED_PRESENTATION_LAYOUT,
   PRESENTATION_KEY,
@@ -126,8 +132,7 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     const marked = markedTime(offset);
     if (marked !== undefined) return marked;
     // Match the first spoken token in this span; clipped-away spans collapse.
-    if (narration && bookmarks.length)
-      return bookmarks.find((word) => word.charOffset >= offset)?.time ?? duration;
+    if (narration && bookmarks.length) return wordTimeAt(bookmarks, offset, 'next') ?? duration;
     return (
       (narration?.startTime ?? 0) +
       (tokensBefore(offset) / Math.max(1, script.tokens.length)) * (narration?.duration ?? duration)
@@ -271,16 +276,6 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
       : { segments: [{ src: '', name: 'presentation-clock', startTime: 0, duration }] },
   };
 }
-const CONCEPT_TEMPLATES = ['cards', 'process', 'cycle', 'layers'] as const;
-function conceptTemplate(template: string): (typeof CONCEPT_TEMPLATES)[number] | undefined {
-  return CONCEPT_TEMPLATES.find((name) => name === template);
-}
-/** Distinctive words, compared by their opening letters so "multiply" matches "multiplying". */
-function stems(text: string): string[] {
-  return (text.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'-]*/gu) ?? [])
-    .filter((word) => word.length >= 4)
-    .map((word) => word.slice(0, 5));
-}
 /**
  * A concept slide's build: each idea appears when the narration reaches the
  * sentence of the slide's passage it shares the most words with. Ideas that
@@ -288,47 +283,21 @@ function stems(text: string): string[] {
  * reveals spread evenly over the slide.
  */
 function conceptReveal(
-  template: (typeof CONCEPT_TEMPLATES)[number],
+  template: ConceptTemplate,
   beat: PresentationBeat,
   start: number,
   end: number,
   sourceText: string,
   timeAt: (offset: number) => number,
 ): Pick<Block, 'build' | 'buildTiming'> {
-  const build = { mode: 'items' as const, effect: 'fadeInUp' as const, previous: 'keep' as const };
   const steps = conceptBuildStepTexts(template, beat.points);
-  const passage = sourceText.slice(beat.sourceStart, beat.sourceEnd);
-  const sentences = [...passage.matchAll(/[^.!?\n]+[.!?]*/gu)].map((match) => ({
-    offset: beat.sourceStart + match.index,
-    words: new Set(stems(match[0])),
-  }));
-  let last = -1;
-  const offsets: number[] = [];
-  for (const point of beat.points.slice(0, steps.length)) {
-    const words = stems(point);
-    let best: { offset: number; shared: number } | undefined;
-    for (const sentence of sentences) {
-      const shared = words.filter((word) => sentence.words.has(word)).length;
-      if (shared > (best?.shared ?? 1)) best = { offset: sentence.offset, shared };
-    }
-    if (!best || best.offset < last) return { build };
-    offsets.push((last = best.offset));
-  }
-  if (offsets.length !== steps.length) return { build };
-  const lead = Math.min(0.5, (end - start) / 8);
-  const starts = offsets.map((offset) =>
-    Math.min(Math.max(0, end - start - 0.1), Math.max(lead, timeAt(offset) - start)),
+  const offsets = matchPointsToSentences(
+    beat.points.slice(0, steps.length),
+    sourceText,
+    beat.sourceStart,
+    beat.sourceEnd,
   );
-  // The first idea lands as the headline settles even when its sentence comes
-  // later, so a slide never sits on its headline alone while the passage opens.
-  starts[0] = Math.min(starts[0]!, Math.max(lead, Math.min(1, (end - start) / 6)));
-  return {
-    build,
-    buildTiming: {
-      sourceText: buildSourceText(steps.map((text, index) => ({ id: `build-${index}`, text }))),
-      starts,
-    },
-  };
+  return conceptRevealTiming(template, beat.points, offsets?.map(timeAt), start, end);
 }
 /**
  * A slide that features a table. A table needs the slide's full width and

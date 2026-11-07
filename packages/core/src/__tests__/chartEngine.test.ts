@@ -11,6 +11,7 @@ import {
   buildChartData,
   niceTicks,
   formatChartValue,
+  formatChartDataValue,
   arcPath,
   pointOnCircle,
   polylinePath,
@@ -225,6 +226,19 @@ describe('formatChartValue', () => {
     expect(formatChartValue(0)).toBe('0');
     expect(formatChartValue(42, 'km')).toBe('42 km');
     expect(formatChartValue(Number.NaN)).toBe('—');
+  });
+});
+
+describe('formatChartDataValue', () => {
+  it('prints value labels exactly below 10,000 and compactly above', () => {
+    // 1,990 and 2,050 both read "2K" as ticks; on their bars they must differ.
+    expect(formatChartDataValue(1_990)).toBe('1,990');
+    expect(formatChartDataValue(2_050)).toBe('2,050');
+    expect(formatChartDataValue(-1_200, 'm')).toBe('-1,200 m');
+    expect(formatChartDataValue(12.5)).toBe('12.5');
+    expect(formatChartDataValue(25_000)).toBe('25K');
+    expect(formatChartDataValue(1_500_000)).toBe('1.5M');
+    expect(formatChartDataValue(Number.NaN)).toBe('—');
   });
 });
 
