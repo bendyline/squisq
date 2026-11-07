@@ -6,7 +6,8 @@
  * headings, paragraphs, inline formatting, lists, code blocks,
  * blockquotes, tables, thematic breaks, and hyperlinks.
  *
- * Uses the standard PDF fonts for authored text and embeds/subsets Font
+ * Uses the standard PDF fonts for authored text. Embeds (subset) Unicode
+ * fonts only for text those cannot encode (see `unicodeText.ts`), and Font
  * Awesome only when the document contains an inline icon.
  *
  * @example
@@ -20,7 +21,6 @@
  */
 
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFImage, PDFPage, PDFString } from 'pdf-lib';
-import fontkit from '@pdf-lib/fontkit';
 
 import type { Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { contrastRatio } from '@bendyline/squisq/schemas';
@@ -62,13 +62,16 @@ import { FootnoteIndex } from '../shared/footnotes.js';
 import { authoredImageSize, fitWithin, readImageDimensions } from '../shared/images.js';
 
 import { WinAnsiTracker } from './winAnsi.js';
+import { subsetSafeFontkit } from './fontkitSubset.js';
+import { breakBetweenCjk } from './lineBreaks.js';
 import {
   PdfTextRuns,
+  characterClusters,
   embedUnicodeFaces,
   loadBundledUnicodeFonts,
   needsUnicodeFont,
   type PdfUnicodeFonts,
-  type UnicodeFace,
+  type UnicodeFaces,
 } from './unicodeText.js';
 import {
   collectInlineIconFamilies,
@@ -163,10 +166,12 @@ export interface PdfExportOptions {
   onWarning?: (message: string) => void;
   /**
    * Fonts that draw what the standard PDF fonts cannot encode — Greek,
-   * Cyrillic, Vietnamese, arrows, math, box drawing, symbols. Default: the
-   * bundled DejaVu Sans faces, embedded (subset) only in a document that has
-   * such text. Pass your own faces to cover other scripts, or `false` to keep
-   * the standard fonts alone and replace those characters.
+   * Cyrillic, Vietnamese, arrows, math, box drawing, symbols, emoji, Chinese,
+   * Japanese and Korean. Default: the bundled DejaVu Sans faces, plus Noto
+   * Emoji, Noto Sans SC and Noto Sans KR for a document with text in their
+   * scripts, embedded (subset) only in a document that has such text. Pass
+   * your own faces to cover other scripts, or `false` to keep the standard
+   * fonts alone and replace those characters.
    */
   unicodeFonts?: PdfUnicodeFonts | false;
 }
@@ -347,9 +352,9 @@ async function createExportContext(
     pdfDoc.embedFont(StandardFonts.Courier),
     pdfDoc.embedFont(StandardFonts.CourierBold),
   ]);
-  let unicodeFaces: Map<PDFFont, UnicodeFace> = new Map();
+  let unicodeFaces: Map<PDFFont, UnicodeFaces> = new Map();
   if (options.unicodeFonts !== false && needsUnicodeFont(doc)) {
-    const faces = options.unicodeFonts ?? (await loadBundledUnicodeFonts());
+    const faces = options.unicodeFonts ?? (await loadBundledUnicodeFonts(doc));
     unicodeFaces = await embedUnicodeFaces(pdfDoc, faces, {
       regular,
       bold,
@@ -362,7 +367,7 @@ async function createExportContext(
   const icons: Partial<Record<IconFamily, PDFFont>> = {};
   const iconFamilies = collectInlineIconFamilies(doc);
   if (iconFamilies.size > 0) {
-    pdfDoc.registerFontkit(fontkit);
+    pdfDoc.registerFontkit(subsetSafeFontkit);
     await Promise.all(
       fontAwesomeFaces(iconFamilies).map(async (face) => {
         icons[face.family] = await pdfDoc.embedFont(face.data, { subset: true });
@@ -899,42 +904,9 @@ function breakLongWord(word: string, span: TextSpan, maxWidth: number): string[]
 }
 
 /**
- * Whether a code point belongs to the character before it: a combining mark,
- * a zero-width joiner, a variation selector or an emoji skin tone.
- */
-function continuesCluster(ch: string): boolean {
-  const codePoint = ch.codePointAt(0) as number;
-  return (
-    /\p{M}/u.test(ch) ||
-    codePoint === 0x200d ||
-    codePoint === 0xfe0e ||
-    codePoint === 0xfe0f ||
-    (codePoint >= 0x1f3fb && codePoint <= 0x1f3ff)
-  );
-}
-
-/**
- * Text as the characters a reader sees, near enough to break a word between
- * them: a combining accent, variation selector or skin tone stays with the
- * character it modifies, and a zero-width joiner holds an emoji sequence
- * together.
- */
-function characterClusters(text: string): string[] {
-  const clusters: string[] = [];
-  for (const ch of text) {
-    const last = clusters.length - 1;
-    if (last >= 0 && (continuesCluster(ch) || clusters[last]!.endsWith('‍'))) {
-      clusters[last] += ch;
-    } else {
-      clusters.push(ch);
-    }
-  }
-  return clusters;
-}
-
-/**
  * Split text into "words" preserving whitespace as separate tokens
- * so the wrapping logic can break at whitespace.
+ * so the wrapping logic can break at whitespace, and between Chinese and
+ * Japanese characters.
  */
 function splitIntoWords(text: string): string[] {
   const tokens: string[] = [];
@@ -951,7 +923,7 @@ function splitIntoWords(text: string): string[] {
     inSpace = isSpace;
   }
   if (current.length > 0) tokens.push(current);
-  return tokens;
+  return tokens.flatMap(breakBetweenCjk);
 }
 
 function getLineHeight(line: TextSpan[]): number {

@@ -2663,9 +2663,12 @@ interface DocxImportOptions {
 
 Export uses pdf-lib (standard 14 fonts — `themeId` affects colors only). Text
 those fonts cannot encode — Greek, Cyrillic, Vietnamese, arrows, math, box
-drawing, symbols — is drawn with an embedded Unicode font: the bundled DejaVu
-Sans faces, loaded and subset only for a document that needs them. CJK and
-emoji are still replaced and reported once through `onWarning`.
+drawing, symbols, emoji, Chinese, Japanese, Korean — is drawn with embedded
+Unicode fonts: the bundled DejaVu Sans faces, plus monochrome Noto Emoji, Noto
+Sans SC and Noto Sans KR, each loaded and subset only for a document that needs
+it. Chinese and Japanese lines break between characters. Scripts none of these
+cover (Thai and Devanagari, for example) are still replaced and reported once
+through `onWarning`.
 Import uses pdfjs-dist with heuristic structure detection (headings by font
 size relative to `bodyFontSize`, plus the `detect*` flags below) — results are
 best-effort. `pdfToMarkdownDoc` is text-only; `pdfToContainer` additionally
@@ -2704,12 +2707,15 @@ interface PdfExportOptions {
   themeRegistry?: ThemeRegistry;
   onWarning?: (message: string) => void; // default console.warn
   // Faces for text the standard fonts cannot encode. Default: bundled DejaVu
-  // Sans (regular, bold, mono); `false` keeps the standard fonts alone.
+  // Sans (regular, bold, mono), plus Noto Emoji, Noto Sans SC and Noto Sans KR
+  // for text in their scripts; `false` keeps the standard fonts alone.
   unicodeFonts?:
     | {
         regular: Uint8Array | ArrayBuffer;
         bold?: Uint8Array | ArrayBuffer;
         mono?: Uint8Array | ArrayBuffer;
+        emoji?: Uint8Array | ArrayBuffer; // first for emoji-style characters
+        fallbacks?: readonly (Uint8Array | ArrayBuffer)[]; // tried in order after the rest
       }
     | false;
 }

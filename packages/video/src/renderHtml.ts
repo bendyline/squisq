@@ -2,7 +2,8 @@
  * Render HTML Generation for Video Frame Capture
  *
  * Generates a self-contained HTML document that loads the SquisqPlayer standalone
- * bundle in renderMode, embedding all images and audio as base64 data URIs.
+ * bundle in renderMode, embedding all images and audio as base64 data URIs, and
+ * any font files the host supplies (`fonts`) as `@font-face` rules.
  *
  * The generated page mounts one standalone player whose instance handle is
  * available through `SquisqPlayer.getHandle(root)`. Headless callers use that
@@ -22,6 +23,28 @@ import type {
 } from '@bendyline/squisq/schemas';
 
 // ── Types ──────────────────────────────────────────────────────────
+
+/**
+ * A font face embedded in the render page. Capture pages load nothing from the
+ * network, so a theme font the rendering machine lacks (any Google Fonts stack,
+ * such as `dm-sans`) falls back to a system face unless its file is supplied.
+ * One entry per file: a family split into unicode-range subsets, or into
+ * upright and italic files, takes one entry for each.
+ */
+export interface RenderFontFace {
+  /** CSS family name as the theme's font stack spells it, e.g. `DM Sans`. */
+  family: string;
+  /** The font file's bytes (an ArrayBuffer, or a Uint8Array such as a Node Buffer). */
+  data: ArrayBuffer | Uint8Array;
+  /** File format (default 'woff2'). */
+  format?: 'woff2' | 'woff' | 'truetype' | 'opentype';
+  /** CSS `font-weight`: one weight, or a variable font's range such as `100 1000` (default `normal`). */
+  weight?: number | string;
+  /** CSS `font-style` (default 'normal'). */
+  style?: 'normal' | 'italic';
+  /** CSS `unicode-range`, when the file holds one subset of the family. */
+  unicodeRange?: string;
+}
 
 export interface RenderHtmlOptions {
   /** The IIFE player bundle source code (from PLAYER_BUNDLE) */
@@ -81,6 +104,12 @@ export interface RenderHtmlOptions {
    */
   displayMode?: 'slideshow' | 'dashboard';
 
+  /**
+   * Font files to embed as `@font-face` rules (default none). Faces load
+   * before the player mounts, so `document.fonts.ready` covers them.
+   */
+  fonts?: readonly RenderFontFace[];
+
   /** Dashboard-mode options (ignored unless `displayMode` is 'dashboard'). */
   dashboard?: {
     /** Layout id or 'auto'. Overrides doc frontmatter. */
@@ -137,8 +166,8 @@ const BINARY_STRING_CHUNK = 0x8000;
  * allocates a rope of hundreds of MB for a large asset (measured ~6-9x slower
  * at 8-32 MB). Output is byte-identical.
  */
-function arrayBufferToDataUrl(buffer: ArrayBuffer, mimeType: string): string {
-  const bytes = new Uint8Array(buffer);
+function arrayBufferToDataUrl(buffer: ArrayBuffer | Uint8Array, mimeType: string): string {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
   const parts: string[] = [];
   for (let i = 0; i < bytes.length; i += BINARY_STRING_CHUNK) {
     parts.push(String.fromCharCode(...bytes.subarray(i, i + BINARY_STRING_CHUNK)));
@@ -162,6 +191,53 @@ function escapeHtml(str: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// ── Font Faces ─────────────────────────────────────────────────────
+
+const FONT_MIME: Record<NonNullable<RenderFontFace['format']>, string> = {
+  woff2: 'font/woff2',
+  woff: 'font/woff',
+  truetype: 'font/ttf',
+  opentype: 'font/otf',
+};
+
+const FONT_FAMILY = /^[\p{L}\p{N} _.-]+$/u;
+const FONT_WEIGHT = /^(?:normal|bold|\d{1,4}(?: \d{1,4})?)$/;
+const UNICODE_RANGE =
+  /^U\+[0-9A-F?]{1,6}(?:-[0-9A-F]{1,6})?(?:, ?U\+[0-9A-F?]{1,6}(?:-[0-9A-F]{1,6})?)*$/i;
+
+/**
+ * `@font-face` rules for the supplied fonts. Every value is checked against a
+ * strict pattern rather than escaped, so a caller cannot break out of the rule.
+ * `font-display: block` keeps a capture from ever drawing the fallback face.
+ */
+function fontFaceCss(fonts: readonly RenderFontFace[]): string {
+  return fonts
+    .map((font) => {
+      const family = font.family.trim();
+      const format = font.format ?? 'woff2';
+      const weight = String(font.weight ?? 'normal').trim();
+      const style = font.style ?? 'normal';
+      if (!FONT_FAMILY.test(family)) throw new Error(`Invalid font family name: ${font.family}`);
+      if (!(format in FONT_MIME)) throw new Error(`Unsupported font format: ${format}`);
+      if (!FONT_WEIGHT.test(weight)) {
+        throw new Error(`Invalid font weight for ${family}: ${weight}`);
+      }
+      if (style !== 'normal' && style !== 'italic') {
+        throw new Error(`Invalid font style for ${family}: ${String(style)}`);
+      }
+      if (font.unicodeRange !== undefined && !UNICODE_RANGE.test(font.unicodeRange.trim())) {
+        throw new Error(`Invalid unicode-range for ${family}: ${font.unicodeRange}`);
+      }
+      const src = arrayBufferToDataUrl(font.data, FONT_MIME[format]);
+      const range = font.unicodeRange ? `;unicode-range:${font.unicodeRange.trim()}` : '';
+      return (
+        `@font-face{font-family:"${family}";src:url(${src}) format("${format}");` +
+        `font-weight:${weight};font-style:${style};font-display:block${range}}`
+      );
+    })
+    .join('\n');
 }
 
 // ── HTML Generation ────────────────────────────────────────────────
@@ -194,7 +270,15 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
     buildsEnabled = true,
     displayMode = 'slideshow',
     dashboard,
+    fonts = [],
   } = options;
+  const fontCss = fonts.length > 0 ? `\n${fontFaceCss(fonts)}` : '';
+  // A face loads only once text uses it; start every one now so the capture's
+  // wait on document.fonts.ready also waits for them.
+  const fontLoad =
+    fonts.length > 0
+      ? '\n  if (document.fonts) document.fonts.forEach(function (face) { face.load().catch(function () {}); });'
+      : '';
 
   // Build base64 image map
   const imageMap: Record<string, string> = {};
@@ -245,7 +329,7 @@ export function generateRenderHtml(doc: Doc, options: RenderHtmlOptions): string
 <style>
 *,*::before,*::after{box-sizing:border-box}
 html,body{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden;background:#000}
-#squisq-root{width:${width}px;height:${height}px;display:flex;align-items:center;justify-content:center}
+#squisq-root{width:${width}px;height:${height}px;display:flex;align-items:center;justify-content:center}${fontCss}
 </style>
 </head>
 <body>
@@ -256,7 +340,7 @@ html,body{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden
   var doc = JSON.parse(${JSON.stringify(docJson)});
   var images = JSON.parse(${JSON.stringify(imageMapJson)});
   var audio = ${audioMapJson === 'null' ? 'null' : 'JSON.parse(' + JSON.stringify(audioMapJson) + ')'};
-  var root = document.getElementById("squisq-root");
+  var root = document.getElementById("squisq-root");${fontLoad}
   SquisqPlayer.mount(root, doc, {
     mode: ${JSON.stringify(displayMode === 'dashboard' ? 'dashboard' : 'slideshow')},
     images: images,

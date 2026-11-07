@@ -41,6 +41,7 @@ import type {
   VideoOrientation,
 } from '@bendyline/squisq-video';
 import { ffmpegGifOutputArgs, frameTimeSeconds, generateRenderHtml } from '@bendyline/squisq-video';
+import type { RenderFontFace } from '@bendyline/squisq-video';
 import { resolveDashboardDimensions, resolveDimensions } from '@bendyline/squisq-video';
 import {
   convert as formatsConvert,
@@ -64,6 +65,7 @@ import { runFfmpeg } from './util/runFfmpeg.js';
 import {
   createFfmpegPipeSink,
   docRenderHash,
+  fontsRenderHash,
   openDirectoryFrameStore,
   type CaptureFormat,
   type FrameManifest,
@@ -110,7 +112,12 @@ function loadFullPlayerBundle(): Promise<string> {
 }
 
 // Re-export utility types and functions callers may need
-export type { GifDither, VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
+export type {
+  GifDither,
+  RenderFontFace,
+  VideoQuality,
+  VideoOrientation,
+} from '@bendyline/squisq-video';
 export { MemoryContentContainer } from '@bendyline/squisq/storage';
 export { readInput } from './util/readInput.js';
 export type { ReadInputResult } from './util/readInput.js';
@@ -284,6 +291,13 @@ export interface RenderDocToMp4Options {
   coverPreRoll?: number;
 
   /**
+   * Font files to embed in the capture page. It loads nothing from the
+   * network, so a theme font the machine lacks (such as a Google Fonts stack)
+   * renders in a fallback face unless it is supplied here. Default: none.
+   */
+  fonts?: readonly RenderFontFace[];
+
+  /**
    * Progress callback. Called with a phase name and 0-100 percentage.
    */
   onProgress?: (phase: string, percent: number) => void;
@@ -319,6 +333,8 @@ export interface RenderDocToGifOptions {
   dither?: GifDither;
   /** Bayer strength when dither is bayer (0-5, default: 3). */
   bayerScale?: number;
+  /** Font files to embed (see {@link RenderDocToMp4Options.fonts}). */
+  fonts?: readonly RenderFontFace[];
   /** Progress callback. */
   onProgress?: (phase: string, percent: number) => void;
 }
@@ -394,6 +410,7 @@ interface CaptureDocFramesOptions {
   motion?: MotionSpec | null;
   coverPreRoll: number;
   animationsEnabled: boolean;
+  fonts?: readonly RenderFontFace[];
   onProgress?: (phase: string, percent: number) => void;
 }
 
@@ -433,6 +450,8 @@ interface RenderPageOptions {
     style?: DashboardStyleId;
     documentTitle?: string;
   };
+  /** Font files embedded in the render page. */
+  fonts?: readonly RenderFontFace[];
   onProgress?: (phase: string, percent: number) => void;
 }
 
@@ -459,6 +478,7 @@ async function withRenderPage<T>(
     animationsEnabled,
     displayMode,
     dashboard,
+    fonts,
     onProgress,
   } = options;
 
@@ -511,6 +531,8 @@ async function withRenderPage<T>(
     }
   }
 
+  for (const font of fonts ?? []) budget.admit(`font:${font.family}`, font.data);
+
   onProgress?.('generating render HTML', 10);
   signal?.throwIfAborted();
   const playerBundle = await (selectStandalonePlayerVariant(doc) === 'full'
@@ -528,6 +550,7 @@ async function withRenderPage<T>(
     animationsEnabled,
     displayMode,
     dashboard,
+    fonts,
   });
 
   onProgress?.('launching browser', 15);
@@ -775,6 +798,7 @@ async function captureDocFrames(
     motion,
     coverPreRoll,
     animationsEnabled,
+    fonts,
     onProgress,
     signal,
   } = options;
@@ -799,6 +823,7 @@ async function captureDocFrames(
         captionStyle,
         motion,
         animationsEnabled,
+        fonts,
         onProgress,
       },
       async (session) => {
@@ -871,6 +896,7 @@ async function renderDocToMp4Piped(
     animationsEnabled,
     coverPreRoll,
     captureFormat,
+    ...(options.fonts?.length ? { fontsHash: fontsRenderHash(options.fonts) } : {}),
   };
   const store = options.framesDir
     ? await openDirectoryFrameStore(
@@ -896,6 +922,7 @@ async function renderDocToMp4Piped(
         captionStyle,
         motion,
         animationsEnabled,
+        fonts: options.fonts,
         onProgress,
       },
       async (session) => {
@@ -1001,6 +1028,8 @@ export interface RenderDashboardPngOptions {
   style?: DashboardStyleId;
   /** Host-supplied title fallback when the doc has no frontmatter title. */
   documentTitle?: string;
+  /** Font files to embed (see {@link RenderDocToMp4Options.fonts}). */
+  fonts?: readonly RenderFontFace[];
   onProgress?: (phase: string, percent: number) => void;
 }
 
@@ -1020,6 +1049,8 @@ export interface RenderCoverPngOptions {
   width?: number;
   height?: number;
   animationsEnabled?: boolean;
+  /** Font files to embed (see {@link RenderDocToMp4Options.fonts}). */
+  fonts?: readonly RenderFontFace[];
   onProgress?: (phase: string, percent: number) => void;
 }
 
@@ -1054,6 +1085,7 @@ export async function renderDocCoverToPng(
       includeAudio: false,
       animationsEnabled: options.animationsEnabled ?? false,
       displayMode: 'slideshow',
+      fonts: options.fonts,
       onProgress: options.onProgress,
     },
     async ({ page, renderAPI }) => {
@@ -1098,6 +1130,7 @@ export async function renderDocToDashboardPng(
     title,
     style,
     documentTitle,
+    fonts,
     onProgress,
   } = options;
   signal?.throwIfAborted();
@@ -1115,6 +1148,7 @@ export async function renderDocToDashboardPng(
       animationsEnabled: false,
       displayMode: 'dashboard',
       dashboard: { layout, title, style, documentTitle },
+      fonts,
       onProgress,
     },
     async ({ page, renderAPI }) => {
@@ -1196,6 +1230,7 @@ export async function renderDocToMp4(
     motion: options.motion ?? null,
     coverPreRoll: options.coverPreRoll ?? 0,
     animationsEnabled: options.animationsEnabled ?? true,
+    fonts: options.fonts,
     onProgress: options.onProgress,
     signal: options.signal,
   });
@@ -1272,6 +1307,7 @@ export async function renderDocToGif(
     motion: options.motion ?? null,
     coverPreRoll: options.coverPreRoll ?? 0,
     animationsEnabled: options.animationsEnabled ?? false,
+    fonts: options.fonts,
     onProgress: options.onProgress,
     signal: options.signal,
   });

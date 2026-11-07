@@ -182,3 +182,48 @@ describe('generateRenderHtml motion', () => {
     );
   });
 });
+
+describe('generateRenderHtml fonts', () => {
+  const bytes = new Uint8Array([0x77, 0x4f, 0x46, 0x32, 1, 2, 3]).buffer;
+
+  it('embeds each face as a @font-face rule with a data URL and loads it before mounting', () => {
+    const html = generateRenderHtml(minimalDoc(), {
+      playerScript: PLAYER_STUB,
+      fonts: [
+        { family: 'DM Sans', data: bytes, weight: '100 1000', unicodeRange: 'U+0000-00FF, U+2122' },
+        { family: 'DM Sans', data: bytes, style: 'italic', format: 'truetype', weight: 700 },
+      ],
+    });
+    const data = `data:font/woff2;base64,${btoa('wOF2\x01\x02\x03')}`;
+    expect(html).toContain(
+      `@font-face{font-family:"DM Sans";src:url(${data}) format("woff2");font-weight:100 1000;font-style:normal;font-display:block;unicode-range:U+0000-00FF, U+2122}`,
+    );
+    expect(html).toContain(
+      'format("truetype");font-weight:700;font-style:italic;font-display:block}',
+    );
+    expect(html).toContain('data:font/ttf;base64,');
+    const load = html.indexOf('document.fonts.forEach');
+    expect(load).toBeGreaterThan(-1);
+    expect(load).toBeLessThan(html.indexOf('SquisqPlayer.mount(root'));
+  });
+
+  it('adds nothing when no fonts are supplied', () => {
+    const html = generateRenderHtml(minimalDoc(), { playerScript: PLAYER_STUB, fonts: [] });
+    expect(html).toBe(generateRenderHtml(minimalDoc(), { playerScript: PLAYER_STUB }));
+    expect(html).not.toContain('@font-face');
+    expect(html).not.toContain('document.fonts');
+  });
+
+  it('rejects values that could break out of the rule', () => {
+    const render = (face: Record<string, unknown>) =>
+      generateRenderHtml(minimalDoc(), {
+        playerScript: PLAYER_STUB,
+        fonts: [{ family: 'DM Sans', data: bytes, ...face }],
+      });
+    expect(() => render({ family: 'Evil"}body{display:none' })).toThrow(/font family/);
+    expect(() => render({ weight: '400;src:url(x)' })).toThrow(/font weight/);
+    expect(() => render({ unicodeRange: 'U+0000-00FF}' })).toThrow(/unicode-range/);
+    expect(() => render({ style: 'oblique' })).toThrow(/font style/);
+    expect(() => render({ format: 'svg' })).toThrow(/font format/);
+  });
+});

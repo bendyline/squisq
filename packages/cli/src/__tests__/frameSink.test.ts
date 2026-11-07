@@ -14,6 +14,7 @@ import {
   createFfmpegPipeSink,
   docRenderHash,
   ffmpegPipeArgs,
+  fontsRenderHash,
   openDirectoryFrameStore,
   type FrameManifest,
 } from '../util/frameSink.js';
@@ -227,5 +228,13 @@ describe('openDirectoryFrameStore', () => {
     const doc: Doc = { articleId: 'a', duration: 1, blocks: [], audio: { segments: [] } };
     expect(docRenderHash(doc)).to.equal(docRenderHash({ ...doc }));
     expect(docRenderHash(doc)).to.not.equal(docRenderHash({ ...doc, duration: 2 }));
+  });
+
+  it('hashes embedded font files by face and bytes', () => {
+    const face = { family: 'DM Sans', data: new Uint8Array([1, 2, 3]), weight: '100 1000' };
+    const hash = fontsRenderHash([face]);
+    expect(fontsRenderHash([{ ...face, data: new Uint8Array([1, 2, 3]).buffer }])).to.equal(hash);
+    expect(fontsRenderHash([{ ...face, data: new Uint8Array([1, 2, 4]) }])).to.not.equal(hash);
+    expect(fontsRenderHash([{ ...face, style: 'italic' }])).to.not.equal(hash);
   });
 });

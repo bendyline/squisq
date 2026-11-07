@@ -278,16 +278,17 @@ export class WinAnsiTracker {
 
   /**
    * One-shot summary for the export, or undefined when nothing was lost.
-   * `unicodeFont` says an embedded Unicode font already drew what it could, so
-   * what remains is beyond it too (CJK and emoji, with the bundled faces).
+   * `unicodeFont` says embedded Unicode fonts already drew what they could, so
+   * what remains is beyond them too (Thai and the Indic scripts, with the
+   * bundled faces).
    */
   warning(options: { unicodeFont?: boolean } = {}): string | undefined {
     if (this.count === 0) return undefined;
     if (options.unicodeFont) {
       return (
         `PDF export replaced ${this.count} character(s) that its fonts cannot draw ` +
-        `(${this.samples.join(', ')}). The PDF fonts do not cover CJK scripts or ` +
-        `most emoji.`
+        `(${this.samples.join(', ')}). The PDF fonts do not cover every script, ` +
+        `such as Thai or Devanagari.`
       );
     }
     return (

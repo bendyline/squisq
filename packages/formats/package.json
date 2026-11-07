@@ -130,7 +130,7 @@
     }
   },
   "scripts": {
-    "build": "tsup && node ../../scripts/generate-bundle-licenses.mjs . @fortawesome/fontawesome-free dejavu-fonts-ttf && node ../../scripts/remove-empty-chunks.mjs dist",
+    "build": "tsup && node ../../scripts/generate-bundle-licenses.mjs . @fortawesome/fontawesome-free dejavu-fonts-ttf @expo-google-fonts/noto-emoji @expo-google-fonts/noto-sans-sc @expo-google-fonts/noto-sans-kr && node ../../scripts/remove-empty-chunks.mjs dist",
     "dev": "concurrently -n js,dts -c blue,gray -r \"tsup --watch --no-dts --no-clean\" \"tsup --watch --dts-only --no-clean\"",
     "typecheck": "tsc --noEmit"
   },
@@ -152,6 +152,9 @@
     }
   },
   "devDependencies": {
+    "@expo-google-fonts/noto-emoji": "0.4.8",
+    "@expo-google-fonts/noto-sans-kr": "0.4.4",
+    "@expo-google-fonts/noto-sans-sc": "0.4.4",
     "@fortawesome/fontawesome-free": "7.3.1",
     "dejavu-fonts-ttf": "2.37.3",
     "hyparquet": "1.31.2",

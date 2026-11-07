@@ -8,6 +8,7 @@ export * from './utils/imageTreatment.js';
 export * from './utils/diagramText.js';
 export * from './templateInputs.js';
 export * from './coverSlideSettings.js';
+export { coverRepeatsLeadingBlock } from './coverLeadingBlock.js';
 export * from './utils/shapeGeometry.js';
 export {
   markdownToDoc,

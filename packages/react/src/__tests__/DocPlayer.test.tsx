@@ -662,6 +662,30 @@ describe('DocPlayer smoke test', () => {
     expect(screen.getByTestId('slide-counter').textContent).toBe('Cover');
   });
 
+  it('shows the cover as the first slide when that slide only repeats it', async () => {
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '# Video review\n\nA clear opening sentence.\n\n## Second section\n\n- First item\n',
+      ),
+    );
+    const { container } = render(<DocPlayer doc={doc} basePath="/test" displayMode="slideshow" />);
+
+    // No separate cover, and slide one carries the cover's words once.
+    await waitFor(() => expect(screen.getByTestId('slide-counter').textContent).toBe('1 / 2'));
+    expect(container.querySelector('.doc-player__block--cover')).toBeNull();
+    expect(container.textContent?.match(/Video review/g)).toHaveLength(1);
+    expect(container.textContent).toContain('A clear opening sentence.');
+  });
+
+  it('keeps a separate cover when the first slide says more', async () => {
+    const doc = markdownToDoc(
+      parseMarkdown('# Video review\n\nOpening.\n\n- A point\n\n## Second section\n\nBody.\n'),
+    );
+    render(<DocPlayer doc={doc} basePath="/test" displayMode="slideshow" />);
+
+    await waitFor(() => expect(screen.getByTestId('slide-counter').textContent).toBe('Cover'));
+  });
+
   it('can suppress the managed cover slide', () => {
     const { container } = render(
       <DocPlayer

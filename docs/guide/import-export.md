@@ -135,9 +135,9 @@ as text and pictures, not as your original Markdown.
 ### PDF
 
 **Export** lays the document out on white pages for printing. Your theme sets the text, heading and
-link colors when they're readable on white; the type is PDF's standard fonts, with an embedded
-Unicode font for scripts and symbols they can't show. Most emoji and CJK text are replaced, with a
-warning.
+link colors when they're readable on white; the type is PDF's standard fonts, with embedded Unicode
+fonts for scripts and symbols they can't show, including emoji (in black and white), Chinese,
+Japanese and Korean. A few scripts, such as Thai, are replaced, with a warning.
 
 - Footnote markers print as raised numbers, and each note prints with its number where you wrote
   it — usually the end of the document.

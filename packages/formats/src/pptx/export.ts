@@ -44,6 +44,7 @@ import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import {
   buildPreviewDoc,
+  coverRepeatsLeadingBlock,
   createTemplateContext,
   docToMarkdown,
   expandCoverBlock,
@@ -361,13 +362,20 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
       Math.max(1, expanded.length + 1),
       VIEWPORT_PRESETS.landscape,
     );
-    slideBlocks.push({
-      id: 'cover-block',
-      startTime: -1,
-      duration: 0,
-      audioSegment: -1,
-      layers: expandCoverBlock(doc.startBlock, coverContext),
-    });
+    const coverLayers = expandCoverBlock(doc.startBlock, coverContext);
+    // A first slide holding only the cover's words is drawn as the cover,
+    // keeping its notes, rather than following it as the same words again.
+    if (coverRepeatsLeadingBlock(doc) && expanded[0] && expanded[0].id === doc.blocks[0]?.id) {
+      expanded[0] = { ...expanded[0], layers: coverLayers };
+    } else {
+      slideBlocks.push({
+        id: 'cover-block',
+        startTime: -1,
+        duration: 0,
+        audioSegment: -1,
+        layers: coverLayers,
+      });
+    }
   }
   slideBlocks.push(...expanded);
 

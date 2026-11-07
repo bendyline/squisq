@@ -53,6 +53,27 @@ describe('materializeFlashcards', () => {
     expect(result.cards.map((card) => card.sourceBlockId)).toEqual(['france', 'japan']);
   });
 
+  it('makes a card of each section of a document whose title has an introduction', () => {
+    const result = deck(
+      '# Welcome\n\nAn ordinary document.\n\n## Write\n\n- Type to add text.\n\n## Share\n\nExport it.\n\n## Present\n\nEach heading is a slide.\n',
+    );
+    expect(result.title).toBe('Welcome');
+    expect(result.cards.map((card) => card.sourceBlockId)).toEqual(['write', 'share', 'present']);
+    expect(result.cards.map((card) => card.front.blocks[0].title)).toEqual([
+      'Write',
+      'Share',
+      'Present',
+    ]);
+  });
+
+  it('keeps an introduction over an Answer section as one card', () => {
+    const result = deck(
+      '## What is HTTP 418?\n\nName the response.\n\n### Hint\n\nTea.\n\n### Answer\n\nI am a teapot.\n',
+    );
+    expect(result.cards).toHaveLength(1);
+    expect(result.cards[0].sourceBlockId).toBe('what-is-http-418');
+  });
+
   it('builds multiple-choice choices, honors an explicit correct marker, and keeps an explanation', () => {
     const result = deck(
       '## Forces {study=multiple-choice-flashcard}\n\nBecause force is measured in newtons.\n\n### Which is a force unit?\n\n### Joule\n\n### Newton {correct=true}\n\n### Watt\n',

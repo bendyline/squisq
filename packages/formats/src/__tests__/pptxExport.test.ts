@@ -674,6 +674,19 @@ describe('docToPptx markdown-authored parity', () => {
     expect(count).toBe(slideshowBlockCount(doc) + 1);
   });
 
+  it('draws the cover as slide 1 when that slide would only repeat it', async () => {
+    const doc = markdownToDoc(
+      parseMarkdown('# Video review\n\nA clear opening sentence.\n\n## Next\n\nMore.'),
+      { articleId: 'cover-repeat' },
+    );
+    const texts = await pptxSlideTexts(await docToPptx(doc));
+
+    expect(texts).toHaveLength(slideshowBlockCount(doc));
+    expect(texts[0]).toContain('Video review');
+    expect(texts[0]).toContain('A clear opening sentence.');
+    expect(texts.slice(1).join(' ')).not.toContain('Video review');
+  });
+
   it('keeps the body prose of headings that carry no template annotation', async () => {
     // The visual path renders an unannotated heading through `sectionHeader`,
     // which draws the heading alone. Running the doc through the slideshow

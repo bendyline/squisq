@@ -67,13 +67,18 @@ function loadRenderFn(): Promise<RenderFn> {
 type PrepareModule = typeof import('@bendyline/squisq-formats/html-prepare');
 
 /**
- * The export's preparation step, with a picture renderer that remembers what
- * it drew and the icon outliner.
+ * The export's preparation step, with picture renderers that remember what
+ * they drew and the icon outliner.
  */
 interface Preparation {
   needs: PrepareModule['needsPlainHtmlPreparation'];
   prepare: PrepareModule['prepareMarkdownDocForPlainHtml'];
-  renderDiagram: DiagramRasterizer;
+  /**
+   * The picture renderer for a page in `theme`: the theme's colors on its
+   * background, so a diagram on a dark page is not a white panel in the
+   * default light colors. One per theme, so switching back redraws nothing.
+   */
+  diagramRenderer(theme: Theme | undefined): DiagramRasterizer;
   outlineIcons: PlainHtmlIconOutliner;
 }
 let preparationPromise: Promise<Preparation> | null = null;
@@ -83,12 +88,31 @@ function loadPreparation(): Promise<Preparation> {
     import('@bendyline/squisq-formats/html-icons'),
     import('@bendyline/squisq-formats/diagrams'),
     import('@bendyline/squisq-react/diagram-pictures'),
-  ]).then(([prep, icons, diagrams, pictures]) => ({
-    needs: prep.needsPlainHtmlPreparation,
-    prepare: prep.prepareMarkdownDocForPlainHtml,
-    renderDiagram: diagrams.cachingDiagramRasterizer(pictures.createDiagramPictureRenderer()),
-    outlineIcons: icons.plainHtmlIcons,
-  }));
+  ]).then(([prep, icons, diagrams, pictures]) => {
+    const unthemed = diagrams.cachingDiagramRasterizer(pictures.createDiagramPictureRenderer());
+    // Keyed by content: a document's own theme is resolved afresh on each edit.
+    const themed = new Map<string, DiagramRasterizer>();
+    return {
+      needs: prep.needsPlainHtmlPreparation,
+      prepare: prep.prepareMarkdownDocForPlainHtml,
+      diagramRenderer: (theme) => {
+        if (!theme) return unthemed;
+        const key = JSON.stringify(theme);
+        let renderer = themed.get(key);
+        if (!renderer) {
+          renderer = diagrams.cachingDiagramRasterizer(
+            pictures.createDiagramPictureRenderer({ theme, background: theme.colors.background }),
+          );
+          themed.set(key, renderer);
+          // A handful of themes are in use at once; forget the oldest beyond that.
+          const oldest = themed.size > 8 ? themed.keys().next().value : undefined;
+          if (oldest !== undefined) themed.delete(oldest);
+        }
+        return renderer;
+      },
+      outlineIcons: icons.plainHtmlIcons,
+    };
+  });
   return preparationPromise;
 }
 
@@ -291,24 +315,27 @@ export function PlainHtmlPreview({
     () => (container ? dataTableCacheFor(container, mediaRevision ?? 0) : undefined),
     [container, mediaRevision],
   );
+  const renderDiagram = useMemo(() => preparation?.diagramRenderer(theme), [preparation, theme]);
   const needsPreparation = useMemo(
     () =>
-      preparation?.needs(mdDoc, {
-        renderDiagram: preparation.renderDiagram,
+      !!preparation &&
+      !!renderDiagram &&
+      preparation.needs(mdDoc, {
+        renderDiagram,
         outlineIcons: preparation.outlineIcons,
         container,
-      }) ?? false,
-    [preparation, mdDoc, container],
+      }),
+    [preparation, renderDiagram, mdDoc, container],
   );
   const [prepared, setPrepared] = useState<PreparedView | null>(null);
   const preparedOnceRef = useRef(false);
   useEffect(() => {
-    if (!preparation || !needsPreparation) return;
+    if (!preparation || !renderDiagram || !needsPreparation) return;
     let cancelled = false;
     const prepare = () => {
       preparation
         .prepare(mdDoc, {
-          renderDiagram: preparation.renderDiagram,
+          renderDiagram,
           outlineIcons: preparation.outlineIcons,
           container,
           dataTableCache,
@@ -331,7 +358,7 @@ export function PlainHtmlPreview({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [preparation, needsPreparation, mdDoc, container, dataTableCache]);
+  }, [preparation, renderDiagram, needsPreparation, mdDoc, container, dataTableCache]);
   // The latest preparation, even of an earlier edit: it stays on screen until
   // the current one is ready.
   const view = needsPreparation ? prepared : null;
