@@ -36,3 +36,6 @@ export { compilePresentationPlan, applySavedPresentation } from './presentationC
 export { collectPresentationMedia, type PresentationMediaItem } from './presentationMedia.js';
 
 export * from './presentationHints.js';
+
+export * from './grounding.js';
+export * from './conceptReveal.js';

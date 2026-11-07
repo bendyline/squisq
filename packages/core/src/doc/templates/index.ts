@@ -45,6 +45,22 @@ export type {
   TemplateBodyPolicy,
 } from './authoringMetadata.js';
 export type { TemplateMetadata } from './metadata.js';
+export {
+  AUTHORING_TRICKS,
+  PRESENTATION_LAYOUT_GUIDE,
+  TEMPLATE_GUIDES,
+  authoringTricks,
+  guideText,
+  templateCatalog,
+} from './authoringGuide.js';
+export type {
+  AuthoringTrick,
+  AuthoringTrickOptions,
+  GuideWording,
+  GuidedTemplate,
+  TemplateCatalogEntry,
+  TemplateGuide,
+} from './authoringGuide.js';
 export { BLOCK_MEDIA_LAYOUT_POLICIES, getBlockMediaLayoutPolicy } from './mediaLayoutPolicy.js';
 export type {
   BlockMediaLayoutPolicy,
@@ -316,10 +332,11 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
   }
 
   // A build carries pacing inside a slide. Splitting/merging its segment
-  // would replay or erase authored steps; retain its resolved slide sequence.
-  const containsBuilds = blocks.some(hasBlockBuilds);
-  const splitLongBlocks = requestedSplit && !containsBuilds;
-  const mergeShortBlocks = requestedMerge && !containsBuilds;
+  // would replay or erase authored steps, so a segment that holds one keeps
+  // its resolved slide sequence; other segments keep their pacing.
+  const buildSegments = new Set(
+    blocks.filter(hasBlockBuilds).map((block) => (block as TemplateBlock).audioSegment ?? 0),
+  );
 
   // Group blocks by their audioSegment index
   const blocksBySegment = new Map<number, { block: DocBlock; originalIndex: number }[]>();
@@ -338,6 +355,8 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
 
   for (const [segmentIndex, segmentBlocks] of blocksBySegment) {
     const audioSegment = audioSegments[segmentIndex];
+    const splitLongBlocks = requestedSplit && !buildSegments.has(segmentIndex);
+    const mergeShortBlocks = requestedMerge && !buildSegments.has(segmentIndex);
     if (segmentBlocks.every(({ block }) => (block as TemplateBlock).timelineLocked === true)) {
       for (const { block, originalIndex } of segmentBlocks) {
         const expanded = materializeScheduledBlock(
@@ -659,9 +678,12 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
 
   // Filter out zero-duration blocks (eliminated in earlier passes). With
   // `mergeShortBlocks: false` nothing was eliminated, so a zero-duration block
-  // is an authored slide the discrete-deck caller still expects to receive.
-  return mergeShortBlocks
-    ? expandedBlocks.filter((block) => block && block.duration > 0)
+  // is an authored slide the discrete-deck caller still expects to receive;
+  // the same holds in a segment that keeps its slides for a build.
+  return requestedMerge
+    ? expandedBlocks.filter(
+        (block) => block && (block.duration > 0 || buildSegments.has(block.audioSegment ?? 0)),
+      )
     : expandedBlocks.filter(Boolean);
 }
 
