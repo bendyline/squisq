@@ -444,16 +444,29 @@ describe('markdownDocToPdf with characters outside WinAnsi', () => {
     await expect(markdownDocToPdf(doc)).resolves.toBeInstanceOf(ArrayBuffer);
   });
 
-  it('warns exactly once per export through the onWarning channel', async () => {
+  it('draws every character of it with the bundled fonts, replacing nothing', async () => {
     const warnings: string[] = [];
     await markdownDocToPdf(nastyDoc(), { onWarning: (m) => warnings.push(m) });
 
+    // DejaVu draws the Cyrillic and arrows, Noto Emoji the emoji, and Noto
+    // Sans SC the CJK.
+    expect(warnings).toEqual([]);
+  });
+
+  it('warns exactly once per export through the onWarning channel', async () => {
+    const warnings: string[] = [];
+    const doc = nastyDoc();
+    // Thai is in none of the bundled fonts, here twice.
+    doc.children.push(
+      { type: 'paragraph', children: [text('ภาษาไทย')] } as MarkdownParagraph,
+      { type: 'paragraph', children: [text('สวัสดี')] } as MarkdownParagraph,
+    );
+    await markdownDocToPdf(doc, { onWarning: (m) => warnings.push(m) });
+
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('character(s)');
-    // The bundled Unicode font draws the Cyrillic and arrows; only CJK and
-    // emoji are left to replace.
-    expect(warnings[0]).toContain('CJK scripts or most emoji');
-    expect(warnings[0]).not.toMatch(/"[ЖЕё→]"/u);
+    expect(warnings[0]).toContain('such as Thai or Devanagari');
+    expect(warnings[0]).not.toMatch(/"[ЖЕё→中\u{1F600}]"/u);
   });
 
   it('names the missing Unicode font when the caller turns it off', async () => {
@@ -485,7 +498,9 @@ describe('markdownDocToPdf with characters outside WinAnsi', () => {
   it('falls back to console.warn when no onWarning is supplied', async () => {
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      await markdownDocToPdf(nastyDoc());
+      const doc = nastyDoc();
+      doc.children.push({ type: 'paragraph', children: [text('ภาษาไทย')] } as MarkdownParagraph);
+      await markdownDocToPdf(doc);
       expect(spy).toHaveBeenCalledTimes(1);
       expect(String(spy.mock.calls[0]![0])).toContain('PDF export replaced');
     } finally {

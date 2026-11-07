@@ -35,7 +35,14 @@ import {
   type CSSProperties,
 } from 'react';
 import { flushSync } from 'react-dom';
-import type { Doc, Block, TextLayer, StartBlockConfig, DocBlock } from '@bendyline/squisq/schemas';
+import type {
+  Doc,
+  Block,
+  Layer,
+  TextLayer,
+  StartBlockConfig,
+  DocBlock,
+} from '@bendyline/squisq/schemas';
 import {
   isTemplateBlock,
   getCaptionAtTime,
@@ -54,6 +61,7 @@ import { useDocPlayback } from './hooks/useDocPlayback';
 import { useViewportOrientation } from './hooks/useViewportOrientation';
 import { useSlideSwipe } from './hooks/useSlideSwipe';
 import {
+  coverRepeatsLeadingBlock,
   expandCoverBlock,
   createTemplateContext,
   markdownToDoc,
@@ -500,6 +508,45 @@ function DocPlayerContent({
     [resolvedPipStyle],
   );
 
+  // The cover's layers, when the document shows a cover.
+  const coverLayers = useMemo((): Layer[] | null => {
+    const startBlockConfig = doc.startBlock as StartBlockConfig | undefined;
+    if (!appearance.showCoverSlide || !startBlockConfig) return null;
+    const context = createTemplateContext(effectiveTheme, 0, 1, activeViewport, {
+      motion: resolveMotionForDoc(doc, effectiveTheme, motionProp),
+    });
+    return expandCoverBlock(startBlockConfig, context, appearance.coverSlideTemplate);
+  }, [
+    doc,
+    motionProp,
+    activeViewport,
+    effectiveTheme,
+    appearance.showCoverSlide,
+    appearance.coverSlideTemplate,
+  ]);
+
+  // A plain document's first section is only its title and opening sentence,
+  // the cover's own words. Draw that slide as the cover, rather than the cover
+  // and then the same words again, small, as slide one.
+  const coverIsFirstSlide = !!coverLayers && coverRepeatsLeadingBlock(doc);
+  const playbackDoc = useMemo((): Doc => {
+    if (!coverIsFirstSlide || !coverLayers) return doc;
+    const [first, ...rest] = doc.blocks;
+    return {
+      ...doc,
+      blocks: [
+        {
+          ...first,
+          template: undefined,
+          autoTemplate: undefined,
+          templateData: undefined,
+          layers: coverLayers,
+        },
+        ...rest,
+      ],
+    };
+  }, [doc, coverIsFirstSlide, coverLayers]);
+
   // Doc playback hook - pass viewport for responsive template expansion
   // Narrated docs carry blocks anchored to their audio segments; an unnarrated
   // preview's template slides do not, and must keep their loss-averse stacking.
@@ -524,7 +571,7 @@ function DocPlayerContent({
     prevBlock: _prevBlock,
     blocks: expandedBlocks,
     suppressOutgoingForNextBlock,
-  } = useDocPlayback(doc, currentTime, {
+  } = useDocPlayback(playbackDoc, currentTime, {
     basePath,
     viewport: activeViewport,
     theme: effectiveTheme,
@@ -545,32 +592,21 @@ function DocPlayerContent({
     useAudioSegmentTiming: audioMode !== 'synthetic' || (renderMode && hasAnchoredBlocks),
   });
 
-  // Expand cover block (startBlock) if present - uses active viewport
-  const coverBlock = useMemo((): Block | null => {
-    const startBlockConfig = doc.startBlock as StartBlockConfig | undefined;
-    if (!appearance.showCoverSlide) return null;
-    if (!startBlockConfig) return null;
-
-    const context = createTemplateContext(effectiveTheme, 0, 1, activeViewport, {
-      motion: resolveMotionForDoc(doc, effectiveTheme, motionProp),
-    });
-    const layers = expandCoverBlock(startBlockConfig, context, appearance.coverSlideTemplate);
-
-    return {
-      id: 'cover-block',
-      startTime: -1, // Not part of timeline
-      duration: 0, // Static
-      audioSegment: -1,
-      layers,
-    };
-  }, [
-    doc,
-    motionProp,
-    activeViewport,
-    effectiveTheme,
-    appearance.showCoverSlide,
-    appearance.coverSlideTemplate,
-  ]);
+  // The managed cover (startBlock), shown before the first slide -- unless it
+  // is the first slide.
+  const coverBlock = useMemo(
+    (): Block | null =>
+      coverLayers && !coverIsFirstSlide
+        ? {
+            id: 'cover-block',
+            startTime: -1, // Not part of timeline
+            duration: 0, // Static
+            audioSegment: -1,
+            layers: coverLayers,
+          }
+        : null,
+    [coverLayers, coverIsFirstSlide],
+  );
 
   // Slideshow mode treats the managed cover as a static slide before block 1.
   // It has no timeline startTime, so keep its visibility separate from audio.

@@ -21,3 +21,23 @@ generated notices.
 After changing the pinned version, run `node scripts/generate-unicode-font-data.mjs`
 from the repository root to refresh `../unicodeFontData.generated.ts`, which the
 PDF writer imports only for a document that needs it.
+
+# Noto Emoji, Noto Sans SC, Noto Sans KR (PDF emoji and CJK fallback)
+
+What DejaVu cannot draw, PDF export draws with monochrome Noto Emoji (emoji,
+including ZWJ sequences, flags and keycaps), Noto Sans SC (Chinese, and the kana
+and kanji Japanese needs) and Noto Sans KR (Korean), all Regular weight. They
+come unmodified from the pinned `@expo-google-fonts/noto-emoji`,
+`@expo-google-fonts/noto-sans-sc` and `@expo-google-fonts/noto-sans-kr`
+devDependencies, under the SIL Open Font License 1.1, which the formats build
+copies into the generated notices.
+
+The same script writes them to `../emojiFontData.generated.ts`,
+`../cjkFontData.generated.ts` and `../hangulFontData.generated.ts`, each
+imported only for a document with text in its scripts. They are large (about
+1.2, 14.1 and 8.3 MB of base64), so a document without emoji or CJK never
+loads them.
+
+Google's builds of these fonts leave glyph data unpadded, which
+`@pdf-lib/fontkit`'s subsetter mishandles; `../../pdf/fontkitSubset.ts` pads
+each subset glyph so they embed intact.
