@@ -1,3 +1,10 @@
+## @bendyline/squisq-video [2.4.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video@2.4.18...@bendyline/squisq-video@2.4.19) (2026-11-07)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.13
+
 ## @bendyline/squisq-video [2.4.18](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video@2.4.17...@bendyline/squisq-video@2.4.18) (2026-11-05)
 
 

@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.12.25](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.24...@bendyline/squisq-react@2.12.25) (2026-11-07)
+
+### Bug Fixes
+
+* Patches to Charts and AI authoring facilities ([#120](https://github.com/bendyline/squisq/issues/120)) ([658b54b](https://github.com/bendyline/squisq/commit/658b54b90f7413b0c4ec8a447890b8687885bac3))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.13
+
 ## @bendyline/squisq-react [2.12.24](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.23...@bendyline/squisq-react@2.12.24) (2026-11-05)
 
 ### Bug Fixes

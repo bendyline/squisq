@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.13](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.12...@bendyline/squisq@2.13.13) (2026-11-07)
+
+### Bug Fixes
+
+* Patches to Charts and AI authoring facilities ([#120](https://github.com/bendyline/squisq/issues/120)) ([658b54b](https://github.com/bendyline/squisq/commit/658b54b90f7413b0c4ec8a447890b8687885bac3))
+
 ## @bendyline/squisq [2.13.12](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.11...@bendyline/squisq@2.13.12) (2026-11-05)
 
 ### Bug Fixes
