@@ -211,13 +211,21 @@ function shouldTreatAsImplicitGroup(block: Block): boolean {
   const children = block.children ?? [];
   if (children.length === 0) return false;
   if (hasExplicitCardDescendant(block)) return true;
-  if (hasBody(block)) return false;
+
+  const completeCards = children.filter(looksLikeCompleteCard).length;
+  if (hasBody(block)) {
+    // A heading with an introduction over sections that are each a card is a
+    // document's title (or a chapter) and its sections, not one card whose
+    // first section is the question and every other section the answer. An
+    // Answer/Back child still makes it a card with a parent-owned front.
+    return completeCards >= 2 && !children.some(isGenericAnswerBlock);
+  }
 
   if (children.length === 1) {
     return looksLikeCompleteCard(children[0]) && !isGenericAnswerBlock(children[0]);
   }
 
-  return children.filter(looksLikeCompleteCard).length >= 2;
+  return completeCards >= 2;
 }
 
 function explanationFor(block: Block): FlashcardFace | undefined {

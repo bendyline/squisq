@@ -571,6 +571,18 @@ describe('tiptapToMarkdown', () => {
     expect(md).toContain('| Alice | 30 |');
   });
 
+  it('keeps row order when a row with th cells is no longer first', () => {
+    // The original header row, moved below a plain row, still carries th cells.
+    const html =
+      '<table><tbody><tr><td><p></p></td><td><p>Output</p></td></tr>' +
+      '<tr><th><p>Desktop</p></th><th><p>57</p></th></tr>' +
+      '<tr><td><p>Laptop</p></td><td><p>27</p></td></tr></tbody></table>';
+
+    expect(tiptapToMarkdown(html)).toBe(
+      '|   | Output |\n' + '| --- | --- |\n' + '| Desktop | 57 |\n' + '| Laptop | 27 |\n',
+    );
+  });
+
   it('preserves paragraph-style newlines inside table cells', () => {
     const html =
       '<table><thead><tr><th><p>Model</p></th><th><p>Notes</p></th></tr></thead>' +

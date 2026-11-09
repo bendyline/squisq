@@ -465,6 +465,17 @@ export function useAudioSync(
 
     // Apply pending seek and play state
     const applyPendingSeek = () => {
+      // This load stays armed until the next render's cleanup, so a seek may
+      // already have moved on to another segment. Its time and resume belong
+      // to that segment's load, which is on its way.
+      if (
+        pendingSeekTime.current !== null &&
+        findSegmentAtTime(pendingSeekTime.current, audioTrack.segments, segmentStarts.current)
+          .segmentIndex !== currentSegment
+      ) {
+        return;
+      }
+
       if (pendingSeekTime.current !== null) {
         const segmentStart = segmentStarts.current[currentSegment] || 0;
         const segmentTime = pendingSeekTime.current - segmentStart;

@@ -1,3 +1,80 @@
+## @bendyline/squisq-editor-react [2.13.21](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.20...@bendyline/squisq-editor-react@2.13.21) (2026-11-07)
+
+### Bug Fixes
+
+* Misc updates for doc support ([#121](https://github.com/bendyline/squisq/issues/121)) ([7fb79a8](https://github.com/bendyline/squisq/commit/7fb79a894afa73a75cfc1e8674b1373f62d5329a))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.14
+* **@bendyline/squisq-formats:** upgraded to 2.8.16
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.43
+* **@bendyline/squisq-react:** upgraded to 2.12.26
+* **@bendyline/squisq-video-react:** upgraded to 2.5.27
+
+## @bendyline/squisq-editor-react [2.13.20](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.19...@bendyline/squisq-editor-react@2.13.20) (2026-11-07)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.13
+* **@bendyline/squisq-formats:** upgraded to 2.8.15
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.42
+* **@bendyline/squisq-react:** upgraded to 2.12.25
+* **@bendyline/squisq-video-react:** upgraded to 2.5.26
+
+## @bendyline/squisq-editor-react [2.13.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.18...@bendyline/squisq-editor-react@2.13.19) (2026-11-05)
+
+### Bug Fixes
+
+* Add concept templates and deck review harness ([#119](https://github.com/bendyline/squisq/issues/119)) ([586ae1d](https://github.com/bendyline/squisq/commit/586ae1dbaef77edfb692cc738c9950f65d87f431))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.12
+* **@bendyline/squisq-formats:** upgraded to 2.8.14
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.41
+* **@bendyline/squisq-react:** upgraded to 2.12.24
+* **@bendyline/squisq-video-react:** upgraded to 2.5.25
+
+## @bendyline/squisq-editor-react [2.13.18](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.17...@bendyline/squisq-editor-react@2.13.18) (2026-11-04)
+
+### Bug Fixes
+
+* Add body-start placeholder to document tray ([#118](https://github.com/bendyline/squisq/issues/118)) ([3edc74b](https://github.com/bendyline/squisq/commit/3edc74bc552175fd809e83073029fa3798803734))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.11
+* **@bendyline/squisq-formats:** upgraded to 2.8.13
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.40
+* **@bendyline/squisq-react:** upgraded to 2.12.23
+* **@bendyline/squisq-video-react:** upgraded to 2.5.24
+
+## @bendyline/squisq-editor-react [2.13.17](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.16...@bendyline/squisq-editor-react@2.13.17) (2026-11-02)
+
+### Bug Fixes
+
+* Allow background processing ([#117](https://github.com/bendyline/squisq/issues/117)) ([d2a0284](https://github.com/bendyline/squisq/commit/d2a0284bdbbf2527b0ed0997e1d9a853388db02d))
+
+## @bendyline/squisq-editor-react [2.13.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.15...@bendyline/squisq-editor-react@2.13.16) (2026-11-01)
+
+### Bug Fixes
+
+* More updates and fixes ([#116](https://github.com/bendyline/squisq/issues/116)) ([c0e631b](https://github.com/bendyline/squisq/commit/c0e631be6e552b3677a56ee4ecb11c57e812c12e))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.10
+* **@bendyline/squisq-formats:** upgraded to 2.8.12
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.39
+* **@bendyline/squisq-react:** upgraded to 2.12.22
+* **@bendyline/squisq-video-react:** upgraded to 2.5.23
+
 ## @bendyline/squisq-editor-react [2.13.15](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.14...@bendyline/squisq-editor-react@2.13.15) (2026-10-30)
 
 ### Bug Fixes

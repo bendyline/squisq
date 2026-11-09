@@ -8,6 +8,7 @@ export * from './utils/imageTreatment.js';
 export * from './utils/diagramText.js';
 export * from './templateInputs.js';
 export * from './coverSlideSettings.js';
+export { coverRepeatsLeadingBlock } from './coverLeadingBlock.js';
 export * from './utils/shapeGeometry.js';
 export {
   markdownToDoc,
@@ -20,7 +21,11 @@ export {
 } from './markdownToDoc.js';
 export type { MarkdownToDocOptions } from './markdownToDoc.js';
 export { docToMarkdown } from './docToMarkdown.js';
-export { buildPreviewDoc, documentTitleFromFileName } from './buildPreviewDoc.js';
+export {
+  buildPreviewDoc,
+  documentTitleFromFileName,
+  previewBlockTemplate,
+} from './buildPreviewDoc.js';
 export type { BuildPreviewDocOptions } from './buildPreviewDoc.js';
 export {
   readCustomTemplatesFromFrontmatter,

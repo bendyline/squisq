@@ -227,22 +227,8 @@ function getTemplateDefaults(
   }
 }
 
-function blockToSlide(
-  block: Block,
-  index: number,
-  knownTemplates?: ReadonlySet<string>,
-  documentTitle?: string,
-): Record<string, unknown> {
-  // A heading-less block (the leading "preamble" that holds body content
-  // before the first heading) has no authored header. Fall back to the block's
-  // own title, then to the document title (frontmatter `title:` or a
-  // host-provided file name), and finally to no header at all. We deliberately
-  // never surface `block.id` — the synthetic preamble id is the literal string
-  // `'preamble'`, which is a placeholder, not a heading anyone wrote.
-  const headingText = block.sourceHeading
-    ? extractPlainText(block.sourceHeading)
-    : block.title || documentTitle || '';
-
+/** The template a block's slide is built from, before images are placed. */
+function slideTemplate(block: Block, knownTemplates?: ReadonlySet<string>): string {
   // `markdownToDoc` uses sectionHeader as its structural default so the
   // authored Markdown can round-trip without materialized annotations. That
   // default is not a content-preserving presentation choice: sectionHeader
@@ -260,9 +246,45 @@ function blockToSlide(
   // template carried in the doc's `customTemplates` set. Without this,
   // an annotated `{[hero]}` heading would silently fall back to
   // `sectionHeader` because `hasTemplate` only knows built-ins.
-  const isCustomTemplate = knownTemplates?.has(requestedTemplate) ?? false;
-  const recognized = hasTemplate(requestedTemplate) || isCustomTemplate;
-  const template = recognized ? requestedTemplate : 'sectionHeader';
+  const recognized = hasTemplate(requestedTemplate) || !!knownTemplates?.has(requestedTemplate);
+  return recognized ? requestedTemplate : 'sectionHeader';
+}
+
+/**
+ * The template a block's slide renders with in previews, slideshows, video,
+ * and a dynamic deck's authored sections. This is not always `block.template`,
+ * because a heading with no annotation shows its body as content and a picture
+ * replaces a bare section header.
+ */
+export function previewBlockTemplate(block: Block, doc?: Pick<Doc, 'customTemplates'>): string {
+  const template = slideTemplate(
+    block,
+    doc?.customTemplates && new Set(doc.customTemplates.map((custom) => custom.name)),
+  );
+  return template === 'sectionHeader' &&
+    !block.summaryMode &&
+    extractBlockImages(block.contents).length > 0
+    ? 'imageWithCaption'
+    : template;
+}
+
+function blockToSlide(
+  block: Block,
+  index: number,
+  knownTemplates?: ReadonlySet<string>,
+  documentTitle?: string,
+): Record<string, unknown> {
+  // A heading-less block (the leading "preamble" that holds body content
+  // before the first heading) has no authored header. Fall back to the block's
+  // own title, then to the document title (frontmatter `title:` or a
+  // host-provided file name), and finally to no header at all. We deliberately
+  // never surface `block.id` — the synthetic preamble id is the literal string
+  // `'preamble'`, which is a placeholder, not a heading anyone wrote.
+  const headingText = block.sourceHeading
+    ? extractPlainText(block.sourceHeading)
+    : block.title || documentTitle || '';
+  const template = slideTemplate(block, knownTemplates);
+  const isCustomTemplate = knownTemplates?.has(template) ?? false;
   const defaults = getTemplateDefaults(template, headingText, block);
   const templateOverrides = omitStringBlockMeta(block.templateOverrides);
   const coercedTemplateOverrides = templateOverrides

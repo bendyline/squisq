@@ -38,7 +38,7 @@ export type { AudioTimelineClip, ComputeAudioTimelineOptions } from './audioTime
 export { computeAudioTimeline } from './audioTimeline.js';
 
 // ── Render HTML ────────────────────────────────────────────────────
-export type { RenderHtmlOptions } from './renderHtml.js';
+export type { RenderFontFace, RenderHtmlOptions } from './renderHtml.js';
 export { generateRenderHtml } from './renderHtml.js';
 
 // ── Dashboard Image Export ─────────────────────────────────────────

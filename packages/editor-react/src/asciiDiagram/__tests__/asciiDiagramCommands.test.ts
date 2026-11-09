@@ -220,6 +220,48 @@ describe('applyAsciiDiagramCommand', () => {
     ]);
   });
 
+  it('renameNode commits on the same fan-out drawn in plain ASCII', () => {
+    // The redrawn ASCII art puts the Documents lane's last `+` turn directly
+    // above its `v`; reading that `v` as text added a phantom box and dropped
+    // the edge, so verification refused the rename.
+    const fanout = [
+      '+------------+',
+      '|  Markdown  |',
+      '+-----+------+',
+      '      |',
+      '  +---+------+------------+-----------+',
+      '  |          |            |           |',
+      '  v          v            v           v',
+      '+-------+ +---------+ +------------+ +-------+',
+      '| Pages | |Documents| | Slideshows | | Video |',
+      '+-------+ +---------+ +------------+ +-------+',
+    ].join('\n');
+    const editor = makeEditor('```diagram\n' + fanout + '\n```\n');
+    const id = firstBlockId(editor);
+    expect(
+      applyAsciiDiagramCommand(editor, id, {
+        kind: 'renameNode',
+        nodeId: 'documents',
+        newLabel: 'Documentsaa',
+      }),
+    ).toBe(true);
+    const reparsed = parseAsciiDiagram(fenceOf(editor).text);
+    expect(reparsed.style).toBe('ascii');
+    expect(reparsed.nodes.map((n) => n.label).sort()).toEqual([
+      'Documentsaa',
+      'Markdown',
+      'Pages',
+      'Slideshows',
+      'Video',
+    ]);
+    expect(reparsed.edges.map((e) => `${e.source}>${e.target}`).sort()).toEqual([
+      'markdown>documentsaa',
+      'markdown>pages',
+      'markdown>slideshows',
+      'markdown>video',
+    ]);
+  });
+
   it('addNode / removeNode change the box count', () => {
     const editor = makeEditor('```\n' + ART + '\n```\n');
     const id = firstBlockId(editor);

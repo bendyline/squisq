@@ -34,6 +34,7 @@ import type { ContentContainer } from '../storage/ContentContainer.js';
 import { estimateTimeFromText } from '../timing/narrationTiming.js';
 import { buildCaptionTrack } from '../timing/captions.js';
 import { buildNarrationScript } from '../narration/script.js';
+import { reanchorNarrationText } from '../narration/reanchor.js';
 import {
   parseNarrationTimingJson,
   type NarrationTimingBlock,
@@ -348,12 +349,19 @@ export async function applyNarrationTiming(
     const blocks = retimeBlocks(doc.blocks, ctx);
     const duration = Math.max(clip.startAt + playedDuration, ctx.cursor);
     const captions = narrationCaptions(doc, clip, timing, timeMap, playedDuration);
+    // Text edited since the take (a title added, a typo fixed) keeps the take
+    // when nearly every word still lines up: offsets move onto the current
+    // script and edited words lose theirs. Otherwise the take keeps its own
+    // text, and a presentation reports that the narration no longer matches.
+    const currentText = buildNarrationScript(doc).sourceText;
+    const reanchor = reanchorNarrationText(timing.sourceText, currentText);
+    const mapOffset = reanchor ?? ((offset: number) => offset);
     const retimed: Doc = {
       ...doc,
       blocks,
       duration,
       presentationNarration: {
-        sourceText: timing.sourceText,
+        sourceText: reanchor ? currentText : timing.sourceText,
         src: clip.src,
         startTime: clip.startAt,
         duration: playedDuration,
@@ -363,10 +371,19 @@ export async function applyNarrationTiming(
             ? [{ ...event, time: clip.startAt + time }]
             : [];
         }),
+        // A slide shown inside a trimmed span appears where playback resumes.
+        slides: timing.slides?.flatMap((mark) => {
+          const time = timeMap ? timeMap.snapSourceToPlayed(mark.time) : mark.time;
+          const charOffset = mapOffset(mark.charOffset);
+          return charOffset !== undefined && time >= 0 && time <= playedDuration
+            ? [{ charOffset, time: clip.startAt + time }]
+            : [];
+        }),
         bookmarks: timing.bookmarks.flatMap((bookmark) => {
           const time = timeMap ? timeMap.sourceToPlayed(bookmark.time) : bookmark.time;
-          return time !== null && time >= 0 && time <= playedDuration
-            ? [{ ...bookmark, time: clip.startAt + time }]
+          const charOffset = mapOffset(bookmark.charOffset);
+          return charOffset !== undefined && time !== null && time >= 0 && time <= playedDuration
+            ? [{ ...bookmark, charOffset, time: clip.startAt + time }]
             : [];
         }),
       },

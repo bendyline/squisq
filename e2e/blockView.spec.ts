@@ -1,10 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
+import { selectWriteMode } from './view-tabs';
 
 /**
  * E2E tests for the block-at-a-time view.
  *
- * Verifies the View menu toggle, that the editing surface is scoped to a
+ * Verifies the Write tab's Blocks mode, that the editing surface is scoped to a
  * single block, that Prev/Next navigate, and that "Add block" both inserts
  * into the full document and advances the card.
  */
@@ -17,10 +18,7 @@ async function loadFeaturesSample(page: Page) {
 }
 
 async function enterBlockMode(page: Page) {
-  await page.getByRole('button', { name: 'View options' }).click();
-  await page.getByRole('menuitemradio', { name: 'Block-at-a-time' }).click();
-  // Close the menu.
-  await page.keyboard.press('Escape');
+  await selectWriteMode(page, 'Blocks');
   await page.locator('[data-testid="block-card-view"]').waitFor({ state: 'visible' });
 }
 
@@ -57,8 +55,8 @@ test.describe('Block-at-a-time view', () => {
     // Turn on the outline, then enter block mode.
     await page.getByRole('button', { name: 'View options' }).click();
     await page.getByRole('menuitemcheckbox', { name: 'Show outline' }).click();
-    await page.getByRole('menuitemradio', { name: 'Block-at-a-time' }).click();
     await page.keyboard.press('Escape');
+    await selectWriteMode(page, 'Blocks');
     await page.locator('[data-testid="block-card-view"]').waitFor({ state: 'visible' });
 
     await page.locator('.squisq-outline-row', { hasText: 'Lists' }).first().click();

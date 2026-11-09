@@ -747,6 +747,7 @@ function findRailLabels(grid: string[][], boxes: readonly ParsedBox[]): ParsedBo
     }
   }
 
+  const boxCell = maskedCell(inBox, W, H);
   const at = (r: number, c: number): string =>
     r >= 0 && r < H && c >= 0 && c < W ? grid[r][c] : ' ';
   const joins = (ch: string): boolean =>
@@ -788,7 +789,7 @@ function findRailLabels(grid: string[][], boxes: readonly ParsedBox[]): ParsedBo
     if (ch === ' ') return false;
     if (arrowDirection(ch) !== null) return true;
     const ascii = asciiArrowDirection(ch);
-    if (ascii !== null && asciiArrowGate(grid, r, c, ascii)) return true;
+    if (ascii !== null && asciiArrowGate(grid, r, c, ascii, boxCell)) return true;
     if (!isLineChar(ch)) return false;
     if (routingRow[r]) return true;
     const vert = vertJoins(at(r - 1, c)) || vertJoins(at(r + 1, c));
@@ -961,6 +962,7 @@ function extractEdges(
   const W = H > 0 ? grid[0].length : 0;
 
   // -- Eligible cells: line/arrow chars outside the mask.
+  const boxCell = maskedCell(mask, W, H);
   const cells = new Map<number, EdgeCellInfo>();
   for (let r = 0; r < H; r++) {
     for (let c = 0; c < W; c++) {
@@ -973,7 +975,7 @@ function extractEdges(
         continue;
       }
       const asc = asciiArrowDirection(ch);
-      if (asc && asciiArrowGate(grid, r, c, asc)) {
+      if (asc && asciiArrowGate(grid, r, c, asc, boxCell)) {
         cells.set(idx, { arrow: asc });
         continue;
       }
@@ -1011,12 +1013,12 @@ function extractEdges(
           // that is part of a word (`read-only`) starts a run that peters
           // out into more text; the run that CLOSES the bridge always ends
           // in structure (the continuing line, its arrowhead, or a border).
-          if (horizRunReachesStructure(grid, mask, r, g, W)) break;
+          if (horizRunReachesStructure(grid, mask, r, g, W, boxCell)) break;
           while (g < W && isHoriz(grid[r][g])) g++;
           sawText = true;
           continue;
         }
-        if (isStructuralInGap(grid, r, g)) {
+        if (isStructuralInGap(grid, r, g, boxCell)) {
           failed = true;
           break;
         }
@@ -1465,6 +1467,7 @@ function horizRunReachesStructure(
   r: number,
   c: number,
   W: number,
+  isBoxCell: (r: number, c: number) => boolean,
 ): boolean {
   let end = c;
   while (end < W && isHoriz(grid[r][end]) && !mask[r * W + end]) end++;
@@ -1472,7 +1475,7 @@ function horizRunReachesStructure(
   const ch = grid[r][end];
   if (isLineChar(ch) || arrowDirection(ch) !== null) return true;
   const asc = asciiArrowDirection(ch);
-  return asc !== null && asciiArrowGate(grid, r, end, asc);
+  return asc !== null && asciiArrowGate(grid, r, end, asc, isBoxCell);
 }
 
 /**
@@ -1492,11 +1495,16 @@ function horizRunReachesStructure(
  * above or below it — which is what lets those survive in a label verbatim
  * instead of being escaped or stripped at the render boundary.
  */
-function isStructuralInGap(grid: string[][], r: number, c: number): boolean {
+function isStructuralInGap(
+  grid: string[][],
+  r: number,
+  c: number,
+  isBoxCell: (r: number, c: number) => boolean,
+): boolean {
   const ch = grid[r][c];
   if (arrowDirection(ch) !== null) return true;
   const asc = asciiArrowDirection(ch);
-  if (asc !== null && asciiArrowGate(grid, r, c, asc)) return true;
+  if (asc !== null && asciiArrowGate(grid, r, c, asc, isBoxCell)) return true;
   if (!isLineChar(ch)) return false;
 
   const isDrawing = (x: string | undefined): boolean =>
@@ -1504,18 +1512,49 @@ function isStructuralInGap(grid: string[][], r: number, c: number): boolean {
   return isDrawing(grid[r - 1]?.[c]) || isDrawing(grid[r + 1]?.[c]);
 }
 
-/** ASCII arrow chars count only when a matching line char sits behind them. */
-function asciiArrowGate(grid: string[][], r: number, c: number, dir: ArrowDirection): boolean {
-  const behind =
+/**
+ * ASCII arrow chars count only when a line reaches them from behind: a
+ * matching line char, or a `+` turn that a line runs into. The renderer draws
+ * a connector's last turn directly behind its arrowhead when the target is
+ * close (`+` above `v`), so reading back what it drew needs the turn. A `+`
+ * that belongs to a box, or that no line reaches (`A + B`), is not a turn —
+ * a caption starting with `v` under a box corner stays text. Callers that
+ * cannot say where the boxes are (`isBoxCell` omitted) accept only a line.
+ */
+function asciiArrowGate(
+  grid: string[][],
+  r: number,
+  c: number,
+  dir: ArrowDirection,
+  isBoxCell?: (r: number, c: number) => boolean,
+): boolean {
+  const [br, bc] =
     dir === 'down'
-      ? grid[r - 1]?.[c]
+      ? [r - 1, c]
       : dir === 'up'
-        ? grid[r + 1]?.[c]
+        ? [r + 1, c]
         : dir === 'right'
-          ? grid[r]?.[c - 1]
-          : grid[r]?.[c + 1];
+          ? [r, c - 1]
+          : [r, c + 1];
+  const behind = grid[br]?.[bc];
   if (behind === undefined) return false;
-  return dir === 'down' || dir === 'up' ? isVert(behind) : isHoriz(behind);
+  if (dir === 'down' || dir === 'up' ? isVert(behind) : isHoriz(behind)) return true;
+  if (!isBoxCell || !isPlus(behind) || isBoxCell(br, bc)) return false;
+  const line = (lr: number, lc: number, test: (ch: string) => boolean): boolean => {
+    const ch = grid[lr]?.[lc];
+    return ch !== undefined && test(ch) && !isBoxCell(lr, lc);
+  };
+  return (
+    line(br, bc - 1, isHoriz) ||
+    line(br, bc + 1, isHoriz) ||
+    line(br - 1, bc, isVert) ||
+    line(br + 1, bc, isVert)
+  );
+}
+
+/** Cell predicate over a box mask, for `asciiArrowGate`. */
+function maskedCell(mask: Uint8Array, W: number, H: number): (r: number, c: number) => boolean {
+  return (r, c) => r >= 0 && r < H && c >= 0 && c < W && mask[r * W + c] === 1;
 }
 
 /**

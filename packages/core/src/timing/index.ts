@@ -18,3 +18,6 @@ export type {
 
 export { buildCaptionTrack } from './captions.js';
 export type { BuildCaptionTrackOptions, CaptionSegmentSource } from './captions.js';
+
+export { phraseOffset, phraseStartTime, wordTimeAt } from './wordTiming.js';
+export type { PhraseTimeOptions, WordMark, WordSnap, WordTimeline } from './wordTiming.js';

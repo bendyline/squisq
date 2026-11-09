@@ -26,7 +26,7 @@
  *   bar across to the (now lower) card.
  */
 
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { ViewportConfig, MediaProvider } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { BlockRenderer, MediaContext } from '@bendyline/squisq-react';
@@ -85,7 +85,10 @@ export function InlinePreviewGutter({
 }: InlinePreviewGutterProps) {
   const gutterRef = useRef<HTMLElement | null>(null);
   const { entries: headingEntries, scrollToBlock } = useHeadingLayout(gutterRef);
-  const items = useBlockPreviewItems(viewport);
+  const [visibleCards, setVisibleCards] = useState<ReadonlySet<string> | null>(() =>
+    typeof IntersectionObserver === 'undefined' ? null : new Set(),
+  );
+  const items = useBlockPreviewItems(viewport, visibleCards);
 
   // Heading top per item id — derived from the layout hook. The connector
   // dot tracks this even when stacking pushes the card below.
@@ -98,6 +101,52 @@ export function InlinePreviewGutter({
   // Card stacking state — populated by a small post-render measurement
   // pass that reads each card's height to push subsequent cards down.
   const [positions, setPositions] = useState<Map<string, number>>(new Map());
+  const itemIds = items.map((item) => item.id).join('\0');
+
+  // Keep every card's label and aspect-ratio box for stacking, but mount the
+  // expensive SVG contents only near the viewport. Re-parsing a long document
+  // must not rebuild hundreds of invisible renderers between keystrokes.
+  useEffect(() => {
+    const gutter = gutterRef.current;
+    if (!gutter || typeof IntersectionObserver === 'undefined') return;
+    let active = true;
+    // New or heading-less blocks may have no position. Observing their hidden
+    // top: 0 placeholders would briefly materialize the entire document.
+    const cards = [...gutter.querySelectorAll<HTMLElement>('.squisq-inline-preview-card')].filter(
+      (card) => positions.has(card.dataset.previewId ?? ''),
+    );
+    const ids = new Set(cards.map((card) => card.dataset.previewId));
+    setVisibleCards((previous) => {
+      if (previous === null || [...previous].every((id) => ids.has(id))) return previous;
+      return new Set([...previous].filter((id) => ids.has(id)));
+    });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!active) return;
+        setVisibleCards((previous) => {
+          const next = new Set(previous);
+          for (const entry of entries) {
+            const id = (entry.target as HTMLElement).dataset.previewId;
+            if (!id) continue;
+            if (entry.isIntersecting) next.add(id);
+            else next.delete(id);
+          }
+          if (previous?.size === next.size && [...next].every((id) => previous.has(id))) {
+            return previous;
+          }
+          return next;
+        });
+      },
+      { root: gutter, rootMargin: '320px 0px' },
+    );
+    for (const card of cards) {
+      observer.observe(card);
+    }
+    return () => {
+      active = false;
+      observer.disconnect();
+    };
+  }, [itemIds, positions]);
 
   useLayoutEffect(() => {
     if (items.length === 0) {
@@ -136,154 +185,173 @@ export function InlinePreviewGutter({
     });
   }, [items, connectorTops]);
 
-  const isEmpty = items.length === 0;
-  if (isEmpty) return null;
+  // EditorContext also updates for every source edit and caret movement. Those
+  // updates do not change the parsed preview or its geometry. Reuse the element
+  // tree so hundreds of unchanged SVG previews do not reconcile on each key.
+  return useMemo(() => {
+    if (items.length === 0) return null;
 
-  const totalWidth = width + connectorWidth;
-  const gutterStyle: CSSProperties = {
-    position: 'relative',
-    width: `${totalWidth}px`,
-    flex: `0 0 ${totalWidth}px`,
-    overflow: 'hidden',
-  };
+    const totalWidth = width + connectorWidth;
+    const gutterStyle: CSSProperties = {
+      position: 'relative',
+      width: `${totalWidth}px`,
+      flex: `0 0 ${totalWidth}px`,
+      overflow: 'hidden',
+    };
 
-  return (
-    <aside
-      ref={gutterRef}
-      className={`squisq-inline-preview-gutter ${className ?? ''}`}
-      style={gutterStyle}
-      data-testid="inline-preview-gutter"
-      aria-label="Block previews"
-    >
-      {/* Connector strip — vertical bracket bars per heading, on the
+    return (
+      <aside
+        ref={gutterRef}
+        className={`squisq-inline-preview-gutter ${className ?? ''}`}
+        style={gutterStyle}
+        data-testid="inline-preview-gutter"
+        aria-label="Block previews"
+      >
+        {/* Connector strip — vertical bracket bars per heading, on the
           left edge of the gutter so they sit immediately next to the
           editor body. */}
-      {headingEntries.length > 0 && (
-        <div
-          className="squisq-inline-preview-connectors"
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: connectorWidth,
-            height: '100%',
-            overflow: 'hidden',
-            pointerEvents: 'none',
-          }}
-        >
-          {headingEntries.map((ex, i) => {
-            const EXTENT_GAP = 6;
-            const height = Math.max(2, ex.bottom - ex.top - EXTENT_GAP);
-            return (
-              <div
-                key={`h-${i}-${ex.block.id}`}
-                className={`squisq-inline-preview-extent${
-                  ex.annotated ? '' : ' squisq-inline-preview-extent--untagged'
-                }`}
-                style={{
-                  position: 'absolute',
-                  top: `${ex.top}px`,
-                  height: `${height}px`,
-                  right: `${BAR_RIGHT_OFFSET}px`,
-                }}
-              />
-            );
-          })}
-        </div>
-      )}
-      {/* Diagonal connector SVG — overlays the connector strip + the
+        {headingEntries.length > 0 && (
+          <div
+            className="squisq-inline-preview-connectors"
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: connectorWidth,
+              height: '100%',
+              overflow: 'hidden',
+              pointerEvents: 'none',
+            }}
+          >
+            {headingEntries.map((ex, i) => {
+              const EXTENT_GAP = 6;
+              const height = Math.max(2, ex.bottom - ex.top - EXTENT_GAP);
+              return (
+                <div
+                  key={`h-${i}-${ex.block.id}`}
+                  className={`squisq-inline-preview-extent${
+                    ex.annotated ? '' : ' squisq-inline-preview-extent--untagged'
+                  }`}
+                  style={{
+                    position: 'absolute',
+                    top: `${ex.top}px`,
+                    height: `${height}px`,
+                    right: `${BAR_RIGHT_OFFSET}px`,
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
+        {/* Diagonal connector SVG — overlays the connector strip + the
           start of the card area, drawing a line from each bar to its
           card's caption row. */}
-      {items.length > 0 && (
-        <svg
-          className="squisq-inline-preview-connector-svg"
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: connectorWidth + CARD_LEFT_INSET,
-            height: '100%',
-            pointerEvents: 'none',
-            overflow: 'visible',
-          }}
-        >
+        {items.length > 0 && (
+          <svg
+            className="squisq-inline-preview-connector-svg"
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: connectorWidth + CARD_LEFT_INSET,
+              height: '100%',
+              pointerEvents: 'none',
+              overflow: 'visible',
+            }}
+          >
+            {items.map((item) => {
+              const headingTop = connectorTops.get(item.id);
+              const cardTop = positions.get(item.id);
+              if (headingTop == null || cardTop == null) return null;
+              const x1 = connectorWidth - BAR_RIGHT_OFFSET - 2;
+              const y1 = headingTop + EXTENT_TOP_PAD;
+              const x2 = connectorWidth + CARD_LEFT_INSET;
+              const y2 = cardTop + CARD_LABEL_OFFSET;
+              return (
+                <g key={item.id}>
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="#6366f1"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <circle cx={x1} cy={y1} r="4" fill="#6366f1" stroke="#ffffff" strokeWidth="2" />
+                  <circle cx={x2} cy={y2} r="4" fill="#6366f1" stroke="#ffffff" strokeWidth="2" />
+                </g>
+              );
+            })}
+          </svg>
+        )}
+
+        {/* Positioned preview cards. */}
+        <MediaContext.Provider value={mediaProvider ?? null}>
           {items.map((item) => {
-            const headingTop = connectorTops.get(item.id);
-            const cardTop = positions.get(item.id);
-            if (headingTop == null || cardTop == null) return null;
-            const x1 = connectorWidth - BAR_RIGHT_OFFSET - 2;
-            const y1 = headingTop + EXTENT_TOP_PAD;
-            const x2 = connectorWidth + CARD_LEFT_INSET;
-            const y2 = cardTop + CARD_LABEL_OFFSET;
+            const top = positions.get(item.id);
+            const hidden = top == null;
             return (
-              <g key={item.id}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke="#6366f1"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-                <circle cx={x1} cy={y1} r="4" fill="#6366f1" stroke="#ffffff" strokeWidth="2" />
-                <circle cx={x2} cy={y2} r="4" fill="#6366f1" stroke="#ffffff" strokeWidth="2" />
-              </g>
+              <div
+                key={item.id}
+                className="squisq-inline-preview-card"
+                data-template={item.template}
+                data-preview-id={item.id}
+                style={{
+                  position: 'absolute',
+                  top: `${top ?? 0}px`,
+                  left: connectorWidth + CARD_LEFT_INSET,
+                  right: 12,
+                  visibility: hidden ? 'hidden' : 'visible',
+                }}
+                onClick={() => scrollToBlock(item.sourceBlock)}
+              >
+                <div className="squisq-inline-preview-card-label">
+                  <span className="squisq-inline-preview-card-template">
+                    {templateLabel(item.template)}
+                  </span>
+                  {item.headingText && (
+                    <>
+                      <span className="squisq-inline-preview-card-sep">—</span>
+                      <span className="squisq-inline-preview-card-title">{item.headingText}</span>
+                    </>
+                  )}
+                </div>
+                <div
+                  className="squisq-inline-preview-card-svg"
+                  style={{
+                    aspectRatio: `${viewport.width} / ${viewport.height}`,
+                  }}
+                >
+                  {item.block && (
+                    <BlockRenderer
+                      block={item.block}
+                      buildPlayback="all"
+                      blockTime={0}
+                      basePath={basePath}
+                      viewport={viewport}
+                    />
+                  )}
+                </div>
+              </div>
             );
           })}
-        </svg>
-      )}
-
-      {/* Positioned preview cards. */}
-      <MediaContext.Provider value={mediaProvider ?? null}>
-        {items.map((item) => {
-          const top = positions.get(item.id);
-          const hidden = top == null;
-          return (
-            <div
-              key={item.id}
-              className="squisq-inline-preview-card"
-              data-template={item.template}
-              style={{
-                position: 'absolute',
-                top: `${top ?? 0}px`,
-                left: connectorWidth + CARD_LEFT_INSET,
-                right: 12,
-                visibility: hidden ? 'hidden' : 'visible',
-              }}
-              onClick={() => scrollToBlock(item.sourceBlock)}
-            >
-              <div className="squisq-inline-preview-card-label">
-                <span className="squisq-inline-preview-card-template">
-                  {templateLabel(item.template)}
-                </span>
-                {item.headingText && (
-                  <>
-                    <span className="squisq-inline-preview-card-sep">—</span>
-                    <span className="squisq-inline-preview-card-title">{item.headingText}</span>
-                  </>
-                )}
-              </div>
-              <div
-                className="squisq-inline-preview-card-svg"
-                style={{
-                  aspectRatio: `${viewport.width} / ${viewport.height}`,
-                }}
-              >
-                <BlockRenderer
-                  block={item.block}
-                  buildPlayback="all"
-                  blockTime={0}
-                  basePath={basePath}
-                  viewport={viewport}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </MediaContext.Provider>
-    </aside>
-  );
+        </MediaContext.Provider>
+      </aside>
+    );
+  }, [
+    items,
+    width,
+    connectorWidth,
+    className,
+    headingEntries,
+    connectorTops,
+    positions,
+    mediaProvider,
+    scrollToBlock,
+    viewport,
+    basePath,
+  ]);
 }

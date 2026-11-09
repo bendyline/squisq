@@ -4,7 +4,7 @@ import type { TemplateBlock } from '../schemas/BlockTemplates.js';
 import type { HtmlNode, MarkdownBlockNode, MarkdownNode } from '../markdown/types.js';
 import { extractPlainText, getChildren } from '../markdown/utils.js';
 import { stringifyHtmlNodes } from '../markdown/htmlParse.js';
-import { deriveTemplateInputs, isPictureFence } from '../doc/templateInputs.js';
+import { deriveTemplateInputs, extractImages, isPictureFence } from '../doc/templateInputs.js';
 import { isAsciiDiagramFence } from '../doc/asciiDiagram/detect.js';
 import { isTreeFence } from '../doc/treeview/detect.js';
 import { isAsciiTimelineFence } from '../doc/asciiTimeline/detect.js';
@@ -128,16 +128,25 @@ function withoutProse<T>(record: Record<string, T> | undefined): Record<string, 
   );
 }
 
-/** Preserve programmatically supplied imagery as well as Markdown body media. */
-function typedMediaContents(block: Block): MarkdownBlockNode[] {
+/**
+ * Preserve programmatically supplied imagery as well as Markdown body media.
+ * Template inputs derived from the body (`imageSrc` from its first picture)
+ * name pictures `bodyMedia` already keeps; those are not added twice.
+ */
+function typedMediaContents(
+  block: Block,
+  bodyMedia: readonly MarkdownBlockNode[],
+): MarkdownBlockNode[] {
   const record: Record<string, unknown> = {
     ...block,
     ...block.templateData,
     ...coerceTemplateParams(block.template ?? '', block.templateOverrides ?? {}).input,
   };
   const contents: MarkdownBlockNode[] = [];
+  const seen = new Set(extractImages([...bodyMedia]).map((image) => image.src));
   const addImage = (src: unknown, alt: unknown): void => {
-    if (typeof src === 'string' && src) {
+    if (typeof src === 'string' && src && !seen.has(src)) {
+      seen.add(src);
       contents.push({
         type: 'paragraph',
         children: [{ type: 'image', url: src, alt: typeof alt === 'string' ? alt : '' }],
@@ -214,7 +223,7 @@ export function summarizeBlock(block: Block, mode: 'brief' | 'headings-and-featu
       ? [{ type: 'paragraph' as const, children: [{ type: 'text' as const, value: brief }] }]
       : []),
     ...featureContents,
-    ...typedMediaContents(block),
+    ...typedMediaContents(block, featureContents),
   ];
   const base: Block & { sourceStartTime: number; sourceDuration: number } = {
     id: block.id,
@@ -277,10 +286,11 @@ export function summarizeBlock(block: Block, mode: 'brief' | 'headings-and-featu
 
 /** Bound promoted highlights too, and keep their source block's media. */
 export function summarizeHighlight(block: TemplateBlock, source: Block): TemplateBlock {
+  const features = extractFeatureContents(source.contents);
   const summary = {
     ...block,
     summaryMode: 'brief' as const,
-    contents: [...extractFeatureContents(source.contents), ...typedMediaContents(source)],
+    contents: [...features, ...typedMediaContents(source, features)],
     media: source.media,
   };
   if (summary.template === 'quote') return { ...summary, quote: briefText(summary.quote) };

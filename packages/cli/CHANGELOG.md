@@ -1,3 +1,57 @@
+## @bendyline/squisq-cli [2.9.30](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.29...@bendyline/squisq-cli@2.9.30) (2026-11-07)
+
+### Bug Fixes
+
+* Misc updates for doc support ([#121](https://github.com/bendyline/squisq/issues/121)) ([7fb79a8](https://github.com/bendyline/squisq/commit/7fb79a894afa73a75cfc1e8674b1373f62d5329a))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.14
+* **@bendyline/squisq-formats:** upgraded to 2.8.16
+* **@bendyline/squisq-video:** upgraded to 2.4.20
+* **@bendyline/squisq-react:** upgraded to 2.12.26
+
+## @bendyline/squisq-cli [2.9.29](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.28...@bendyline/squisq-cli@2.9.29) (2026-11-07)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.13
+* **@bendyline/squisq-formats:** upgraded to 2.8.15
+* **@bendyline/squisq-video:** upgraded to 2.4.19
+* **@bendyline/squisq-react:** upgraded to 2.12.25
+
+## @bendyline/squisq-cli [2.9.28](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.27...@bendyline/squisq-cli@2.9.28) (2026-11-05)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.12
+* **@bendyline/squisq-formats:** upgraded to 2.8.14
+* **@bendyline/squisq-video:** upgraded to 2.4.18
+* **@bendyline/squisq-react:** upgraded to 2.12.24
+
+## @bendyline/squisq-cli [2.9.27](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.26...@bendyline/squisq-cli@2.9.27) (2026-11-04)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.11
+* **@bendyline/squisq-formats:** upgraded to 2.8.13
+* **@bendyline/squisq-video:** upgraded to 2.4.17
+* **@bendyline/squisq-react:** upgraded to 2.12.23
+
+## @bendyline/squisq-cli [2.9.26](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.25...@bendyline/squisq-cli@2.9.26) (2026-11-01)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.10
+* **@bendyline/squisq-formats:** upgraded to 2.8.12
+* **@bendyline/squisq-video:** upgraded to 2.4.16
+* **@bendyline/squisq-react:** upgraded to 2.12.22
+
 ## @bendyline/squisq-cli [2.9.25](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.24...@bendyline/squisq-cli@2.9.25) (2026-10-30)
 
 

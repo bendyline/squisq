@@ -34,7 +34,14 @@
 /* ─── View Tabs (inside toolbar) ─────────────────────── */
 
 .squisq-toolbar-view-tabs {
-  display: flex;
+  /* A grid rather than a flex row so each ▾ mode-menu button can sit right
+     after its tab. The buttons live outside the tablist, which may own only
+     tabs, so the tablist is a subgrid spanning the tab columns and each button
+     drops into the column beside its tab:
+       1 Write · 2 Write ▾ · 3 Source · 4 Use · 5 Use ▾ */
+  display: grid;
+  grid-template-columns: repeat(5, auto);
+  justify-content: start;
   gap: 0;
   margin-right: 0;
   padding: 0 16px 0 12px;
@@ -44,47 +51,75 @@
   /* Bottom-align so the active-tab underline lands flush with the
      toolbar's lower edge — the underline-as-tab-indicator pattern
      reads as "tab", not "floating button in the middle of a bar". */
-  align-items: flex-end;
+  align-items: end;
   box-sizing: border-box;
 }
 
-.squisq-toolbar-view-tab-list,
+.squisq-toolbar-view-tab-list {
+  grid-row: 1;
+  grid-column: 1 / 5;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-self: stretch;
+}
+
 .squisq-toolbar-view-tab-wrap,
-.squisq-toolbar-use-menu {
+.squisq-toolbar-mode-menu {
+  grid-row: 1;
   display: flex;
   align-items: flex-end;
   align-self: stretch;
 }
 
-/* The Use tab owns the primary preview-mode chooser. Keeping the arrow in the
-   tab cluster makes mode selection available before entering Use and frees the
-   preview toolbar for format/theme/output settings. */
-.squisq-toolbar-use-tab,
+.squisq-toolbar-view-tab-wrap--wysiwyg {
+  grid-column: 1;
+}
+
+.squisq-toolbar-write-menu {
+  grid-column: 2;
+}
+
+.squisq-toolbar-view-tab-wrap--raw {
+  grid-column: 3;
+}
+
+.squisq-toolbar-view-tab-wrap--preview {
+  grid-column: 4;
+}
+
 .squisq-toolbar-use-menu {
+  grid-column: 5;
+}
+
+/* Write and Use each own a mode chooser (Write / Blocks / Timeline; Slideshow,
+   Page, …). Keeping the arrow in the tab cluster makes a mode available before
+   entering its view and frees the preview toolbar for format/theme/output
+   settings. */
+.squisq-toolbar-mode-tab,
+.squisq-toolbar-mode-menu {
   position: relative;
   border-bottom: 2px solid transparent;
 }
 
-.squisq-toolbar-use-tab > .squisq-toolbar-view-tab {
+.squisq-toolbar-mode-tab > .squisq-toolbar-view-tab {
   padding-right: 4px;
   padding-bottom: 4px;
   border-bottom: 0;
 }
 
-.squisq-toolbar-use-tab--active {
+.squisq-toolbar-mode-tab--active {
   border-bottom-color: var(--squisq-accent);
 }
 
 /* The tab and its adjacent menu button are separate keyboard stops. Give each
-   a visible focus ring above the shared active underline. The menu button lives
-   outside the tablist so assistive technology sees only tabs inside it. */
-.squisq-toolbar-use-tab > .squisq-toolbar-view-tab:focus-visible,
-.squisq-toolbar-use-menu > .squisq-use-mode-trigger:focus-visible {
+   a visible focus ring above the shared active underline: the tab's around the
+   tab, the menu button's around its face. */
+.squisq-toolbar-mode-tab > .squisq-toolbar-view-tab:focus-visible,
+.squisq-toolbar-mode-menu > .squisq-view-mode-trigger:focus-visible {
   outline: none;
 }
 
-.squisq-toolbar-use-tab:has(> .squisq-toolbar-view-tab:focus-visible)::after,
-.squisq-toolbar-use-menu:has(> .squisq-use-mode-trigger:focus-visible)::after {
+.squisq-toolbar-mode-tab:has(> .squisq-toolbar-view-tab:focus-visible)::after {
   content: '';
   position: absolute;
   inset: 2px 0 4px;
@@ -94,35 +129,73 @@
   pointer-events: none;
 }
 
-.squisq-use-mode-trigger {
+/* The trigger is the whole column beside the tab, top to bottom, so it is an
+   easy target; the face inside it is what reads as a button. The face is
+   centred on the tab label (2px clear of the active underline). */
+.squisq-view-mode-trigger {
   align-self: stretch;
   display: inline-flex;
   align-items: flex-end;
   justify-content: center;
-  width: 20px;
-  padding: 0 6px 9px 0;
+  padding: 0 6px 2px 2px;
   border: 0;
   background: transparent;
   color: var(--squisq-text-soft);
   cursor: pointer;
-  box-sizing: content-box;
 }
 
-.squisq-use-mode-trigger > svg {
+.squisq-view-mode-trigger-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--squisq-border);
+  border-radius: 5px;
+  background: var(--squisq-input-bg);
+  box-sizing: border-box;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.squisq-view-mode-trigger-face > svg {
   display: block;
-  transform: translateY(-1px);
 }
 
-.squisq-use-mode-trigger:hover,
-.squisq-use-mode-trigger--open {
+.squisq-view-mode-trigger:hover > .squisq-view-mode-trigger-face {
+  border-color: var(--squisq-border-strong);
+  background: var(--squisq-surface-hover);
   color: var(--squisq-text-strong);
 }
 
-.squisq-toolbar-use-tab--active .squisq-use-mode-trigger {
+.squisq-toolbar-mode-tab--active .squisq-view-mode-trigger-face {
+  border-color: var(--squisq-accent-border);
+  background: var(--squisq-accent-subtle);
   color: var(--squisq-accent-strong);
 }
 
-.squisq-use-mode-menu {
+.squisq-view-mode-trigger--open > .squisq-view-mode-trigger-face,
+.squisq-toolbar-mode-tab--active .squisq-view-mode-trigger:hover > .squisq-view-mode-trigger-face {
+  border-color: var(--squisq-accent);
+  background: var(--squisq-accent-soft);
+  color: var(--squisq-accent-strong);
+}
+
+.squisq-view-mode-trigger:focus-visible > .squisq-view-mode-trigger-face {
+  outline: 2px solid var(--squisq-focus-ring);
+  outline-offset: 1px;
+}
+
+/* Fingers need more room than a pointer: widen the target on touch screens. */
+@media (pointer: coarse) {
+  .squisq-view-mode-trigger {
+    padding: 0 10px 2px 6px;
+  }
+}
+
+.squisq-view-mode-menu {
   position: fixed;
   z-index: 120;
   width: min(340px, calc(100vw - 16px));
@@ -144,10 +217,10 @@
     Arial,
     sans-serif
   );
-  animation: squisq-use-mode-menu-in 0.12s ease-out;
+  animation: squisq-view-mode-menu-in 0.12s ease-out;
 }
 
-.squisq-use-mode-menu-item {
+.squisq-view-mode-menu-item {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -166,19 +239,19 @@
     color 0.12s ease;
 }
 
-.squisq-use-mode-menu-item:hover,
-.squisq-use-mode-menu-item:focus-visible {
+.squisq-view-mode-menu-item:hover,
+.squisq-view-mode-menu-item:focus-visible {
   outline: none;
   background: var(--squisq-surface-hover);
   color: var(--squisq-text-strong);
 }
 
-.squisq-use-mode-menu-item--selected {
+.squisq-view-mode-menu-item--selected {
   background: var(--squisq-accent-subtle);
   color: var(--squisq-accent-strong);
 }
 
-.squisq-use-mode-menu-icon {
+.squisq-view-mode-menu-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -191,12 +264,12 @@
   font-size: 14px;
 }
 
-.squisq-use-mode-menu-item--selected .squisq-use-mode-menu-icon {
+.squisq-view-mode-menu-item--selected .squisq-view-mode-menu-icon {
   background: var(--squisq-accent-soft);
   color: var(--squisq-accent);
 }
 
-.squisq-use-mode-menu-copy {
+.squisq-view-mode-menu-copy {
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
@@ -204,14 +277,14 @@
   gap: 2px;
 }
 
-.squisq-use-mode-menu-label {
+.squisq-view-mode-menu-label {
   color: inherit;
   font-size: 12.5px;
   font-weight: 650;
   line-height: 1.2;
 }
 
-.squisq-use-mode-menu-summary {
+.squisq-view-mode-menu-summary {
   overflow: hidden;
   color: var(--squisq-text-muted);
   font-size: 11.5px;
@@ -221,7 +294,7 @@
   white-space: nowrap;
 }
 
-.squisq-use-mode-menu-check {
+.squisq-view-mode-menu-check {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -232,7 +305,7 @@
   text-align: center;
 }
 
-@keyframes squisq-use-mode-menu-in {
+@keyframes squisq-view-mode-menu-in {
   from {
     opacity: 0;
     transform: translateY(-3px) scale(0.99);
@@ -244,27 +317,27 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .squisq-use-mode-menu {
+  .squisq-view-mode-menu {
     animation: none;
   }
 }
 
-.squisq-use-mode-menu[data-theme='dark'] {
+.squisq-view-mode-menu[data-theme='dark'] {
   border-color: var(--squisq-border);
   background: var(--squisq-surface-overlay);
 }
-.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-icon {
+.squisq-view-mode-menu[data-theme='dark'] .squisq-view-mode-menu-icon {
   background: var(--squisq-surface-hover);
   color: var(--squisq-text-soft);
 }
 
-.squisq-use-mode-menu[data-theme='dark']
-  .squisq-use-mode-menu-item--selected
-  .squisq-use-mode-menu-icon {
+.squisq-view-mode-menu[data-theme='dark']
+  .squisq-view-mode-menu-item--selected
+  .squisq-view-mode-menu-icon {
   background: var(--squisq-accent-soft);
   color: var(--squisq-accent-strong);
 }
-.squisq-use-mode-menu[data-theme='dark'] .squisq-use-mode-menu-check {
+.squisq-view-mode-menu[data-theme='dark'] .squisq-view-mode-menu-check {
   color: var(--squisq-accent-strong);
 }
 

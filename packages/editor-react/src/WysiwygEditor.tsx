@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import { Selection } from '@tiptap/pm/state';
-import { Extension, getHTMLFromFragment } from '@tiptap/core';
+import { Extension } from '@tiptap/core';
 import type { EditorView as ProseMirrorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
 import Table from '@tiptap/extension-table';
@@ -76,6 +76,7 @@ import { findBlockSliceByHeadingIndex } from './blockSlice';
 import { stripFrontmatter } from './frontmatter';
 import { ingestForWrite, persistFromWrite } from './wrapPolicy';
 import { createSourceBaseline, preserveSource } from './sourcePreservation';
+import { createDocumentHtmlSerializer } from './documentHtml';
 import type { SourceBaseline } from './sourcePreservation';
 import { useEditorContext } from './EditorContext';
 import { buildMentionExtension } from './MentionExtension';
@@ -330,6 +331,7 @@ export function WysiwygEditor({
   /** An external source is queued for Tiptap but not yet applied. */
   const externalApplyPendingRef = useRef(false);
   const lastSourceRef = useRef(editorSource);
+  const serializeHtml = useMemo(createDocumentHtmlSerializer, []);
   const sourceLayoutRef = useRef(layoutMode);
   // React may commit several rapid editor updates one at a time. Remember
   // every locally emitted value so an intermediate commit is not mistaken
@@ -492,7 +494,10 @@ export function WysiwygEditor({
       ImageWithMediaProvider.configure({ inline: false }),
       TiptapVideo,
       TiptapAudio,
-      DocumentTrayExtension.configure({ enabled: layoutMode === 'document' }),
+      DocumentTrayExtension.configure({
+        enabled: layoutMode === 'document',
+        placeholder: resolvedPlaceholder,
+      }),
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
@@ -522,14 +527,14 @@ export function WysiwygEditor({
       // reintroduce parse-on-every-keystroke work.
       const serialize = (html: string): string =>
         persistFromWrite(tiptapToMarkdown(html), wrapStateRef.current);
-      let bodyMd = serialize(ed.getHTML());
+      let bodyMd = serialize(serializeHtml(ed.state.doc));
       const loaded = loadedSourceRef.current;
       if (loaded) {
         // The first change after a load starts from the document as loaded,
         // so its `before` is what that load serializes to.
         loaded.baseline ??= createSourceBaseline(
           loaded.body,
-          serialize(getHTMLFromFragment(transaction.before.content, ed.schema)),
+          serialize(serializeHtml(transaction.before)),
         );
         bodyMd = preserveSource(loaded.baseline, bodyMd);
       }

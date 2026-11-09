@@ -172,6 +172,8 @@ export type { ToolbarProps } from './Toolbar.js';
 
 export { VersionHistoryPanel } from './VersionHistoryPanel.js';
 export { ViewMenuPanel } from './ViewMenuPanel.js';
+export { WriteModeMenu } from './WriteModeMenu.js';
+export type { WriteModeMenuProps } from './WriteModeMenu.js';
 export { TransformMenu } from './TransformMenu.js';
 export { ingestForWrite, persistFromWrite } from './wrapPolicy.js';
 export type { WrapPolicyIngest } from './wrapPolicy.js';

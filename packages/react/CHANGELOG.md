@@ -1,3 +1,54 @@
+## @bendyline/squisq-react [2.12.26](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.25...@bendyline/squisq-react@2.12.26) (2026-11-07)
+
+### Bug Fixes
+
+* Misc updates for doc support ([#121](https://github.com/bendyline/squisq/issues/121)) ([7fb79a8](https://github.com/bendyline/squisq/commit/7fb79a894afa73a75cfc1e8674b1373f62d5329a))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.14
+
+## @bendyline/squisq-react [2.12.25](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.24...@bendyline/squisq-react@2.12.25) (2026-11-07)
+
+### Bug Fixes
+
+* Patches to Charts and AI authoring facilities ([#120](https://github.com/bendyline/squisq/issues/120)) ([658b54b](https://github.com/bendyline/squisq/commit/658b54b90f7413b0c4ec8a447890b8687885bac3))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.13
+
+## @bendyline/squisq-react [2.12.24](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.23...@bendyline/squisq-react@2.12.24) (2026-11-05)
+
+### Bug Fixes
+
+* Add concept templates and deck review harness ([#119](https://github.com/bendyline/squisq/issues/119)) ([586ae1d](https://github.com/bendyline/squisq/commit/586ae1dbaef77edfb692cc738c9950f65d87f431))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.12
+
+## @bendyline/squisq-react [2.12.23](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.22...@bendyline/squisq-react@2.12.23) (2026-11-04)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.11
+
+## @bendyline/squisq-react [2.12.22](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.21...@bendyline/squisq-react@2.12.22) (2026-11-01)
+
+### Bug Fixes
+
+* More updates and fixes ([#116](https://github.com/bendyline/squisq/issues/116)) ([c0e631b](https://github.com/bendyline/squisq/commit/c0e631be6e552b3677a56ee4ecb11c57e812c12e))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.10
+
 ## @bendyline/squisq-react [2.12.21](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.20...@bendyline/squisq-react@2.12.21) (2026-10-30)
 
 

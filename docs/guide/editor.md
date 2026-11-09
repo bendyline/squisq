@@ -40,25 +40,27 @@ unsaved changes — save to a **Storage** slot or download a copy first.
 
 The tabs at the top left of the editor switch between three views of the same document:
 
-| Tab                                    | What it's for                                                                                 |
-| -------------------------------------- | --------------------------------------------------------------------------------------------- |
-| **Write**                              | Visual editing, like a word processor. Headings, lists, tables, and pictures appear formatted |
-| **Source**                             | The Markdown itself, with syntax colors and suggestions as you type tags                      |
-| **Use** (named after the current mode) | The finished document — as a slideshow, page, video, dashboard, and more                      |
+| Tab                                      | What it's for                                                                                 |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Write** (named after the current mode) | Visual editing, like a word processor. Headings, lists, tables, and pictures appear formatted |
+| **Source**                               | The Markdown itself, with syntax colors and suggestions as you type tags                      |
+| **Use** (named after the current mode)   | The finished document — as a slideshow, page, video, dashboard, and more                      |
 
-The third tab shows the name of the display mode you're in — **Slideshow** until you choose
-another. Click the **▾** beside it, or click the tab again while you're in it, to pick a mode.
-Switch views with Ctrl+Shift+1, 2, and 3 (⌘⇧1, 2, and 3 on a Mac).
+The first and third tabs show the name of the mode you're in — **Write** and **Slideshow** until
+you choose others. Click the **▾** beside either one, or click the tab again while you're in it,
+to pick a mode; choosing one also switches to that tab. Switch views with Ctrl+Shift+1, 2, and 3
+(⌘⇧1, 2, and 3 on a Mac).
 
 Changes in one view appear in the others immediately. Write and Source edit the same Markdown,
 and Write leaves the parts of your file you didn't touch exactly as they were.
 
-### Layouts: document, block at a time, timeline
+### Write modes: Write, Blocks, Timeline
 
-**View options** (the eye icon) → **View** changes how Write and Source lay out the document:
+The **▾** beside the first tab changes how Write and Source lay out the document. The tab is
+named after the mode, and Source keeps the same layout:
 
-- **Document** — the whole document in one scrolling column. The default.
-- **Block-at-a-time** — one block on a card, with **Previous**, **Next**, a "Block N of M"
+- **Write** — the whole document in one scrolling column. The default.
+- **Blocks** — one block on a card, with **Previous**, **Next**, a "Block N of M"
   counter, and **Add block**.
 - **Timeline** — a card for the selected block above a timeline of every block and media clip.
   Drag a block's right edge to change its duration, drag clips to move them, drag the playhead to
@@ -190,8 +192,8 @@ document's theme choice.
 - **Show outline** — the document's headings as a tree on the left. Click a heading to jump to
   it, drag one to move its whole section, and use the arrows to promote or demote it.
 - **Show block previews** — a small preview of each block beside the text; click one to scroll
-  to it. In the block-at-a-time and timeline layouts, it shows a large preview of the current
-  block instead.
+  to it. In the Blocks and Timeline modes, it shows a large preview of the current block
+  instead.
 
 **On a narrow screen** (720 pixels wide or less) both panes are hidden. On a touch screen, swipe in
 from the right edge of the editor to pull out the **navigation sheet**: it opens on the
@@ -354,15 +356,14 @@ The file icon on the toolbar opens **Document settings**:
 
 The eye icon on the toolbar:
 
-| Option                        | Choices                                                                                            |
-| ----------------------------- | -------------------------------------------------------------------------------------------------- |
-| **View**                      | Document, Block-at-a-time, or Timeline (see [Layouts](#layouts-document-block-at-a-time-timeline)) |
-| **Show outline**              | The outline pane                                                                                   |
-| **Show block previews**       | The block preview pane                                                                             |
-| **Show block tags**           | Heading badges: No inline block tags, Selected/hovered block, or Always show                       |
-| **Show status bar**           | The word-count bar at the bottom                                                                   |
-| **Check spelling & grammar**  | Proofing on or off                                                                                 |
-| **Editor styling from theme** | How much the Write view looks like the document: Don't inherit, Fonts only, or Fonts & colors      |
+| Option                        | Choices                                                                                       |
+| ----------------------------- | --------------------------------------------------------------------------------------------- |
+| **Show outline**              | The outline pane                                                                              |
+| **Show block previews**       | The block preview pane                                                                        |
+| **Show block tags**           | Heading badges: No inline block tags, Selected/hovered block, or Always show                  |
+| **Show status bar**           | The word-count bar at the bottom                                                              |
+| **Check spelling & grammar**  | Proofing on or off                                                                            |
+| **Editor styling from theme** | How much the Write view looks like the document: Don't inherit, Fonts only, or Fonts & colors |
 
 ## Status bar
 

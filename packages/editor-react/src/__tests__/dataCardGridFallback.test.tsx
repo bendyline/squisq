@@ -29,13 +29,13 @@ function toDataUrl(text: string): string {
   return `data:text/csv;base64,${Buffer.from(text, 'utf8').toString('base64')}`;
 }
 
-function makeProvider(): MediaProvider {
+function makeProvider(href = HREF): MediaProvider {
   return {
     async resolveUrl(relativePath: string) {
-      return relativePath === HREF ? toDataUrl(CSV) : relativePath;
+      return relativePath === href ? toDataUrl(CSV) : relativePath;
     },
     async listMedia(): Promise<MediaEntry[]> {
-      return [{ name: HREF, mimeType: 'text/csv', size: CSV.length }];
+      return [{ name: href, mimeType: 'text/csv', size: CSV.length }];
     },
     async addMedia(name: string) {
       return name;
@@ -85,5 +85,39 @@ describe('DataCardWidget grid fallback', () => {
     expect(screen.getByText('gadget')).toBeTruthy();
     // No grid mounted anywhere.
     expect(document.querySelector('.squisq-data-card-grid')).toBeNull();
+  });
+
+  it('shows a percent-encoded file name the way the person named it', async () => {
+    const href = 'report_files/data/q3%20final.csv';
+    const markdown = [`## Q3 {[dataTable src=${href}]}`, '', `[q3 final.csv](${href})`].join('\n');
+    const editor = new Editor({
+      extensions: [
+        StarterKit,
+        LinkWithTitle.configure({ openOnClick: false, autolink: false }),
+        DataCardExtension.configure({ mediaProvider: () => null, mediaRevision: () => 0 }),
+      ],
+      content: markdownToTiptap(markdown),
+    });
+    editors.push(editor);
+    const blockId = DATA_CARD_KEY.getState(editor.state)?.entries[0]?.id;
+    expect(blockId).toBeDefined();
+
+    const provider = makeProvider(href);
+    render(
+      <DataCardWidget
+        editor={editor}
+        blockId={blockId!}
+        getMediaProvider={() => provider}
+        getMediaRevision={() => 0}
+      />,
+    );
+
+    const name = document.querySelector('.squisq-data-card-name');
+    expect(name?.textContent).toBe('q3 final.csv');
+    expect(name?.getAttribute('title')).toBe('report_files/data/q3 final.csv');
+    // The encoded href still addresses the bytes.
+    await waitFor(() => {
+      expect(screen.getByText('widget')).toBeTruthy();
+    });
   });
 });

@@ -145,6 +145,24 @@ function overlapPairs(rects: readonly DOMRect[]): Set<string> {
   return pairs;
 }
 
+/**
+ * The earliest authored entrance delay among each build step's layers. A
+ * building block times a step's entrances from the step's reveal: the step's
+ * own choreography (a badge pops, then its words rise) is kept, while the
+ * stagger the template gave it for unbuilt playback gives way to the build.
+ */
+function stepEntranceDelays(layers: readonly Layer[] | undefined): Map<number, number> {
+  const delays = new Map<number, number>();
+  for (const layer of layers ?? []) {
+    if (layer.buildStep === undefined || !layer.animation || layer.animation.type === 'none')
+      continue;
+    const delay = layer.animation.delay ?? 0;
+    const current = delays.get(layer.buildStep);
+    if (current === undefined || delay < current) delays.set(layer.buildStep, delay);
+  }
+  return delays;
+}
+
 /** Viewport configuration type */
 export interface ViewportDimensions {
   width: number;
@@ -253,6 +271,9 @@ export function BlockRenderer({
         : undefined,
     [steps, block.build, block.duration, block.buildTiming],
   );
+  const entranceDelays = useMemo(() => stepEntranceDelays(block.layers), [block.layers]);
+  /** Steps shown when the cursor last moved, so a step revealed by hand can replay its entrances. */
+  const shownSteps = useRef<{ block: Block; revealed: number } | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
   useEffect(() => {
     if (!respectReducedMotion) {
@@ -277,6 +298,9 @@ export function BlockRenderer({
           : buildPlayback;
     svg.dataset.buildRevealed = String(cursor.revealed);
     svg.dataset.buildCount = String(steps.length);
+    const motion = animationsEnabled && !reducedMotion;
+    const shown = shownSteps.current?.block === block ? shownSteps.current.revealed : undefined;
+    shownSteps.current = { block, revealed: cursor.revealed };
     for (const target of svg.querySelectorAll<HTMLElement>('[data-squisq-build-step]')) {
       const index = Number(target.dataset.squisqBuildStep);
       if (!Number.isInteger(index) || index < 0 || index >= steps.length || !block.build) {
@@ -284,16 +308,22 @@ export function BlockRenderer({
         target.style.opacity = '1';
         target.style.transform = '';
         target.style.pointerEvents = '';
+        target.style.removeProperty('--squisq-step-offset');
         target.removeAttribute('aria-hidden');
         target.removeAttribute('inert');
         continue;
       }
+      // A step whose layers bring their own entrances appears at once and lets
+      // them play, timed from its reveal rather than from the block's start.
+      const delay = entranceDelays.get(index);
+      const spec =
+        buildPlayback === 'all' ? { ...block.build, previous: 'keep' as const } : block.build;
       const state = buildTargetState(
         index,
         steps,
         cursor,
-        buildPlayback === 'all' ? { ...block.build, previous: 'keep' } : block.build,
-        animationsEnabled && !reducedMotion,
+        delay === undefined ? spec : { ...spec, effect: 'appear' },
+        motion,
       );
       target.style.visibility = state.hidden ? 'hidden' : 'visible';
       target.style.opacity = String(state.opacity);
@@ -301,8 +331,37 @@ export function BlockRenderer({
       target.style.pointerEvents = state.hidden ? 'none' : '';
       target.setAttribute('aria-hidden', String(state.hidden));
       target.toggleAttribute('inert', state.hidden);
+      if (delay === undefined) continue;
+      if (buildPlayback === 'timed' && timeline)
+        target.style.setProperty(
+          '--squisq-step-offset',
+          `${Number((timeline.starts[index]! - delay).toFixed(3))}s`,
+        );
+      else target.style.removeProperty('--squisq-step-offset');
+      // Stepped by hand, the entrances run from the click that reveals the step.
+      if (
+        motion &&
+        typeof buildPlayback === 'object' &&
+        shown !== undefined &&
+        index >= shown &&
+        index < cursor.revealed
+      ) {
+        for (const animation of target.getAnimations?.({ subtree: true }) ?? []) {
+          animation.currentTime = delay * 1000;
+          animation.play();
+        }
+      }
     }
-  }, [block.build, steps, timeline, blockTime, buildPlayback, animationsEnabled, reducedMotion]);
+  }, [
+    block,
+    steps,
+    timeline,
+    entranceDelays,
+    blockTime,
+    buildPlayback,
+    animationsEnabled,
+    reducedMotion,
+  ]);
   // Charts, timelines and diagrams position their labels against drawn
   // geometry; growing that text would detach it from the marks it labels.
   const growText =
@@ -383,25 +442,35 @@ export function BlockRenderer({
 
       {/* All layers clipped to viewBox bounds */}
       <g clipPath={`url(#${clipId})`}>
-        {(block.layers ?? []).map((layer) => (
-          <LayerRenderer
-            key={layer.id}
-            block={block}
-            layer={layer}
-            basePath={basePath}
-            viewport={viewport}
-            blockTime={blockTime}
-            isPlaying={isPlaying}
-            muted={muted}
-            animationsEnabled={animationsEnabled}
-            theme={theme}
-            tableContentRenderer={tableContentRenderer}
-            textScale={textScale}
-            videoEmbeds={videoEmbeds}
-            videoClips={videoClips}
-            staticMedia={staticMedia || reducedMotion || !animationsEnabled}
-          />
-        ))}
+        {(block.layers ?? []).map((layer) => {
+          const rendered = (
+            <LayerRenderer
+              key={layer.id}
+              block={block}
+              layer={layer}
+              basePath={basePath}
+              viewport={viewport}
+              blockTime={blockTime}
+              isPlaying={isPlaying}
+              muted={muted}
+              animationsEnabled={animationsEnabled}
+              theme={theme}
+              tableContentRenderer={tableContentRenderer}
+              textScale={textScale}
+              videoEmbeds={videoEmbeds}
+              videoClips={videoClips}
+              staticMedia={staticMedia || reducedMotion || !animationsEnabled}
+            />
+          );
+          // A layer that belongs to a build step reveals with it (see `blockBuildSteps`).
+          return layer.buildStep === undefined ? (
+            rendered
+          ) : (
+            <g key={layer.id} data-squisq-build-step={layer.buildStep}>
+              {rendered}
+            </g>
+          );
+        })}
       </g>
     </svg>
   );

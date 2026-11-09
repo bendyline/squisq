@@ -105,13 +105,15 @@ export function BlockPreviewList({
                 aria-hidden="true"
                 style={{ aspectRatio: `${viewport.width} / ${viewport.height}` }}
               >
-                <BlockRenderer
-                  block={item.block}
-                  buildPlayback="all"
-                  blockTime={0}
-                  basePath={basePath}
-                  viewport={viewport}
-                />
+                {item.block && (
+                  <BlockRenderer
+                    block={item.block}
+                    buildPlayback="all"
+                    blockTime={0}
+                    basePath={basePath}
+                    viewport={viewport}
+                  />
+                )}
               </span>
             </button>
           </li>

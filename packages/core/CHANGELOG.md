@@ -1,3 +1,33 @@
+## @bendyline/squisq [2.13.14](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.13...@bendyline/squisq@2.13.14) (2026-11-07)
+
+### Bug Fixes
+
+* Misc updates for doc support ([#121](https://github.com/bendyline/squisq/issues/121)) ([7fb79a8](https://github.com/bendyline/squisq/commit/7fb79a894afa73a75cfc1e8674b1373f62d5329a))
+
+## @bendyline/squisq [2.13.13](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.12...@bendyline/squisq@2.13.13) (2026-11-07)
+
+### Bug Fixes
+
+* Patches to Charts and AI authoring facilities ([#120](https://github.com/bendyline/squisq/issues/120)) ([658b54b](https://github.com/bendyline/squisq/commit/658b54b90f7413b0c4ec8a447890b8687885bac3))
+
+## @bendyline/squisq [2.13.12](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.11...@bendyline/squisq@2.13.12) (2026-11-05)
+
+### Bug Fixes
+
+* Add concept templates and deck review harness ([#119](https://github.com/bendyline/squisq/issues/119)) ([586ae1d](https://github.com/bendyline/squisq/commit/586ae1dbaef77edfb692cc738c9950f65d87f431))
+
+## @bendyline/squisq [2.13.11](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.10...@bendyline/squisq@2.13.11) (2026-11-04)
+
+### Bug Fixes
+
+* Add body-start placeholder to document tray ([#118](https://github.com/bendyline/squisq/issues/118)) ([3edc74b](https://github.com/bendyline/squisq/commit/3edc74bc552175fd809e83073029fa3798803734))
+
+## @bendyline/squisq [2.13.10](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.9...@bendyline/squisq@2.13.10) (2026-11-01)
+
+### Bug Fixes
+
+* More updates and fixes ([#116](https://github.com/bendyline/squisq/issues/116)) ([c0e631b](https://github.com/bendyline/squisq/commit/c0e631be6e552b3677a56ee4ecb11c57e812c12e))
+
 ## @bendyline/squisq [2.13.9](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.8...@bendyline/squisq@2.13.9) (2026-10-30)
 
 ### Bug Fixes

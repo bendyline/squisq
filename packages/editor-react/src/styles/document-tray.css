@@ -4,6 +4,22 @@
   display: none !important;
 }
 
+/* Stands in for the first body paragraph when every node is in the tray. */
+.squisq-wysiwyg-editor .squisq-document-tray-body-start {
+  min-height: 1lh;
+  cursor: text;
+}
+
+.squisq-wysiwyg-editor .squisq-document-tray-body-start::before {
+  content: attr(data-placeholder);
+  color: var(--squisq-text-faint);
+  pointer-events: none;
+}
+
+.squisq-wysiwyg-editor[contenteditable='false'] .squisq-document-tray-body-start {
+  display: none;
+}
+
 .squisq-document-tray {
   max-width: 800px;
   margin: 0 auto;

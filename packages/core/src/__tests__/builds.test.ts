@@ -166,6 +166,28 @@ describe('progressive builds', () => {
     expect(blockBuildSteps(blocks[0]!)).toHaveLength(6);
   });
 
+  it('keeps pacing in the segments that hold no build', () => {
+    const { preview } = fixture();
+    const build = { ...(preview.blocks[0] as DocBlock), audioSegment: 0 } as DocBlock;
+    const plain = {
+      id: 'plain',
+      template: 'factCard',
+      fact: 'Long',
+      explanation: 'A slide held for a whole minute of narration.',
+      duration: 60,
+      audioSegment: 1,
+    } as DocBlock;
+    const blocks = expandDocBlocks([build, plain], {
+      audioSegments: [
+        { startTime: 0, duration: 60 },
+        { startTime: 60, duration: 60 },
+      ],
+    });
+    // The build's segment keeps its one slide; the minute-long card is paced in 20 s parts.
+    expect(blocks.filter((block) => !block.id.startsWith('plain'))).toHaveLength(1);
+    expect(blocks.filter((block) => block.id.startsWith('plain'))).toHaveLength(3);
+  });
+
   it('evaluates arbitrary times deterministically and completes even a very short slide', () => {
     const { block } = fixture();
     const steps = blockBuildSteps(block);

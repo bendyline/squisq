@@ -1166,7 +1166,7 @@ describe('Use tab mode menu', () => {
     expect(
       within(menu)
         .getAllByRole('menuitemradio')
-        .map((item) => item.querySelector('.squisq-use-mode-menu-label')?.textContent),
+        .map((item) => item.querySelector('.squisq-view-mode-menu-label')?.textContent),
     ).toEqual(['Slideshow', 'Flashcards', 'Video', 'Page', 'Dashboard', 'Document', 'Narrate']);
     const slideshowItem = within(menu).getByRole('menuitemradio', { name: 'Slideshow' });
     expect(slideshowItem.getAttribute('aria-checked')).toBe('true');

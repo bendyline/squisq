@@ -31,7 +31,7 @@ import type {
 import { parseTimeSeconds } from '../markdown/annotationCoercion.js';
 import { mediaKindForUrl } from '../markdown/mediaReference.js';
 import { sanitizeUrl } from '../markdown/sanitize.js';
-import { extractPlainText } from '../markdown/utils.js';
+import { extractPlainText, isHtmlLineBreak } from '../markdown/utils.js';
 import { isSvgIslandLang } from '../markdown/svgIsland.js';
 import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
@@ -231,6 +231,9 @@ function renderInlineHtml(nodes: MarkdownInlineNode[]): string {
         case 'inlineIcon':
           return `<i class="fa-${node.family} fa-${node.name}" aria-hidden="true"></i>`;
         case 'htmlInline':
+          // A `<br>` tag is a line break — the only one a table cell can hold,
+          // and the one the editor writes there for Enter.
+          if (isHtmlLineBreak(node.rawHtml)) return '<br>';
           // A clip plays as its own layer; its markup printed as text says
           // nothing (a recording inside a list item lands here).
           return INLINE_MEDIA_TAG_RE.test(node.rawHtml.trim())
@@ -916,6 +919,38 @@ export function deriveTemplateInputs(
         };
       }
       return placeholders ? { items: ['Item 1', 'Item 2', 'Item 3'] } : null;
+    }
+    case 'cards':
+    case 'process':
+    case 'cycle':
+    case 'layers': {
+      // Each list item is an idea; without a list, each paragraph is one.
+      const listed = extractListItems(contents);
+      const items = listed.length
+        ? listed
+        : (contents ?? [])
+            .filter((node) => node.type === 'paragraph' && !isPictureParagraph(node))
+            .map((node) => extractPlainText(node).trim())
+            .filter(Boolean);
+      if (items.length > 0) return { items, ...(headingText ? { title: headingText } : {}) };
+      return placeholders
+        ? {
+            items:
+              templateName === 'cards'
+                ? [
+                    'First idea: what makes it matter',
+                    'Second idea: how it differs',
+                    'Third idea: why it helps',
+                  ]
+                : templateName === 'layers'
+                  ? [
+                      'Core: the innermost part',
+                      'Middle: what surrounds it',
+                      'Outer: the outermost layer',
+                    ]
+                  : ['Begin: the first stage', 'Grow: what happens next', 'Finish: where it leads'],
+          }
+        : null;
     }
     case 'definitionCard':
       return { term: headingText, definition: bodyText };

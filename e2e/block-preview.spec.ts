@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
+import { selectWriteMode, type WriteMode } from './view-tabs';
 
 /**
  * E2E for the large block preview shown beside the editing card in
@@ -18,26 +19,20 @@ async function load(page: Page, sample = 'hello-world') {
 }
 
 /**
- * Set the layout and the "Show block previews" toggle in one menu session.
- * The View menu stays open after clicking its items, so we open once, apply
- * both changes, then close by re-clicking the trigger.
+ * Set the layout (the Write tab's mode menu, which also enters Write) and the
+ * "Show block previews" toggle. The View menu stays open after clicking its
+ * items, so we close it by re-clicking the trigger.
  */
-async function configureView(
-  page: Page,
-  opts: { layout?: 'Document' | 'Block-at-a-time' | 'Timeline'; previews?: boolean },
-) {
+async function configureView(page: Page, opts: { layout?: WriteMode; previews?: boolean }) {
+  if (opts.layout) await selectWriteMode(page, opts.layout);
+  if (opts.previews === undefined) return;
   const trigger = page.getByRole('button', { name: 'View options' });
   await trigger.click();
-  if (opts.layout) {
-    await page.getByRole('menuitemradio', { name: opts.layout }).click();
-  }
-  if (opts.previews !== undefined) {
-    const toggle = page
-      .locator('[role="menuitemcheckbox"]')
-      .filter({ hasText: 'Show block previews' });
-    const checked = (await toggle.getAttribute('aria-checked')) === 'true';
-    if (checked !== opts.previews) await toggle.click();
-  }
+  const toggle = page
+    .locator('[role="menuitemcheckbox"]')
+    .filter({ hasText: 'Show block previews' });
+  const checked = (await toggle.getAttribute('aria-checked')) === 'true';
+  if (checked !== opts.previews) await toggle.click();
   await trigger.click(); // close the menu
 }
 
@@ -47,7 +42,7 @@ test('block mode: panel appears when previews are on, follows the active block',
   page,
 }) => {
   await load(page);
-  await configureView(page, { layout: 'Block-at-a-time', previews: true });
+  await configureView(page, { layout: 'Blocks', previews: true });
 
   await expect(panel(page)).toBeVisible();
   // The single big preview replaces the multi-card gutter in card mode.
@@ -69,7 +64,7 @@ test('timeline mode shows the panel too', async ({ page }) => {
 
 test('toggling previews off hides the panel', async ({ page }) => {
   await load(page);
-  await configureView(page, { layout: 'Block-at-a-time', previews: true });
+  await configureView(page, { layout: 'Blocks', previews: true });
   await expect(panel(page)).toBeVisible();
   await configureView(page, { previews: false });
   await expect(panel(page)).toHaveCount(0);
@@ -77,7 +72,7 @@ test('toggling previews off hides the panel', async ({ page }) => {
 
 test('document mode still uses the inline-preview gutter, not the panel', async ({ page }) => {
   await load(page, 'about-squisq');
-  await configureView(page, { layout: 'Document', previews: true });
+  await configureView(page, { layout: 'Write', previews: true });
   await expect(page.locator('.squisq-inline-preview-gutter')).toBeVisible();
   await expect(panel(page)).toHaveCount(0);
 });
@@ -86,8 +81,8 @@ for (const view of ['Write', 'Source'] as const) {
   test(`document mode previews untagged blocks in ${view}`, async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 1000 });
     await load(page);
+    await configureView(page, { layout: 'Write', previews: true });
     if (view === 'Source') await page.getByRole('tab', { name: 'Source', exact: true }).click();
-    await configureView(page, { layout: 'Document', previews: true });
     const gutter = page.getByTestId('inline-preview-gutter');
     await expect(gutter).toBeVisible();
     const cards = gutter.locator('.squisq-inline-preview-card');
@@ -104,6 +99,7 @@ for (const view of ['Write', 'Source'] as const) {
 test('document mode previews prose without any headings in Source and Write', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 });
   await load(page);
+  await configureView(page, { layout: 'Write', previews: true });
   await page.getByRole('tab', { name: 'Source', exact: true }).click();
   const source = page.locator('[data-testid="raw-editor"] textarea.inputarea');
   await expect(source).toBeVisible();
@@ -112,7 +108,6 @@ test('document mode previews prose without any headings in Source and Write', as
   );
   await source.press(`${modifier}+a`);
   await page.keyboard.insertText('An introduction without any headings or template tags.');
-  await configureView(page, { layout: 'Document', previews: true });
   const card = page.getByTestId('inline-preview-gutter').locator('.squisq-inline-preview-card');
   await expect(card).toHaveCount(1);
   await expect(card).toBeVisible();

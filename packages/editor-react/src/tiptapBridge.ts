@@ -929,23 +929,21 @@ export function tiptapToMarkdown(html: string): string {
       const tableContent = tableMatch[1];
 
       // Extract all rows with their cells
-      const rows: { content: string; align: string | null; isHeader: boolean }[][] = [];
+      const rows: { content: string; align: string | null }[][] = [];
       const rowRegex = /<tr[^>]*>(.*?)<\/tr>/gs;
       let rowExec;
       while ((rowExec = rowRegex.exec(tableContent)) !== null) {
         const rowHtml = rowExec[1];
-        const cells: { content: string; align: string | null; isHeader: boolean }[] = [];
+        const cells: { content: string; align: string | null }[] = [];
         const cellRegex = /<(th|td)([^>]*)>(.*?)<\/\1>/gs;
         let cellExec;
         while ((cellExec = cellRegex.exec(rowHtml)) !== null) {
-          const tag = cellExec[1];
           const attrs = cellExec[2];
           const content = htmlToTableCell(cellExec[3]);
           const alignExec = attrs.match(/text-align:\s*(left|center|right)/);
           cells.push({
             content,
             align: alignExec ? alignExec[1] : null,
-            isHeader: tag === 'th',
           });
         }
         if (cells.length > 0) {
@@ -954,11 +952,11 @@ export function tiptapToMarkdown(html: string): string {
       }
 
       if (rows.length > 0) {
-        // Header row = first row with th cells, or just the first row
-        const headerIdx = rows.findIndex((r) => r.some((c) => c.isHeader));
-        const hIdx = headerIdx >= 0 ? headerIdx : 0;
-        const headerRow = rows[hIdx];
-        const dataRows = rows.filter((_, i) => i !== hIdx);
+        // Markdown's header is always the first row, so the editor's first
+        // row is the header. Promoting "the first row with th cells" instead
+        // reordered tables: a header row moved down keeps its th cells (there
+        // is no move-row command), so every save wrote it back on top.
+        const [headerRow, ...dataRows] = rows;
 
         const aligns = headerRow.map((c) => c.align);
         lines.push('| ' + headerRow.map((c) => c.content || ' ').join(' | ') + ' |');

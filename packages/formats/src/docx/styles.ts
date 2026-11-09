@@ -96,6 +96,9 @@ export const DEFAULT_HEADING_FONT = 'Calibri Light';
 /** Default font size in half-points (22 = 11pt) */
 export const DEFAULT_FONT_SIZE_HALF_POINTS = 22;
 
+/** Space after each paragraph in twips (160 = 8pt, Word's own default) */
+export const PARAGRAPH_SPACING_AFTER_TWIPS = 160;
+
 /** Default code font */
 export const DEFAULT_CODE_FONT = 'Consolas';
 

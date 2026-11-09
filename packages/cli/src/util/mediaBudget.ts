@@ -27,7 +27,7 @@ export interface MediaBudget {
    * @param path - Asset path, used in the error message.
    * @param data - Asset bytes.
    */
-  admit(path: string, data: ArrayBuffer): void;
+  admit(path: string, data: ArrayBuffer | Uint8Array): void;
   /** Bytes admitted so far. */
   readonly totalBytes: number;
   /** Assets admitted so far. */
@@ -50,7 +50,7 @@ export function createMediaBudget(): MediaBudget {
     get fileCount() {
       return fileCount;
     },
-    admit(path: string, data: ArrayBuffer): void {
+    admit(path: string, data: ArrayBuffer | Uint8Array): void {
       if (data.byteLength > MAX_RENDER_MEDIA_FILE_BYTES) {
         throw new Error(
           `Media file "${path}" is ${mib(data.byteLength)}, which exceeds the ` +

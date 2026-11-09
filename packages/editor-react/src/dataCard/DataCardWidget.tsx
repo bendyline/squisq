@@ -114,6 +114,19 @@ function formatBytes(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * Hosts percent-encode link hrefs so a file name with spaces survives as a
+ * Markdown destination (`pg_catalog%202.csv`); the strip shows the name the
+ * person gave the file. A malformed escape is shown as written.
+ */
+function decodeHrefForDisplay(href: string): string {
+  try {
+    return decodeURIComponent(href);
+  } catch {
+    return href;
+  }
+}
+
 interface GridState {
   module: GridModule;
   provider: InstanceType<GridModule['TableStoreClient']>;
@@ -434,7 +447,8 @@ export function DataCardWidget({
   }, [href, onMediaSaved]);
 
   if (!link || !href) return null;
-  const fileName = href.split('/').pop() ?? href;
+  // Split before decoding, so an encoded `%2F` stays inside the file name.
+  const fileName = decodeHrefForDisplay(href.split('/').pop() ?? href);
   const size = state.kind === 'meta' || state.kind === 'grid' ? state.size : null;
   const grid = state.kind === 'grid' ? state.grid : null;
   const xlsxMeta = grid?.ingested.xlsx;
@@ -450,7 +464,7 @@ export function DataCardWidget({
         <span className="squisq-data-card-icon" aria-hidden="true">
           {'\u{1F4CA}'}
         </span>
-        <span className="squisq-data-card-name" title={href}>
+        <span className="squisq-data-card-name" title={decodeHrefForDisplay(href)}>
           {fileName}
         </span>
         <span className="squisq-data-card-meta">

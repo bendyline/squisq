@@ -190,8 +190,40 @@ test.describe('Editor toolbar', () => {
     expect(tabsBg).not.toBe(toolbarBg);
   });
 
-  test('Use tab and its adjacent menu have distinct visible keyboard focus', async ({ page }) => {
+  test('the Write menu button sits between the Write and Source tabs', async ({ page }) => {
+    const write = await viewTab(page, 'Editor').boundingBox();
+    const source = await viewTab(page, 'Markdown').boundingBox();
+    const trigger = await page
+      .getByRole('button', { name: 'Choose Write mode', exact: true })
+      .boundingBox();
+    expect(write && source && trigger).toBeTruthy();
+    expect(trigger!.x).toBeGreaterThanOrEqual(write!.x + write!.width - 1);
+    expect(trigger!.x + trigger!.width).toBeLessThanOrEqual(source!.x + 1);
+  });
+
+  test('the mode-menu buttons are drawn as buttons with full-height targets', async ({ page }) => {
+    for (const name of ['Choose Write mode', 'Choose Use mode']) {
+      const trigger = page.getByRole('button', { name, exact: true });
+      const target = await trigger.boundingBox();
+      const face = await trigger.locator('.squisq-view-mode-trigger-face').boundingBox();
+      const tab = await viewTab(page, 'Markdown').boundingBox();
+      // The whole column beside the tab responds, not just the visible face.
+      expect(target!.width).toBeGreaterThanOrEqual(32);
+      expect(target!.height).toBeGreaterThanOrEqual(tab!.height - 2);
+      expect(face).toMatchObject({ width: 24, height: 24 });
+      expect(
+        await trigger
+          .locator('.squisq-view-mode-trigger-face')
+          .evaluate((el) => getComputedStyle(el).borderTopWidth),
+      ).toBe('1px');
+    }
+  });
+
+  test('mode tabs and their adjacent menus have distinct visible keyboard focus', async ({
+    page,
+  }) => {
     const useTab = viewTab(page, 'Play');
+    const writeTrigger = page.getByRole('button', { name: 'Choose Write mode', exact: true });
     const modeTrigger = page.getByRole('button', { name: 'Choose Use mode', exact: true });
     await useTab.focus();
     await useTab.press('Home');
@@ -211,14 +243,29 @@ test.describe('Editor toolbar', () => {
       borderStyle: 'solid',
       borderWidth: '2px',
     });
+    // A ▾ button's ring is drawn around its face, the part that looks like a button.
+    const faceRing = (selector: string) =>
+      page.locator(`${selector} .squisq-view-mode-trigger-face`).evaluate((face) => {
+        const style = getComputedStyle(face);
+        return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
+      });
+    // The tablist is one tab stop; the ▾ buttons follow it, Write's first.
+    await page.keyboard.press('Tab');
+    await expect(writeTrigger).toBeFocused();
+    expect(await faceRing('.squisq-toolbar-write-menu')).toEqual({
+      outlineStyle: 'solid',
+      outlineWidth: '2px',
+    });
     await page.keyboard.press('Tab');
     await expect(modeTrigger).toBeFocused();
-    expect(await ring('.squisq-toolbar-use-menu')).toEqual({
-      content: '""',
-      borderStyle: 'solid',
-      borderWidth: '2px',
+    expect(await faceRing('.squisq-toolbar-use-menu')).toEqual({
+      outlineStyle: 'solid',
+      outlineWidth: '2px',
     });
-    expect(await modeTrigger.evaluate((button) => button.closest('[role="tablist"]'))).toBeNull();
+    expect((await faceRing('.squisq-toolbar-write-menu')).outlineStyle).toBe('none');
+    for (const trigger of [writeTrigger, modeTrigger]) {
+      expect(await trigger.evaluate((button) => button.closest('[role="tablist"]'))).toBeNull();
+    }
   });
 });
 

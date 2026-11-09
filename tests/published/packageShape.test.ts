@@ -52,14 +52,17 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   '@bendyline/squisq': 750_000,
   // Includes the three Font Awesome OpenType faces embedded for portable
   // DOCX/PDF/PPTX/EPUB inline-icon export (~477 KB packed), plus the PDF
-  // writer's DejaVu Sans regular/bold/mono Unicode fallback (~1.16 MB packed,
-  // its own dynamically imported chunk). Packs to ~1.82 MB in total.
-  '@bendyline/squisq-formats': 2_000_000,
+  // writer's DejaVu Sans regular/bold/mono Unicode fallback (~1.16 MB packed),
+  // and its Noto Emoji, Noto Sans SC and Noto Sans KR emoji/CJK fallback
+  // (~11.8 MB packed), each its own dynamically imported chunk. Packs to
+  // ~13.6 MB in total; leave roughly 15% headroom.
+  '@bendyline/squisq-formats': 15_600_000,
   // Ships the ESM entries plus the light and full standalone players, and each
   // again as an embeddable string (`standalone-source`, and the Mermaid-bearing
   // `standalone-source/full`, ~1.4 MB packed on its own) — so anything the
-  // player renders is paid roughly four times over.
-  '@bendyline/squisq-react': 4_500_000,
+  // player renders is paid roughly four times over. Packs to ~4.50 MB; leave
+  // roughly 15% headroom.
+  '@bendyline/squisq-react': 5_200_000,
   // Columnar store + kernel + TanStack-Virtual renderer; tiny by design.
   '@bendyline/squisq-grid-react': 60_000,
   '@bendyline/squisq-calc': 110_000,
@@ -74,11 +77,17 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // external dependency), plus the audio-file encoder's audio-only MP4
   // writer (loaded lazily, ~287 KB packed in total at release B).
   '@bendyline/squisq-video-react': 300_000,
-  '@bendyline/squisq-editor-react': 1_000_000,
-  // Includes compressed light and full standalone players plus one shared
-  // Font Awesome webfont payload so CLI video export remains self-contained
-  // without duplicating the fonts into both player variants.
-  '@bendyline/squisq-cli': 2_250_000,
+  // Also ships the background markdown parser as one self-contained worker
+  // file (loaded by URL, so it cannot share core's copy): remark, parse5 for
+  // inline HTML, and the icon catalog for {[icon]} tokens, minified to ~240 KB
+  // packed. Packs to ~1.24 MB; leave roughly 15% headroom.
+  '@bendyline/squisq-editor-react': 1_420_000,
+  // Includes the light and full (Mermaid-bearing, ~1.42 MB packed on its own)
+  // standalone players plus one shared Font Awesome webfont payload so CLI
+  // video export remains self-contained without duplicating the fonts into
+  // both player variants. Grows with every template the player renders.
+  // Packs to ~2.26 MB; leave roughly 15% headroom.
+  '@bendyline/squisq-cli': 2_600_000,
 };
 
 function dryRunPack(directory: string, cache: string): PackResult {

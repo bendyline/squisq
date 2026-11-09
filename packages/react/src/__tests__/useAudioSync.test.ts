@@ -441,6 +441,37 @@ describe('useAudioSync seeking', () => {
     expect(result.current.currentTime).toBe(2.25);
   });
 
+  // A load stays armed until React re-renders, so its `canplay` can land after
+  // a later seek has moved on to another segment. That seek is measured from
+  // the next segment's start, so this load must leave it pending.
+  it('keeps a seek that moved on to another segment when the earlier load lands first', async () => {
+    const audio = createAudioElement();
+    mockSegmentFetches();
+    const { result } = renderHook(() => useAudioSync({ current: audio }, threeSegments));
+    await waitFor(() => expect(audio.src).toBe('blob:a.mp3'));
+
+    let crossing!: Promise<void>;
+    act(() => {
+      crossing = result.current.seekTo(4.5);
+    });
+    await waitFor(() => expect(audio.src).toBe('blob:b.mp3'));
+
+    let onward!: Promise<void>;
+    act(() => {
+      onward = result.current.seekTo(5.5);
+      audio.dispatchEvent(new Event('canplay'));
+    });
+    await waitFor(() => expect(audio.src).toBe('blob:c.mp3'));
+    await act(async () => {
+      audio.dispatchEvent(new Event('canplay'));
+      await Promise.all([crossing, onward]);
+    });
+
+    expect(result.current.currentSegment).toBe(2);
+    expect(audio.currentTime).toBeCloseTo(0.5, 5);
+    expect(result.current.currentTime).toBe(5.5);
+  });
+
   it('clamps an overshooting seek to the end of the last segment', async () => {
     const audio = createAudioElement();
     mockSegmentFetches();

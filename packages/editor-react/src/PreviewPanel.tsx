@@ -176,6 +176,19 @@ export function PreviewPanel({
   const isNarrateMode = activeDisplayMode === 'narrate';
   const isDashboardMode = activeDisplayMode === 'dashboard';
   const isFlashcardsMode = activeDisplayMode === 'flashcards';
+  // A dynamic deck that cannot follow its document plays the sections as
+  // written. Say why while the player shows them, or the preview looks fine
+  // until an export refuses the document.
+  const presentationProblem =
+    !printMode?.active &&
+    !isDocumentMode &&
+    !isNarrateMode &&
+    !isPageMode &&
+    !isFlashcardsMode &&
+    !isDashboardMode
+      ? previewDoc?.diagnostics?.find((diagnostic) => diagnostic.code === 'presentation-invalid')
+          ?.message
+      : undefined;
 
   useEffect(() => {
     if (presentation?.activeTarget === 'window') return;
@@ -493,6 +506,11 @@ export function PreviewPanel({
           background: 'var(--squisq-bg)',
         }}
       >
+        {presentationProblem && (
+          <p className="squisq-preview-notice" role="status">
+            Showing the sections as written. {presentationProblem}
+          </p>
+        )}
         <div ref={mainSurfaceRef} className="squisq-preview-player" style={surfaceStyle}>
           {renderSurface(false)}
         </div>

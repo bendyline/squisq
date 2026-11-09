@@ -113,6 +113,8 @@ export interface Doc {
     duration: number;
     bookmarks: AudioBookmark[];
     builds?: BuildAdvance[];
+    /** When the presenter first showed each presentation slide during the take. */
+    slides?: PresentationSlideMark[];
   };
   /** Projection-only guard: never compile an accepted plan twice. */
   presentationApplied?: boolean;
@@ -475,6 +477,13 @@ interface BaseLayer {
 
   /** Animation to apply */
   animation?: Animation;
+
+  /**
+   * The build step this layer reveals with, when its block builds: layers
+   * sharing an index (a card's shape and words) appear together, in index
+   * order. Their text names the step (`blockBuildSteps`).
+   */
+  buildStep?: number;
 }
 
 /**
@@ -851,6 +860,11 @@ export interface TableLayer extends BaseLayer {
     maxVisibleRows?: number;
     /** Per-column alignment */
     align?: (('left' | 'right' | 'center') | null)[];
+    /**
+     * Fit the layer's width: cells wrap and keep their own line breaks
+     * instead of running on one line and scrolling sideways.
+     */
+    wrap?: boolean;
     /** Visual styling */
     style: TableLayerStyle;
   };
@@ -1292,6 +1306,18 @@ export interface AudioBookmark {
   charOffset: number;
   /** The word text at this position */
   textFragment?: string;
+}
+
+/**
+ * A presentation slide the presenter put on screen while recording, keyed by
+ * where its passage begins in the narration script. Unlike a bookmark it marks
+ * a click, not a spoken word.
+ */
+export interface PresentationSlideMark {
+  /** Character offset in the narration script where the slide's passage begins. */
+  charOffset: number;
+  /** Seconds: take-relative in a timing sidecar, document time once applied. */
+  time: number;
 }
 
 /**

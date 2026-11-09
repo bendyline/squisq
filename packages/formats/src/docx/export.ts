@@ -114,6 +114,7 @@ import {
   DEFAULT_CODE_FONT,
   DEFAULT_CODE_FONT_SIZE,
   HYPERLINK_COLOR,
+  PARAGRAPH_SPACING_AFTER_TWIPS,
   pointsToTwips,
 } from './styles.js';
 
@@ -808,10 +809,10 @@ function convertTableCell(
   align: 'left' | 'right' | 'center' | null,
 ): string {
   const runs = convertInlines(cell.children, ctx, bodyFormat(ctx));
-  const rPr = isHeader ? '<w:rPr><w:b/></w:rPr>' : '';
   const jcMap = { left: 'left', center: 'center', right: 'right' };
   const jc = align ? `<w:jc w:val="${jcMap[align]}"/>` : '';
-  const pPr = rPr || jc ? `<w:pPr>${jc}</w:pPr>` : '';
+  // Cells opt out of the document's paragraph gap, which would pad every row.
+  const pPr = `<w:pPr><w:spacing w:after="0"/>${jc}</w:pPr>`;
   return `<w:tc><w:p>${pPr}${runs}</w:p></w:tc>`;
 }
 
@@ -1355,7 +1356,11 @@ function buildStylesXml(options: DocxExportOptions, ctx: ExportContext): string 
     `<w:sz w:val="${DEFAULT_FONT_SIZE_HALF_POINTS}"/>` +
     `<w:szCs w:val="${DEFAULT_FONT_SIZE_HALF_POINTS}"/>` +
     `</w:rPr></w:rPrDefault>` +
-    `<w:pPrDefault/>` +
+    // Word's own 8pt gap after each paragraph — Markdown blocks are separated
+    // by blank lines, and without it Word stacks every paragraph flush. It
+    // sits in the defaults, not on Normal, so a table cell's direct spacing
+    // and ListParagraph/Code's contextual spacing still win over it.
+    `<w:pPrDefault><w:pPr><w:spacing w:after="${PARAGRAPH_SPACING_AFTER_TWIPS}"/></w:pPr></w:pPrDefault>` +
     `</w:docDefaults>` +
     // Normal style — carries the body color explicitly so direct-typed
     // body paragraphs render in the theme's text color in every Word
@@ -1379,6 +1384,8 @@ function buildStylesXml(options: DocxExportOptions, ctx: ExportContext): string 
     `<w:style w:type="paragraph" w:styleId="Code">` +
     `<w:name w:val="Code"/>` +
     `<w:basedOn w:val="Normal"/>` +
+    // One paragraph per code line: keep the lines together as one box.
+    `<w:pPr><w:contextualSpacing/></w:pPr>` +
     `<w:rPr>` +
     `<w:rFonts w:ascii="${DEFAULT_CODE_FONT}" w:hAnsi="${DEFAULT_CODE_FONT}"/>` +
     `<w:sz w:val="${DEFAULT_CODE_FONT_SIZE}"/>` +
@@ -1388,7 +1395,8 @@ function buildStylesXml(options: DocxExportOptions, ctx: ExportContext): string 
     `<w:style w:type="paragraph" w:styleId="ListParagraph">` +
     `<w:name w:val="List Paragraph"/>` +
     `<w:basedOn w:val="Normal"/>` +
-    `<w:pPr><w:ind w:left="720"/></w:pPr>` +
+    // As in Word's own style: items sit tight, the list as a whole is spaced.
+    `<w:pPr><w:ind w:left="720"/><w:contextualSpacing/></w:pPr>` +
     `</w:style>` +
     // Hyperlink character style
     `<w:style w:type="character" w:styleId="Hyperlink">` +
@@ -1430,7 +1438,7 @@ function buildHeadingStyles(headingFont: string, headingColor?: string): string 
       `<w:basedOn w:val="Normal"/>` +
       `<w:next w:val="Normal"/>` +
       `<w:qFormat/>` +
-      `<w:pPr><w:outlineLvl w:val="${depth - 1}"/><w:spacing w:before="240" w:after="60"/></w:pPr>` +
+      `<w:pPr><w:spacing w:before="240" w:after="60"/><w:outlineLvl w:val="${depth - 1}"/></w:pPr>` +
       `<w:rPr>` +
       `<w:rFonts w:ascii="${escapeXml(headingFont)}" w:hAnsi="${escapeXml(headingFont)}"/>` +
       `<w:b/>` +

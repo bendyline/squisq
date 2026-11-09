@@ -1,12 +1,15 @@
-/** The videos and diagrams a narrated section embeds, which dynamic slides show
- * beside its summaries. Images keep their own full-bleed slides; these are the
- * visuals rich-media layout places next to slide text (`appendRichContentLayers`).
+/** The features a narrated section embeds (videos, diagrams, tables and
+ * pictures), which dynamic slides show beside its summaries: the visuals
+ * rich-media layout places next to slide text (`appendRichContentLayers`).
+ * A picture usually has its own full-bleed slide; it rides beside the text
+ * only when no slide shows it that way.
  */
-import type { Doc } from '../schemas/Doc.js';
+import type { Block, Doc } from '../schemas/Doc.js';
 import type { MarkdownBlockNode } from '../markdown/types.js';
 import { flattenRenderableBlocks } from '../doc/markdownToDoc.js';
 import {
   extractEmbeddedVideos,
+  extractImages,
   isPictureFence,
   isPictureParagraph,
 } from '../doc/templateInputs.js';
@@ -19,16 +22,46 @@ import { parseTimeSeconds } from '../markdown/annotationCoercion.js';
 import { cloneData } from '../internal/immutable.js';
 
 export interface PresentationMediaItem {
-  /** `<section block id>#<index>`, stable while the section's visuals are unchanged. */
+  /** `<section block id>#<index>` for videos and diagrams, `#table-<index>` and
+   * `#image-<index>` for tables and pictures; stable while the section's
+   * visuals are unchanged. */
   ref: string;
-  kind: 'video' | 'diagram';
-  /** The body node exactly as authored; slides render it through rich-media layout. */
+  kind: 'video' | 'diagram' | 'table' | 'image';
+  /** The body node exactly as authored (a picture gets a paragraph of its
+   * own); slides render it through rich-media layout. */
   node: MarkdownBlockNode;
-  /** A diagram, or an HTML video that can resume mid-clip on a following slide. */
+  /** A diagram, table, picture, or an HTML video that can resume mid-clip on a
+   * following slide. */
   continuous: boolean;
+  /** A picture's source, matched against the slides that show it full-bleed. */
+  src?: string;
 }
 
-function mediaKind(node: MarkdownBlockNode): Omit<PresentationMediaItem, 'ref' | 'node'> | null {
+/** Each block's own pictures. Children follow their parent in the flattened
+ * order, so pictures are claimed children-first; a container template keeps
+ * the pictures of its nested parts. */
+export function presentationBlockImages(
+  doc: Doc,
+): Map<string, Array<{ src: string; alt: string; width?: number; height?: number }>> {
+  const own = new Map<string, ReturnType<typeof extractImages>>();
+  const seen = new Set<string>();
+  const claim = (block: Block): ReturnType<typeof extractImages> => [
+    ...extractImages(block.contents).filter((image) => {
+      if (seen.has(image.src)) return false;
+      seen.add(image.src);
+      return true;
+    }),
+    ...(block.children ?? []).flatMap(claim),
+  ];
+  for (const block of [...flattenRenderableBlocks(doc.blocks)].reverse())
+    own.set(block.id, claim(block));
+  return own;
+}
+
+function mediaKind(
+  node: MarkdownBlockNode,
+): Omit<PresentationMediaItem, 'ref' | 'node' | 'src'> | null {
+  if (node.type === 'table') return { kind: 'table', continuous: true };
   if (node.type === 'code')
     return isPictureFence(node) ||
       isExplicitDiagramLang(node.lang) ||
@@ -46,25 +79,53 @@ function mediaKind(node: MarkdownBlockNode): Omit<PresentationMediaItem, 'ref' |
   return null;
 }
 
-/** Each section's visuals in source order, claimed like images: a nested
- * block's visuals belong to the nearest narrated section at or before it. */
+/** Each section's visuals in source order (a block's pictures after its other
+ * visuals), claimed like images: a nested block's visuals belong to the
+ * nearest narrated section at or before it. */
 export function collectPresentationMedia(
   doc: Doc,
   sectionIds: string[],
 ): Map<string, PresentationMediaItem[]> {
   const sections = new Set(sectionIds);
   const result = new Map<string, PresentationMediaItem[]>();
+  const pictures = presentationBlockImages(doc);
   let owner = sectionIds[0];
   for (const block of flattenRenderableBlocks(doc.blocks)) {
     if (sections.has(block.id)) owner = block.id;
     if (!owner) continue;
+    const items = result.get(owner) ?? [];
+    const count = (kind: PresentationMediaItem['kind']) =>
+      items.filter((item) => item.kind === kind).length;
     for (const node of block.contents ?? []) {
       const kind = mediaKind(node);
       if (!kind) continue;
-      const items = result.get(owner) ?? [];
-      items.push({ ...kind, ref: `${owner}#${items.length}`, node });
-      result.set(owner, items);
+      // Videos and diagrams keep the plain numbering saved plans refer to.
+      const ref =
+        kind.kind === 'table'
+          ? `${owner}#table-${count('table')}`
+          : `${owner}#${count('video') + count('diagram')}`;
+      items.push({ ...kind, ref, node });
     }
+    for (const { src, alt, width, height } of pictures.get(block.id) ?? [])
+      items.push({
+        kind: 'image',
+        continuous: true,
+        ref: `${owner}#image-${count('image')}`,
+        src,
+        node: {
+          type: 'paragraph',
+          children: [
+            {
+              type: 'image',
+              url: src,
+              alt,
+              ...(width !== undefined ? { width } : {}),
+              ...(height !== undefined ? { height } : {}),
+            },
+          ],
+        },
+      });
+    if (items.length) result.set(owner, items);
   }
   return result;
 }

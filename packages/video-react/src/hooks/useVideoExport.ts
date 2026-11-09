@@ -34,6 +34,7 @@ import {
 import {
   DEFAULT_COVER_SLIDE_SETTINGS,
   MAX_COVER_SLIDE_DURATION_SECONDS,
+  coverRepeatsLeadingBlock,
   resolveCoverSlideSettings,
   type CoverSlidePlayback,
 } from '@bendyline/squisq/doc';
@@ -436,7 +437,10 @@ export function resolveVideoExportCover(
         : {}),
   });
   const showCoverSlide = settings.enabled && !!doc.startBlock;
-  const coverDuration = showCoverSlide ? settings.duration : 0;
+  // A document whose first slide holds only the cover's words plays the cover
+  // as that slide (`coverRepeatsLeadingBlock`), so the cover takes no time of
+  // its own: no pre-roll, and nothing held over the story.
+  const coverDuration = showCoverSlide && !coverRepeatsLeadingBlock(doc) ? settings.duration : 0;
   return {
     showCoverSlide,
     coverDuration,

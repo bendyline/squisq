@@ -102,6 +102,9 @@ export function PaginatedDocView({
   const [currentPage, setCurrentPage] = useState(() =>
     Math.min(Math.max(0, initialPage), lastPage),
   );
+  // Read by the layout reset, which must not re-run on every page turn.
+  const currentPageRef = useRef(currentPage);
+  currentPageRef.current = currentPage;
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingPageRef = useRef<number | null>(null);
   const pendingPageTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -148,7 +151,7 @@ export function PaginatedDocView({
     if (!container) return;
     const keys = JSON.parse(pageKeys) as string[];
     const previous = previousLayoutRef.current;
-    const selected = pendingPageRef.current ?? currentPage;
+    const selected = pendingPageRef.current ?? currentPageRef.current;
     const preserveSelection =
       previous &&
       previous.initialPage === initialPage &&

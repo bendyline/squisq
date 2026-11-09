@@ -1,5 +1,5 @@
 import { Extension } from '@tiptap/core';
-import { Plugin, PluginKey, type Transaction } from '@tiptap/pm/state';
+import { Plugin, PluginKey, TextSelection, type Transaction } from '@tiptap/pm/state';
 import { Decoration, DecorationSet, type EditorView as ProseMirrorView } from '@tiptap/pm/view';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 
@@ -172,13 +172,63 @@ function headingPositionForTarget(
   }
 }
 
+function isEditableDomPosition(view: ProseMirrorView, node: Node): boolean {
+  const element =
+    node.nodeType === Node.ELEMENT_NODE
+      ? (node as Element)
+      : (node.parentElement as Element | null);
+  if (!element || !view.dom.contains(element)) return false;
+  const island = element.closest('[contenteditable="false"]');
+  return !island || !view.dom.contains(island);
+}
+
+/**
+ * The browser moves the caret itself for Ctrl+End, Page Down and the arrow
+ * keys, and ProseMirror learns of it only from the asynchronous
+ * `selectionchange` event. Scrolling in between slides another block under a
+ * still pointer, so `mouseover` fires first. A hover transaction then changes
+ * decorations, ProseMirror redraws, and it writes its older selection back
+ * over the move — the caret appears not to move at all. Carry the caret the
+ * browser already shows into the hover transaction instead.
+ */
+function withPendingDomSelection(view: ProseMirrorView, transaction: Transaction): Transaction {
+  const { selection } = view.state;
+  if (view.composing || !view.hasFocus() || !(selection instanceof TextSelection)) {
+    return transaction;
+  }
+
+  const domSelection = view.dom.ownerDocument.getSelection();
+  const anchorNode = domSelection?.anchorNode;
+  const focusNode = domSelection?.focusNode;
+  if (!domSelection || !anchorNode || !focusNode) return transaction;
+  if (!isEditableDomPosition(view, anchorNode) || !isEditableDomPosition(view, focusNode)) {
+    return transaction;
+  }
+
+  let anchor: number;
+  let head: number;
+  try {
+    anchor = view.posAtDOM(anchorNode, domSelection.anchorOffset);
+    head = view.posAtDOM(focusNode, domSelection.focusOffset);
+  } catch {
+    return transaction;
+  }
+  if (anchor === selection.anchor && head === selection.head) return transaction;
+
+  const { doc } = transaction;
+  return transaction.setSelection(TextSelection.between(doc.resolve(anchor), doc.resolve(head)));
+}
+
 function setHoveredPosition(view: ProseMirrorView, hoveredPosition: number | null): void {
   const current = BLOCK_TAG_ACTIVITY_KEY.getState(view.state)?.hoveredPosition ?? null;
   if (current === hoveredPosition) return;
   view.dispatch(
-    view.state.tr
-      .setMeta(BLOCK_TAG_ACTIVITY_KEY, { hoveredPosition } satisfies BlockTagHoverMeta)
-      .setMeta('addToHistory', false),
+    withPendingDomSelection(
+      view,
+      view.state.tr
+        .setMeta(BLOCK_TAG_ACTIVITY_KEY, { hoveredPosition } satisfies BlockTagHoverMeta)
+        .setMeta('addToHistory', false),
+    ),
   );
 }
 
