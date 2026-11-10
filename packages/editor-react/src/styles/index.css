@@ -13,6 +13,8 @@
 @import './editor.css';
 /* Touch-screen placement for editor.css's text-entry dialogs; must follow it. */
 @import './touch-dialogs.css';
+/* Phone-width overrides for editor.css's toolbar popovers; must follow it. */
+@import './narrow-screens.css';
 @import './navigation-sheet.css';
 @import './wiki-links.css';
 @import './document-tray.css';
