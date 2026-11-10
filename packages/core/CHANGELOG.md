@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.15](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.14...@bendyline/squisq@2.13.15) (2026-11-10)
+
+### Bug Fixes
+
+* Mobile width fixes ([#123](https://github.com/bendyline/squisq/issues/123)) ([0949909](https://github.com/bendyline/squisq/commit/0949909a28e77426a27019fc6b15db994ac8eaba))
+
 ## @bendyline/squisq [2.13.14](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.13...@bendyline/squisq@2.13.14) (2026-11-07)
 
 ### Bug Fixes

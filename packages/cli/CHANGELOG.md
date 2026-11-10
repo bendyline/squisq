@@ -1,3 +1,17 @@
+## @bendyline/squisq-cli [2.9.31](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.30...@bendyline/squisq-cli@2.9.31) (2026-11-10)
+
+### Bug Fixes
+
+* Mobile width fixes ([#123](https://github.com/bendyline/squisq/issues/123)) ([0949909](https://github.com/bendyline/squisq/commit/0949909a28e77426a27019fc6b15db994ac8eaba))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.15
+* **@bendyline/squisq-formats:** upgraded to 2.8.17
+* **@bendyline/squisq-video:** upgraded to 2.4.21
+* **@bendyline/squisq-react:** upgraded to 2.12.27
+
 ## @bendyline/squisq-cli [2.9.30](https://github.com/bendyline/squisq/compare/@bendyline/squisq-cli@2.9.29...@bendyline/squisq-cli@2.9.30) (2026-11-07)
 
 ### Bug Fixes

@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.8.17](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.16...@bendyline/squisq-formats@2.8.17) (2026-11-10)
+
+### Bug Fixes
+
+* Mobile width fixes ([#123](https://github.com/bendyline/squisq/issues/123)) ([0949909](https://github.com/bendyline/squisq/commit/0949909a28e77426a27019fc6b15db994ac8eaba))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.15
+
 ## @bendyline/squisq-formats [2.8.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.15...@bendyline/squisq-formats@2.8.16) (2026-11-07)
 
 ### Bug Fixes

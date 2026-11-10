@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.12.27](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.26...@bendyline/squisq-react@2.12.27) (2026-11-10)
+
+### Bug Fixes
+
+* Mobile width fixes ([#123](https://github.com/bendyline/squisq/issues/123)) ([0949909](https://github.com/bendyline/squisq/commit/0949909a28e77426a27019fc6b15db994ac8eaba))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.15
+
 ## @bendyline/squisq-react [2.12.26](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.25...@bendyline/squisq-react@2.12.26) (2026-11-07)
 
 ### Bug Fixes
