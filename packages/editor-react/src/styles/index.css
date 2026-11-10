@@ -11,6 +11,8 @@
 @import './template-picker.css';
 @import './template-gallery.css';
 @import './editor.css';
+/* Touch-screen placement for editor.css's text-entry dialogs; must follow it. */
+@import './touch-dialogs.css';
 @import './navigation-sheet.css';
 @import './wiki-links.css';
 @import './document-tray.css';

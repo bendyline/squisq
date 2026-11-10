@@ -607,6 +607,7 @@ export function Scene(props: SceneProps) {
               viewport={viewport}
               transform={panZoom.transform}
               viewportToScreen={panZoom.viewportToScreen}
+              container={containerSize}
               onClose={textEdit.close}
             />
           );

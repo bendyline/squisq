@@ -1,0 +1,36 @@
+/* ── Text-entry dialogs on touch screens ─────────────────────────────
+   The link, video-embed and document settings dialogs take typing. On a
+   touch screen the keyboard covers about the bottom half, and iOS raises it
+   over the page without resizing it, so a centered dialog ends up with its
+   fields and buttons underneath. These dialogs open in the upper part of the
+   screen instead, before the keyboard rises, so they don't jump when it does.
+   A host that measures the keyboard publishes its height as
+   `--squisq-keyboard-inset` (DocBlocks does). The dialog then stays inside
+   what the keyboard leaves visible, and its body scrolls. index.css loads this
+   after editor.css, whose base dialog rules it overrides at equal specificity. */
+@media (pointer: coarse) {
+  .squisq-link-dialog-overlay,
+  .squisq-doc-settings-overlay {
+    align-items: flex-start;
+    padding-top: max(calc(env(safe-area-inset-top, 0px) + 16px), min(12vh, 96px));
+    padding-bottom: calc(
+      max(env(safe-area-inset-bottom, 0px), var(--squisq-keyboard-inset, 0px)) + 16px
+    );
+  }
+
+  .squisq-link-dialog,
+  .squisq-doc-settings-dialog {
+    max-height: 100%;
+  }
+
+  .squisq-link-dialog-body {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /* Under 16px, iOS zooms the page into a field when it takes focus. */
+  .squisq-link-dialog-input,
+  .squisq-doc-settings-input {
+    font-size: 16px;
+  }
+}

@@ -322,6 +322,18 @@ editor's chrome to match your app, see [Theming the editor chrome](../../theming
 | `showStatusBar`                              | `true`              | The word-count and status bar.                                                                                                                                                                  |
 | `defaultViewportPreset`                      | `'landscape'`       | The slide shape when neither the document nor the user picked one.                                                                                                                              |
 
+On a touch screen, the link, video embed and document settings dialogs open in the upper part
+of the screen, clear of the on-screen keyboard. iOS raises the keyboard over the page without
+resizing it, so the editor can't see how much of the dialog the keyboard covers. If your host
+measures that (for example from `visualViewport`), publish it on the root as
+`--squisq-keyboard-inset`, and those dialogs then shrink to the visible area and scroll:
+
+```css
+:root {
+  --squisq-keyboard-inset: 0px; /* update while the keyboard is up */
+}
+```
+
 ## Read-only and compact embeds
 
 | Prop                                                                   | What it does                                                                                  |

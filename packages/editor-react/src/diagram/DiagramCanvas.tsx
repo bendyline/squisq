@@ -17,6 +17,7 @@ import {
   Scene,
   buildDiagramScene,
   nodeIdFromCardLayerId,
+  labelLayerIdForCard,
   diagramLayerFollows,
   DiagramEdges,
   type SceneCommand,
@@ -189,10 +190,31 @@ export function DiagramCanvas({
   // the editor is `inline` level. Refs keep the config stable.
   const incomingNodesRef = useRef(incomingNodes);
   incomingNodesRef.current = incomingNodes;
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
   const textConfig = useMemo<SceneTextEditConfig>(
     () => ({
       channel: textChannel,
       resolveEditableId: (id) => (nodeIdFromCardLayerId(id) ? id : null),
+      // The card is what's edited; its label is what the text looks like.
+      // A container's title sits at the top of the card, a node's label in
+      // the middle.
+      textStyle: (id) => {
+        const { layers, nodes } = sceneRef.current;
+        const label = layers.find((l) => l.id === labelLayerIdForCard(id));
+        if (label?.type !== 'text') return undefined;
+        const { fontSize, fontFamily, fontWeight, lineHeight, textAlign } = label.content.style;
+        const nodeId = nodeIdFromCardLayerId(id);
+        const container = nodes.find((n) => n.id === nodeId)?.kind === 'container';
+        return {
+          fontSize,
+          fontFamily,
+          fontWeight,
+          lineHeight,
+          textAlign,
+          verticalAlign: container ? 'top' : 'middle',
+        };
+      },
       getHtml: (id) => {
         const nodeId = nodeIdFromCardLayerId(id);
         const node = incomingNodesRef.current.find((n) => n.id === nodeId);

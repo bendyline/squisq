@@ -5,9 +5,26 @@
  * the host owns persistence (markdown heading vs. layout JSON blob).
  */
 
+import type { TextStyle } from '@bendyline/squisq/schemas';
 import type { SceneTextChannel } from './sceneTextChannel';
 
 export type SceneTextLevel = 'inline' | 'block' | 'rich';
+
+/**
+ * The type the editor sets its text in. Colors aren't included: the editor
+ * keeps its own surface and text color so whatever it shows stays readable.
+ */
+export type SceneTextTypography = Pick<
+  TextStyle,
+  | 'fontSize'
+  | 'fontFamily'
+  | 'fontWeight'
+  | 'fontStyle'
+  | 'lineHeight'
+  | 'textAlign'
+  | 'verticalAlign'
+  | 'padding'
+>;
 
 export interface SceneTextEditConfig {
   /** Per-editor bridge to the formatting toolbar. */
@@ -19,6 +36,12 @@ export interface SceneTextEditConfig {
    * a non-text drawing shape maps to `null`.
    */
   resolveEditableId: (layerId: string) => string | null;
+  /**
+   * Typography for an edited layer that isn't itself text: a diagram card
+   * edits the label drawn on it, so the editor should match that label's
+   * size, weight and alignment. A text layer always uses its own style.
+   */
+  textStyle?: (editableId: string) => SceneTextTypography | undefined;
   /** Seed HTML for the editor (e.g. `content.html` or `markdownToTiptap(label)`). */
   getHtml: (editableId: string) => string;
   /** Persist the edited content. The host serializes per its storage model. */

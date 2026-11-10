@@ -17,7 +17,8 @@ import { DEFAULT_DOC_FONT } from '@bendyline/squisq/schemas';
 import { plainTextFromInlineHtml } from '@bendyline/squisq/markdown';
 import { layerBounds } from '../hooks/useSceneHitTest';
 import type { SceneTransform } from '../hooks/useScenePanZoom';
-import type { SceneTextEditConfig } from './sceneTextConfig';
+import type { SceneTextEditConfig, SceneTextTypography } from './sceneTextConfig';
+import { editFontFloorPx, sceneTextFrame } from './sceneTextFrame';
 import { buildSceneTextExtensions } from './sceneTiptap';
 
 interface SceneTextOverlayProps {
@@ -28,6 +29,8 @@ interface SceneTextOverlayProps {
   viewport: { width: number; height: number };
   transform: SceneTransform;
   viewportToScreen: (vx: number, vy: number) => { x: number; y: number };
+  /** The canvas's on-screen size; a magnified editor stays inside it. */
+  container: { width: number; height: number } | null;
   onClose: () => void;
 }
 
@@ -38,10 +41,16 @@ export function SceneTextOverlay({
   viewport,
   transform,
   viewportToScreen,
+  container,
   onClose,
 }: SceneTextOverlayProps) {
   const initialHtml = useMemo(() => config.getHtml(editableId), [config, editableId]);
-  const style = layer.type === 'text' ? layer.content.style : undefined;
+  // A text layer edits in its own style; anything else (a diagram card) in
+  // the typography its host names, on the editor's own colors.
+  const style: SceneTextTypography | undefined =
+    layer.type === 'text' ? layer.content.style : config.textStyle?.(editableId);
+  const textColor = layer.type === 'text' ? layer.content.style.color : undefined;
+  const fontFloorPx = useMemo(editFontFloorPx, []);
 
   // Stable commit/cancel via refs so the editor's keydown closure (bound
   // once at creation) always calls the latest handlers.
@@ -107,10 +116,17 @@ export function SceneTextOverlay({
 
   const bounds = layerBounds(layer, viewport);
   if (!bounds) return null;
-  const tl = viewportToScreen(bounds.x, bounds.y);
-  const scale = transform.scale;
-  const fontSize = (style?.fontSize ?? 18) * scale;
-  const pad = (style?.padding ?? 0) * scale;
+  const baseFontSize = style?.fontSize ?? 18;
+  const frame = sceneTextFrame({
+    origin: viewportToScreen(bounds.x, bounds.y),
+    size: bounds,
+    zoom: transform.scale,
+    fontSize: baseFontSize,
+    minFontPx: fontFloorPx,
+    container,
+  });
+  const fontSize = baseFontSize * frame.scale;
+  const pad = (style?.padding ?? 0) * frame.scale;
   // Mirror the layer's vertical alignment so changing it (via the toolbar)
   // updates the editor live, matching what the committed box will look like.
   const justifyContent =
@@ -131,10 +147,10 @@ export function SceneTextOverlay({
       onDoubleClick={(e) => e.stopPropagation()}
       style={{
         position: 'absolute',
-        left: tl.x,
-        top: tl.y,
-        width: bounds.width * scale,
-        height: bounds.height * scale,
+        left: frame.left,
+        top: frame.top,
+        width: frame.width,
+        height: frame.height,
         zIndex: 20,
         boxSizing: 'border-box',
         display: 'flex',
@@ -143,7 +159,9 @@ export function SceneTextOverlay({
         padding: pad,
         fontSize,
         fontFamily: style?.fontFamily || DEFAULT_DOC_FONT,
-        color: style?.color ?? 'var(--squisq-text)',
+        fontWeight: style?.fontWeight,
+        fontStyle: style?.fontStyle,
+        color: textColor ?? 'var(--squisq-text)',
         lineHeight: style?.lineHeight || 1.4,
         textAlign: style?.textAlign ?? 'left',
         background: 'var(--squisq-surface)',
