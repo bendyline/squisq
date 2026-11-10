@@ -34,6 +34,10 @@ import { RawEditor } from '../RawEditor';
 /** Stands in for the browser's observer so a test can set the editor's width. */
 class FakeResizeObserver {
   static instances: FakeResizeObserver[] = [];
+  /** The most recently created observer (the lib target is ES2020, so no `.at(-1)`). */
+  static latest(): FakeResizeObserver | undefined {
+    return FakeResizeObserver.instances[FakeResizeObserver.instances.length - 1];
+  }
   constructor(private readonly callback: ResizeObserverCallback) {
     FakeResizeObserver.instances.push(this);
   }
@@ -112,7 +116,7 @@ describe('RawEditor compact gutter', () => {
     renderAtWidth(390);
     expect(captured.options?.glyphMargin).toBe(false);
 
-    act(() => FakeResizeObserver.instances.at(-1)?.resize(1024));
+    act(() => FakeResizeObserver.latest()?.resize(1024));
     expect(gutterOf(captured.options)).toEqual({
       lineNumbersMinChars: 5,
       glyphMargin: true,
@@ -124,7 +128,7 @@ describe('RawEditor compact gutter', () => {
   it('keeps its last answer while the editor is hidden', () => {
     renderAtWidth(390);
 
-    act(() => FakeResizeObserver.instances.at(-1)?.resize(0));
+    act(() => FakeResizeObserver.latest()?.resize(0));
     expect(captured.options?.lineNumbersMinChars).toBe(2);
   });
 });
