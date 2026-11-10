@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Response } from '@playwright/test';
 import { readFile, writeFile } from 'node:fs/promises';
 import JSZip from 'jszip';
 import { waitForAppReady } from './appReady';
@@ -8,7 +8,7 @@ test('startup keeps optional encoders and diagrams out of the initial script pay
 }, testInfo) => {
   test.setTimeout(60_000);
   const scripts: Promise<{ name: string; bytes: number }>[] = [];
-  page.on('response', (response) => {
+  const collectScript = (response: Response) => {
     if (
       response.request().resourceType() !== 'script' ||
       !/\.m?js$/.test(new URL(response.url()).pathname)
@@ -19,11 +19,17 @@ test('startup keeps optional encoders and diagrams out of the initial script pay
         .body()
         .then((body) => ({ name: new URL(response.url()).pathname, bytes: body.byteLength })),
     );
-  });
+  };
+  page.on('response', collectScript);
   await page.goto('/');
   await waitForAppReady(page);
   await expect(page.locator('.tiptap.ProseMirror')).toBeVisible();
   await page.waitForLoadState('networkidle');
+  // Stop collecting before awaiting. The proofing engine's chunks load lazily
+  // right around the moment the network first goes quiet; a body() read started
+  // after Promise.all took its snapshot is awaited by nothing, and Playwright
+  // rejects it with "Test ended" at teardown, failing a test whose budget held.
+  page.off('response', collectScript);
   const payload = await Promise.all(scripts);
   const total = payload.reduce((sum, script) => sum + script.bytes, 0);
   const reportPath = testInfo.outputPath('startup-scripts.json');
