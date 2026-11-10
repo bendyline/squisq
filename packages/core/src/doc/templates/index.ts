@@ -48,6 +48,7 @@ export type { TemplateMetadata } from './metadata.js';
 export {
   AUTHORING_TRICKS,
   PRESENTATION_LAYOUT_GUIDE,
+  PRESENTATION_LAYOUT_LABELS,
   TEMPLATE_GUIDES,
   authoringTricks,
   guideText,
@@ -256,7 +257,14 @@ function materializeScheduledBlock(
         audioSegment: sourceBlock.audioSegment,
         ...(materialized.layers.length > 0 ? { layers: materialized.layers } : {}),
         transition: sourceBlock.transition,
-        template: sourceBlock.template,
+        // A block its template could not draw was drawn as content. Name what
+        // drew it, so renderers size its text as a content slide's: they skip
+        // grow-to-fit by template name, and "comparisonBar" would keep a
+        // paragraph at chart-label size.
+        template:
+          materialized.diagnostic?.code === 'template-drew-nothing'
+            ? 'content'
+            : sourceBlock.template,
         build: sourceBlock.build,
         buildTiming: sourceBlock.buildTiming,
         buildSource: sourceBlock.buildSource,
@@ -560,6 +568,10 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
     // Minimum gap between any two transitions (including section boundaries).
     // No block should be visible for less than this before a transition occurs.
     const MIN_TRANSITION_GAP = 5;
+    // Durations are sums and differences of narration times, so a slide
+    // meant to last exactly the minimum can arrive as 4.999999 s. That is
+    // rounding, not a slide too short to read, and must not be merged away.
+    const GAP_TOLERANCE = 1e-3;
     const segmentEnd = audioSegment.startTime + audioSegment.duration;
 
     // Fourth pass: enforce minimum transition gap at section boundary.
@@ -572,7 +584,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
 
       if (
         mergeShortBlocks &&
-        timeFromLastToEnd < MIN_TRANSITION_GAP &&
+        timeFromLastToEnd < MIN_TRANSITION_GAP - GAP_TOLERANCE &&
         lastBlock.template !== 'sectionHeader'
       ) {
         const prevBlock = segmentExpandedBlocks[segmentExpandedBlocks.length - 2];
@@ -605,7 +617,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
       changed = false;
       for (let i = segmentExpandedBlocks.length - 1; i >= 1; i--) {
         const block = segmentExpandedBlocks[i];
-        if (block.duration > 0 && block.duration < MIN_TRANSITION_GAP) {
+        if (block.duration > 0 && block.duration < MIN_TRANSITION_GAP - GAP_TOLERANCE) {
           const prev = segmentExpandedBlocks[i - 1];
           const blockEnd = block.startTime + block.duration;
           prev.duration = blockEnd - prev.startTime;
@@ -635,7 +647,7 @@ export function expandDocBlocks(blocks: DocBlock[], options: ExpandDocBlocksOpti
           const partDuration = block.duration / numParts;
 
           // Only split if each part would meet minimum transition gap
-          if (partDuration >= MIN_TRANSITION_GAP) {
+          if (partDuration >= MIN_TRANSITION_GAP - GAP_TOLERANCE) {
             // Shorten original block to first part
             block.duration = partDuration;
 
@@ -772,6 +784,17 @@ export {
   processBlock,
   splitConceptItem,
 } from './conceptBlocks.js';
+export type { ConceptItem, ConceptTemplateName } from './conceptBlocks.js';
+export {
+  funnelBlock,
+  hubBlock,
+  matrixBlock,
+  pyramidBlock,
+  statsBlock,
+  vennBlock,
+} from './conceptShapes.js';
+export { isFigureText, splitStatItem, vennOverlapIndex } from './conceptItems.js';
+export type { StatItem } from './conceptItems.js';
 export { photoGrid } from './photoGrid.js';
 export { definitionCard } from './definitionCard.js';
 export { comparisonBar } from './comparisonBar.js';

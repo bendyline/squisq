@@ -37,6 +37,7 @@ import type {
   RightFeatureInput,
   SectionHeaderInput,
   StatHighlightInput,
+  StatsBlockInput,
   TemplateBlock,
   TitleBlockInput,
   TwoColumnInput,
@@ -48,7 +49,7 @@ import { extractPlainText } from '../../markdown/utils.js';
 import { isVideoEmbedUrl } from '../../markdown/videoEmbed.js';
 import { extractRichListItems } from '../templateInputs.js';
 import { buildChartData } from '../templates/chart/parse.js';
-import { splitConceptItem } from '../templates/conceptBlocks.js';
+import { splitConceptItem, splitStatItem } from '../templates/conceptItems.js';
 import type { PageEmphasis } from '../../schemas/PageStyle.js';
 import type { PageMedia, PageRichText, PageSection, PageSpatialKind } from './PageSection.js';
 
@@ -85,6 +86,15 @@ function bodyRichText(input: TemplateBlock): PageRichText | undefined {
     .join('\n')
     .trim();
   return text ? { text, markdown: contents } : undefined;
+}
+
+/**
+ * A template that cannot draw its picture shows the block as prose instead,
+ * as the slide engine shows it as `content` (`materializeBlockLayers`).
+ */
+function asProse(input: TemplateBlock, heading?: string): PageSectionDraft {
+  const title = (input as unknown as { title?: string }).title ?? heading;
+  return { kind: 'prose', slots: { title, body: bodyRichText(input) } };
 }
 
 function accentImageMedia(accent?: AccentImage): PageMedia | undefined {
@@ -196,6 +206,7 @@ const statHighlight: SectionExtractor = (input) => {
     kind: 'stat-band',
     variant: 'single',
     slots: {
+      title: s.headline,
       items: [{ value: s.stat, title: s.description, body: s.detail }],
       media: accentImageMedia(s.accentImage),
     },
@@ -234,6 +245,8 @@ const factCard: SectionExtractor = (input) => {
 
 const twoColumn: SectionExtractor = (input) => {
   const t = input as TwoColumnInput;
+  // Two columns with no columns would be two empty cards over a dropped body.
+  if (!t.left?.label || !t.right?.label) return asProse(input, t.header);
   return {
     kind: 'card-grid',
     variant: 'two-column',
@@ -265,6 +278,8 @@ const dateEvent: SectionExtractor = (input) => {
 
 const imageWithCaption: SectionExtractor = (input) => {
   const i = input as ImageWithCaptionInput;
+  // A captioned image with no image is an empty frame: show what was written.
+  if (!i.imageSrc) return asProse(input, i.caption);
   const media: PageMedia = {
     type: 'image',
     src: i.imageSrc,
@@ -326,6 +341,8 @@ const fullBleedQuote: SectionExtractor = (input) => {
 const list: SectionExtractor = (input) => {
   const l = input as ListBlockInput;
   const contents = (input as unknown as { contents?: MarkdownBlockNode[] }).contents;
+  // A list template over a body with no list shows the body.
+  if (!l.items?.length) return asProse(input, l.title);
   const richItems = extractRichListItems(contents);
   return {
     kind: 'item-list',
@@ -341,9 +358,14 @@ const list: SectionExtractor = (input) => {
   };
 };
 
-/** Cards, a process, a cycle or layers read on a page as a list of titled items. */
+/**
+ * Cards, a process, a cycle, layers, a pyramid, a funnel, a hub, a Venn
+ * diagram or a matrix read on a page as a list of titled items.
+ */
 const concept: SectionExtractor = (input) => {
   const c = input as CardsBlockInput | ProcessBlockInput | CycleBlockInput | LayersBlockInput;
+  // A body that holds no ideas (a table, a quotation) reads as it was written.
+  if (!c.items?.length) return asProse(input, c.title);
   return {
     kind: 'item-list',
     slots: {
@@ -354,6 +376,25 @@ const concept: SectionExtractor = (input) => {
       }),
     },
     colorScheme: c.colorScheme,
+  };
+};
+
+/** Key numbers read on a page as a band of figures, each over what it measures. */
+const stats: SectionExtractor = (input, ctx) => {
+  const s = input as StatsBlockInput;
+  const items = (s.items ?? []).map((item) => splitStatItem(String(item ?? '')));
+  // Without a figure among them the ideas read as the list they are.
+  if (!items.some((item) => item.figure)) return concept(input, ctx);
+  return {
+    kind: 'stat-band',
+    variant: 'row',
+    slots: {
+      title: s.title,
+      items: items.map((item) =>
+        item.figure ? { value: item.figure, title: item.caption } : { title: item.caption },
+      ),
+    },
+    colorScheme: s.colorScheme,
   };
 };
 
@@ -404,6 +445,14 @@ const definitionCard: SectionExtractor = (input) => {
 
 const comparisonBar: SectionExtractor = (input) => {
   const c = input as ComparisonBarInput;
+  // Neither side named or measured: there is nothing to compare.
+  if (
+    !c.leftLabel &&
+    !c.rightLabel &&
+    !Number.isFinite(c.leftValue) &&
+    !Number.isFinite(c.rightValue)
+  )
+    return asProse(input);
   return {
     kind: 'stat-band',
     variant: 'comparison',
@@ -439,6 +488,7 @@ const pullQuote: SectionExtractor = (input) => {
 
 const videoWithCaption: SectionExtractor = (input) => {
   const v = input as VideoWithCaptionInput;
+  if (!v.videoSrc) return asProse(input, v.caption);
   if (isVideoEmbedUrl(v.videoSrc)) {
     return {
       kind: 'media-figure',
@@ -572,6 +622,12 @@ export const sectionExtractors: Record<string, SectionExtractor> = {
   process: concept,
   cycle: concept,
   layers: concept,
+  stats,
+  pyramid: concept,
+  funnel: concept,
+  hub: concept,
+  venn: concept,
+  matrix: concept,
   photoGrid,
   definitionCard,
   comparisonBar,

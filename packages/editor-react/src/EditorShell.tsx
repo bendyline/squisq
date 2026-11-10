@@ -33,6 +33,12 @@ import { NavigationSheet } from './NavigationSheet';
 import type { NavigationSheetPanel } from './useNavigationSheetSwipe';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
 import { ProofingRoot } from './proofing/ProofingContext';
+import { proofingTapTarget } from './proofing/proofingTap';
+import {
+  clearLinkHoverTitle,
+  clearStaleLinkHoverTitle,
+  showLinkHoverTitle,
+} from './linkHoverTitle';
 import { ReviewRoot } from './review/ReviewContext';
 import { ReviewPanel } from './review/ReviewPanel';
 import type { ReviewCapability } from './review/types';
@@ -899,7 +905,7 @@ export function EditorShell({
         viewPreferences={viewPreferences}
         onViewPreferencesChange={onViewPreferencesChange}
       >
-        <ProofingRoot>
+        <ProofingRoot onLinkClick={onLinkClick}>
           <ReviewRoot providers={reviewProviders}>
             <PageTemplateContext.Provider value={pageTemplates}>
               <EditorShellInner
@@ -1518,6 +1524,10 @@ function EditorShellInner({
       if (!onLinkClick || event.button !== 0) return;
       const anchor = (event.target as HTMLElement).closest?.('a[href]');
       if (!anchor || !event.currentTarget.contains(anchor)) return;
+      // A finger on a squiggled link is asking about the squiggle first. The
+      // proofing card it raises carries "Open link"; following the link here
+      // would take the reader away before the card could be seen.
+      if (proofingTapTarget(event.nativeEvent)) return;
       const href = anchor.getAttribute('href');
       if (!href || onLinkClick(href) === false) return;
       event.preventDefault();
@@ -1529,27 +1539,22 @@ function EditorShellInner({
   const handleShellLinkMouseOver = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       if (!onLinkClick) return;
-      const anchor = (event.target as HTMLElement).closest?.('a[href]');
-      if (!anchor || !event.currentTarget.contains(anchor)) return;
-      const href = anchor.getAttribute('href');
-      if (
-        !href ||
-        (anchor.hasAttribute('title') && !anchor.hasAttribute('data-squisq-link-title'))
-      ) {
+      const target = event.target as HTMLElement;
+      const anchor = target.closest?.('a[href]');
+      if (!anchor || !event.currentTarget.contains(anchor)) {
+        clearStaleLinkHoverTitle(target);
         return;
       }
-      anchor.setAttribute('title', href);
-      anchor.setAttribute('data-squisq-link-title', 'true');
+      showLinkHoverTitle(anchor);
     },
     [onLinkClick],
   );
 
   const handleShellLinkMouseOut = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    const anchor = (event.target as HTMLElement).closest?.('a[data-squisq-link-title]');
+    const anchor = (event.target as HTMLElement).closest?.('a[href]');
     if (!anchor || !event.currentTarget.contains(anchor)) return;
     if (event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget)) return;
-    anchor.removeAttribute('title');
-    anchor.removeAttribute('data-squisq-link-title');
+    clearLinkHoverTitle(anchor);
   }, []);
 
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;

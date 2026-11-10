@@ -23,7 +23,7 @@
 
 import JSZip from 'jszip';
 import type { Doc, AudioSegment, ThemeRegistry } from '@bendyline/squisq/schemas';
-import { resolveFontFamily } from '@bendyline/squisq/schemas';
+import { contrastRatio, isHex, resolveFontFamily } from '@bendyline/squisq/schemas';
 import { resolveThemeForDoc } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
@@ -1052,6 +1052,11 @@ ${navItems}
 
 // ── Stylesheet ────────────────────────────────────────────────────
 
+/** Whether a theme colour has the contrast body text needs on a white page. */
+function readsOnPaper(color: string | undefined): boolean {
+  return !!color && isHex(color) && contrastRatio(color, '#ffffff') >= 4.5;
+}
+
 function generateStylesheet(
   themeId: string | undefined,
   doc?: MarkdownDocument,
@@ -1061,10 +1066,18 @@ function generateStylesheet(
   let themeVars = '';
   if (themeId) {
     const theme = resolveThemeForDoc(doc, themeId, registry);
+    // The page of an e-book belongs to its reader (paper, sepia, night), so
+    // the theme never paints one — `--epub-bg` only records its colour for a
+    // host that wants it — and only its inks that read on paper are used: a
+    // dark theme's near-white text on a reader's white page was invisible.
+    // Ink that fails falls back to the stylesheet's own.
+    const ink = [theme.colors.primary, theme.colors.secondary, theme.colors.highlight].find(
+      (color) => readsOnPaper(color),
+    );
     themeVars = `
-  --epub-bg: ${theme.colors.background};
-  --epub-text: ${theme.colors.text};
-  --epub-primary: ${theme.colors.primary};
+  --epub-bg: ${theme.colors.background};${
+    readsOnPaper(theme.colors.text) ? `\n  --epub-text: ${theme.colors.text};` : ''
+  }${ink ? `\n  --epub-primary: ${ink};` : ''}
   --epub-heading-font: ${resolveFontFamily(theme.typography.titleFont, 'serif')};
   --epub-body-font: ${resolveFontFamily(theme.typography.bodyFont, 'sans-serif')};`;
   }

@@ -269,7 +269,11 @@
 /* ── Hover card (portaled; interactive twin of the menu) ──────────── */
 
 .squisq-proof-tooltip {
-  max-width: 320px;
+  /* Sized by its content, not by the room to its right: the card is measured
+     where it first lands and then moved clear of the viewport's edge, and a
+     width that changed with the move would undo the clearance. */
+  width: max-content;
+  max-width: min(320px, calc(100vw - 16px));
   background: var(--squisq-surface-overlay);
   border: 1px solid var(--squisq-border);
   border-radius: 8px;
@@ -369,6 +373,70 @@
   background: var(--squisq-surface-hover);
   color: var(--squisq-text-strong);
   outline: none;
+}
+
+/* The link a tapped squiggle sits in: the tap raised this card instead of
+   following it, so the card offers it — with where it goes beside it. */
+.squisq-proof-tooltip-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--squisq-border-subtle);
+}
+
+.squisq-proof-tooltip-link .squisq-proof-tooltip-action {
+  flex: 0 0 auto;
+  color: var(--squisq-accent-strong);
+  font-weight: 600;
+}
+
+.squisq-proof-tooltip-link-href {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--squisq-text-faint);
+  font-size: 11px;
+}
+
+/* A finger raised this card, so its buttons are sized for one. Keyed on how
+   the card was opened rather than on `pointer: coarse`, which describes the
+   device's main pointer: a touchscreen laptop taps too. */
+.squisq-proof-tooltip[data-trigger='tap'] {
+  max-width: min(340px, calc(100vw - 16px));
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.squisq-proof-tooltip[data-trigger='tap'] .squisq-proof-tooltip-suggestions {
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.squisq-proof-tooltip[data-trigger='tap'] .squisq-proof-tooltip-chip {
+  min-height: 40px;
+  padding: 8px 14px;
+  font-size: 15px;
+}
+
+.squisq-proof-tooltip[data-trigger='tap'] .squisq-proof-tooltip-more,
+.squisq-proof-tooltip[data-trigger='tap'] .squisq-proof-tooltip-action {
+  min-height: 40px;
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.squisq-proof-tooltip[data-trigger='tap'] .squisq-proof-tooltip-link-href {
+  font-size: 12px;
+}
+
+/* The menu is reached by touch too: a long press, or the card's "+N more". */
+@media (pointer: coarse) {
+  .squisq-proof-menu-item {
+    padding: 10px 12px;
+  }
 }
 
 /* ── Status bar segment ─────────────────────────────────────────────── */
@@ -497,8 +565,14 @@
   color: var(--squisq-text);
 }
 
-.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-actions {
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-actions,
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-link {
   border-top-color: var(--squisq-border-subtle);
+}
+
+/* After the dark action rule above, which would otherwise mute it. */
+.squisq-proof-tooltip[data-theme='dark'] .squisq-proof-tooltip-link .squisq-proof-tooltip-action {
+  color: var(--squisq-accent-strong);
 }
 
 /* Review panel. Same geometry as the proofing panel — it occupies the same

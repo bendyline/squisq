@@ -511,8 +511,9 @@ export interface ListBlockInput extends BaseTemplateBlock {
 }
 
 /**
- * Shared shape of the concept blocks (`cards`, `process`, `cycle`): a
- * headline over 2–6 related ideas, each `Label: detail` or plain text.
+ * Shared shape of the concept blocks (`cards`, `process`, `cycle`, `layers`,
+ * `stats`, `pyramid`, `funnel`, `hub`, `venn`, `matrix`): a headline over
+ * 2–6 related ideas, each `Label: detail` or plain text.
  */
 interface ConceptBlockBase extends BaseTemplateBlock {
   /** The ideas, in order; `Label: detail` sets the label bold above its detail. */
@@ -543,6 +544,53 @@ export interface CycleBlockInput extends ConceptBlockBase {
 /** Nested parts, innermost first: concentric rings, each part called out beside them. */
 export interface LayersBlockInput extends ConceptBlockBase {
   template: 'layers';
+}
+
+/**
+ * Key figures side by side, each `Figure: what it measures` ("57 million:
+ * deaths prevented"); the figures count up where the theme's motion does.
+ */
+export interface StatsBlockInput extends ConceptBlockBase {
+  template: 'stats';
+}
+
+/** A hierarchy as a pyramid of tiers: the apex first, the base last. */
+export interface PyramidBlockInput extends ConceptBlockBase {
+  template: 'pyramid';
+}
+
+/** Stages that narrow as a funnel: the widest stage first, the outcome last. */
+export interface FunnelBlockInput extends ConceptBlockBase {
+  template: 'funnel';
+}
+
+/** Ideas around the one thing they share: a hub joined to each idea by a spoke. */
+export interface HubBlockInput extends ConceptBlockBase {
+  template: 'hub';
+  /** The words inside the hub (1–3); without them the hub is a plain disc. */
+  center?: string;
+}
+
+/**
+ * Two sets and what they share, as overlapping circles. The overlap comes
+ * from `overlap` or from an item labelled `Both:` / `Shared:`.
+ */
+export interface VennBlockInput extends ConceptBlockBase {
+  template: 'venn';
+  /** What the two sets have in common, written in the overlap. */
+  overlap?: string;
+}
+
+/**
+ * Four ideas placed on two axes as a 2×2 matrix, in reading order: top left,
+ * top right, bottom left, bottom right.
+ */
+export interface MatrixBlockInput extends ConceptBlockBase {
+  template: 'matrix';
+  /** What grows from left to right (for example "Effort"). */
+  xAxis?: string;
+  /** What grows from bottom to top (for example "Impact"). */
+  yAxis?: string;
 }
 
 /**
@@ -779,6 +827,12 @@ export interface DiagramTemplateNode {
   container?: string;
 }
 
+/** A node as an author may write it: its position is optional (see `DiagramBlockInput.nodes`). */
+export type DiagramTemplateNodeInput = Omit<DiagramTemplateNode, 'x' | 'y'> & {
+  x?: number;
+  y?: number;
+};
+
 /** A position along one side of a diagram node, normalized from 0 to 1. */
 export interface DiagramEdgeAnchor {
   side: 'top' | 'right' | 'bottom' | 'left';
@@ -830,8 +884,14 @@ export interface DiagramBlockInput extends BaseTemplateBlock {
   endStyle?: MarkerStyle;
   /** Edge line style (default: 'solid'). */
   lineStyle?: 'solid' | 'dashed' | 'dotted';
-  /** Data-driven node list; used only when the block has no children. */
-  nodes?: DiagramTemplateNode[];
+  /**
+   * Data-driven node list; used only when the block has no children. Leave
+   * `x` and `y` off every node and the diagram places them itself from the
+   * edges (a layered layout: left to right, or top to bottom in a portrait
+   * frame), so an author states the relationships and never computes
+   * coordinates.
+   */
+  nodes?: DiagramTemplateNodeInput[];
   /** Edges for `nodes`. */
   edges?: DiagramTemplateEdge[];
 }
@@ -1005,6 +1065,12 @@ export type TemplateBlock =
   | ProcessBlockInput
   | CycleBlockInput
   | LayersBlockInput
+  | StatsBlockInput
+  | PyramidBlockInput
+  | FunnelBlockInput
+  | HubBlockInput
+  | VennBlockInput
+  | MatrixBlockInput
   | PhotoGridInput
   | DefinitionCardInput
   | ComparisonBarInput

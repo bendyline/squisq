@@ -24,12 +24,38 @@ export function officeTypeface(
   fallback: string,
 ): string {
   const resolved = resolveFontFamily(family, fallback);
-  const first = resolved
-    .split(',')[0]
-    ?.trim()
-    .replace(/^['"]|['"]$/g, '');
-  return first || fallback;
+  const names = resolved
+    .split(',')
+    .map((name) => name.trim().replace(/^['"]|['"]$/g, ''))
+    .filter(Boolean);
+  // A CSS keyword is not a face Office can look up: `system-ui` in a
+  // `typeface` falls back to whatever the reader's default is. Take the
+  // first real family in the stack, else the Office face of the stack's kind.
+  const named = names.find((name) => !GENERIC_FONT_FAMILIES.has(name.toLowerCase()));
+  if (named) return named;
+  const kind = names.map((name) => name.toLowerCase());
+  if (kind.includes('monospace') || kind.includes('ui-monospace')) return 'Consolas';
+  if (kind.includes('serif') || kind.includes('ui-serif')) return 'Georgia';
+  return names.length ? 'Segoe UI' : fallback;
 }
+
+/** CSS generic and system font keywords, which name no installable face. */
+const GENERIC_FONT_FAMILIES: ReadonlySet<string> = new Set([
+  'system-ui',
+  '-apple-system',
+  'blinkmacsystemfont',
+  'ui-sans-serif',
+  'ui-serif',
+  'ui-monospace',
+  'ui-rounded',
+  'sans-serif',
+  'serif',
+  'monospace',
+  'cursive',
+  'fantasy',
+  'emoji',
+  'math',
+]);
 
 export function solidColorXml(color: ParsedColor): string {
   const alpha = color.alpha < 100000 ? `<a:alpha val="${color.alpha}"/>` : '';
@@ -143,6 +169,15 @@ export function buildLayerShape(layer: ShapeLayer, shapeId: number): string {
         : layer.content.borderRadius
           ? 'roundRect'
           : 'rect';
+  // A rounded rectangle takes its authored corner radius: PowerPoint's own
+  // default (a sixth of the shorter side) turns a gently rounded card into a pill.
+  const box = resolveLayerRect(layer.position, 100, 100);
+  const shorter = Math.min(box.width, box.height);
+  const radius = Math.min(shorter / 2, Math.max(0, layer.content.borderRadius ?? 0));
+  const adjust =
+    geometry === 'roundRect' && shorter > 0
+      ? `<a:avLst><a:gd name="adj" fmla="val ${Math.round((radius / shorter) * 100000)}"/></a:avLst>`
+      : '<a:avLst/>';
   const fill =
     layer.content.shape === 'line'
       ? '<a:noFill/>'
@@ -158,7 +193,7 @@ export function buildLayerShape(layer: ShapeLayer, shapeId: number): string {
     `<p:sp><p:nvSpPr><p:cNvPr id="${shapeId}" name="${escapeXml(layer.id)}"/>` +
     `<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>` +
     `<a:xfrm><a:off x="${rect.x}" y="${rect.y}"/><a:ext cx="${rect.width}" cy="${rect.height}"/></a:xfrm>` +
-    `<a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom>` +
+    `<a:prstGeom prst="${geometry}">${adjust}</a:prstGeom>` +
     fill +
     stroke +
     `</p:spPr></p:sp>`

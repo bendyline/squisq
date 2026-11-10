@@ -621,7 +621,7 @@ interface LayoutHints {
 
 ### Subpath: Doc
 
-**Import:** `@bendyline/squisq/doc` — the template registry, all 33 templates,
+**Import:** `@bendyline/squisq/doc` — the template registry, all 48 templates,
 markdown↔doc conversion, canonical layer materialization, and
 theme/validation helpers.
 
@@ -681,6 +681,12 @@ Template failures are returned as structured diagnostics without hidden console
 output. The default visible fallback keeps previews and playback readable;
 `failureMode: 'empty'` is the explicit opt-out. Theme persistent layers are
 inherited by default and `persistentLayers: false` disables them.
+
+A template that runs and draws nothing — two columns with no columns, a photo
+grid or captioned image with no picture, a list with no items — is not a
+failure: the block is drawn as `content`, so its heading and body are kept, and
+the result carries a `template-drew-nothing` diagnostic naming the template.
+Treat it as information ("this section has no columns yet"), not as an error.
 
 `expandDocBlocks` adds timeline scheduling and transitions around the canonical
 materializer. Its `persistentLayers`, `failureMode`, and `customTemplates`
@@ -1231,6 +1237,26 @@ interface NarrationTimeEstimate {
   minutes: number;
   seconds: number;
 }
+
+// Captions and chapters as the sidecar files players and platforms read.
+// Pure functions of the doc's own times; `offset` shifts every time for a
+// video that starts before the doc does (a cover pre-roll).
+function formatCaptionsSrt(track?: Pick<CaptionTrack, 'phrases'>, options?: CaptionFileOptions): string;
+function formatCaptionsVtt(track?: Pick<CaptionTrack, 'phrases'>, options?: CaptionFileOptions): string;
+function docChapters(doc: Pick<Doc, 'blocks'> | readonly Block[], options?: DocChapterOptions): DocChapter[];
+function formatChaptersFfmetadata(chapters: readonly DocChapter[], duration: number): string;
+function formatChaptersText(chapters: readonly DocChapter[]): string; // "0:00 Opening"
+
+interface CaptionFileOptions {
+  offset?: number;
+}
+interface DocChapterOptions extends CaptionFileOptions {
+  minDuration?: number; // default 10 s: shorter sections fold into the one before
+}
+interface DocChapter {
+  startTime: number;
+  title: string;
+}
 ```
 
 ---
@@ -1627,15 +1653,60 @@ function iconClass(family: IconFamily, name: string): string; // e.g. 'fa-solid 
 
 ### Subpath: Recommend
 
-**Import:** `@bendyline/squisq/recommend` — block-content profiler + template
-recommendations for the editor's template picker.
+**Import:** `@bendyline/squisq/recommend` — block-content profiler, template
+recommendations for the editor's template picker, and the list-shape classifier
+behind [lists that draw themselves](guide/markup.md#lists-that-draw-themselves).
 
 ```ts
-function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentProfile;
+function profileBlockContents(
+  nodes: MarkdownBlockNode[],
+  options?: { heading?: string },
+): BlockContentProfile;
 function recommendTemplatesForBlock(
   profile: BlockContentProfile,
   allNames: readonly string[],
 ): RecommendationResult;
+// The one template an unannotated section takes, or undefined.
+// `concepts: false` keeps every list a plain `list`.
+function pickAutoTemplate(
+  profile: BlockContentProfile,
+  blockIndex?: number,
+  options?: { concepts?: boolean },
+): string | undefined;
+
+// What a list is a picture of. `strong` rests on something the author wrote
+// (a numbered list, dates in order, a heading that says "cycle") and is safe
+// to apply; `weak` is only worth offering. `inputs` carries what the template
+// needs beyond the items: a reversed order for layers or a pyramid, `versus`.
+function classifyListShape(input: ListShapeInput): ListShapeResult;
+
+type ListShape =
+  | 'figures' // → stats
+  | 'timeline' // → process, drawn as a timeline
+  | 'sequence' // → process
+  | 'cycle'
+  | 'nested' // → layers
+  | 'hierarchy' // → pyramid
+  | 'funnel'
+  | 'contrast' // → cards with versus
+  | 'overlap' // → venn
+  | 'matrix'
+  | 'hub'
+  | 'parallel' // → cards
+  | 'plain'; // → list
+interface ListShapeInput {
+  heading?: string;
+  items: readonly string[]; // a nested item as "Label: detail"
+  ordered?: boolean;
+  intro?: string;
+}
+interface ListShapeResult {
+  shape: ListShape;
+  template: string;
+  confidence: 'strong' | 'weak';
+  inputs?: Record<string, unknown>;
+  reason: string;
+}
 
 interface BlockContentProfile {
   hasImage: boolean;
@@ -1647,6 +1718,7 @@ interface BlockContentProfile {
   hasDate: boolean;
   hasNumberHighlight: boolean;
   wordCount: number;
+  listShape?: ListShapeResult; // when the body is one list of two to six items
 }
 interface RecommendationResult {
   recommended: string[];

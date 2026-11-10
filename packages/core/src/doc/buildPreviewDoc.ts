@@ -18,12 +18,12 @@ import { applySavedPresentation } from '../transform/presentationCompiler.js';
  */
 
 import { coerceTemplateParams } from './templates/inputDescriptors.js';
-import { deriveTemplateInputs, isPictureFence } from './templateInputs.js';
+import { deriveTemplateInputs, extractBlockquote, isPictureFence } from './templateInputs.js';
 import { flattenRenderableBlocks, getBlockBodyText } from './markdownToDoc.js';
 import { hasTemplate } from './templates/index.js';
 import { isContainerTemplate } from './templates/templateNames.js';
 import { KNOWN_BLOCK_META_KEYS } from '../markdown/annotationCoercion.js';
-import { extractPlainText, getChildren } from '../markdown/utils.js';
+import { extractPlainText, getChildren, isHtmlLineBreak } from '../markdown/utils.js';
 import { iconMarker } from '../icons/inlineIconMarker.js';
 import type { IconFamily } from '../icons/index.js';
 import type { Block, Doc } from '../schemas/Doc.js';
@@ -45,8 +45,19 @@ function extractRichText(node: MarkdownNode): string {
   if ('value' in node && typeof (node as { value?: unknown }).value === 'string') {
     return (node as { value: string }).value;
   }
+  // Hard breaks, table rows and table cells keep their boundaries, exactly as
+  // in `extractPlainText`: without them a table under a text template read as
+  // one fused word ("RegionSalesWest120") on the slide.
+  if (node.type === 'break') return '\n';
+  if (node.type === 'htmlInline' && isHtmlLineBreak((node as { rawHtml: string }).rawHtml))
+    return '\n';
   const children = getChildren(node);
-  const separator = node.type === 'list' || node.type === 'listItem' ? '\n' : '';
+  const separator =
+    node.type === 'list' || node.type === 'listItem' || node.type === 'table'
+      ? '\n'
+      : node.type === 'tableRow'
+        ? ' '
+        : '';
   return children.map(extractRichText).join(separator);
 }
 
@@ -160,6 +171,7 @@ function getTemplateDefaults(
   block: Block,
 ): Record<string, unknown> {
   const body = extractBodyText(block.contents);
+  const hasBody = (block.contents?.length ?? 0) > 0;
 
   switch (templateName) {
     case 'statHighlight':
@@ -169,8 +181,17 @@ function getTemplateDefaults(
           description: body || headingText,
         }
       );
-    case 'quote':
-      return { quote: body || headingText };
+    case 'quote': {
+      // The blockquote's closing "— Name" line is who said it, not more of
+      // what was said (`extractBlockquote`).
+      const quoted = extractBlockquote(block.contents);
+      return quoted.text
+        ? {
+            quote: quoted.text,
+            ...(quoted.attribution ? { attribution: quoted.attribution } : {}),
+          }
+        : { quote: body || headingText };
+    }
     case 'fullBleedQuote':
     case 'pullQuote':
       // These two take `text`, not `quote` — `deriveTemplateInputs` owns the
@@ -185,23 +206,54 @@ function getTemplateDefaults(
     case 'factCard':
       return { fact: headingText, explanation: body || headingText };
     case 'comparisonBar':
-      return { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 };
+      // Sample values only under a bare heading, where they show the author
+      // what to fill in. A block with a body never shows invented numbers: its
+      // template draws nothing and the body is shown as content.
+      return hasBody ? {} : { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 };
     case 'list':
       // Preserve the source list kind in the player-ready slide. The slideshow
       // projection removes `sourceHeading`, so its later materialization pass
       // cannot re-derive `ordered` from `contents`; omitting it here made the
       // list template fall back to its legacy numbered-list behaviour.
+      // Sample items, like sample values, only under a bare heading.
       return (
-        deriveTemplateInputs(templateName, headingText, block.contents) ?? {
-          items: ['Item 1', 'Item 2', 'Item 3'],
-        }
+        deriveTemplateInputs(templateName, headingText, block.contents) ??
+        (hasBody ? {} : { items: ['Item 1', 'Item 2', 'Item 3'] })
       );
+    case 'transcript':
+      // The heading names the speaker and the body is what they said. The
+      // slide must carry the message: without this every Markdown-authored
+      // beat was an empty bubble in the preview, the slideshow export and
+      // PowerPoint.
+      return deriveTemplateInputs(templateName, headingText, block.contents) ?? {};
+    case 'twoColumn':
+      // The heading is the band above the columns, and a body list of two
+      // items is the columns. The slide must carry both: without this a
+      // `{[twoColumn left=… right=…]}` slide lost its heading in the preview,
+      // the slideshow export and PowerPoint.
+      return deriveTemplateInputs(templateName, headingText, block.contents) ?? {};
     case 'videoWithCaption':
     case 'videoPullQuote':
       // The slide must carry its clip: the projection drops `sourceHeading`,
       // so materialization cannot re-derive it. Without this the template drew
       // an empty video and the rich-media pass added the body's clip (or
       // hosted player) as a second, separate copy.
+      return deriveTemplateInputs(templateName, headingText, block.contents) ?? {};
+    case 'cards':
+    case 'process':
+    case 'cycle':
+    case 'layers':
+    case 'stats':
+    case 'pyramid':
+    case 'funnel':
+    case 'hub':
+    case 'venn':
+    case 'matrix':
+      // A concept block draws the items of its body list. The slide must
+      // carry them: the projection drops `sourceHeading`, so materialization
+      // cannot re-derive them, and without this an annotated `{[cards]}` or
+      // `{[cycle]}` section showed its headline over an empty slide in the
+      // preview, the slideshow export and PowerPoint.
       return deriveTemplateInputs(templateName, headingText, block.contents) ?? {};
     case 'definitionCard':
       return { term: headingText, definition: body || headingText };

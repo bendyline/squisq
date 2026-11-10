@@ -29,6 +29,7 @@ import type {
   DiagramEdgeAnchor,
   DiagramTemplateEdge,
   DiagramTemplateNode,
+  DiagramTemplateNodeInput,
   TemplateContext,
 } from '../../schemas/BlockTemplates.js';
 import type { MarkdownCodeBlock } from '../../markdown/types.js';
@@ -45,6 +46,7 @@ import {
 } from '../utils/themeUtils.js';
 import { DIAGRAM_LABEL_LINE_HEIGHT, fitDiagramLabel } from '../utils/diagramText.js';
 import { createBackgroundLayer, fitProse, type ProseFit } from './captionUtils.js';
+import { layoutGraph } from '@bendyline/squisq-graph';
 import {
   anchorPoint,
   connectorPath,
@@ -433,24 +435,79 @@ function nodesFromChildren(context: TemplateContext): ResolvedDiagram {
 }
 
 /**
+ * Positions for nodes whose author gave none: a layered layout that follows
+ * the edges (`squisq-graph`), spaced on the same pitch the hand-placed
+ * examples use, so an AI author or a host states the relationships and never
+ * computes coordinates. Nodes inside a container are left to their author.
+ */
+function placeDiagramNodes(
+  nodes: readonly DiagramTemplateNodeInput[],
+  rawEdges: DiagramBlockInput['edges'],
+  direction: 'right' | 'down',
+): DiagramTemplateNode[] {
+  if (nodes.length === 0 || nodes.some((node) => node.container)) return [];
+  const ids = new Set(nodes.map((node) => node.id));
+  const edges = (Array.isArray(rawEdges) ? rawEdges : [])
+    .filter(
+      (edge) =>
+        typeof edge === 'object' &&
+        edge !== null &&
+        ids.has(edge.source) &&
+        ids.has(edge.target) &&
+        edge.source !== edge.target,
+    )
+    .map((edge, index) => ({ id: String(index), source: edge.source, target: edge.target }));
+  const size = (node: DiagramTemplateNodeInput) => ({
+    width: typeof node.w === 'number' && node.w > 0 ? node.w : NODE_WIDTH,
+    height: typeof node.h === 'number' && node.h > 0 ? node.h : NODE_HEIGHT,
+  });
+  const result = layoutGraph(
+    { nodes: nodes.map((node) => ({ id: node.id, ...size(node) })), edges },
+    {
+      direction,
+      layerSpacing: direction === 'right' ? 100 : 96,
+      nodeSpacing: direction === 'right' ? 96 : 100,
+      componentSpacing: 100,
+      // The template draws its own connectors; only the positions are used.
+      edgeSpacing: 1,
+    },
+  );
+  return nodes.map((node, index) => ({
+    ...node,
+    x: Math.round(result.nodes[index]!.x),
+    y: Math.round(result.nodes[index]!.y),
+  }));
+}
+
+/**
  * Defensive resolution of `templateData`-supplied nodes/edges: the data is
  * untyped at runtime (it can come from a hand-written `json data` fence),
  * so malformed entries are dropped rather than crashing the template.
  */
-function nodesFromTemplateData(input: DiagramBlockInput): ResolvedDiagram {
+function nodesFromTemplateData(
+  input: DiagramBlockInput,
+  direction: 'right' | 'down',
+): ResolvedDiagram {
   const rawNodes = Array.isArray(input.nodes) ? input.nodes : [];
-  const valid = rawNodes.filter(
-    (n): n is DiagramTemplateNode =>
+  const named = rawNodes.filter(
+    (n): n is DiagramTemplateNodeInput =>
       typeof n === 'object' &&
       n !== null &&
       typeof n.id === 'string' &&
       n.id.length > 0 &&
-      typeof n.label === 'string' &&
-      typeof n.x === 'number' &&
-      Number.isFinite(n.x) &&
-      typeof n.y === 'number' &&
-      Number.isFinite(n.y),
+      typeof n.label === 'string',
   );
+  const positioned = (n: DiagramTemplateNodeInput): n is DiagramTemplateNode =>
+    typeof n.x === 'number' &&
+    Number.isFinite(n.x) &&
+    typeof n.y === 'number' &&
+    Number.isFinite(n.y);
+  // Nodes written without positions are placed from the edges. A diagram is
+  // either positioned by its author or not: one stray unplaced node among
+  // placed ones is dropped, as malformed data always was.
+  const valid: DiagramTemplateNode[] = named.some(positioned)
+    ? named.filter(positioned)
+    : placeDiagramNodes(named, input.edges, direction);
   const ids = new Set(valid.map((n) => n.id));
   const containerIds = new Set(
     valid.map((n) => n.container).filter((c): c is string => typeof c === 'string' && ids.has(c)),
@@ -513,7 +570,7 @@ export function diagramBlock(input: DiagramBlockInput, context: TemplateContext)
     children.length > 0
       ? nodesFromChildren(context)
       : input.nodes && input.nodes.length > 0
-        ? nodesFromTemplateData(input)
+        ? nodesFromTemplateData(input, viewport.height > viewport.width ? 'down' : 'right')
         : { nodes: [], edges: [] };
 
   if (resolved.nodes.length === 0) {

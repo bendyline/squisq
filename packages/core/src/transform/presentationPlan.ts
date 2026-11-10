@@ -3,6 +3,11 @@
  * it atomically. Layout choices never replace the source prose or store seconds.
  */
 import { matchNumberHighlight, type NumberHighlightMatch } from '../recommend/numberHighlight.js';
+import {
+  splitConceptItem,
+  splitStatItem,
+  vennOverlapIndex,
+} from '../doc/templates/conceptItems.js';
 
 export const PRESENTATION_KEY = 'squisq-presentation';
 /** The layouts a summary (a headline and up to four points) can fill. */
@@ -22,6 +27,12 @@ export const PRESENTATION_LAYOUTS = [
   'process',
   'cycle',
   'layers',
+  'stats',
+  'pyramid',
+  'funnel',
+  'hub',
+  'venn',
+  'matrix',
 ] as const;
 export type PresentationLayout = (typeof PRESENTATION_LAYOUTS)[number];
 /** Shows a section's own block, with the template its author chose, instead of
@@ -61,7 +72,18 @@ export function presentationLayoutFits(
       return points.length >= 2;
     case 'cycle':
     case 'layers':
+    case 'pyramid':
+    case 'funnel':
+    case 'hub':
       return points.length >= 3;
+    case 'stats':
+      // Key numbers need a figure in every point, or the slide has nothing to count.
+      return points.length >= 2 && points.every((point) => !!splitStatItem(point).figure);
+    case 'venn':
+      // Two sets and the point that names what they share.
+      return points.length === 3 && vennOverlapIndex(points.map(splitConceptItem)) >= 0;
+    case 'matrix':
+      return points.length === 4;
     case 'comparison':
       return points.length === 2;
     case 'definition':

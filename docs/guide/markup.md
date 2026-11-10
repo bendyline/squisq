@@ -172,6 +172,11 @@ syntax; the [block gallery](../blocks/index.md) shows every template.
 The template only changes how the block is _presented_. The heading and body are still ordinary
 Markdown, so delete the tag and you're left with the same text.
 
+A template that has nothing to draw shows the section as ordinary content instead. A
+`{[twoColumn]}` with no columns, a `{[photoGrid]}` or `{[imageWithCaption]}` with no picture, a
+`{[list]}` over a paragraph: each keeps its heading and body on the slide and the page, never a
+blank frame and never sample values in place of yours.
+
 ## Automatic templates
 
 You don't have to tag every heading. When a heading has no tag, Squiggly Square looks at what's
@@ -188,7 +193,7 @@ under it, and when the body is clearly one kind of thing it picks the matching t
 | Paragraphs that include an image                                       | [Left Feature](../blocks/leftFeature.md) and [Right Feature](../blocks/rightFeature.md), alternating |
 | One blockquote                                                         | [Quote](../blocks/quote.md)                                                                          |
 | A short line built around a figure (`18%`, `$2.3M`, `3×`)              | [Stat Highlight](../blocks/statHighlight.md)                                                         |
-| One list                                                               | [List](../blocks/list.md)                                                                            |
+| One list                                                               | [List](../blocks/list.md), or [the drawing its shape suggests](#lists-that-draw-themselves)          |
 
 The rules are checked in that order, and they're deliberately strict: the body must be _only_
 that one thing. A table with an introductory paragraph above it, or a list followed by a closing
@@ -233,6 +238,58 @@ content its template follows. A tag you write yourself always wins.
 When nothing matches, the block keeps the default: in slides, a content slide with the heading
 and the complete body; on a page, a prose section.
 
+### Lists that draw themselves
+
+A list says "here are some things". Its heading and its items usually say more — that the things
+happen in order, come round again, sit inside one another, or are numbers — and when they do, the
+list is drawn as that instead of as bullets:
+
+| When the list…                                                               | You get                                        |
+| ---------------------------------------------------------------------------- | ---------------------------------------------- |
+| Is numbered, or its heading names steps ("How to…", "Stages of…")            | [Process](../blocks/process.md)                |
+| Opens every item with a date, in order                                       | Process, drawn as a timeline                   |
+| Sits under a heading that says it repeats ("The water cycle")                | [Cycle](../blocks/cycle.md)                    |
+| Is all figures with what they measure (`95%: coverage needed`)               | [Key Numbers](../blocks/stats.md)              |
+| Has figures that shrink item by item, or a heading that names a funnel       | [Funnel](../blocks/funnel.md)                  |
+| Sits under a heading that names nested parts ("Layers of the Earth")         | [Layers](../blocks/layers.md)                  |
+| Sits under a heading that names a hierarchy ("Chain of command")             | [Pyramid](../blocks/pyramid.md)                |
+| Has two sets and an item labelled `Both:`                                    | [Venn](../blocks/venn.md)                      |
+| Has two items that are opposites (`Pros:` / `Cons:`), or a heading with "vs" | [Cards](../blocks/cards.md), set as a contrast |
+| Has four items under a heading that names a matrix ("SWOT", "2×2")           | [Matrix](../blocks/matrix.md)                  |
+| Has labelled items under a heading that names what they share ("Causes of…") | [Hub](../blocks/hub.md)                        |
+| Has items written `Label: detail`                                            | [Cards](../blocks/cards.md)                    |
+
+```markdown preview
+## How the tide table is made
+
+1. Record: the gauge logs the water level every six minutes
+2. Analyse: a year of readings gives the harbor's tidal pattern
+3. Predict: the pattern is run forward for the year ahead
+
+## The season in numbers
+
+- 412 tonnes: of herring landed
+- 18%: more boats than last spring
+- 2 berths: opened on the east quay
+```
+
+A drawing is only chosen when the list itself makes the relationship clear, and never when it
+would lose something: a list with more than six items, with links, pictures or task boxes in it, or
+with sub-items more than one level deep stays a list. Where the order matters and the items don't settle
+it — is the first layer the core or the crust? — the list stays a list too, and the drawing is
+offered in the editor's template picker instead. A sub-item becomes its item's detail, so
+
+```markdown
+1. Survey
+   - Count trips at six points
+2. Build
+```
+
+reads as `Survey: Count trips at six points`, then `Build`.
+
+To keep every list a plain list while leaving the other automatic templates on, set
+`squisq-auto-templates: structural` in the frontmatter.
+
 ### Turning automatic templates off
 
 To show every untagged heading with the default design, add this to the document's frontmatter:
@@ -248,7 +305,8 @@ squisq-auto-templates: false
 - Two new berths opened on the east quay
 ```
 
-The values `false`, `off`, `no`, and `0` turn it off. On the command line, pass
+The values `false`, `off`, `no`, and `0` turn it off; `structural` keeps
+[lists as lists](#lists-that-draw-themselves) and leaves the rest on. On the command line, pass
 `--no-auto-templates` to `squisq convert` or `squisq video` (see [CLI](cli.md)).
 
 ## Tags in a section's body

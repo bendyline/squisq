@@ -67,6 +67,21 @@ describe('concept blocks', () => {
     expect(process.filter((layer) => layer.type === 'path')).toHaveLength(2);
   });
 
+  it('draws a cycle too short or too wordy for a ring as a process', () => {
+    // Two stages are not a ring, and a paragraph does not fit beside one:
+    // the stages ran over the headline and off the slide.
+    const paragraph = `Evaporation: ${'the sun heats the water and it rises as vapor, '.repeat(5)}`;
+    for (const items of [water.slice(0, 2), [paragraph, ...water.slice(1)]]) {
+      const layers = layersOf(block('cycle', items));
+      // One arrow between stages, none closing the loop.
+      expect(layers.filter((layer) => layer.type === 'path')).toHaveLength(items.length - 1);
+      expect(layers.some((layer) => layer.id === 'stage-close-arrow')).toBe(false);
+      // Its steps are still named as they are drawn.
+      const steps = blockBuildSteps({ layers, build: { mode: 'items' } });
+      expect(steps.map((step) => step.text)).toEqual(conceptBuildStepTexts('cycle', items));
+    }
+  });
+
   it('sets four long ideas two by two, never wider than a word allows', () => {
     const layers = layersOf(
       block('cards', [

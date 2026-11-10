@@ -33,7 +33,7 @@ theme, or open the example in the editor and change it.
 - [How the format works](guide/markup.md) — headings become blocks; tags choose their look.
 - [Tag reference](guide/tags.md) and the [cheat sheet](guide/cheatsheet.md) — every
   `{[…]}` form on one page.
-- [Block gallery](blocks/index.md) — all 38 built-in blocks, each with a live example.
+- [Block gallery](blocks/index.md) — all 48 built-in blocks, each with a live example.
 
 **Presenting and sharing**
 

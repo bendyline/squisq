@@ -401,6 +401,27 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
     { key: 'tracks', description: 'Timeline tracks and events (supply via template data)' },
     { key: 'links', description: 'Branch links between event ids (supply via template data)' },
   ],
+  cards: CONCEPT_DESCRIPTORS([
+    {
+      key: 'versus',
+      description: 'Set exactly two ideas against each other, with a "vs" mark between them',
+      coerce: 'boolean',
+    },
+  ]),
+  process: CONCEPT_DESCRIPTORS(),
+  cycle: CONCEPT_DESCRIPTORS(),
+  layers: CONCEPT_DESCRIPTORS(),
+  stats: CONCEPT_DESCRIPTORS(),
+  pyramid: CONCEPT_DESCRIPTORS(),
+  funnel: CONCEPT_DESCRIPTORS(),
+  hub: CONCEPT_DESCRIPTORS([
+    { key: 'center', description: 'The one to three words written inside the hub' },
+  ]),
+  venn: CONCEPT_DESCRIPTORS(),
+  matrix: CONCEPT_DESCRIPTORS([
+    { key: 'xAxis', description: 'What grows from left to right, named along the foot' },
+    { key: 'yAxis', description: 'What grows from bottom to top, named up the side' },
+  ]),
   videoWithCaption: [
     { key: 'videoSrc', description: 'Path to the video file', required: true },
     { key: 'posterSrc', description: 'Poster frame path' },
@@ -413,6 +434,25 @@ export const TEMPLATE_INPUT_DESCRIPTORS: Readonly<
     { key: 'videoLicense', description: 'License identifier' },
   ],
 };
+
+/**
+ * Shared descriptors for the concept templates, which all take a headline and
+ * an accent and read their ideas from the body list. `extra` appends the keys
+ * one of them adds.
+ */
+function CONCEPT_DESCRIPTORS(
+  extra: readonly TemplateInputDescriptor[] = [],
+): readonly TemplateInputDescriptor[] {
+  return [
+    { key: 'title', description: 'Headline above the ideas (defaults to the heading)' },
+    {
+      key: 'colorScheme',
+      description: 'Accent color (defaults to the theme highlight)',
+      valueHint: COLOR_SCHEME_HINT,
+    },
+    ...extra,
+  ];
+}
 
 /** Shared descriptor list for `leftFeature`/`rightFeature` (identical inputs). */
 function FEATURE_DESCRIPTORS(): readonly TemplateInputDescriptor[] {

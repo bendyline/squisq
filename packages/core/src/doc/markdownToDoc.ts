@@ -123,8 +123,15 @@ export interface MarkdownToDocOptions {
    * instead of the structural `defaultTemplate`. Explicit `{[template]}`
    * annotations always win. Authors can also disable per document with
    * frontmatter `squisq-auto-templates: false`.
+   *
+   * A list is drawn as what it is a picture of when its shape is clear
+   * (`classifyListShape`): a numbered list as a `process`, dated items as a
+   * timeline, `Label: detail` items as `cards`, figures as `stats`, and a
+   * heading that says so as a `cycle`, `layers`, a `pyramid`, a `funnel`, a
+   * `hub`, a `venn` or a `matrix`. `'structural'` (frontmatter
+   * `squisq-auto-templates: structural`) keeps every list a plain `list`.
    */
-  autoTemplates?: boolean;
+  autoTemplates?: boolean | 'structural';
 }
 
 // ============================================
@@ -596,8 +603,12 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // plus inputs derived from that body. Strict derivation — when the
   // essential input can't be built (e.g. feature without an image src),
   // the block keeps the structural default.
-  if ((options?.autoTemplates ?? true) && !frontmatterDisablesAutoTemplates(markdownDoc)) {
-    applyAutoTemplates(rootBlocks, resolveTemplateName(defaultTemplate), { featureIndex: 0 });
+  const autoLevel = frontmatterAutoTemplates(markdownDoc, options?.autoTemplates ?? true);
+  if (autoLevel) {
+    applyAutoTemplates(rootBlocks, resolveTemplateName(defaultTemplate), {
+      featureIndex: 0,
+      concepts: autoLevel !== 'structural',
+    });
   }
 
   // Timeline parsing is intentionally tolerant and can retain unresolved
@@ -951,10 +962,21 @@ function collectTimelineWarnings(block: Block, diagnostics: DocDiagnostic[]): vo
   }
 }
 
-/** Truthiness of the `squisq-auto-templates` frontmatter kill-switch. */
-function frontmatterDisablesAutoTemplates(markdownDoc: MarkdownDocument): boolean {
+/**
+ * The auto-template level in force: the caller's option, lowered by the
+ * `squisq-auto-templates` frontmatter key (`false` turns picking off,
+ * `structural` keeps lists plain). Frontmatter never raises what the caller
+ * turned down.
+ */
+function frontmatterAutoTemplates(
+  markdownDoc: MarkdownDocument,
+  option: boolean | 'structural',
+): boolean | 'structural' {
+  if (!option) return false;
   const v = markdownDoc.frontmatter?.['squisq-auto-templates'];
-  return v === false || v === 'false' || v === 'off' || v === 'no' || v === 0;
+  if (v === false || v === 'false' || v === 'off' || v === 'no' || v === 0) return false;
+  if (v === 'structural' || v === 'basic') return 'structural';
+  return option;
 }
 
 /**
@@ -967,7 +989,7 @@ function frontmatterDisablesAutoTemplates(markdownDoc: MarkdownDocument): boolea
 function applyAutoTemplates(
   blocks: Block[],
   resolvedDefault: string,
-  state: { featureIndex: number },
+  state: { featureIndex: number; concepts: boolean },
 ): void {
   for (const block of blocks) {
     // A promoted body annotation is author-intended — treat it as annotated so a
@@ -975,12 +997,21 @@ function applyAutoTemplates(
     const annotated =
       !!block.sourceHeading?.templateAnnotation?.template || !!block.promotedBodyAnnotation;
     if (block.sourceHeading && !annotated && block.template === resolvedDefault) {
-      const profile = profileBlockContents(block.contents ?? []);
-      const picked = pickAutoTemplate(profile, state.featureIndex);
+      const profile = profileBlockContents(block.contents ?? [], { heading: block.title });
+      let picked = pickAutoTemplate(profile, state.featureIndex, { concepts: state.concepts });
+      // A list whose drawing would drop something (a link, a seventh item)
+      // stays the list it is.
+      const drawn = !!picked && picked !== 'list' && profile.listShape?.template === picked;
+      if (drawn && !autoTemplatePreservesContent(picked!, block.contents)) picked = 'list';
       if (picked && autoTemplatePreservesContent(picked, block.contents)) {
-        const inputs = deriveTemplateInputs(picked, block.title ?? '', block.contents, {
+        const derived = deriveTemplateInputs(picked, block.title ?? '', block.contents, {
           preserveSourceHeading: true,
         });
+        // What the shape adds to the items: an order to draw them in, `versus`.
+        const inputs =
+          derived && drawn && picked !== 'list'
+            ? { ...derived, ...profile.listShape?.inputs }
+            : derived;
         if (inputs) {
           if (picked === 'leftFeature' || picked === 'rightFeature') state.featureIndex += 1;
           block.template = picked;

@@ -706,6 +706,32 @@ describe('expandDocBlocks', () => {
     expect(discrete.map((block) => block.id)).toEqual(blocks.map((block) => block.id));
   });
 
+  it('keeps a slide whose length is the minimum but for rounding', () => {
+    // Slide times are sums and differences of narration times, so a slide
+    // meant to last exactly five seconds can arrive as 4.999999. Folding it
+    // into its neighbour made a planned beat vanish from the video.
+    const beat = (
+      id: string,
+      startTime: number,
+      duration: number,
+    ): TemplateBlock & { startTime: number } => {
+      const card: TemplateBlock = {
+        template: 'factCard',
+        id,
+        duration,
+        audioSegment: 0,
+        fact: id,
+        explanation: 'E',
+      };
+      return { ...card, startTime };
+    };
+    const blocks = [beat('one', 0, 10), beat('two', 10, 4.999999), beat('three', 14.999999, 10)];
+    const paced = expandDocBlocks(blocks, {
+      audioSegments: [{ startTime: 0, duration: 24.999999 }],
+    });
+    expect(paced.map((block) => block.id)).toEqual(['one', 'two', 'three']);
+  });
+
   it('never mutates or aliases raw blocks and persistent layers', () => {
     const rawLayer: Layer = {
       type: 'shape',

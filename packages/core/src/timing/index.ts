@@ -17,6 +17,15 @@ export type {
 } from './readingTime.js';
 
 export { buildCaptionTrack } from './captions.js';
+// Captions and chapters as the sidecar files video players and platforms read.
+export {
+  docChapters,
+  formatCaptionsSrt,
+  formatCaptionsVtt,
+  formatChaptersFfmetadata,
+  formatChaptersText,
+} from './captionFiles.js';
+export type { CaptionFileOptions, DocChapter, DocChapterOptions } from './captionFiles.js';
 export type { BuildCaptionTrackOptions, CaptionSegmentSource } from './captions.js';
 
 export { phraseOffset, phraseStartTime, wordTimeAt } from './wordTiming.js';

@@ -25,6 +25,14 @@ import { mapBlock } from './mapBlock.js';
 import { fullBleedQuote } from './fullBleedQuote.js';
 import { listBlock } from './listBlock.js';
 import { cardsBlock, cycleBlock, layersBlock, processBlock } from './conceptBlocks.js';
+import {
+  funnelBlock,
+  hubBlock,
+  matrixBlock,
+  pyramidBlock,
+  statsBlock,
+  vennBlock,
+} from './conceptShapes.js';
 import { photoGrid } from './photoGrid.js';
 import { definitionCard } from './definitionCard.js';
 import { comparisonBar } from './comparisonBar.js';
@@ -103,6 +111,12 @@ export const templateRegistry: TemplateRegistry = {
   process: processBlock,
   cycle: cycleBlock,
   layers: layersBlock,
+  stats: statsBlock,
+  pyramid: pyramidBlock,
+  funnel: funnelBlock,
+  hub: hubBlock,
+  venn: vennBlock,
+  matrix: matrixBlock,
   photoGrid,
   definitionCard,
   comparisonBar,

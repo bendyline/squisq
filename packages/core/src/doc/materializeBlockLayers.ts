@@ -94,6 +94,8 @@ export type LayerMaterializationFailureMode = 'fallback' | 'empty';
 /** A structured, inspectable explanation for a template render failure. */
 export type LayerMaterializationDiagnostic =
   | { code: 'unsupported-build'; template: string; message: string }
+  // The template ran and drew nothing, so the block is shown as `content`.
+  | { code: 'template-drew-nothing'; template: string; message: string }
   | {
       code: 'unknown-template';
       template: string;
@@ -246,6 +248,24 @@ export function materializeBlockLayersWithRuntime(
   context.block = cloneData(block as Block);
 
   const execution = executeTemplateMaterialization(block, context, runtime.registry);
+  if (execution.status === 'ok' && drawsNothing(execution.layers) && hasContentToShow(block)) {
+    // A template that cannot draw its picture (two columns with no columns, a
+    // photo grid or captioned image with no picture) draws the block as
+    // content, so the heading and body the author wrote are never a blank slide.
+    const asContent = materializeBlockLayersWithRuntime(
+      { ...(block as Block), template: 'content' } as DocBlock,
+      options,
+      runtime,
+    );
+    return {
+      ...asContent,
+      diagnostic: {
+        code: 'template-drew-nothing',
+        template: block.template,
+        message: `Template "${block.template}" has nothing to draw here; the block is shown as content.`,
+      },
+    };
+  }
   if (execution.status === 'ok') {
     const styledLayers =
       runtime.applyRenderStyle !== false
@@ -312,6 +332,23 @@ export function materializeBlockLayersWithRuntime(
     source: 'fallback',
     diagnostic,
   };
+}
+
+/**
+ * Whether a template's output shows nothing: no layers at all, or only media
+ * layers that name no file (a captioned image whose block has no image).
+ */
+function drawsNothing(layers: readonly Layer[]): boolean {
+  return layers.every(
+    (layer) => (layer.type === 'image' || layer.type === 'video') && !layer.content.src,
+  );
+}
+
+/** A block has a heading or a body the `content` template could show instead. */
+function hasContentToShow(block: TemplateBlock): boolean {
+  if (resolveTemplateName(block.template) === 'content') return false;
+  const { title, contents } = block as Block;
+  return !!title?.trim() || (contents?.length ?? 0) > 0;
 }
 
 /** Mermaid fences are explicit author intent and never inferred from other code. */

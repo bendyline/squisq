@@ -2,7 +2,8 @@ import type { Block, TemplateBlock } from '@bendyline/squisq/schemas';
 import type { MarkdownBlockNode } from '@bendyline/squisq/markdown';
 
 export interface TemplateScreenshotFixture {
-  block: TemplateBlock & { children?: Block[] };
+  /** `contents` is the block's Markdown body, for templates that render it whole. */
+  block: TemplateBlock & { children?: Block[]; contents?: MarkdownBlockNode[] };
 }
 
 function imageDataUrl(label: string, from: string, to: string): string {
@@ -70,6 +71,21 @@ function childBlock(input: {
     ...(input.connectsTo ? { connectsTo: input.connectsTo } : {}),
   };
 }
+
+function imageParagraph(src: string, alt: string): MarkdownBlockNode {
+  return { type: 'paragraph', children: [{ type: 'image', url: src, alt }] };
+}
+
+const BODY_TEXT =
+  'The waterfront redesign replaced a four-lane arterial with a shared promenade, a protected cycle track, and a tidal garden that floods twice a day.';
+
+const CHART_HEADERS = ['Quarter', 'Visitors (k)', 'Revenue ($k)'];
+const CHART_ROWS = [
+  ['Q1', '124', '38'],
+  ['Q2', '189', '55'],
+  ['Q3', '263', '62'],
+  ['Q4', '217', '48'],
+];
 
 const TEMPLATE_SCREENSHOT_FIXTURES_INTERNAL = {
   title: {
@@ -261,6 +277,292 @@ const TEMPLATE_SCREENSHOT_FIXTURES_INTERNAL = {
         alt: 'Abstract checklist image',
         position: 'corner-inset',
       },
+    },
+  },
+  cards: {
+    block: {
+      id: 'sample-cards',
+      template: 'cards',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Why the Waterfront Works',
+      items: [
+        'Promenade: a shared surface from the ferry to the market',
+        'Cycle track: protected, on the harbor side',
+        'Tidal garden: floods twice a day and drains itself',
+      ],
+    },
+  },
+  process: {
+    block: {
+      id: 'sample-process',
+      template: 'process',
+      duration: 6,
+      audioSegment: 0,
+      title: 'How the Redesign Rolled Out',
+      items: [
+        'Survey: count trips at six points',
+        'Design: a shared surface with tactile edges',
+        'Build: one lane at a time',
+        'Measure: against the baseline',
+      ],
+    },
+  },
+  cycle: {
+    block: {
+      id: 'sample-cycle',
+      template: 'cycle',
+      duration: 6,
+      audioSegment: 0,
+      title: 'A Day in the Tidal Garden',
+      items: [
+        'Flood: the tide fills the lower beds',
+        'Settle: silt drops out of the still water',
+        'Drain: the ebb carries the water back',
+        'Dry: the beds air until the next tide',
+      ],
+    },
+  },
+  layers: {
+    block: {
+      id: 'sample-layers',
+      template: 'layers',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Inside the Sea Wall',
+      items: [
+        'Core: compacted clay that keeps the water out',
+        'Filter: gravel that lets the wall drain',
+        'Armor: stone that takes the waves',
+      ],
+    },
+  },
+  stats: {
+    block: {
+      id: 'sample-stats',
+      template: 'stats',
+      duration: 6,
+      audioSegment: 0,
+      title: 'The Waterfront in Numbers',
+      items: [
+        '2×: weekend foot traffic within a month',
+        '31 minutes: median dwell time, up from 14',
+        '2,400: cycle trips on an average weekday',
+      ],
+    },
+  },
+  pyramid: {
+    block: {
+      id: 'sample-pyramid',
+      template: 'pyramid',
+      duration: 6,
+      audioSegment: 0,
+      title: 'What the Plan Rests On',
+      items: [
+        'Vision: a harbor people walk to',
+        'Strategy: give the edge back to people',
+        'Projects: promenade, cycle track, garden',
+        'Upkeep: the daily work that keeps it open',
+      ],
+    },
+  },
+  funnel: {
+    block: {
+      id: 'sample-funnel',
+      template: 'funnel',
+      duration: 6,
+      audioSegment: 0,
+      title: 'From Visitors to Regulars',
+      items: [
+        '10,000 visitors: walk the promenade each weekend',
+        '2,400 stop: at a stall or a café',
+        '600 return: within the month',
+        '150 regulars: come every week',
+      ],
+    },
+  },
+  hub: {
+    block: {
+      id: 'sample-hub',
+      template: 'hub',
+      duration: 6,
+      audioSegment: 0,
+      title: 'What Draws People In',
+      items: [
+        'Promenade: room to walk side by side',
+        'Market: stalls open into the evening',
+        'Ferry: runs to 11 pm on weekends',
+        'Garden: a tide to watch come in',
+      ],
+      center: 'The waterfront',
+    },
+  },
+  venn: {
+    block: {
+      id: 'sample-venn',
+      template: 'venn',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Promenade and Bypass',
+      items: [
+        'Promenade: walking, cycling and the evening market',
+        'Bypass: through traffic at 1,900 vehicles an hour',
+        'Both: carry the harbor’s trips without the old arterial',
+      ],
+    },
+  },
+  matrix: {
+    block: {
+      id: 'sample-matrix',
+      template: 'matrix',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Where to Invest Next',
+      items: [
+        'Fishing quay: big gain, long build',
+        'Evening ferry: big gain, quick to start',
+        'New signage: small gain, slow to agree',
+        'More benches: small gain, quick to do',
+      ],
+      xAxis: 'Speed',
+      yAxis: 'Impact',
+    },
+  },
+  bigText: {
+    block: {
+      id: 'sample-bigText',
+      template: 'bigText',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Make it obvious',
+    },
+  },
+  transcript: {
+    block: {
+      id: 'sample-transcript',
+      template: 'transcript',
+      duration: 6,
+      audioSegment: 0,
+      speaker: 'Ada Lovelace',
+      text: 'The promenade changed how the whole harbor moves. People stay, and the traffic found another way.',
+      meta: '00:12',
+    },
+  },
+  content: {
+    block: {
+      id: 'sample-content',
+      template: 'content',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Field Notes',
+      contents: [paragraph(BODY_TEXT)],
+    },
+  },
+  topFeature: {
+    block: {
+      id: 'sample-topFeature',
+      template: 'topFeature',
+      duration: 6,
+      audioSegment: 0,
+      title: 'The picture leads, the notes follow',
+      contents: [imageParagraph(HERO_IMAGE, 'Harbor study'), paragraph(BODY_TEXT)],
+    },
+  },
+  bottomFeature: {
+    block: {
+      id: 'sample-bottomFeature',
+      template: 'bottomFeature',
+      duration: 6,
+      audioSegment: 0,
+      title: 'The notes lead, the picture follows',
+      contents: [paragraph(BODY_TEXT), imageParagraph(DETAIL_IMAGE, 'Field notes')],
+    },
+  },
+  mediaOnly: {
+    block: {
+      id: 'sample-mediaOnly',
+      template: 'mediaOnly',
+      duration: 6,
+      audioSegment: 0,
+      title: 'The picture is the slide',
+      contents: [imageParagraph(HERO_IMAGE, 'Harbor study')],
+    },
+  },
+  barChart: {
+    block: {
+      id: 'sample-barChart',
+      template: 'barChart',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Visitors by Quarter',
+      headers: CHART_HEADERS,
+      rows: CHART_ROWS,
+    },
+  },
+  columnChart: {
+    block: {
+      id: 'sample-columnChart',
+      template: 'columnChart',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Visitors by Quarter',
+      headers: CHART_HEADERS,
+      rows: CHART_ROWS,
+    },
+  },
+  pieChart: {
+    block: {
+      id: 'sample-pieChart',
+      template: 'pieChart',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Share of Visitors',
+      headers: CHART_HEADERS,
+      rows: CHART_ROWS,
+    },
+  },
+  donutChart: {
+    block: {
+      id: 'sample-donutChart',
+      template: 'donutChart',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Share of Visitors',
+      headers: CHART_HEADERS,
+      rows: CHART_ROWS,
+    },
+  },
+  lineChart: {
+    block: {
+      id: 'sample-lineChart',
+      template: 'lineChart',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Visitors Through the Year',
+      headers: CHART_HEADERS,
+      rows: CHART_ROWS,
+    },
+  },
+  areaChart: {
+    block: {
+      id: 'sample-areaChart',
+      template: 'areaChart',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Visitors Through the Year',
+      headers: CHART_HEADERS,
+      rows: CHART_ROWS,
+    },
+  },
+  scatterChart: {
+    block: {
+      id: 'sample-scatterChart',
+      template: 'scatterChart',
+      duration: 6,
+      audioSegment: 0,
+      title: 'Visitors Against Revenue',
+      headers: CHART_HEADERS,
+      rows: CHART_ROWS,
     },
   },
   photoGrid: {

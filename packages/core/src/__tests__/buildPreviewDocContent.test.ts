@@ -142,8 +142,33 @@ Fun fact: this slideshow is running from one of my apps`);
   });
 
   it('preserves a lossless content-aware auto template', () => {
-    const slide = firstPreviewSlide('# Steps\n\n- First\n- Second');
+    const slide = firstPreviewSlide('# Notes\n\n- Apples\n- Pears');
     expect(slide.template).toBe('list');
+  });
+
+  it.each([
+    'cards',
+    'process',
+    'cycle',
+    'layers',
+    'stats',
+    'pyramid',
+    'funnel',
+    'hub',
+    'venn',
+    'matrix',
+  ])('carries the items of an annotated %s block onto its slide', (template) => {
+    // The projection drops `sourceHeading`, so a slide that did not carry
+    // its items drew the headline over an empty frame.
+    const slide = firstPreviewSlide(
+      `# Kinds {[${template}]}\n\n- Live: a weakened germ\n- Inactivated: a killed germ\n- Both: train the body\n`,
+    );
+    expect(slide.template).toBe(template);
+    expect(slide.items).toEqual([
+      'Live: a weakened germ',
+      'Inactivated: a killed germ',
+      'Both: train the body',
+    ]);
   });
 
   it('preserves unordered and ordered markers through slideshow materialization', () => {
@@ -310,6 +335,121 @@ Dense vs Mixture of Experts (MoE)
         'right-sublabel',
       ]),
     );
+  });
+
+  it('carries the heading and list-derived columns of a twoColumn slide', () => {
+    // The projection drops `sourceHeading`, so the slide itself must hold the
+    // header band; before it did, the heading vanished from the slideshow.
+    const authored = firstPreviewSlide(
+      '## Coffee {[twoColumn left="Espresso|Bold" right="Filter|Smooth"]}',
+    );
+    expect(authored).toMatchObject({ header: 'Coffee', left: { label: 'Espresso' } });
+
+    const fromList = firstPreviewSlide(
+      '## Coffee {[twoColumn]}\n\n- Espresso: bold and short\n- Filter: smooth and long',
+    );
+    expect(fromList).toMatchObject({
+      header: 'Coffee',
+      left: { label: 'Espresso', sublabel: 'bold and short' },
+      right: { label: 'Filter', sublabel: 'smooth and long' },
+    });
+    const { layers, diagnostic } = materializeBlockLayers(fromList as unknown as DocBlock);
+    expect(diagnostic).toBeUndefined();
+    expect(layers.map((layer) => layer.id)).toEqual(
+      expect.arrayContaining(['header', 'left-label', 'right-label']),
+    );
+  });
+
+  it('shows a template with nothing to draw as content, never a blank slide', () => {
+    const body = 'Markdown is portable, while visual editors are immediate.';
+    for (const template of [
+      'twoColumn',
+      'photoGrid',
+      'imageWithCaption',
+      'videoWithCaption',
+      'list',
+      'comparisonBar',
+    ]) {
+      const slide = firstPreviewSlide(`## Side by side {[${template}]}\n\n${body}`);
+      expect(slide.template, template).toBe(template);
+      const { layers, diagnostic } = materializeBlockLayers(slide as unknown as DocBlock, {
+        persistentLayers: false,
+      });
+      expect(diagnostic, template).toMatchObject({ code: 'template-drew-nothing', template });
+      const text = layers
+        .filter((layer): layer is TextLayer => layer.type === 'text')
+        .map((layer) => layer.content.text)
+        .join(' ');
+      expect(text, template).toContain('Side by side');
+      expect(text, template).toContain('Markdown is portable');
+      // Nothing the author did not write: no sample items, no sample values.
+      expect(text, template).not.toMatch(/Item 1|\b60\b/);
+    }
+  });
+
+  it('shows sample inputs only under a bare heading', () => {
+    expect(firstPreviewSlide('## Compare {[comparisonBar]}')).toMatchObject({
+      leftLabel: 'A',
+      rightLabel: 'B',
+    });
+    expect(firstPreviewSlide('## Steps {[list]}')).toMatchObject({
+      items: ['Item 1', 'Item 2', 'Item 3'],
+    });
+    expect(firstPreviewSlide('## Compare {[comparisonBar]}\n\nReal prose.')).not.toHaveProperty(
+      'leftLabel',
+    );
+    expect(firstPreviewSlide('## Steps {[list]}\n\nReal prose.')).not.toHaveProperty('items');
+  });
+
+  it('carries what a transcript speaker said onto the slide', () => {
+    const slide = firstPreviewSlide(
+      '## Ada Lovelace {[transcript]}\n\nThe engine weaves patterns.',
+    );
+    expect(slide).toMatchObject({ speaker: 'Ada Lovelace', text: 'The engine weaves patterns.' });
+    const text = materializeBlockLayers(slide as unknown as DocBlock)
+      .layers.filter((layer): layer is TextLayer => layer.type === 'text')
+      .map((layer) => layer.content.text)
+      .join(' ');
+    expect(text).toContain('The engine weaves patterns.');
+  });
+
+  it('keeps the rows and cells of a table apart in a text template', () => {
+    const slide = firstPreviewSlide(
+      '## Sales {[factCard]}\n\n| Region | Sales |\n| --- | --- |\n| West | 120 |',
+    );
+    expect(slide.explanation).toBe('Region Sales\nWest 120');
+  });
+
+  it('shows a concept block whose body holds no ideas as content', () => {
+    const table = '| Region | Sales |\n| --- | --- |\n| West | 120 |';
+    const quote = '> The harbor wakes before the town does.';
+    for (const template of ['cards', 'process', 'cycle', 'layers', 'pyramid', 'funnel', 'hub']) {
+      for (const body of [table, quote]) {
+        const slide = firstPreviewSlide(`## Landings {[${template}]}\n\n${body}`);
+        const result = materializeBlockLayers(slide as unknown as DocBlock, {
+          persistentLayers: false,
+        });
+        expect(result.diagnostic, template).toMatchObject({ code: 'template-drew-nothing' });
+        expect(
+          result.layers.map((layer) => layer.id),
+          template,
+        ).toContain('title');
+      }
+    }
+
+    // A bare headline keeps the concept lockup: there is no body to show.
+    const bare = materializeBlockLayers(
+      {
+        template: 'cards',
+        id: 'bare',
+        duration: 5,
+        audioSegment: 0,
+        title: 'Landings',
+      } as DocBlock,
+      { persistentLayers: false },
+    );
+    expect(bare.diagnostic).toBeUndefined();
+    expect(bare.layers.length).toBeGreaterThan(0);
   });
 
   it('keeps Mermaid source available to the slide materializer for every template', () => {

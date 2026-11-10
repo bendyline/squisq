@@ -167,6 +167,42 @@ export const TEMPLATE_AUTHORING_METADATA = {
     safeForContentFirst: false,
     placement: 'heading',
   },
+  stats: {
+    role: 'highlight',
+    bodyPolicy: 'derived',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  pyramid: {
+    role: 'content',
+    bodyPolicy: 'derived',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  funnel: {
+    role: 'content',
+    bodyPolicy: 'derived',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  hub: {
+    role: 'content',
+    bodyPolicy: 'derived',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  venn: {
+    role: 'comparison',
+    bodyPolicy: 'derived',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
+  matrix: {
+    role: 'comparison',
+    bodyPolicy: 'derived',
+    safeForContentFirst: false,
+    placement: 'heading',
+  },
   photoGrid: {
     role: 'media',
     bodyPolicy: 'structured',

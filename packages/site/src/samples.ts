@@ -650,7 +650,8 @@ This is a section header -- great for dividing a document into chapters.
 
 ## Side by Side {[twoColumn]}
 
-**Markdown** is lightweight and portable, while **WYSIWYG** editors offer instant visual feedback. Both approaches have their place in modern workflows.
+- Markdown: lightweight and portable
+- WYSIWYG: instant visual feedback
 
 ## A Pivotal Moment {[dateEvent mood=celebratory]}
 

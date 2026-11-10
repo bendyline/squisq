@@ -30,8 +30,9 @@ import {
   isExplicitTimelineLang,
 } from '../doc/asciiTimeline/detect.js';
 import { detectTree, isEligibleTreeFenceLang, isExplicitTreeLang } from '../doc/treeview/detect.js';
-import { isPictureFence } from '../doc/templateInputs.js';
+import { extractConceptItems, isPictureFence } from '../doc/templateInputs.js';
 import { matchNumberHighlight } from './numberHighlight.js';
+import { classifyListShape, type ListShapeResult } from './listShape.js';
 
 export interface BlockContentProfile {
   hasImage: boolean;
@@ -63,6 +64,18 @@ export interface BlockContentProfile {
    * exclusive with `hasAsciiDiagram`.
    */
   hasTree?: boolean;
+  /**
+   * What the body's list is a picture of — a process, a cycle, key numbers…
+   * (see `classifyListShape`). Set when the body is one list of two to six
+   * items; a `strong` shape picks its template automatically.
+   */
+  listShape?: ListShapeResult;
+}
+
+/** What `profileBlockContents` may know beyond the body itself. */
+export interface ProfileBlockOptions {
+  /** The heading over the body: "The water cycle" says more than its bullets do. */
+  heading?: string;
 }
 
 export interface RecommendationResult {
@@ -118,7 +131,10 @@ function htmlElementsByTag(root: MarkdownNode, tagNames: Set<string>): HtmlEleme
  * Walk a slice of block nodes and summarize what kinds of content it
  * contains. Cheap to run — no markdown parsing, just AST traversal.
  */
-export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentProfile {
+export function profileBlockContents(
+  nodes: MarkdownBlockNode[],
+  options: ProfileBlockOptions = {},
+): BlockContentProfile {
   if (!nodes || nodes.length === 0) return { ...EMPTY_PROFILE };
 
   let imageCount = 0;
@@ -189,6 +205,9 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
   let hasNumberHighlight = false;
   walkMarkdownTree(root, (n) => {
     if (hasNumberHighlight) return true;
+    // A list item is one of several things, never the block's one key figure
+    // ("1796: the first vaccine" among dated bullets is a timeline's station).
+    if (n.type === 'list') return true;
     if (n.type !== 'paragraph') return;
     const text = extractPlainText(n).trim();
     if (!text) return true;
@@ -261,6 +280,17 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     }
   }
 
+  // The shape of a body that is one list: its items, its heading, and whether
+  // it was numbered say what the list is a picture of.
+  const onlyList = nodes.length === 1 && nodes[0]!.type === 'list' ? nodes[0] : undefined;
+  const listShape = onlyList
+    ? classifyListShape({
+        heading: options.heading,
+        items: extractConceptItems([onlyList]),
+        ordered: (onlyList as { ordered?: boolean | null }).ordered === true,
+      })
+    : undefined;
+
   return {
     hasImage: imageCount > 0,
     imageCount,
@@ -275,6 +305,7 @@ export function profileBlockContents(nodes: MarkdownBlockNode[]): BlockContentPr
     hasAsciiDiagram,
     hasTimeline,
     hasTree,
+    ...(listShape ? { listShape } : {}),
   };
 }
 
@@ -347,6 +378,12 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
   if (profile.hasList) {
     anyContentSignal = true;
     names.add('list');
+    // What the list is a picture of, then the two drawings any list can take.
+    if (profile.listShape && profile.listShape.shape !== 'plain') {
+      names.add(profile.listShape.template);
+      names.add('cards');
+      names.add('process');
+    }
   }
 
   if (profile.hasTable) {
@@ -383,6 +420,16 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
   return Array.from(names);
 }
 
+/** How `pickAutoTemplate` chooses. */
+export interface AutoTemplateOptions {
+  /**
+   * Draw a list as what it is a picture of (a process, a cycle, key
+   * numbers…) when its shape is clear. `false` keeps every list a `list`.
+   * Default true.
+   */
+  concepts?: boolean;
+}
+
 /**
  * Deterministic single-template choice for an unannotated heading block,
  * from strong content signals only. Returns `undefined` when no signal is
@@ -397,7 +444,11 @@ function recommendedNamesForProfile(profile: BlockContentProfile): string[] {
  * option); the multi-candidate `recommendTemplatesForBlock` below serves
  * the editor's template-picker UI instead.
  */
-export function pickAutoTemplate(profile: BlockContentProfile, blockIndex = 0): string | undefined {
+export function pickAutoTemplate(
+  profile: BlockContentProfile,
+  blockIndex = 0,
+  options: AutoTemplateOptions = {},
+): string | undefined {
   if (profile.hasCompoundBody) return undefined;
   if (profile.hasAsciiDiagram) return 'diagram';
   if (profile.hasTimeline) return 'timeline';
@@ -408,7 +459,10 @@ export function pickAutoTemplate(profile: BlockContentProfile, blockIndex = 0): 
   if (profile.hasImage) return blockIndex % 2 === 0 ? 'leftFeature' : 'rightFeature';
   if (profile.hasBlockquote) return 'quote';
   if (profile.hasNumberHighlight) return 'statHighlight';
-  if (profile.hasList) return 'list';
+  if (profile.hasList)
+    return options.concepts !== false && profile.listShape?.confidence === 'strong'
+      ? profile.listShape.template
+      : 'list';
   return undefined;
 }
 

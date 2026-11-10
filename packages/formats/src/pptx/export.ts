@@ -54,6 +54,7 @@ import {
   isTemplateBlock,
   resolvePersistentLayers,
   resolveThemeForDoc,
+  shapePath,
 } from '@bendyline/squisq/doc';
 import { splitIconMarkers } from '@bendyline/squisq/icon-marker';
 import type {
@@ -85,24 +86,29 @@ import { RelIdAllocator } from '../ooxml/relIds.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
 import {
   buildImageShape,
+  fitPicture,
   mermaidPictureShapes,
   svgImagePictureShapes,
   svgIslandPictureShapes,
 } from './pictureLayers.js';
-import {
-  EMU_PER_CANVAS_PX,
-  resolveLayerRect,
-  resolvePositionValue,
-  toEmuRect,
-} from './geometry.js';
+import { readImageDimensions } from '../shared/images.js';
+import { EMU_PER_CANVAS_PX, resolveLayerRect, toEmuRect } from './geometry.js';
 import {
   buildLayerShape,
   dashXml,
+  fillXml,
   officeTypeface,
   parseCssColor,
   solidColorXml,
 } from './drawingXml.js';
 import { planDeckBackdrops, type SlidePlan } from './backdrop.js';
+import {
+  customGeometryXml,
+  isStraightLine,
+  parseSvgPath,
+  pathBounds,
+  type PathSegment,
+} from './pathGeometry.js';
 import { buildLayerTextShape } from './layerText.js';
 import {
   buildDeckLayoutXml,
@@ -821,9 +827,12 @@ function buildLayerSlideXml(block: Block, ctx: SlideContext, plan: SlidePlan): s
   // size the player shows, not the template's base size (see textFit.ts).
   const textScale = isGeometryBoundTemplate(block.template) ? 1 : estimateSlideTextScale(layers);
   const units = mergeTextFlows(layers, textScale);
-  const textLayerY = units
+  // Where each text box sits, so a box that must grow for Office's line
+  // metrics stops short of the text beneath it. Only text in the same column
+  // counts: the words of the card beside this one are no reason to shrink it.
+  const textBoxes = units
     .filter(({ layer }) => layer.type === 'text')
-    .map(({ layer }) => resolvePositionValue(layer.position.y, 1080));
+    .map(({ layer }) => resolveLayerRect(layer.position, 1920, 1));
 
   for (const layer of layers) {
     if (layer.type !== 'text') continue;
@@ -835,12 +844,20 @@ function buildLayerSlideXml(block: Block, ctx: SlideContext, plan: SlidePlan): s
   for (let index = 0; index < units.length; index++) {
     if ((index & 31) === 0) ctx.signal?.throwIfAborted();
     const { layer, listIndentPx } = units[index]!;
-    const currentY =
-      layer.type === 'text' ? resolvePositionValue(layer.position.y, 1080) : undefined;
+    const current = layer.type === 'text' ? resolveLayerRect(layer.position, 1920, 1) : undefined;
+    const currentY = current?.y;
     const nextTextY =
-      currentY === undefined
+      current === undefined
         ? undefined
-        : textLayerY.filter((candidate) => candidate > currentY + 1).sort((a, b) => a - b)[0];
+        : textBoxes
+            .filter(
+              (candidate) =>
+                candidate.y > current.y + 1 &&
+                candidate.x < current.x + current.width - TEXT_COLUMN_OVERLAP_PX &&
+                candidate.x + candidate.width > current.x + TEXT_COLUMN_OVERLAP_PX,
+            )
+            .map((candidate) => candidate.y)
+            .sort((a, b) => a - b)[0];
     const textBottom =
       nextTextY === undefined || currentY === undefined
         ? undefined
@@ -886,10 +903,25 @@ function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: numb
       const data = svg ? undefined : ctx.images?.get(layer.content.src);
       if (data) {
         const image = ctx.addImage(layer.content.src, data, layer.content.alt);
-        const rect = toEmuRect(resolveLayerRect(layer.position, 1920, 1080));
+        // Fitted as the player fits it: covered and cropped, or shown whole.
+        const { rect, srcRect } = fitPicture(
+          toEmuRect(resolveLayerRect(layer.position, 1920, 1080)),
+          readImageDimensions(data),
+          layer.content.fit,
+        );
         const embedded = ctx.embeddedImages.find((candidate) => candidate.relId === image)!;
         return [
-          buildImageShape(embedded, ctx.allocShapeId(), rect.x, rect.y, rect.width, rect.height),
+          buildImageShape(
+            embedded,
+            ctx.allocShapeId(),
+            rect.x,
+            rect.y,
+            rect.width,
+            rect.height,
+            null,
+            undefined,
+            srcRect,
+          ),
         ];
       }
       return [
@@ -1109,52 +1141,100 @@ function treeItemsToText(items: TreeLayerItem[], depth = 0): string {
   return lines.filter(Boolean).join('\n');
 }
 
-function buildPathLayerShapes(layer: PathLayer, ctx: SlideContext): string[] {
-  if (layer.content.shapeKind) {
-    const shape: ShapeLayer = {
-      id: layer.id,
-      type: 'shape',
-      position: layer.position,
-      content: {
-        shape: layer.content.shapeKind === 'circle' ? 'circle' : 'rect',
-        fill: layer.content.fill,
-        fillOpacity: layer.content.fillOpacity,
-        gradient: layer.content.gradient,
-        stroke: layer.content.stroke,
-        strokeWidth: layer.content.strokeWidth,
-        borderStyle: layer.content.borderStyle,
-      },
-    };
-    return [buildLayerShape(shape, ctx.allocShapeId())];
-  }
-
-  const numbers = layer.content.d.match(/-?\d+(?:\.\d+)?/g)?.map(Number);
-  if (!numbers || numbers.length < 4) return [];
-  const x1 = numbers[0];
-  const y1 = numbers[1];
-  const x2 = numbers[numbers.length - 2];
-  const y2 = numbers[numbers.length - 1];
-  const rect = toEmuRect({
-    x: Math.min(x1, x2),
-    y: Math.min(y1, y2),
-    width: Math.max(1, Math.abs(x2 - x1)),
-    height: Math.max(1, Math.abs(y2 - y1)),
-  });
-  const flipH = x2 < x1 ? ' flipH="1"' : '';
-  const flipV = y2 < y1 ? ' flipV="1"' : '';
-  const stroke = parseCssColor(layer.content.stroke, 'FFFFFF');
-  const width = Math.max(1, Math.round((layer.content.strokeWidth ?? 2) * EMU_PER_CANVAS_PX));
+/** The paint a path's outline takes, or none when it has no visible stroke. */
+function pathLineXml(layer: PathLayer): string {
+  const { stroke, strokeWidth } = layer.content;
+  if (stroke === 'none' || stroke === 'transparent' || strokeWidth === 0)
+    return '<a:ln><a:noFill/></a:ln>';
+  const color = parseCssColor(stroke, 'FFFFFF');
+  const width = Math.max(1, Math.round((strokeWidth ?? 2) * EMU_PER_CANVAS_PX));
   const head = markerXml('headEnd', layer.content.startMarker);
   const tail = markerXml('tailEnd', layer.content.endMarker);
   const dash = dashXml(layer.content.borderStyle, layer.content.dasharray);
-  const shapeId = ctx.allocShapeId();
+  return `<a:ln w="${width}">${solidColorXml(color)}${dash}${head}${tail}</a:ln>`;
+}
+
+/** How far two text boxes must overlap sideways to be in one column. */
+const TEXT_COLUMN_OVERLAP_PX = 8;
+
+/**
+ * A path layer as a native shape. One straight stroke is a `line` preset (a
+ * connector people can grab by its ends); anything else — a pie wedge, a
+ * chart's line, a curved or elbowed connector, a cycle's arc, a pyramid's
+ * tier, a named shape such as a diamond or a star — is custom geometry that
+ * repeats the path's own lines and curves (`pathGeometry.ts`).
+ */
+function buildPathLayerShapes(layer: PathLayer, ctx: SlideContext): string[] {
+  let d = layer.content.d;
+  if (layer.content.shapeKind) {
+    // A named shape derives its outline from its box, as the player does.
+    const box = resolveLayerRect(layer.position, 100, 100);
+    const named = shapePath(layer.content.shapeKind, box.x, box.y, box.width, box.height);
+    if (!named) {
+      const shape: ShapeLayer = {
+        id: layer.id,
+        type: 'shape',
+        position: layer.position,
+        content: {
+          shape: layer.content.shapeKind === 'circle' ? 'circle' : 'rect',
+          fill: layer.content.fill,
+          fillOpacity: layer.content.fillOpacity,
+          gradient: layer.content.gradient,
+          stroke: layer.content.stroke,
+          strokeWidth: layer.content.strokeWidth,
+          borderStyle: layer.content.borderStyle,
+        },
+      };
+      return [buildLayerShape(shape, ctx.allocShapeId())];
+    }
+    d = named;
+  }
+
+  const segments = parseSvgPath(d);
+  const bounds = segments ? pathBounds(segments) : null;
+  if (!segments || !bounds) return [];
+  const { fill, gradient, fillOpacity } = layer.content;
+  const filled = !!gradient || (!!fill && fill !== 'none' && fill !== 'transparent');
+  const name = `<p:nvSpPr><p:cNvPr id="${ctx.allocShapeId()}" name="${escapeXml(layer.id)}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>`;
+
+  if (!filled && isStraightLine(segments)) {
+    const points = segments.filter(
+      (segment): segment is Extract<PathSegment, { op: 'M' | 'L' }> =>
+        segment.op === 'M' || segment.op === 'L',
+    );
+    const from = points[0]!;
+    const to = points[points.length - 1]!;
+    const rect = toEmuRect({
+      x: Math.min(from.x, to.x),
+      y: Math.min(from.y, to.y),
+      width: Math.max(1, Math.abs(to.x - from.x)),
+      height: Math.max(1, Math.abs(to.y - from.y)),
+    });
+    const flipH = to.x < from.x ? ' flipH="1"' : '';
+    const flipV = to.y < from.y ? ' flipV="1"' : '';
+    return [
+      `<p:sp>${name}<p:spPr>` +
+        `<a:xfrm${flipH}${flipV}><a:off x="${rect.x}" y="${rect.y}"/>` +
+        `<a:ext cx="${rect.width}" cy="${rect.height}"/></a:xfrm>` +
+        `<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:noFill/>` +
+        pathLineXml(layer) +
+        `</p:spPr></p:sp>`,
+    ];
+  }
+
+  const rect = toEmuRect({
+    x: bounds.x,
+    y: bounds.y,
+    width: Math.max(1, bounds.width),
+    height: Math.max(1, bounds.height),
+  });
   return [
-    `<p:sp><p:nvSpPr><p:cNvPr id="${shapeId}" name="${escapeXml(layer.id)}"/>` +
-      `<p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>` +
-      `<a:xfrm${flipH}${flipV}><a:off x="${rect.x}" y="${rect.y}"/>` +
+    `<p:sp>${name}<p:spPr>` +
+      `<a:xfrm><a:off x="${rect.x}" y="${rect.y}"/>` +
       `<a:ext cx="${rect.width}" cy="${rect.height}"/></a:xfrm>` +
-      `<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:noFill/>` +
-      `<a:ln w="${width}">${solidColorXml(stroke)}${dash}${head}${tail}</a:ln>` +
+      customGeometryXml(segments, bounds, EMU_PER_CANVAS_PX, filled) +
+      (filled ? fillXml(fill, fillOpacity, gradient) : '<a:noFill/>') +
+      pathLineXml(layer) +
       `</p:spPr></p:sp>`,
   ];
 }

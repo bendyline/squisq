@@ -9,9 +9,12 @@ import {
   type PresentationHints,
 } from './presentationHints.js';
 import type { Doc } from '../schemas/Doc.js';
+import { matchNumberHighlight } from '../recommend/numberHighlight.js';
 import { buildNarrationScript } from '../narration/script.js';
 import { extractPlainText } from '../markdown/utils.js';
 import { transformNarratedSegment } from './narratedSegment.js';
+import { conceptTemplate } from './conceptReveal.js';
+import { flattenRenderableBlocks } from '../doc/markdownToDoc.js';
 import { collectPresentationMedia, type PresentationMediaItem } from './presentationMedia.js';
 import {
   AUTHORED_PRESENTATION_LAYOUT,
@@ -23,6 +26,13 @@ import {
 } from './presentationPlan.js';
 
 const SENTENCE_END = /[.!?][”"')\]]?$/u;
+/**
+ * A word whose full stop does not end a sentence: an initial ("John F.
+ * Kennedy"), a title ("Dr."), or a common abbreviation ("U.S.", "e.g.").
+ * Splitting there cut a headline or a point off mid-name.
+ */
+const ABBREVIATION =
+  /(?:^|[\s(“"‘'])(?:\p{Lu}|(?:\p{Lu}\.)+\p{Lu}|Mr|Mrs|Ms|Mx|Dr|Prof|Sr|Jr|St|Mt|Ft|Gen|Col|Lt|Capt|Sgt|Cmdr|Adm|Gov|Sen|Rep|Rev|Hon|vs|etc|e\.g|i\.e|cf|ca|approx|est|No|Fig|Inc|Ltd|Co|Corp)\.$/u;
 /** What can open a new sentence; "(like video, etc.) on top" continues one. */
 const SENTENCE_START = /^[\p{Lu}\p{N}"“‘'([]/u;
 /** A sentence that opens with an ordering word reads as one step of a sequence. */
@@ -46,7 +56,10 @@ const PRONOUN =
 /** A card's text: a defining sentence labelled by its subject, otherwise the sentence. */
 function labelledPoint(sentence: string): string {
   const match = sentence.replace(/\s+/gu, ' ').trim().match(DEFINES);
-  if (match && !PRONOUN.test(match[1]!.split(' ')[0]!)) {
+  // "Armstrong was commander, Aldrin was the pilot, and Collins was…" names
+  // three things, not one: a label for the first would mislabel the rest.
+  const clauses = match && /[,;]\s+(?:and\s+)?[^,;]*?\s(?:is|are|was|were)\s/u.test(match[2]!);
+  if (match && !clauses && !PRONOUN.test(match[1]!.split(' ')[0]!)) {
     const label = match[1]!;
     return clip(`${label[0]!.toUpperCase()}${label.slice(1)}: ${match[2]!}`, Infinity, 160);
   }
@@ -101,12 +114,36 @@ function sentencesIn(sourceText: string, start: number, end: number): Sentence[]
     sentences.push({ text, start: from, end: from + text.length });
   };
   for (const match of passage.matchAll(/(?<=[.!?][”"')\]]?)\s+(?=[\p{Lu}\p{N}"“‘'([])|\n+/gu)) {
+    // "President John F. Kennedy" does not end at the initial.
+    if (!match[0].includes('\n') && ABBREVIATION.test(passage.slice(cursor, match.index))) continue;
     add(match.index);
     cursor = match.index + match[0].length;
   }
   add(passage.length);
   return sentences;
 }
+/** The longest sentence a key-number slide shows beside its figure. */
+const STAT_SENTENCE_CHARACTERS = 120;
+/** How many slides pass before another key number, so figures stay an event. */
+const STAT_SPACING = 3;
+/** A calendar year, which is a date and not a quantity worth counting up to. */
+const YEAR = /^(?:1\d{3}|20\d{2})$/u;
+/**
+ * The figure a sentence turns on, when it has one worth a slide of its own:
+ * a percentage, an amount of money, a count in the thousands or more, a
+ * multiple. Years and bare small numbers are not.
+ */
+function strikingFigure(sentence: string): string | undefined {
+  if (sentence.length > STAT_SENTENCE_CHARACTERS) return undefined;
+  const value = matchNumberHighlight(sentence)?.value.trim();
+  if (!value || YEAR.test(value)) return undefined;
+  return /[%‰$€£¥×,]|\d\s?(?:[xKMB]|million|billion|thousand|percent|times)\b/iu.test(value) ||
+    /\d{4,}/u.test(value)
+    ? value
+    : undefined;
+}
+/** The longest sentence that stands alone as a big statement. */
+const EMPHASIS_SENTENCE_CHARACTERS = 60;
 const comparable = (text: string) =>
   text
     .toLowerCase()
@@ -125,7 +162,8 @@ function chunkWords(words: RegExpMatchArray[], limit: number): Array<[number, nu
   const chunks: Array<[number, number]> = [];
   const ends = (count: number) =>
     SENTENCE_END.test(words[count - 1]![0]) &&
-    (count >= words.length || SENTENCE_START.test(words[count]![0]));
+    (count >= words.length ||
+      (SENTENCE_START.test(words[count]![0]) && !ABBREVIATION.test(words[count - 1]![0])));
   let first = 0;
   while (first < words.length) {
     let last = Math.min(first + limit, words.length);
@@ -204,7 +242,25 @@ export function createPresentationPlan(
     doc,
     script.blocks.map((block) => block.blockId),
   );
+  // A section whose body is a list already drawn as what it is a picture of
+  // (a process, a cycle, key numbers: an author's tag, or a list whose shape
+  // is clear) keeps that drawing. Dealt into summary cards it would lose the
+  // very structure the list states, so it is shown as authored unless the
+  // deck's designer chose a layout for it.
+  const drawnLists = new Set(
+    flattenRenderableBlocks(doc.blocks)
+      .filter(
+        (block) =>
+          !!conceptTemplate(block.template ?? '') &&
+          block.contents?.length === 1 &&
+          block.contents[0]!.type === 'list',
+      )
+      .map((block) => block.id),
+  );
   const beats: PresentationBeat[] = [];
+  /** Where the deck last showed a key number or a big statement. */
+  let lastStat = -Infinity;
+  let lastEmphasis = -Infinity;
   const supportingOpeners = new Set<string>();
   /** The whole sentence each slide would show as a quote. */
   const quotes = new Map<string, string>();
@@ -221,7 +277,10 @@ export function createPresentationPlan(
     const headingEnd = block.charStart + (heading?.length ?? 0);
     // An authored section is one slide for its whole narration: its own block,
     // never summarized, split, or given the section's media a second time.
-    if (hint?.layout === AUTHORED_PRESENTATION_LAYOUT) {
+    if (
+      hint?.layout === AUTHORED_PRESENTATION_LAYOUT ||
+      (hint?.layout === undefined && !wording && drawnLists.has(block.blockId))
+    ) {
       if (!words.length) continue;
       const start = block.charStart + words[0]!.index;
       const last = words[words.length - 1]!;
@@ -319,19 +378,27 @@ export function createPresentationPlan(
       const cardPoints = shown.slice(0, 4).map((item) => labelledPoint(item.text));
       const custom = chunk === 0 ? wording : undefined;
       if (custom?.headline) headline = custom.headline;
-      const pointsFor = (layout: PresentationLayout) =>
+      const pointsFor = (layout: PresentationLayout): string[] =>
         custom?.points ??
         (['steps', 'process', 'cycle'].includes(layout)
           ? stepPoints
           : layout === 'cards'
             ? cardPoints
-            : textPoints);
+            : layout === 'stat' && statPoints
+              ? statPoints
+              : layout === 'emphasis' && takeaway
+                ? []
+                : textPoints);
       // A quote shows one of the passage's own sentences, whole.
       const quote = custom?.headline
         ? undefined
         : body.find((sentence) => sentence.text.length <= 110)?.text;
       const headlineFor = (layout: PresentationLayout) =>
-        layout === 'quote' && quote ? quote : headline;
+        layout === 'quote' && quote
+          ? quote
+          : layout === 'emphasis' && takeaway
+            ? headlineText(takeaway)
+            : headline;
       // Several ideas become cards; an ordered passage a process, or a cycle
       // when it says the sequence comes round again.
       let layout: PresentationLayout =
@@ -339,6 +406,40 @@ export function createPresentationPlan(
       if (sequence) layout = steps.length >= 3 && CYCLE_CUE.test(prose) ? 'cycle' : 'steps';
       else if (textPoints.length === 2 && /\b(versus|whereas|compared|instead)\b/iu.test(prose))
         layout = 'comparison';
+      // A sentence that turns on a figure shows it as a key number: the
+      // figure large, the sentence beside it. The heading must not carry a
+      // number of its own, since the slide shows the first figure it finds.
+      const figureLine =
+        !sequence && !custom && index > 0 && index - lastStat >= STAT_SPACING
+          ? shown.find((sentence) => strikingFigure(sentence.text))
+          : undefined;
+      const statPoints = figureLine
+        ? [
+            pointText(figureLine.text),
+            ...shown
+              .filter((sentence) => sentence !== figureLine && !strikingFigure(sentence.text))
+              .slice(0, 1)
+              .map((item) => pointText(item.text)),
+          ]
+        : undefined;
+      if (
+        statPoints &&
+        !matchNumberHighlight(headline) &&
+        presentationLayoutFits('stat', headline, statPoints, passage)
+      )
+        layout = 'stat';
+      // One short sentence left to itself, later in a section, is a takeaway:
+      // it sets as a big statement rather than small under the heading again.
+      const takeaway =
+        layout === 'statement' &&
+        !!heading &&
+        chunk > 0 &&
+        index - lastEmphasis >= 2 &&
+        shown.length === 1 &&
+        shown[0]!.text.length <= EMPHASIS_SENTENCE_CHARACTERS
+          ? shown[0]!.text
+          : undefined;
+      if (takeaway) layout = 'emphasis';
       if (image) layout = 'image';
       if (
         preferred &&
@@ -362,6 +463,8 @@ export function createPresentationPlan(
         ...(layout === 'image' && image?.src ? { imageSrc: image.src } : {}),
       };
       if (quote) quotes.set(beat.id, quote);
+      if (beat.layout === 'stat') lastStat = index;
+      if (beat.layout === 'emphasis') lastEmphasis = index;
       // An optional supporting visual shares the passage's narration span and
       // takes over at a spoken sentence start, so each slide shows different
       // material: an introduction before its steps diagram, or the opening

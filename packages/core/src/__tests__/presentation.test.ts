@@ -758,6 +758,46 @@ describe('authored sections and summary layouts', () => {
     expect(JSON.stringify(deck.blocks.find((item) => item.id === beat.id))).toContain('South');
   });
 
+  it('keeps a list drawn as what it is, and summarizes it only when the designer asks', async () => {
+    const steps = [
+      '# Tides',
+      '',
+      'The sea rises and falls twice a day.',
+      '',
+      '## How a tide table is made',
+      '',
+      '1. Record: the gauge logs the water level',
+      '2. Analyse: a year of readings gives the pattern',
+      '3. Predict: the pattern is run forward',
+      '',
+      '## Notes',
+      '',
+      '- Bring a coat',
+      '- Dogs are welcome',
+    ].join('\n');
+    const { doc } = await narrated(steps, [0, 10, 40, 60]);
+    // A numbered list is a process: the deck shows it as one, not as cards of its lines.
+    const { beat, block } = slide(doc, defaultPresentationHints(), 'how-a-tide-table-is-made');
+    expect(beat).toMatchObject({ layout: 'authored', points: [] });
+    expect(block).toMatchObject({ template: 'process', startTime: 10, duration: 30 });
+    // Its stages arrive one at a time, each when the narration reaches it.
+    expect(block.build).toMatchObject({ mode: 'items' });
+    const starts = block.buildTiming?.starts ?? [];
+    expect(starts).toHaveLength(3);
+    expect(starts[1]!).toBeGreaterThan(starts[0]!);
+    expect(starts[2]!).toBeGreaterThan(starts[1]!);
+    // Plain bullets are no drawing, so they are summarized like any section.
+    expect(slide(doc, defaultPresentationHints(), 'notes').beat.layout).not.toBe('authored');
+    // A layout the designer chose for the section wins.
+    const chosen = slide(
+      doc,
+      prefer('how-a-tide-table-is-made', 'cards'),
+      'how-a-tide-table-is-made',
+    );
+    expect(chosen.beat.layout).toBe('cards');
+    expect(chosen.block.template).toBe('cards');
+  });
+
   it('never repeats a nested section or takes AI wording on an authored slide', () => {
     const doc = parse(report);
     const hints = prefer('results', 'authored');

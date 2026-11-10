@@ -27,6 +27,9 @@ export interface ParsedStat {
 }
 
 const STAT_PATTERN = /^([^\d]*?)([-−]?\d[\d,]*(?:\.\d+)?)(.*)$/s;
+/** A unit of measure right after the number: "1943 feet" is a height, not a year. */
+const MEASURE_UNIT =
+  /^\s?(?:feet|foot|ft|metres?|meters?|m|km|kilomet(?:re|er)s?|miles?|mi|yards?|inch(?:es)?|cm|mm|acres?|hectares?|ha|kg|kilograms?|g|grams?|lbs?|pounds?|tons?|tonnes?|litres?|liters?|gallons?|people|residents|inhabitants|visitors|species|steps|pages|words|°[CF]?|degrees|mph|km\/h|knots|watts?|kW|MW|calories|dollars|euros)\b/i;
 
 /**
  * Parse the first number in a statistic. Returns `null` for text without a
@@ -41,10 +44,12 @@ export function parseStatNumber(text: string): ParsedStat | null {
   const value = Number(normalized);
   if (!Number.isFinite(value)) return null;
   const decimals = normalized.includes('.') ? normalized.split('.')[1].length : 0;
-  const bare = /^-?\d{4}$/.test(normalized);
+  // A year is four bare digits. "1,943 feet" is written with a separator and
+  // "1943 m" with a unit: both are quantities, and count up like any other.
+  const bare = /^-?\d{4}$/.test(numeric.replace('−', '-'));
   const looksLikeYear =
     bare && Math.abs(value) >= 1000 && Math.abs(value) <= 2999 && !/^[$€£¥]/.test(prefix);
-  if (looksLikeYear && !/^[%KMB]/i.test(suffix.trim())) return null;
+  if (looksLikeYear && !/^[%KMB]/i.test(suffix.trim()) && !MEASURE_UNIT.test(suffix)) return null;
   return { prefix, value, decimals, grouping: numeric.includes(','), suffix };
 }
 

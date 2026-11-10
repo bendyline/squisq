@@ -23,11 +23,10 @@ back-and-forth, [Quote](quote.md) or [Pull Quote](pullQuote.md) reads better.
   lines.
 - **`speakerImage=`** — the avatar. Without one, the speaker gets a circle with their initials, so
   a transcript never depends on having pictures.
-- **Body** — not drawn on the slide. Put the message in `text=`.
+- **Body** — the message, when `text=` is absent: the block's blockquote, or else its paragraphs.
 
-[Page view](../guide/display-modes.md#page) shows each beat as a quote attributed to the speaker.
-There, when `text=` is absent, the block's blockquote — or else its paragraphs — becomes the
-message.
+[Page view](../guide/display-modes.md#page) shows each beat as a quote attributed to the speaker,
+with the same message.
 
 ## Examples
 

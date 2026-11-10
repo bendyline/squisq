@@ -45,6 +45,13 @@ describe('parseStatNumber', () => {
     expect(parseStatNumber('$1889')).toMatchObject({ value: 1889 });
     expect(parseStatNumber('1889 km')).toMatchObject({ value: 1889 });
     expect(parseStatNumber('12345')).toMatchObject({ value: 12345 });
+    // A thousands separator or a unit of measure makes four digits a quantity:
+    // "1,943 feet" is a height that counts up, not the year 1943.
+    expect(parseStatNumber('1,943 feet')).toMatchObject({ value: 1943, grouping: true });
+    expect(parseStatNumber('1943 feet')).toMatchObject({ value: 1943 });
+    expect(parseStatNumber('2,100')).toMatchObject({ value: 2100, grouping: true });
+    // Words after a year do not make it a measurement.
+    expect(parseStatNumber('1889 Paris Exposition')).toBeNull();
   });
 });
 

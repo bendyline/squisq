@@ -19,6 +19,7 @@ import type { MarkdownBlockNode } from '../markdown/types.js';
 import type { MediaClip } from '../schemas/Media.js';
 import { isContainerTemplate } from '../doc/templates/templateNames.js';
 import { conceptBuildStepTexts } from '../doc/templates/conceptBlocks.js';
+import { extractConceptItems } from '../doc/templateInputs.js';
 import {
   conceptRevealTiming,
   conceptTemplate,
@@ -238,11 +239,26 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
       // Nested sections get their own slides; only a container template (a
       // diagram or drawing) draws its children itself.
       const { children, media: _media, ...own } = authored;
+      // A drawn list (a process, a cycle, key numbers) reveals its items as
+      // the narration reaches each one, like the summary slides that draw.
+      const drawn = conceptTemplate(authored.template ?? '');
+      // The items as the block draws them: a list turned over for its drawing
+      // (layers from the outside in) carries that order in its own data.
+      const given = (authored.templateData as { items?: unknown } | undefined)?.items;
+      const items =
+        drawn && !build
+          ? Array.isArray(given)
+            ? given.map((item) => String(item ?? ''))
+            : extractConceptItems(authored.contents)
+          : [];
       blocks.push({
         ...own,
         ...base,
         ...(children && isContainerTemplate(authored.template) ? { children } : {}),
         transition: authored.transition ?? base.transition,
+        ...(drawn && items.length
+          ? conceptReveal(drawn, { ...beat, points: items }, start, end, script.sourceText, timeAt)
+          : {}),
       });
       continue;
     }
@@ -414,6 +430,13 @@ function visualBlock(
       return { ...base, template: 'cycle', title: beat.headline, items: beat.points };
     case 'layers':
       return { ...base, template: 'layers', title: beat.headline, items: beat.points };
+    case 'stats':
+    case 'pyramid':
+    case 'funnel':
+    case 'hub':
+    case 'venn':
+    case 'matrix':
+      return { ...base, template: layout, title: beat.headline, items: beat.points };
   }
 }
 export function applySavedPresentation(doc: Doc): Doc {

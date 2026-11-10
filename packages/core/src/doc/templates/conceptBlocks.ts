@@ -1,5 +1,6 @@
 /**
- * Concept templates — `cards`, `process` and `cycle`.
+ * Concept templates — `cards`, `process`, `cycle` and `layers`, and the kit
+ * (lockup, type ramp, motion) the later ones in `conceptShapes.ts` share.
  *
  * Three ways to show a handful of related ideas as a picture of how they
  * relate rather than as a list: side-by-side cards for parallel ideas, a
@@ -27,6 +28,7 @@ import type {
   CardsBlockInput,
   CycleBlockInput,
   LayersBlockInput,
+  ListBlockInput,
   ProcessBlockInput,
   StatHighlightInput,
   TemplateContext,
@@ -44,57 +46,60 @@ import {
 } from '../utils/themeUtils.js';
 import { createBackgroundLayer, estimateProseLineCount, fitProse } from './captionUtils.js';
 import { countUpSpecFor } from '../utils/countUp.js';
+import { listBlock } from './listBlock.js';
+import {
+  splitConceptItem,
+  splitStatItem,
+  timelineItems,
+  type ConceptItem,
+  type DatedItem,
+  type StatItem,
+} from './conceptItems.js';
 
 type ConceptInput = CardsBlockInput | ProcessBlockInput | CycleBlockInput | LayersBlockInput;
+/** Every template that draws a handful of ideas (`conceptShapes.ts` holds the later ones). */
+export type ConceptTemplateName =
+  | 'cards'
+  | 'process'
+  | 'cycle'
+  | 'layers'
+  | 'stats'
+  | 'pyramid'
+  | 'funnel'
+  | 'hub'
+  | 'venn'
+  | 'matrix';
 /** What the shared lockup draws: a headline in an accent. */
-type Headed = Pick<ConceptInput, 'title' | 'colorScheme'>;
+export type Headed = Pick<ConceptInput, 'title' | 'colorScheme'>;
 
-/** One idea: an optional bold label and the words beneath it. */
-export interface ConceptItem {
-  label: string;
-  detail: string;
-}
+export { splitConceptItem, type ConceptItem } from './conceptItems.js';
 
 const MAX_ITEMS = 6;
-const LABEL_WORDS = 7;
-
-/** Split `Label: detail` or `Label — detail`; anything else is all detail. */
-export function splitConceptItem(text: string): ConceptItem {
-  const clean = text.replace(/\s+/gu, ' ').trim();
-  const match = clean.match(/^(.{1,64}?)(:\s|\s[—–-]\s)(.+)$/u);
-  // A dash between numbers is a range ("1.1 – 1.3 degrees"), not a label; a
-  // date before a colon is ("July 16, 1969: launch").
-  const range = !!match && !match[2]!.startsWith(':') && /\d$/u.test(match[1]!);
-  // A label is a phrase, never the end of a sentence and the start of another.
-  if (match && !range && !/[.!?]\s/u.test(match[1]!) && match[1]!.split(' ').length <= LABEL_WORDS)
-    return { label: match[1]!.trim(), detail: match[3]!.trim() };
-  return { label: '', detail: clean };
-}
 
 // ---- Type ramp (1080p reference; themed per viewport and theme) ----------
 
 const HEADLINE_BASE = 60;
 const HEADLINE_MIN = 40;
-const HEADLINE_LINE_HEIGHT = 1.15;
-const LABEL_BASE = 44;
-const DETAIL_BASE = 33;
+export const HEADLINE_LINE_HEIGHT = 1.15;
+export const LABEL_BASE = 44;
+export const DETAIL_BASE = 33;
 /** An item without a label sets its words between the two. */
-const PLAIN_BASE = 38;
-const LABEL_LINE_HEIGHT = 1.2;
-const DETAIL_LINE_HEIGHT = 1.4;
+export const PLAIN_BASE = 38;
+export const LABEL_LINE_HEIGHT = 1.2;
+export const DETAIL_LINE_HEIGHT = 1.4;
 /** The smallest the ramp shrinks to before text clamps. */
 const MIN_SCALE = 0.62;
 /** How far short ideas may grow past the base sizes, and the share of the room they then fill. */
 const MAX_SCALE = 1.18;
 const GROW_SHARE = 0.9;
 
-interface Ramp {
+export interface Ramp {
   label: number;
   detail: number;
   plain: number;
 }
 
-function ramp(context: TemplateContext, scale: number): Ramp {
+export function ramp(context: TemplateContext, scale: number): Ramp {
   return {
     label: Math.round(themedFontSize(LABEL_BASE, context, false) * scale),
     detail: Math.round(themedFontSize(DETAIL_BASE, context, false) * scale),
@@ -102,14 +107,14 @@ function ramp(context: TemplateContext, scale: number): Ramp {
   };
 }
 
-interface ItemMeasure {
+export interface ItemMeasure {
   labelH: number;
   gap: number;
   detailH: number;
   height: number;
 }
 
-function measureItem(item: ConceptItem, sizes: Ramp, width: number): ItemMeasure {
+export function measureItem(item: ConceptItem, sizes: Ramp, width: number): ItemMeasure {
   const labelH = item.label
     ? estimateProseLineCount(item.label, sizes.label, width) * sizes.label * LABEL_LINE_HEIGHT
     : 0;
@@ -139,7 +144,7 @@ const SCALES = [MAX_SCALE, 1, 0.82, MIN_SCALE];
  * ideas grow past the base size (to `MAX_SCALE`) while they fill no more than
  * `GROW_SHARE` of the height, so a slide of a few words is not mostly empty.
  */
-function fitRamp(
+export function fitRamp(
   items: readonly ConceptItem[],
   context: TemplateContext,
   width: (scale: number) => number,
@@ -156,7 +161,7 @@ function fitRamp(
 
 // ---- Shared lockup -------------------------------------------------------
 
-interface Frame {
+export interface Frame {
   layers: Layer[];
   accent: string;
   /** Content region the template arranges its items in. */
@@ -167,14 +172,14 @@ interface Frame {
   portrait: boolean;
 }
 
-function accentColor(input: Headed, context: TemplateContext): string {
+export function accentColor(input: Headed, context: TemplateContext): string {
   return input.colorScheme
     ? resolveColorScheme(context, input.colorScheme).accent
     : context.theme.colors.highlight || context.theme.colors.primary;
 }
 
 /** Background, accent rule and headline; returns the region beneath them. */
-function frame(input: Headed, context: TemplateContext): Frame {
+export function frame(input: Headed, context: TemplateContext): Frame {
   const { theme, viewport } = context;
   const { width: W, height: H } = viewport;
   const portrait = H > W;
@@ -233,11 +238,11 @@ function frame(input: Headed, context: TemplateContext): Frame {
 }
 
 /** A top-aligned text box spanning `left`…`left + width` from `top`. */
-function box(left: number, top: number, width: number, height: number): Position {
+export function box(left: number, top: number, width: number, height: number): Position {
   return { x: left + width / 2, y: top + height / 2, width, height, anchor: 'center' };
 }
 
-function textLayer(
+export function textLayer(
   id: string,
   text: string,
   position: Position,
@@ -257,7 +262,7 @@ function textLayer(
 }
 
 /** The label and detail of one item, stacked from `top` across `width`. */
-function itemText(
+export function itemText(
   id: string,
   item: ConceptItem,
   measure: ItemMeasure,
@@ -310,12 +315,53 @@ function itemText(
   return layers;
 }
 
-function itemsOf(input: Pick<ConceptInput, 'items'>): ConceptItem[] {
+function itemTexts(input: { items?: unknown }): string[] {
   return (Array.isArray(input.items) ? input.items : [])
     .map((item) => String(item ?? '').trim())
     .filter(Boolean)
-    .slice(0, MAX_ITEMS)
-    .map(splitConceptItem);
+    .slice(0, MAX_ITEMS);
+}
+
+export function itemsOf(input: { items?: unknown }): ConceptItem[] {
+  return itemTexts(input).map(splitConceptItem);
+}
+
+/**
+ * A concept block with no ideas. Under a bare headline it is the headline in
+ * its lockup. Over a body that holds no ideas (a table, a quotation) it draws
+ * nothing, and the block is shown as content (`materializeBlockLayers`), so
+ * the body is kept rather than dropped under the headline.
+ */
+function withoutIdeas(area: { layers: Layer[] }, context: TemplateContext): Layer[] {
+  return context.block?.contents?.length ? [] : area.layers;
+}
+
+/**
+ * More ideas than a drawing holds. Rather than draw six and drop the rest,
+ * the block shows all of them as the list they are (numbered for a process).
+ */
+export function asListWhenCrowded(
+  input: { items?: unknown; title?: string; colorScheme?: string; template: string },
+  context: TemplateContext,
+): Layer[] | undefined {
+  const items = (Array.isArray(input.items) ? input.items : [])
+    .map((item) => String(item ?? '').trim())
+    .filter(Boolean);
+  if (items.length <= MAX_ITEMS) return undefined;
+  return listBlock(
+    {
+      ...(input as unknown as Omit<ListBlockInput, 'template' | 'items'>),
+      template: 'list',
+      items,
+      ordered: input.template === 'process',
+    },
+    context,
+  );
+}
+
+/** The items of a `stats` block: each a figure and what it measures. */
+export function statItemsOf(input: { items?: unknown }): StatItem[] {
+  return itemTexts(input).map(splitStatItem);
 }
 
 /**
@@ -324,48 +370,54 @@ function itemsOf(input: Pick<ConceptInput, 'items'>): ConceptItem[] {
  * so a caller can time the reveals before the block is drawn.
  */
 export function conceptBuildStepTexts(
-  template: 'cards' | 'process' | 'cycle' | 'layers',
+  template: ConceptTemplateName,
   items: readonly string[],
 ): string[] {
   const shown = itemsOf({ items: [...items] });
-  // A process of dated stages draws as a timeline: each station is its date, then its words.
-  const dated = template === 'process' ? timelineItems(shown) : undefined;
+  // A key number is its figure, the word that scales it, then what it measures.
+  // Without a figure among them, key numbers draw (and are named) as cards.
+  const stats = template === 'stats' ? statItemsOf({ items: [...items] }) : [];
+  if (stats.some((stat) => stat.figure))
+    return stats.map((stat) => {
+      const { number, unit } = splitFigure(stat.figure);
+      return [number, unit, stat.caption].filter(Boolean).join(' ');
+    });
+  if (template !== 'process' && template !== 'cycle')
+    return shown.map((item) => [item.label, item.detail].filter(Boolean).join(' '));
+  // A process of dated stages draws as a timeline: each station is its date,
+  // then its words. A cycle too short or too wordy for a ring draws as a process.
+  const asProcess = template === 'process' || cycleDrawsAsProcess(shown);
+  const dated = asProcess ? timelineItems(shown) : undefined;
   if (dated)
     return dated.map((item) => [item.when, item.label, item.detail].filter(Boolean).join(' '));
   // A cycle of one item draws as a process.
   return shown.map((item, index) =>
-    [
-      template === 'cards' || template === 'layers' ? '' : String(index + 1),
-      item.label,
-      item.detail,
-    ]
-      .filter(Boolean)
-      .join(' '),
+    [String(index + 1), item.label, item.detail].filter(Boolean).join(' '),
   );
 }
 
 // ---- Motion --------------------------------------------------------------
 
 /** When the first item enters, and the seconds between items, on a block that does not build. */
-const FIRST_TURN = 0.6;
-const TURN_STAGGER = 0.45;
-const SETTLE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+export const FIRST_TURN = 0.6;
+export const TURN_STAGGER = 0.45;
+export const SETTLE = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
 /**
  * How a layer enters: words rise (or, for a statement, arrive word by word),
  * cards lift, rules and bars grow, badges pop, connectors draw.
  */
-type Entrance = 'text' | 'words' | 'surface' | 'rule' | 'bar' | 'pop' | 'draw';
+export type Entrance = 'text' | 'words' | 'surface' | 'rule' | 'bar' | 'pop' | 'draw';
 
 /** One layer of an item, with how it enters and when (seconds into the item's turn). */
-type Part = [layer: Layer, entrance: Entrance, at: number];
+export type Part = [layer: Layer, entrance: Entrance, at: number];
 
 /**
  * A layer's entrance. Profiles that build diagrams draw connectors on, pop
  * badges and grow rules, so each idea assembles as it arrives; `calm` fades
  * everything in, as squisq's other templates do.
  */
-function entrance(context: TemplateContext, kind: Entrance, delay: number): Animation {
+export function entrance(context: TemplateContext, kind: Entrance, delay: number): Animation {
   const profile = getMotionProfile(context);
   if (kind === 'text' || !profile.diagramBuild)
     return motionEntrance(context, { type: 'fadeIn', duration: 0.7, delay });
@@ -399,7 +451,7 @@ function entrance(context: TemplateContext, kind: Entrance, delay: number): Anim
  * Tag an item's layers as one build step, each entering on its cue in the
  * item's turn. A building block times the turn from the step's reveal.
  */
-function step(parts: readonly Part[], index: number, context: TemplateContext): Layer[] {
+export function step(parts: readonly Part[], index: number, context: TemplateContext): Layer[] {
   const turn = FIRST_TURN + index * TURN_STAGGER;
   return parts.map(([layer, kind, at]) => ({
     ...layer,
@@ -409,12 +461,12 @@ function step(parts: readonly Part[], index: number, context: TemplateContext): 
 }
 
 /** A badge's disc and number pop together. */
-function pops(layers: readonly Layer[], at: number): Part[] {
+export function pops(layers: readonly Layer[], at: number): Part[] {
   return layers.map((layer): Part => [layer, 'pop', at]);
 }
 
 /** An item's label and detail as parts, the detail a beat after its label. */
-function words(layers: readonly TextLayer[], at: number): Part[] {
+export function words(layers: readonly TextLayer[], at: number): Part[] {
   return layers.map((layer, i): Part => [layer, 'text', at + i * 0.12]);
 }
 
@@ -560,10 +612,12 @@ function statement(area: Frame, text: string, context: TemplateContext): Layer[]
  * lead paragraph under its headline, or as a display statement without one.
  */
 export function cardsBlock(input: CardsBlockInput, context: TemplateContext): Layer[] {
+  const crowded = asListWhenCrowded(input, context);
+  if (crowded) return crowded;
   const items = itemsOf(input);
   const area = frame(input, context);
   const { theme, viewport } = context;
-  if (!items.length) return area.layers;
+  if (!items.length) return withoutIdeas(area, context);
   if (items.length === 1 && !items[0]!.label)
     return (input.title?.trim() ? lead : statement)(area, items[0]!.detail, context);
   // `versus=true` written in a block tag arrives as text.
@@ -777,7 +831,7 @@ function versus(area: Frame, items: readonly ConceptItem[], context: TemplateCon
 
 // ---- process -------------------------------------------------------------
 
-function badge(
+export function badge(
   id: string,
   number: number,
   cx: number,
@@ -814,7 +868,13 @@ function badge(
 }
 
 /** A line joining two stages; an arrow where it is long enough to carry one. */
-function connector(id: string, d: string, color: string, width: number, arrow = true): PathLayer {
+export function connector(
+  id: string,
+  d: string,
+  color: string,
+  width: number,
+  arrow = true,
+): PathLayer {
   return {
     type: 'path',
     id,
@@ -836,10 +896,12 @@ function connector(id: string, d: string, color: string, width: number, arrow = 
  * timeline instead (`timeline`).
  */
 export function processBlock(input: ProcessBlockInput, context: TemplateContext): Layer[] {
+  const crowded = asListWhenCrowded(input, context);
+  if (crowded) return crowded;
   const items = itemsOf(input);
   const area = frame(input, context);
   const { viewport } = context;
-  if (!items.length) return area.layers;
+  if (!items.length) return withoutIdeas(area, context);
   const dated = timelineItems(items);
   if (dated) return timeline(area, dated, context);
   const W = area.right - area.left;
@@ -986,42 +1048,6 @@ export function processBlock(input: ProcessBlockInput, context: TemplateContext)
 }
 
 // ---- timeline ------------------------------------------------------------
-
-/** One dated stage: when it happened, then what. */
-interface DatedItem extends ConceptItem {
-  when: string;
-}
-
-const MONTH = '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\\.?\\s+';
-/** A leading date: a year ("1859", "1990s", "300 BC"), optionally after a month and day. */
-const LEADING_DATE = new RegExp(
-  `^((?:${MONTH}(?:\\d{1,2},?\\s+)?)?(?:\\d{4}s?|\\d{1,4}\\s?(?:BCE?|AD|CE))(?![.,]?\\d))[\\s,:;—–-]*(.*)$`,
-  'u',
-);
-
-/**
- * The stages of a process as a timeline's stations, when every one opens with
- * a date and the dates run forward; otherwise undefined.
- */
-function timelineItems(items: readonly ConceptItem[]): DatedItem[] | undefined {
-  if (items.length < 2) return undefined;
-  let last = -Infinity;
-  const dated: DatedItem[] = [];
-  for (const item of items) {
-    const match = (item.label || item.detail).match(LEADING_DATE);
-    if (!match) return undefined;
-    const when = match[1]!;
-    const year = Number(when.match(/\d{1,4}(?=s?\s?(?:BCE?|AD|CE)?$)/u)?.[0] ?? NaN);
-    const signed = /BCE?$/u.test(when) ? -year : year;
-    if (!Number.isFinite(signed) || signed < last) return undefined;
-    last = signed;
-    const rest = match[2]!.trim();
-    dated.push(
-      item.label ? { when, label: rest, detail: item.detail } : { when, label: '', detail: rest },
-    );
-  }
-  return dated;
-}
 
 /**
  * Dated stages as stations on a track that draws forward through time: across
@@ -1212,15 +1238,29 @@ function timeline(area: Frame, items: readonly DatedItem[], context: TemplateCon
 
 // ---- cycle ---------------------------------------------------------------
 
+/** The longest detail a stage on the ring can hold beside it. */
+const CYCLE_STAGE_CHARACTERS = 170;
+
+/**
+ * A ring needs at least three stages to read as one, and its labels sit in
+ * the corners the ring leaves. Two stages, or stages that run to a paragraph
+ * each, draw as a process instead, whose rail has the room.
+ */
+function cycleDrawsAsProcess(items: readonly ConceptItem[]): boolean {
+  return items.length < 3 || items.some((item) => item.detail.length > CYCLE_STAGE_CHARACTERS);
+}
+
 /**
  * A cycle: stages on a ring, each joined to the next by an arrow and the
  * last back to the first. Labels sit beside their stage, away from the ring.
  */
 export function cycleBlock(input: CycleBlockInput, context: TemplateContext): Layer[] {
+  const crowded = asListWhenCrowded(input, context);
+  if (crowded) return crowded;
   const items = itemsOf(input);
   const area = frame(input, context);
   const { viewport } = context;
-  if (items.length < 2) return processBlock({ ...input, template: 'process' }, context);
+  if (cycleDrawsAsProcess(items)) return processBlock({ ...input, template: 'process' }, context);
   const H = area.bottom - area.top;
   const n = items.length;
   const cx = (area.left + area.right) / 2;
@@ -1323,6 +1363,8 @@ export function cycleBlock(input: CycleBlockInput, context: TemplateContext): La
  * rings above the callouts, each marked with its ring's color.
  */
 export function layersBlock(input: LayersBlockInput, context: TemplateContext): Layer[] {
+  const crowded = asListWhenCrowded(input, context);
+  if (crowded) return crowded;
   const items = itemsOf(input);
   if (items.length < 2) return cardsBlock({ ...input, template: 'cards' }, context);
   const area = frame(input, context);
@@ -1451,7 +1493,7 @@ const FIGURE_MIN = 120;
 const FIGURE_LINE_HEIGHT = 1.0;
 
 /** A figure's number and the word that scales it: "3.5 million" → "3.5" over "million". */
-function splitFigure(stat: string): { number: string; unit: string } {
+export function splitFigure(stat: string): { number: string; unit: string } {
   const match = stat.trim().match(/^(\D{0,2}[\d.,]+\s?[%×x]?)\s+(\p{L}[\p{L} -]{0,20})$/u);
   return match
     ? { number: match[1]!.trim(), unit: match[2]!.trim() }

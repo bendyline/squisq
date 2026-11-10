@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '../markdown/parse.js';
-import { deriveTemplateInputs, renderMarkdownBlocksHtml } from '../doc/templateInputs.js';
+import {
+  deriveTemplateInputs,
+  extractBlockquote,
+  renderMarkdownBlocksHtml,
+} from '../doc/templateInputs.js';
 
 function statInputs(heading: string, body: string): Record<string, unknown> | null {
   return deriveTemplateInputs('statHighlight', heading, parseMarkdown(body).children);
@@ -81,6 +85,40 @@ describe('quote template input derivation', () => {
     expect(quoteInputs('Context', '> Words worth quoting')).toEqual({
       quote: 'Words worth quoting',
       title: 'Context',
+    });
+  });
+
+  it('reads a closing dash line as who said it, not as more of the quote', () => {
+    // Markdown has no attribution syntax, so authors write the convention.
+    for (const body of [
+      '> Make it obvious.\n>\n> — Ada Lovelace',
+      '> Make it obvious.\n> — Ada Lovelace',
+      '> Make it obvious. — Ada Lovelace',
+      '> Make it obvious.\n>\n> -- Ada Lovelace',
+    ]) {
+      expect(quoteInputs('', body), body).toEqual({
+        quote: 'Make it obvious.',
+        attribution: 'Ada Lovelace',
+      });
+    }
+    // The picture-backed quotes take the same split.
+    expect(
+      deriveTemplateInputs('pullQuote', '', parseMarkdown('> Go on. — A nurse').children),
+    ).toEqual({ text: 'Go on.', attribution: 'A nurse' });
+  });
+
+  it('keeps a quote’s own dashes, and spaces its paragraphs', () => {
+    // A dash inside a sentence is punctuation, not a signature.
+    expect(quoteInputs('', '> I came — I saw — I left early.')).toEqual({
+      quote: 'I came — I saw — I left early.',
+    });
+    // Two paragraphs used to run together: "…first.Second…".
+    expect(quoteInputs('', '> The first thought.\n>\n> The second thought.')).toEqual({
+      quote: 'The first thought. The second thought.',
+    });
+    // A lone dash line with nothing before it is the quote itself.
+    expect(extractBlockquote(parseMarkdown('> — only a dash line').children)).toEqual({
+      text: '— only a dash line',
     });
   });
 });
@@ -187,6 +225,30 @@ describe('markdown-authored quote, list, column and card derivation', () => {
   it('turns the heading into the twoColumn header band', () => {
     expect(derive('twoColumn', 'Two Approaches', '')).toEqual({ header: 'Two Approaches' });
     expect(derive('twoColumn', '', '')).toBeNull();
+  });
+
+  it('reads the two columns from a body list of two items', () => {
+    expect(
+      derive('twoColumn', 'Two Approaches', '- Markdown: portable\n- Visual editors: immediate'),
+    ).toEqual({
+      header: 'Two Approaches',
+      left: { label: 'Markdown', sublabel: 'portable' },
+      right: { label: 'Visual editors', sublabel: 'immediate' },
+    });
+    // A short item is its own label.
+    expect(derive('twoColumn', '', '- Before\n- After')).toEqual({
+      left: { label: 'Before' },
+      right: { label: 'After' },
+    });
+    // Three items, or an item that is a sentence, are not two columns.
+    expect(derive('twoColumn', 'Options', '- One\n- Two\n- Three')).toEqual({ header: 'Options' });
+    expect(
+      derive(
+        'twoColumn',
+        'Options',
+        '- Fast\n- A much longer item that reads as a sentence, not as a label',
+      ),
+    ).toEqual({ header: 'Options' });
   });
 
   it('does not echo the heading into an empty explanation, definition or description', () => {

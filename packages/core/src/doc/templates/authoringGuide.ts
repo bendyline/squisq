@@ -62,7 +62,13 @@ export type GuidedTemplate =
   | 'cards'
   | 'process'
   | 'cycle'
-  | 'layers';
+  | 'layers'
+  | 'stats'
+  | 'pyramid'
+  | 'funnel'
+  | 'hub'
+  | 'venn'
+  | 'matrix';
 
 const CHART: TemplateGuide = {
   fields: 'title, headers [label, value], rows [[label, value], …] 2–6 rows, showValues: true',
@@ -112,7 +118,7 @@ export const TEMPLATE_GUIDES: Readonly<Record<GuidedTemplate, TemplateGuide>> = 
   },
   diagram: {
     fields:
-      "title, nodeShape: 'pill', nodes: [{ id, label ≤ 3 words, x, y }] 3–6 nodes with x in {0, 280, 560} and y in {0, 160, 320}, edges: [{ source, target, label ≤ 3 words }]",
+      "title, nodeShape: 'pill', nodes: [{ id, label ≤ 3 words }] 3–6 nodes (no x or y: the diagram places them from the edges), edges: [{ source, target, label ≤ 3 words }]",
     use: 'relationships the {source} describes',
   },
   list: {
@@ -145,6 +151,30 @@ export const TEMPLATE_GUIDES: Readonly<Record<GuidedTemplate, TemplateGuide>> = 
   layers: {
     fields: `title, items: ["Label: detail", …] 3–5 innermost first, ${CONCEPT_BUILD}`,
     use: 'parts nested inside one another, drawn as concentric rings',
+  },
+  stats: {
+    fields: `title, items: ["Figure: what it measures", …] 2–4 such as "40%: of trips made on foot", ${CONCEPT_BUILD}`,
+    use: 'several key numbers the {source} states, side by side; each counts up',
+  },
+  pyramid: {
+    fields: `title, items: ["Label: detail", …] 3–5 from the top down, ${CONCEPT_BUILD}`,
+    use: 'a hierarchy, or levels that rest on one another, drawn as a pyramid',
+  },
+  funnel: {
+    fields: `title, items: ["Label: detail", …] 3–5 widest first, ${CONCEPT_BUILD}`,
+    use: 'stages that narrow from many to few, drawn as a funnel',
+  },
+  hub: {
+    fields: `title, center ≤ 3 words, items: ["Label: detail", …] 3–6, ${CONCEPT_BUILD}`,
+    use: 'factors, causes or parts of the one thing `center` names, drawn around a hub',
+  },
+  venn: {
+    fields: `title, items: ["A: what only A has", "B: what only B has", "Both: what they share"], ${CONCEPT_BUILD}`,
+    use: 'two things compared by what each has alone and what they share, drawn as overlapping circles',
+  },
+  matrix: {
+    fields: `title, xAxis, yAxis, items: ["Label: detail", …] exactly 4 in reading order (top left, top right, bottom left, bottom right), ${CONCEPT_BUILD}`,
+    use: 'four ideas placed on two axes, such as effort against impact',
   },
 };
 
@@ -211,6 +241,45 @@ export const PRESENTATION_LAYOUT_GUIDE: Readonly<Record<PresentationLayout, stri
   cycle: '3–5 stages that repeat in a loop, drawn on a ring',
   layers:
     '3–5 parts nested inside one another, innermost first, such as a core and the layers around it, drawn as concentric rings',
+  stats:
+    '2–4 key figures the passage states, each point written "figure: what it measures", such as "40%: of trips made on foot"; they count up side by side',
+  pyramid: '3–4 levels of a hierarchy, the top first and the base last, drawn as a pyramid',
+  funnel: '3–4 stages that narrow from many to few, the widest first, drawn as a funnel',
+  hub: '3–4 factors, causes or parts of the one thing the headline names, drawn around a hub',
+  venn: 'exactly 3 points: two things compared, each "Name: what only it has", then "Both: what they share"; drawn as overlapping circles',
+  matrix:
+    'exactly 4 points placed on two axes, in reading order: top left, top right, bottom left, bottom right',
+};
+
+/**
+ * What to call each presentation layout in a picker, and one line on what it
+ * shows. Hosts that let a person choose a slide's layout render these rather
+ * than keeping their own copy, so a layout added here is named everywhere.
+ */
+export const PRESENTATION_LAYOUT_LABELS: Readonly<
+  Record<PresentationLayout, { label: string; description: string }>
+> = {
+  title: { label: 'Title', description: 'Opens the deck or closes it.' },
+  divider: { label: 'Section break', description: 'A new topic begins; only the headline.' },
+  statement: { label: 'Statement', description: 'One idea under the headline.' },
+  emphasis: { label: 'Big statement', description: 'One short takeaway in display type.' },
+  quote: { label: 'Quote', description: 'One sentence in the passage’s own words.' },
+  stat: { label: 'Key number', description: 'One figure, large, beside what it means.' },
+  definition: { label: 'Definition', description: 'A term and what it means.' },
+  list: { label: 'Points', description: 'Two or three points side by side.' },
+  comparison: { label: 'Comparison', description: 'Two sides set against each other.' },
+  steps: { label: 'Steps', description: 'Ordered actions, numbered and joined by arrows.' },
+  image: { label: 'Picture', description: 'A picture with the headline as its caption.' },
+  cards: { label: 'Cards', description: 'Parallel ideas side by side.' },
+  process: { label: 'Process', description: 'Ordered stages; dated ones draw as a timeline.' },
+  cycle: { label: 'Cycle', description: 'Stages on a ring that comes back to its start.' },
+  layers: { label: 'Layers', description: 'Nested parts as concentric rings.' },
+  stats: { label: 'Key numbers', description: 'Several figures side by side, counting up.' },
+  pyramid: { label: 'Pyramid', description: 'Levels of a hierarchy, the top first.' },
+  funnel: { label: 'Funnel', description: 'Stages that narrow from many to few.' },
+  hub: { label: 'Hub', description: 'Ideas around the one thing they share.' },
+  venn: { label: 'Venn', description: 'Two sets and what they share.' },
+  matrix: { label: 'Matrix', description: 'Four ideas on two axes.' },
 };
 
 /** A piece of craft an author can reuse. */
@@ -228,8 +297,18 @@ export interface AuthoringTrick {
   templates?: readonly string[];
 }
 
-const DRAWN = ['cards', 'process', 'cycle', 'layers'] as const;
-const NUMBERS = ['statHighlight', 'comparisonBar', 'columnChart', 'barChart', 'pieChart'] as const;
+/** The first four are the ones a summary author is steered to by name. */
+const DRAWN_CORE = ['cards', 'process', 'cycle', 'layers'] as const;
+const DRAWN_SHAPES = ['pyramid', 'funnel', 'hub', 'venn', 'matrix'] as const;
+const DRAWN = [...DRAWN_CORE, ...DRAWN_SHAPES] as const;
+const NUMBERS = [
+  'statHighlight',
+  'stats',
+  'comparisonBar',
+  'columnChart',
+  'barChart',
+  'pieChart',
+] as const;
 const ACCENTED = [
   'factCard',
   'statHighlight',
@@ -246,7 +325,9 @@ export const AUTHORING_TRICKS: readonly AuthoringTrick[] = [
   },
   {
     id: 'numbers-as-numbers',
-    text: 'Draw numbers as numbers: one striking quantity → statHighlight (it counts up); two quantities in one unit → comparisonBar; three or more values in one unit → a chart; three to seven dated events → timeline.',
+    text: 'Draw numbers as numbers: one striking quantity → statHighlight (it counts up); two to four key quantities in different units → stats; two quantities in one unit → comparisonBar; three or more values in one unit → a chart; three to seven dated events → timeline.',
+    summary:
+      'Draw numbers as numbers: when the passage turns on one figure choose "stat"; when it gives two to four key figures choose "stats" and write each point as "figure: what it measures".',
     templates: [...NUMBERS, 'timeline'],
   },
   {
@@ -257,8 +338,15 @@ export const AUTHORING_TRICKS: readonly AuthoringTrick[] = [
   {
     id: 'draw-ideas',
     text: 'Slides that draw their ideas explain best: several parallel ideas → cards, ordered stages → process, a loop that comes back to its start → cycle, parts nested inside one another → layers; prefer them to a list. Write each item as "Label: detail", a label of 1–4 words and a detail of at most 70 characters, in the {source}\'s own words. For dated events, start each label with its date: a process of dated stages draws as a timeline.',
-    summary: `Slides that draw their ideas explain best: when the passage has several parallel ideas, ordered stages, a repeating loop or nested parts, choose ${DRAWN.map((layout) => `"${layout}"`).join(', ')} rather than "statement" or "list", and write each of their points (up to 4) as "Label: detail", a label of 1–4 words and a detail of at most 70 characters. For dated events, start each label with its date.`,
-    templates: DRAWN,
+    summary: `Slides that draw their ideas explain best: when the passage has several parallel ideas, ordered stages, a repeating loop or nested parts, choose ${DRAWN_CORE.map((layout) => `"${layout}"`).join(', ')} rather than "statement" or "list", and write each of their points (up to 4) as "Label: detail", a label of 1–4 words and a detail of at most 70 characters. For dated events, start each label with its date.`,
+    templates: DRAWN_CORE,
+  },
+  {
+    id: 'draw-shapes',
+    text: 'Some relationships have a shape of their own: a hierarchy or levels that rest on one another → pyramid (top first); stages that narrow from many to few → funnel (widest first); factors, causes or parts of one thing → hub, with that thing as `center`; two things and what they share → venn, its last item "Both: …"; four ideas on two axes → matrix. Choose one only when the {source} states that relationship; a shape the ideas do not have misleads.',
+    summary:
+      'Some relationships have a shape of their own: a hierarchy → "pyramid", stages that narrow from many to few → "funnel", factors or causes of one thing → "hub", two things and what they share → "venn" (its third point "Both: …"), four ideas on two axes → "matrix". Choose one only when the passage states that relationship; a shape the ideas do not have misleads.',
+    templates: DRAWN_SHAPES,
   },
   {
     id: 'reveal-as-spoken',

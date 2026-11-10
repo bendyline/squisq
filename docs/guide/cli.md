@@ -175,31 +175,33 @@ squisq video long-tour.md --frames-dir frames                   # keep every fra
 squisq video long-tour.md --frames-dir frames --resume          # reuse them after a stop
 ```
 
-| Option                      | What it does                                                                               | Default                           |
-| --------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------- |
-| `[output]`, `-o, --output`  | Output path ending in `.mp4` or `.gif`. Give one or the other, not both.                   | `<input name>.mp4`                |
-| `--format <format>`         | `mp4` or `gif`. Must agree with the output's extension.                                    | From the extension, else `mp4`    |
-| `--fps <number>`            | Frames per second: 1–120 for MP4, 1–100 for GIF.                                           | 30 for MP4, 10 for GIF            |
-| `--quality <level>`         | MP4 only: `draft`, `normal` or `high`.                                                     | `normal`                          |
-| `--orientation <orient>`    | `landscape` or `portrait`.                                                                 | `landscape`                       |
-| `--width`, `--height <px>`  | Override the size. Must be an even number of pixels, for MP4 and GIF alike.                | 1920×1080 MP4, 960×540 GIF        |
-| `--captions <style>`        | `off`, `standard`, or `social` (Reels-style, at most two lines).                           | `off` for MP4, `standard` for GIF |
-| `--animations`              | Turn slide animations and transitions on.                                                  | On for MP4, off for GIF           |
-| `--no-animations`           | Turn them off. Media and timing keep playing.                                              |                                   |
-| `--motion <profile>`        | Motion profile: `calm`, `documentary` or `vibrant`.                                        | The document's, then the theme's  |
-| `--cover-preroll <seconds>` | How long the cover slide shows before the story starts.                                    | 2                                 |
-| `-t, --theme <id>`          | Render in a theme.                                                                         | The document's theme              |
-| `--transform <style>`       | Restyle with a [transform style](#transform-styles) first.                                 | None                              |
-| `--no-auto-templates`       | Don't pick blocks automatically for untagged headings.                                     | Automatic                         |
-| `--overwrite`               | Replace an existing output file.                                                           | Off                               |
-| `--loop <count>`            | GIF only: `0` repeats forever, `-1` plays once, or a repeat count up to 65535.             | 0                                 |
-| `--max-colors <count>`      | GIF only: palette size, 2–256.                                                             | 256                               |
-| `--dither <algorithm>`      | GIF only: `bayer`, `sierra2_4a` or `none`.                                                 | `sierra2_4a`                      |
-| `--bayer-scale <number>`    | GIF only: strength of `bayer` dithering, 0–5.                                              | 3                                 |
-| `--frame-transport <mode>`  | MP4 only: `pipe` streams frames to FFmpeg as they're drawn; `memory` holds them all first. | `pipe`                            |
-| `--capture-format <format>` | MP4 only: each frame captured as `png` or `jpeg`. Needs `pipe`.                            | `png` for `high`, else `jpeg`     |
-| `--frames-dir <dir>`        | MP4 only: save every frame here and keep it after the render. Needs `pipe`.                | —                                 |
-| `--resume`                  | MP4 only: reuse frames an identical earlier render saved in `--frames-dir`.                | Off                               |
+| Option                      | What it does                                                                                | Default                           |
+| --------------------------- | ------------------------------------------------------------------------------------------- | --------------------------------- |
+| `[output]`, `-o, --output`  | Output path ending in `.mp4` or `.gif`. Give one or the other, not both.                    | `<input name>.mp4`                |
+| `--format <format>`         | `mp4` or `gif`. Must agree with the output's extension.                                     | From the extension, else `mp4`    |
+| `--fps <number>`            | Frames per second: 1–120 for MP4, 1–100 for GIF.                                            | 30 for MP4, 10 for GIF            |
+| `--quality <level>`         | MP4 only: `draft`, `normal` or `high`.                                                      | `normal`                          |
+| `--orientation <orient>`    | `landscape` or `portrait`.                                                                  | `landscape`                       |
+| `--width`, `--height <px>`  | Override the size. Must be an even number of pixels, for MP4 and GIF alike.                 | 1920×1080 MP4, 960×540 GIF        |
+| `--captions <style>`        | `off`, `standard`, or `social` (Reels-style, at most two lines).                            | `off` for MP4, `standard` for GIF |
+| `--animations`              | Turn slide animations and transitions on.                                                   | On for MP4, off for GIF           |
+| `--no-animations`           | Turn them off. Media and timing keep playing.                                               |                                   |
+| `--motion <profile>`        | Motion profile: `calm`, `documentary` or `vibrant`.                                         | The document's, then the theme's  |
+| `--cover-preroll <seconds>` | How long the cover slide shows before the story starts.                                     | 2                                 |
+| `--captions-file <path>`    | Also write the captions as a file a player can switch on and off: `.srt`, or `.vtt`.        | None                              |
+| `--chapters-file <path>`    | Also write the chapters: `.txt` as a list of timestamps, any other name as FFmpeg metadata. | None                              |
+| `-t, --theme <id>`          | Render in a theme.                                                                          | The document's theme              |
+| `--transform <style>`       | Restyle with a [transform style](#transform-styles) first.                                  | None                              |
+| `--no-auto-templates`       | Don't pick blocks automatically for untagged headings.                                      | Automatic                         |
+| `--overwrite`               | Replace an existing output file.                                                            | Off                               |
+| `--loop <count>`            | GIF only: `0` repeats forever, `-1` plays once, or a repeat count up to 65535.              | 0                                 |
+| `--max-colors <count>`      | GIF only: palette size, 2–256.                                                              | 256                               |
+| `--dither <algorithm>`      | GIF only: `bayer`, `sierra2_4a` or `none`.                                                  | `sierra2_4a`                      |
+| `--bayer-scale <number>`    | GIF only: strength of `bayer` dithering, 0–5.                                               | 3                                 |
+| `--frame-transport <mode>`  | MP4 only: `pipe` streams frames to FFmpeg as they're drawn; `memory` holds them all first.  | `pipe`                            |
+| `--capture-format <format>` | MP4 only: each frame captured as `png` or `jpeg`. Needs `pipe`.                             | `png` for `high`, else `jpeg`     |
+| `--frames-dir <dir>`        | MP4 only: save every frame here and keep it after the render. Needs `pipe`.                 | —                                 |
+| `--resume`                  | MP4 only: reuse frames an identical earlier render saved in `--frames-dir`.                 | Off                               |
 
 Sizes and other settings are checked before the document is read or the browser starts, so a typo
 fails in a second rather than after a long render. Documents with Mermaid diagrams are rendered
