@@ -1260,18 +1260,26 @@ const PIP_POSITION_OPTIONS: Array<{ key: PipPosition; label: string }> = [
 export const DISPLAY_MODE_OPTIONS: {
   key: DisplayMode;
   label: string;
+  /**
+   * The Use tab's label in a narrow toolbar. Each is a run of letters from
+   * `label`, so the tab's accessible name (always the full label) still
+   * contains the words a speech-input user sees.
+   */
+  shortLabel?: string;
   icon: string;
   summary: string;
 }[] = [
   {
     key: 'slideshow',
     label: 'Slideshow',
+    shortLabel: 'Slides',
     icon: 'fa-solid fa-images',
     summary: 'Present designed slides one at a time.',
   },
   {
     key: 'flashcards',
     label: 'Flashcards',
+    shortLabel: 'Cards',
     icon: 'fa-solid fa-clone',
     summary: 'Study with progressive reveals and quizzes.',
   },
@@ -1290,12 +1298,14 @@ export const DISPLAY_MODE_OPTIONS: {
   {
     key: 'dashboard',
     label: 'Dashboard',
+    shortLabel: 'Board',
     icon: 'fa-solid fa-table-cells-large',
     summary: 'See every block arranged on one canvas.',
   },
   {
     key: 'page',
     label: 'Document',
+    shortLabel: 'Doc',
     icon: 'fa-solid fa-align-left',
     summary: 'Read a clean, text-first document.',
   },
@@ -1309,6 +1319,12 @@ export const DISPLAY_MODE_OPTIONS: {
 
 export function displayModeLabel(mode: DisplayMode): string {
   return DISPLAY_MODE_OPTIONS.find((option) => option.key === mode)?.label ?? 'Slideshow';
+}
+
+/** The mode's label for a narrow toolbar; its full label when that is short already. */
+export function displayModeShortLabel(mode: DisplayMode): string {
+  const option = DISPLAY_MODE_OPTIONS.find((candidate) => candidate.key === mode);
+  return option?.shortLabel ?? option?.label ?? 'Slides';
 }
 
 const TRANSFORM_STYLE_OPTIONS = [

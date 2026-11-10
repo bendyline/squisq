@@ -798,13 +798,36 @@
   visibility: hidden;
 }
 
-@container squisq-toolbar (max-width: 900px) {
-  .squisq-toolbar-view-tab:has(.squisq-toolbar-view-tab-label--short)
+/* A tab's icon (Source's </>) stands in for its label only when narrow. */
+.squisq-toolbar-view-tab-icon {
+  display: none;
+  align-items: center;
+  /* One label line tall, nudged like the label, so it centres where the
+     neighbouring tabs' text does. */
+  height: 1lh;
+  transform: translateY(1px);
+}
+
+/* Phone width: Write ▾, Source and Slideshow ▾ overrun a 360px row, more so
+   with Android's larger system text. Source becomes its icon, a Use mode its
+   short label (Slideshow → Slides), and the tabs pad tighter. Each tab's
+   accessible name stays its full label. */
+@container squisq-toolbar (max-width: 520px) {
+  .squisq-toolbar-view-tab:has(.squisq-toolbar-view-tab-label--short, .squisq-toolbar-view-tab-icon)
     .squisq-toolbar-view-tab-label--long {
     display: none;
   }
+
   .squisq-toolbar-view-tab-label--short {
     display: inline-block;
+  }
+
+  .squisq-toolbar-view-tab-icon {
+    display: inline-flex;
+  }
+
+  .squisq-toolbar-view-tab {
+    padding-inline: 10px;
   }
 }
 
