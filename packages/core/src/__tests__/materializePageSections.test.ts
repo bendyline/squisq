@@ -131,6 +131,50 @@ describe('section extractor coverage', () => {
     expect(materializePageSection(emptyDoc.blocks[0]).section.kind).toBe('canvas-embed');
   });
 
+  it('shows a template with nothing to draw as prose, never an empty frame or sample data', () => {
+    const body = 'Markdown is portable, while visual editors are immediate.';
+    for (const template of [
+      'twoColumn',
+      'imageWithCaption',
+      'videoWithCaption',
+      'list',
+      'comparisonBar',
+    ]) {
+      const doc = markdownToDoc(parseMarkdown(`## Side by side {[${template}]}\n\n${body}\n`), {
+        generateCoverBlock: false,
+      });
+      const { section } = materializePageSection(doc.blocks[0]);
+      expect(section.kind, template).toBe('prose');
+      expect(section.slots.title, template).toBe('Side by side');
+      expect(section.slots.body?.text, template).toBe(body);
+      expect(JSON.stringify(section.slots), template).not.toMatch(/Item 1|"value":60/);
+    }
+
+    // A concept block over a body that holds no ideas reads as that body,
+    // never beside sample ideas.
+    for (const template of ['cards', 'process', 'hub']) {
+      const doc = markdownToDoc(
+        parseMarkdown(`## Landings {[${template}]}\n\n> The harbor wakes before the town does.\n`),
+        { generateCoverBlock: false },
+      );
+      const { section } = materializePageSection(doc.blocks[0]);
+      expect(section.kind, template).toBe('prose');
+      expect(JSON.stringify(section.slots), template).not.toMatch(/First idea|Begin: the first/);
+    }
+
+    // With its inputs, each still draws its own section.
+    const columns = markdownToDoc(
+      parseMarkdown('## Coffee {[twoColumn]}\n\n- Espresso: bold\n- Filter: smooth\n'),
+      { generateCoverBlock: false },
+    );
+    const grid = materializePageSection(columns.blocks[0]).section;
+    expect(grid.kind).toBe('card-grid');
+    expect(grid.slots.items).toMatchObject([
+      { title: 'Espresso', body: 'bold' },
+      { title: 'Filter', body: 'smooth' },
+    ]);
+  });
+
   it('pullQuote with a background image becomes a media-backed quote band', () => {
     const { section } = materializePageSection(
       templateBlock('pullQuote', {

@@ -258,7 +258,10 @@ export function EmojiPicker({
           caps the popover overall (set on the root element above), so
           the grid scrolls only when the content doesn't fit. With the
           default sizing (480 wide × 560 tall, 10 columns) the common
-          categories fit without a scrollbar at all. */}
+          categories fit without a scrollbar at all. A column is a tenth
+          of the grid but never under 36px (a glyph and its padding), so a
+          phone-width picker (95vw) drops to fewer columns instead of
+          scrolling sideways. */}
       <div
         style={{
           padding: 6,
@@ -266,7 +269,8 @@ export function EmojiPicker({
           minHeight: 0,
           overflowY: 'auto',
           display: 'grid',
-          gridTemplateColumns: 'repeat(10, 1fr)',
+          gridTemplateColumns:
+            'repeat(auto-fill, minmax(max(36px, calc((100% - 18px) / 10)), 1fr))',
           gap: 2,
         }}
       >

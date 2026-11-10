@@ -117,6 +117,31 @@ export const TEMPLATE_METADATA: Record<string, TemplateMetadata> = {
     label: 'Layers',
     description: 'Draws nested parts as concentric rings, innermost first, each one called out.',
   },
+  stats: {
+    label: 'Key Numbers',
+    description:
+      'Sets two to six key figures side by side, each counting up over what it measures.',
+  },
+  pyramid: {
+    label: 'Pyramid',
+    description: 'Stacks a hierarchy as a pyramid, the apex first and the base last.',
+  },
+  funnel: {
+    label: 'Funnel',
+    description: 'Draws stages that narrow as a funnel, the widest first and the outcome last.',
+  },
+  hub: {
+    label: 'Hub',
+    description: 'Arranges ideas around the one thing they share, each joined to it by a spoke.',
+  },
+  venn: {
+    label: 'Venn',
+    description: 'Draws two sets as overlapping circles, with what they share in the overlap.',
+  },
+  matrix: {
+    label: 'Matrix',
+    description: 'Places four ideas on two axes as a two-by-two grid.',
+  },
   photoGrid: {
     label: 'Photo Grid',
     description: 'Arranges up to four photos in a mosaic grid.',

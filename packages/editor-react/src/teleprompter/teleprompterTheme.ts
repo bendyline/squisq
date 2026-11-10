@@ -235,6 +235,10 @@ export const TELEPROMPTER_CSS = `
 .squisq-teleprompter-controls .squisq-teleprompter-group {
   display: inline-flex;
   align-items: center;
+  /* Voice pace (button, sensitivity, microphone, meter) is wider than a
+     phone; wrap within the group rather than run off the bar. */
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: 6px;
   white-space: nowrap;
 }

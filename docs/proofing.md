@@ -2,8 +2,9 @@
 
 Squisq's editor can proof documents — red squigglies for spelling/typos,
 green for grammar, blue-dotted for style, in both the Write (Tiptap) and
-Source (Monaco) views, with a hover card that both explains a squiggle
-and acts on it, a right-click suggestions menu, a findings panel, a
+Source (Monaco) views, with a card that both explains a squiggle and
+acts on it (raised by hovering, or by a tap on a touch screen), a
+right-click suggestions menu, a findings panel, a
 StatusBar count, and per-doc settings. The engine is
 [harper.js](https://github.com/Automattic/harper) (Apache-2.0, English
 only, five dialects), compiled to WebAssembly and running fully offline
@@ -156,9 +157,31 @@ Two surfaces, same actions, different amounts of intent:
   pointer leaves the word — leaving only _arms_ a close ~260 ms out,
   which is cancelled when the pointer lands on the card. A click in the
   text or a scroll dismisses it at once. "+N more" opens the full menu.
-- **Right-click menu** (both views). The complete suggestion list plus
-  the same Ignore/dictionary items, with arrow-key navigation. It
-  supersedes the hover card whenever both would be live.
+- **Tap** (Write view, touch and pen). A finger cannot hover, so tapping
+  a squiggle raises the same card at once, with buttons sized for a
+  finger. It stays until the reader taps anywhere outside it — the same
+  word included, so a second tap puts it away — or starts typing, and it
+  follows its word through a scroll rather than closing on one: the tap
+  also places the caret, which on a phone raises the keyboard and
+  scrolls the page.
+- **Right-click menu** (both views; a long press where the browser
+  reports one). The complete suggestion list plus the same
+  Ignore/dictionary items, with arrow-key navigation. It supersedes the
+  card whenever both would be live.
+
+### A squiggle on a link
+
+When the host passes `onLinkClick`, a link in the Write view opens on a
+click. A link whose text is also flagged behaves the same way for a
+mouse: the click opens it, and the hover card is there for the spelling.
+
+A finger has only the tap, so the two would collide. There the squiggle
+wins: the tap raises the card and does **not** call `onLinkClick`, and
+the card carries an **Open link** button beside the href, which hands
+that href to `onLinkClick`. The long-press menu offers the same item. A
+link with no squiggle opens on a tap as before. Without `onLinkClick`
+nothing changes: the card shows no link, and the tap is left to do
+whatever the surface did with it.
 
 The Source view's explanation is Monaco's own hover card (built from the
 decoration's `hoverMessage`), so it reads the same but carries no

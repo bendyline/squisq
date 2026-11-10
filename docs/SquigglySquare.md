@@ -176,6 +176,11 @@ doc-wide persistent layers), and `imageTreatment` (`none` | `mono` | `duotone`
   - Inputs: `items` _(required — usually the block's markdown list)_, `title`, `colorScheme`, `accentImage`
   - Usage: bulleted/numbered lists authored as a single template
 
+- `cards`, `process`, `cycle`, `layers`, `stats`, `pyramid`, `funnel`, `hub`, `venn`, `matrix`
+  - Inputs: `items` _(required — usually the block's markdown list, two to six items)_, `title`, `colorScheme`; `cards` also takes `versus`, `hub` takes `center`, `matrix` takes `xAxis` / `yAxis`
+  - Items: each item is plain text, optionally `Label: detail` (or `Label — detail`); a sub-item becomes its item's detail. `stats` reads `Figure: what it measures`; a `venn`'s shared item is labelled `Both:`; a `matrix` takes exactly four items in reading order; a `process` whose items each open with a date draws as a timeline
+  - Usage: a handful of ideas drawn as how they relate — side by side, in order, in a loop, nested, as key numbers, as a hierarchy, narrowing, around one centre, overlapping, or on two axes. A block that cannot draw its picture draws cards; more than six items draw as the list they are
+
 - `photoGrid`
   - Inputs: `images` _(required — the 2–4 images in the block body, each `{ src, alt, credit?, license? }`)_, `caption`, `ambientMotion`
   - Usage: image gallery grid
@@ -329,7 +334,7 @@ template, deriving its inputs from that body:
 | Paragraphs that include an image                       | `leftFeature` / `rightFeature` (alternating) |
 | Blockquote                                             | `quote`                                      |
 | A short, stat-looking line (`89%`, `$2.3M`, `1,234`)   | `statHighlight`                              |
-| List                                                   | `list`                                       |
+| List                                                   | `list`, or the drawing its shape makes clear |
 
 The body must be _only_ that one structure: a table with an introductory
 paragraph, or a list followed by a closing sentence, keeps the default.
@@ -340,9 +345,22 @@ deliberately **ephemeral** — serializing back to markdown does not write a
 `{[…]}` annotation for them, so round-trips stay lossless. Explicit
 annotations always win over auto-picking.
 
+A list is drawn as what it is a picture of when its heading and items make
+that clear (`classifyListShape`): a numbered list, or one under a heading
+that names steps, is a `process`; items that open with dates in order are a
+`process` drawn as a timeline; items that are all figures are `stats`;
+`Label: detail` items are `cards`; and a heading that says so makes a
+`cycle`, `layers`, a `pyramid`, a `funnel`, a `hub`, a `venn` or a `matrix`.
+Only a relationship the author's own structure or words state is applied,
+and never one that would lose content: a list with more than six items,
+with links, images or code, with task boxes, or with sub-items more than one
+level deep stays a `list`.
+
 Disable per call with `markdownToDoc(…, { autoTemplates: false })`, per
 document with frontmatter `squisq-auto-templates: false`, or on the CLI with
-`--no-auto-templates`.
+`--no-auto-templates`. `autoTemplates: 'structural'` (frontmatter
+`squisq-auto-templates: structural`) keeps every list a `list` and leaves the
+rest on.
 
 ## YAML Frontmatter
 
@@ -421,7 +439,7 @@ These are read by core and every export path (not just the editor preview):
 | `squisq-theme`            | Canonical theme selector (see [`theme`](#theme) above). Resolves against the doc's own custom themes first, then built-ins.                                |
 | `squisq-custom-themes`    | Inline custom `Theme[]` payload (compact single-line JSON keyed by theme id) → `Doc.customThemes`. One is activated via `squisq-theme`.                    |
 | `squisq-custom-templates` | Inline custom template definitions (compact single-line JSON keyed by name) → `Doc.customTemplates`. A `{[myTemplate]}` annotation resolves against these. |
-| `squisq-auto-templates`   | Kill-switch for content-aware auto-templating in `markdownToDoc`. Disabled when the value is `false`/`off`/`no`/`0`.                                       |
+| `squisq-auto-templates`   | Kill-switch for content-aware auto-templating in `markdownToDoc`. Disabled when the value is `false`/`off`/`no`/`0`; `structural` keeps lists as `list`.   |
 | `title`                   | Document title. Preferred over the first heading by `inferDocumentTitle()`.                                                                                |
 
 These are managed by the editor's Preview controls and consumed by the player/export paths:

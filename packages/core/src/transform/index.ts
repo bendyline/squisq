@@ -38,4 +38,6 @@ export { collectPresentationMedia, type PresentationMediaItem } from './presenta
 export * from './presentationHints.js';
 
 export * from './grounding.js';
+// The protocol a model follows to word a deck: prompts, reply shapes, and the gates on a reply.
+export * from './presentationAuthor.js';
 export * from './conceptReveal.js';

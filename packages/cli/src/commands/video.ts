@@ -10,11 +10,18 @@
  *     [--frames-dir <dir> [--resume]] [--capture-format png|jpeg]
  */
 
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import type { MotionProfileName } from '@bendyline/squisq/schemas';
 import { dirname, basename, extname, resolve } from 'node:path';
 import type { Command } from 'commander';
 import type { Doc } from '@bendyline/squisq/schemas';
+import {
+  docChapters,
+  formatCaptionsSrt,
+  formatCaptionsVtt,
+  formatChaptersFfmetadata,
+  formatChaptersText,
+} from '@bendyline/squisq/timing';
 import { readInput } from '../util/readInput.js';
 import {
   applyTransformToDoc,
@@ -55,6 +62,10 @@ interface VideoCommandOptions {
   maxColors?: string;
   dither?: string;
   bayerScale?: string;
+  /** Also write the captions beside the video, as `.srt` or `.vtt`. */
+  captionsFile?: string;
+  /** Also write the chapter list: `.txt` for a description, else FFmpeg metadata. */
+  chaptersFile?: string;
 }
 
 const VALID_QUALITIES = ['draft', 'normal', 'high'] as const;
@@ -124,6 +135,14 @@ export function registerVideoCommand(program: Command): void {
     .option(
       '--resume',
       'MP4 only: reuse frames an identical earlier render spooled into --frames-dir',
+    )
+    .option(
+      '--captions-file <path>',
+      'Also write the captions as a sidecar file: .srt, or .vtt (WebVTT) by extension',
+    )
+    .option(
+      '--chapters-file <path>',
+      'Also write the chapters: .txt as a timestamp list, otherwise FFmpeg metadata',
     )
     .option('--animations', 'Enable slide animations/transitions (GIF default: disabled)')
     .option('--no-animations', 'Disable slide animations/transitions')
@@ -288,7 +307,12 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
     : resolve(dirname(resolvedInput), `${baseName}.${outputFormat}`);
 
   // Refuse to clobber an existing render before spending minutes producing one.
-  await assertOutputsWritable([outputPath], opts.overwrite);
+  const captionsPath = opts.captionsFile ? resolve(opts.captionsFile) : undefined;
+  const chaptersPath = opts.chaptersFile ? resolve(opts.chaptersFile) : undefined;
+  await assertOutputsWritable(
+    [outputPath, captionsPath, chaptersPath].filter((path): path is string => !!path),
+    opts.overwrite,
+  );
 
   // Ensure output directory exists
   await mkdir(dirname(outputPath), { recursive: true });
@@ -390,6 +414,33 @@ async function runVideo(inputPath: string, opts: VideoCommandOptions): Promise<v
   console.error(
     `  ✓ ${outputPath} (${result2.duration.toFixed(1)}s, ${result2.frameCount} frames${reused})`,
   );
+
+  // ── Step 4: Sidecar files ───────────────────────────────────────
+  // The video starts with the cover, so every time shifts by its pre-roll.
+  if (captionsPath) {
+    const format =
+      extname(captionsPath).toLowerCase() === '.vtt' ? formatCaptionsVtt : formatCaptionsSrt;
+    const phrases = doc.captions?.phrases.length ?? 0;
+    await mkdir(dirname(captionsPath), { recursive: true });
+    await writeFile(captionsPath, format(doc.captions, { offset: coverPreRoll }), 'utf8');
+    console.error(
+      phrases
+        ? `  ✓ ${captionsPath} (${phrases} captions)`
+        : `  ⚠ ${captionsPath} is empty: the document has no captions to write`,
+    );
+  }
+  if (chaptersPath) {
+    const chapters = docChapters(doc, { offset: coverPreRoll });
+    await mkdir(dirname(chaptersPath), { recursive: true });
+    await writeFile(
+      chaptersPath,
+      extname(chaptersPath).toLowerCase() === '.txt'
+        ? `${formatChaptersText(chapters)}\n`
+        : formatChaptersFfmetadata(chapters, result2.duration),
+      'utf8',
+    );
+    console.error(`  ✓ ${chaptersPath} (${chapters.length} chapters)`);
+  }
   console.error('Done.');
 }
 

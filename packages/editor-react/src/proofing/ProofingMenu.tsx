@@ -25,6 +25,11 @@ export interface ProofingMenuProps {
   onAddToDocWordList: () => void;
   /** Hide the app-dictionary item when the host persists nothing. */
   canAddToAppDictionary: boolean;
+  /**
+   * Open the link the squiggle sits in. Present only when a finger or pen
+   * raised the menu there — a mouse opens the link by clicking it.
+   */
+  onOpenLink?: () => void;
   onClose: () => void;
 }
 
@@ -57,6 +62,7 @@ export function ProofingMenu({
   onAddToAppDictionary,
   onAddToDocWordList,
   canAddToAppDictionary,
+  onOpenLink,
   onClose,
 }: ProofingMenuProps): JSX.Element {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -69,19 +75,21 @@ export function ProofingMenu({
 
   useEscapeDismissal(true, onClose);
 
-  // Outside mousedown (deferred a frame so the opening click can't
-  // self-dismiss) + any scroll/resize closes the menu.
+  // Outside press (deferred a frame so the opening click can't
+  // self-dismiss) + any scroll/resize closes the menu. `pointerdown`, not
+  // `mousedown`: iOS sends no mouse events for a tap on plain content, so
+  // a finger could not dismiss the menu by touching the page beside it.
   useEffect(() => {
-    const onMouse = (event: MouseEvent) => {
+    const onPress = (event: PointerEvent) => {
       if (!menuRef.current?.contains(event.target as Node)) onClose();
     };
     const onScrollOrResize = () => onClose();
-    const id = requestAnimationFrame(() => document.addEventListener('mousedown', onMouse));
+    const id = requestAnimationFrame(() => document.addEventListener('pointerdown', onPress));
     window.addEventListener('scroll', onScrollOrResize, true);
     window.addEventListener('resize', onScrollOrResize);
     return () => {
       cancelAnimationFrame(id);
-      document.removeEventListener('mousedown', onMouse);
+      document.removeEventListener('pointerdown', onPress);
       window.removeEventListener('scroll', onScrollOrResize, true);
       window.removeEventListener('resize', onScrollOrResize);
     };
@@ -114,6 +122,7 @@ export function ProofingMenu({
           },
         ]
       : []),
+    ...(onOpenLink ? [{ key: 'open-link', label: 'Open link', run: onOpenLink }] : []),
   ];
 
   useEffect(() => {

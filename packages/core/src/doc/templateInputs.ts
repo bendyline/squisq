@@ -36,6 +36,7 @@ import { isSvgIslandLang } from '../markdown/svgIsland.js';
 import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
 import { isStandaloneHtmlVideo } from './mediaAnnotations.js';
+import { readMatrixItems, splitConceptItem } from './templates/conceptItems.js';
 import {
   detectAsciiDiagram,
   isEligibleAsciiFenceLang,
@@ -170,6 +171,67 @@ export function extractBodyPlainText(contents?: MarkdownBlockNode[]): string {
 /** Extract list items as plain text. */
 export function extractListItems(contents?: MarkdownBlockNode[]): string[] {
   return extractRichListItems(contents).map((item) => item.text);
+}
+
+/**
+ * List items as the ideas of a concept block. An item with sub-items reads as
+ * `Label: detail`: its own words are the label and its sub-items the detail
+ * ("Discover" over "Interview customers; Review existing data"), so a nested
+ * list draws as labelled ideas instead of one run-on line.
+ */
+export function extractConceptItems(contents?: MarkdownBlockNode[]): string[] {
+  const flat = (node: MarkdownNode): string => extractPlainText(node).replace(/\s+/g, ' ').trim();
+  const items: string[] = [];
+  for (const node of contents ?? []) {
+    if (node.type !== 'list') continue;
+    for (const item of (node as MarkdownList).children) {
+      const own = item.children
+        .filter((child) => child.type !== 'list')
+        .map(flat)
+        .filter(Boolean)
+        .join(' ');
+      const nested = item.children
+        .filter((child): child is MarkdownList => child.type === 'list')
+        .flatMap((list) => list.children.map(flat))
+        .filter(Boolean);
+      if (!own && !nested.length) continue;
+      if (!nested.length) items.push(own);
+      else if (!own) items.push(nested.join('; '));
+      // An item that already has its own "Label: detail" keeps it; the sub-items extend the detail.
+      else
+        items.push(
+          `${own.replace(/[:;,.]$/, '')}${/:\s/.test(own) ? ';' : ':'} ${nested.join('; ')}`,
+        );
+    }
+  }
+  return items;
+}
+
+/** The longest unlabelled item that can stand as a column's label. */
+const COLUMN_LABEL_CHARACTERS = 40;
+
+/**
+ * The two columns a `{[twoColumn]}` block draws when its body is a list of
+ * exactly two items: `Label: detail` gives a label and the words beneath it,
+ * and a short item is its own label. Anything longer is not two columns.
+ */
+function twoColumnsFromList(
+  contents?: MarkdownBlockNode[],
+): { left: TwoColumnSide; right: TwoColumnSide } | null {
+  const items = extractConceptItems(contents);
+  if (items.length !== 2) return null;
+  const sides = items.map((item): TwoColumnSide | null => {
+    const { label, detail } = splitConceptItem(item);
+    if (label) return { label, sublabel: detail };
+    return detail.length <= COLUMN_LABEL_CHARACTERS ? { label: detail } : null;
+  });
+  const [left, right] = sides;
+  return left && right ? { left, right } : null;
+}
+
+interface TwoColumnSide {
+  label: string;
+  sublabel?: string;
 }
 
 /** One authored Markdown list item with both plain and rich projections. */
@@ -606,13 +668,49 @@ export function extractTableFromContents(contents?: MarkdownBlockNode[]): {
   return null;
 }
 
-/** First blockquote's plain text, or ''. */
+/** The paragraphs of the first blockquote, one line each. */
+function blockquoteLines(contents?: MarkdownBlockNode[]): string[] {
+  const quote = (contents ?? []).find((node) => node.type === 'blockquote');
+  if (!quote) return [];
+  const children = (quote as { children?: MarkdownNode[] }).children ?? [];
+  return children
+    .flatMap((child) => extractPlainText(child).split(/\r?\n/))
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+/**
+ * First blockquote's plain text, or ''. Its paragraphs are joined by a
+ * space: read straight off the tree they ran together ("…moved on.— Ada").
+ */
 export function extractBlockquoteText(contents?: MarkdownBlockNode[]): string {
-  if (!contents) return '';
-  for (const node of contents) {
-    if (node.type === 'blockquote') return extractPlainText(node).trim();
+  return blockquoteLines(contents).join(' ');
+}
+
+/** A closing line that names who said it: "— Ada Lovelace", "-- A district nurse". */
+const ATTRIBUTION_LINE = /^(?:[—–―]|-{2,})\s*(\S.*)$/u;
+/** The same after the quote's last sentence, on one line: "…this early. — Marta Lind". */
+const ATTRIBUTION_TAIL = /^(.*[.!?…]["”’')\]]?)\s+(?:[—–―]|-{2,})\s*([^.!?…]{2,90})$/su;
+
+/**
+ * The first blockquote as what was said and who said it. Markdown has no
+ * syntax for an attribution, so authors write the convention: a last line (or
+ * the end of the last line) that opens with a dash. Read as part of the
+ * quote, it was set in the quote's own type and then repeated beneath it by
+ * a template's `attribution`.
+ */
+export function extractBlockquote(contents?: MarkdownBlockNode[]): {
+  text: string;
+  attribution?: string;
+} {
+  const lines = blockquoteLines(contents);
+  if (lines.length > 1) {
+    const last = lines[lines.length - 1]!.match(ATTRIBUTION_LINE);
+    if (last) return { text: lines.slice(0, -1).join(' '), attribution: last[1]!.trim() };
   }
-  return '';
+  const text = lines.join(' ');
+  const tail = text.match(ATTRIBUTION_TAIL);
+  return tail ? { text: tail[1]!.trim(), attribution: tail[2]!.trim() } : { text };
 }
 
 function firstParagraph(
@@ -752,6 +850,70 @@ function normalizeCoverageText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+/** Inline nodes a concept block's plain words cannot carry. */
+const RICH_INLINE_TYPES = new Set([
+  'link',
+  'linkReference',
+  'image',
+  'imageReference',
+  'inlineCode',
+  'inlineMath',
+  'htmlInline',
+  'icon',
+  'footnoteReference',
+  'mention',
+]);
+
+function conceptListIsPlain(list: MarkdownList): boolean {
+  const items = list.children;
+  if (items.length < 2 || items.length > 6) return false;
+  let plain = true;
+  const visit = (node: MarkdownNode, depth: number): void => {
+    if (!plain) return;
+    if (RICH_INLINE_TYPES.has(node.type) || node.type === 'code' || node.type === 'table') {
+      plain = false;
+      return;
+    }
+    // A sub-item's own sub-items have no place in "Label: detail", and a
+    // drawing has nowhere to show whether a task is ticked.
+    const task =
+      node.type === 'listItem' &&
+      typeof (node as { checked?: boolean | null }).checked === 'boolean';
+    if (task || (node.type === 'list' && depth >= 2)) {
+      plain = false;
+      return;
+    }
+    const children = (node as { children?: MarkdownNode[] }).children ?? [];
+    for (const child of children) visit(child, node.type === 'list' ? depth + 1 : depth);
+  };
+  visit(list, 0);
+  return plain;
+}
+
+/** Sample ideas an empty concept block shows while it is being authored. */
+const CONCEPT_PLACEHOLDERS: Readonly<Record<string, string[] | undefined>> = {
+  stats: ['3×: faster to make', '92%: finish a first draft', '14 days: saved each quarter'],
+  pyramid: [
+    'Vision: where it is going',
+    'Strategy: how it gets there',
+    'Daily work: what makes it happen',
+  ],
+  funnel: ['Everyone: who hears of it', 'Interested: who looks closer', 'Committed: who stays'],
+  hub: [
+    'People: who does the work',
+    'Process: how it gets done',
+    'Tools: what they use',
+    'Goals: what it is for',
+  ],
+  venn: ['This: what only it has', 'That: what only it has', 'Both: what they share'],
+  matrix: [
+    'Do first: urgent and important',
+    'Plan: important, not urgent',
+    'Delegate: urgent, not important',
+    'Drop: neither',
+  ],
+};
+
 /**
  * Whether an automatically selected template can represent every authored
  * node in the block. Auto-selection must be conservative: the source remains
@@ -771,6 +933,24 @@ export function autoTemplatePreservesContent(
       return nodes.length === 1 && nodes[0]?.type === 'table';
     case 'list':
       return nodes.length === 1 && nodes[0]?.type === 'list';
+    case 'cards':
+    case 'process':
+    case 'cycle':
+    case 'layers':
+    case 'stats':
+    case 'pyramid':
+    case 'funnel':
+    case 'hub':
+    case 'venn':
+    case 'matrix':
+      // A concept block draws each item as plain words: two to six of them,
+      // one level of sub-items, and nothing a drawing would drop (a link's
+      // target, a picture, code).
+      return (
+        nodes.length === 1 &&
+        nodes[0]?.type === 'list' &&
+        conceptListIsPlain(nodes[0] as MarkdownList)
+      );
     case 'diagram':
     case 'timeline':
       return nodes.length === 1 && nodes[0]?.type === 'code';
@@ -855,8 +1035,14 @@ export function deriveTemplateInputs(
       };
     }
     case 'quote': {
-      const quote = extractBlockquoteText(contents) || bodyText;
-      if (quote) return { quote, ...(headingText ? { title: headingText } : {}) };
+      const quoted = extractBlockquote(contents);
+      const quote = quoted.text || bodyText;
+      if (quote)
+        return {
+          quote,
+          ...(quoted.attribution ? { attribution: quoted.attribution } : {}),
+          ...(headingText ? { title: headingText } : {}),
+        };
       // A heading-only quote promotes the heading into the quote slot. Do not
       // also return it as the optional title, or renderers display the same
       // authored text twice.
@@ -870,18 +1056,22 @@ export function deriveTemplateInputs(
     case 'pullQuote': {
       // The first body image becomes the full-bleed backdrop; without one the
       // template renders the quote on a theme surface rather than nothing.
-      const text = extractBlockquoteText(contents) || bodyText || headingText;
+      const quoted = extractBlockquote(contents);
+      const text = quoted.text || bodyText || headingText;
       const img = extractFirstImage(contents);
       return {
         text,
+        ...(quoted.attribution ? { attribution: quoted.attribution } : {}),
         ...(img ? { backgroundImage: { src: img.src, alt: img.alt || headingText } } : {}),
       };
     }
     case 'videoPullQuote': {
-      const text = extractBlockquoteText(contents) || bodyText || headingText;
+      const quoted = extractBlockquote(contents);
+      const text = quoted.text || bodyText || headingText;
       const video = extractFirstEmbeddedVideo(contents);
       return {
         text,
+        ...(quoted.attribution ? { attribution: quoted.attribution } : {}),
         ...(video
           ? {
               backgroundVideo: {
@@ -899,12 +1089,18 @@ export function deriveTemplateInputs(
       // A heading-only card keeps its explanation empty rather than echoing
       // the fact a second time.
       return { fact: headingText, explanation: bodyText };
-    case 'twoColumn':
-      // The columns come from `left=`/`right=` params; the heading is the
-      // header band above them (it was silently dropped before).
-      return headingText ? { header: headingText } : placeholders ? {} : null;
+    case 'twoColumn': {
+      // The columns come from `left=`/`right=` params, or from a body list of
+      // exactly two items; the heading is the header band above them (it was
+      // silently dropped before).
+      const columns = twoColumnsFromList(contents);
+      if (!headingText && !columns) return placeholders ? {} : null;
+      return { ...(headingText ? { header: headingText } : {}), ...columns };
+    }
     case 'comparisonBar':
-      return placeholders
+      // Sample values only under a bare heading: a block with a body never
+      // shows invented numbers.
+      return placeholders && !contents?.length
         ? { leftLabel: 'A', leftValue: 60, rightLabel: 'B', rightValue: 40 }
         : null;
     case 'list': {
@@ -918,25 +1114,45 @@ export function deriveTemplateInputs(
           ...(headingText ? { title: headingText } : {}),
         };
       }
-      return placeholders ? { items: ['Item 1', 'Item 2', 'Item 3'] } : null;
+      // Sample items only under a bare heading, never beside a body.
+      return placeholders && !contents?.length ? { items: ['Item 1', 'Item 2', 'Item 3'] } : null;
     }
     case 'cards':
     case 'process':
     case 'cycle':
-    case 'layers': {
+    case 'layers':
+    case 'stats':
+    case 'pyramid':
+    case 'funnel':
+    case 'hub':
+    case 'venn':
+    case 'matrix': {
       // Each list item is an idea; without a list, each paragraph is one.
-      const listed = extractListItems(contents);
+      const listed = extractConceptItems(contents);
       const items = listed.length
         ? listed
         : (contents ?? [])
             .filter((node) => node.type === 'paragraph' && !isPictureParagraph(node))
             .map((node) => extractPlainText(node).trim())
             .filter(Boolean);
-      if (items.length > 0) return { items, ...(headingText ? { title: headingText } : {}) };
-      return placeholders
+      if (items.length > 0) {
+        // Four items that each say where they stand on the same two measures
+        // name a matrix's axes themselves. An author's order stands, so the
+        // names are taken only when the items are already where they say.
+        const matrix = templateName === 'matrix' ? readMatrixItems(items) : undefined;
+        return {
+          items,
+          ...(matrix && !matrix.reordered ? { xAxis: matrix.xAxis, yAxis: matrix.yAxis } : {}),
+          ...(headingText ? { title: headingText } : {}),
+        };
+      }
+      // Sample ideas only under a bare heading: a body that holds no ideas (a
+      // table, a quotation) is shown as it is, never beside invented ones.
+      return placeholders && !contents?.length
         ? {
             items:
-              templateName === 'cards'
+              CONCEPT_PLACEHOLDERS[templateName] ??
+              (templateName === 'cards'
                 ? [
                     'First idea: what makes it matter',
                     'Second idea: how it differs',
@@ -948,7 +1164,11 @@ export function deriveTemplateInputs(
                       'Middle: what surrounds it',
                       'Outer: the outermost layer',
                     ]
-                  : ['Begin: the first stage', 'Grow: what happens next', 'Finish: where it leads'],
+                  : [
+                      'Begin: the first stage',
+                      'Grow: what happens next',
+                      'Finish: where it leads',
+                    ]),
           }
         : null;
     }

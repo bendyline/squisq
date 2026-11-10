@@ -49,7 +49,10 @@ export function DocControlsOverlay({
         background: 'linear-gradient(transparent, rgba(0,0,0,0.8))',
         display: 'flex',
         alignItems: 'center',
-        gap: '8px',
+        // In a phone-width player the timeline wraps to its own row rather
+        // than being squeezed to a dot between the time and the counter.
+        flexWrap: 'wrap',
+        gap: '4px 8px',
         zIndex: 100,
       }}
     >
@@ -103,14 +106,16 @@ export function DocControlsOverlay({
         {formatTime(state.currentTime)} / {formatTime(state.totalDuration)}
       </span>
 
-      {/* Progress bar */}
-      <DocProgressBar
-        state={state}
-        actions={actions}
-        blockMarkers={blockMarkers}
-        expandedBlocks={expandedBlocks}
-        getBlockTitle={getBlockTitle}
-      />
+      {/* Progress bar — wraps below the buttons when it can't get 120px. */}
+      <div style={{ flex: '1 1 120px', minWidth: 0, display: 'flex' }}>
+        <DocProgressBar
+          state={state}
+          actions={actions}
+          blockMarkers={blockMarkers}
+          expandedBlocks={expandedBlocks}
+          getBlockTitle={getBlockTitle}
+        />
+      </div>
 
       {/* Segment indicator */}
       <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '11px', whiteSpace: 'nowrap' }}>

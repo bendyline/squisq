@@ -1,14 +1,28 @@
 #!/usr/bin/env node
 import { chromium } from '@playwright/test';
-import react from '@vitejs/plugin-react';
 import { createServer } from 'vite';
 import fs from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const HARNESS_PATH = '/scripts/template-screenshots/index.html';
+
+/**
+ * `@vitejs/plugin-react` is a devDependency of the site workspace, not the
+ * root, so resolve it from there instead of assuming npm hoisted it (as
+ * `scripts/harness-server.ts` does for the other harnesses).
+ */
+async function loadReactPlugin() {
+  const siteRequire = createRequire(path.join(REPO_ROOT, 'packages', 'site', 'package.json'));
+  const mod = await import(pathToFileURL(siteRequire.resolve('@vitejs/plugin-react')).href);
+  if (typeof mod.default !== 'function') {
+    throw new Error('Unable to load @vitejs/plugin-react from packages/site.');
+  }
+  return mod.default();
+}
 const DEFAULT_OUT_DIR = 'reports/template-screenshots/latest';
 
 function usage() {
@@ -115,7 +129,7 @@ async function createHarnessServer() {
     configFile: false,
     appType: 'mpa',
     logLevel: 'warn',
-    plugins: [react()],
+    plugins: [await loadReactPlugin()],
     resolve: {
       alias: workspaceSourceAliases(),
       dedupe: ['react', 'react-dom'],

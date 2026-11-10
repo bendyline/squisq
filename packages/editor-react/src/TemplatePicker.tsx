@@ -459,6 +459,109 @@ export const TEMPLATE_ENTRIES: TemplateEntry[] = [
     ),
   },
   {
+    name: 'stats',
+    label: 'Key Numbers',
+    description:
+      'Sets two to six key figures side by side, each counting up over what it measures.',
+    icon: (
+      <TemplateIcon>
+        <rect x={4} y={5} width={30} height={4} rx={1} fill={F2} />
+        {[4, 22, 40].map((x) => (
+          <g key={x}>
+            <rect x={x} y={15} width={12} height={9} rx={1.5} fill={FA} />
+            <rect x={x} y={28} width={13} height={2.5} rx={1} fill={F2} />
+            <rect x={x} y={33} width={9} height={2.5} rx={1} fill={F1} />
+          </g>
+        ))}
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'pyramid',
+    label: 'Pyramid',
+    description: 'Stacks a hierarchy as a pyramid, the apex first and the base last.',
+    icon: (
+      <TemplateIcon>
+        <path d="M 18 6 L 23 15 L 13 15 Z" fill={FA} />
+        <path d="M 12.2 16.5 L 23.8 16.5 L 29 26 L 7 26 Z" fill={FA} opacity={0.65} />
+        <path d="M 6.2 27.5 L 29.8 27.5 L 35 37 L 1 37 Z" fill={FA} opacity={0.35} />
+        <rect x={39} y={9} width={13} height={3} rx={1} fill={F2} />
+        <rect x={39} y={20} width={13} height={3} rx={1} fill={F2} />
+        <rect x={39} y={31} width={13} height={3} rx={1} fill={F2} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'funnel',
+    label: 'Funnel',
+    description: 'Draws stages that narrow as a funnel, the widest first and the outcome last.',
+    icon: (
+      <TemplateIcon>
+        <path d="M 2 6 L 34 6 L 30 15 L 6 15 Z" fill={FA} opacity={0.35} />
+        <path d="M 6.7 16.5 L 29.3 16.5 L 25.5 26 L 10.5 26 Z" fill={FA} opacity={0.65} />
+        <path d="M 11.2 27.5 L 24.8 27.5 L 21.5 37 L 14.5 37 Z" fill={FA} />
+        <rect x={39} y={9} width={13} height={3} rx={1} fill={F2} />
+        <rect x={39} y={20} width={13} height={3} rx={1} fill={F2} />
+        <rect x={39} y={31} width={13} height={3} rx={1} fill={F2} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'hub',
+    label: 'Hub',
+    description: 'Arranges ideas around the one thing they share, each joined to it by a spoke.',
+    icon: (
+      <TemplateIcon>
+        {[
+          [10, 9],
+          [10, 33],
+          [46, 9],
+          [46, 33],
+        ].map(([x, y]) => (
+          <g key={`${x}-${y}`}>
+            <line x1={28} y1={21} x2={x} y2={y} stroke={FA} strokeWidth={1.5} opacity={0.6} />
+            <circle cx={x} cy={y} r={3} fill={FA} />
+          </g>
+        ))}
+        <circle cx={28} cy={21} r={7} fill={FA} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'venn',
+    label: 'Venn',
+    description: 'Draws two sets as overlapping circles, with what they share in the overlap.',
+    icon: (
+      <TemplateIcon>
+        <circle cx={21} cy={19} r={12} fill={FA} opacity={0.5} />
+        <circle cx={35} cy={19} r={12} fill={F2} opacity={0.6} />
+        <rect x={20} y={36} width={16} height={3} rx={1} fill={F2} />
+      </TemplateIcon>
+    ),
+  },
+  {
+    name: 'matrix',
+    label: 'Matrix',
+    description: 'Places four ideas on two axes as a two-by-two grid.',
+    icon: (
+      <TemplateIcon>
+        <line x1={5} y1={36} x2={5} y2={5} stroke={F2} strokeWidth={1.5} />
+        <line x1={5} y1={36} x2={52} y2={36} stroke={F2} strokeWidth={1.5} />
+        {[
+          [9, 5],
+          [31, 5],
+          [9, 20],
+          [31, 20],
+        ].map(([x, y]) => (
+          <g key={`${x}-${y}`}>
+            <rect x={x} y={y} width={20} height={13} rx={2} fill={F2} opacity={0.35} />
+            <rect x={x + 2} y={y + 3} width={6} height={2} rx={1} fill={FA} />
+          </g>
+        ))}
+      </TemplateIcon>
+    ),
+  },
+  {
     name: 'photoGrid',
     label: 'Photo Grid',
     description: 'Arranges up to four photos in a mosaic grid.',

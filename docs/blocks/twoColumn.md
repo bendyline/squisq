@@ -19,18 +19,23 @@ Use it when the comparison is in words. When it's in numbers, use
 
 ## How it reads your section
 
-The columns come from the tag (or a [data fence](#from-a-data-fence)), not from the body's text:
+The columns come from the tag, from a [data fence](#from-a-data-fence), or from a list of exactly
+two items in the body:
 
 - **`left=` and `right=`** — each column, written `"Label|Detail"`: the text before the `|` is the
-  large label, the text after it the smaller line beneath. Both are required; without them the
-  slide is blank.
-- **`header=`** — the title above the columns. On a slide this is the only source of the title,
-  so repeat your heading here if you want it shown.
-- **Body** — not drawn. It still counts toward the slide's timing and the
+  large label, the text after it the smaller line beneath.
+- **A two-item list** — when the tag names no columns, each item is one: `Label: detail` gives the
+  label and the line beneath it, and a short item is a label on its own. See
+  [From a list](#from-a-list).
+- **`header=`** — the title above the columns. Without it, the heading is the title.
+- **Other body text** — not drawn. It still counts toward the slide's timing and the
   [Narrate](../guide/display-modes.md#narrate) script, and stays in Word, PDF, and EPUB exports.
 
-[Page view](../guide/display-modes.md#page) shows the two columns as a pair of cards, using the
-heading as their title when `header=` is absent.
+A section with no columns at all — no `left=` and `right=`, no data fence, no two-item list — is
+shown as ordinary content, heading and body, instead of two empty panels.
+
+[Page view](../guide/display-modes.md#page) shows the two columns as a pair of cards under the
+same title.
 
 ## Examples
 
@@ -48,6 +53,17 @@ The detail after `|` is optional.
 
 ```markdown preview
 ## Then and now {[twoColumn header="The Harbor Street pier" left=1962 right=2027]}
+```
+
+### From a list
+
+Two list items are two columns, so the comparison can stay plain Markdown.
+
+```markdown preview
+## Two routes to the ferry {[twoColumn]}
+
+- Tram: Extend the line along Harbor Street
+- Shuttle: An electric loop every eight minutes
 ```
 
 ### From a data fence

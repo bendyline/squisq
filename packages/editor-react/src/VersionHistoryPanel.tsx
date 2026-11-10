@@ -11,13 +11,22 @@
  * a provider that has `allowVersioning` and a `container`.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { DiffEditor } from '@monaco-editor/react';
 import type { Version } from '@bendyline/squisq/versions';
 import { useEditorContext } from './EditorContext';
 import { useMonacoLoader } from './useMonacoLoader';
 import { monacoLanguagesForDocument } from './monacoLanguageDetection';
 import { Icon } from './Icon';
+import { fitPopoverWithinClip } from './popoverFit';
 import { useEscapeDismissal } from './useEscapeDismissal';
 
 interface LazyDiffEditorProps {
@@ -125,6 +134,7 @@ export function VersionHistoryPanel() {
   const [state, setState] = useState<PanelState>(initialState);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
 
   useEscapeDismissal(open, close, triggerRef);
@@ -261,6 +271,12 @@ export function VersionHistoryPanel() {
   const hasDiff = state.selected !== null;
   const diffTheme = colorScheme === 'dark' ? 'vs-dark' : 'vs';
 
+  // The popover hangs from the trigger's right edge; on a phone that ran it
+  // off the left of the screen, and the diff view is wider still.
+  useLayoutEffect(() => {
+    if (open && popoverRef.current) fitPopoverWithinClip(popoverRef.current);
+  }, [open, hasDiff]);
+
   if (!versioning) return null;
 
   return (
@@ -280,6 +296,7 @@ export function VersionHistoryPanel() {
       </button>
       {open && (
         <div
+          ref={popoverRef}
           className={`squisq-version-history-popover${
             hasDiff ? ' squisq-version-history-popover--with-diff' : ''
           }`}

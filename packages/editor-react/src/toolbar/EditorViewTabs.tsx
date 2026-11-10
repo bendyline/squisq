@@ -4,13 +4,28 @@ import { useEditorContext, type EditorView } from '../EditorContext';
 import { PreviewModeMenu } from '../PreviewModeMenu';
 import { WriteModeMenu } from '../WriteModeMenu';
 import { writeModeLabel } from '../writeModes';
-import { displayModeLabel, usePreviewSettingsOptional } from '../PreviewControls';
+import {
+  displayModeLabel,
+  displayModeShortLabel,
+  usePreviewSettingsOptional,
+} from '../PreviewControls';
+import { Icon } from '../Icon';
 import { platformShortcut } from '../platformShortcuts';
 import type { EditorHostMode } from '../editorHostMode';
 import { navigateViewTabs } from '../viewTabKeyboard';
-const VIEWS: { id: EditorView; label: string; shortLabel?: string; shortcutKey: string }[] = [
+/**
+ * In a narrow toolbar a tab shows its `icon`, or its short label, instead of
+ * its label (see toolbar.css). Its accessible name stays the full label.
+ */
+const VIEWS: {
+  id: EditorView;
+  label: string;
+  shortLabel?: string;
+  icon?: string;
+  shortcutKey: string;
+}[] = [
   { id: 'wysiwyg', label: 'Write', shortcutKey: '1' },
-  { id: 'raw', label: 'Source', shortcutKey: '2' },
+  { id: 'raw', label: 'Source', icon: 'fa-solid fa-code', shortcutKey: '2' },
   { id: 'preview', label: 'Use', shortcutKey: '3' },
 ];
 
@@ -59,6 +74,10 @@ export function EditorViewTabs({
                   : modeMenu === 'write'
                     ? writeModeLabel(layoutMode)
                     : view.label;
+              const shortLabel =
+                modeMenu === 'use' && previewSettings
+                  ? displayModeShortLabel(previewSettings.activeDisplayMode)
+                  : view.shortLabel;
               const tab = (
                 <button
                   type="button"
@@ -81,6 +100,8 @@ export function EditorViewTabs({
                     setActiveView(view.id);
                   }}
                   data-tooltip={`${viewLabel} (${platformShortcut(`Shift+${view.shortcutKey}`)})`}
+                  // The visible label can shrink to an icon or short form.
+                  aria-label={viewLabel}
                 >
                   <span
                     className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--long"
@@ -88,13 +109,20 @@ export function EditorViewTabs({
                   >
                     {viewLabel}
                   </span>
-                  {view.shortLabel && view.shortLabel !== view.label && (
-                    <span
-                      className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--short"
-                      data-label={view.shortLabel}
-                    >
-                      {view.shortLabel}
+                  {view.icon ? (
+                    <span className="squisq-toolbar-view-tab-icon" aria-hidden="true">
+                      <Icon icon={view.icon} />
                     </span>
+                  ) : (
+                    shortLabel &&
+                    shortLabel !== viewLabel && (
+                      <span
+                        className="squisq-toolbar-view-tab-label squisq-toolbar-view-tab-label--short"
+                        data-label={shortLabel}
+                      >
+                        {shortLabel}
+                      </span>
+                    )
                   )}
                 </button>
               );

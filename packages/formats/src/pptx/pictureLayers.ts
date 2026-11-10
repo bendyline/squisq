@@ -52,6 +52,8 @@ export function buildImageShape(
   hyperlinkRelId?: string | null,
   /** Relationship id of the SVG part drawn in place of the raster. */
   svgRelId?: string,
+  /** An `a:srcRect` that trims the picture to its box (see {@link fitPicture}). */
+  srcRect = '',
 ): string {
   const name = escapeXml(img.alt || 'Picture');
   const descr = img.alt ? ` descr="${escapeXml(img.alt)}"` : '';
@@ -67,6 +69,7 @@ export function buildImageShape(
     `</p:nvPicPr>` +
     `<p:blipFill>` +
     blipXml(img.relId, svgRelId) +
+    srcRect +
     `<a:stretch><a:fillRect/></a:stretch>` +
     `</p:blipFill>` +
     `<p:spPr>` +
@@ -76,6 +79,35 @@ export function buildImageShape(
     `</p:spPr>` +
     `</p:pic>`
   );
+}
+
+/**
+ * Where a picture of `size` pixels sits in a layer's `box`, as the player
+ * draws it: `cover` fills the box and trims what overflows, centred (a
+ * `srcRect`); `contain` — the default — shows the whole picture inside the
+ * box; `fill` stretches it. Without this every picture was stretched to its
+ * box, so a portrait photo in a landscape frame came out squashed.
+ */
+export function fitPicture(
+  box: EmuRect,
+  size: { width: number; height: number } | null,
+  fit: 'cover' | 'contain' | 'fill' | undefined,
+): { rect: EmuRect; srcRect: string } {
+  if (!size || size.width <= 0 || size.height <= 0 || fit === 'fill' || box.height <= 0)
+    return { rect: box, srcRect: '' };
+  if (fit !== 'cover') return { rect: fitCentered(box, size.width, size.height), srcRect: '' };
+  const image = size.width / size.height;
+  const frame = box.width / box.height;
+  if (Math.abs(image - frame) < 0.001) return { rect: box, srcRect: '' };
+  // The share of the overflowing axis trimmed from each side, in 1/1000 %.
+  const edge = Math.round(((image > frame ? 1 - frame / image : 1 - image / frame) / 2) * 100000);
+  return {
+    rect: box,
+    srcRect:
+      image > frame
+        ? `<a:srcRect l="${edge}" r="${edge}"/>`
+        : `<a:srcRect t="${edge}" b="${edge}"/>`,
+  };
 }
 
 /** The largest `width × height`-shaped box inside `area`, centered. */

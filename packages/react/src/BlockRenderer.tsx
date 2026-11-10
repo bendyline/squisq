@@ -362,6 +362,20 @@ export function BlockRenderer({
     animationsEnabled,
     reducedMotion,
   ]);
+  /**
+   * How long after its authored delay a step's count-up starts. A figure
+   * counts from the block clock, not from a CSS animation the step's reveal
+   * can shift, so in a timed build its clock is moved to the step's reveal:
+   * the number starts counting as its step arrives, neither before it shows
+   * nor after it has sat on its final value.
+   */
+  const countUpOffset = (layer: Layer): number => {
+    if (layer.buildStep === undefined || layer.animation?.type !== 'countUp') return 0;
+    if (buildPlayback !== 'timed' || !timeline || !block.build) return 0;
+    const start = timeline.starts[layer.buildStep];
+    const delay = entranceDelays.get(layer.buildStep);
+    return start === undefined || delay === undefined ? 0 : start - delay;
+  };
   // Charts, timelines and diagrams position their labels against drawn
   // geometry; growing that text would detach it from the marks it labels.
   const growText =
@@ -450,7 +464,7 @@ export function BlockRenderer({
               layer={layer}
               basePath={basePath}
               viewport={viewport}
-              blockTime={blockTime}
+              blockTime={blockTime - countUpOffset(layer)}
               isPlaying={isPlaying}
               muted={muted}
               animationsEnabled={animationsEnabled}

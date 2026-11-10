@@ -6,7 +6,14 @@
  * Syncs changes back to EditorContext on every keystroke (debounced).
  */
 
-import { useRef, useCallback, useEffect, useState } from 'react';
+import {
+  useRef,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  type CSSProperties,
+} from 'react';
 import Editor, { type OnMount, type OnChange, type BeforeMount } from '@monaco-editor/react';
 import type * as monaco from 'monaco-editor';
 import { wikiQueryAt, validWikiSuggestions } from './wikiSuggestions';
@@ -53,6 +60,76 @@ const SQUISQ_THEMES: Record<string, string> = {
   vs: 'squisq-light',
   'vs-dark': 'squisq-dark',
 };
+
+/**
+ * Gutter furniture, in full and on a narrow editor. Below
+ * `COMPACT_GUTTER_MAX_WIDTH` (a phone, a split pane) the gutter keeps only
+ * what earns its width: line numbers, sized to the digits the document needs
+ * (Monaco still widens past `lineNumbersMinChars` as lines are added), and a
+ * thinner breathing strip. Nothing in Squisq draws in the glyph margin, and
+ * folding is a desktop affordance. Every key is listed in both, because
+ * `updateOptions` merges: one left out of the full set would stay compact.
+ *
+ * `breathing` is the slice of `lineDecorationsWidth` that editor.css paints as
+ * canvas (see `.margin::before`), and `numberInset` how far the digits step in
+ * from the editor's left edge — Monaco has no gutter padding, and without the
+ * glyph margin two-digit numbers would touch the edge. Both come out of
+ * `lineDecorationsWidth`, so Monaco's coordinate math is untouched. They reach
+ * the stylesheet as `--squisq-raw-editor-breathing` and
+ * `--squisq-raw-editor-number-inset`, so the CSS and the option can't drift
+ * apart.
+ */
+const COMPACT_GUTTER_MAX_WIDTH = 520;
+
+const FULL_GUTTER = {
+  lineNumbersMinChars: 5,
+  glyphMargin: true,
+  folding: true,
+  // Monaco's default is 10; 12 more become the breathing strip.
+  lineDecorationsWidth: 22,
+  breathing: 12,
+  numberInset: 0,
+} as const;
+
+const COMPACT_GUTTER = {
+  lineNumbersMinChars: 2,
+  glyphMargin: false,
+  folding: false,
+  // 4px number inset, 6px between the digits and the seam, 6px breathing.
+  lineDecorationsWidth: 16,
+  breathing: 6,
+  numberInset: 4,
+} as const;
+
+/**
+ * Whether the editor is narrow enough for the compact gutter. Measured on the
+ * editor's own box, not the viewport, so a narrow split pane on a desktop
+ * qualifies too. The first guess reads the window so a phone opens compact
+ * rather than reflowing after its first measurement; a hidden editor (zero
+ * width) keeps its last answer.
+ */
+function useCompactGutter(host: HTMLElement | null): boolean {
+  const [compact, setCompact] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < COMPACT_GUTTER_MAX_WIDTH,
+  );
+
+  useLayoutEffect(() => {
+    if (!host) return;
+    const apply = (width: number) => {
+      if (width > 0) setCompact(width < COMPACT_GUTTER_MAX_WIDTH);
+    };
+    apply(host.getBoundingClientRect().width);
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (entry) apply(entry.contentRect.width);
+    });
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [host]);
+
+  return compact;
+}
 
 function useDocumentMonacoLanguages(language: string, source: string): readonly string[] {
   const [requested, setRequested] = useState<readonly string[]>(() =>
@@ -113,6 +190,10 @@ export function RawEditor({
   readOnly = false,
 }: RawEditorProps) {
   const contextMenuOwnedByShell = useEditorContextMenuAvailable();
+  const [editorHost, setEditorHost] = useState<HTMLDivElement | null>(null);
+  const { breathing, numberInset, ...gutterOptions } = useCompactGutter(editorHost)
+    ? COMPACT_GUTTER
+    : FULL_GUTTER;
   const {
     editorSource,
     setEditorSource,
@@ -843,7 +924,19 @@ export function RawEditor({
   }
 
   return (
-    <div className={className} style={{ width: '100%', height: '100%' }} data-testid="raw-editor">
+    <div
+      ref={setEditorHost}
+      className={className}
+      style={
+        {
+          width: '100%',
+          height: '100%',
+          ['--squisq-raw-editor-breathing' as string]: `${breathing}px`,
+          ['--squisq-raw-editor-number-inset' as string]: `${numberInset}px`,
+        } as CSSProperties
+      }
+      data-testid="raw-editor"
+    >
       <Editor
         defaultLanguage={language}
         value={editorSource}
@@ -871,15 +964,16 @@ export function RawEditor({
           // the trigger character.
           quickSuggestions: { other: true, comments: true, strings: true },
           suggestOnTriggerCharacters: true,
-          // Breathing room between the gutter and the first character.
-          // Done via Monaco's own option so cursor + hit-testing stay in
-          // sync — CSS-padding `.view-lines` shifts the text but not the
-          // cursors layer, which causes the cursor to drift left of the
-          // model column. Monaco's default is 10. We set 22 (12 extra),
-          // and CSS paints the rightmost 12px of the gutter as canvas
-          // color so the breathing room looks like it sits *inside* the
-          // canvas rather than widening the gutter.
-          lineDecorationsWidth: 22,
+          // Line numbers, glyph margin, folding and the breathing room
+          // between the gutter and the first character (see FULL_GUTTER).
+          // The breathing room is done via Monaco's own
+          // `lineDecorationsWidth` so cursor + hit-testing stay in sync —
+          // CSS-padding `.view-lines` shifts the text but not the cursors
+          // layer, which causes the cursor to drift left of the model
+          // column. CSS then paints the rightmost `breathing` px of the
+          // gutter as canvas color so the room looks like it sits *inside*
+          // the canvas rather than widening the gutter.
+          ...gutterOptions,
           // EditorShell owns one consistent, host-extensible menu across
           // Source, Write, and Preview. Proofing still intercepts squiggles.
           contextmenu: !contextMenuOwnedByShell,

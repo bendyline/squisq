@@ -1,6 +1,7 @@
 /**
- * Concept reveals: a concept slide (`cards`, `process`, `cycle`, `layers`)
- * that shows its ideas one at a time, each as the narration reaches it.
+ * Concept reveals: a concept slide (`cards`, `process`, `cycle`, `layers`,
+ * `stats`, `pyramid`, `funnel`, `hub`, `venn`, `matrix`) that shows its ideas
+ * one at a time, each as the narration reaches it.
  *
  * Two steps, so any host with narration can use them: find where in the
  * script each idea is spoken ({@link matchPointsToSentences}), then turn
@@ -20,16 +21,13 @@
 
 import { buildSourceText } from '../doc/builds.js';
 import { conceptBuildStepTexts } from '../doc/templates/conceptBlocks.js';
+import type { ConceptTemplateName } from '../doc/templates/conceptSpecs.js';
 import type { Block } from '../schemas/Doc.js';
 import type { BuildSpec } from '../schemas/Build.js';
 
-export const CONCEPT_TEMPLATES = ['cards', 'process', 'cycle', 'layers'] as const;
-export type ConceptTemplate = (typeof CONCEPT_TEMPLATES)[number];
-
-/** The concept template a name denotes, or `undefined`. */
-export function conceptTemplate(template: string): ConceptTemplate | undefined {
-  return CONCEPT_TEMPLATES.find((name) => name === template);
-}
+// The names live with what each template takes (`conceptSpecs.ts`).
+export { CONCEPT_TEMPLATES, conceptTemplate } from '../doc/templates/conceptSpecs.js';
+export type ConceptTemplate = ConceptTemplateName;
 
 /** Distinctive words, compared by their opening letters so "multiply" matches "multiplying". */
 function stems(text: string): string[] {

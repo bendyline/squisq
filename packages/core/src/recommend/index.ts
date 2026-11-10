@@ -12,5 +12,13 @@
  * ```
  */
 
-export type { BlockContentProfile, RecommendationResult } from './templates.js';
-export { profileBlockContents, recommendTemplatesForBlock } from './templates.js';
+export type {
+  AutoTemplateOptions,
+  BlockContentProfile,
+  ProfileBlockOptions,
+  RecommendationResult,
+} from './templates.js';
+export { pickAutoTemplate, profileBlockContents, recommendTemplatesForBlock } from './templates.js';
+// What a list is a picture of: a process, a cycle, key numbers, a hierarchy…
+export type { ListShape, ListShapeInput, ListShapeResult, ShapeEvidence } from './listShape.js';
+export { classifyListShape, shapeIsStated, unstatedShapeFallback } from './listShape.js';

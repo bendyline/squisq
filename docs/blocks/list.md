@@ -32,6 +32,9 @@ If the paragraphs matter too, use Content, which shows both.
 - **An image** — the first one becomes an accent strip down the left edge (along the bottom on a
   portrait stage), and the list shifts over to make room.
 
+A section tagged `{[list]}` whose body has no list is shown as ordinary content, so its paragraphs
+are kept rather than replaced by sample items.
+
 A heading whose body is only a list becomes a List automatically, so the tag is optional there.
 See [automatic templates](../guide/markup.md#automatic-templates).
 

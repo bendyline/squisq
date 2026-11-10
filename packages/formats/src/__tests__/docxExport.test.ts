@@ -357,6 +357,29 @@ describe('markdownDocToDocx', () => {
     expect(xmlText).toContain('<w:tc>');
     expect(xmlText).toContain('Name');
     expect(xmlText).toContain('Value');
+    // The header row reads as one: bold on a tint, and repeated on each page.
+    const [header, body] = xmlText.split('</w:tr>');
+    expect(header).toContain('<w:tblHeader/>');
+    expect(header).toContain('<w:shd w:val="clear" w:color="auto" w:fill="E6E6E6"/>');
+    expect(header).toContain('<w:b/>');
+    expect(body).not.toContain('<w:shd');
+    expect(body).not.toContain('<w:b/>');
+    // One grid column per table column.
+    expect(xmlText).toContain('<w:tblGrid><w:gridCol/><w:gridCol/></w:tblGrid>');
+  });
+
+  it('shades a table header from the theme, light page or dark', async () => {
+    const doc = parseMarkdown('| A | B |\n| --- | --- |\n| 1 | 2 |\n');
+    const fill = async (themeId: string) => {
+      const zip = await JSZip.loadAsync(await markdownDocToDocx(doc, { themeId }));
+      const xml = await zip.file('word/document.xml')!.async('text');
+      return xml.match(/<w:shd w:val="clear" w:color="auto" w:fill="([0-9A-F]{6})"\/>/)?.[1] ?? '';
+    };
+    const brightness = (hex: string) => parseInt(hex.slice(0, 2), 16);
+    // A tenth of the text colour mixed into the page: pale on white, and a
+    // shade lighter than the page on a dark theme, never a white bar.
+    expect(brightness(await fill('standard'))).toBeGreaterThan(220);
+    expect(brightness(await fill('cinematic'))).toBeLessThan(90);
   });
 
   // ============================================

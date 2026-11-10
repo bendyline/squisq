@@ -45,6 +45,7 @@ import {
   updateTiptapProofingDecorations,
   type TiptapProofDecoration,
 } from './ProofingExtension';
+import { isTapClick, proofingTapTarget, trackTapPointers } from './proofingTap';
 import { collectTextblockRuns, resolveRunOffsets } from './writeViewText';
 import {
   buildMonacoProofDecorations,
@@ -92,17 +93,33 @@ function categoryEnabled(finding: ProofFinding, filter: ProofingCategoryFilter):
   return finding.category === 'spelling' ? filter.spelling : filter.grammar;
 }
 
+/**
+ * The rendered span of a finding's squiggle — its first, when marks split
+ * the flagged text across several.
+ */
+function findSquiggle(root: HTMLElement, findingId: string): HTMLElement | null {
+  for (const span of root.querySelectorAll<HTMLElement>('[data-proof-id]')) {
+    if (span.getAttribute('data-proof-id') === findingId) return span;
+  }
+  return null;
+}
+
 export type ProofingStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface ProofingMenuAnchor {
   findingId: string;
   x: number;
   y: number;
+  /**
+   * The link the squiggle sits in, when a finger or pen raised the menu and
+   * the host opens links. The menu then offers "Open link".
+   */
+  linkHref?: string;
 }
 
 /**
- * A hovered squiggle, anchored on the RECT of its rendered span rather
- * than the pointer — the tooltip should sit under the flagged word, not
+ * The squiggle a card explains, anchored on the RECT of its rendered span
+ * rather than the pointer — the card should sit under the flagged word, not
  * wherever in it the cursor happened to stop.
  */
 export interface ProofingHoverAnchor {
@@ -110,6 +127,26 @@ export interface ProofingHoverAnchor {
   left: number;
   top: number;
   bottom: number;
+  /**
+   * What raised the card. A hovered card closes when the pointer wanders off
+   * or the page scrolls; a tapped one stays with its word until the reader
+   * dismisses it, because a finger has no pointer to leave resting on it.
+   */
+  trigger: 'hover' | 'tap';
+  /**
+   * The link the tapped squiggle sits in, when the host opens links. The tap
+   * raised this card instead of following it, so the card offers it.
+   */
+  linkHref?: string;
+}
+
+export interface UseProofingOptions {
+  /**
+   * The host opens links (`EditorShell`'s `onLinkClick`). A finger's tap on a
+   * squiggled link then raises the card with the link attached rather than
+   * leaving the link to whatever the surface does with it.
+   */
+  canOpenLinks?: boolean;
 }
 
 export interface ProofingState {
@@ -169,7 +206,9 @@ export interface ProofingState {
  * Null when the host injected no proofing capability — every proofing
  * surface renders nothing in that case.
  */
-export function useProofing(): ProofingState | null {
+export function useProofing({
+  canOpenLinks = false,
+}: UseProofingOptions = {}): ProofingState | null {
   const {
     proofing,
     proofingDefaultEnabled,
@@ -220,6 +259,16 @@ export function useProofing(): ProofingState | null {
   const hoverCloseTimerRef = useRef<number | undefined>(undefined);
   const hoveredFindingRef = useRef<string | null>(null);
   const hoverHeldRef = useRef(false);
+  // The finding whose card a tap raised, while that card is up.
+  const tapCardRef = useRef<string | null>(null);
+  // The finding whose card the current press just put away: the click that
+  // completes the press must not raise it again.
+  const tapDismissedRef = useRef<string | null>(null);
+  const canOpenLinksRef = useRef(canOpenLinks);
+  canOpenLinksRef.current = canOpenLinks;
+  // Set once the card lifecycle exists below; the lint pass above it calls
+  // through here to keep a card that is up attached to its squiggle.
+  const carryHoverRef = useRef<(successorId: string | null) => void>(() => undefined);
 
   // ── Settings & effective enable ─────────────────────────────────────
   const settings = useMemo(() => readProofingSettings(markdownDoc?.frontmatter), [markdownDoc]);
@@ -370,10 +419,27 @@ export function useProofing(): ProofingState | null {
           });
           kept.push(finding);
         }
+        // The engine issues finding ids per pass, so a card that is up (or
+        // dwelling) names a finding this pass has just retired. Find where
+        // its squiggle is before the decorations are replaced, and re-point
+        // the card at whatever this pass flagged in the same place.
+        const openId = hoveredFindingRef.current;
+        const openRange = openId === null ? null : proofingDecorationById(editor.state, openId);
         lastWriteDecorationsRef.current = decorated;
         updateTiptapProofingDecorations(editor, decorated);
         setFindings(kept);
         setFindingsView('wysiwyg');
+        if (openId !== null) {
+          const successor = openRange
+            ? decorated.find(
+                (decoration) =>
+                  decoration.from === openRange.from &&
+                  decoration.to === openRange.to &&
+                  decoration.category === openRange.category,
+              )
+            : undefined;
+          carryHoverRef.current(successor?.findingId ?? null);
+        }
       } else if (view === 'raw') {
         const editor = monacoRef.current;
         const model = editor?.getModel();
@@ -605,7 +671,19 @@ export function useProofing(): ProofingState | null {
       const hit = proofingDecorationAt(editor.state, pos.pos);
       if (!hit) return;
       event.preventDefault();
-      openMenuRef.current({ findingId: hit.findingId, x: event.clientX, y: event.clientY });
+      // A long press is a finger's right-click. On a squiggled link the menu
+      // it raises is where that finger can still open the link.
+      const target = event.target as Element | null;
+      const linkHref =
+        canOpenLinksRef.current && isTapClick(event)
+          ? target?.closest?.('a[href]')?.getAttribute('href')
+          : null;
+      openMenuRef.current({
+        findingId: hit.findingId,
+        x: event.clientX,
+        y: event.clientY,
+        ...(linkHref ? { linkHref } : {}),
+      });
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
@@ -636,6 +714,12 @@ export function useProofing(): ProofingState | null {
   // the pointer needs time to cross the gap, and `holdHover` (fired by
   // the card's own pointer-enter) cancels the pending close when it
   // lands. Only a click in the text or a scroll dismisses immediately.
+  //
+  // A finger cannot hover, so its TAP on a squiggle raises the same card
+  // at once. That card answers to presses rather than to pointer travel:
+  // it stays until the reader presses anywhere outside it (the same word
+  // included — a second tap puts it away) or types, and it follows its
+  // word through a scroll instead of closing on one.
   const cancelHoverTimers = useCallback(() => {
     if (hoverOpenTimerRef.current !== undefined) window.clearTimeout(hoverOpenTimerRef.current);
     if (hoverCloseTimerRef.current !== undefined) window.clearTimeout(hoverCloseTimerRef.current);
@@ -647,8 +731,24 @@ export function useProofing(): ProofingState | null {
     cancelHoverTimers();
     hoveredFindingRef.current = null;
     hoverHeldRef.current = false;
+    tapCardRef.current = null;
     setHoverAnchor(null);
   }, [cancelHoverTimers]);
+
+  // A lint pass landed while a card was up or dwelling. Its squiggle now
+  // answers to `successorId`, or (null) the pass no longer flags it.
+  carryHoverRef.current = (successorId) => {
+    if (successorId === null) {
+      closeHover();
+      return;
+    }
+    const retired = hoveredFindingRef.current;
+    hoveredFindingRef.current = successorId;
+    if (tapCardRef.current !== null) tapCardRef.current = successorId;
+    setHoverAnchor((current) =>
+      current && current.findingId === retired ? { ...current, findingId: successorId } : current,
+    );
+  };
 
   const scheduleHoverClose = useCallback(() => {
     if (hoverOpenTimerRef.current !== undefined) {
@@ -662,6 +762,7 @@ export function useProofing(): ProofingState | null {
       // owns the lifecycle until `releaseHover`.
       if (hoverHeldRef.current) return;
       hoveredFindingRef.current = null;
+      tapCardRef.current = null;
       setHoverAnchor(null);
     }, HOVER_CLOSE_DELAY_MS);
   }, []);
@@ -687,7 +788,11 @@ export function useProofing(): ProofingState | null {
     if (!editor || editor.isDestroyed) return;
     const dom = editor.view.dom;
 
-    const onMouseMove = (event: MouseEvent) => {
+    // Pointer events, not mouse events: a tap is followed by emulated mouse
+    // events that would otherwise start a dwell no pointer is there to end.
+    // A card a tap raised is likewise not a passing pointer's to close.
+    const onPointerMove = (event: PointerEvent) => {
+      if (event.pointerType === 'touch' || tapCardRef.current !== null) return;
       const target = event.target as HTMLElement | null;
       const span = target?.closest?.('[data-proof-id]') as HTMLElement | null;
       const findingId = span?.getAttribute('data-proof-id') ?? null;
@@ -710,29 +815,150 @@ export function useProofing(): ProofingState | null {
       setHoverAnchor(null);
       hoverOpenTimerRef.current = window.setTimeout(() => {
         hoverOpenTimerRef.current = undefined;
-        const rect = span.getBoundingClientRect();
-        setHoverAnchor({ findingId, left: rect.left, top: rect.top, bottom: rect.bottom });
+        // Both are re-read rather than trusted from when the dwell began. A
+        // lint pass landing meanwhile re-issues the finding's id, and a span
+        // ProseMirror redrew is detached: it measures as an empty rect at
+        // the window's corner.
+        const dwelt = hoveredFindingRef.current;
+        const live = dwelt === null ? null : findSquiggle(dom, dwelt);
+        if (dwelt === null || !live) {
+          hoveredFindingRef.current = null;
+          return;
+        }
+        const rect = live.getBoundingClientRect();
+        setHoverAnchor({
+          findingId: dwelt,
+          left: rect.left,
+          top: rect.top,
+          bottom: rect.bottom,
+          trigger: 'hover',
+        });
       }, HOVER_DELAY_MS);
     };
 
     // Leaving the editor is how the pointer REACHES a card sitting below
     // the text, so it arms the close rather than performing it.
-    const onMouseLeave = () => {
+    const onPointerLeave = (event: PointerEvent) => {
+      if (event.pointerType === 'touch' || tapCardRef.current !== null) return;
       if (hoveredFindingRef.current !== null) scheduleHoverClose();
     };
 
-    dom.addEventListener('mousemove', onMouseMove);
-    dom.addEventListener('mouseleave', onMouseLeave);
+    // Every press, anywhere: one outside a tapped card dismisses it.
+    const onPress = (event: PointerEvent) => {
+      tapDismissedRef.current = null;
+      const open = tapCardRef.current;
+      if (open === null) return;
+      const target = event.target as Element | null;
+      if (target?.closest?.('.squisq-proof-tooltip')) return;
+      // Pressing the word whose card is up puts the card away, and the
+      // click completing that press must not raise it again.
+      const pressed = target?.closest?.('[data-proof-id]');
+      if (pressed && dom.contains(pressed) && pressed.getAttribute('data-proof-id') === open) {
+        tapDismissedRef.current = open;
+      }
+      closeHover();
+    };
+
+    const onClick = (event: MouseEvent) => {
+      const span = proofingTapTarget(event);
+      const findingId = span?.getAttribute('data-proof-id');
+      if (!span || !findingId) return;
+      if (tapDismissedRef.current === findingId) {
+        tapDismissedRef.current = null;
+        return;
+      }
+      const linkHref = canOpenLinksRef.current
+        ? span.closest('a[href]')?.getAttribute('href')
+        : null;
+      // The card offers the link, so a read-only surface (where a link is
+      // live) must not follow it as well.
+      if (linkHref) event.preventDefault();
+      cancelHoverTimers();
+      hoverHeldRef.current = false;
+      hoveredFindingRef.current = findingId;
+      tapCardRef.current = findingId;
+      const rect = span.getBoundingClientRect();
+      setHoverAnchor({
+        findingId,
+        left: rect.left,
+        top: rect.top,
+        bottom: rect.bottom,
+        trigger: 'tap',
+        ...(linkHref ? { linkHref } : {}),
+      });
+    };
+
+    // A hovered card is tied to where the pointer rests, which a scroll
+    // moves out from under it. A tapped card follows its word instead.
+    const onScroll = () => {
+      if (tapCardRef.current === null) closeHover();
+    };
+
+    // Typing is the reader moving on; a tapped card has no pointer to
+    // leave it, so this is its cue.
+    const onKeyDown = () => {
+      if (tapCardRef.current !== null) closeHover();
+    };
+
+    const releaseTapPointers = trackTapPointers();
+    dom.addEventListener('pointermove', onPointerMove);
+    dom.addEventListener('pointerleave', onPointerLeave);
     dom.addEventListener('mousedown', closeHover);
-    window.addEventListener('scroll', closeHover, true);
+    dom.addEventListener('click', onClick);
+    dom.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPress, true);
+    window.addEventListener('scroll', onScroll, true);
     return () => {
-      dom.removeEventListener('mousemove', onMouseMove);
-      dom.removeEventListener('mouseleave', onMouseLeave);
+      releaseTapPointers();
+      dom.removeEventListener('pointermove', onPointerMove);
+      dom.removeEventListener('pointerleave', onPointerLeave);
       dom.removeEventListener('mousedown', closeHover);
-      window.removeEventListener('scroll', closeHover, true);
+      dom.removeEventListener('click', onClick);
+      dom.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPress, true);
+      window.removeEventListener('scroll', onScroll, true);
+      tapDismissedRef.current = null;
       closeHover();
     };
   }, [tiptapEditor, enabled, status, cancelHoverTimers, closeHover, scheduleHoverClose]);
+
+  // ── A tapped card follows its word ──────────────────────────────────
+  // The tap that raises a card also puts the caret in the word, which on
+  // a phone raises the keyboard and scrolls the caret clear of it. Closing
+  // on that scroll, as a hovered card does, would dismiss the card before
+  // it had been read.
+  const tapCardId = hoverAnchor?.trigger === 'tap' ? hoverAnchor.findingId : null;
+  useEffect(() => {
+    if (tapCardId === null) return;
+    let frame = 0;
+    const follow = () => {
+      frame = 0;
+      const editor = tiptapRef.current;
+      const span = editor && !editor.isDestroyed ? findSquiggle(editor.view.dom, tapCardId) : null;
+      if (!span) {
+        closeHover();
+        return;
+      }
+      const rect = span.getBoundingClientRect();
+      setHoverAnchor((current) =>
+        current &&
+        current.findingId === tapCardId &&
+        (current.left !== rect.left || current.top !== rect.top || current.bottom !== rect.bottom)
+          ? { ...current, left: rect.left, top: rect.top, bottom: rect.bottom }
+          : current,
+      );
+    };
+    const schedule = () => {
+      if (frame === 0) frame = requestAnimationFrame(follow);
+    };
+    window.addEventListener('scroll', schedule, true);
+    window.addEventListener('resize', schedule);
+    return () => {
+      if (frame !== 0) cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', schedule, true);
+      window.removeEventListener('resize', schedule);
+    };
+  }, [tapCardId, closeHover]);
 
   useEffect(() => {
     if (!enabled || status !== 'ready') return;

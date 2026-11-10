@@ -172,6 +172,9 @@ export function StatBandSection({ section }: SectionProps) {
 
   return (
     <>
+      {section.slots.title && (
+        <h2 className="squisq-page-section-title squisq-page-stats-title">{section.slots.title}</h2>
+      )}
       <div className="squisq-page-stats">
         {items.map((item, i) => (
           <div key={i} className={`squisq-page-stat${comparison ? ' squisq-page-stat--bars' : ''}`}>

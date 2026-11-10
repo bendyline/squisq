@@ -126,10 +126,10 @@ theme** in the editor. Let the editor write it; see [custom themes](themes.md#cu
 
 ## Templates
 
-| Key                       | What it does                                                                        | Values                                                 | Default | Applies    |
-| ------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------ | ------- | ---------- |
-| `squisq-auto-templates`   | Turns [automatic templates](markup.md#automatic-templates) on or off                | `false`, `off`, `no`, or `0` turn them off (lowercase) | On      | Everywhere |
-| `squisq-custom-templates` | Block designs you made, stored in the document so `{[yourName]}` tags work anywhere | Written by the template designer                       | None    | Everywhere |
+| Key                       | What it does                                                                        | Values                                                                                    | Default | Applies    |
+| ------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------- | ---------- |
+| `squisq-auto-templates`   | Turns [automatic templates](markup.md#automatic-templates) on or off                | `false`, `off`, `no`, or `0` turn them off (lowercase); `structural` keeps lists as lists | On      | Everywhere |
+| `squisq-custom-templates` | Block designs you made, stored in the document so `{[yourName]}` tags work anywhere | Written by the template designer                                                          | None    | Everywhere |
 
 ```yaml
 ---

@@ -11,9 +11,14 @@
  * this card cancels it (`onHold`) the moment the pointer arrives. Every
  * action closes the card explicitly, because after applying a
  * suggestion the finding it describes no longer exists.
+ *
+ * A finger cannot hover, so a tap on a squiggle raises the same card
+ * (`anchor.trigger === 'tap'`), with buttons sized for a finger. When the
+ * tapped squiggle sits in a link the host opens, the card also carries
+ * "Open link": the tap that raised it did not follow the link.
  */
 
-import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import type { ProofFinding } from '@bendyline/squisq/proof';
 import { PROOF_CATEGORY_LABELS, proofMessageText, proofSuggestionLabel } from './findingText';
@@ -37,26 +42,51 @@ export interface ProofingTooltipProps {
   onHold: () => void;
   /** Pointer left the card — re-arm the close. */
   onRelease: () => void;
+  /** The link the squiggle sits in, when the card should offer to open it. */
+  linkHref?: string;
+  /** Hand `linkHref` to the host. */
+  onOpenLink: () => void;
 }
 
 /** Suggestions shown as buttons; the rest live behind "more". */
 const MAX_SUGGESTIONS = 3;
 
-/** Below the squiggle by default, flipped above / clamped to the viewport. */
+/**
+ * The part of the page the reader can see, in the coordinates `fixed`
+ * positioning uses. An on-screen keyboard shrinks it without resizing the
+ * window on iOS, and a tap on a word is exactly what raises the keyboard.
+ */
+function visibleBounds(): { top: number; left: number; width: number; height: number } {
+  const viewport = window.visualViewport;
+  if (!viewport) return { top: 0, left: 0, width: window.innerWidth, height: window.innerHeight };
+  return {
+    top: viewport.offsetTop,
+    left: viewport.offsetLeft,
+    width: viewport.width,
+    height: viewport.height,
+  };
+}
+
+/** Below the squiggle by default, flipped above / clamped to what is visible. */
 function computeStyle(anchor: ProofingHoverAnchor, element?: HTMLElement | null): CSSProperties {
   const rect = element?.getBoundingClientRect();
   const width = rect?.width ?? 240;
   const height = rect?.height ?? 72;
   const margin = 8;
   const gap = 6;
+  const view = visibleBounds();
 
   let top = anchor.bottom + gap;
-  if (top + height + margin > window.innerHeight && anchor.top - height - gap >= margin) {
+  if (
+    top + height + margin > view.top + view.height &&
+    anchor.top - height - gap >= view.top + margin
+  ) {
     top = anchor.top - height - gap;
   }
+  const minLeft = view.left + margin;
   const left = Math.min(
-    Math.max(margin, anchor.left),
-    Math.max(margin, window.innerWidth - width - margin),
+    Math.max(minLeft, anchor.left),
+    Math.max(minLeft, view.left + view.width - width - margin),
   );
   return { position: 'fixed', top, left, zIndex: 9998 };
 }
@@ -73,6 +103,8 @@ export function ProofingTooltip({
   onMore,
   onHold,
   onRelease,
+  linkHref,
+  onOpenLink,
 }: ProofingTooltipProps): JSX.Element {
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<CSSProperties>(() => computeStyle(anchor));
@@ -82,7 +114,21 @@ export function ProofingTooltip({
   // the user is looking at when it opens).
   useLayoutEffect(() => {
     setStyle(computeStyle(anchor, tooltipRef.current));
-  }, [anchor, finding.id]);
+  }, [anchor, finding.id, linkHref]);
+
+  // The keyboard a tap raises arrives after the card does, and can cover it
+  // without moving the word the card is anchored to.
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const place = () => setStyle(computeStyle(anchor, tooltipRef.current));
+    viewport.addEventListener('resize', place);
+    viewport.addEventListener('scroll', place);
+    return () => {
+      viewport.removeEventListener('resize', place);
+      viewport.removeEventListener('scroll', place);
+    };
+  }, [anchor]);
 
   const suggestions = finding.suggestions.slice(0, MAX_SUGGESTIONS);
   const extra = finding.suggestions.length - suggestions.length;
@@ -95,6 +141,7 @@ export function ProofingTooltip({
       ref={tooltipRef}
       className="squisq-proof-tooltip"
       data-theme={colorScheme}
+      data-trigger={anchor.trigger}
       data-proof-tooltip-id={finding.id}
       role="group"
       aria-label={`${PROOF_CATEGORY_LABELS[finding.category]} suggestion`}
@@ -164,6 +211,14 @@ export function ProofingTooltip({
           </button>
         )}
       </div>
+      {linkHref && (
+        <div className="squisq-proof-tooltip-link">
+          <button type="button" className="squisq-proof-tooltip-action" onClick={onOpenLink}>
+            Open link
+          </button>
+          <span className="squisq-proof-tooltip-link-href">{linkHref}</span>
+        </div>
+      )}
     </div>,
     document.body,
   );

@@ -960,11 +960,55 @@ describe('auto template picking (autoTemplates, default on)', () => {
   });
 
   it('picks list for list-bearing sections and photoGrid for multi-image sections', () => {
-    const doc = toDocFromMd('# Steps\n\n- one\n- two\n\n# Gallery\n\n![a](a.jpg)\n\n![b](b.jpg)\n');
+    const doc = toDocFromMd('# Notes\n\n- one\n- two\n\n# Gallery\n\n![a](a.jpg)\n\n![b](b.jpg)\n');
     expect(doc.blocks[0].template).toBe('list');
     expect(doc.blocks[0].templateData?.items).toEqual(['one', 'two']);
-    expect(doc.blocks[0].templateData?.title).toBe('Steps');
+    expect(doc.blocks[0].templateData?.title).toBe('Notes');
     expect(doc.blocks[1].template).toBe('photoGrid');
+  });
+
+  it('draws a list as what it is a picture of when its shape is clear', () => {
+    const picked = (markdown: string, options?: Parameters<typeof toDocFromMd>[1]) => {
+      const block = toDocFromMd(markdown, options).blocks[0];
+      return [block.template, block.autoTemplate, block.templateData?.items];
+    };
+    // A numbered list is a process; its sub-items are each stage's detail.
+    expect(picked('# Plan\n\n1. Survey\n   - Count trips\n2. Build\n')).toEqual([
+      'process',
+      true,
+      ['Survey: Count trips', 'Build'],
+    ]);
+    // Dated bullets are a timeline (a process of dated stages), not a key number.
+    expect(picked('# Milestones\n\n- 1796: first vaccine\n- 1955: polio vaccine\n')[0]).toBe(
+      'process',
+    );
+    expect(picked('# The water cycle\n\n- Evaporation\n- Condensation\n- Rain\n')[0]).toBe('cycle');
+    expect(picked('# Kinds\n\n- Live: weakened germ\n- Inactivated: killed germ\n')[0]).toBe(
+      'cards',
+    );
+    expect(picked('# In numbers\n\n- 95%: coverage\n- $3.2B: spent a year\n')[0]).toBe('stats');
+    // Layers draw innermost first, so a list from the outside in is reversed.
+    expect(
+      picked('# Layers of the Earth\n\n- Crust: thin shell\n- Mantle: rock\n- Core: iron\n')[2],
+    ).toEqual(['Core: iron', 'Mantle: rock', 'Crust: thin shell']);
+    // `structural` (option or frontmatter) keeps every list a list.
+    expect(picked('# Plan\n\n1. Survey\n2. Build\n', { autoTemplates: 'structural' })[0]).toBe(
+      'list',
+    );
+    expect(
+      picked('---\nsquisq-auto-templates: structural\n---\n\n# Plan\n\n1. Survey\n2. Build\n')[0],
+    ).toBe('list');
+  });
+
+  it('keeps a list a list when a drawing would drop something', () => {
+    const template = (markdown: string) => toDocFromMd(markdown).blocks[0].template;
+    // A ticked box has no place in a drawing either: a task list stays a list.
+    expect(template('# Plan\n\n1. [x] Survey\n2. [ ] Build\n')).toBe('list');
+    // Nor do a link's target or a seventh item.
+    expect(template('# Plan\n\n1. Read [the brief](brief.md)\n2. Build\n')).toBe('list');
+    expect(
+      template(`# Plan\n\n${Array.from({ length: 7 }, (_, i) => `${i + 1}. Step`).join('\n')}\n`),
+    ).toBe('list');
   });
 
   it('declines a quote template when a sibling list would be hidden', () => {

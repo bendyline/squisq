@@ -760,6 +760,7 @@ function convertCodeBlock(node: MarkdownCodeBlock): string {
 }
 
 function convertTable(node: MarkdownTable, ctx: ExportContext): string {
+  const columnCount = Math.max(1, ...node.children.map((row) => row.children.length));
   const rows: string[] = [];
   for (let ri = 0; ri < node.children.length; ri++) {
     const row = node.children[ri];
@@ -780,7 +781,9 @@ function convertTable(node: MarkdownTable, ctx: ExportContext): string {
     `<w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/>` +
     `</w:tblBorders>` +
     `</w:tblPr>` +
-    `<w:tblGrid/>` +
+    // One grid column per table column: Word lays an empty grid out by
+    // itself, but stricter readers want the columns declared.
+    `<w:tblGrid>${'<w:gridCol/>'.repeat(columnCount)}</w:tblGrid>` +
     rows.join('') +
     `</w:tbl>`
   );
@@ -808,12 +811,33 @@ function convertTableCell(
   isHeader: boolean,
   align: 'left' | 'right' | 'center' | null,
 ): string {
-  const runs = convertInlines(cell.children, ctx, bodyFormat(ctx));
+  // A header row reads as one: bold, on a tint of the page's own ink, so it
+  // stands apart on a light page and a dark one alike.
+  const format = isHeader ? { ...bodyFormat(ctx), bold: true } : bodyFormat(ctx);
+  const runs = convertInlines(cell.children, ctx, format);
   const jcMap = { left: 'left', center: 'center', right: 'right' };
   const jc = align ? `<w:jc w:val="${jcMap[align]}"/>` : '';
   // Cells opt out of the document's paragraph gap, which would pad every row.
   const pPr = `<w:pPr><w:spacing w:after="0"/>${jc}</w:pPr>`;
-  return `<w:tc><w:p>${pPr}${runs}</w:p></w:tc>`;
+  const tcPr = isHeader
+    ? `<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="${tableHeaderFill(ctx)}"/></w:tcPr>`
+    : '';
+  return `<w:tc>${tcPr}<w:p>${pPr}${runs}</w:p></w:tc>`;
+}
+
+/** The header row's shade: the page colour with a tenth of the text colour mixed in. */
+function tableHeaderFill(ctx: ExportContext): string {
+  const channels = (hex: string | undefined, fallback: string) =>
+    (/^[0-9a-f]{6}$/i.test(hex ?? '') ? hex! : fallback)
+      .match(/../g)!
+      .map((pair) => parseInt(pair, 16));
+  const page = channels(ctx.backgroundColor, 'FFFFFF');
+  const ink = channels(ctx.bodyColor, '000000');
+  return page
+    .map((channel, index) => Math.round(channel + (ink[index]! - channel) * 0.1))
+    .map((channel) => channel.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
 }
 
 function convertThematicBreak(): string {

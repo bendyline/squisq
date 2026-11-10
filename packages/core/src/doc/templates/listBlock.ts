@@ -128,6 +128,11 @@ function measureListHeightPx(
 export function listBlock(input: ListBlockInput, context: TemplateContext): Layer[] {
   const { title } = input;
   const items: string[] = Array.isArray(input.items) ? input.items : [];
+  // No items is no list: the block is shown as content instead
+  // (`materializeBlockLayers`), so a `{[list]}` over prose keeps its prose.
+  // A summary slide is the exception: its items are withheld on purpose and
+  // the heading alone is the slide.
+  if (items.length === 0 && !context.block?.summaryMode) return [];
   const build = input.build ?? context.block?.build;
   if (build && build.mode !== 'off') {
     // Keep the full hierarchy in one flowing rich-text layout; fragments own

@@ -23,6 +23,15 @@ import {
 
 export function comparisonBar(input: ComparisonBarInput, context: TemplateContext): Layer[] {
   const { leftLabel, rightLabel, unit, colorScheme = 'blue' } = input;
+  // Neither side named or measured: there is no comparison to draw, and the
+  // block is shown as content instead (`materializeBlockLayers`).
+  if (
+    !leftLabel &&
+    !rightLabel &&
+    !Number.isFinite(input.leftValue) &&
+    !Number.isFinite(input.rightValue)
+  )
+    return [];
   const { theme, viewport } = context;
   const colors = resolveColorScheme(context, colorScheme);
 

@@ -467,6 +467,26 @@ describe('markdownDocToEpub', () => {
       expect(css).toContain('blockquote');
     });
 
+    it('uses only theme inks that read on a white page', async () => {
+      // An e-book's page belongs to its reader. A dark theme's near-white
+      // text on that page was invisible, so it falls back to the default ink.
+      const css = async (theme: string) => {
+        const zip = await exportAndUnzip(makeDoc([heading(1, 'Test'), paragraph('Body.')]), {
+          themeId: theme,
+        });
+        return zip.file('OEBPS/styles.css')!.async('string');
+      };
+      const dark = await css('cinematic');
+      expect(dark).not.toContain('--epub-text:');
+      expect(dark).toContain('color: var(--epub-text, #1a1a1a)');
+      const light = await css('standard');
+      expect(light).toContain('--epub-text: #0f172a');
+      expect(light).toContain('--epub-primary: #2563eb');
+      // Neither paints the page.
+      for (const sheet of [dark, light])
+        expect(sheet).not.toMatch(/background(?:-color)?:\s*var\(--epub-bg/);
+    });
+
     it('chapters reference the stylesheet', async () => {
       const doc = makeDoc([heading(1, 'Test')]);
       const zip = await exportAndUnzip(doc);

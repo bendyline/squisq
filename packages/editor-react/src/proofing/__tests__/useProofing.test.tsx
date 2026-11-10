@@ -12,6 +12,7 @@
 
 import { act, render } from '@testing-library/react';
 import { Editor } from '@tiptap/core';
+import Link from '@tiptap/extension-link';
 import StarterKit from '@tiptap/starter-kit';
 import { useEffect } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -71,9 +72,12 @@ function makeFakeProvider(options: { hasAppDictionary?: boolean } = {}): FakePro
       const findings: ProofFinding[] = [];
       let index = text.indexOf('teh');
       let n = 0;
+      // Ids are issued per pass, as harper's are: the same misspelling comes
+      // back from the next pass under a new id.
+      const pass = provider.lintCalls.length;
       while (index >= 0) {
         findings.push({
-          id: `f${(n += 1)}`,
+          id: `${pass}:${(n += 1)}`,
           start: index,
           end: index + 3,
           category: 'spelling',
@@ -124,16 +128,25 @@ function makeFakeProvider(options: { hasAppDictionary?: boolean } = {}): FakePro
 let tiptap: Editor | null = null;
 let lastState: ProofingState | null = null;
 let lastSource = '';
+/** Edit the source out from under the mounted editor, to provoke a re-lint. */
+let editSource: (source: string) => void = () => undefined;
 
 function Harness(): null {
-  const { setTiptapEditor, markdownSource } = useEditorContext();
+  const { setTiptapEditor, markdownSource, setMarkdownSource } = useEditorContext();
   lastState = useProofingState();
   lastSource = markdownSource;
+  editSource = setMarkdownSource;
   useEffect(() => {
+    // In the document, as the Write view's editor is: a press has to reach
+    // the window for tap detection to see what made the click after it.
+    const host = document.createElement('div');
+    document.body.append(host);
     const editor = new Editor({
+      element: host,
       extensions: [
         StarterKit.configure({ heading: false }),
         HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+        Link.configure({ openOnClick: false, autolink: false }),
         ProofingExtension,
       ],
       content: markdownToTiptap(markdownSource),
@@ -143,6 +156,7 @@ function Harness(): null {
     return () => {
       setTiptapEditor(null);
       editor.destroy();
+      host.remove();
       tiptap = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -159,6 +173,8 @@ interface MountOptions {
   ignoreStore?: ProofingIgnoreStore | null;
   articleId?: string;
   fileName?: string;
+  /** The host's link delegate, as `EditorShell` hands it to `ProofingRoot`. */
+  onLinkClick?: (href: string) => boolean | undefined;
 }
 
 /** In-memory stand-in for a host's per-document ignore storage. */
@@ -198,7 +214,7 @@ function mount(options: MountOptions = {}) {
       articleId={current.articleId}
       fileName={current.fileName}
     >
-      <ProofingRoot>
+      <ProofingRoot onLinkClick={current.onLinkClick}>
         <Harness />
       </ProofingRoot>
     </EditorProvider>
@@ -607,7 +623,7 @@ describe('hover card', () => {
 
   function move(target: HTMLElement): void {
     act(() => {
-      target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+      target.dispatchEvent(new MouseEvent('pointermove', { bubbles: true }));
     });
   }
 
@@ -696,6 +712,246 @@ describe('hover card', () => {
     ].map((button) => button.textContent);
     expect(labels).not.toContain('Add to dictionary');
     expect(labels).toContain('Add to document word list');
+  });
+
+  it('closes on a scroll, which moves the word out from under the pointer', async () => {
+    mount();
+    await openCard();
+    act(() => {
+      window.dispatchEvent(new Event('scroll'));
+    });
+    expect(card()).toBeNull();
+  });
+
+  it('stays on its word when a lint pass lands and re-issues the finding’s id', async () => {
+    const { provider } = mount();
+    const fake = provider as FakeProvider;
+    await openCard();
+    const before = lastState!.findings[0].id;
+    const passes = fake.lintCalls.length;
+
+    act(() => editSource(`${lastSource}\nAnother paragraph.\n`));
+    await vi.waitFor(() => expect(fake.lintCalls.length).toBeGreaterThan(passes), {
+      timeout: 2000,
+    });
+    await vi.waitFor(() => expect(lastState!.findings[0].id).not.toBe(before));
+
+    // Same squiggle, new id: the card is still explaining it, and still acts.
+    expect(card()?.getAttribute('data-proof-tooltip-id')).toBe(lastState!.findings[0].id);
+    await act(async () => {
+      card()!.querySelector<HTMLButtonElement>('.squisq-proof-tooltip-chip')!.click();
+    });
+    await flush();
+    expect(tiptap!.state.doc.textBetween(0, tiptap!.state.doc.content.size, ' ')).toContain(
+      'This is the body.',
+    );
+  });
+
+  it('is not started by the mouse events a browser emulates after a tap', async () => {
+    mount();
+    await vi.waitFor(() => expect(squiggle()).toBeTruthy());
+    const touchMove = new MouseEvent('pointermove', { bubbles: true });
+    Object.defineProperty(touchMove, 'pointerType', { value: 'touch' });
+    act(() => {
+      squiggle().dispatchEvent(touchMove);
+      squiggle().dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+    });
+    await wait(OPEN_MS + 40);
+    expect(card()).toBeNull();
+  });
+});
+
+describe('tap card', () => {
+  const LINK_MD = '# Title\n\nSee [teh](https://example.com/the) page.\n';
+
+  const card = () => document.querySelector<HTMLElement>('.squisq-proof-tooltip');
+  const squiggle = () =>
+    tiptap!.view.dom.querySelector<HTMLElement>('[data-proof-id]') as HTMLElement;
+  const linkButton = () =>
+    card()?.querySelector<HTMLButtonElement>('.squisq-proof-tooltip-link button') ?? null;
+
+  /** A `pointerdown` as `pointerType` would make it. */
+  function press(target: Element, pointerType: string): void {
+    const event = new MouseEvent('pointerdown', { bubbles: true });
+    Object.defineProperty(event, 'pointerType', { value: pointerType });
+    act(() => {
+      target.dispatchEvent(event);
+    });
+  }
+
+  /**
+   * Press and click, the click a plain `MouseEvent` with no `pointerType` of
+   * its own — Safari's shape, where only the press says what made the click.
+   */
+  function click(target: Element, pointerType: string): MouseEvent {
+    press(target, pointerType);
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
+    act(() => {
+      target.dispatchEvent(event);
+    });
+    return event;
+  }
+
+  async function ready(): Promise<void> {
+    await vi.waitFor(() => expect(lastState?.findings.length).toBe(1));
+    await vi.waitFor(() => expect(squiggle()).toBeTruthy());
+  }
+
+  afterEach(() => {
+    tiptap = null;
+  });
+
+  it('a finger on a squiggle raises the card at once, with no dwell', async () => {
+    mount();
+    await ready();
+    click(squiggle(), 'touch');
+    expect(card()?.getAttribute('data-trigger')).toBe('tap');
+    expect(card()?.querySelector('.squisq-proof-tooltip-chip')?.textContent).toBe('the');
+  });
+
+  it('reads the pointer type off the click itself where the browser supplies it', async () => {
+    mount();
+    await ready();
+    // No press first: Chrome and Firefox dispatch `click` as a PointerEvent.
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
+    Object.defineProperty(event, 'pointerType', { value: 'pen' });
+    act(() => {
+      squiggle().dispatchEvent(event);
+    });
+    expect(card()?.getAttribute('data-trigger')).toBe('tap');
+  });
+
+  it('a mouse click raises nothing — the mouse has the hover card', async () => {
+    mount();
+    await ready();
+    click(squiggle(), 'mouse');
+    expect(card()).toBeNull();
+  });
+
+  it('a second tap on the same word puts the card away', async () => {
+    mount();
+    await ready();
+    click(squiggle(), 'touch');
+    expect(card()).toBeTruthy();
+    click(squiggle(), 'touch');
+    expect(card()).toBeNull();
+    click(squiggle(), 'touch');
+    expect(card()).toBeTruthy();
+  });
+
+  it('a press outside the card dismisses it, a press inside does not', async () => {
+    mount();
+    await ready();
+    click(squiggle(), 'touch');
+    press(card()!, 'touch');
+    expect(card()).toBeTruthy();
+    press(document.body, 'touch');
+    expect(card()).toBeNull();
+  });
+
+  it('typing dismisses it', async () => {
+    mount();
+    await ready();
+    click(squiggle(), 'touch');
+    act(() => {
+      tiptap!.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }));
+    });
+    expect(card()).toBeNull();
+  });
+
+  it('stays through a scroll and a passing pointer, which a hovered card would not', async () => {
+    mount();
+    await ready();
+    click(squiggle(), 'touch');
+    act(() => {
+      window.dispatchEvent(new Event('scroll'));
+      tiptap!.view.dom.dispatchEvent(new MouseEvent('pointermove', { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 320));
+    });
+    expect(card()).toBeTruthy();
+  });
+
+  it('applies a suggestion from its button', async () => {
+    mount();
+    await ready();
+    click(squiggle(), 'touch');
+    await act(async () => {
+      card()!.querySelector<HTMLButtonElement>('.squisq-proof-tooltip-chip')!.click();
+    });
+    await flush();
+    expect(tiptap!.state.doc.textBetween(0, tiptap!.state.doc.content.size, ' ')).toContain(
+      'This is the body.',
+    );
+    expect(card()).toBeNull();
+  });
+
+  it('on a squiggled link, offers the link instead of leaving it to open', async () => {
+    const onLinkClick = vi.fn();
+    mount({ markdown: LINK_MD, onLinkClick });
+    await ready();
+    expect(squiggle().closest('a[href]')).toBeTruthy();
+
+    const event = click(squiggle(), 'touch');
+    // A read-only surface would otherwise follow the link under the card.
+    expect(event.defaultPrevented).toBe(true);
+    expect(onLinkClick).not.toHaveBeenCalled();
+    expect(card()?.querySelector('.squisq-proof-tooltip-link-href')?.textContent).toBe(
+      'https://example.com/the',
+    );
+
+    await act(async () => {
+      linkButton()!.click();
+    });
+    expect(onLinkClick).toHaveBeenCalledExactlyOnceWith('https://example.com/the');
+    expect(card()).toBeNull();
+  });
+
+  it('offers no link when the host opens none', async () => {
+    mount({ markdown: LINK_MD });
+    await ready();
+    const event = click(squiggle(), 'touch');
+    expect(card()).toBeTruthy();
+    expect(linkButton()).toBeNull();
+    // Nothing here claims the link, so whatever the surface did still happens.
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('the full menu offers the link too when a finger raised it there', async () => {
+    const onLinkClick = vi.fn();
+    mount({ markdown: LINK_MD, onLinkClick });
+    await ready();
+    act(() => {
+      lastState!.openMenu({
+        findingId: lastState!.findings[0].id,
+        x: 10,
+        y: 10,
+        linkHref: 'https://example.com/the',
+      });
+    });
+    const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (button) => button.textContent === 'Open link',
+    );
+    expect(item).toBeTruthy();
+    await act(async () => {
+      item!.click();
+    });
+    expect(onLinkClick).toHaveBeenCalledExactlyOnceWith('https://example.com/the');
+    expect(document.querySelector('.squisq-proof-menu')).toBeNull();
+  });
+
+  it('the right-click menu on a squiggled link offers no link — the mouse clicks it', async () => {
+    mount({ markdown: LINK_MD, onLinkClick: vi.fn() });
+    await ready();
+    act(() => {
+      lastState!.openMenu({ findingId: lastState!.findings[0].id, x: 10, y: 10 });
+    });
+    const labels = [...document.querySelectorAll('[role="menuitem"]')].map(
+      (button) => button.textContent,
+    );
+    expect(labels).toContain('Ignore');
+    expect(labels).not.toContain('Open link');
   });
 });
 

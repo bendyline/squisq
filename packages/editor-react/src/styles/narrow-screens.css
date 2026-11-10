@@ -1,0 +1,26 @@
+/* ── Narrow toolbars ────────────────────────────────────────────────
+   Overrides for chrome that hangs from the toolbar when the toolbar is
+   phone-width. index.css loads this after editor.css, whose base rules it
+   overrides at equal specificity. */
+
+/* Version history's comparison sits beside the snapshot list and needs at
+   least 720px. On a phone, stack them: the list first, the comparison below,
+   sharing the screen's height. Monaco's diff turns inline on its own when
+   this narrow. The popover's horizontal fit is done in VersionHistoryPanel. */
+@container squisq-toolbar (max-width: 760px) {
+  .squisq-version-history-popover--with-diff {
+    flex-direction: column-reverse;
+    min-width: 0;
+  }
+
+  .squisq-version-history-popover--with-diff .squisq-version-history-list-pane {
+    width: auto;
+    max-height: 30vh;
+    border-left: 0;
+    border-bottom: 1px solid var(--squisq-border);
+  }
+
+  .squisq-version-history-popover--with-diff .squisq-version-history-diff-body {
+    height: 40vh;
+  }
+}

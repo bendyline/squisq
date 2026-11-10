@@ -126,6 +126,45 @@ describe('slide and video builds', () => {
     expect(shown.style.getPropertyValue('--squisq-step-offset')).toBe('');
   });
 
+  it('starts a key number counting when its step is revealed, not at its unbuilt delay', () => {
+    const [block] = expandDocBlocks(
+      [
+        {
+          id: 'numbers',
+          template: 'stats',
+          title: 'In numbers',
+          items: ['900: visitors a day', '400: stay for lunch'],
+          startTime: 0,
+          duration: 20,
+          audioSegment: 0,
+          build: { mode: 'items', effect: 'fadeInUp' },
+          // The second figure is spoken late in the slide.
+          buildTiming: {
+            sourceText: JSON.stringify([
+              ['900 visitors a day', []],
+              ['400 stay for lunch', []],
+            ]),
+            starts: [1, 12],
+          },
+        } as unknown as DocBlock,
+      ],
+      { motion: 'documentary' },
+    );
+    const second = () => document.querySelector('[data-layer-id="stat-1"]')?.textContent ?? '';
+    const view = render(
+      <BlockRenderer block={block!} blockTime={12.4} basePath="." buildPlayback="timed" />,
+    );
+    // Just revealed: partway up, though the block clock is far past the
+    // delay the figure has when the slide does not build.
+    const early = Number(second().replace(/\D/gu, ''));
+    expect(early).toBeGreaterThan(0);
+    expect(early).toBeLessThan(400);
+    view.rerender(
+      <BlockRenderer block={block!} blockTime={19} basePath="." buildPlayback="timed" />,
+    );
+    expect(second()).toBe('400');
+  });
+
   it('Next and Previous traverse steps before slides, including the last slide', async () => {
     const view = render(
       <DocPlayer

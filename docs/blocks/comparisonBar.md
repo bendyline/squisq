@@ -31,8 +31,9 @@ nor the body is drawn on the slide; the body still counts toward the slide's tim
 [Narrate](../guide/display-modes.md#narrate) script, and both stay in Word, PDF, and EPUB exports.
 
 > [!IMPORTANT]
-> Set all four of `leftLabel`, `leftValue`, `rightLabel`, and `rightValue`. A Comparison Bar
-> missing them shows placeholder bars labeled "A" and "B".
+> Set all four of `leftLabel`, `leftValue`, `rightLabel`, and `rightValue`. Without any of them, a
+> section that has a body is shown as ordinary content, and a bare heading shows sample bars
+> labeled "A" and "B" to mark what to fill in.
 
 ## Examples
 

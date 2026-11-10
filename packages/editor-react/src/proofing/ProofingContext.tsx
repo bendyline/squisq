@@ -21,10 +21,20 @@ export function useProofingState(): ProofingState | null {
   return useContext(ProofingStateContext);
 }
 
+export interface ProofingRootProps {
+  children: ReactNode;
+  /**
+   * The host's link delegate (`EditorShell`'s `onLinkClick`). With one, a
+   * finger on a squiggled link gets a card that offers "Open link" instead of
+   * the link opening out from under it.
+   */
+  onLinkClick?: (href: string) => boolean | undefined;
+}
+
 /** Mount point for proofing orchestration + the shared suggestions menu. */
-export function ProofingRoot({ children }: { children: ReactNode }): JSX.Element {
+export function ProofingRoot({ children, onLinkClick }: ProofingRootProps): JSX.Element {
   const { colorScheme } = useEditorContext();
-  const state = useProofing();
+  const state = useProofing({ canOpenLinks: onLinkClick != null });
 
   const menuFinding =
     state?.menuAnchor != null
@@ -36,6 +46,9 @@ export function ProofingRoot({ children }: { children: ReactNode }): JSX.Element
     state?.hoverAnchor != null && !state.menuAnchor
       ? (state.findings.find((finding) => finding.id === state.hoverAnchor?.findingId) ?? null)
       : null;
+  // Set only when a finger or pen raised the surface on a squiggled link.
+  const menuLink = state?.menuAnchor?.linkHref;
+  const hoverLink = state?.hoverAnchor?.linkHref;
 
   return (
     <ProofingStateContext.Provider value={state}>
@@ -45,6 +58,14 @@ export function ProofingRoot({ children }: { children: ReactNode }): JSX.Element
           anchor={state.menuAnchor}
           finding={menuFinding}
           colorScheme={colorScheme}
+          onOpenLink={
+            menuLink
+              ? () => {
+                  state.closeMenu();
+                  onLinkClick?.(menuLink);
+                }
+              : undefined
+          }
           onApply={(index) => {
             state.applySuggestion(menuFinding.id, index);
             state.closeMenu();
@@ -87,7 +108,14 @@ export function ProofingRoot({ children }: { children: ReactNode }): JSX.Element
             state.closeHover();
           }}
           canAddToAppDictionary={state.canAddToAppDictionary}
-          onMore={(x, y) => state.openMenu({ findingId: hoverFinding.id, x, y })}
+          linkHref={hoverLink}
+          onOpenLink={() => {
+            state.closeHover();
+            if (hoverLink) onLinkClick?.(hoverLink);
+          }}
+          onMore={(x, y) =>
+            state.openMenu({ findingId: hoverFinding.id, x, y, linkHref: hoverLink })
+          }
           onHold={state.holdHover}
           onRelease={state.releaseHover}
         />

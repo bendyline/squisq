@@ -115,8 +115,17 @@ export function buildLayerTextShape(
   const rect = toEmuRect(virtualRect);
   const align = style.textAlign === 'center' ? 'ctr' : style.textAlign === 'right' ? 'r' : 'l';
   const inset = Math.max(0, Math.round(padding * EMU_PER_CANVAS_PX));
+  // A label that is one word a line (an axis tick, a figure, a date) has
+  // nowhere to wrap: its box is sized from an estimate of the player's font,
+  // and where Office's face runs a little wider it would break the word
+  // itself ("Q" over "1") and clip the rest. Such text is set unwrapped and
+  // overflows its box from the anchor instead.
+  const unbreakable =
+    !visibleBox &&
+    sourceText.trim() !== '' &&
+    sourceText.split('\n').every((line) => !/\s/u.test(line.trim()));
   const bodyPr =
-    `<a:bodyPr wrap="square" anchor="${vertical}" vertOverflow="clip" horzOverflow="clip"` +
+    `<a:bodyPr wrap="${unbreakable ? 'none' : 'square'}" anchor="${vertical}" vertOverflow="clip" horzOverflow="${unbreakable ? 'overflow' : 'clip'}"` +
     ` lIns="${inset}" rIns="${inset}" tIns="${inset}" bIns="${inset}">` +
     `<a:noAutofit/></a:bodyPr>`;
   // Rich text spaces its blocks by margins, so it takes the structured path

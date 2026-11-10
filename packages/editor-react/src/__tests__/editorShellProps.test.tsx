@@ -280,6 +280,68 @@ describe('<EditorShell> link delegation', () => {
 
     expect(link.getAttribute('title')).toBe('Read the documentation');
   });
+
+  it('shows an editor link’s href from the editor root, never on the link', () => {
+    // ProseMirror redraws a link whose attributes change under it — see
+    // linkHoverTitle.test.ts for that half against a real editor.
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        onLinkClick={vi.fn()}
+        toolbarSlotRight={
+          <div className="ProseMirror" data-testid="editor-root">
+            <a href="https://example.com/docs">Documentation</a> and prose
+          </div>
+        }
+      />,
+    );
+
+    const root = screen.getByTestId('editor-root');
+    const link = screen.getByRole('link', { name: 'Documentation' });
+
+    fireEvent.mouseOver(link);
+    expect(root.getAttribute('title')).toBe('https://example.com/docs');
+    expect(link.hasAttribute('title')).toBe(false);
+
+    fireEvent.mouseOut(link, { relatedTarget: root });
+    expect(root.hasAttribute('title')).toBe(false);
+  });
+
+  it('leaves a finger on a squiggled link to the proofing card, and opens it for a mouse', () => {
+    const onLinkClick = vi.fn();
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        onLinkClick={onLinkClick}
+        toolbarSlotRight={
+          // A fragment, so the tap the shell leaves alone has somewhere
+          // jsdom can follow it without reporting unimplemented navigation.
+          <a href="#the">
+            <span data-proof-id="f1">teh</span>
+          </a>
+        }
+      />,
+    );
+
+    const squiggle = screen.getByText('teh');
+    const clickAs = (pointerType: string) => {
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
+      Object.defineProperty(event, 'pointerType', { value: pointerType });
+      squiggle.dispatchEvent(event);
+      return event;
+    };
+
+    // The card the tap raises carries "Open link"; the shell stands down.
+    const tap = clickAs('touch');
+    expect(onLinkClick).not.toHaveBeenCalled();
+    expect(tap.defaultPrevented).toBe(false);
+
+    const click = clickAs('mouse');
+    expect(onLinkClick).toHaveBeenCalledExactlyOnceWith('#the');
+    expect(click.defaultPrevented).toBe(true);
+  });
 });
 
 describe('<EditorShell> Write canvas settings', () => {

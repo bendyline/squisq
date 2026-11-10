@@ -192,6 +192,43 @@ const INTL =
 const LONG_TITLE =
   'How the Harbor Waterfront Redesign Doubled Weekend Foot Traffic Without Slowing the Bypass or Cutting Evening Ferry Service';
 
+/** The templates that draw a handful of ideas (`conceptBlocks.ts`, `conceptShapes.ts`). */
+const CONCEPT_TEMPLATES = [
+  'cards',
+  'process',
+  'cycle',
+  'layers',
+  'pyramid',
+  'funnel',
+  'hub',
+  'matrix',
+] as const;
+
+const LABELLED_4 = [
+  'Promenade: a shared surface from the ferry to the market',
+  'Cycle track: protected, on the harbor side',
+  'Tidal garden: floods twice a day and drains itself',
+  'Evening ferry: runs to 11 pm on weekends',
+];
+
+const LABELLED_6 = [
+  ...LABELLED_4,
+  'Market square: stalls moved off the roadway',
+  'Fishing quay: the same treatment, from 2027',
+];
+
+const FIGURES_3 = [
+  '2×: weekend foot traffic within a month',
+  '31 minutes: median dwell time, up from 14',
+  '2,400: cycle trips on an average weekday',
+];
+
+const SETS = [
+  'Promenade: walking, cycling and the evening market',
+  'Bypass: through traffic at 1,900 vehicles an hour',
+  'Both: carry the harbor’s trips without the old arterial',
+];
+
 function bullets(items: readonly string[]): string {
   return items.map((item) => `- ${item}`).join('\n');
 }
@@ -245,6 +282,38 @@ export const CONTENT_VARIANTS: readonly ContentVariant[] = [
     description: 'An ordered list with nested sub-bullets.',
     body: NUMBERED_NESTED,
     features: ['list', 'nested'],
+  },
+  {
+    id: 'labelled',
+    label: 'Labelled ideas',
+    description: 'Four ideas, each a label and its detail — the form concept templates draw.',
+    body: bullets(LABELLED_4),
+    features: ['list'],
+    onlyFor: CONCEPT_TEMPLATES,
+  },
+  {
+    id: 'labelled-many',
+    label: 'Six labelled ideas',
+    description: 'Six labelled ideas — the most a concept template draws.',
+    body: bullets(LABELLED_6),
+    features: ['list'],
+    onlyFor: CONCEPT_TEMPLATES.filter((id) => id !== 'matrix'),
+  },
+  {
+    id: 'figures',
+    label: 'Key figures',
+    description: 'Three figures, each with what it measures.',
+    body: bullets(FIGURES_3),
+    features: ['list'],
+    onlyFor: ['stats'],
+  },
+  {
+    id: 'sets',
+    label: 'Two sets and their overlap',
+    description: 'Two labelled sets and an item naming what they share.',
+    body: bullets(SETS),
+    features: ['list'],
+    onlyFor: ['venn'],
   },
   {
     id: 'table',
@@ -367,6 +436,24 @@ const MEDIA_LED_SEED = (heading: string): TemplateSeed => ({
   bodyExpectation: 'full',
 });
 
+/**
+ * A concept template draws a list's items, or each paragraph as an item when
+ * there is no list, so every variant applies: prose that runs long is the
+ * stress that finds a drawing its words do not fit. `only` narrows the
+ * variants for the templates that need a particular kind of item (figures for
+ * `stats`, two sets for `venn`, exactly four ideas for `matrix`).
+ */
+const CONCEPT_SEED = (
+  heading: string,
+  params?: Readonly<Record<string, string>>,
+  only?: readonly string[],
+): TemplateSeed => ({
+  heading,
+  ...(params ? { params } : {}),
+  bodyExpectation: 'full',
+  ...(only ? { variants: only } : {}),
+});
+
 export const TEMPLATE_SEEDS: Readonly<Record<string, TemplateSeed>> = {
   title: {
     heading: 'Designing Better Blocks',
@@ -464,6 +551,16 @@ export const TEMPLATE_SEEDS: Readonly<Record<string, TemplateSeed>> = {
     needsAny: ['list'],
     bodyExpectation: 'full',
   },
+  cards: CONCEPT_SEED('Why the Waterfront Works'),
+  process: CONCEPT_SEED('How the Redesign Rolled Out'),
+  cycle: CONCEPT_SEED('A Day on the Promenade'),
+  layers: CONCEPT_SEED('Inside the Harbor Plan'),
+  stats: CONCEPT_SEED('The Waterfront in Numbers', undefined, ['figures']),
+  pyramid: CONCEPT_SEED('What the Plan Rests On'),
+  funnel: CONCEPT_SEED('From Visitors to Regulars'),
+  hub: CONCEPT_SEED('What Draws People In', { center: 'The waterfront' }),
+  venn: CONCEPT_SEED('Promenade and Bypass', undefined, ['sets']),
+  matrix: CONCEPT_SEED('Where to Invest Next', { xAxis: 'Effort', yAxis: 'Impact' }, ['labelled']),
   photoGrid: {
     heading: 'A four-image grid stresses gutters and crops',
     mediaPrefix: GRID.map((src, i) => `![Grid image ${i + 1}](${src})`).join('\n'),

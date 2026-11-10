@@ -550,4 +550,70 @@ Supporting copy.
     expect(scheduled.layers).toEqual(direct.layers);
     expect(diagnostics).toEqual(['unknown-template']);
   });
+
+  it('draws a block as content when its template draws nothing', () => {
+    const contents = parseMarkdown('The east quay handled a little more than half.').children;
+    const bare = (template: string, extra: Record<string, unknown> = {}): TemplateBlock =>
+      ({
+        template,
+        id: `bare-${template}`,
+        duration: 5,
+        audioSegment: 0,
+        title: 'East and west',
+        contents,
+        ...extra,
+      }) as unknown as TemplateBlock;
+    const textOf = (layers: Layer[]): string =>
+      layers
+        .filter((layer): layer is TextLayer => layer.type === 'text')
+        .map((layer) => layer.content.text)
+        .join(' ');
+
+    for (const template of [
+      'twoColumn',
+      'photoGrid',
+      'list',
+      'comparisonBar',
+      'imageWithCaption',
+    ]) {
+      const result = materializeBlockLayers(bare(template), { persistentLayers: false });
+      expect(result.diagnostic, template).toMatchObject({
+        code: 'template-drew-nothing',
+        template,
+      });
+      expect(textOf(result.layers), template).toContain('East and west');
+      expect(textOf(result.layers), template).toContain('a little more than half');
+    }
+
+    // With its inputs the template draws itself, and nothing is reported.
+    const drawn = materializeBlockLayers(
+      bare('twoColumn', { left: { label: 'East' }, right: { label: 'West' } }),
+      { persistentLayers: false },
+    );
+    expect(drawn.diagnostic).toBeUndefined();
+    expect(drawn.layers.map((layer) => layer.id)).toContain('left-label');
+
+    // A block with nothing to show instead stays as its template left it.
+    const empty = materializeBlockLayers(
+      {
+        template: 'photoGrid',
+        id: 'empty',
+        duration: 5,
+        audioSegment: 0,
+      } as unknown as TemplateBlock,
+      { persistentLayers: false },
+    );
+    expect(empty.diagnostic).toBeUndefined();
+    expect(empty.layers).toEqual([]);
+
+    // The scheduled block names the template that drew it, so a renderer
+    // sizes its text as a content slide's rather than as chart labels.
+    const diagnostics: string[] = [];
+    const [scheduled] = expandDocBlocks([bare('comparisonBar')], {
+      persistentLayers: false,
+      onDiagnostic: (diagnostic) => diagnostics.push(diagnostic.code),
+    });
+    expect(scheduled.template).toBe('content');
+    expect(diagnostics).toEqual(['template-drew-nothing']);
+  });
 });
