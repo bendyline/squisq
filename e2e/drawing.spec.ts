@@ -49,10 +49,28 @@ async function dragPointer(
   await page.mouse.up();
 }
 
-async function readMarkdown(page: Page): Promise<string> {
+function sourceLines(page: Page) {
+  return page.locator('[data-testid="raw-editor"] .monaco-editor .view-lines').first();
+}
+
+/**
+ * Switch to Source and wait until Monaco has actually rendered the document.
+ *
+ * Monaco loads on the first visit to Source (until then `raw-editor` is a
+ * plain textarea), and @monaco-editor/react creates it inside a hidden
+ * container: Monaco lays out at 0×0 and, with word wrap on, renders only "#"
+ * until automaticLayout catches up. Together those windows run past 3 s on a
+ * loaded machine, so call this BEFORE an assertion's short `toPass` window —
+ * inside it, the wait would be capped by that window.
+ */
+async function openSource(page: Page): Promise<void> {
   await switchView(page, 'Markdown');
-  await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });
-  return page.locator('.monaco-editor .view-lines').first().innerText();
+  await expect(sourceLines(page)).toContainText('{[drawing]}', { timeout: 15_000 });
+}
+
+async function readMarkdown(page: Page): Promise<string> {
+  await openSource(page);
+  return sourceLines(page).innerText();
 }
 
 test.describe('Drawing editor (Scene engine, semantic markdown)', () => {
@@ -81,6 +99,7 @@ test.describe('Drawing editor (Scene engine, semantic markdown)', () => {
     const before = await shapeCenter(page, 'cto');
     await dragPointer(page, before, { x: before.x + 120, y: before.y + 60 });
     // CTO starts at x=160 y=320; a rightward+downward drag grows both.
+    await openSource(page);
     await expect(async () => {
       const md = await readMarkdown(page);
       const match = md.match(/#cto\}?\s*\{\[rectangle\s+x=(\d+)\s+y=(\d+)/);
@@ -96,6 +115,7 @@ test.describe('Drawing editor (Scene engine, semantic markdown)', () => {
     const source = await shapeCenter(page, 'coo');
     const target = await shapeCenter(page, 'cto');
     await dragPointer(page, source, target);
+    await openSource(page);
     await expect(async () => {
       const md = await readMarkdown(page);
       expect(md).toMatch(/\{\[arrow\s+from=coo\s+to=cto\]\}/);
@@ -125,6 +145,7 @@ test.describe('Drawing editor (Scene engine, semantic markdown)', () => {
     if (!host) throw new Error('no widget host box');
     const from = { x: host.x + host.width * 0.3, y: host.y + host.height * 0.55 };
     await dragPointer(page, from, { x: from.x + 90, y: from.y + 70 });
+    await openSource(page);
     await expect(async () => {
       const md = await readMarkdown(page);
       expect(md, `expected a star heading:\n${md}`).toMatch(/\{\[star\b/);
@@ -146,6 +167,7 @@ test.describe('Drawing editor (Scene engine, semantic markdown)', () => {
 
     // Setting the fill persists to the shape's {[rectangle … fill=…]} annotation.
     await fill.fill('#ff0000');
+    await openSource(page);
     await expect(async () => {
       const md = (await readMarkdown(page)).replace(/\s+/g, ' ');
       expect(md, `expected ceo fill in markdown:\n${md}`).toMatch(/fill="?#ff0000"?/i);
