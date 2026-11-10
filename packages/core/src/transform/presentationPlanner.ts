@@ -14,11 +14,13 @@ import { buildNarrationScript } from '../narration/script.js';
 import { extractPlainText } from '../markdown/utils.js';
 import { transformNarratedSegment } from './narratedSegment.js';
 import { conceptTemplate } from './conceptReveal.js';
+import { shapeIsStated } from '../recommend/listShape.js';
 import { flattenRenderableBlocks } from '../doc/markdownToDoc.js';
 import { collectPresentationMedia, type PresentationMediaItem } from './presentationMedia.js';
 import {
   AUTHORED_PRESENTATION_LAYOUT,
   PRESENTATION_LIMITS,
+  presentationBeatExtras,
   presentationLayoutFits,
   type PresentationBeat,
   type PresentationLayout,
@@ -46,8 +48,6 @@ function stagePoint(sentence: string): string {
   const rest = sentence.replace(ORDINAL_OPENER, '');
   return pointText(rest === sentence ? sentence : `${rest[0]!.toUpperCase()}${rest.slice(1)}`);
 }
-/** A passage that says its sequence comes round again. */
-const CYCLE_CUE = /\b(?:cycles?|cyclical|repeats?|over and over|again and again|loop)\b/iu;
 /** A sentence that defines its subject: "Antibodies are proteins produced by…". */
 const DEFINES =
   /^(?:the |an? )?((?:[\p{Lu}][\p{L}'’-]*|[\p{Ll}][\p{L}'’-]*)(?: [\p{L}'’()-]+){0,3}?) (?:is|are|was|were) (?:an? |the )?(.{12,})$/u;
@@ -173,6 +173,11 @@ function chunkWords(words: RegExpMatchArray[], limit: number): Array<[number, nu
       const reach = Math.min(words.length, first + Math.ceil(limit * 1.5));
       for (let cursor = last + 1; cursor <= reach && !cut; cursor++) if (ends(cursor)) cut = cursor;
       if (cut) last = cut;
+      // A short tail is not a slide of its own. When everything left fits a
+      // stretched slide, the passage stays whole: a cycle keeps the sentence
+      // that closes it, and a matrix its fourth panel.
+      if (words.length - last < limit / 2 && words.length - first <= Math.ceil(limit * 1.5))
+        last = words.length;
     }
     chunks.push([first, last]);
     first = last;
@@ -403,7 +408,13 @@ export function createPresentationPlan(
       // when it says the sequence comes round again.
       let layout: PresentationLayout =
         index === 0 ? 'title' : textPoints.length >= 2 ? 'cards' : 'statement';
-      if (sequence) layout = steps.length >= 3 && CYCLE_CUE.test(prose) ? 'cycle' : 'steps';
+      // Whether the passage says so is the same reading a list's shape gets.
+      if (sequence)
+        layout =
+          steps.length >= 3 &&
+          shapeIsStated('cycle', { heading, passage: prose, items: stepPoints })
+            ? 'cycle'
+            : 'steps';
       else if (textPoints.length === 2 && /\b(versus|whereas|compared|instead)\b/iu.test(prose))
         layout = 'comparison';
       // A sentence that turns on a figure shows it as a key number: the
@@ -573,6 +584,7 @@ export function createPresentationPlan(
       beat.headline = cached.headline;
       beat.points = [...cached.points];
       beat.layout = cached.layout;
+      Object.assign(beat, presentationBeatExtras(cached.layout, cached));
       suggested.add(beat.id);
       origin = 'ai';
     }
@@ -664,6 +676,16 @@ export function createPresentationPlan(
       )
     )
       beat.layout = 'statement';
+  }
+  // A hub's centre and a matrix's axes belong to those layouts only; a slide
+  // that ended up as something else (a section preference, too few points
+  // beside a feature) does not carry them.
+  for (const beat of beats) {
+    const extras = presentationBeatExtras(beat.layout, beat);
+    delete beat.center;
+    delete beat.xAxis;
+    delete beat.yAxis;
+    Object.assign(beat, extras);
   }
   return { version: 1, sourceText: script.sourceText, origin, beats };
 }

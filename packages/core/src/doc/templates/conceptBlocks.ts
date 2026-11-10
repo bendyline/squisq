@@ -55,26 +55,22 @@ import {
   type DatedItem,
   type StatItem,
 } from './conceptItems.js';
+import {
+  CONCEPT_MAX_DRAWN,
+  conceptDrawsAs,
+  cycleDrawsAsProcess,
+  type ConceptTemplateName,
+} from './conceptSpecs.js';
 
 type ConceptInput = CardsBlockInput | ProcessBlockInput | CycleBlockInput | LayersBlockInput;
 /** Every template that draws a handful of ideas (`conceptShapes.ts` holds the later ones). */
-export type ConceptTemplateName =
-  | 'cards'
-  | 'process'
-  | 'cycle'
-  | 'layers'
-  | 'stats'
-  | 'pyramid'
-  | 'funnel'
-  | 'hub'
-  | 'venn'
-  | 'matrix';
+export type { ConceptTemplateName } from './conceptSpecs.js';
 /** What the shared lockup draws: a headline in an accent. */
 export type Headed = Pick<ConceptInput, 'title' | 'colorScheme'>;
 
 export { splitConceptItem, type ConceptItem } from './conceptItems.js';
 
-const MAX_ITEMS = 6;
+const MAX_ITEMS = CONCEPT_MAX_DRAWN;
 
 // ---- Type ramp (1080p reference; themed per viewport and theme) ----------
 
@@ -1238,18 +1234,6 @@ function timeline(area: Frame, items: readonly DatedItem[], context: TemplateCon
 
 // ---- cycle ---------------------------------------------------------------
 
-/** The longest detail a stage on the ring can hold beside it. */
-const CYCLE_STAGE_CHARACTERS = 170;
-
-/**
- * A ring needs at least three stages to read as one, and its labels sit in
- * the corners the ring leaves. Two stages, or stages that run to a paragraph
- * each, draw as a process instead, whose rail has the room.
- */
-function cycleDrawsAsProcess(items: readonly ConceptItem[]): boolean {
-  return items.length < 3 || items.some((item) => item.detail.length > CYCLE_STAGE_CHARACTERS);
-}
-
 /**
  * A cycle: stages on a ring, each joined to the next by an arrow and the
  * last back to the first. Labels sit beside their stage, away from the ring.
@@ -1366,7 +1350,8 @@ export function layersBlock(input: LayersBlockInput, context: TemplateContext): 
   const crowded = asListWhenCrowded(input, context);
   if (crowded) return crowded;
   const items = itemsOf(input);
-  if (items.length < 2) return cardsBlock({ ...input, template: 'cards' }, context);
+  if (conceptDrawsAs('layers', input.items) === 'cards')
+    return cardsBlock({ ...input, template: 'cards' }, context);
   const area = frame(input, context);
   const { theme, viewport } = context;
   const W = area.right - area.left;

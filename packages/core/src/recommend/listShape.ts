@@ -86,7 +86,7 @@ const CYCLE_CUE =
   /\b(?:cycles?(?!\s+(?:tracks?|lanes?|paths?|routes?|hire|shops?|parking|helmets?))|cyclical|loops?|recurring|rinse and repeat|virtuous circle|vicious circle)\b/iu;
 /** Prose around the list that says the sequence comes round again. */
 const CYCLE_INTRO =
-  /\b(?:repeats? itself|cycle repeats|over and over|again and again|feedback loop|comes? full circle|round and round)\b/iu;
+  /\b(?:repeats? itself|(?:cycle|process|sequence|pattern|it|this|which) (?:then |all )?repeats?|over and over|again and again|feedback loop|comes? full circle|round and round)\b/iu;
 const CYCLE_CLOSE =
   /\b(?:repeats?|again|back to|returns? to|starts? over|begins? again|the cycle|full circle)\b/iu;
 const NESTED_CUE =
@@ -304,4 +304,92 @@ export function classifyListShape(input: ListShapeInput): ListShapeResult {
   if (n <= 4 && texts.every((text) => text.length <= 90))
     return result('parallel', 'cards', 'weak', 'a few short items');
   return PLAIN('no relationship the items make clear');
+}
+
+/** What says whether a relationship holds: the heading, the prose, the items. */
+export interface ShapeEvidence {
+  /** The heading over the ideas. */
+  heading?: string;
+  /** The prose the ideas summarize or sit under. */
+  passage?: string;
+  /** The ideas as they would be drawn. */
+  items: readonly string[];
+  /** A matrix's axis names; naming both says what its panels are placed on. */
+  axes?: readonly [x?: string, y?: string];
+}
+
+/** Prose that says two things have something in common. */
+const SHARED_CUE = /\b(?:both|shared?|shares|sharing|alike|similar(?:ly|ity|ities)?|in common)\b/iu;
+
+/**
+ * Whether the source says its ideas have the relationship `template` draws.
+ *
+ * `classifyListShape` chooses a drawing for a list; this is the other
+ * direction, for an author (a model, usually) that has already chosen one.
+ * Cards, a process, a hub and key numbers claim little beyond what their
+ * items say, so they always pass. The shapes that assert how the ideas
+ * relate need the source to say so, in the heading, the prose or the items:
+ *
+ * - `cycle`: it comes round again ("cycle", "loop", "the cycle repeats");
+ * - `layers`: the parts are nested ("layers", "anatomy", a core and a crust);
+ * - `pyramid`: there is a hierarchy ("hierarchy", "tiers", a top and a base);
+ * - `funnel`: the stages narrow ("funnel", "conversion"), or their figures shrink;
+ * - `venn`: the two share something ("both", "in common", "overlap");
+ * - `matrix`: two named axes, or a source that calls it a matrix.
+ *
+ * A drawing that misstates the relationship is worse than cards, so a caller
+ * that gets `false` should draw the ideas as cards (or a process) instead.
+ */
+export function shapeIsStated(template: string, evidence: ShapeEvidence): boolean {
+  const heading = (evidence.heading ?? '').replace(/\s+/gu, ' ').trim();
+  const passage = (evidence.passage ?? '').replace(/\s+/gu, ' ').trim();
+  const texts = evidence.items.map((item) => item.replace(/\s+/gu, ' ').trim()).filter(Boolean);
+  const context = `${heading} ${passage}`;
+  const everything = `${context} ${texts.join(' ')}`;
+  switch (template) {
+    case 'cycle':
+      return (
+        CYCLE_CUE.test(context) ||
+        CYCLE_INTRO.test(passage) ||
+        (texts.length > 0 && CYCLE_CLOSE.test(texts[texts.length - 1]!))
+      );
+    case 'layers':
+      return NESTED_CUE.test(context) || (INNERMOST.test(everything) && OUTERMOST.test(everything));
+    case 'pyramid':
+      return HIERARCHY_CUE.test(context) || (APEX.test(everything) && BASE.test(everything));
+    case 'funnel': {
+      if (FUNNEL_CUE.test(context)) return true;
+      const values = texts.map((text) => figureValue(splitStatItem(text).figure));
+      return (
+        values.length >= 3 &&
+        values.every(
+          (value, index) => Number.isFinite(value) && (!index || value < values[index - 1]!),
+        )
+      );
+    }
+    case 'venn':
+      return OVERLAP_CUE.test(context) || SHARED_CUE.test(passage);
+    case 'matrix':
+      return (
+        MATRIX_CUE.test(context) || (!!evidence.axes?.[0]?.trim() && !!evidence.axes[1]?.trim())
+      );
+    default:
+      return true;
+  }
+}
+
+/** What to draw instead when the source does not state a shape: the same ideas, claiming less. */
+export function unstatedShapeFallback(template: string): 'cards' | 'process' | undefined {
+  switch (template) {
+    case 'cycle':
+    case 'funnel':
+      return 'process';
+    case 'layers':
+    case 'pyramid':
+    case 'venn':
+    case 'matrix':
+      return 'cards';
+    default:
+      return undefined;
+  }
 }

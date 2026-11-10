@@ -865,8 +865,18 @@ Four more registries must also gain the new id; each has a 1:1 guard test that f
 When an AI author should be able to choose the template, give it a `TEMPLATE_GUIDES` entry in
 `templates/authoringGuide.ts` (the fields as an author writes them, and when it earns its place),
 and add any craft worth sharing to `AUTHORING_TRICKS` there. Products that let a model write slides
-(Qualla's video director, DocBlocks' presentation refiner) render their prompts from those tables
-and hold the output to `transform/grounding.ts`; see `docs/ai-authoring.md`.
+(Qualla's video director, DocBlocks' presentation designer and document tools) render their prompts
+from those tables and hold the output to `transform/grounding.ts`; see `docs/ai-authoring.md`.
+
+A template that draws a handful of ideas (a concept template) states what it takes ONCE, in
+`templates/conceptSpecs.ts`: the item range, the item form, the order, and inputs beyond `title` and
+`items`. The guides render their counts from it, `presentationLayoutFits` checks a summary against
+it, and the template asks `conceptDrawsAs` what to draw when its items cannot make its picture, so a
+prompt, a check and the drawing cannot disagree. Give a new concept template a `CONCEPT_SPECS` entry
+(`conceptSpecs.test.ts` fails without one), a worked example in `templates/markdownShapeGuide.ts`
+when a plain list can draw it, and, when it asserts a relationship, a case in `shapeIsStated`
+(`recommend/listShape.ts`). The exchange with a model that words a deck (prompts, reply shapes, the
+gates on a reply) is `transform/presentationAuthor.ts`; hosts make the calls and nothing else.
 
 If the template replaces an older name, add it to the internal `TEMPLATE_ALIASES` in `templates/templateNames.ts` so legacy documents still resolve. After adding, update the template count in this file's "Subpath Exports" → `@bendyline/squisq/doc` line.
 

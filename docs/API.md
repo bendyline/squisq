@@ -1680,6 +1680,22 @@ function pickAutoTemplate(
 // needs beyond the items: a reversed order for layers or a pyramid, `versus`.
 function classifyListShape(input: ListShapeInput): ListShapeResult;
 
+// The other direction, for an author that has already chosen a drawing:
+// whether the source says its ideas have that relationship. Cards, a process,
+// a hub and key numbers always pass; a cycle, layers, a pyramid, a funnel, a
+// Venn diagram and a matrix need the heading, the passage or the items to say so.
+function shapeIsStated(
+  template: string,
+  evidence: {
+    heading?: string;
+    passage?: string;
+    items: readonly string[];
+    axes?: readonly [x?: string, y?: string];
+  },
+): boolean;
+// What to draw when it does not: the same ideas, claiming less.
+function unstatedShapeFallback(template: string): 'cards' | 'process' | undefined;
+
 type ListShape =
   | 'figures' // → stats
   | 'timeline' // → process, drawn as a timeline

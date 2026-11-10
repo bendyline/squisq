@@ -67,6 +67,7 @@ import {
   type Part,
 } from './conceptBlocks.js';
 import { vennOverlapIndex } from './conceptItems.js';
+import { conceptDrawsAs } from './conceptSpecs.js';
 
 /** A filled outline drawn in slide coordinates (a tier, the overlap of two circles). */
 function region(
@@ -161,7 +162,7 @@ export function statsBlock(input: StatsBlockInput, context: TemplateContext): La
   if (crowded) return crowded;
   const stats = statItemsOf(input);
   // Without a figure there is nothing to count: the ideas read as cards.
-  if (!stats.some((stat) => stat.figure))
+  if (conceptDrawsAs('stats', input.items) === 'cards')
     return cardsBlock({ ...input, template: 'cards' }, context);
   const area = frame(input, context);
   const { theme, viewport } = context;
@@ -315,7 +316,8 @@ function tiers(
   const crowded = asListWhenCrowded(input, context);
   if (crowded) return crowded;
   const items = itemsOf(input);
-  if (items.length < 2) return cardsBlock({ ...input, template: 'cards' }, context);
+  if (conceptDrawsAs(kind, input.items) === 'cards')
+    return cardsBlock({ ...input, template: 'cards' }, context);
   const area = frame(input, context);
   const { theme, viewport } = context;
   const W = area.right - area.left;
@@ -489,7 +491,8 @@ export function hubBlock(input: HubBlockInput, context: TemplateContext): Layer[
   const crowded = asListWhenCrowded(input, context);
   if (crowded) return crowded;
   const items = itemsOf(input);
-  if (items.length < 2) return cardsBlock({ ...input, template: 'cards' }, context);
+  if (conceptDrawsAs('hub', input.items) === 'cards')
+    return cardsBlock({ ...input, template: 'cards' }, context);
   const area = frame(input, context);
   const { viewport } = context;
   const W = area.right - area.left;
@@ -680,7 +683,8 @@ export function vennBlock(input: VennBlockInput, context: TemplateContext): Laye
   const sets = all
     .map((item, index) => ({ item, index }))
     .filter(({ index }) => index !== sharedAt);
-  if (sets.length !== 2) return cardsBlock({ ...input, template: 'cards' }, context);
+  if (conceptDrawsAs('venn', input.items) === 'cards')
+    return cardsBlock({ ...input, template: 'cards' }, context);
   const shared = sharedAt >= 0 ? all[sharedAt]! : undefined;
   const area = frame(input, context);
   const { theme, viewport } = context;
@@ -926,7 +930,8 @@ export function matrixBlock(input: MatrixBlockInput, context: TemplateContext): 
   const crowded = asListWhenCrowded(input, context);
   if (crowded) return crowded;
   const items = itemsOf(input);
-  if (items.length !== 4) return cardsBlock({ ...input, template: 'cards' }, context);
+  if (conceptDrawsAs('matrix', input.items) === 'cards')
+    return cardsBlock({ ...input, template: 'cards' }, context);
   const area: Frame = frame(input, context);
   const { theme, viewport } = context;
   const xAxis = String(input.xAxis ?? '').trim();

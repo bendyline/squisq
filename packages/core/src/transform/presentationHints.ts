@@ -6,7 +6,10 @@ import { hashString } from '../random/SeededRandom.js';
 import {
   AUTHORED_PRESENTATION_LAYOUT,
   PRESENTATION_LAYOUTS,
+  PRESENTATION_LIMITS,
+  presentationBeatExtras,
   presentationLayoutFits,
+  type PresentationBeatExtras,
   type PresentationBeatLayout,
   type PresentationLayout,
 } from './presentationPlan.js';
@@ -16,6 +19,14 @@ export const DYNAMIC_PRESENTATION_STYLE = 'dynamic-slides';
  * than the passage keeps the document text out of the hints. */
 export function presentationPassageKey(passage: string): string {
   return `${hashString(passage).toString(36)}-${passage.length.toString(36)}`;
+}
+/** One slide's AI wording: a layout, a headline, points, and what the layout
+ * draws beyond them (a hub's centre, a matrix's axes). */
+export interface PresentationAiSuggestion extends PresentationBeatExtras {
+  source: string;
+  layout: PresentationLayout;
+  headline: string;
+  points: string[];
 }
 export interface PresentationBlockHint {
   build?: BuildSpec;
@@ -27,7 +38,7 @@ export interface PresentationBlockHint {
    * Changing a passage, or how the section is split, shows its slide again. */
   hidden?: string[];
   /** Optional AI-authored display text, keyed to the exact passage it summarizes. */
-  ai?: Array<{ source: string; layout: PresentationLayout; headline: string; points: string[] }>;
+  ai?: PresentationAiSuggestion[];
   /** Explicit user wording, applied only while this section's source still matches. */
   wording?: { source: string; headline?: string; points?: string[] };
 }
@@ -120,13 +131,18 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
       for (const item of entry.ai) {
         if (
           !record(item) ||
-          !exact(item, ['source', 'layout', 'headline', 'points']) ||
+          !exact(item, ['source', 'layout', 'headline', 'points'], ['center', 'xAxis', 'yAxis']) ||
           !text(item.source, 4000) ||
           !PRESENTATION_LAYOUTS.includes(item.layout as PresentationLayout) ||
           !text(item.headline, 110) ||
           !Array.isArray(item.points) ||
-          item.points.length > 4 ||
+          item.points.length > PRESENTATION_LIMITS.points ||
           !item.points.every((point) => text(point, 180)) ||
+          // An extra is saved only on the layout that draws it, as it will be set.
+          (['center', 'xAxis', 'yAxis'] as const).some(
+            (key) =>
+              key in item && item[key] !== presentationBeatExtras(String(item.layout), item)[key],
+          ) ||
           !presentationLayoutFits(
             item.layout as PresentationLayout,
             item.headline,
@@ -140,6 +156,7 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
           layout: item.layout as PresentationLayout,
           headline: item.headline,
           points: [...item.points] as string[],
+          ...presentationBeatExtras(String(item.layout), item),
         });
       }
     }
@@ -153,7 +170,7 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
         (wording.headline !== undefined && !text(wording.headline, 110)) ||
         (wording.points !== undefined &&
           (!Array.isArray(wording.points) ||
-            wording.points.length > 4 ||
+            wording.points.length > PRESENTATION_LIMITS.points ||
             !wording.points.every((point) => text(point, 180))))
       )
         return null;

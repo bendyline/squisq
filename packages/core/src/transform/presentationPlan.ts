@@ -4,10 +4,10 @@
  */
 import { matchNumberHighlight, type NumberHighlightMatch } from '../recommend/numberHighlight.js';
 import {
-  splitConceptItem,
-  splitStatItem,
-  vennOverlapIndex,
-} from '../doc/templates/conceptItems.js';
+  conceptItemCount,
+  conceptItemsProblem,
+  conceptTemplate,
+} from '../doc/templates/conceptSpecs.js';
 
 export const PRESENTATION_KEY = 'squisq-presentation';
 /** The layouts a summary (a headline and up to four points) can fill. */
@@ -53,49 +53,94 @@ export function presentationStat(
   }
   return null;
 }
-/** Whether a summary can fill a layout: enough points for a list, steps,
- * cards, a process, a cycle (three) or a comparison; a prominent number for a key number; a short headline for a big
- * statement; and, for a quote, a headline found word for word in
- * `passage`, the source text the slide summarizes. An image slide also needs a
- * picture, which callers check. */
+/** Whether a summary can fill a layout: the items a drawn layout takes
+ * (`conceptItemsProblem`: three stages for a cycle, a figure in every key
+ * number, four ideas for a matrix…); enough points for a list, steps or a
+ * comparison; a prominent number for a key number; a short headline for a big
+ * statement; and, for a quote, a headline found word for word in `passage`,
+ * the source text the slide summarizes. An image slide also needs a picture,
+ * which callers check. */
 export function presentationLayoutFits(
   layout: PresentationLayout,
   headline: string,
   points: readonly string[],
   passage: string,
 ): boolean {
+  return presentationLayoutProblem(layout, headline, points, passage) === undefined;
+}
+/** Why a summary cannot fill a layout, as a sentence its author can act on
+ * (a person reading a designer's help, a model reading a correction), or
+ * `undefined` when it can. */
+export function presentationLayoutProblem(
+  layout: PresentationLayout,
+  headline: string,
+  points: readonly string[],
+  passage: string,
+): string | undefined {
+  // A layout that draws its points takes what its template takes.
+  const concept = conceptTemplate(layout);
+  if (concept) return conceptItemsProblem(concept, points, { max: PRESENTATION_LIMITS.points });
   switch (layout) {
     case 'list':
     case 'steps':
-    case 'cards':
-    case 'process':
-      return points.length >= 2;
-    case 'cycle':
-    case 'layers':
-    case 'pyramid':
-    case 'funnel':
-    case 'hub':
-      return points.length >= 3;
-    case 'stats':
-      // Key numbers need a figure in every point, or the slide has nothing to count.
-      return points.length >= 2 && points.every((point) => !!splitStatItem(point).figure);
-    case 'venn':
-      // Two sets and the point that names what they share.
-      return points.length === 3 && vennOverlapIndex(points.map(splitConceptItem)) >= 0;
-    case 'matrix':
-      return points.length === 4;
+      return points.length >= 2
+        ? undefined
+        : `${layout} takes at least 2 points and this has ${points.length}`;
     case 'comparison':
-      return points.length === 2;
+      return points.length === 2
+        ? undefined
+        : `comparison takes exactly 2 points and this has ${points.length}`;
     case 'definition':
-      return points.length >= 1;
+      return points.length >= 1 ? undefined : 'definition takes a point that defines its headline';
     case 'stat':
-      return presentationStat(headline, points) !== null;
+      return presentationStat(headline, points) !== null
+        ? undefined
+        : 'stat shows a prominent figure, such as 40% or $3 million, and neither the headline nor a point states one';
     case 'emphasis':
-      return headline.length <= EMPHASIS_CHARACTERS;
+      return headline.length <= EMPHASIS_CHARACTERS
+        ? undefined
+        : `emphasis takes a headline of at most ${EMPHASIS_CHARACTERS} characters`;
     case 'quote':
-      return spaced(passage).includes(spaced(headline));
+      return spaced(passage).includes(spaced(headline))
+        ? undefined
+        : 'quote takes a headline copied word for word from the passage';
     default:
-      return true;
+      return undefined;
+  }
+}
+/** What a slide must have for a layout to apply, as a designer's help says it
+ * ("at least 2 points", "exactly 4 points"), or `undefined` when any slide
+ * will do. It states what `presentationLayoutProblem` checks, so a picker's
+ * help and the plan agree. `points` names a slide's points in the host's own
+ * word ("highlights"). */
+export function presentationLayoutNeeds(
+  layout: PresentationLayout,
+  wording: { points?: string } = {},
+): string | undefined {
+  const points = wording.points ?? 'points';
+  const concept = conceptTemplate(layout);
+  if (concept) {
+    const count = `${conceptItemCount(concept, { max: PRESENTATION_LIMITS.points })} ${points}`;
+    if (concept === 'stats') return `${count}, each stating a figure`;
+    if (concept === 'venn') return `${count}, one of them labelled "Both:"`;
+    return count;
+  }
+  switch (layout) {
+    case 'list':
+    case 'steps':
+      return `at least 2 ${points}`;
+    case 'comparison':
+      return `exactly 2 ${points}`;
+    case 'stat':
+      return 'a prominent figure, such as 40% or $3 million';
+    case 'emphasis':
+      return `a headline of ${EMPHASIS_CHARACTERS} characters or fewer`;
+    case 'quote':
+      return 'a sentence of 110 characters or fewer to quote';
+    case 'image':
+      return 'a picture';
+    default:
+      return undefined;
   }
 }
 export interface PresentationBeat {
@@ -110,6 +155,33 @@ export interface PresentationBeat {
   media?: string[];
   /** Left out of the deck; the slide shown before it stays on screen instead. */
   hidden?: true;
+  /** A hub only: the one to three words its ideas share, written inside it. */
+  center?: string;
+  /** A matrix only: what grows from left to right, named along the foot. */
+  xAxis?: string;
+  /** A matrix only: what grows from bottom to top, named up the side. */
+  yAxis?: string;
+}
+/** What a layout draws beyond its headline and points. */
+export type PresentationBeatExtras = Pick<PresentationBeat, 'center' | 'xAxis' | 'yAxis'>;
+const BEAT_EXTRAS = ['center', 'xAxis', 'yAxis'] as const;
+/** The extras each layout draws: a hub's centre, a matrix's axes. */
+const LAYOUT_EXTRAS: Readonly<Record<string, readonly (typeof BEAT_EXTRAS)[number][]>> = {
+  hub: ['center'],
+  matrix: ['xAxis', 'yAxis'],
+};
+/** The extras of `source` that `layout` draws, trimmed; ones it does not draw,
+ * empty ones and ones too long to set are left out. Read loosely, so a model's
+ * reply and a saved beat pass through the same door. */
+export function presentationBeatExtras(layout: string, source: unknown): PresentationBeatExtras {
+  const extras: PresentationBeatExtras = {};
+  if (!record(source)) return extras;
+  for (const key of LAYOUT_EXTRAS[layout] ?? []) {
+    const value = source[key];
+    const clean = typeof value === 'string' ? value.replace(/\s+/gu, ' ').trim() : '';
+    if (clean && text(clean, PRESENTATION_LIMITS.extraCharacters)) extras[key] = clean;
+  }
+  return extras;
 }
 export interface PresentationPlan {
   version: 1;
@@ -122,6 +194,10 @@ export const PRESENTATION_LIMITS = {
   beats: 80,
   serializedCharacters: 160_000,
   mediaPerBeat: 4,
+  /** The most points a summary slide holds. */
+  points: 4,
+  /** The longest a hub's centre or a matrix's axis name may be. */
+  extraCharacters: 40,
 } as const;
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -178,7 +254,7 @@ export function parsePresentationPlan(input: unknown): PresentationPlan | null {
       !keys(
         beat,
         ['id', 'sourceStart', 'sourceEnd', 'layout', 'headline', 'points'],
-        ['imageSrc', 'media', 'hidden'],
+        ['imageSrc', 'media', 'hidden', ...BEAT_EXTRAS],
       ) ||
       ('hidden' in beat && beat.hidden !== true) ||
       !text(beat.id, 80) ||
@@ -193,10 +269,13 @@ export function parsePresentationPlan(input: unknown): PresentationPlan | null {
       value.sourceText.slice(end, beat.sourceStart).trim() ||
       !text(beat.headline, 110) ||
       !Array.isArray(beat.points) ||
-      beat.points.length > 4 ||
+      beat.points.length > PRESENTATION_LIMITS.points ||
       !beat.points.every((point) => text(point, 180))
     )
       return null;
+    // An extra is saved only on the layout that draws it, as it will be set.
+    const extras = presentationBeatExtras(String(beat.layout), beat);
+    if (BEAT_EXTRAS.some((key) => key in beat && beat[key] !== extras[key])) return null;
     if (beat.layout === AUTHORED_PRESENTATION_LAYOUT) {
       // The section's block carries its own words, pictures and media.
       if (beat.points.length || 'media' in beat) return null;
@@ -232,6 +311,7 @@ export function parsePresentationPlan(input: unknown): PresentationPlan | null {
       ...(beat.layout === 'image' ? { imageSrc: beat.imageSrc as string } : {}),
       ...('media' in beat ? { media: [...(beat.media as string[])] } : {}),
       ...(beat.hidden === true ? { hidden: true as const } : {}),
+      ...extras,
     });
   }
   if (value.sourceText.slice(end).trim()) return null;

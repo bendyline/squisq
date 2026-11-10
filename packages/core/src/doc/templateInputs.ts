@@ -36,7 +36,7 @@ import { isSvgIslandLang } from '../markdown/svgIsland.js';
 import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
 import { isStandaloneHtmlVideo } from './mediaAnnotations.js';
-import { splitConceptItem } from './templates/conceptItems.js';
+import { readMatrixItems, splitConceptItem } from './templates/conceptItems.js';
 import {
   detectAsciiDiagram,
   isEligibleAsciiFenceLang,
@@ -1135,7 +1135,17 @@ export function deriveTemplateInputs(
             .filter((node) => node.type === 'paragraph' && !isPictureParagraph(node))
             .map((node) => extractPlainText(node).trim())
             .filter(Boolean);
-      if (items.length > 0) return { items, ...(headingText ? { title: headingText } : {}) };
+      if (items.length > 0) {
+        // Four items that each say where they stand on the same two measures
+        // name a matrix's axes themselves. An author's order stands, so the
+        // names are taken only when the items are already where they say.
+        const matrix = templateName === 'matrix' ? readMatrixItems(items) : undefined;
+        return {
+          items,
+          ...(matrix && !matrix.reordered ? { xAxis: matrix.xAxis, yAxis: matrix.yAxis } : {}),
+          ...(headingText ? { title: headingText } : {}),
+        };
+      }
       // Sample ideas only under a bare heading: a body that holds no ideas (a
       // table, a quotation) is shown as it is, never beside invented ones.
       return placeholders && !contents?.length

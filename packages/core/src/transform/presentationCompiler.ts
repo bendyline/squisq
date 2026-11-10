@@ -433,10 +433,27 @@ function visualBlock(
     case 'stats':
     case 'pyramid':
     case 'funnel':
-    case 'hub':
     case 'venn':
-    case 'matrix':
       return { ...base, template: layout, title: beat.headline, items: beat.points };
+    case 'hub':
+      // The hub holds the one thing its ideas share, when the slide names it.
+      return {
+        ...base,
+        template: 'hub',
+        title: beat.headline,
+        items: beat.points,
+        ...(beat.center ? { center: beat.center } : {}),
+      };
+    case 'matrix':
+      // Named axes are what make four panels a matrix.
+      return {
+        ...base,
+        template: 'matrix',
+        title: beat.headline,
+        items: beat.points,
+        ...(beat.xAxis ? { xAxis: beat.xAxis } : {}),
+        ...(beat.yAxis ? { yAxis: beat.yAxis } : {}),
+      };
   }
 }
 export function applySavedPresentation(doc: Doc): Doc {

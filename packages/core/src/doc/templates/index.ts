@@ -793,8 +793,31 @@ export {
   statsBlock,
   vennBlock,
 } from './conceptShapes.js';
-export { isFigureText, splitStatItem, vennOverlapIndex } from './conceptItems.js';
-export type { StatItem } from './conceptItems.js';
+export { isFigureText, readMatrixItems, splitStatItem, vennOverlapIndex } from './conceptItems.js';
+export type { MatrixReading, StatItem } from './conceptItems.js';
+// What each concept template takes, as data: counts, item form, fallbacks.
+export {
+  CONCEPT_MAX_DRAWN,
+  CONCEPT_SPECS,
+  conceptDowngrade,
+  conceptDrawsAs,
+  conceptItemCount,
+  conceptItemsProblem,
+} from './conceptSpecs.js';
+export type {
+  ConceptDowngrade,
+  ConceptItemsOptions,
+  ConceptSpec,
+  ConceptSpecInput,
+} from './conceptSpecs.js';
+// How a Markdown author gets each drawing: the guide and a worked example per template.
+export {
+  MARKDOWN_SHAPE_EXAMPLES,
+  markdownShapeExample,
+  markdownShapeGuide,
+  markdownShapeSummary,
+} from './markdownShapeGuide.js';
+export type { MarkdownShapeExample } from './markdownShapeGuide.js';
 export { photoGrid } from './photoGrid.js';
 export { definitionCard } from './definitionCard.js';
 export { comparisonBar } from './comparisonBar.js';

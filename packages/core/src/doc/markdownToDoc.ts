@@ -60,8 +60,10 @@ import { profileBlockContents, pickAutoTemplate } from '../recommend/templates.j
 import {
   autoTemplatePreservesContent,
   deriveTemplateInputs,
+  extractConceptItems,
   isMaterializedMediaNode,
 } from './templateInputs.js';
+import { conceptDowngrade, conceptTemplate } from './templates/conceptSpecs.js';
 import { isEligibleAsciiFenceLang } from './asciiDiagram/detect.js';
 import { parseAsciiDiagram } from './asciiDiagram/parse.js';
 import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
@@ -616,6 +618,12 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // selection so both explicit and auto-derived timeline blocks participate.
   for (const block of allBlocks) collectTimelineWarnings(block, diagnostics);
 
+  // A concept template that cannot draw its own picture draws cards (or a
+  // process, or a list) instead of a broken diagram. That is right for a
+  // reader and silent for an author, so say what was asked for and why it
+  // was not drawn.
+  for (const block of allBlocks) collectShapeWarning(block, diagnostics);
+
   // Duplicate ids make connections and navigation ambiguous. Generated
   // slugs are already deduped; this catches author-pinned `{#id}` clashes.
   const seenIds = new Map<string, Block>();
@@ -939,6 +947,32 @@ function applyTimelineData(block: Block, diagnostics: DocDiagnostic[]): void {
     return;
   }
   block.templateData = { ...derived, ...block.templateData };
+}
+
+/**
+ * A `template-shape-unmet` warning for a block whose author chose a concept
+ * template its items cannot fill: `{[matrix]}` over three items, `{[venn]}`
+ * with no second set. A shape picked automatically always fits, and a bare
+ * heading shows sample items, so only annotated blocks with ideas are checked.
+ */
+function collectShapeWarning(block: Block, diagnostics: DocDiagnostic[]): void {
+  if (!block.sourceHeading?.templateAnnotation?.template && !block.promotedBodyAnnotation) return;
+  const template = conceptTemplate(resolveTemplateName(block.template ?? ''));
+  if (!template) return;
+  const given = (block.templateData as { items?: unknown } | undefined)?.items;
+  const items = Array.isArray(given) ? given : extractConceptItems(block.contents);
+  if (!items.length) return;
+  const downgrade = conceptDowngrade(template, items);
+  if (!downgrade) return;
+  diagnostics.push({
+    severity: 'warning',
+    code: 'template-shape-unmet',
+    message: `Block "${block.id}" asks for ${template} but is drawn as ${
+      downgrade.drawsAs === 'list' ? 'a list' : downgrade.drawsAs
+    }: ${downgrade.reason}`,
+    blockId: block.id,
+    ...lineOf(block),
+  });
 }
 
 function collectTimelineWarnings(block: Block, diagnostics: DocDiagnostic[]): void {

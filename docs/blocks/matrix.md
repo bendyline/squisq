@@ -27,7 +27,12 @@ Choose it over [Cards](cards.md) when where an idea sits is part of what it mean
   `Label: detail` sets the label bold above its detail.
 - **`xAxis` and `yAxis`** — what grows from left to right and from bottom to top. Leave either out
   and its arrow is not drawn.
-- **Not four items** — the ideas draw as [Cards](cards.md).
+- **Items that place themselves** — when you name no axes and each item says where it stands on
+  the same two measures (`Quick wins: low effort, high impact`), the measures name the axes:
+  low on the first is left, high on the second is top. This applies only when the items are
+  already in that order, so your order always stands.
+- **Not four items** — the ideas draw as [Cards](cards.md), and the document reports a
+  `template-shape-unmet` warning saying what the matrix was missing.
 
 A four-item list under a heading that names a matrix ("Priority matrix", "SWOT", "2×2") is drawn
 as one automatically.

@@ -21,27 +21,13 @@
 
 import { buildSourceText } from '../doc/builds.js';
 import { conceptBuildStepTexts } from '../doc/templates/conceptBlocks.js';
+import type { ConceptTemplateName } from '../doc/templates/conceptSpecs.js';
 import type { Block } from '../schemas/Doc.js';
 import type { BuildSpec } from '../schemas/Build.js';
 
-export const CONCEPT_TEMPLATES = [
-  'cards',
-  'process',
-  'cycle',
-  'layers',
-  'stats',
-  'pyramid',
-  'funnel',
-  'hub',
-  'venn',
-  'matrix',
-] as const;
-export type ConceptTemplate = (typeof CONCEPT_TEMPLATES)[number];
-
-/** The concept template a name denotes, or `undefined`. */
-export function conceptTemplate(template: string): ConceptTemplate | undefined {
-  return CONCEPT_TEMPLATES.find((name) => name === template);
-}
+// The names live with what each template takes (`conceptSpecs.ts`).
+export { CONCEPT_TEMPLATES, conceptTemplate } from '../doc/templates/conceptSpecs.js';
+export type ConceptTemplate = ConceptTemplateName;
 
 /** Distinctive words, compared by their opening letters so "multiply" matches "multiplying". */
 function stems(text: string): string[] {

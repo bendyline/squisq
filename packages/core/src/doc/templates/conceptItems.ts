@@ -135,3 +135,71 @@ export function timelineItems(items: readonly ConceptItem[]): DatedItem[] | unde
   }
   return dated;
 }
+
+/** A matrix read from its four items: what its axes measure, and the items in reading order. */
+export interface MatrixReading {
+  /** What grows from left to right. */
+  xAxis: string;
+  /** What grows from bottom to top. */
+  yAxis: string;
+  /** The items top left, top right, bottom left, bottom right. */
+  items: string[];
+  /** Whether the items had to be moved to sit where their own words put them. */
+  reordered: boolean;
+}
+
+/** "low effort", "a lot of effort", "high impact": a level and what it is a level of. */
+const LEVEL =
+  /\b(low|little|small|less|minimal|few|high|a lot of|lots of|much|more|big|large|great|major|significant)\s+([\p{L}][\p{L}-]*)/giu;
+const LOW_LEVELS: ReadonlySet<string> = new Set([
+  'low',
+  'little',
+  'small',
+  'less',
+  'minimal',
+  'few',
+]);
+
+/**
+ * Read a matrix's axes out of its own items. Four ideas that each say where
+ * they stand on the same two measures ("Quick wins: low effort, high impact")
+ * name the axes themselves, and say which panel each belongs in: low on the
+ * horizontal axis is left, high on the vertical axis is top. The items are
+ * returned in that order, so a panel is never drawn where its words say it
+ * is not. `undefined` when the items do not place themselves: other than
+ * four, no two shared measures, or two items claiming the same corner.
+ */
+export function readMatrixItems(items: readonly string[]): MatrixReading | undefined {
+  if (items.length !== 4) return undefined;
+  const read = items.map((item) => {
+    const levels = new Map<string, boolean>();
+    for (const match of item.matchAll(LEVEL))
+      levels.set(match[2]!.toLowerCase(), !LOW_LEVELS.has(match[1]!.toLowerCase()));
+    return levels;
+  });
+  const measures = [...read[0]!.keys()].filter((measure) =>
+    read.every((levels) => levels.has(measure)),
+  );
+  if (measures.length !== 2) return undefined;
+  const name = (measure: string) => `${measure[0]!.toUpperCase()}${measure.slice(1)}`;
+  /** 0 top left, 1 top right, 2 bottom left, 3 bottom right. */
+  const corner = (levels: Map<string, boolean>, x: string, y: string) =>
+    (levels.get(y) ? 0 : 2) + (levels.get(x) ? 1 : 0);
+  const [first, second] = measures as [string, string];
+  for (const [x, y] of [
+    [first, second],
+    [second, first],
+  ] as const) {
+    const corners = read.map((levels) => corner(levels, x, y));
+    if (new Set(corners).size !== 4) return undefined;
+    // Written in reading order for these axes: nothing to move.
+    if (corners.every((at, index) => at === index))
+      return { xAxis: name(x), yAxis: name(y), items: [...items], reordered: false };
+  }
+  // Written in some other order: the measure named first runs along the foot.
+  const placed: string[] = [];
+  read.forEach((levels, index) => {
+    placed[corner(levels, first, second)] = items[index]!;
+  });
+  return { xAxis: name(first), yAxis: name(second), items: placed, reordered: true };
+}

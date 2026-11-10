@@ -31,7 +31,8 @@
  * `metadata.ts` (labels for pickers), `transform/presentationPlan.ts`.
  */
 
-import type { PresentationLayout } from '../../transform/presentationPlan.js';
+import { PRESENTATION_LIMITS, type PresentationLayout } from '../../transform/presentationPlan.js';
+import { CONCEPT_SPECS, conceptItemCount, type ConceptTemplateName } from './conceptSpecs.js';
 
 /** How a template is offered to an author that writes template blocks. */
 export interface TemplateGuide {
@@ -76,6 +77,32 @@ const CHART: TemplateGuide = {
 };
 
 const CONCEPT_BUILD = 'build: {mode: "items"} to reveal them as they are spoken';
+
+/**
+ * A concept template's fields as a prompt lists them. The count, the order
+ * and the extra inputs come from its spec (`conceptSpecs.ts`), so the guide
+ * cannot ask for what the template does not take; `items` words the items
+ * when "Label: detail" does not say enough.
+ */
+function conceptFields(template: ConceptTemplateName, items?: string): string {
+  const spec = CONCEPT_SPECS[template];
+  const inputs = spec.inputs ?? [];
+  const form =
+    spec.itemForm === 'figure-caption' ? '"Figure: what it measures"' : '"Label: detail"';
+  return [
+    'title',
+    // What names the picture comes before its items; a switch comes after.
+    ...inputs.filter((input) => input.key !== 'versus').map((input) => input.guide),
+    items ??
+      `items: [${form}, …] ${conceptItemCount(template)}${spec.order ? ` ${spec.order}` : ''}`,
+    ...inputs.filter((input) => input.key === 'versus').map((input) => input.guide),
+    CONCEPT_BUILD,
+  ].join(', ');
+}
+
+/** How many points a summary slide of this layout takes: its template's count, within a slide's four. */
+const points = (template: ConceptTemplateName) =>
+  conceptItemCount(template, { max: PRESENTATION_LIMITS.points });
 
 export const TEMPLATE_GUIDES: Readonly<Record<GuidedTemplate, TemplateGuide>> = {
   imageWithCaption: {
@@ -137,43 +164,49 @@ export const TEMPLATE_GUIDES: Readonly<Record<GuidedTemplate, TemplateGuide>> = 
     use: 'opens a section on a photograph',
   },
   cards: {
-    fields: `title, items: ["Label: detail", …] 2–4, versus: true for exactly two set against each other, ${CONCEPT_BUILD}`,
+    fields: conceptFields('cards'),
     use: 'parallel ideas side by side, such as kinds, causes or features',
   },
   process: {
-    fields: `title, items: ["Label: detail", …] 2–4 in order, ${CONCEPT_BUILD}`,
+    fields: conceptFields('process'),
     use: 'ordered stages or dated events, drawn as numbered steps joined by arrows',
   },
   cycle: {
-    fields: `title, items: ["Label: detail", …] 3–5, ${CONCEPT_BUILD}`,
+    fields: conceptFields('cycle'),
     use: 'stages that repeat in a loop, drawn on a ring',
   },
   layers: {
-    fields: `title, items: ["Label: detail", …] 3–5 innermost first, ${CONCEPT_BUILD}`,
+    fields: conceptFields('layers'),
     use: 'parts nested inside one another, drawn as concentric rings',
   },
   stats: {
-    fields: `title, items: ["Figure: what it measures", …] 2–4 such as "40%: of trips made on foot", ${CONCEPT_BUILD}`,
+    fields: conceptFields(
+      'stats',
+      `items: ["Figure: what it measures", …] ${conceptItemCount('stats')} such as "40%: of trips made on foot"`,
+    ),
     use: 'several key numbers the {source} states, side by side; each counts up',
   },
   pyramid: {
-    fields: `title, items: ["Label: detail", …] 3–5 from the top down, ${CONCEPT_BUILD}`,
+    fields: conceptFields('pyramid'),
     use: 'a hierarchy, or levels that rest on one another, drawn as a pyramid',
   },
   funnel: {
-    fields: `title, items: ["Label: detail", …] 3–5 widest first, ${CONCEPT_BUILD}`,
+    fields: conceptFields('funnel'),
     use: 'stages that narrow from many to few, drawn as a funnel',
   },
   hub: {
-    fields: `title, center ≤ 3 words, items: ["Label: detail", …] 3–6, ${CONCEPT_BUILD}`,
+    fields: conceptFields('hub'),
     use: 'factors, causes or parts of the one thing `center` names, drawn around a hub',
   },
   venn: {
-    fields: `title, items: ["A: what only A has", "B: what only B has", "Both: what they share"], ${CONCEPT_BUILD}`,
+    fields: conceptFields(
+      'venn',
+      'items: ["A: what only A has", "B: what only B has", "Both: what they share"]',
+    ),
     use: 'two things compared by what each has alone and what they share, drawn as overlapping circles',
   },
   matrix: {
-    fields: `title, xAxis, yAxis, items: ["Label: detail", …] exactly 4 in reading order (top left, top right, bottom left, bottom right), ${CONCEPT_BUILD}`,
+    fields: conceptFields('matrix'),
     use: 'four ideas placed on two axes, such as effort against impact',
   },
 };
@@ -236,19 +269,16 @@ export const PRESENTATION_LAYOUT_GUIDE: Readonly<Record<PresentationLayout, stri
   comparison: 'exactly 2 genuinely contrasting points',
   steps: '2–3 ordered actions',
   image: 'only when the current layout is "image"; the headline is then its caption',
-  cards: '2–4 parallel ideas side by side, such as kinds, causes or features',
-  process: '2–4 ordered stages or dated events, drawn as numbered steps joined by arrows',
-  cycle: '3–5 stages that repeat in a loop, drawn on a ring',
-  layers:
-    '3–5 parts nested inside one another, innermost first, such as a core and the layers around it, drawn as concentric rings',
-  stats:
-    '2–4 key figures the passage states, each point written "figure: what it measures", such as "40%: of trips made on foot"; they count up side by side',
-  pyramid: '3–4 levels of a hierarchy, the top first and the base last, drawn as a pyramid',
-  funnel: '3–4 stages that narrow from many to few, the widest first, drawn as a funnel',
-  hub: '3–4 factors, causes or parts of the one thing the headline names, drawn around a hub',
-  venn: 'exactly 3 points: two things compared, each "Name: what only it has", then "Both: what they share"; drawn as overlapping circles',
-  matrix:
-    'exactly 4 points placed on two axes, in reading order: top left, top right, bottom left, bottom right',
+  cards: `${points('cards')} parallel ideas side by side, such as kinds, causes or features`,
+  process: `${points('process')} ordered stages or dated events, drawn as numbered steps joined by arrows`,
+  cycle: `${points('cycle')} stages that repeat in a loop, drawn on a ring`,
+  layers: `${points('layers')} parts nested inside one another, innermost first, such as a core and the layers around it, drawn as concentric rings`,
+  stats: `${points('stats')} key figures the passage states, each point the number itself, then a colon and what it measures, such as "40%: of trips made on foot" or "$3 million: raised"; they count up side by side`,
+  pyramid: `${points('pyramid')} levels of a hierarchy, the top first and the base last, drawn as a pyramid`,
+  funnel: `${points('funnel')} stages that narrow from many to few, the widest first, drawn as a funnel`,
+  hub: `${points('hub')} factors, causes or parts of one thing, drawn around a hub; add "center", that thing in 1–3 words`,
+  venn: `${points('venn')} points: two things compared, each "Name: what only it has", then "Both: what they share"; drawn as overlapping circles`,
+  matrix: `${points('matrix')} points placed on two axes, in reading order: top left, top right, bottom left, bottom right; add "xAxis" and "yAxis", what grows from left to right and from bottom to top`,
 };
 
 /**
@@ -293,6 +323,11 @@ export interface AuthoringTrick {
    * or applies there at all.
    */
   summary?: string;
+  /**
+   * The advice for an author that only chooses each slide's layout, planning
+   * the whole deck before its slides are worded.
+   */
+  storyboard?: string;
   /** Templates (or presentation layouts) it concerns; omitted when it concerns every slide. */
   templates?: readonly string[];
 }
@@ -327,7 +362,9 @@ export const AUTHORING_TRICKS: readonly AuthoringTrick[] = [
     id: 'numbers-as-numbers',
     text: 'Draw numbers as numbers: one striking quantity → statHighlight (it counts up); two to four key quantities in different units → stats; two quantities in one unit → comparisonBar; three or more values in one unit → a chart; three to seven dated events → timeline.',
     summary:
-      'Draw numbers as numbers: when the passage turns on one figure choose "stat"; when it gives two to four key figures choose "stats" and write each point as "figure: what it measures".',
+      'Draw numbers as numbers: when the passage turns on one figure choose "stat"; when it gives two to four key figures choose "stats" and start each point with its number, as in "40%: of trips made on foot".',
+    storyboard:
+      'Draw numbers as numbers: a passage that turns on one figure is a "stat"; one that gives two to four key figures is "stats".',
     templates: [...NUMBERS, 'timeline'],
   },
   {
@@ -339,6 +376,8 @@ export const AUTHORING_TRICKS: readonly AuthoringTrick[] = [
     id: 'draw-ideas',
     text: 'Slides that draw their ideas explain best: several parallel ideas → cards, ordered stages → process, a loop that comes back to its start → cycle, parts nested inside one another → layers; prefer them to a list. Write each item as "Label: detail", a label of 1–4 words and a detail of at most 70 characters, in the {source}\'s own words. For dated events, start each label with its date: a process of dated stages draws as a timeline.',
     summary: `Slides that draw their ideas explain best: when the passage has several parallel ideas, ordered stages, a repeating loop or nested parts, choose ${DRAWN_CORE.map((layout) => `"${layout}"`).join(', ')} rather than "statement" or "list", and write each of their points (up to 4) as "Label: detail", a label of 1–4 words and a detail of at most 70 characters. For dated events, start each label with its date.`,
+    storyboard:
+      'Draw ideas rather than list them: several parallel ideas are "cards", ordered stages or dated events a "process", a loop that comes back to its start a "cycle", and parts nested inside one another "layers".',
     templates: DRAWN_CORE,
   },
   {
@@ -346,6 +385,8 @@ export const AUTHORING_TRICKS: readonly AuthoringTrick[] = [
     text: 'Some relationships have a shape of their own: a hierarchy or levels that rest on one another → pyramid (top first); stages that narrow from many to few → funnel (widest first); factors, causes or parts of one thing → hub, with that thing as `center`; two things and what they share → venn, its last item "Both: …"; four ideas on two axes → matrix. Choose one only when the {source} states that relationship; a shape the ideas do not have misleads.',
     summary:
       'Some relationships have a shape of their own: a hierarchy → "pyramid", stages that narrow from many to few → "funnel", factors or causes of one thing → "hub", two things and what they share → "venn" (its third point "Both: …"), four ideas on two axes → "matrix". Choose one only when the passage states that relationship; a shape the ideas do not have misleads.',
+    storyboard:
+      'Some relationships have a shape of their own: a hierarchy is a "pyramid", stages that narrow from many to few a "funnel", factors or causes of one thing a "hub", two things and what they share a "venn", and four ideas on two axes a "matrix". Choose one only when the passage states that relationship.',
     templates: DRAWN_SHAPES,
   },
   {
@@ -371,6 +412,8 @@ export const AUTHORING_TRICKS: readonly AuthoringTrick[] = [
   {
     id: 'vary',
     text: 'Vary the slides: when two templates fit equally well, choose the one not just shown. A long run of photo-and-caption slides is where a narrated story feels static.',
+    storyboard:
+      'Vary the deck: no layout on more than a third of the slides, and no two neighbouring slides alike when another layout fits as well.',
   },
 ];
 
@@ -379,15 +422,18 @@ export interface AuthoringTrickOptions {
   templates?: readonly string[];
   /** Only these tricks, in this order. */
   ids?: readonly string[];
-  /** Which text to render: for block authors (default) or summary authors. */
-  surface?: 'blocks' | 'summary';
+  /**
+   * Which text to render: for block authors (default), for summary authors,
+   * or for an author storyboarding a deck's layouts.
+   */
+  surface?: 'blocks' | 'summary' | 'storyboard';
   wording?: GuideWording;
 }
 
 /**
  * The tricks a prompt should carry, rendered. With `templates`, a trick is
- * kept when it concerns every slide or one of those templates; summary
- * authors get only tricks written for them.
+ * kept when it concerns every slide or one of those templates; summary and
+ * storyboard authors get only tricks written for them.
  */
 export function authoringTricks(options: AuthoringTrickOptions = {}): string[] {
   const offered = options.templates ? new Set(options.templates) : undefined;
@@ -400,7 +446,12 @@ export function authoringTricks(options: AuthoringTrickOptions = {}): string[] {
         !offered || !trick.templates || trick.templates.some((template) => offered.has(template)),
     )
     .flatMap((trick) => {
-      const text = options.surface === 'summary' ? trick.summary : trick.text;
+      const text =
+        options.surface === 'summary'
+          ? trick.summary
+          : options.surface === 'storyboard'
+            ? trick.storyboard
+            : trick.text;
       return text ? [guideText(text, options.wording)] : [];
     });
 }

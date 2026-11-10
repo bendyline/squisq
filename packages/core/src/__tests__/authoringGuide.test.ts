@@ -65,7 +65,7 @@ describe('authoring guide', () => {
 
   it('gives summary authors only the tricks written for them', () => {
     expect(authoringTricks({ surface: 'summary' })).toEqual([
-      'Draw numbers as numbers: when the passage turns on one figure choose "stat"; when it gives two to four key figures choose "stats" and write each point as "figure: what it measures".',
+      'Draw numbers as numbers: when the passage turns on one figure choose "stat"; when it gives two to four key figures choose "stats" and start each point with its number, as in "40%: of trips made on foot".',
       'Slides that draw their ideas explain best: when the passage has several parallel ideas, ordered stages, a repeating loop or nested parts, choose "cards", "process", "cycle", "layers" rather than "statement" or "list", and write each of their points (up to 4) as "Label: detail", a label of 1–4 words and a detail of at most 70 characters. For dated events, start each label with its date.',
       'Some relationships have a shape of their own: a hierarchy → "pyramid", stages that narrow from many to few → "funnel", factors or causes of one thing → "hub", two things and what they share → "venn" (its third point "Both: …"), four ideas on two axes → "matrix". Choose one only when the passage states that relationship; a shape the ideas do not have misleads.',
     ]);
