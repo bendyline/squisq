@@ -4114,7 +4114,12 @@ button.squisq-view-menu-radio-row:focus-visible {
       inward to `right: 12px` so it sits between the real gutter and the
       fake-canvas strip. From the outside the gutter looks the same
       width it always did and the breathing room appears to live inside
-      the canvas. */
+      the canvas.
+
+   On a narrow editor RawEditor trims the gutter (COMPACT_GUTTER) and
+   shrinks that strip with it; the width arrives as
+   `--squisq-raw-editor-breathing`, set from the same constant as the
+   Monaco option. */
 .squisq-raw-editor-container .monaco-editor .margin {
   position: relative;
 }
@@ -4124,7 +4129,7 @@ button.squisq-view-menu-radio-row:focus-visible {
   position: absolute;
   top: 0;
   right: 0;
-  width: 12px;
+  width: var(--squisq-raw-editor-breathing, 12px);
   height: 100%;
   background: var(--squisq-surface);
   pointer-events: none;
@@ -4135,7 +4140,7 @@ button.squisq-view-menu-radio-row:focus-visible {
   content: '';
   position: absolute;
   top: 0;
-  right: 12px;
+  right: var(--squisq-raw-editor-breathing, 12px);
   width: 1px;
   height: 100%;
   background: var(--squisq-desk-border);
@@ -4148,6 +4153,13 @@ button.squisq-view-menu-radio-row:focus-visible {
   .monaco-editor
   .margin::before {
   background: var(--squisq-surface-sunken);
+}
+
+/* The compact gutter steps the digits in from the editor's edge. The inset is
+   reserved inside `lineDecorationsWidth` (RawEditor's COMPACT_GUTTER), so the
+   numbers only move within room Monaco already set aside. */
+.squisq-raw-editor-container .monaco-editor .margin-view-overlays .line-numbers {
+  translate: var(--squisq-raw-editor-number-inset, 0px) 0;
 }
 /* The outline pane and the inline-preview gutter are flex children too —
    each holds a fixed width and the editor takes the remainder. */
