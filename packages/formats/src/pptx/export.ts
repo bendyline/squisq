@@ -85,6 +85,14 @@ import { createPackage } from '../ooxml/writer.js';
 import { RelIdAllocator } from '../ooxml/relIds.js';
 import { xmlDeclaration, escapeXml } from '../ooxml/xmlUtils.js';
 import {
+  buildNotesMasterXml,
+  buildNotesSlideXml,
+  collectFootnoteDefinitions,
+  footnoteIdentifiersIn,
+  speakerNoteLines,
+  withoutFootnoteDefinitions,
+} from './speakerNotes.js';
+import {
   buildImageShape,
   fitPicture,
   mermaidPictureShapes,
@@ -151,12 +159,16 @@ import {
   REL_HYPERLINK,
   REL_IMAGE,
   REL_FONT,
+  REL_NOTES_MASTER,
+  REL_NOTES_SLIDE,
   CONTENT_TYPE_PPTX_PRESENTATION,
   CONTENT_TYPE_PPTX_SLIDE,
   CONTENT_TYPE_PPTX_SLIDE_LAYOUT,
   CONTENT_TYPE_PPTX_SLIDE_MASTER,
   CONTENT_TYPE_PPTX_THEME,
   CONTENT_TYPE_PPTX_FONT,
+  CONTENT_TYPE_PPTX_NOTES_MASTER,
+  CONTENT_TYPE_PPTX_NOTES_SLIDE,
 } from '../ooxml/namespaces.js';
 import {
   DEFAULT_FONT,
@@ -281,7 +293,14 @@ export async function markdownDocToPptx(
     slideContexts.push(ctx);
   }
 
-  return buildPptxPackage(slideXmls, slideContexts, options);
+  const definitions = collectFootnoteDefinitions(doc.children);
+  const slideNotes = slides.map((slide) =>
+    speakerNoteLines(
+      footnoteIdentifiersIn([...(slide.title ?? []), ...slide.bodyNodes]),
+      definitions,
+    ),
+  );
+  return buildPptxPackage(slideXmls, slideContexts, options, undefined, slideNotes);
 }
 
 /**
@@ -312,7 +331,11 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
   options.signal?.throwIfAborted();
   const effectiveOptions =
     !options.themeId && doc.themeId ? { ...options, themeId: doc.themeId } : options;
-  const slideshowDoc = needsSlideshowProjection(doc) ? buildPreviewDoc(doc) : doc;
+  // Footnote definitions become speaker notes; left in, a template draws them
+  // as body text on whichever slide holds them (usually the last).
+  const definitions = collectDocFootnoteDefinitions(doc.blocks);
+  const visualDoc = definitions.size > 0 ? withoutDocFootnoteDefinitions(doc) : doc;
+  const slideshowDoc = needsSlideshowProjection(visualDoc) ? buildPreviewDoc(visualDoc) : visualDoc;
   const flatBlocks = flattenRenderableBlocks(slideshowDoc.blocks);
 
   // A Doc with no template blocks at all (raw authored layers, or an empty
@@ -425,19 +448,71 @@ export async function docToPptx(doc: Doc, options: PptxExportOptions = {}): Prom
     slideContexts.push(ctx);
   }
 
-  return buildPptxPackage(slideXmls, slideContexts, effectiveOptions, {
-    layoutXmls: backdrops.layouts.map(buildDeckLayoutXml),
-    masterXml: (layoutRelIds) =>
-      buildDeckMasterXml({
-        backgroundXml: backdrops.master.base
-          ? paintBackgroundXml(backdrops.master.base)
-          : colorBackgroundXml(style.background),
-        overlays: backdrops.master.overlays,
-        layoutRelIds,
-        dark: isDarkTheme(theme),
-      }),
-    themeXml: buildDeckThemeXml(theme),
+  // Each slide keeps its authored block's id through projection and expansion,
+  // so its footnote references are read from what the author wrote.
+  const authored = authoredBlocksById(doc.blocks);
+  const slideNotes = slideBlocks.map((slide) => {
+    const source = authored.get(slide.id);
+    if (!source) return [];
+    const nodes = [
+      ...(source.sourceHeading ? [source.sourceHeading] : []),
+      ...(source.contents ?? []),
+    ];
+    return speakerNoteLines(footnoteIdentifiersIn(nodes), definitions);
   });
+
+  return buildPptxPackage(
+    slideXmls,
+    slideContexts,
+    effectiveOptions,
+    {
+      layoutXmls: backdrops.layouts.map(buildDeckLayoutXml),
+      masterXml: (layoutRelIds) =>
+        buildDeckMasterXml({
+          backgroundXml: backdrops.master.base
+            ? paintBackgroundXml(backdrops.master.base)
+            : colorBackgroundXml(style.background),
+          overlays: backdrops.master.overlays,
+          layoutRelIds,
+          dark: isDarkTheme(theme),
+        }),
+      themeXml: buildDeckThemeXml(theme),
+    },
+    slideNotes,
+  );
+}
+
+/** Every authored block, nested ones included, by id. */
+function authoredBlocksById(blocks: readonly Block[] | undefined): Map<string, Block> {
+  const byId = new Map<string, Block>();
+  const visit = (list: readonly Block[] | undefined) => {
+    for (const block of list ?? []) {
+      if (!byId.has(block.id)) byId.set(block.id, block);
+      visit(block.children);
+    }
+  };
+  visit(blocks);
+  return byId;
+}
+
+/** Every footnote definition in a Doc's authored content, by identifier. */
+function collectDocFootnoteDefinitions(blocks: readonly Block[] | undefined): Map<string, string> {
+  const definitions = new Map<string, string>();
+  for (const block of authoredBlocksById(blocks).values()) {
+    if (block.contents) collectFootnoteDefinitions(block.contents, definitions);
+  }
+  return definitions;
+}
+
+/** A copy of `doc` whose blocks no longer carry footnote definitions. */
+function withoutDocFootnoteDefinitions(doc: Doc): Doc {
+  const strip = (list: Block[] | undefined): Block[] | undefined =>
+    list?.map((block) => ({
+      ...block,
+      ...(block.contents ? { contents: withoutFootnoteDefinitions(block.contents) } : {}),
+      ...(block.children ? { children: strip(block.children) } : {}),
+    }));
+  return { ...doc, blocks: strip(doc.blocks) ?? [] };
 }
 
 // ============================================
@@ -1933,9 +2008,12 @@ async function buildPptxPackage(
   slideContexts: SlideContext[],
   options: PptxExportOptions,
   structure: DeckStructure = SEMANTIC_DECK_STRUCTURE,
+  /** Speaker-note lines per slide, by index; a deck with none writes no notes parts. */
+  slideNotes: ReadonlyArray<readonly string[] | undefined> = [],
 ): Promise<ArrayBuffer> {
   const pkg = createPackage();
   const slideCount = slideXmls.length;
+  const hasNotes = slideNotes.some((lines) => (lines?.length ?? 0) > 0);
 
   // One allocator, keyed by rels part — see `RelIdAllocator`. The slide,
   // slideMaster and theme rels all live in ppt/_rels/presentation.xml.rels,
@@ -1960,6 +2038,7 @@ async function buildPptxPackage(
     face,
     relId: relIds.alloc(PRESENTATION_PART),
   }));
+  const notesMasterRelId = hasNotes ? relIds.alloc(PRESENTATION_PART) : undefined;
 
   // --- ppt/presentation.xml ---
   const presentationXml = buildPresentationXml(
@@ -1968,6 +2047,7 @@ async function buildPptxPackage(
     slideMasterRelId,
     themeRelId,
     embeddedIconFonts.map(({ face, relId }) => ({ typeface: face.typeface, relId })),
+    notesMasterRelId,
   );
   pkg.addPart('ppt/presentation.xml', presentationXml, CONTENT_TYPE_PPTX_PRESENTATION);
 
@@ -1979,6 +2059,26 @@ async function buildPptxPackage(
     // Per-slide relationships: layout + hyperlinks + images, all allocated
     // from the slide's own counter inside SlideContext.
     const ctx = slideContexts[i];
+    const notes = slideNotes[i];
+    if (notes && notes.length > 0) {
+      const notesPart = `ppt/notesSlides/notesSlide${i + 1}.xml`;
+      pkg.addPart(notesPart, buildNotesSlideXml(notes), CONTENT_TYPE_PPTX_NOTES_SLIDE);
+      pkg.addRelationship(notesPart, {
+        id: 'rId1',
+        type: REL_NOTES_MASTER,
+        target: '../notesMasters/notesMaster1.xml',
+      });
+      pkg.addRelationship(notesPart, {
+        id: 'rId2',
+        type: REL_SLIDE,
+        target: `../slides/slide${i + 1}.xml`,
+      });
+      ctx.relationships.push({
+        id: ctx.allocRelId(),
+        type: REL_NOTES_SLIDE,
+        target: `../notesSlides/notesSlide${i + 1}.xml`,
+      });
+    }
     for (const rel of ctx.relationships) {
       pkg.addRelationship(slidePath, {
         id: rel.id,
@@ -2029,6 +2129,24 @@ async function buildPptxPackage(
 
   // --- Theme ---
   pkg.addPart('ppt/theme/theme1.xml', structure.themeXml, CONTENT_TYPE_PPTX_THEME);
+
+  // --- Notes master (only when a slide has speaker notes) ---
+  // PowerPoint requires the notes master to carry its own theme part.
+  if (notesMasterRelId) {
+    const NOTES_MASTER_PART = 'ppt/notesMasters/notesMaster1.xml';
+    pkg.addPart(NOTES_MASTER_PART, buildNotesMasterXml(), CONTENT_TYPE_PPTX_NOTES_MASTER);
+    pkg.addPart('ppt/theme/theme2.xml', structure.themeXml, CONTENT_TYPE_PPTX_THEME);
+    pkg.addRelationship(NOTES_MASTER_PART, {
+      id: relIds.alloc(NOTES_MASTER_PART),
+      type: REL_THEME,
+      target: '../theme/theme2.xml',
+    });
+    pkg.addRelationship('ppt/presentation.xml', {
+      id: notesMasterRelId,
+      type: REL_NOTES_MASTER,
+      target: 'notesMasters/notesMaster1.xml',
+    });
+  }
 
   // --- Root relationship ---
   pkg.addRelationship('', {

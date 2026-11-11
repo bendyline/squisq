@@ -213,6 +213,20 @@ export const REL_SLIDE_LAYOUT =
 export const REL_SLIDE_MASTER =
   'http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster';
 
+export const CONTENT_TYPE_PPTX_NOTES_MASTER =
+  'application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml';
+
+export const CONTENT_TYPE_PPTX_NOTES_SLIDE =
+  'application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml';
+
+/** Relationship type: Notes master */
+export const REL_NOTES_MASTER =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster';
+
+/** Relationship type: Notes slide (a slide's speaker notes) */
+export const REL_NOTES_SLIDE =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide';
+
 export const CONTENT_TYPE_XLSX_WORKBOOK =
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml';
 

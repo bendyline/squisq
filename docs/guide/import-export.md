@@ -112,7 +112,8 @@ slideshow sizes it.
 - SVG pictures are embedded as vector art with a PNG fallback.
 - Drawings, timelines and box diagrams become native shapes. Mermaid needs a picture; the editor's
   **Export…** dialog draws one.
-- Footnotes are dropped, with a warning.
+- Footnotes become speaker notes. The marker leaves the slide, and each slide's notes list the
+  footnotes it cites, numbered from 1.
 
 > [!NOTE]
 > Apple's Quick Look shows every gradient as a flat color. Check gradient backgrounds in
