@@ -336,17 +336,17 @@ measures that (for example from `visualViewport`), publish it on the root as
 
 ## Read-only and compact embeds
 
-| Prop                                                                   | What it does                                                                                  |
-| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `readOnly`                                                             | Neither view accepts edits. The toolbar still renders; hide it yourself for a pure viewer.    |
-| `showPlayTab`                                                          | `false` hides the Use view.                                                                   |
-| `hostMode="chat"`                                                      | A message composer: stays in Write view, hides the view tabs and document-level controls.     |
-| `submitOnEnter`                                                        | Enter calls this instead of inserting a line break; Cmd/Ctrl+Enter inserts one.               |
-| `minHeight`, `maxHeight`                                               | Grow with the content between these heights instead of using `height`.                        |
-| `placeholder`, `thinMargins`, `fullWidth`                              | Empty-state text, tighter padding, and an edge-to-edge Write view instead of a centered page. |
-| `showFormattingControls`, `showInsertControls`                         | Hide the formatting buttons or the Insert menu.                                               |
-| `allowPresentationWindow`, `allowPresentationFullscreen`, `allowPrint` | Turn off the audience window, full screen, or printing where your host can't support them.    |
-| `writeCanvasSettings`, `uxFont`                                        | Text size and line spacing for the Write view; the font for the editor's chrome.              |
+| Prop                                                                   | What it does                                                                                                                                                               |
+| ---------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `readOnly`                                                             | Neither view accepts edits. The toolbar still renders; hide it yourself for a pure viewer.                                                                                 |
+| `showPlayTab`                                                          | `false` hides the Use view.                                                                                                                                                |
+| `hostMode="chat"`                                                      | A message composer: stays in Write view, hides the view tabs and document-level controls.                                                                                  |
+| `submitOnEnter`                                                        | Enter calls this instead of inserting a line break; Cmd/Ctrl+Enter inserts one.                                                                                            |
+| `minHeight`, `maxHeight`                                               | Grow with the content between these heights instead of using `height`. A grid or diagram that ends the document keeps its natural height here instead of filling the page. |
+| `placeholder`, `thinMargins`, `fullWidth`                              | Empty-state text, tighter padding, and an edge-to-edge Write view instead of a centered page.                                                                              |
+| `showFormattingControls`, `showInsertControls`                         | Hide the formatting buttons or the Insert menu.                                                                                                                            |
+| `allowPresentationWindow`, `allowPresentationFullscreen`, `allowPrint` | Turn off the audience window, full screen, or printing where your host can't support them.                                                                                 |
+| `writeCanvasSettings`, `uxFont`                                        | Text size and line spacing for the Write view; the font for the editor's chrome.                                                                                           |
 
 ## Extend the chrome
 

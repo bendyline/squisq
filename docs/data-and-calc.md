@@ -76,6 +76,13 @@ Contract points worth knowing:
 - **Always grid** — the compact preview card renders only when the grid
   module fails to load (it is a lazy `import()`, code-split by your
   bundler; a transient load failure retries on the next mount).
+- **Fills the page when it ends it** — the grid's scroller is 420px, but a
+  card with nothing after it (empty paragraphs aside) grows to the bottom of
+  the visible page, in the document view and in Blocks, as long as its table
+  has more rows than 420px shows. Diagrams and drawings ending a page do the
+  same unless their height was dragged. Hosts that build their own Tiptap
+  editor get this from `FillAvailableExtension`; an auto-growing
+  `EditorShell` (`minHeight`/`maxHeight`) never fills.
 - Sort/filter changes persist onto the heading annotation ONLY when that
   heading's template is table-fed and its `src` matches the card — never
   fabricated onto a plain heading (session-only, with a footer hint).

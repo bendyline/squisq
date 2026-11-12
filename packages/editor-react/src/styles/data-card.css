@@ -120,44 +120,23 @@
   border-top: 1px solid var(--squisq-border-subtle);
 }
 
-/* A height-capable component at the end of a single-block editor may use any
- * vertical room left after its preceding content. The marker is deliberately
- * opt-in: ordinary prose and components with intrinsic aspect ratios retain
- * their natural size, and document view retains normal flowing layout. */
-.squisq-block-card-body .squisq-wysiwyg-editor:has(> .squisq-block-fill-available:last-child) {
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-.squisq-block-card-body .squisq-wysiwyg-editor > .squisq-block-fill-available:last-child {
-  display: flex;
-  flex: 1 0 auto;
-  flex-direction: column;
-}
-
-/* Carry the allocated height through the data-card wrappers. The grid's
- * normal 420px scroller remains its flex basis/minimum experience; when the
- * block has spare space, flex growth turns that space into visible rows. */
-.squisq-block-card-body
-  .squisq-wysiwyg-editor
-  > .squisq-data-card-host:last-child
-  > .squisq-data-card,
-.squisq-block-card-body
-  .squisq-wysiwyg-editor
-  > .squisq-data-card-host:last-child
-  > .squisq-data-card
-  > .squisq-data-card-grid {
+/* At the end of the page the host may get spare height (fill-available.css).
+ * Carry it through the card to the grid's scroller, whose normal 420px stays
+ * the flex basis, so the room becomes visible rows. Only a card whose table
+ * outgrows that box takes it (`data-fills`); a short table, or a loading or
+ * missing card, keeps its natural size. */
+.squisq-data-card-host[data-fill-height] > .squisq-data-card[data-fills],
+.squisq-data-card-host[data-fill-height] > .squisq-data-card[data-fills] > .squisq-data-card-grid {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
 }
 
-.squisq-block-card-body
-  .squisq-wysiwyg-editor
-  > .squisq-data-card-host:last-child
-  .squisq-grid-scroller {
+.squisq-data-card-host[data-fill-height]
+  > .squisq-data-card[data-fills]
+  > .squisq-data-card-grid
+  > .squisq-grid-scroller {
   flex: 1 1 420px;
   min-height: 0;
 }

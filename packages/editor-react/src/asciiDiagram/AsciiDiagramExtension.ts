@@ -163,7 +163,7 @@ function buildDecorations(
         entry.pos + node.nodeSize,
         (view) => {
           const container = document.createElement('div');
-          container.className = 'squisq-ascii-diagram-widget-host';
+          container.className = 'squisq-ascii-diagram-widget-host squisq-block-fill-available';
           container.contentEditable = 'false';
           // Keep the widget's whole interaction stream — pointer, keys, text
           // input, IME composition, clipboard — from reaching ProseMirror and

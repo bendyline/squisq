@@ -54,6 +54,13 @@ import {
 import { loadGridModule, type GridModule } from './loadGridModule';
 const pendingFormulas = new WeakMap<object, Map<string, FormulaEditRecord>>();
 
+/**
+ * Rows the grid's natural 420px scroller shows under its header and filter
+ * row. A table this short gains nothing from the page's spare height, so its
+ * card keeps its natural size instead of growing into an empty grid.
+ */
+const NATURAL_VISIBLE_ROWS = 13;
+
 export interface DataCardWidgetProps {
   editor: Editor;
   blockId: string;
@@ -454,11 +461,13 @@ export function DataCardWidget({
   const xlsxMeta = grid?.ingested.xlsx;
   const editableGrid = Boolean(grid?.ingested.csv || xlsxMeta) && editor.isEditable;
   const readOnlyReason = grid?.ingested.readOnlyReason;
+  const fillsSpareHeight = (grid?.ingested.ingest.cells.length ?? 0) > NATURAL_VISIBLE_ROWS;
 
   return (
     <div
       className={`squisq-data-card${state.kind === 'missing' ? ' squisq-data-card--missing' : ''}`}
       data-proof-exempt="true"
+      data-fills={fillsSpareHeight ? 'true' : undefined}
     >
       <div className="squisq-data-card-header">
         <span className="squisq-data-card-icon" aria-hidden="true">

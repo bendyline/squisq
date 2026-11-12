@@ -146,10 +146,9 @@ function buildDecorations(
         entry.pos + node.nodeSize,
         () => {
           const container = document.createElement('div');
-          // The generic marker lets block-at-a-time layout give a terminal,
-          // height-capable component the card's remaining space. Document
-          // layout ignores it, and the data-card-specific CSS teaches the
-          // virtualized grid how to consume the extra height.
+          // The generic marker lets FillAvailableExtension hand the card the
+          // page's spare height when it ends the document; data-card.css
+          // turns that height into rows of the virtualized grid.
           container.className = 'squisq-data-card-host squisq-block-fill-available';
           container.contentEditable = 'false';
           // The card carries buttons; contain the edit/composition/clipboard

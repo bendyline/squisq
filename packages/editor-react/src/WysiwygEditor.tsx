@@ -46,6 +46,7 @@ import { createMermaidThemeStore, type MermaidThemeStore } from './mermaid/merma
 import { CodeSnippetExtension } from './codeSnippet/CodeSnippetExtension';
 import { HostFenceExtension } from './fenceWidgets/HostFenceExtension';
 import { DataCardExtension } from './dataCard/DataCardExtension';
+import { FillAvailableExtension } from './fillAvailable/FillAvailableExtension';
 import { VideoEmbedExtension } from './videoEmbed/VideoEmbedExtension';
 import { pasteVideoEmbedCode } from './videoEmbed/videoEmbedPaste';
 import { fenceRendererLangs } from '@bendyline/squisq/fence';
@@ -478,6 +479,7 @@ export function WysiwygEditor({
       TimelineViewExtension,
       TreeViewExtension,
       SceneBlockExtension.configure({ textChannel: sceneTextChannel }),
+      FillAvailableExtension,
       Table.configure({ resizable: true }),
       TableRow,
       AlignedTableCell,

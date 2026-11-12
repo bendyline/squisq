@@ -104,7 +104,7 @@ function buildDecorations(
         widgetPos,
         (view) => {
           const container = document.createElement('div');
-          container.className = 'squisq-scene-widget-host';
+          container.className = 'squisq-scene-widget-host squisq-block-fill-available';
           container.contentEditable = 'false';
           container.addEventListener('mousedown', (e) => e.stopPropagation());
           container.addEventListener('keydown', (e) => e.stopPropagation());

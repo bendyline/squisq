@@ -24,6 +24,7 @@
 @import '../imageEditor/image-editor.css';
 @import './image-edit-affordance.css';
 @import './media-edit.css';
+@import './fill-available.css';
 @import './diagram.css';
 @import './ascii-diagram.css';
 @import './mermaid-diagram.css';

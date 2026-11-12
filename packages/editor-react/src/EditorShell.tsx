@@ -1573,6 +1573,7 @@ function EditorShellInner({
       data-link-handler={onLinkClick ? 'true' : undefined}
       data-full-width={fullWidth ? 'true' : undefined}
       data-thin-margins={thinMargins ? 'true' : undefined}
+      data-auto-grow={autoGrow ? 'true' : undefined}
       data-outline-visible={isMarkdownMode && outlineVisible ? 'true' : undefined}
       style={{
         display: 'flex',
