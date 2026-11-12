@@ -102,6 +102,7 @@ import { FindHighlightExtension } from './find/FindHighlightExtension';
 import { ProofingExtension } from './proofing/ProofingExtension';
 import { ReviewExtension } from './review/ReviewExtension';
 import { DictationExtension } from './speech/DictationExtension';
+import { TrailingParagraphExtension, withoutTrailingParagraph } from './trailingParagraph';
 import { syncAccessoryFileLinkPlaceholders } from './accessoryFileLinks';
 import { replaceDocumentMinimal } from './wysiwygMinimalSync';
 
@@ -508,6 +509,9 @@ export function WysiwygEditor({
       ProofingExtension,
       ReviewExtension,
       DictationExtension,
+      // Somewhere to type after a diagram, code snippet, table or drawing
+      // that ends the document; see trailingParagraph.ts.
+      TrailingParagraphExtension,
     ],
     content: initialContentRef.current,
     onUpdate: ({ editor: ed, transaction }) => {
@@ -529,14 +533,16 @@ export function WysiwygEditor({
       // reintroduce parse-on-every-keystroke work.
       const serialize = (html: string): string =>
         persistFromWrite(tiptapToMarkdown(html), wrapStateRef.current);
-      let bodyMd = serialize(serializeHtml(ed.state.doc));
+      // Without the empty line kept after a trailing diagram or table: it is a
+      // place to type, not a blank line in the file.
+      let bodyMd = serialize(serializeHtml(withoutTrailingParagraph(ed.state.doc)));
       const loaded = loadedSourceRef.current;
       if (loaded) {
         // The first change after a load starts from the document as loaded,
         // so its `before` is what that load serializes to.
         loaded.baseline ??= createSourceBaseline(
           loaded.body,
-          serialize(serializeHtml(transaction.before)),
+          serialize(serializeHtml(withoutTrailingParagraph(transaction.before))),
         );
         bodyMd = preserveSource(loaded.baseline, bodyMd);
       }

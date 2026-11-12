@@ -8,7 +8,7 @@ import { planContentBuilds } from '../builds.js';
  * more visual template after validation and preview.
  */
 
-import type { Layer, TextParagraph } from '../../schemas/Doc.js';
+import { taskMarker, type Layer, type TextParagraph } from '../../schemas/Doc.js';
 import type { ContentBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import type { MarkdownBlockNode, MarkdownList } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
@@ -47,11 +47,17 @@ function listParagraphs(list: MarkdownList, level = 0): TextParagraph[] {
       .map((node) => extractPlainText(node).trim())
       .filter(Boolean)
       .join(' ');
+    const checked = typeof item.checked === 'boolean' ? { checked: item.checked } : {};
     const paragraphs: TextParagraph[] = ownText
       ? [
           {
             text: ownText,
-            list: { ordered, level, ...(ordered ? { number: (list.start ?? 1) + index } : {}) },
+            list: {
+              ordered,
+              level,
+              ...(ordered ? { number: (list.start ?? 1) + index } : {}),
+              ...checked,
+            },
           },
         ]
       : [];
@@ -65,7 +71,12 @@ function listParagraphs(list: MarkdownList, level = 0): TextParagraph[] {
 /** A paragraph as plain text: list items carry their indent and marker. */
 function plainParagraphText({ text, list }: TextParagraph): string {
   if (!list) return text;
-  const marker = list.ordered ? `${list.number ?? 1}.` : '•';
+  const marker =
+    list.checked !== undefined
+      ? taskMarker(list.checked)
+      : list.ordered
+        ? `${list.number ?? 1}.`
+        : '•';
   return `${'  '.repeat(list.level)}${marker} ${text}`;
 }
 

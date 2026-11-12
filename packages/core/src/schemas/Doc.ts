@@ -591,6 +591,16 @@ export interface TextParagraphList {
   level: number;
   /** The item's number, for an ordered item. */
   number?: number;
+  /**
+   * A task-list item (`- [ ]` / `- [x]`): drawn with an empty or ticked box
+   * as its marker instead of a bullet. Absent for an ordinary item.
+   */
+  checked?: boolean;
+}
+
+/** The marker character of a task-list item: a ballot box, ticked when done. */
+export function taskMarker(checked: boolean): string {
+  return checked ? '☑' : '☐';
 }
 
 /**

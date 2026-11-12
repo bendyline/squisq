@@ -541,6 +541,8 @@ function RichTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
     `.${cls} ul,.${cls} ol{margin:0 0 .7em;padding-left:1.2em;list-style-position:${listStylePosition}}` +
     `.${cls} li{margin:0}` +
     `.${cls} li[data-squisq-build-item]{list-style:none}` +
+    // A task item's box is its marker; a bullet beside it read "• ☐ Task".
+    `.${cls} li[data-squisq-task]{list-style:none}` +
     `.${cls} [data-squisq-build-row]{display:flex;gap:.35em}` +
     `.${cls} [data-squisq-build-row]>span{flex:0 0 1.4em;text-align:right;margin-left:-1.75em}` +
     `.${cls} [data-squisq-build-row]>div{min-width:0;flex:1}` +

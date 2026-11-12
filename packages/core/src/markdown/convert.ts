@@ -1120,13 +1120,31 @@ function convertBlockNode(node: MdastNode, parseHtml: boolean): MarkdownBlockNod
 
 function convertListItem(node: MdastNode, parseHtml: boolean): MarkdownListItem {
   const pos = convertPosition(node.position);
+  const emptyTask = node.checked == null ? emptyTaskMarker(node) : null;
   return {
     type: 'listItem',
     ...(node.checked != null ? { checked: node.checked } : {}),
+    ...(emptyTask !== null ? { checked: emptyTask } : {}),
     ...(node.spread != null ? { spread: node.spread } : {}),
-    children: convertBlockChildren(node.children ?? [], parseHtml),
+    children: emptyTask !== null ? [] : convertBlockChildren(node.children ?? [], parseHtml),
     ...posField(pos),
   };
+}
+
+/**
+ * GFM recognizes a task marker only with text after it, so the item an
+ * author has just added to a task list (`- [ ]`, before typing anything) reads
+ * as a bullet whose text is "[ ]", and stays one after the next save. An item
+ * that is exactly a marker is an empty task: `false` for `[ ]`, `true` for
+ * `[x]`. Null for anything else.
+ */
+function emptyTaskMarker(node: MdastNode): boolean | null {
+  const [paragraph, ...rest] = node.children ?? [];
+  if (!paragraph || rest.length > 0 || paragraph.type !== 'paragraph') return null;
+  const [text, ...more] = paragraph.children ?? [];
+  if (!text || more.length > 0 || text.type !== 'text') return null;
+  const match = /^\[( |x|X)\]$/.exec(String(text.value ?? '').trim());
+  return match ? match[1] !== ' ' : null;
 }
 
 function convertTableRow(node: MdastNode, isHeader: boolean, parseHtml: boolean): MarkdownTableRow {
@@ -1470,6 +1488,20 @@ function blockToMdast(node: MarkdownBlockNode): MdastNode {
 }
 
 function listItemToMdast(item: MarkdownListItem): MdastNode {
+  if (item.checked != null && item.children.length === 0) {
+    // The GFM writer adds the box only in front of an item's text, so an
+    // empty task item came out as a bare `-`. Write its marker as the item's
+    // raw text instead (`- [ ]`); `emptyTaskMarker` reads that back as an
+    // empty task item.
+    return {
+      type: 'listItem',
+      ...(item.spread != null ? { spread: item.spread } : {}),
+      children: [
+        { type: 'paragraph', children: [{ type: 'html', value: item.checked ? '[x]' : '[ ]' }] },
+      ],
+      ...mdastPosField(item.position),
+    };
+  }
   return {
     type: 'listItem',
     ...(item.checked != null ? { checked: item.checked } : {}),

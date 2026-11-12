@@ -88,6 +88,30 @@ describe('TextLayer', () => {
     expect(container.querySelector('style')?.textContent).toContain('list-style-position:outside');
   });
 
+  it('shows a task item’s box without a bullet beside it', () => {
+    const layer: TextLayerType = {
+      id: 'content-body',
+      type: 'text',
+      content: {
+        text: '☐ Book the venue',
+        html: '<ul><li data-squisq-task><span aria-hidden="true">☐ </span><p>Book the venue</p></li></ul>',
+        style: { fontSize: 28, color: '#000' },
+      },
+      position: { x: 100, y: 200, width: 900, height: 400 },
+    };
+    const { container } = render(
+      <svg>
+        <TextLayer layer={layer} viewport={viewport} blockTime={0} />
+      </svg>,
+    );
+    // The marker attribute survives sanitizing (inline styles do not), and
+    // the slide stylesheet hides that item's bullet.
+    expect(container.querySelector('li[data-squisq-task]')).not.toBeNull();
+    expect(container.querySelector('style')?.textContent).toContain(
+      'li[data-squisq-task]{list-style:none}',
+    );
+  });
+
   it('keeps source-gap lines in sanitized rich text', () => {
     const layer: TextLayerType = {
       id: 'content-body',
