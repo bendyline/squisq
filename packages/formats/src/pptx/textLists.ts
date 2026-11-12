@@ -10,7 +10,12 @@
  * lines that start with a typed `•`, or a shape per marker and per item.
  */
 
-import type { Layer, TextLayer, TextParagraph } from '@bendyline/squisq/schemas';
+import {
+  taskMarker,
+  type Layer,
+  type TextLayer,
+  type TextParagraph,
+} from '@bendyline/squisq/schemas';
 import { EMU_PER_CANVAS_PX, resolveLayerRect } from './geometry.js';
 import { estimateTextHeight } from './textFit.js';
 
@@ -105,6 +110,8 @@ export interface ListParagraphPlan {
   level: number;
   /** The numbering run's first number, for an ordered item. */
   startAt?: number;
+  /** A task-list item: its bullet is an empty or ticked box. */
+  checked?: boolean;
 }
 
 /**
@@ -125,6 +132,10 @@ export function planListParagraphs(
     }
     const level = Math.min(8, Math.max(0, Math.floor(list.level)));
     runs.length = Math.min(runs.length, level + 1);
+    if (list.checked !== undefined) {
+      runs[level] = undefined;
+      return { ordered: false, level, checked: list.checked };
+    }
     if (!list.ordered) {
       runs[level] = undefined;
       return { ordered: false, level };
@@ -146,6 +157,10 @@ export function listParagraphXml(
   const startAt = plan.startAt && plan.startAt !== 1 ? ` startAt="${plan.startAt}"` : '';
   return {
     attributes: ` marL="${hang * (plan.level + 1)}" lvl="${plan.level}" indent="${-hang}"`,
-    bullet: plan.ordered ? `<a:buAutoNum type="arabicPeriod"${startAt}/>` : `<a:buChar char="•"/>`,
+    bullet: plan.ordered
+      ? `<a:buAutoNum type="arabicPeriod"${startAt}/>`
+      : plan.checked !== undefined
+        ? `<a:buChar char="${taskMarker(plan.checked)}"/>`
+        : `<a:buChar char="•"/>`,
   };
 }

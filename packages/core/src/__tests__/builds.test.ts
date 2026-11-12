@@ -83,7 +83,8 @@ describe('progressive builds', () => {
       .flatMap((layer) => (layer.type === 'text' ? [layer.content.html ?? ''] : []))
       .join('');
     expect(html).toContain('>4.</span>');
-    expect(html).toContain('>[x]</span>');
+    // A done task's marker is a ticked box.
+    expect(html).toContain('>☑</span>');
     expect(html).toContain('<p>Paragraph</p>');
     expect(blockBuildSteps({ build: block.build, layers })).toHaveLength(4);
   });

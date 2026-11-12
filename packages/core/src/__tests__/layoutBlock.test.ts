@@ -34,14 +34,16 @@ function ctxWith(children: Block[]) {
 const INPUT: RawLayersInput = { template: 'layout', id: 'lay', duration: 0, audioSegment: 0 };
 
 describe('layoutBlock template', () => {
-  it('returns a single hint layer for an empty layout', () => {
+  it('returns the theme page and a hint for an empty layout', () => {
     const layers = layoutBlock(INPUT, ctxWith([]));
-    expect(layers).toHaveLength(1);
-    expect(layers[0].type).toBe('text');
-    expect((layers[0] as TextLayer).content.text).toBe('Empty layout');
+    // The page, not black: a layout was a black slide in a light deck.
+    expect(layers).toHaveLength(2);
+    expect(layers[0].id).toBe('bg');
+    expect(layers[1].type).toBe('text');
+    expect((layers[1] as TextLayer).content.text).toBe('Empty layout');
   });
 
-  it('emits one layer per child, in document order, at absolute positions', () => {
+  it('emits one layer per child over the page, in document order, at absolute positions', () => {
     const layers = layoutBlock(
       INPUT,
       ctxWith([
@@ -49,11 +51,11 @@ describe('layoutBlock template', () => {
         child('text-1', 'text', { x: '360', y: '380', width: '1200', height: '320' }, 'Welcome'),
       ]),
     );
-    expect(layers.map((l) => l.id)).toEqual(['box-1', 'text-1']);
-    expect(layers[0].type).toBe('shape');
-    expect(layers[1].type).toBe('text');
-    expect((layers[1] as TextLayer).content.text).toBe('Welcome');
-    expect(layers[0].position).toMatchObject({ x: 760, y: 390 });
+    expect(layers.map((l) => l.id)).toEqual(['bg', 'box-1', 'text-1']);
+    expect(layers[1].type).toBe('shape');
+    expect(layers[2].type).toBe('text');
+    expect((layers[2] as TextLayer).content.text).toBe('Welcome');
+    expect(layers[1].position).toMatchObject({ x: 760, y: 390 });
   });
 });
 

@@ -1,6 +1,6 @@
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import { Fragment } from '@tiptap/pm/model';
-import { TextSelection } from '@tiptap/pm/state';
+import { TextSelection, type EditorState, type Transaction } from '@tiptap/pm/state';
 import {
   DEFAULT_MERMAID_DIAGRAM_TYPE,
   mermaidDiagramMarkdown,
@@ -8,6 +8,7 @@ import {
 import { CODE_SNIPPET_FOCUS_INSERTED_META } from '../codeSnippet/codeSnippetFocus';
 import { tiptapBlockInsertion } from '../blockInsertion';
 import { headingDepthForInsertion } from '../sourceEdits';
+import { createTrailingParagraph } from '../trailingParagraph';
 
 // ─── Scene-block inserts (diagram / drawing / layout) ───
 
@@ -16,10 +17,12 @@ import { headingDepthForInsertion } from '../sourceEdits';
  * canvas isn't a blank surface. Each layer is a readable child sub-block
  * (`### {#id} {[type …]}`); a text layer's content is its markdown body.
  * Coordinates are absolute within the 1920×1080 scene viewport
- * (`SceneBlockWidget`). See `scene/commands/layoutCommands.ts`.
+ * (`SceneBlockWidget`). See `scene/commands/layoutCommands.ts`. No color:
+ * un-styled text takes the theme's ink, where a fixed dark slate vanished on
+ * every dark theme's slides.
  */
 const LAYOUT_STARTER_TEXT_PARAMS =
-  'x=360 y=380 width=1200 height=320 fontSize=64 fontWeight=bold align=center valign=middle color="#1e293b"';
+  'x=360 y=380 width=1200 height=320 fontSize=64 fontWeight=bold align=center valign=middle';
 /** Multi-line markdown for a new layout (raw / code views). */
 export const LAYOUT_STARTER_MARKDOWN = `\n## Layout {[layout]}\n\n### {#text-1} {[text ${LAYOUT_STARTER_TEXT_PARAMS}]}\n\nLayout\n`;
 
@@ -119,15 +122,67 @@ export function insertFenceBlock(
       // After the caret's top-level block — or before a drawing/layout the
       // caret sits in, so the fence never lands among its child headings.
       const insertPos = tiptapBlockInsertion(state, 'afterBlock').pos;
+      // An empty line the author made for the block becomes the block,
+      // rather than staying behind as a blank line above it.
+      const empty = emptyLineBefore(state, insertPos);
       if (dispatch) {
-        tr.insert(insertPos, block);
+        if (empty) tr.replaceWith(empty.from, insertPos, block);
+        else tr.insert(insertPos, block);
+        const blockPos = empty ? empty.from : insertPos;
         if (options.focusInsertedCodeSnippet) {
-          tr.setMeta(CODE_SNIPPET_FOCUS_INSERTED_META, insertPos);
+          tr.setMeta(CODE_SNIPPET_FOCUS_INSERTED_META, blockPos);
+        } else {
+          // Most fences draw a widget over hidden source text; leave the
+          // caret on the line below it so typing carries on after the block.
+          placeCaretAfterBlock(tr, blockPos + block.nodeSize);
         }
       }
       return true;
     })
     .run();
+}
+
+/**
+ * The empty top-level paragraph holding the caret, when it is the block a
+ * new block would be inserted straight after (`insertPos`).
+ */
+function emptyLineBefore(state: EditorState, insertPos: number): { from: number } | null {
+  const { $from, empty } = state.selection;
+  if (!empty || $from.depth !== 1) return null;
+  const line = $from.parent;
+  if (line.type.name !== 'paragraph' || line.content.size > 0) return null;
+  const from = $from.before(1);
+  return from + line.nodeSize === insertPos ? { from } : null;
+}
+
+/**
+ * Put the caret at the start of the paragraph after `pos`, creating an
+ * empty one when the next block is not a paragraph (or there is none).
+ */
+function placeCaretAfterBlock(tr: Transaction, pos: number): void {
+  const schema = tr.doc.type.schema;
+  const paragraph = schema.nodes.paragraph;
+  if (!paragraph) return;
+  const next = tr.doc.nodeAt(pos);
+  if (!next || next.type !== paragraph) {
+    // At the end of the document this is the trailing line the editor keeps
+    // anyway, and like it is not saved until typed in.
+    const line = next ? paragraph.create() : createTrailingParagraph(schema);
+    if (!line) return;
+    tr.insert(pos, line);
+  }
+  tr.setSelection(TextSelection.create(tr.doc, pos + 1)).scrollIntoView();
+}
+
+/**
+ * Select a freshly inserted heading's text, so the first keystroke names the
+ * block instead of being prepended to its placeholder title.
+ */
+function selectInsertedHeading(tr: Transaction, headingPos: number): void {
+  const heading = tr.doc.nodeAt(headingPos);
+  const from = headingPos + 1;
+  const to = from + (heading?.content.size ?? 0);
+  tr.setSelection(TextSelection.create(tr.doc, from, to)).scrollIntoView();
 }
 
 /**
@@ -175,8 +230,7 @@ export function insertChartBlock(
       }
       if (dispatch) {
         tr.insert(insertPos, Fragment.fromArray(nodes));
-        // Drop the caret into the new heading's text so it can be renamed.
-        tr.setSelection(TextSelection.create(tr.doc, insertPos + 1));
+        selectInsertedHeading(tr, insertPos);
       }
       return true;
     })
@@ -216,8 +270,7 @@ export function insertTemplateHeading(
       );
       if (dispatch) {
         tr.insert(insertPos, heading);
-        // Drop the caret into the new heading's text so it can be renamed.
-        tr.setSelection(TextSelection.create(tr.doc, insertPos + 1));
+        selectInsertedHeading(tr, insertPos);
       }
       return true;
     })
@@ -254,7 +307,7 @@ export function insertLayoutBlock(editor: TiptapEditor): void {
       const body = paragraphType.create(null, state.schema.text('Layout'));
       if (dispatch) {
         tr.insert(insertPos, Fragment.fromArray([parent, child, body]));
-        tr.setSelection(TextSelection.create(tr.doc, insertPos + 1));
+        selectInsertedHeading(tr, insertPos);
       }
       return true;
     })
