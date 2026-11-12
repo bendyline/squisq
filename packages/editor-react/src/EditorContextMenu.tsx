@@ -11,6 +11,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -24,9 +25,13 @@ import { createPortal } from 'react-dom';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
 import { CellSelection } from '@tiptap/pm/tables';
 import type { Editor as TiptapEditor } from '@tiptap/core';
+import type { ProofFinding } from '@bendyline/squisq/proof';
 import { useEditorContext, type EditorView } from './EditorContext';
 import { indentListItem, listNesting, outdentListItem } from './toolbar/tiptapToolbar';
 import { copyMediaCommand, mediaNodePosAt, type ClipboardMediaKind } from './mediaClipboard';
+import { proofMessageText, proofSuggestionLabel } from './proofing/findingText';
+import { useProofingState } from './proofing/proofingStateContext';
+import type { ProofingState } from './proofing/useProofing';
 
 export interface EditorContextMenuContext {
   /** Editor rendition that was right-clicked. */
@@ -111,9 +116,33 @@ interface SelectionInteraction {
   paste: () => Promise<void>;
 }
 
+/** A menu item with the styling only Squisq's own items use. */
+interface InternalMenuItem extends EditorContextMenuItem {
+  className?: string;
+}
+
 interface ResolvedMenuItem {
   item: EditorContextMenuItem;
   disabled: boolean;
+  className?: string;
+}
+
+interface MenuPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Where the menu was opened, kept so the menu can stay attached to that
+ * spot while the content under it scrolls.
+ */
+interface ScrollAnchor {
+  /**
+   * Every ancestor of the right-clicked element, with its scroll offsets at
+   * open. The chain ends at the document's scrolling element, so page
+   * scrolling is counted there.
+   */
+  ancestors: ReadonlyArray<{ element: Element; top: number; left: number; clips: boolean }>;
 }
 
 interface OpenMenu {
@@ -121,6 +150,9 @@ interface OpenMenu {
   items: readonly ResolvedMenuItem[];
   x: number;
   y: number;
+  anchor: ScrollAnchor;
+  /** The squiggled finding the right-click landed on; its message heads the menu. */
+  proof: ProofFinding | null;
   error: string | null;
 }
 
@@ -383,25 +415,142 @@ function listMenuItems(
   ];
 }
 
+const MAX_PROOF_SUGGESTIONS = 5;
+
+/**
+ * The squiggled finding under a pointer right-click, if any. It leads the
+ * menu, as a word processor puts spelling suggestions above Cut and Copy:
+ * a squiggled word in a table cell still offers the table's actions.
+ */
+function proofingFindingAt(
+  proofing: ProofingState | null,
+  context: EditorContextMenuContext,
+): ProofFinding | null {
+  if (!proofing || context.media) return null;
+  const findingId = proofing.findingAtPoint(context.view, context.clientX, context.clientY);
+  if (!findingId) return null;
+  return proofing.findings.find((finding) => finding.id === findingId) ?? null;
+}
+
+function proofingMenuItems(
+  proofing: ProofingState,
+  finding: ProofFinding,
+  context: EditorContextMenuContext,
+): InternalMenuItem[] {
+  const items: InternalMenuItem[] = finding.suggestions
+    .slice(0, MAX_PROOF_SUGGESTIONS)
+    .map((suggestion, index) => ({
+      id: `squisq.proof.suggestion-${index}`,
+      label: proofSuggestionLabel(suggestion),
+      group: 'proofing',
+      className: 'squisq-editor-context-menu-item--suggestion',
+      disabled: !context.editable,
+      onSelect: () => proofing.applySuggestion(finding.id, index),
+    }));
+  items.push({
+    id: 'squisq.proof.ignore',
+    label: 'Ignore',
+    group: 'proofing',
+    onSelect: () => proofing.ignoreFinding(finding.id),
+  });
+  // Only an unknown WORD can be dictionary material; a grammar or style
+  // finding spans a phrase. The two scopes stay distinct: the app dictionary
+  // is invisible to the file, the word list is written into its frontmatter.
+  if (finding.category === 'spelling') {
+    if (proofing.canAddToAppDictionary) {
+      items.push({
+        id: 'squisq.proof.add-app',
+        label: 'Add to dictionary',
+        group: 'proofing',
+        onSelect: () => proofing.addToAppDictionary(finding.id),
+      });
+    }
+    items.push({
+      id: 'squisq.proof.add-doc',
+      label: 'Add to document word list',
+      group: 'proofing',
+      disabled: !context.editable,
+      onSelect: () => proofing.addToDocWordList(finding.id),
+    });
+  }
+  return items;
+}
+
 function shortcutModifier(): string {
   return /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 }
 
-function computeMenuStyle(menu: OpenMenu, element?: HTMLElement | null): CSSProperties {
-  const rect = element?.getBoundingClientRect();
-  const width = rect?.width ?? 220;
-  const height = rect?.height ?? 150;
+function computeMenuStyle(point: MenuPoint, element?: HTMLElement | null): CSSProperties {
+  const width = element?.getBoundingClientRect().width ?? 220;
+  // The natural height: scrollHeight ignores the max-height an earlier pass set.
+  const height = element ? element.scrollHeight + element.offsetHeight - element.clientHeight : 150;
   const margin = 8;
   const gap = 4;
-  let top = menu.y + gap;
-  if (top + height + margin > window.innerHeight && menu.y - height - gap >= margin) {
-    top = menu.y - height - gap;
+  let top = point.y + gap;
+  if (top + height + margin > window.innerHeight) {
+    // Open upward where that fits. Otherwise slide up just far enough to fit,
+    // as a native menu does; only a menu taller than the window scrolls.
+    top =
+      point.y - height - gap >= margin
+        ? point.y - height - gap
+        : Math.max(margin, window.innerHeight - height - margin);
   }
   const left = Math.min(
-    Math.max(margin, menu.x),
+    Math.max(margin, point.x),
     Math.max(margin, window.innerWidth - width - margin),
   );
-  return { position: 'fixed', top, left, zIndex: 9999 };
+  return {
+    position: 'fixed',
+    top,
+    left,
+    zIndex: 9999,
+    boxSizing: 'border-box',
+    maxHeight: Math.max(0, window.innerHeight - top - margin),
+    overflowY: 'auto',
+  };
+}
+
+function rectContains(rect: DOMRect, point: MenuPoint): boolean {
+  return (
+    point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom
+  );
+}
+
+/**
+ * Remember the scroll offsets above the right-clicked element. An ancestor
+ * that clips its overflow and holds the click bounds where that spot can be
+ * seen; one that does not hold it (the click landed in content positioned
+ * outside it) never hides it.
+ */
+function captureScrollAnchor(target: Element, point: MenuPoint): ScrollAnchor {
+  const ancestors: Array<{ element: Element; top: number; left: number; clips: boolean }> = [];
+  for (let element = target.parentElement; element; element = element.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(element);
+    const clips =
+      (overflowX !== 'visible' || overflowY !== 'visible') &&
+      rectContains(element.getBoundingClientRect(), point);
+    ancestors.push({ element, top: element.scrollTop, left: element.scrollLeft, clips });
+  }
+  return { ancestors };
+}
+
+/**
+ * Where the spot the menu was opened on sits now that its content has
+ * scrolled, or null once it has scrolled out of view.
+ */
+function followScrollAnchor(anchor: ScrollAnchor, opened: MenuPoint): MenuPoint | null {
+  let { x, y } = opened;
+  for (const { element, top, left } of anchor.ancestors) {
+    x -= element.scrollLeft - left;
+    y -= element.scrollTop - top;
+  }
+  const point = { x, y };
+  if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return null;
+  for (const { element, clips } of anchor.ancestors) {
+    if (!element.isConnected) return null;
+    if (clips && !rectContains(element.getBoundingClientRect(), point)) return null;
+  }
+  return point;
 }
 
 /**
@@ -415,6 +564,8 @@ export function EditorContextMenuProvider({
 }: EditorContextMenuProviderProps): ReactElement {
   const { activeView, editorMode, colorScheme, monacoEditor, tiptapEditor, mediaProvider } =
     useEditorContext();
+  const proofing = useProofingState();
+  const proofHeadingId = useId();
   const itemGettersRef = useRef(new Set<ItemGetter>());
   const menuRef = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<OpenMenu | null>(null);
@@ -595,10 +746,13 @@ export function EditorContextMenuProvider({
   );
 
   const openAt = useCallback(
-    (target: Element, clientX: number, clientY: number): boolean => {
+    (target: Element, clientX: number, clientY: number, fromPointer: boolean): boolean => {
       const interaction = buildInteraction(target, clientX, clientY);
       if (!interaction) return false;
       const { context } = interaction;
+      // The menu key opens at the caret, where proofing answers it itself.
+      const proof = fromPointer ? proofingFindingAt(proofing, context) : null;
+      const proofItems = proof && proofing ? proofingMenuItems(proofing, proof, context) : [];
       const modifier = shortcutModifier();
       const baseItems: EditorContextMenuItem[] = [
         {
@@ -629,16 +783,29 @@ export function EditorContextMenuProvider({
       const tableItems = tableMenuItems(tiptapEditor, context);
       const listItems = listMenuItems(tiptapEditor, context);
       const hostItems = Array.from(itemGettersRef.current).flatMap((getItems) => getItems());
-      const items = [...baseItems, ...tableItems, ...listItems, ...hostItems]
+      const allItems: InternalMenuItem[] = [
+        ...proofItems,
+        ...baseItems,
+        ...tableItems,
+        ...listItems,
+        ...hostItems,
+      ];
+      const items = allItems
         .filter((item) => shouldShowItem(item, context))
-        .map((item) => ({ item, disabled: resolveDisabled(item, context) }));
+        .map((item) => ({
+          item,
+          disabled: resolveDisabled(item, context),
+          className: item.className,
+        }));
       if (!items.some((item) => !item.disabled)) return false;
-      const nextMenu = { context, items, x: clientX, y: clientY, error: null };
-      setMenuStyle(computeMenuStyle(nextMenu));
+      const point = { x: clientX, y: clientY };
+      const anchor = captureScrollAnchor(target, point);
+      const nextMenu = { context, items, ...point, anchor, proof, error: null };
+      setMenuStyle(computeMenuStyle(point));
       setMenu(nextMenu);
       return true;
     },
-    [buildInteraction, tiptapEditor],
+    [buildInteraction, proofing, tiptapEditor],
   );
 
   useEffect(() => {
@@ -646,7 +813,7 @@ export function EditorContextMenuProvider({
     if (!root) return;
     const onContextMenu = (event: MouseEvent) => {
       if (event.defaultPrevented || !(event.target instanceof Element)) return;
-      if (!openAt(event.target, event.clientX, event.clientY)) return;
+      if (!openAt(event.target, event.clientX, event.clientY, true)) return;
       event.preventDefault();
       event.stopPropagation();
     };
@@ -655,7 +822,7 @@ export function EditorContextMenuProvider({
       if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
       if (!(event.target instanceof Element)) return;
       const rect = event.target.getBoundingClientRect();
-      if (!openAt(event.target, rect.left + 12, rect.top + 20)) return;
+      if (!openAt(event.target, rect.left + 12, rect.top + 20, false)) return;
       event.preventDefault();
       event.stopPropagation();
     };
@@ -669,15 +836,31 @@ export function EditorContextMenuProvider({
 
   useEffect(() => {
     if (!menu) return;
+    let point: MenuPoint = { x: menu.x, y: menu.y };
     const frame = requestAnimationFrame(() => {
-      setMenuStyle(computeMenuStyle(menu, menuRef.current));
+      setMenuStyle(computeMenuStyle(point, menuRef.current));
       menuRef.current
         ?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
-        ?.focus();
+        ?.focus({ preventScroll: true });
     });
     const dismiss = (event: Event) => {
       if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
       setMenu(null);
+    };
+    // The menu stays with the spot it was opened on rather than closing on
+    // the first scroll. The gesture that opens it can scroll the content a
+    // few pixels (a trackpad's two-finger click settling, the caret being
+    // revealed), and that used to close the menu the moment it appeared.
+    const onScroll = (event: Event) => {
+      if (event.target instanceof Node && menuRef.current?.contains(event.target)) return;
+      const next = followScrollAnchor(menu.anchor, menu);
+      if (!next) {
+        setMenu(null);
+        return;
+      }
+      if (next.x === point.x && next.y === point.y) return;
+      point = next;
+      setMenuStyle(computeMenuStyle(point, menuRef.current));
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -686,13 +869,13 @@ export function EditorContextMenuProvider({
       }
     };
     document.addEventListener('pointerdown', dismiss, true);
-    window.addEventListener('scroll', dismiss, true);
+    window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', dismiss);
     window.addEventListener('keydown', onKeyDown);
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener('pointerdown', dismiss, true);
-      window.removeEventListener('scroll', dismiss, true);
+      window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', dismiss);
       window.removeEventListener('keydown', onKeyDown);
     };
@@ -746,9 +929,22 @@ export function EditorContextMenuProvider({
             data-theme={colorScheme}
             role="menu"
             aria-label="Editor actions"
+            aria-describedby={menu.proof ? proofHeadingId : undefined}
             style={menuStyle}
             onKeyDown={onMenuKeyDown}
           >
+            {menu.proof && (
+              <div id={proofHeadingId} className="squisq-editor-context-menu-proof">
+                <span
+                  className={`squisq-proof-dot squisq-proof-dot--${menu.proof.category}`}
+                  aria-hidden
+                />
+                <span>{proofMessageText(menu.proof)}</span>
+              </div>
+            )}
+            {menu.proof && menu.proof.suggestions.length === 0 && (
+              <div className="squisq-editor-context-menu-proof-empty">No suggestions</div>
+            )}
             {menu.items.map((resolved, index) => {
               const group = resolved.item.group ?? 'host';
               const previousGroup =
@@ -762,7 +958,7 @@ export function EditorContextMenuProvider({
                     type="button"
                     role="menuitem"
                     disabled={resolved.disabled}
-                    className="squisq-editor-context-menu-item"
+                    className={`squisq-editor-context-menu-item ${resolved.className ?? ''}`.trim()}
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => void runItem(resolved)}
                   >

@@ -7,19 +7,15 @@
  * when the host injected no capability.
  */
 
-import { createContext, useContext, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { useEditorContext } from '../EditorContext';
-import { useProofing, type ProofingState } from './useProofing';
+import { useProofing } from './useProofing';
 import { ProofingMenu } from './ProofingMenu';
 import { ProofingTooltip } from './ProofingTooltip';
+import { ProofingStateContext } from './proofingStateContext';
 
-const ProofingStateContext = createContext<ProofingState | null>(null);
-
-/** Proofing state, or `null` when the host injected no capability. */
 // eslint-disable-next-line react-refresh/only-export-components -- hook is co-located with its provider by design, mirroring CustomTemplateContext
-export function useProofingState(): ProofingState | null {
-  return useContext(ProofingStateContext);
-}
+export { useProofingState } from './proofingStateContext';
 
 export interface ProofingRootProps {
   children: ReactNode;

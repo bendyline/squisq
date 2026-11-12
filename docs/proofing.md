@@ -164,8 +164,15 @@ Two surfaces, same actions, different amounts of intent:
   follows its word through a scroll rather than closing on one: the tap
   also places the caret, which on a phone raises the keyboard and
   scrolls the page.
-- **Right-click menu** (both views; a long press where the browser
-  reports one). The complete suggestion list plus the same
+- **Right-click menu** (both views). A mouse right-click on a squiggle
+  opens the shell's editor context menu, led by the finding's message,
+  its suggestions and the same Ignore/dictionary items, with Cut, Copy,
+  Paste and any table or host actions beneath — so a squiggled word in a
+  table cell still offers the table's actions. Suggestions and the
+  document word list are disabled where the editor is read-only.
+- **Suggestions menu** (both views: the menu key or Shift+F10 on a
+  squiggle, a long press where the browser reports one, and the hover
+  card's "More"). The complete suggestion list plus the same
   Ignore/dictionary items, with arrow-key navigation. It supersedes the
   card whenever both would be live.
 
