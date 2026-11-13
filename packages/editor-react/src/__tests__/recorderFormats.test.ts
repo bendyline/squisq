@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildFilename,
+  dualFilenameSeeds,
+  recordingFilenameSeed,
   resolveFormat,
   supportsDisplayMedia,
   supportsMediaRecorder,
@@ -177,6 +179,35 @@ describe('resolveFormat', () => {
     expect(fmt.mimeType).toBe('');
     expect(fmt.extension).toBe('.webm');
     expect(fmt.directory).toBe('audio');
+  });
+});
+
+describe('recording filename seeds', () => {
+  function streamWithAudio(audioTracks: number): MediaStream {
+    return { getAudioTracks: () => new Array(audioTracks) } as unknown as MediaStream;
+  }
+
+  it('names a recording after the request until a stream is acquired', () => {
+    expect(recordingFilenameSeed('mic', null, true)).toBe('audio');
+    expect(recordingFilenameSeed('camera', null, true)).toBe('camera-audio');
+    expect(recordingFilenameSeed('screen+mic', null, false)).toBe('screen');
+  });
+
+  it('trusts the acquired stream over the request', () => {
+    // Display capture may accept an audio request and return video only.
+    expect(recordingFilenameSeed('screen', streamWithAudio(0), true)).toBe('screen');
+    expect(recordingFilenameSeed('camera', streamWithAudio(1), false)).toBe('camera-audio');
+  });
+
+  it('names each file of a dual capture by its own stream', () => {
+    expect(dualFilenameSeeds(streamWithAudio(0), streamWithAudio(1), true, false)).toEqual({
+      screen: 'screen',
+      camera: 'camera-audio',
+    });
+    expect(dualFilenameSeeds(null, null, true, false)).toEqual({
+      screen: 'screen-audio',
+      camera: 'camera',
+    });
   });
 });
 

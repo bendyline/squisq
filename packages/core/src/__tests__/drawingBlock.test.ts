@@ -52,7 +52,9 @@ describe('drawingBlock template', () => {
         ),
       ]),
     );
-    const shapes = layers.filter((l): l is ShapeLayer => l.type === 'shape');
+    // The first layer is the theme's page; the drawing's shapes follow.
+    expect(layers[0]?.id).toBe('bg');
+    const shapes = layers.filter((l): l is ShapeLayer => l.type === 'shape' && l.id !== 'bg');
     const texts = layers.filter((l): l is TextLayer => l.type === 'text');
     expect(shapes.map((s) => s.content.shape).sort()).toEqual(['circle', 'rect']);
     expect(texts.map((t) => t.content.text).sort()).toEqual(['CEO', 'Dev']);
@@ -71,8 +73,11 @@ describe('drawingBlock template', () => {
     expect(paths).toHaveLength(1);
     expect(paths[0].content.endMarker).toBe('arrow');
     expect(paths[0].content.d.startsWith('M ')).toBe(true);
-    // Connector emitted before the shapes (so it sits behind them).
-    expect(layers.indexOf(paths[0])).toBeLessThan(layers.findIndex((l) => l.type === 'shape'));
+    // Connector emitted before the shapes (so it sits behind them), above the page.
+    expect(layers.indexOf(paths[0])).toBeLessThan(
+      layers.findIndex((l) => l.type === 'shape' && l.id !== 'bg'),
+    );
+    expect(layers.indexOf(paths[0])).toBeGreaterThan(layers.findIndex((l) => l.id === 'bg'));
   });
 
   it('emits a title layer when input.title is set', () => {
@@ -83,10 +88,12 @@ describe('drawingBlock template', () => {
     expect(layers.find((l) => l.id === 'drawing-title')).toBeDefined();
   });
 
-  it('returns a single hint layer for an empty drawing', () => {
+  it('returns the theme page and a hint for an empty drawing', () => {
     const layers = drawingBlock(makeInput({ title: 'Nothing yet' }), ctxWith([]));
-    expect(layers).toHaveLength(1);
-    expect(layers[0].type).toBe('text');
+    // The page, not black: an untouched drawing was a black slide in a light deck.
+    expect(layers).toHaveLength(2);
+    expect(layers[0].id).toBe('bg');
+    expect(layers[1].type).toBe('text');
   });
 });
 

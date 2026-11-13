@@ -955,6 +955,79 @@ describe('tap card', () => {
   });
 });
 
+describe('right-click', () => {
+  const squiggle = () =>
+    tiptap!.view.dom.querySelector<HTMLElement>('[data-proof-id]') as HTMLElement;
+
+  /** Document position just inside the first "teh". */
+  function tehPos(): number {
+    let found = -1;
+    tiptap!.state.doc.descendants((node, pos) => {
+      if (found < 0 && node.isText && node.text?.includes('teh')) {
+        found = pos + node.text.indexOf('teh') + 1;
+      }
+    });
+    return found;
+  }
+
+  async function ready(): Promise<void> {
+    await vi.waitFor(() => expect(lastState?.findings.length).toBe(1));
+    await vi.waitFor(() => expect(squiggle()).toBeTruthy());
+  }
+
+  /** A `contextmenu` as `pointerType` would make it, at a point on the squiggle. */
+  function rightClick(pointerType: string): MouseEvent {
+    vi.spyOn(tiptap!.view, 'posAtCoords').mockReturnValue({ pos: tehPos(), inside: -1 });
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 10,
+      clientY: 10,
+    });
+    Object.defineProperty(event, 'pointerType', { value: pointerType });
+    act(() => {
+      squiggle().dispatchEvent(event);
+    });
+    return event;
+  }
+
+  afterEach(() => {
+    tiptap = null;
+  });
+
+  it('names the squiggled finding under a point in the Write view', async () => {
+    mount();
+    await ready();
+    const posAtCoords = vi.spyOn(tiptap!.view, 'posAtCoords');
+
+    posAtCoords.mockReturnValue({ pos: tehPos(), inside: -1 });
+    expect(lastState!.findingAtPoint('wysiwyg', 10, 10)).toBe(lastState!.findings[0].id);
+
+    // "This", clear of the squiggle.
+    posAtCoords.mockReturnValue({ pos: tehPos() - 8, inside: -1 });
+    expect(lastState!.findingAtPoint('wysiwyg', 10, 10)).toBeNull();
+    // Preview has no squiggles, and the Source view here has no editor.
+    expect(lastState!.findingAtPoint('preview', 10, 10)).toBeNull();
+    expect(lastState!.findingAtPoint('raw', 10, 10)).toBeNull();
+  });
+
+  it('leaves a mouse right-click to the editor menu, which leads with the finding', async () => {
+    mount();
+    await ready();
+    const event = rightClick('mouse');
+    expect(event.defaultPrevented).toBe(false);
+    expect(document.querySelector('.squisq-proof-menu')).toBeNull();
+  });
+
+  it('still answers a finger’s long press with the suggestions menu', async () => {
+    mount();
+    await ready();
+    const event = rightClick('touch');
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.querySelector('.squisq-proof-menu')).toBeTruthy();
+  });
+});
+
 describe('view switches', () => {
   // EditorShell mounts the Write editor only while its tab is showing, and the
   // new instance reaches the proofing hook in a LATER task than the view

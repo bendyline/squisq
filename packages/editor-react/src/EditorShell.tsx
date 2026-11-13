@@ -21,6 +21,7 @@ import {
   type BlockTagVisibility,
   type CoverImageSaveOutput,
   type DashboardImageSaveOutput,
+  type MediaEditSaveOutput,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
 import { StatusBar } from './StatusBar';
@@ -424,6 +425,11 @@ export interface EditorShellProps {
    */
   saveDashboardImageOutput?: DashboardImageSaveOutput;
   /**
+   * Host save flow for "Save edited copy" in the media-edit dialog (a clip
+   * with its edits baked into one file). Without one the copy is downloaded.
+   */
+  saveMediaEditOutput?: MediaEditSaveOutput;
+  /**
    * Explicit Monaco language ID override (e.g. `'typescript'`,
    * `'python'`, `'json'`). Wins over the language derived from
    * `fileName`. Anything other than `'markdown'` or `'plaintext'`
@@ -783,6 +789,7 @@ export function EditorShell({
   fileName,
   saveCoverImageOutput,
   saveDashboardImageOutput,
+  saveMediaEditOutput,
   language,
   findMode,
   onFindModeChange,
@@ -872,6 +879,7 @@ export function EditorShell({
         versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
         onSaveVersion={onSaveVersion}
         mediaProvider={effectiveMediaProvider}
+        mediaBasePath={basePath}
         mediaEditRenders={effectiveMediaEditRenders}
         imageDisplayMode={imageDisplayMode}
         mentionProvider={mentionProvider}
@@ -892,6 +900,7 @@ export function EditorShell({
         fileName={fileName}
         saveCoverImageOutput={saveCoverImageOutput}
         saveDashboardImageOutput={saveDashboardImageOutput}
+        saveMediaEditOutput={saveMediaEditOutput}
         language={language}
         findMode={findMode}
         onFindModeChange={onFindModeChange}
@@ -1573,6 +1582,7 @@ function EditorShellInner({
       data-link-handler={onLinkClick ? 'true' : undefined}
       data-full-width={fullWidth ? 'true' : undefined}
       data-thin-margins={thinMargins ? 'true' : undefined}
+      data-auto-grow={autoGrow ? 'true' : undefined}
       data-outline-visible={isMarkdownMode && outlineVisible ? 'true' : undefined}
       style={{
         display: 'flex',

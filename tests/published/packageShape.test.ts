@@ -76,8 +76,12 @@ const PACKED_SIZE_BUDGETS: Record<string, number> = {
   // media-edit render engine: mediabunny's audio demuxers for imported
   // formats and its WebM/WAV writers (~60 KB packed; RNNoise stays an
   // external dependency), plus the audio-file encoder's audio-only MP4
-  // writer (loaded lazily, ~287 KB packed in total at release B).
-  '@bendyline/squisq-video-react': 300_000,
+  // writer (loaded lazily, ~287 KB packed in total at release B), plus the
+  // media-bake engine — a clip's recipe rendered into one ordinary file —
+  // which adds mediabunny's video decode sink and encode source to the
+  // media-edit worker and to its main-thread fallback (~19 KB packed for
+  // the pair). Packs to ~306 KB; leave roughly 15% headroom.
+  '@bendyline/squisq-video-react': 350_000,
   // Also ships the background markdown parser as one self-contained worker
   // file (loaded by URL, so it cannot share core's copy): remark, parse5 for
   // inline HTML, and the icon catalog for {[icon]} tokens, minified to ~240 KB

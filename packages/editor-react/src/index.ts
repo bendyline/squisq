@@ -55,6 +55,7 @@ export type {
   LayoutMode,
   CoverImageSaveOutput,
   DashboardImageSaveOutput,
+  MediaEditSaveOutput,
 } from './EditorContext.js';
 export { EditorContextMenuProvider, useEditorContextMenuItems } from './EditorContextMenu.js';
 export type {
@@ -120,6 +121,12 @@ export {
   setMediaClipInSource,
 } from './timelineSource.js';
 export type { MediaClipPatch } from './timelineSource.js';
+export { bakeMarkdownMedia } from './mediaEdit/bakedMarkdown.js';
+export type {
+  BakedMarkdown,
+  BakedMediaReference,
+  BakeMarkdownMediaOptions,
+} from './mediaEdit/bakedMarkdown.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome
 // around the editor based on whether a file is markdown or code.
@@ -560,6 +567,17 @@ export type {
   DataCardPluginState,
 } from './dataCard/DataCardExtension.js';
 export { DataCardWidget } from './dataCard/DataCardWidget.js';
+
+// Fill-available — a height-capable widget host (`squisq-block-fill-available`)
+// that ends the document takes the page's spare height. Hosts that build
+// their own Tiptap editor add the extension beside the widget extensions.
+export {
+  FillAvailableExtension,
+  FILL_AVAILABLE_CLASS,
+  fillHeightFor,
+  terminalFillHost,
+} from './fillAvailable/FillAvailableExtension.js';
+export type { FillGeometry } from './fillAvailable/FillAvailableExtension.js';
 
 // Hosted-video embeds — a top-level paragraph that is only a link (or bare
 // URL) to a YouTube/Vimeo/Loom/Wistia page plays inline in the

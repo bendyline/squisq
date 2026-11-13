@@ -1,0 +1,12 @@
+/* FillAvailableExtension — a height-capable block at the end of the page takes
+ * the room left below it. Hosts opt in with `.squisq-block-fill-available`;
+ * the extension measures the room and stamps the host with `data-fill-height`
+ * and `--squisq-fill-height`. The host becomes a flex column that is at least
+ * that tall, and each component's own sheet says which part grows into it
+ * (data-card.css: the grid's scroller; scene.css: a diagram or scene canvas).
+ * Without the stamp every component keeps its natural height. */
+.squisq-block-fill-available[data-fill-height] {
+  display: flex;
+  flex-direction: column;
+  min-height: var(--squisq-fill-height);
+}

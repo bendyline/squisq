@@ -27,12 +27,18 @@ function fakeManager(overrides: Partial<MediaEditRenderManager> = {}): MediaEdit
       render: vi.fn(),
       analyze: vi.fn(),
       pauses: vi.fn(async () => ({ cuts: [{ start: 2, end: 3.5 }], durationSec: 10 })),
+      waveform: vi.fn(async () => ({
+        peaks: new Float32Array(1000),
+        peaksPerSec: 100,
+        durationSec: 10,
+      })),
       preview: vi.fn(async () => ({
         sampleRate: 48000,
         startSec: 0,
         original: [new Float32Array(10)],
         processed: [new Float32Array(10)],
       })),
+      bake: vi.fn(),
       dispose: vi.fn(),
     },
     sync: vi.fn(),
@@ -41,6 +47,11 @@ function fakeManager(overrides: Partial<MediaEditRenderManager> = {}): MediaEdit
     whenReady: vi.fn(async () => {}),
     retry: vi.fn(),
     loadSource: vi.fn(async () => new Blob(['x'])),
+    bakedMedia: () => undefined,
+    bake: vi.fn(async (_clip, options) => {
+      options?.onProgress?.(1);
+      return '.mediaEdits/take.0123456789ab.baked.m4a';
+    }),
     collectGarbage: vi.fn(async () => []),
     subscribe: () => () => {},
     getVersion: () => 0,
@@ -254,7 +265,15 @@ describe('MediaEditModal', () => {
     expect(within(header).getByText('Processing 39%')).toBeTruthy();
     const status = within(footer).getByRole('status');
     expect(status.textContent).toBe('Processing… 39%');
-    expect(status.nextElementSibling).toBe(within(footer).getByRole('button', { name: 'Cancel' }));
+    // The status takes the slack to the left of the footer's three actions.
+    expect(
+      within(footer)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Save edited copy…', 'Cancel', 'Apply']);
+    expect(status.nextElementSibling).toBe(
+      within(footer).getByRole('button', { name: 'Save edited copy…' }),
+    );
   });
 
   it('shows no render status without a saved cleanup recipe', async () => {
@@ -309,14 +328,173 @@ describe('media edit targets', () => {
   });
 });
 
-describe('MediaEditModal — timing', () => {
-  it('shortens pauses with proposed cuts and writes volume and fades', async () => {
+/** Open the Cuts tab and wait for the clip's length (read with the waveform). */
+async function openCutsTab() {
+  fireEvent.click(screen.getByRole('tab', { name: /^Cuts/ }));
+  return screen.findByRole('group', { name: 'Clip timeline' });
+}
+
+describe('MediaEditModal — cuts', () => {
+  const audio = '{[audio src=audio/take.webm anchor=document]}\n\n# One\n';
+
+  it('reads the waveform only once the Cuts tab is opened', async () => {
+    const manager = fakeManager();
+    await openModal(audio, manager);
+    expect(manager.renderer.waveform).not.toHaveBeenCalled();
+    await openCutsTab();
+    expect(manager.renderer.waveform).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('No cuts yet.')).toBeTruthy();
+    expect(screen.getByText('0:00.0 / 0:10.0')).toBeTruthy();
+  });
+
+  it('cuts a section marked at the playhead and writes it to the clip', async () => {
+    const { source } = await openModal(audio, fakeManager());
+    const timeline = await openCutsTab();
+    const cut = screen.getByRole('button', { name: 'Cut selection' });
+    expect(cut).toHaveProperty('disabled', true);
+
+    // Playhead to 2 s, mark the start; on to 5 s, mark the end.
+    fireEvent.keyDown(timeline, { key: 'ArrowRight' });
+    fireEvent.keyDown(timeline, { key: 'ArrowRight' });
+    fireEvent.click(screen.getByRole('button', { name: 'Set start' }));
+    expect(screen.getByTestId('media-edit-selection-text').textContent).toBe('From 0:02.0');
+    expect(cut).toHaveProperty('disabled', true);
+    for (let i = 0; i < 3; i++) fireEvent.keyDown(timeline, { key: 'ArrowRight' });
+    fireEvent.click(screen.getByRole('button', { name: 'Set end' }));
+    expect(screen.getByTestId('media-edit-selection-text').textContent).toBe(
+      '0:02.0 – 0:05.0 (3.0 s)',
+    );
+
+    fireEvent.click(cut);
+    expect(screen.getAllByTestId('media-edit-cut')).toHaveLength(1);
+    expect(screen.queryByTestId('media-edit-selection')).toBeNull();
+    expect(
+      screen.getByText('1 cut removes 3.0 s: the clip plays for 0:07 instead of 0:10.'),
+    ).toBeTruthy();
+    // The readout is in result time: the playhead sits on the join, 2 s in, of 7 s.
+    expect(screen.getByText('0:02.0 / 0:07.0')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Cuts (edited)' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() =>
+      expect(source().split('\n')[0]).toBe(
+        '{[audio src=audio/take.webm anchor=document cuts=2-5]}',
+      ),
+    );
+  });
+
+  it('makes several cuts from the keyboard, merging the ones that overlap', async () => {
+    const { source } = await openModal(audio, fakeManager());
+    const timeline = await openCutsTab();
+    const press = (key: string, times = 1) => {
+      for (let i = 0; i < times; i++) fireEvent.keyDown(timeline, { key });
+    };
+    press('ArrowRight');
+    press('i');
+    press('ArrowRight', 2);
+    press('o');
+    press('x'); // 1–3
+    press('ArrowRight', 5); // playhead 6
+    press('i');
+    press('ArrowRight', 2);
+    press('o');
+    press('Delete'); // 6–8
+    expect(screen.getAllByTestId('media-edit-cut')).toHaveLength(2);
+    // A third cut bridging the gap fuses all three.
+    press('Home');
+    press('ArrowRight', 2);
+    press('[');
+    press('ArrowRight', 5);
+    press(']');
+    press('x'); // 2–7
+    expect(screen.getAllByTestId('media-edit-cut')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(source().split('\n')[0]).toContain('cuts=1-8'));
+  });
+
+  it('shows saved cuts when reopened, and adjusts, restores and undoes them', async () => {
+    const { source } = await openModal(
+      '{[audio src=audio/take.webm anchor=document cuts="2-3 6-8"]}\n\n# One\n',
+      fakeManager(),
+    );
+    await openCutsTab();
+    const apply = screen.getByRole('button', { name: 'Apply' });
+    expect(screen.getAllByTestId('media-edit-cut')).toHaveLength(2);
+    const rows = within(screen.getByRole('list', { name: 'Cuts' })).getAllByRole('listitem');
+    expect(rows.map((row) => row.firstChild?.textContent)).toEqual([
+      '0:02.0 – 0:03.0',
+      '0:06.0 – 0:08.0',
+    ]);
+    // Opening the tab changes nothing.
+    expect(apply).toHaveProperty('disabled', true);
+
+    // Pull the first cut's end half a second later.
+    const end = screen.getByRole('slider', { name: 'Cut 1 end' });
+    expect(end.getAttribute('aria-valuetext')).toBe('0:03.0');
+    for (let i = 0; i < 5; i++) fireEvent.keyDown(end, { key: 'ArrowRight' });
+    expect(end.getAttribute('aria-valuetext')).toBe('0:03.5');
+    // An edge stops at its neighbour instead of running into it.
+    for (let i = 0; i < 6; i++) fireEvent.keyDown(end, { key: 'ArrowRight', shiftKey: true });
+    expect(end.getAttribute('aria-valuenow')).toBe('5.99');
+    for (let i = 0; i < 6; i++) fireEvent.keyDown(end, { key: 'ArrowLeft', shiftKey: true });
+    expect(end.getAttribute('aria-valuenow')).toBe('2.05');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore cut 2' }));
+    expect(screen.getAllByTestId('media-edit-cut')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(screen.getAllByTestId('media-edit-cut')).toHaveLength(2);
+
+    // Undo all the way back: nothing left to apply.
+    const undo = screen.getByRole('button', { name: 'Undo' });
+    while (!(undo as HTMLButtonElement).disabled) fireEvent.click(undo);
+    expect(screen.getByRole('slider', { name: 'Cut 1 end' }).getAttribute('aria-valuetext')).toBe(
+      '0:03.0',
+    );
+    expect(apply).toHaveProperty('disabled', true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore all' }));
+    expect(screen.queryByTestId('media-edit-cut')).toBeNull();
+    fireEvent.click(apply);
+    await waitFor(() =>
+      expect(source().split('\n')[0]).toBe('{[audio src=audio/take.webm anchor=document]}'),
+    );
+  });
+
+  it('plays the result, skipping cuts, and previews one cut in context', async () => {
+    await openModal(
+      '{[audio src=audio/take.webm anchor=document cuts="0-2 6-8"]}\n\n# One\n',
+      fakeManager(),
+    );
+    await openCutsTab();
+    const media = document.querySelector('audio')!;
+    const play = vi.spyOn(media, 'play');
+
+    // The clip opens on a cut: the result starts after it.
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(media.currentTime).toBe(2);
+
+    // "Original" plays through the cuts from where the playhead is.
+    fireEvent.click(screen.getByRole('button', { name: 'Original' }));
+    const timeline = screen.getByRole('group', { name: 'Clip timeline' });
+    fireEvent.keyDown(timeline, { key: 'Home' });
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    expect(media.currentTime).toBe(0);
+    expect(screen.getByText('0:00.0 / 0:10.0')).toBeTruthy();
+
+    // Previewing a cut starts shortly before it, whatever the mode.
+    fireEvent.click(screen.getByRole('button', { name: 'Preview cut 2' }));
+    expect(media.currentTime).toBe(4.5);
+    expect(play).toHaveBeenCalledTimes(3);
+  });
+
+  it('adds found pauses to the cuts already made', async () => {
     const manager = fakeManager();
     const { source } = await openModal(
-      '{[audio src=audio/take.webm anchor=document]}\n\n# One\n',
+      '{[audio src=audio/take.webm anchor=document cuts=7-8]}\n\n# One\n',
       manager,
     );
-    fireEvent.click(screen.getByRole('tab', { name: 'Timing' }));
+    await openCutsTab();
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Find pauses' }));
     });
@@ -324,13 +502,12 @@ describe('MediaEditModal — timing', () => {
       expect.objectContaining({ options: { maxPauseSec: 0.8, keepSec: 0.4 } }),
       expect.anything(),
     );
-    await screen.findByText('1 pause shortened, saving 0:02.');
-    fireEvent.change(screen.getByLabelText('Volume'), { target: { value: '-3' } });
-    fireEvent.change(screen.getByLabelText('Fade in'), { target: { value: '0.5' } });
+    await screen.findByText('1 pause shortened.');
+    expect(screen.getAllByTestId('media-edit-cut')).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() =>
       expect(source().split('\n')[0]).toBe(
-        '{[audio src=audio/take.webm anchor=document cuts=2-3.5 gain=-3 fadeIn=0.5]}',
+        '{[audio src=audio/take.webm anchor=document cuts="2-3.5 7-8"]}',
       ),
     );
   });
@@ -342,11 +519,11 @@ describe('MediaEditModal — timing', () => {
       '<video src="video/camera.webm" data-squisq-video-placement="picture-in-picture" data-squisq-video-lock-to-block="false" data-squisq-video-clip-start="0.5" data-squisq-video-gain="-6" data-squisq-video-group="rec-a"></video>\n';
     const { source } = await openModal(markdown, fakeManager(), 'video/screen.webm');
     expect(screen.getByText('Edit clip')).toBeTruthy();
-    fireEvent.click(screen.getByRole('tab', { name: 'Timing' }));
+    await openCutsTab();
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Find pauses' }));
     });
-    await screen.findByText('1 pause shortened, saving 0:02.');
+    await screen.findByText('1 pause shortened.');
     fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     await waitFor(() => {
       const lines = source().split('\n');
@@ -355,6 +532,232 @@ describe('MediaEditModal — timing', () => {
       expect(lines[4]).toContain('data-squisq-video-cuts="2.5-4"');
       expect(lines[4]).toContain('data-squisq-video-gain="-6"');
     });
+  });
+
+  it('keeps cuts inside a trimmed clip and labels them from its start', async () => {
+    const markdown =
+      '# One\n\n<video src="video/screen.webm" data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false" data-squisq-video-clip-start="2" data-squisq-video-clip-end="8"></video>\n';
+    const { source } = await openModal(markdown, fakeManager(), 'video/screen.webm');
+    const timeline = await openCutsTab();
+    expect(screen.getByText('0:00.0 / 0:06.0')).toBeTruthy();
+    // One second into the clip is 3 s into the file.
+    fireEvent.keyDown(timeline, { key: 'ArrowRight' });
+    fireEvent.keyDown(timeline, { key: 'i' });
+    fireEvent.keyDown(timeline, { key: 'End' });
+    fireEvent.keyDown(timeline, { key: 'o' });
+    expect(screen.getByTestId('media-edit-selection-text').textContent).toBe(
+      '0:01.0 – 0:06.0 (5.0 s)',
+    );
+    fireEvent.keyDown(timeline, { key: 'x' });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(source().split('\n')[2]).toContain('data-squisq-video-cuts="3-8"'));
+  });
+
+  it('drops a selection on Escape before Escape closes the dialog', async () => {
+    const { onClose } = await openModal(audio, fakeManager());
+    const timeline = await openCutsTab();
+    fireEvent.keyDown(timeline, { key: 'i' });
+    expect(screen.getByTestId('media-edit-selection')).toBeTruthy();
+    fireEvent.keyDown(timeline, { key: 'Escape' });
+    expect(screen.queryByTestId('media-edit-selection')).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.keyDown(timeline, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('still cuts by time when the waveform cannot be read', async () => {
+    const manager = fakeManager();
+    vi.mocked(manager.renderer.waveform).mockRejectedValue(new Error('unsupported codec'));
+    await openModal(audio, manager);
+    fireEvent.click(screen.getByRole('tab', { name: /^Cuts/ }));
+    await screen.findByText('This clip could not be read: unsupported codec');
+    expect(screen.queryByRole('group', { name: 'Clip timeline' })).toBeNull();
+    // The player knows the length even though the decoder failed.
+    const media = document.querySelector('audio')!;
+    Object.defineProperty(media, 'duration', { configurable: true, value: 10 });
+    fireEvent.durationChange(media);
+    expect(await screen.findByRole('group', { name: 'Clip timeline' })).toBeTruthy();
+    expect(
+      screen.getByText('The waveform could not be read; cuts still work by time.'),
+    ).toBeTruthy();
+  });
+
+  it('gives a silent recording its timeline from the length read out of the file', async () => {
+    // A screen recording with no audio track: no waveform to draw, and (as a
+    // recorder's WebM) no length the player can report either.
+    const manager = fakeManager();
+    vi.mocked(manager.renderer.waveform).mockResolvedValue({
+      peaks: new Float32Array(0),
+      peaksPerSec: 100,
+      durationSec: 10,
+    });
+    const markdown =
+      '# One\n\n<video src="video/screen.webm" data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false"></video>\n';
+    const { source } = await openModal(markdown, manager, 'video/screen.webm');
+    const timeline = await openCutsTab();
+    expect(screen.getByText('0:00.0 / 0:10.0')).toBeTruthy();
+    expect(screen.queryByText(/length/)).toBeNull();
+    fireEvent.keyDown(timeline, { key: 'ArrowRight' });
+    fireEvent.keyDown(timeline, { key: 'i' });
+    fireEvent.keyDown(timeline, { key: 'ArrowRight' });
+    fireEvent.keyDown(timeline, { key: 'o' });
+    fireEvent.keyDown(timeline, { key: 'x' });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() => expect(source().split('\n')[2]).toContain('data-squisq-video-cuts="1-2"'));
+  });
+
+  it('asks the player for the length when the file cannot be read at all', async () => {
+    const manager = fakeManager();
+    vi.mocked(manager.renderer.waveform).mockRejectedValue(new Error('unsupported container'));
+    const markdown =
+      '# One\n\n<video src="video/screen.webm" data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false"></video>\n';
+    await openModal(markdown, manager, 'video/screen.webm');
+    // A recording as the player first sees it: no length yet.
+    const media = document.querySelector<HTMLVideoElement>('[role="tabpanel"] video')!;
+    Object.defineProperty(media, 'duration', { configurable: true, value: Infinity });
+    fireEvent.click(screen.getByRole('tab', { name: /^Cuts/ }));
+    await screen.findByText('This clip could not be read: unsupported container');
+    // Seeking far past the end makes the browser work the length out.
+    await waitFor(() => expect(media.currentTime).toBe(1e101));
+    Object.defineProperty(media, 'duration', { configurable: true, value: 10 });
+    fireEvent.durationChange(media);
+    expect(await screen.findByRole('group', { name: 'Clip timeline' })).toBeTruthy();
+    expect(screen.getByText('0:00.0 / 0:10.0')).toBeTruthy();
+  });
+});
+
+describe('MediaEditModal — size', () => {
+  it('fills the app for a video clip and stays compact for audio', async () => {
+    await openModal(
+      '# One\n\n<video src="video/screen.webm" data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false"></video>\n',
+      fakeManager(),
+      'video/screen.webm',
+    );
+    expect(screen.getByRole('dialog').className).toContain(
+      'squisq-media-edit-modal__surface--large',
+    );
+    cleanup();
+    await openModal('{[audio src=audio/take.webm anchor=document]}\n\n# One\n', fakeManager());
+    expect(screen.getByRole('dialog').className).not.toContain('--large');
+  });
+});
+
+describe('MediaEditModal — save edited copy', () => {
+  const audio = '{[audio src=audio/take.webm anchor=document]}\n\n# One\n';
+
+  function renderWithSaver(
+    markdown: string,
+    manager: MediaEditRenderManager,
+    saveMediaEditOutput: (blob: Blob, filename: string) => boolean | void,
+  ) {
+    render(
+      <EditorProvider
+        initialMarkdown={markdown}
+        mediaEditRenders={manager}
+        saveMediaEditOutput={saveMediaEditOutput}
+      >
+        <SourceProbe />
+        <MediaEditModal target={{ src: 'audio/take.webm', kind: 'audio' }} onClose={vi.fn()} />
+      </EditorProvider>,
+    );
+    return screen.findByRole('checkbox', { name: 'Loudness' });
+  }
+
+  it('has nothing to save for an unedited clip', async () => {
+    await openModal(audio, fakeManager());
+    expect(screen.getByRole('button', { name: 'Save edited copy…' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+  });
+
+  it('bakes the recipe on screen, applied or not, and hands the file to the host', async () => {
+    const manager = fakeManager();
+    const saved: Array<{ filename: string; type: string }> = [];
+    await renderWithSaver(
+      '{[audio src=audio/take.webm anchor=document clipStart=1 cuts=2-3]}\n\n# One\n',
+      manager,
+      (blob, filename) => {
+        saved.push({ filename, type: blob.type });
+      },
+    );
+    // An edit made in the dialog and not applied is part of the copy.
+    fireEvent.click(screen.getByRole('tab', { name: 'Volume & fades' }));
+    fireEvent.change(screen.getByLabelText('Volume'), { target: { value: '-3' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save edited copy…' }));
+    });
+    expect(manager.bake).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(manager.bake).mock.calls[0][0]).toMatchObject({
+      src: 'audio/take.webm',
+      kind: 'audio',
+      clipStart: 1,
+      edits: { cuts: [{ start: 2, end: 3 }], gain: -3 },
+    });
+    expect(manager.loadSource).toHaveBeenCalledWith('.mediaEdits/take.0123456789ab.baked.m4a');
+    await screen.findByText('Saved take-edited.m4a.');
+    expect(saved).toEqual([{ filename: 'take-edited.m4a', type: 'audio/mp4' }]);
+    // The document is untouched: saving a copy applies nothing.
+    expect(screen.getByTestId('source').textContent).toContain('cuts=2-3]}');
+    expect(screen.getByTestId('source').textContent).not.toContain('gain');
+  });
+
+  it('shows progress while the copy is made and the reason when it fails', async () => {
+    const manager = fakeManager();
+    let finish: (error: Error) => void = () => {};
+    vi.mocked(manager.bake).mockImplementation(
+      (_clip, options) =>
+        new Promise<string>((_resolve, reject) => {
+          options?.onProgress?.(0.42);
+          finish = reject;
+        }),
+    );
+    await openModal('{[audio src=audio/take.webm anchor=document cuts=2-3]}\n\n# One\n', manager);
+    fireEvent.click(screen.getByRole('button', { name: 'Save edited copy…' }));
+    const busy = await screen.findByRole('button', { name: 'Saving copy… 42%' });
+    expect(busy).toHaveProperty('disabled', true);
+    await act(async () => finish(new Error('This browser cannot encode video.')));
+    await screen.findByText('The copy could not be made: This browser cannot encode video.');
+    expect(screen.getByRole('button', { name: 'Save edited copy…' })).toHaveProperty(
+      'disabled',
+      false,
+    );
+  });
+
+  it('stays quiet when the host reports the save was cancelled', async () => {
+    const manager = fakeManager();
+    await renderWithSaver(
+      '{[audio src=audio/take.webm anchor=document cuts=2-3]}\n\n# One\n',
+      manager,
+      () => false,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save edited copy…' }));
+    });
+    await waitFor(() => expect(manager.loadSource).toHaveBeenCalled());
+    expect(screen.queryByText(/^Saved /)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Save edited copy…' })).toHaveProperty(
+      'disabled',
+      false,
+    );
+  });
+});
+
+describe('MediaEditModal — volume & fades', () => {
+  it('writes volume and fades', async () => {
+    const { source } = await openModal(
+      '{[audio src=audio/take.webm anchor=document]}\n\n# One\n',
+      fakeManager(),
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Volume & fades' }));
+    fireEvent.change(screen.getByLabelText('Volume'), { target: { value: '-3' } });
+    fireEvent.change(screen.getByLabelText('Fade in'), { target: { value: '0.5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await waitFor(() =>
+      expect(source().split('\n')[0]).toBe(
+        '{[audio src=audio/take.webm anchor=document gain=-3 fadeIn=0.5]}',
+      ),
+    );
   });
 });
 
@@ -379,7 +782,8 @@ describe('MediaEditModal — frame', () => {
     await openModal('{[audio src=audio/take.webm anchor=document]}\n\n# One\n', fakeManager());
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Audio cleanup',
-      'Timing',
+      'Cuts',
+      'Volume & fades',
     ]);
     expect(screen.queryByRole('slider', { name: 'Crop area', hidden: true })).toBeNull();
   });
@@ -392,17 +796,23 @@ describe('MediaEditModal — tabs', () => {
   it('opens on audio cleanup and shows one panel at a time', async () => {
     await openModal(video, fakeManager(), 'video/screen.webm');
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['Audio cleanup', 'Timing', 'Frame']);
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      'Audio cleanup',
+      'Cuts',
+      'Volume & fades',
+      'Frame',
+    ]);
     expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual([
       'true',
+      'false',
       'false',
       'false',
     ]);
     expect(screen.getByRole('tabpanel', { name: 'Audio cleanup' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Find pauses' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Timing' }));
-    expect(screen.getByRole('tabpanel', { name: 'Timing' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('tab', { name: 'Cuts' }));
+    expect(screen.getByRole('tabpanel', { name: 'Cuts' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Find pauses' })).toBeTruthy();
     expect(screen.queryByRole('checkbox', { name: 'Loudness' })).toBeNull();
   });
@@ -412,11 +822,11 @@ describe('MediaEditModal — tabs', () => {
     const audio = screen.getByRole('tab', { name: 'Audio cleanup' });
     expect(audio.tabIndex).toBe(0);
     fireEvent.keyDown(audio, { key: 'ArrowRight' });
-    const timing = screen.getByRole('tab', { name: 'Timing' });
-    expect(timing.getAttribute('aria-selected')).toBe('true');
-    expect(document.activeElement).toBe(timing);
+    const cuts = screen.getByRole('tab', { name: 'Cuts' });
+    expect(cuts.getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(cuts);
     expect(audio.tabIndex).toBe(-1);
-    fireEvent.keyDown(timing, { key: 'End' });
+    fireEvent.keyDown(cuts, { key: 'End' });
     expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Frame' }));
     fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' });
     expect(document.activeElement).toBe(audio);
@@ -435,16 +845,16 @@ describe('MediaEditModal — tabs', () => {
         .getAllByRole('tab')
         .filter((tab) => tab.dataset.edited === 'true')
         .map((tab) => tab.firstChild?.textContent);
-    expect(edited()).toEqual(['Timing']);
-    expect(screen.getByRole('tab', { name: 'Timing (edited)' })).toBeTruthy();
+    expect(edited()).toEqual(['Volume & fades']);
+    expect(screen.getByRole('tab', { name: 'Volume & fades (edited)' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Levels only' }));
-    expect(edited()).toEqual(['Audio cleanup', 'Timing']);
+    expect(edited()).toEqual(['Audio cleanup', 'Volume & fades']);
   });
 
   it('keeps each tab’s settings when switching away and back', async () => {
     const { source } = await openModal(video, fakeManager(), 'video/screen.webm');
     fireEvent.click(screen.getByRole('button', { name: 'Levels only' }));
-    fireEvent.click(screen.getByRole('tab', { name: /Timing/ }));
+    fireEvent.click(screen.getByRole('tab', { name: /Volume/ }));
     fireEvent.change(screen.getByLabelText('Volume'), { target: { value: '-3' } });
     fireEvent.click(screen.getByRole('tab', { name: /Audio cleanup/ }));
     expect(screen.getByRole('checkbox', { name: 'Loudness' })).toHaveProperty('checked', true);

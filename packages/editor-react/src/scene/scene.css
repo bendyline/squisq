@@ -782,6 +782,25 @@
   background: var(--squisq-surface);
 }
 
+/* At the end of the page the host may get spare height (fill-available.css).
+ * The shell passes it to the canvas, whose normal 420px stays the flex basis.
+ * A diagram whose height someone dragged (`data-height-pinned`) keeps it. */
+.squisq-block-fill-available[data-fill-height] > .squisq-scene-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.squisq-block-fill-available[data-fill-height] > .squisq-scene-shell > .squisq-scene-inline,
+.squisq-block-fill-available[data-fill-height]
+  > .squisq-scene-shell
+  > .squisq-diagram-inline:not([data-height-pinned]) {
+  flex: 1 1 420px;
+  height: auto;
+  min-height: 0;
+}
+
 .squisq-scene-inline-placeholder {
   height: 420px;
   border: 1px dashed var(--squisq-border);

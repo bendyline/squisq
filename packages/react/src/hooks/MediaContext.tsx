@@ -14,7 +14,7 @@
  */
 
 import { createContext, useCallback, useContext, useState, useEffect, useMemo } from 'react';
-import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { MediaClip, MediaProvider } from '@bendyline/squisq/schemas';
 import {
   DEFAULT_INTERACTIVE_RESOURCE_POLICY,
   isResourceUrlAllowed,
@@ -27,6 +27,15 @@ import { useSanitizedSvgImage } from '../svgIsland/svgImageUrl.js';
  * React context holding the current MediaProvider (or null if none provided).
  */
 export const MediaContext = createContext<MediaProvider | null>(null);
+
+/**
+ * The host's processed-audio lookup (`DocPlayer`'s `processedAudio`), for
+ * renderers below the schedule — a video laid out in a slide — that have to
+ * find a clip's cleaned-up sound themselves. Undefined when none is wired.
+ */
+export const ProcessedAudioContext = createContext<
+  ((clip: MediaClip) => string | undefined) | undefined
+>(undefined);
 
 /**
  * Policy for document-controlled media URLs. Hosts rendering untrusted

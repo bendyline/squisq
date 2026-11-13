@@ -8,9 +8,11 @@ import { createRnnoiseDenoiserFactory } from '../mediaEdit/rnnoiseDenoiser.js';
 import {
   analyzeMediaEditAudio,
   analyzeMediaEditPauses,
+  analyzeMediaEditWaveform,
   previewMediaEditAudio,
   renderMediaEditAudio,
 } from '../mediaEdit/mediaEditEngine.js';
+import { bakeMediaClip } from '../mediaEdit/mediaBakeEngine.js';
 import type {
   MediaEditWorkerRequest,
   MediaEditWorkerResponse,
@@ -44,6 +46,14 @@ async function run(request: Exclude<MediaEditWorkerRequest, { type: 'cancel' }>)
     } else if (request.type === 'pauses') {
       const result = await analyzeMediaEditPauses(request, options);
       scope.postMessage({ type: 'paused', id: request.id, result });
+    } else if (request.type === 'bake') {
+      const result = await bakeMediaClip(request, options);
+      scope.postMessage({ type: 'baked', id: request.id, result }, [result.bytes]);
+    } else if (request.type === 'waveform') {
+      const result = await analyzeMediaEditWaveform(request, options);
+      scope.postMessage({ type: 'waveformed', id: request.id, result }, [
+        result.peaks.buffer as ArrayBuffer,
+      ]);
     } else if (request.type === 'analyze') {
       const result = await analyzeMediaEditAudio(request, options);
       scope.postMessage({ type: 'analyzed', id: request.id, result });

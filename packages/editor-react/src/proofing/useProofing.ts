@@ -183,7 +183,16 @@ export interface ProofingState {
   addToDocWordList: (findingId: string) => void;
   /** False when the host wired no app-level dictionary storage. */
   canAddToAppDictionary: boolean;
-  /** Open the suggestions menu at client coordinates. */
+  /**
+   * The finding squiggled at a client point in `view`, or null. A mouse
+   * right-click goes to the shell's editor menu, which asks here so it can
+   * lead with that finding's suggestions above its own actions.
+   */
+  findingAtPoint: (view: EditorView, clientX: number, clientY: number) => string | null;
+  /**
+   * Open the suggestions menu at client coordinates — for the menu key and a
+   * finger's long press on a squiggle, and the hover card's "More".
+   */
   openMenu: (anchor: ProofingMenuAnchor) => void;
   closeMenu: () => void;
   menuAnchor: ProofingMenuAnchor | null;
@@ -658,7 +667,11 @@ export function useProofing({
     return undefined;
   }, [tiptapEditor, enabled, status]);
 
-  // ── Context-menu triggering (right-click / menu key on a squiggle) ──
+  // ── Context-menu triggering (long press / menu key on a squiggle) ──
+  // A mouse right-click is left to the shell's editor menu, which leads
+  // with the finding (`findingAtPoint`) and keeps Cut/Copy/Paste and the
+  // table actions beneath it. Claiming it here hid those actions on every
+  // squiggled word.
   const openMenuRef = useRef<(anchor: ProofingMenuAnchor) => void>(() => undefined);
   useEffect(() => {
     if (!enabled || status !== 'ready') return;
@@ -666,18 +679,18 @@ export function useProofing({
     if (!editor || editor.isDestroyed) return;
     const dom = editor.view.dom;
     const onContextMenu = (event: MouseEvent) => {
+      // A long press is a finger's right-click. On a squiggled link the menu
+      // it raises is where that finger can still open the link.
+      if (!isTapClick(event)) return;
       const pos = editor.view.posAtCoords({ left: event.clientX, top: event.clientY });
       if (!pos) return;
       const hit = proofingDecorationAt(editor.state, pos.pos);
       if (!hit) return;
       event.preventDefault();
-      // A long press is a finger's right-click. On a squiggled link the menu
-      // it raises is where that finger can still open the link.
       const target = event.target as Element | null;
-      const linkHref =
-        canOpenLinksRef.current && isTapClick(event)
-          ? target?.closest?.('a[href]')?.getAttribute('href')
-          : null;
+      const linkHref = canOpenLinksRef.current
+        ? target?.closest?.('a[href]')?.getAttribute('href')
+        : null;
       openMenuRef.current({
         findingId: hit.findingId,
         x: event.clientX,
@@ -960,12 +973,12 @@ export function useProofing({
     };
   }, [tapCardId, closeHover]);
 
-  useEffect(() => {
-    if (!enabled || status !== 'ready') return;
-    const editor = monacoEditor;
-    const dom = editor?.getDomNode();
-    if (!editor || !dom) return;
-    const findingAt = (position: { lineNumber: number; column: number }): string | null => {
+  /** The Source view's finding at a Monaco position, or null. */
+  const sourceFindingAt = useCallback(
+    (
+      editor: MonacoEditorNs.IStandaloneCodeEditor,
+      position: { lineNumber: number; column: number },
+    ): string | null => {
       const collection = collectionRef.current;
       if (!collection) return null;
       const index = findingIndexAtPosition(collection, sourceOrderRef.current.length, position);
@@ -974,10 +987,22 @@ export function useProofing({
       const model = editor.getModel();
       if (model && sourceWikiLink(model.getValue(), model.getOffsetAt(position))) return null;
       return sourceOrderRef.current[index] ?? null;
-    };
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!enabled || status !== 'ready') return;
+    const editor = monacoEditor;
+    const dom = editor?.getDomNode();
+    if (!editor || !dom) return;
+    const findingAt = (position: { lineNumber: number; column: number }) =>
+      sourceFindingAt(editor, position);
     // Capture phase so we win against Monaco's own context-menu listener
-    // when (and only when) the click lands on a squiggle.
+    // when (and only when) a finger's long press lands on a squiggle. A
+    // mouse right-click is the shell's editor menu, as in the Write view.
     const onContextMenu = (event: MouseEvent) => {
+      if (!isTapClick(event)) return;
       const target = editor.getTargetAtClientPoint(event.clientX, event.clientY);
       const position = target?.position;
       if (!position) return;
@@ -1009,7 +1034,24 @@ export function useProofing({
       dom.removeEventListener('contextmenu', onContextMenu, true);
       dom.removeEventListener('keydown', onKeyDown, true);
     };
-  }, [monacoEditor, enabled, status]);
+  }, [monacoEditor, enabled, status, sourceFindingAt]);
+
+  const findingAtPoint = useCallback(
+    (view: EditorView, clientX: number, clientY: number): string | null => {
+      if (!enabled || status !== 'ready') return null;
+      if (view === 'wysiwyg') {
+        if (!tiptapEditor || tiptapEditor.isDestroyed) return null;
+        const pos = tiptapEditor.view.posAtCoords({ left: clientX, top: clientY });
+        return pos ? (proofingDecorationAt(tiptapEditor.state, pos.pos)?.findingId ?? null) : null;
+      }
+      if (view === 'raw' && monacoEditor) {
+        const position = monacoEditor.getTargetAtClientPoint(clientX, clientY)?.position;
+        return position ? sourceFindingAt(monacoEditor, position) : null;
+      }
+      return null;
+    },
+    [enabled, status, tiptapEditor, monacoEditor, sourceFindingAt],
+  );
 
   // ── Actions ─────────────────────────────────────────────────────────
   const findingById = useCallback(
@@ -1349,6 +1391,7 @@ export function useProofing({
       addToAppDictionary,
       addToDocWordList,
       canAddToAppDictionary,
+      findingAtPoint,
       openMenu,
       closeMenu,
       menuAnchor,
@@ -1376,6 +1419,7 @@ export function useProofing({
     addToAppDictionary,
     addToDocWordList,
     canAddToAppDictionary,
+    findingAtPoint,
     openMenu,
     closeMenu,
     menuAnchor,

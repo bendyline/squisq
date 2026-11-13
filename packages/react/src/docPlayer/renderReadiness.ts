@@ -1,3 +1,5 @@
+import { createMediaTimeMap, parseMediaCuts } from '@bendyline/squisq/mediaEdit';
+
 const DEFAULT_VIDEO_FRAME_TIMEOUT_MS = 2_000;
 const VIDEO_FRAME_READINESS_POLL_MS = 16;
 const VIDEO_TIME_TOLERANCE_SECONDS = 0.01;
@@ -13,6 +15,24 @@ const SEQUENTIAL_CAPTURE_PLAYBACK_RATE = 1;
  */
 export function isCaptureDrivenVideo(video: HTMLMediaElement): boolean {
   return video.dataset.captureSequential === 'true' || video.dataset.captureDecoded === 'true';
+}
+
+/**
+ * The source time a block's `<video>` shows `blockElapsed` seconds into its
+ * block, from the `data-*` attributes VideoLayer sets: it holds at the
+ * in-point until `data-start-at`, then advances by the played time — mapped
+ * through `data-cuts` so a cut clip skips its removed sections — and stops at
+ * the out-point.
+ */
+export function blockVideoSourceTime(video: HTMLVideoElement, blockElapsed: number): number {
+  const clipStart = parseFloat(video.dataset.clipStart || '0');
+  const clipEnd = parseFloat(video.dataset.clipEnd || '0');
+  const played = Math.max(0, blockElapsed - parseFloat(video.dataset.startAt || '0'));
+  const cuts = parseMediaCuts(video.dataset.cuts);
+  const source = cuts
+    ? createMediaTimeMap({ clipStart, cuts }).playedToSource(played)
+    : clipStart + played;
+  return Math.min(source, clipEnd);
 }
 
 function formatMediaTime(time: number): string {

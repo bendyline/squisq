@@ -681,6 +681,7 @@ export function MermaidDiagramWidget({
         className="squisq-diagram-inline"
         ref={inlineRef}
         style={effectiveHeight != null ? { height: effectiveHeight } : undefined}
+        data-height-pinned={effectiveHeight != null ? 'true' : undefined}
       >
         {canvas}
         <div

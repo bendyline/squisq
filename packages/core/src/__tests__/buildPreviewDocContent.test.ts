@@ -562,7 +562,10 @@ describe('buildPreviewDoc container templates', () => {
     const [, drawing, layout] = previewSlides(markdown) as unknown as DocBlock[];
     const drawingLayers = materializeBlockLayers(drawing!).layers;
     expect(drawingLayers.some((layer) => layer.id.endsWith('-empty'))).toBe(false);
-    expect(drawingLayers.filter((layer) => layer.type === 'shape')).toHaveLength(2);
+    // Two drawn shapes over the theme's page (`bg`).
+    expect(
+      drawingLayers.filter((layer) => layer.type === 'shape' && layer.id !== 'bg'),
+    ).toHaveLength(2);
     const layoutText = materializeBlockLayers(layout!)
       .layers.filter((layer): layer is TextLayer => layer.type === 'text')
       .map((layer) => layer.content.text);

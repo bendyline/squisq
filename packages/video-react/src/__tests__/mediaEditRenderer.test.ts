@@ -8,6 +8,7 @@ vi.mock('../mediaEdit/mediaEditEngine.js', () => ({
   renderMediaEditAudio: vi.fn(async () => ({ inline: true })),
   analyzeMediaEditAudio: vi.fn(async () => null),
   previewMediaEditAudio: vi.fn(async () => ({ inline: true })),
+  analyzeMediaEditWaveform: vi.fn(async () => ({ inline: true })),
 }));
 
 const { createMediaEditRenderer } = await import('../mediaEdit/mediaEditRenderer.js');
@@ -55,6 +56,32 @@ describe('createMediaEditRenderer', () => {
     });
     await expect(job).resolves.toEqual({ mimeType: 'audio/webm' });
     expect(progress).toEqual([0.5]);
+  });
+
+  it('reads a waveform in the worker, or inline when there is none', async () => {
+    const worker = new FakeWorker();
+    const renderer = createMediaEditRenderer({
+      createWorker: () => worker as unknown as Worker,
+    });
+    const job = renderer.waveform({ source: request.source });
+    const sent = worker.posted[0];
+    expect(sent).toMatchObject({ type: 'waveform' });
+    const peaks = new Float32Array([0.2, 0.9]);
+    worker.reply({
+      type: 'waveformed',
+      id: sent.id,
+      result: { peaks, peaksPerSec: 100, durationSec: 0.02 },
+    });
+    await expect(job).resolves.toEqual({ peaks, peaksPerSec: 100, durationSec: 0.02 });
+
+    // A source with no audio track has no peaks, but still its length.
+    const silent = renderer.waveform({ source: request.source });
+    const none = { peaks: new Float32Array(0), peaksPerSec: 100, durationSec: 12.5 };
+    worker.reply({ type: 'waveformed', id: worker.posted[1].id, result: none });
+    await expect(silent).resolves.toEqual(none);
+
+    const inline = createMediaEditRenderer({ createWorker: () => null });
+    await expect(inline.waveform({ source: request.source })).resolves.toEqual({ inline: true });
   });
 
   it('forwards cancellation and rejects with AbortError', async () => {

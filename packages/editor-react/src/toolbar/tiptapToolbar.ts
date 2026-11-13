@@ -35,9 +35,18 @@ export function taskListContent(
   };
 }
 
+/**
+ * Insert a task list with one empty item and the caret in it, the way a
+ * bullet list starts. Placeholder items ("Task 1", "Task 2", …) had to be
+ * deleted or typed over one by one before the list said anything. The
+ * Source view, whose inserts are all placeholder text, keeps
+ * {@link TASK_LIST_MARKDOWN}.
+ */
 export function insertTaskList(editor: TiptapEditor): void {
   const supportsTaskList = !!editor.schema.nodes.taskList && !!editor.schema.nodes.taskItem;
-  const content = supportsTaskList ? taskListContent() : TASK_LIST_MARKDOWN;
+  const content = supportsTaskList
+    ? taskListContent([{ checked: false, text: '' }])
+    : TASK_LIST_MARKDOWN;
   editor.chain().focus().insertContent(content).run();
 }
 

@@ -19,6 +19,7 @@ import type { DrawingBlockInput, TemplateContext } from '../../schemas/BlockTemp
 import { resolveColorScheme, getThemeFont, themedFontSize } from '../utils/themeUtils.js';
 import { computeDrawingLayout, type DrawingShape, type DrawingConnector } from './drawingLayout.js';
 import { shapePath, connectorPath, snapEndpoints } from '../utils/shapeGeometry.js';
+import { createBackgroundLayer } from './captionUtils.js';
 import {
   CANVAS_PADDING,
   canvasDescriptionLayer,
@@ -36,10 +37,13 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
   const defaultFill = input.fill ?? 'none';
 
   const layout = computeDrawingLayout(children);
+  // The theme's page, as every other template draws: without it a drawing
+  // was a black slide in a light deck, and its muted hint text was unreadable.
+  const background = createBackgroundLayer('bg', theme.colors.background);
 
   // No shapes authored as children → empty drawing hint.
   if (layout.shapes.length === 0 && layout.connectors.length === 0) {
-    return [emptyHint(input, context)];
+    return [background, emptyHint(input, context)];
   }
 
   // Bounding box of all shapes in author coordinates.
@@ -66,7 +70,7 @@ export function drawingBlock(input: DrawingBlockInput, context: TemplateContext)
   const ty = (y: number) => offsetY + (y - minY) * scale;
   const fontAdj = Math.min(Math.max(scale, 1), 1.5);
 
-  const layers: Layer[] = [];
+  const layers: Layer[] = [background];
 
   if (input.title) {
     const titleLayer = canvasTitleLayer('drawing-title', input.title, frame, placement, context);

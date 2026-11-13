@@ -14,6 +14,7 @@
  * stopping them (and closing the context).
  */
 
+import { markDisplayCaptureError } from '../captureErrors.js';
 import { supportsDisplayMedia } from '../formats.js';
 
 /** A base stream (mic or camera) with system audio mixed into a single track. */
@@ -42,10 +43,14 @@ export async function requestSystemAudioStream(
   if (!supportsDisplayMedia()) {
     throw new Error('navigator.mediaDevices.getDisplayMedia is not available in this environment.');
   }
-  const display = await navigator.mediaDevices.getDisplayMedia({
-    video: true,
-    audio: audioConstraints ?? true,
-  });
+  const display = await navigator.mediaDevices
+    .getDisplayMedia({
+      video: true,
+      audio: audioConstraints ?? true,
+    })
+    .catch((err: unknown) => {
+      throw markDisplayCaptureError(err);
+    });
   // We only wanted the audio — release the shared surface immediately. The
   // audio track stays live; that alone keeps the browser's share indicator lit
   // until `dispose()` stops it.

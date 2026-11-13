@@ -58,8 +58,8 @@ Three things to notice:
 - **Every heading block has a template.** An unannotated heading gets `sectionHeader`, or a
   template chosen from its content — here, `list`, with `autoTemplate: true` marking it as chosen
   rather than authored.
-- **Timing is estimated.** `startTime` and `duration` come from reading time unless a heading
-  attribute such as `duration=6` sets them.
+- **Timing is estimated.** `startTime` and `duration` come from reading time — or a video the
+  block plays, when that runs longer — unless a heading attribute such as `duration=6` sets them.
 
 ## `Doc`
 
@@ -243,6 +243,16 @@ and its data in `content`:
 Times are seconds from the start of the document. `markdownToDoc` estimates each block's duration
 from the reading time of its body — at least three seconds, or `options.defaultDuration` (default 5) for a block with no body text — and lays blocks end to end;
 `getBlockAtTime(blocks, t)` (from `@bendyline/squisq/schemas`) finds the block on screen at a time.
+
+A block that plays a video lasts at least as long as the video: its body's `<video>` or video link,
+or a block-anchored video clip that ends with the block (not `spillover`, not unlocked). The
+video's played length counts from its `startAt` through its trim window, less cuts. `markdownToDoc`
+can only use an authored out-point (`clipEnd`). A file's own length is measured in the browser:
+`collectVideoDurationSources(doc)` lists the files that need it, and
+`applyVideoDurations(doc, lookup)` re-times the blocks and lays out the timeline again, exactly as
+conversion would. Run it on `markdownToDoc` output before `resolveAudioMapping`, so recorded
+narration still has the last word. `@bendyline/squisq-react`'s `resolveVideoDurations(doc, options)`
+does both steps for an exporter, and the editor does them live.
 
 `doc.audio.segments` starts empty. When a workspace holds narration, `resolveAudioMapping`
 (see [Projections](projections.md#narration-and-audio)) fills the segments and assigns each block

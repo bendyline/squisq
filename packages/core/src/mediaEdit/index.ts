@@ -26,6 +26,8 @@ export {
   mediaEditValuesFromParams,
   mediaEditValuesFromAttributes,
   mediaRenderKey,
+  canonicalMediaFx,
+  mediaRecipeHash,
 } from './recipe.js';
 export type {
   MediaFxOpId,
@@ -66,6 +68,39 @@ export type {
   MediaRenderEntry,
   ParsedMediaRenderPath,
 } from './renderStore.js';
+
+// Baked clips: a clip's whole recipe rendered into one ordinary media file.
+export {
+  MEDIA_BAKE_ENGINE,
+  MEDIA_BAKE_MANIFEST_VERSION,
+  MEDIA_CUT_EDGE_FADE_SEC,
+  mediaBakeCuts,
+  needsMediaBake,
+  canBakeMedia,
+  mediaBakeSpec,
+  mediaBakeKey,
+  mediaBakeFilePath,
+  mediaBakeManifestPath,
+  parseMediaBakePath,
+  isMediaBakePath,
+  buildMediaBakeIndex,
+  parseMediaBakeManifest,
+  serializeMediaBakeManifest,
+  isMediaBakeStale,
+  selectSupersededMediaBakes,
+  mediaBakeCopyName,
+  mediaBakeCopyPath,
+  mediaBakeFrameRanges,
+  createMediaBakeAudioStage,
+} from './bake.js';
+export type {
+  MediaBakeClip,
+  MediaBakeEntry,
+  MediaBakeManifest,
+  ParsedMediaBakePath,
+  MediaBakeAudioStage,
+  MediaBakeAudioStageOptions,
+} from './bake.js';
 
 // Signal chain (pure DSP; the denoiser model is injected by the renderer).
 export {

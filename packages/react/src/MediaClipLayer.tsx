@@ -20,53 +20,19 @@
  */
 
 import { useEffect, useRef, type CSSProperties } from 'react';
-import type { MediaCrop, ScheduledClip } from '@bendyline/squisq/schemas';
+import type { ScheduledClip } from '@bendyline/squisq/schemas';
 import { serializeMediaCrop } from '@bendyline/squisq/mediaEdit';
 import { isCaptureDrivenVideo } from './docPlayer/renderReadiness';
 import { useMediaUrl } from './hooks/MediaContext';
 import { useMediaSchedule } from './hooks/useMediaSchedule';
 import { clipLevelAt, mountedClips } from './mediaClipPlayback';
+import { applyMediaLevel, mediaCropStyle } from './mediaRecipePlayback';
 import type { PipPosition, PipShape, PipSize, VideoPresentation } from './types';
 
 /** Re-seek an element only when it drifts this far from its target (seconds). */
 const DRIFT = 0.25;
 /** Park an upcoming clip on its in-point this long before it starts (seconds). */
 const PRESEEK = 0.75;
-
-/**
- * Boosts above unity need Web Audio (an element's `volume` stops at 1). One
- * lazily created context serves the page; each boosted element is routed
- * through its own GainNode, once — an element can only be captured once.
- */
-let boostContext: AudioContext | null = null;
-const boostNodes = new WeakMap<HTMLMediaElement, GainNode>();
-
-function boostNodeFor(el: HTMLMediaElement): GainNode | null {
-  const existing = boostNodes.get(el);
-  if (existing) return existing;
-  if (typeof AudioContext === 'undefined') return null;
-  try {
-    boostContext ??= new AudioContext();
-    const gain = boostContext.createGain();
-    boostContext.createMediaElementSource(el).connect(gain).connect(boostContext.destination);
-    boostNodes.set(el, gain);
-    return gain;
-  } catch {
-    return null;
-  }
-}
-
-/** Apply a linear level to an element: `volume` for attenuation, a GainNode for boosts. */
-function applyLevel(el: HTMLMediaElement, level: number): void {
-  const boost = level > 1 ? boostNodeFor(el) : boostNodes.get(el);
-  if (boost) {
-    el.volume = 1;
-    boost.gain.value = level;
-    if (boostContext?.state === 'suspended') void boostContext.resume().catch(() => {});
-    return;
-  }
-  el.volume = Math.min(1, Math.max(0, level));
-}
 
 export interface MediaClipLayerProps {
   schedule: ScheduledClip[];
@@ -162,18 +128,6 @@ function mediaVideoStyle({
     ...pipFrameStyle,
     ...pipCornerStyle(pipPosition),
   };
-}
-
-/**
- * Crop via CSS `object-view-box` (Chromium): the crop region replaces the
- * frame before object-fit applies, so framing matches the export exactly.
- * Browsers without it show the uncropped frame.
- */
-function cropStyle(crop: MediaCrop | undefined): CSSProperties {
-  if (!crop) return {};
-  const pct = (n: number) => `${(n * 100).toFixed(3)}%`;
-  const inset = `inset(${pct(crop.y)} ${pct(1 - crop.x - crop.w)} ${pct(1 - crop.y - crop.h)} ${pct(crop.x)})`;
-  return { objectViewBox: inset } as CSSProperties;
 }
 
 export function MediaClipLayer({
@@ -329,7 +283,7 @@ function MediaClipElement({
       return;
     }
     if (!renderMode) {
-      applyLevel(
+      applyMediaLevel(
         el,
         clipLevelAt({ absoluteStart, absoluteEnd, gain, fadeIn, fadeOut }, currentTime),
       );
@@ -403,7 +357,7 @@ function MediaClipElement({
             pipFrameStyle,
             active,
           }),
-          ...cropStyle(clip.crop),
+          ...mediaCropStyle(clip.crop),
         }}
       />
     );

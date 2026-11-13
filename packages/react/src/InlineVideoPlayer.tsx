@@ -13,7 +13,10 @@
  * htmlElement; the editor-react Tiptap video node uses the same
  * component for its NodeView.
  */
+import { useRef } from 'react';
+import type { MediaEdits } from '@bendyline/squisq/schemas';
 import { useMediaUrl } from './hooks/MediaContext.js';
+import { mediaCropStyle, useCutTimeMap, useSkipCuts } from './mediaRecipePlayback.js';
 
 export interface InlineVideoPlayerProps {
   /** Source path — resolved through MediaContext when relative. */
@@ -34,6 +37,11 @@ export interface InlineVideoPlayerProps {
   className?: string;
   /** Accessible name — a markdown reference's alt text; `<video>` has no `alt`. */
   label?: string;
+  /**
+   * The clip's edit recipe (`data-squisq-video-*`). The player skips its cuts
+   * as it plays and shows its crop; the sound is the file's own.
+   */
+  edits?: MediaEdits;
 }
 
 export function InlineVideoPlayer({
@@ -46,8 +54,11 @@ export function InlineVideoPlayer({
   preload = 'metadata',
   className,
   label,
+  edits,
 }: InlineVideoPlayerProps) {
   const resolvedSrc = useMediaUrl(src, basePath);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useSkipCuts(videoRef, useCutTimeMap(edits?.cuts), resolvedSrc);
   // Always call the hook (Rules of Hooks); only use the result if a poster
   // was actually requested. Empty input → fallback path which we discard.
   const resolvedPoster = useMediaUrl(poster ?? '', basePath);
@@ -58,6 +69,8 @@ export function InlineVideoPlayer({
   return (
     <span className={`squisq-inline-video-player ${className ?? ''}`.trim()}>
       <video
+        ref={videoRef}
+        style={mediaCropStyle(edits?.crop)}
         src={resolvedSrc}
         poster={posterUrl}
         controls={controls}

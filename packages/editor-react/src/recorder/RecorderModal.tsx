@@ -50,6 +50,7 @@ import { formatRecordingBytes } from './recordingLimits.js';
 import { useStreamPreview } from './hooks/useStreamPreview.js';
 import { requestCameraStream } from './sources/cameraStream.js';
 import { RecorderDeviceSettingsPanel } from './RecorderDeviceSettingsPanel.js';
+import { describeCaptureError, type CaptureErrorContext } from './captureErrors.js';
 import { RecorderDeviceQuickPicks } from './RecorderDeviceQuickPicks.js';
 import { RecorderScreenSettings } from './RecorderScreenSettings.js';
 import { useMediaDevices } from './hooks/useMediaDevices.js';
@@ -64,8 +65,9 @@ import {
 } from './deviceSettings.js';
 import {
   buildFilename,
+  dualFilenameSeeds,
+  recordingFilenameSeed,
   supportsSystemAudioCapture,
-  type RecordingFilenameSeed,
 } from './formats.js';
 import { recordedMediaKind, type RecordedMediaKind } from './recordedMediaKind.js';
 import {
@@ -678,46 +680,6 @@ function captureSummary(
       : 'Voice-only audio. Pairs with a written script for auto-mapping to blocks.';
   }
   return 'Pick at least one source to record.';
-}
-
-/**
- * Describe the tracks that made it into the acquired stream. This deliberately
- * reads the result instead of trusting the requested toggles: display capture
- * may accept an audio request while returning video only.
- */
-function recordingFilenameSeed(
-  source: RecorderSource,
-  stream: MediaStream | null,
-  audioRequested: boolean,
-): RecordingFilenameSeed {
-  if (source === 'mic') return 'audio';
-  // Before preview, make the filename hint reflect the selected sources. Once
-  // acquired, the stream is authoritative because browsers may omit requested
-  // display audio.
-  const hasAudio = stream ? stream.getAudioTracks().length > 0 : audioRequested;
-  if (source === 'camera') return hasAudio ? 'camera-audio' : 'camera';
-  return hasAudio ? 'screen-audio' : 'screen';
-}
-
-/**
- * The two filename seeds for a `'screen+camera'` save — one per file. Each
- * reads its own acquired stream's audio tracks so the name reflects what the
- * file actually contains (browsers may drop a requested display-audio track).
- */
-function dualFilenameSeeds(
-  screenStream: MediaStream | null,
-  cameraStream: MediaStream | null,
-  systemAudioRequested: boolean,
-  micRequested: boolean,
-): { screen: RecordingFilenameSeed; camera: RecordingFilenameSeed } {
-  const screenHasAudio = screenStream
-    ? screenStream.getAudioTracks().length > 0
-    : systemAudioRequested;
-  const cameraHasAudio = cameraStream ? cameraStream.getAudioTracks().length > 0 : micRequested;
-  return {
-    screen: screenHasAudio ? 'screen-audio' : 'screen',
-    camera: cameraHasAudio ? 'camera-audio' : 'camera',
-  };
 }
 
 // ── Component ──────────────────────────────────────────────────────
@@ -1653,6 +1615,16 @@ export function RecorderModal({
   // separate video lane rather than the standalone Camera pill.
   const microphoneEnabled = narrationRecording ? true : micOn;
   const cameraEnabled = narrationRecording ? stage.recorder.withCamera : cameraOn;
+  // What the failing request asked for, so a raw getUserMedia rejection
+  // ("Requested device not found") can name the missing device.
+  const captureErrorContext: CaptureErrorContext = {
+    camera: cameraEnabled,
+    microphone: microphoneEnabled,
+    cameraDeviceId: deviceSettings.camera.deviceId,
+    microphoneDeviceId: deviceSettings.audio.deviceId,
+    devices: mediaDevices,
+  };
+  const narrationError = stage.recorder.error ?? stage.controller.mic.error;
   const narrationToggleFor = (key: ToggleKey) => {
     switch (key) {
       case 'mic':
@@ -1857,7 +1829,9 @@ export function RecorderModal({
             />
 
             {!narrationRecording && recorder.error && (
-              <div style={errorStyle}>{recorder.error.message}</div>
+              <div role="alert" style={errorStyle} data-testid="recorder-error">
+                {describeCaptureError(recorder.error, captureErrorContext)}
+              </div>
             )}
             {!narrationRecording && saveError && (
               <div role="alert" style={errorStyle}>
@@ -1889,9 +1863,9 @@ export function RecorderModal({
                 copy or save it to the document.
               </p>
             )}
-            {narrationOn && (stage.recorder.error ?? stage.controller.mic.error) && (
-              <div style={errorStyle}>
-                {(stage.recorder.error ?? stage.controller.mic.error)?.message}
+            {narrationOn && narrationError && (
+              <div role="alert" style={errorStyle} data-testid="recorder-narration-error">
+                {describeCaptureError(narrationError, captureErrorContext)}
               </div>
             )}
 

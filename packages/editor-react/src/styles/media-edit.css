@@ -1,4 +1,4 @@
-/* Media-edit modal — audio cleanup, timing and frame for one clip. Palette via the chrome tokens. */
+/* Media-edit modal — audio cleanup, cuts, volume and frame for one clip. Palette via the chrome tokens. */
 
 .squisq-media-edit-modal {
   position: fixed;
@@ -73,16 +73,37 @@
   background: var(--squisq-editor-control-bg-hover);
 }
 
-/* A tabbed dialog keeps one height across tabs: a centered dialog that
-   resized per tab would move its own tab strip out from under the pointer. */
+/* A tabbed dialog keeps one size across tabs: a centered dialog that resized
+   per tab would move its own tab strip out from under the pointer. Wide
+   enough for the Cuts timeline to be worth dragging on. */
 .squisq-media-edit-modal__surface--tabbed {
+  width: min(720px, 100%);
   height: min(640px, 100%);
 }
 
+/* A video clip is edited by looking at it: its dialog takes the whole
+   backdrop (the app, less the backdrop's padding), and the Cuts tab gives
+   every spare pixel to the picture. */
+.squisq-media-edit-modal__surface--large {
+  width: 100%;
+  height: 100%;
+}
+
 .squisq-media-edit-modal__body {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  min-height: 0;
   overflow: auto;
   padding: 12px 16px 16px;
+}
+
+/* A panel that fills the body instead of stacking from its top. `:not([hidden])`
+   because a display set here would otherwise un-hide an inactive tab. */
+.squisq-media-edit-panel--fill:not([hidden]) {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
 }
 
 /* Tabs — one per section; the strip stays put while the panel scrolls. */
@@ -461,6 +482,14 @@
   touch-action: none;
 }
 
+/* In the large dialog the crop stage grows to the room there is: as wide as
+   the panel, or as wide as its height allows at the frame's own shape —
+   never stretched, since the crop is measured against the picture. */
+.squisq-media-edit-modal__surface--large .squisq-media-edit-crop {
+  max-width: min(100%, calc((100vh - 300px) * var(--squisq-media-edit-frame-ratio, 1.7778)));
+  margin-inline: auto;
+}
+
 .squisq-media-edit-crop video {
   display: block;
   width: 100%;
@@ -512,4 +541,376 @@
   bottom: -7px;
   right: -7px;
   cursor: nwse-resize;
+}
+
+/* Cuts: monitor, transport, actions. The panel is a column: the monitor takes
+   whatever height the transport, timeline and lists below it leave. */
+.squisq-media-edit-cuts {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+.squisq-media-edit-cuts__monitor {
+  position: relative;
+  flex: 1 1 180px;
+  min-height: 180px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  background: var(--squisq-surface-sunken);
+  border-radius: 4px;
+}
+
+/* Absolutely placed, so the picture's own size never sets the monitor's. */
+.squisq-media-edit-cuts__monitor video {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.squisq-media-edit-cuts__transport,
+.squisq-media-edit-cuts__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.squisq-media-edit-cuts__transport {
+  margin-bottom: 8px;
+}
+
+.squisq-media-edit-cuts__actions {
+  margin-top: 8px;
+}
+
+/* How-to on the left, what the cuts add up to on the right; they stack when
+   the dialog is too narrow for both. */
+.squisq-media-edit-cuts__notes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  column-gap: 16px;
+}
+
+/* In the large dialog the cut list and the pause finder sit side by side, so
+   the picture above keeps the height they would otherwise stack up. */
+.squisq-media-edit-modal__surface--large .squisq-media-edit-cuts__lower {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  column-gap: 20px;
+  align-items: start;
+}
+
+.squisq-media-edit-modal__surface--large .squisq-media-edit-cuts__pauses {
+  margin-top: 6px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.squisq-media-edit-cuts__transport .squisq-media-edit-chips {
+  margin: 0;
+}
+
+/* Fixed width: the bar does not shift as the label flips between Play and Pause. */
+.squisq-media-edit-cuts__play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 78px;
+}
+
+.squisq-media-edit-cuts__time {
+  min-width: 9.5em;
+  color: var(--squisq-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.squisq-media-edit-cuts__zoom {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* The selection readout takes the slack, pushing Undo / Restore all to the right. */
+.squisq-media-edit-cuts__selection {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--squisq-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-media-edit-cuts__pauses {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--squisq-border-subtle);
+}
+
+/* Cuts timeline: a scrolling viewport over a track that widens with zoom. */
+.squisq-media-edit-timeline {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  background: var(--squisq-surface-sunken);
+  border: 1px solid var(--squisq-editor-control-border);
+  border-radius: 4px;
+}
+
+.squisq-media-edit-timeline:focus-visible {
+  outline: 2px solid var(--squisq-focus-ring);
+  outline-offset: 1px;
+}
+
+.squisq-media-edit-timeline--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 122px;
+  padding: 0 16px;
+  overflow: hidden;
+  color: var(--squisq-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The ruler's 18px is padding, not a margin on the canvas: a first child's
+   margin would collapse through the track and push the whole timeline down. */
+.squisq-media-edit-timeline__track {
+  position: relative;
+  box-sizing: border-box;
+  min-width: 100%;
+  height: 120px;
+  padding-top: 18px;
+  cursor: text;
+  touch-action: none;
+  user-select: none;
+}
+
+.squisq-media-edit-timeline__ruler {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 18px;
+  border-bottom: 1px solid var(--squisq-border-subtle);
+  pointer-events: none;
+}
+
+.squisq-media-edit-timeline__tick {
+  position: absolute;
+  top: 0;
+  height: 18px;
+  padding-left: 4px;
+  border-left: 1px solid var(--squisq-editor-control-border);
+  color: var(--squisq-text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+/* The canvas is the viewport's size and stays put while the track scrolls
+   under it; it draws only the visible span. Its `color` is the waveform ink. */
+.squisq-media-edit-timeline__wave {
+  position: sticky;
+  left: 0;
+  display: block;
+  height: 102px;
+  color: var(--squisq-accent);
+  pointer-events: none;
+}
+
+/* A removed section: the waveform washed out, under a light hatch. */
+.squisq-media-edit-timeline__cut {
+  position: absolute;
+  top: 18px;
+  bottom: 0;
+  box-sizing: border-box;
+  min-width: 2px;
+  border-inline: 1px solid var(--squisq-danger);
+}
+
+.squisq-media-edit-timeline__cut::before,
+.squisq-media-edit-timeline__cut::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.squisq-media-edit-timeline__cut::before {
+  background: var(--squisq-surface-sunken);
+  opacity: 0.84;
+}
+
+.squisq-media-edit-timeline__cut::after {
+  background: repeating-linear-gradient(
+    135deg,
+    transparent 0 6px,
+    color-mix(in srgb, var(--squisq-danger) 38%, transparent) 6px 7px
+  );
+}
+
+/* An 11px grab zone straddling each edge, with a pill grip in its middle. */
+.squisq-media-edit-timeline__handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 11px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.squisq-media-edit-timeline__handle--start {
+  left: -6px;
+}
+
+.squisq-media-edit-timeline__handle--end {
+  right: -6px;
+}
+
+.squisq-media-edit-timeline__handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  box-sizing: border-box;
+  width: 7px;
+  height: 30px;
+  border: 1px solid var(--squisq-surface-sunken);
+  border-radius: 4px;
+  background: var(--squisq-danger);
+  transform: translateY(-50%);
+}
+
+.squisq-media-edit-timeline__handle:focus-visible {
+  outline: 2px solid var(--squisq-focus-ring);
+  outline-offset: -2px;
+}
+
+/* Too narrow on screen to grab: the edges hide until focused; zooming in brings them back. */
+.squisq-media-edit-timeline__cut[data-narrow='true'] .squisq-media-edit-timeline__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.squisq-media-edit-timeline__cut[data-narrow='true']
+  .squisq-media-edit-timeline__handle:focus-visible {
+  opacity: 1;
+}
+
+.squisq-media-edit-modal button.squisq-media-edit-timeline__restore {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  z-index: 2;
+  width: 18px;
+  min-height: 0;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+  transform: translateX(-50%);
+}
+
+.squisq-media-edit-timeline__cut:hover .squisq-media-edit-timeline__restore,
+.squisq-media-edit-modal button.squisq-media-edit-timeline__restore:focus-visible {
+  opacity: 1;
+}
+
+.squisq-media-edit-timeline__cut[data-narrow='true'] .squisq-media-edit-timeline__restore {
+  display: none;
+}
+
+/* content-box: an empty selection (a start mark with no end yet) still shows as a line. */
+.squisq-media-edit-timeline__selection {
+  position: absolute;
+  top: 18px;
+  bottom: 0;
+  box-sizing: content-box;
+  margin-left: -1px;
+  border-inline: 1px solid var(--squisq-accent);
+  background: color-mix(in srgb, var(--squisq-accent) 26%, transparent);
+  pointer-events: none;
+}
+
+.squisq-media-edit-timeline__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  width: 0;
+  margin-left: -1px;
+  border-left: 2px solid var(--squisq-text);
+  pointer-events: none;
+}
+
+.squisq-media-edit-timeline__playhead::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -6px;
+  border: 5px solid transparent;
+  border-top: 7px solid var(--squisq-text);
+  border-bottom: 0;
+}
+
+/* Every cut, by time: preview the join or restore the section. */
+/* One height, cuts or none: the picture above takes the spare room, so a
+   list that grew would move the timeline each time a cut is made. */
+.squisq-media-edit-cutlist {
+  flex: none;
+  box-sizing: border-box;
+  height: 100px;
+  margin: 6px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 1px solid var(--squisq-border-subtle);
+  border-radius: 4px;
+  list-style: none;
+}
+
+.squisq-media-edit-cutlist--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--squisq-text-muted);
+  font-size: 12px;
+}
+
+.squisq-media-edit-cutlist li {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  column-gap: 8px;
+  padding: 3px 6px 3px 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.squisq-media-edit-cutlist li + li {
+  border-top: 1px solid var(--squisq-border-subtle);
+}
+
+.squisq-media-edit-cutlist__length {
+  min-width: 4.5em;
+  color: var(--squisq-text-muted);
+  text-align: right;
+}
+
+.squisq-media-edit-modal .squisq-media-edit-cutlist button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 8px;
 }

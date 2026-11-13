@@ -38,10 +38,18 @@ describe('rich table cells survive Markdown persistence', () => {
     try {
       editor.commands.setTextSelection(4);
       insertTaskList(editor);
-      expect(editor.getHTML().match(/data-type="taskItem"/g)).toHaveLength(3);
+      // The list starts as one empty item with the caret in it.
+      expect(editor.getHTML().match(/data-type="taskItem"/g)).toHaveLength(1);
       editor.commands.undo();
       expect(editor.getHTML()).not.toContain('taskItem');
       editor.commands.redo();
+      // Type three items, as an author would, then round-trip them.
+      editor.commands.insertContent('Task 1');
+      editor.commands.splitListItem('taskItem');
+      editor.commands.insertContent('Task 2');
+      editor.commands.splitListItem('taskItem');
+      editor.commands.insertContent('Task 3');
+      expect(editor.getHTML().match(/data-type="taskItem"/g)).toHaveLength(3);
       // This is the same parse/serialize boundary as switching Write/Source,
       // saving, and loading the document in a new editor.
       const before = editor.getJSON();

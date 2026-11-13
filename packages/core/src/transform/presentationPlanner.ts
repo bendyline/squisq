@@ -16,6 +16,7 @@ import { transformNarratedSegment } from './narratedSegment.js';
 import { conceptTemplate } from './conceptReveal.js';
 import { shapeIsStated } from '../recommend/listShape.js';
 import { flattenRenderableBlocks } from '../doc/markdownToDoc.js';
+import { resolveTemplateName } from '../doc/templates/templateNames.js';
 import { collectPresentationMedia, type PresentationMediaItem } from './presentationMedia.js';
 import {
   AUTHORED_PRESENTATION_LAYOUT,
@@ -89,6 +90,9 @@ const captionText = (text: string) => clip(text, 18, 110);
  * short so the feature has the room: two points of about a line each. */
 const FEATURE_POINTS = 2;
 const FEATURE_POINT_CHARACTERS = 100;
+/** Templates whose child headings are shapes someone placed on the slide. An
+ * ASCII `diagram` is not one: its fence is a feature of the section around it. */
+const HAND_DRAWN_TEMPLATES: ReadonlySet<string> = new Set(['drawing', 'layout']);
 /** A feature slide's point: the sentence, cut at a clause break when it runs long. */
 function featurePointText(text: string): string {
   const clean = text.replace(/\s+/gu, ' ').trim();
@@ -252,13 +256,21 @@ export function createPresentationPlan(
   // is clear) keeps that drawing. Dealt into summary cards it would lose the
   // very structure the list states, so it is shown as authored unless the
   // deck's designer chose a layout for it.
+  //
+  // So does a section someone drew: a drawing or a layout, shapes placed on
+  // the slide, which is what Illustrate inserts. Only its heading is narrated,
+  // so summarized it was an empty section break and its picture was in no
+  // slide at all.
   const drawnLists = new Set(
     flattenRenderableBlocks(doc.blocks)
       .filter(
         (block) =>
-          !!conceptTemplate(block.template ?? '') &&
-          block.contents?.length === 1 &&
-          block.contents[0]!.type === 'list',
+          (!!conceptTemplate(block.template ?? '') &&
+            block.contents?.length === 1 &&
+            block.contents[0]!.type === 'list') ||
+          (!block.autoTemplate &&
+            HAND_DRAWN_TEMPLATES.has(resolveTemplateName(block.template ?? '')) &&
+            !!block.children?.length),
       )
       .map((block) => block.id),
   );
@@ -655,11 +667,20 @@ export function createPresentationPlan(
       if (refs.length) beat.media = refs;
     });
   }
+  const mediaKinds = new Map(
+    [...sectionMedia.values()].flatMap((items) => items.map((item) => [item.ref, item.kind])),
+  );
   for (const beat of beats) {
     if (!beat.media) continue;
+    // The points of a drawn layout are the parts of one picture, not words
+    // beside a feature: a process cut to two stages is a different process,
+    // and a timeline cut to two dates ends early (2026-11-12). A table takes
+    // the slide's width, so beside one every layout is words above it.
+    const drawn =
+      !!conceptTemplate(beat.layout) && !beat.media.some((ref) => mediaKinds.get(ref) === 'table');
     // A feature needs the room, so the words beside it are fewer and shorter;
     // points the author typed stand as written.
-    if (!worded.has(beat.id)) {
+    if (!worded.has(beat.id) && !drawn) {
       const points = beat.points.slice(0, FEATURE_POINTS);
       beat.points = suggested.has(beat.id) ? points : points.map(featurePointText);
     }

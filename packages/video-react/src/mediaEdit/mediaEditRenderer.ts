@@ -16,7 +16,10 @@ import type {
   MediaEditPreviewResult,
   MediaEditRenderRequest,
   MediaEditRenderResult,
+  MediaEditWaveformRequest,
+  MediaEditWaveformResult,
 } from './mediaEditEngine.js';
+import type { MediaBakeRequest, MediaBakeResult } from './mediaBakeEngine.js';
 import { createRnnoiseDenoiserFactory } from './rnnoiseDenoiser.js';
 
 /**
@@ -52,6 +55,19 @@ export interface MediaEditRenderer {
     request: MediaEditPausesRequest,
     options?: MediaEditJobOptions,
   ): Promise<MediaEditPausesResult>;
+  /**
+   * The take's waveform peaks and its length, for an editing timeline. Media
+   * with no audio track has no peaks, but still its length.
+   */
+  waveform(
+    request: MediaEditWaveformRequest,
+    options?: MediaEditJobOptions,
+  ): Promise<MediaEditWaveformResult>;
+  /**
+   * Bake a clip: its source with trim, cuts, gain, fades and crop applied,
+   * encoded as one ordinary media file.
+   */
+  bake(request: MediaBakeRequest, options?: MediaEditJobOptions): Promise<MediaBakeResult>;
   dispose(): void;
 }
 
@@ -125,7 +141,7 @@ export function createMediaEditRenderer(options: MediaEditRendererOptions = {}):
   };
 
   function dispatch<T>(
-    request: MediaEditWorkerRequest & { type: 'render' | 'analyze' | 'preview' | 'pauses' },
+    request: Exclude<MediaEditWorkerRequest, { type: 'cancel' }>,
     jobOptions: MediaEditJobOptions,
     inline: () => Promise<T>,
   ): Promise<T> {
@@ -171,6 +187,16 @@ export function createMediaEditRenderer(options: MediaEditRendererOptions = {}):
     pauses(request, jobOptions = {}) {
       return dispatch({ ...request, type: 'pauses', id: nextId++ }, jobOptions, async () =>
         (await inlineEngine()).analyzeMediaEditPauses(request, jobOptions),
+      );
+    },
+    waveform(request, jobOptions = {}) {
+      return dispatch({ ...request, type: 'waveform', id: nextId++ }, jobOptions, async () =>
+        (await inlineEngine()).analyzeMediaEditWaveform(request, jobOptions),
+      );
+    },
+    bake(request, jobOptions = {}) {
+      return dispatch({ ...request, type: 'bake', id: nextId++ }, jobOptions, async () =>
+        (await import('./mediaBakeEngine.js')).bakeMediaClip(request, jobOptions),
       );
     },
     dispose() {

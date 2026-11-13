@@ -91,7 +91,7 @@ function buildDecorations(
         entry.pos + node.nodeSize,
         (view) => {
           const container = document.createElement('div');
-          container.className = 'squisq-mermaid-diagram-widget-host';
+          container.className = 'squisq-mermaid-diagram-widget-host squisq-block-fill-available';
           container.contentEditable = 'false';
           // The canvas mounts inline rename fields; contain their whole
           // edit/composition/clipboard stream so it never reaches ProseMirror.

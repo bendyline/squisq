@@ -30,6 +30,8 @@ export function buildPresentationXml(
   slideMasterRelId: string,
   _themeRelId: string,
   embeddedFonts: Array<{ typeface: string; relId: string }> = [],
+  /** Present when any slide carries speaker notes. */
+  notesMasterRelId?: string,
 ): string {
   const sldIdList: string[] = [];
   for (let i = 0; i < slideCount; i++) {
@@ -56,6 +58,9 @@ export function buildPresentationXml(
     `<p:sldMasterIdLst>` +
     `<p:sldMasterId id="2147483648" r:id="${slideMasterRelId}"/>` +
     `</p:sldMasterIdLst>` +
+    (notesMasterRelId
+      ? `<p:notesMasterIdLst><p:notesMasterId r:id="${notesMasterRelId}"/></p:notesMasterIdLst>`
+      : '') +
     `<p:sldIdLst>${sldIdList.join('')}</p:sldIdLst>` +
     `<p:sldSz cx="${SLIDE_WIDTH}" cy="${SLIDE_HEIGHT}" type="screen16x9"/>` +
     `<p:notesSz cx="${SLIDE_HEIGHT}" cy="${SLIDE_WIDTH}"/>` +

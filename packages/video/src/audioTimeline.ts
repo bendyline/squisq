@@ -21,6 +21,7 @@
 import type { Doc, MediaScheduleOptions, ScheduledClip } from '@bendyline/squisq/schemas';
 import { resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import { flattenRenderableBlocks, materializeBlockLayers } from '@bendyline/squisq/doc';
+import { createMediaTimeMap } from '@bendyline/squisq/mediaEdit';
 
 /** One audio source placed on the absolute export timeline. */
 export interface AudioTimelineClip {
@@ -158,24 +159,56 @@ export function computeAudioTimeline(
       for (const layer of materialized.layers) {
         if (layer.type !== 'video' || !layer.content.src) continue;
         const startAt = safeSeconds(layer.content.startAt ?? 0);
-        const sourceInSec = safeSeconds(layer.content.clipStart);
-        const clipDuration = Math.max(0, layer.content.clipEnd - sourceInSec);
+        const clipStart = safeSeconds(layer.content.clipStart);
         const blockRemainder = Math.max(0, safeSeconds(block.duration) - startAt);
-        const durationSec = layer.content.spillover
-          ? clipDuration
-          : Math.min(clipDuration, blockRemainder);
-        if (durationSec <= 0) continue;
-        const candidate: AudioTimelineClip = {
-          src: layer.content.src,
-          startSec: safeSeconds(block.startTime) + startAt + preRoll,
-          sourceInSec,
-          durationSec,
-          sourceKind: 'video',
-        };
-        const key = timelineKey(candidate);
-        if (existing.has(key)) continue;
-        existing.add(key);
-        clips.push(candidate);
+        // The kept source ranges, back to back: one for an uncut clip, one per
+        // side of each cut otherwise — the sound skips what the picture skips.
+        const kept = createMediaTimeMap({
+          clipStart,
+          clipEnd: Math.max(clipStart, layer.content.clipEnd),
+          cuts: layer.content.cuts,
+        }).keptRanges();
+        // The clip's recipe, as a scheduled clip's would apply: its processed
+        // render in place of its own sound, its gain, and its two fades.
+        const edits = layer.content.edits;
+        const processed =
+          edits?.fx && options.processedAudio
+            ? options.processedAudio({
+                id: layer.id,
+                src: layer.content.src,
+                kind: 'video',
+                startAt: 0,
+                anchor: 'block',
+                edits,
+              })
+            : undefined;
+        let played = 0;
+        kept.forEach((range, index) => {
+          const length = range.end - range.start;
+          const room = layer.content.spillover ? length : Math.min(length, blockRemainder - played);
+          const offset = played;
+          played += length;
+          if (!(room > 0)) return;
+          // Joins are de-clicked, as a scheduled clip's cut segments are; the
+          // recipe's own fades sit at the two ends of the played clip.
+          const fadeIn = index > 0 ? CUT_EDGE_FADE_SEC : (edits?.fadeIn ?? 0);
+          const fadeOut = index < kept.length - 1 ? CUT_EDGE_FADE_SEC : (edits?.fadeOut ?? 0);
+          const candidate: AudioTimelineClip = {
+            src: processed ?? layer.content.src,
+            startSec: safeSeconds(block.startTime) + startAt + offset + preRoll,
+            sourceInSec: range.start,
+            durationSec: room,
+            // A render is an audio file; only the video itself may be silent.
+            ...(processed ? {} : { sourceKind: 'video' as const }),
+            ...(edits?.gain ? { gainDb: edits.gain } : {}),
+            ...(fadeIn > 0 ? { fadeInSec: fadeIn } : {}),
+            ...(fadeOut > 0 ? { fadeOutSec: fadeOut } : {}),
+          };
+          const key = timelineKey(candidate);
+          if (existing.has(key)) return;
+          existing.add(key);
+          clips.push(candidate);
+        });
       }
     });
   }

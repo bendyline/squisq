@@ -35,6 +35,7 @@ import {
   SlideshowDataGridProvider,
   SlideshowDataGridRenderer,
 } from './slideshow/SlideshowDataGrid';
+import { useReportActiveSlide } from './slideshow/ActiveSlide';
 import { useProcessedAudio } from '@bendyline/squisq-video-react/media-edit';
 
 export interface PreviewPanelProps {
@@ -113,10 +114,7 @@ export function PreviewPanel({
   const mainSurfaceRef = useRef<HTMLDivElement>(null);
   const popupSurfaceRef = useRef<HTMLDivElement>(null);
   const [playbackState, setPlaybackState] = useState<PlaybackState | null>(null);
-
-  const handlePlaybackStateChange = useCallback((next: PlaybackState) => {
-    setPlaybackState(next);
-  }, []);
+  const reportActiveSlide = useReportActiveSlide();
 
   // Build the player-ready Doc whenever the parsed doc changes.
   // Transform runs on the ORIGINAL doc (which has block.contents with
@@ -136,6 +134,34 @@ export function PreviewPanel({
 
   const previewDoc = previewProjection?.playerDoc ?? null;
   const contentDoc = previewProjection?.contentDoc ?? null;
+
+  // The primary player's state feeds two listeners: the audience window, which
+  // follows it while open, and the toolbar, which acts on the slide on screen.
+  // Slideshow is the only mode whose slide stays put until the author moves on,
+  // so it is the only one that names an active slide.
+  const audienceFollows = presentation?.activeTarget === 'window';
+  const namesActiveSlide = activeDisplayMode === 'slideshow' && !printMode?.active;
+  const slidesAreGenerated = !!activeTransformStyle || !!previewDoc?.presentationApplied;
+  const handlePlaybackStateChange = useCallback(
+    (next: PlaybackState) => {
+      if (audienceFollows) setPlaybackState(next);
+      if (!namesActiveSlide) return;
+      // The managed cover is reported as a block of its own; it is no section.
+      const isCover = next.currentSlideLabel === 'Cover';
+      reportActiveSlide({
+        blockId: isCover ? null : (next.currentBlock?.id ?? null),
+        template: isCover ? undefined : next.currentBlock?.template,
+        isCover,
+        generated: slidesAreGenerated,
+      });
+    },
+    [audienceFollows, namesActiveSlide, reportActiveSlide, slidesAreGenerated],
+  );
+  // No slide is on screen outside Slideshow, or once this preview is gone.
+  useEffect(() => {
+    if (!namesActiveSlide || !previewDoc) reportActiveSlide(null);
+  }, [namesActiveSlide, previewDoc, reportActiveSlide]);
+  useEffect(() => () => reportActiveSlide(null), [reportActiveSlide]);
 
   // The popup owns no clock, audio, or transport. It follows the primary
   // player's published state while all actions remain inert, keeping the
@@ -304,7 +330,6 @@ export function PreviewPanel({
     printMode?.active || isDocumentMode || isPageMode || isNarrateMode || isFlashcardsMode
       ? 'stretch'
       : 'center';
-  const audienceWindowOpen = presentation?.activeTarget === 'window';
 
   const renderSurface = (audience: boolean): ReactNode => {
     if (!audience && printMode?.active) {
@@ -469,7 +494,7 @@ export function PreviewPanel({
         showCodeCopyButton={showCodeCopyButton}
         onCopyCode={onCopyCode}
         onPlaybackStateChange={
-          !audience && audienceWindowOpen ? handlePlaybackStateChange : undefined
+          !audience && (audienceFollows || namesActiveSlide) ? handlePlaybackStateChange : undefined
         }
         tableContentRenderer={
           !audience && activeDisplayMode === 'slideshow' ? SlideshowDataGridRenderer : undefined
@@ -515,7 +540,7 @@ export function PreviewPanel({
           {renderSurface(false)}
         </div>
       </div>
-      {audienceWindowOpen && presentation?.popupRoot && !isNarrateMode
+      {audienceFollows && presentation?.popupRoot && !isNarrateMode
         ? createPortal(
             <div
               className="squisq-editor-shell squisq-presentation-window"

@@ -11,6 +11,9 @@ import { Node, mergeAttributes } from '@tiptap/core';
 import { mediaEditNodeAttributes } from './mediaEditAttributes.js';
 import { MediaEditButton } from '../mediaEdit/MediaEditButton';
 import { usePlaybackSrc } from '../mediaEdit/usePlaybackSrc';
+import { useMemo, useRef } from 'react';
+import { parseMediaCuts } from '@bendyline/squisq/mediaEdit';
+import { useCutTimeMap, useSkipCuts } from '@bendyline/squisq-react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
 import { useResolvedMediaSrc } from './useResolvedMediaSrc.js';
@@ -42,14 +45,20 @@ export function AudioMedia({
   attrs: Record<string, unknown>;
   readOnly?: boolean;
 }) {
-  const { src, controls, editFx } = attrs as {
+  const { src, controls, editFx, editCuts } = attrs as {
     src: string;
     controls: boolean;
     editFx: string | null;
+    editCuts: string | null;
   };
   // With a cleanup recipe rendered, play the processed audio in place.
   const playbackSrc = usePlaybackSrc(src ?? '', 'audio', editFx);
   const resolvedSrc = useResolvedMediaSrc(playbackSrc);
+  // The clip plays here as it is cut. The processed render shares the
+  // source's clock, so the same cut times apply to either file.
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const cuts = useMemo(() => parseMediaCuts(editCuts ?? undefined), [editCuts]);
+  useSkipCuts(audioRef, useCutTimeMap(cuts), resolvedSrc);
 
   return (
     <span
@@ -59,7 +68,7 @@ export function AudioMedia({
       data-squisq-media-src={src}
       data-squisq-media-kind="audio"
     >
-      <audio src={resolvedSrc || undefined} controls={controls} preload="metadata" />
+      <audio ref={audioRef} src={resolvedSrc || undefined} controls={controls} preload="metadata" />
       {!readOnly && (
         <span className="squisq-audio-node-toolbar" contentEditable={false}>
           <MediaEditButton src={src} kind="audio" fx={editFx} />

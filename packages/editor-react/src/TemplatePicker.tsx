@@ -959,6 +959,18 @@ export interface TemplatePickerProps {
    * their static wireframe icons.
    */
   previewSource?: TemplatePreviewSource;
+  /**
+   * Shows the current type but cannot be opened — for a host whose active
+   * block has no type to change. Pair with {@link title} to say why.
+   */
+  disabled?: boolean;
+  /** Tooltip for the trigger. Defaults to "Choose block type". */
+  title?: string;
+  /**
+   * Text for the current type, in place of the label derived from `value` —
+   * for a host that shows something `value` cannot name (e.g. "Cover").
+   */
+  valueLabel?: string;
 }
 
 export function TemplatePicker({
@@ -969,6 +981,9 @@ export function TemplatePicker({
   recommended,
   onOpenDesigner,
   previewSource,
+  disabled = false,
+  title = 'Choose block type',
+  valueLabel,
 }: TemplatePickerProps) {
   const [open, setOpen] = useState(false);
   const [dialogStyle, setDialogStyle] = useState<React.CSSProperties>({});
@@ -988,6 +1003,13 @@ export function TemplatePicker({
     updateDialogBounds();
     setOpen((v) => !v);
   };
+
+  // The block under the picker can stop being changeable while the gallery is
+  // open (the slideshow advanced to its cover, say); close rather than leave a
+  // gallery whose choices would no longer apply.
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
 
   // Close on outside click
   useEffect(() => {
@@ -1034,6 +1056,8 @@ export function TemplatePicker({
       <select
         className="squisq-template-picker-select"
         value={value}
+        disabled={disabled}
+        title={title}
         onChange={(e) => onChange(e.target.value)}
       >
         {all.map((e) => (
@@ -1045,48 +1069,56 @@ export function TemplatePicker({
     );
   }
 
-  const gallery = open
-    ? createPortal(
-        <TemplateGalleryDialog
-          dialogRef={dialogRef}
-          returnFocusRef={triggerRef}
-          dialogId={dialogId}
-          title={dialogTitle}
-          colorScheme={colorScheme}
-          style={dialogStyle}
-          onClose={() => setOpen(false)}
-        >
-          <TemplateGalleryBody
-            value={value}
-            onSelect={handleSelect}
-            style={{}}
-            recommended={recommended}
-            onOpenDesigner={onOpenDesigner}
-            previewSource={previewSource}
-          />
-        </TemplateGalleryDialog>,
-        document.body,
-      )
-    : null;
+  const gallery =
+    open && !disabled
+      ? createPortal(
+          <TemplateGalleryDialog
+            dialogRef={dialogRef}
+            returnFocusRef={triggerRef}
+            dialogId={dialogId}
+            title={dialogTitle}
+            colorScheme={colorScheme}
+            style={dialogStyle}
+            onClose={() => setOpen(false)}
+          >
+            <TemplateGalleryBody
+              value={value}
+              onSelect={handleSelect}
+              style={{}}
+              recommended={recommended}
+              onOpenDesigner={onOpenDesigner}
+              previewSource={previewSource}
+            />
+          </TemplateGalleryDialog>,
+          document.body,
+        )
+      : null;
 
   return (
-    <div className="squisq-template-picker-popover-host" ref={containerRef}>
+    // The disabled trigger takes no pointer events (see its CSS), so hover
+    // reaches this element, which carries the reason as its tooltip.
+    <div
+      className="squisq-template-picker-popover-host"
+      ref={containerRef}
+      title={disabled ? title : undefined}
+    >
       <button
         ref={triggerRef}
         type="button"
         className={`squisq-template-picker-trigger${open ? ' squisq-template-picker-trigger--open' : ''}`}
         onClick={handleOpen}
+        disabled={disabled}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={open ? dialogId : undefined}
-        title="Choose block type"
+        title={title}
       >
         <span className="squisq-template-picker-trigger-label">Block:</span>
         <span className="squisq-template-picker-trigger-thumb" aria-hidden="true">
           {currentEntry.icon}
         </span>
         <span className="squisq-template-picker-trigger-value">
-          {value ? currentLabel : '(No visual)'}
+          {valueLabel ?? (value ? currentLabel : '(No visual)')}
         </span>
         <svg
           className="squisq-template-picker-trigger-caret"

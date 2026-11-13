@@ -18,6 +18,9 @@ import {
   type EditorContextMenuContext,
 } from '../EditorContextMenu';
 import { forgetMediaCopy, MediaClipboard } from '../mediaClipboard';
+import type { ProofFinding } from '@bendyline/squisq/proof';
+import { ProofingStateContext } from '../proofing/proofingStateContext';
+import type { ProofingState } from '../proofing/useProofing';
 
 function HostActions({ onNarrate }: { onNarrate: (context: EditorContextMenuContext) => void }) {
   const items = useMemo(
@@ -92,10 +95,21 @@ function MountedTableContextMenu({ editor, readOnly }: { editor: Editor; readOnl
   );
 }
 
-function TableHarness({ editor, readOnly = false }: { editor: Editor; readOnly?: boolean }) {
+function TableHarness({
+  editor,
+  readOnly = false,
+  proofing = null,
+}: {
+  editor: Editor;
+  readOnly?: boolean;
+  /** Proofing state, as `ProofingRoot` provides it around the shell. */
+  proofing?: ProofingState | null;
+}) {
   return (
     <EditorProvider initialMarkdown="" initialView="wysiwyg">
-      <MountedTableContextMenu editor={editor} readOnly={readOnly} />
+      <ProofingStateContext.Provider value={proofing}>
+        <MountedTableContextMenu editor={editor} readOnly={readOnly} />
+      </ProofingStateContext.Provider>
     </EditorProvider>
   );
 }
@@ -224,6 +238,116 @@ describe('EditorContextMenu', () => {
     expect(screen.queryByRole('menuitem')).toBeNull();
   });
 
+  describe('while the content scrolls', () => {
+    function rect(left: number, top: number, right: number, bottom: number): DOMRect {
+      return {
+        left,
+        top,
+        right,
+        bottom,
+        x: left,
+        y: top,
+        width: right - left,
+        height: bottom - top,
+        toJSON: () => ({}),
+      };
+    }
+
+    /** Make the content a 400×200 scroller at (0, 50) whose offset tests can move. */
+    function scrollableContent(): { content: HTMLElement; scrollTo: (top: number) => void } {
+      const content = document.querySelector<HTMLElement>('.squisq-editor-content')!;
+      let scrollTop = 0;
+      Object.defineProperty(content, 'scrollTop', { configurable: true, get: () => scrollTop });
+      content.style.overflow = 'auto';
+      content.getBoundingClientRect = () => rect(0, 50, 400, 250);
+      return {
+        content,
+        scrollTo: (top: number) => {
+          scrollTop = top;
+          fireEvent.scroll(content);
+        },
+      };
+    }
+
+    it('stays open and moves with the spot it was opened on', async () => {
+      render(<Harness />);
+      const { scrollTo } = scrollableContent();
+      fireEvent.contextMenu(screen.getByRole('textbox', { name: 'Source' }), {
+        clientX: 40,
+        clientY: 120,
+      });
+      const menu = await screen.findByRole('menu');
+      expect(menu.style.top).toBe('124px');
+
+      // A trackpad's two-finger click scrolls a few pixels as it settles.
+      scrollTo(3);
+
+      expect(screen.getByRole('menu')).toBe(menu);
+      await waitFor(() => expect(menu.style.top).toBe('121px'));
+    });
+
+    it('ignores scrolling elsewhere on the page', async () => {
+      render(<Harness />);
+      scrollableContent();
+      fireEvent.contextMenu(screen.getByRole('textbox', { name: 'Source' }), {
+        clientX: 40,
+        clientY: 120,
+      });
+      await screen.findByRole('menu');
+      const sidebar = document.createElement('div');
+      document.body.append(sidebar);
+
+      fireEvent.scroll(sidebar);
+
+      expect(screen.getByRole('menu')).toBeDefined();
+      sidebar.remove();
+    });
+
+    it('closes once that spot scrolls out of view', async () => {
+      render(<Harness />);
+      const { scrollTo } = scrollableContent();
+      fireEvent.contextMenu(screen.getByRole('textbox', { name: 'Source' }), {
+        clientX: 40,
+        clientY: 120,
+      });
+      await screen.findByRole('menu');
+
+      scrollTo(40);
+      expect(screen.getByRole('menu')).toBeDefined();
+      // 120 - 80 = 40, above the scroller's top edge at 50.
+      scrollTo(80);
+
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    });
+  });
+
+  it('slides a menu that fits neither below nor above into a short window', async () => {
+    const innerHeight = window.innerHeight;
+    const scrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollHeight');
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 300 });
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.getAttribute('role') === 'menu' ? 240 : 0;
+      },
+    });
+    try {
+      render(<Harness />);
+      fireEvent.contextMenu(screen.getByRole('textbox', { name: 'Source' }), {
+        clientX: 40,
+        clientY: 150,
+      });
+      const menu = await screen.findByRole('menu');
+
+      // 240px fits neither below 150 nor above it, so it ends 8px above the bottom.
+      await waitFor(() => expect(menu.style.top).toBe('52px'));
+      expect(menu.style.maxHeight).toBe('240px');
+    } finally {
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: innerHeight });
+      if (scrollHeight) Object.defineProperty(HTMLElement.prototype, 'scrollHeight', scrollHeight);
+    }
+  });
+
   it('disables destructive clipboard actions in a read-only editor', async () => {
     render(<Harness readOnly />);
     const source = screen.getByRole('textbox', { name: 'Source' }) as HTMLTextAreaElement;
@@ -318,6 +442,128 @@ describe('EditorContextMenu', () => {
     expect(screen.getByRole('menuitem', { name: 'Insert column to the right' })).toBeDefined();
     expect(screen.getByRole('menuitem', { name: 'Delete column' })).toBeDefined();
     editor.destroy();
+  });
+
+  describe('on a squiggled word', () => {
+    const finding: ProofFinding = {
+      id: 'finding-1',
+      start: 0,
+      end: 4,
+      category: 'spelling',
+      kind: 'Typo',
+      message: 'Did you mean to spell `Qwen` this way?',
+      originalText: 'Qwen',
+      suggestions: [
+        { text: 'Queen', kind: 'replace' },
+        { text: 'Gwen', kind: 'replace' },
+      ],
+    };
+
+    function fakeProofing(findingId: string | null = finding.id) {
+      const state = {
+        findings: [finding],
+        findingAtPoint: vi.fn(() => findingId),
+        applySuggestion: vi.fn(),
+        ignoreFinding: vi.fn(),
+        addToAppDictionary: vi.fn(),
+        addToDocWordList: vi.fn(),
+        canAddToAppDictionary: true,
+      };
+      return { state, proofing: state as unknown as ProofingState };
+    }
+
+    function renderTable(proofing: ProofingState, readOnly = false): Editor {
+      const editor = makeTableEditor();
+      vi.spyOn(editor.view, 'posAtCoords').mockReturnValue(null);
+      render(<TableHarness editor={editor} proofing={proofing} readOnly={readOnly} />);
+      return editor;
+    }
+
+    const labels = () =>
+      screen.getAllByRole('menuitem').map((item) => item.textContent?.replace(/[⌘]|Ctrl\+/g, ''));
+
+    it('leads with its suggestions and keeps the table actions beneath', async () => {
+      const { state, proofing } = fakeProofing();
+      const editor = renderTable(proofing);
+
+      fireEvent.contextMenu(editor.view.dom.querySelectorAll('td')[0], {
+        clientX: 40,
+        clientY: 60,
+      });
+
+      const menu = await screen.findByRole('menu');
+      expect(state.findingAtPoint).toHaveBeenCalledWith('wysiwyg', 40, 60);
+      expect(labels()).toEqual([
+        'Queen',
+        'Gwen',
+        'Ignore',
+        'Add to dictionary',
+        'Add to document word list',
+        'CutX',
+        'CopyC',
+        'PasteV',
+        'Insert row above',
+        'Insert row below',
+        'Delete this row',
+        'Insert column to the left',
+        'Insert column to the right',
+        'Delete column',
+      ]);
+      const heading = document.getElementById(menu.getAttribute('aria-describedby') ?? '');
+      expect(heading?.textContent).toBe('Did you mean to spell “Qwen” this way?');
+
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Queen' }));
+      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+      expect(state.applySuggestion).toHaveBeenCalledExactlyOnceWith(finding.id, 0);
+      editor.destroy();
+    });
+
+    it('offers only the actions that leave a read-only document alone', async () => {
+      const { proofing } = fakeProofing();
+      const editor = renderTable(proofing, true);
+
+      fireEvent.contextMenu(editor.view.dom.querySelectorAll('td')[0], {
+        clientX: 40,
+        clientY: 60,
+      });
+
+      const disabled = (name: string) =>
+        (screen.getByRole('menuitem', { name }) as HTMLButtonElement).disabled;
+      expect(
+        ((await screen.findByRole('menuitem', { name: 'Queen' })) as HTMLButtonElement).disabled,
+      ).toBe(true);
+      expect(disabled('Add to document word list')).toBe(true);
+      expect(disabled('Ignore')).toBe(false);
+      expect(disabled('Add to dictionary')).toBe(false);
+      editor.destroy();
+    });
+
+    it('is the ordinary menu where no word is squiggled', async () => {
+      const { proofing } = fakeProofing(null);
+      const editor = renderTable(proofing);
+
+      fireEvent.contextMenu(editor.view.dom.querySelectorAll('td')[0], {
+        clientX: 40,
+        clientY: 60,
+      });
+
+      const menu = await screen.findByRole('menu');
+      expect(menu.getAttribute('aria-describedby')).toBeNull();
+      expect(labels()[0]).toBe('CutX');
+      editor.destroy();
+    });
+
+    it('leaves the menu key to proofing, which answers it at the caret', async () => {
+      const { state, proofing } = fakeProofing();
+      const editor = renderTable(proofing);
+
+      fireEvent.keyDown(editor.view.dom.querySelectorAll('td')[0], { key: 'ContextMenu' });
+
+      await screen.findByRole('menu');
+      expect(state.findingAtPoint).not.toHaveBeenCalled();
+      expect(screen.queryByRole('menuitem', { name: 'Queen' })).toBeNull();
+      editor.destroy();
+    });
   });
 
   describe('on an image', () => {

@@ -2,7 +2,7 @@
 
 import type { RenderResult } from 'mermaid';
 import type { Theme } from '@bendyline/squisq/schemas';
-import { buildMermaidThemeVariables } from '@bendyline/squisq/schemas';
+import { buildMermaidThemeCss, buildMermaidThemeVariables } from '@bendyline/squisq/schemas';
 import { DEFAULT_THEME } from '@bendyline/squisq/doc';
 
 let mermaidPromise: Promise<typeof import('mermaid').default> | null = null;
@@ -95,6 +95,7 @@ export function renderMermaidSvg(
       ...MERMAID_BASE_CONFIG,
       theme: 'base',
       themeVariables: buildMermaidThemeVariables(theme),
+      themeCSS: buildMermaidThemeCss(theme),
     });
     const { svg, diagramType } = await withMermaidLabelWrapping(() =>
       mermaid.render(id, source, container),
@@ -123,6 +124,7 @@ export function renderMermaidSvgForExport(
       ...MERMAID_BASE_CONFIG,
       theme: 'base',
       themeVariables: fontFamily ? { ...themeVariables, fontFamily } : themeVariables,
+      themeCSS: buildMermaidThemeCss(theme),
       htmlLabels: false,
       journey: { textPlacement: 'tspan' },
     });

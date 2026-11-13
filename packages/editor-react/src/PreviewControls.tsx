@@ -80,6 +80,8 @@ import {
   type ThemeSaveExtras,
 } from './customThemes';
 import { Icon } from './Icon';
+import { ActiveSlideProvider } from './slideshow/ActiveSlide';
+import { SlideBlockTypeControl } from './slideshow/SlideBlockTypeControl';
 import { resolvePersistedTransformStyleId } from './transformStyleId';
 import {
   FRONTMATTER_SETTING_DEFAULTS,
@@ -1187,8 +1189,12 @@ export function PreviewSettingsProvider({
     ],
   );
 
+  // The slide on screen is its own context: it changes as the deck is stepped
+  // through, and nothing that reads the settings above should re-render for it.
   return (
-    <PreviewSettingsContext.Provider value={value}>{children}</PreviewSettingsContext.Provider>
+    <PreviewSettingsContext.Provider value={value}>
+      <ActiveSlideProvider>{children}</ActiveSlideProvider>
+    </PreviewSettingsContext.Provider>
   );
 }
 
@@ -1341,9 +1347,12 @@ const SUMMARIZE_TOOLTIP =
  * first (Cover, then Loop, then Captions, …). Aspect ratio stays inline the
  * longest, but
  * still collapses into the same menu when the toolbar is very constrained.
+ * The block type sits right after it: it is the one control about the slide
+ * on screen rather than the whole deck, so it leads the deck-wide settings.
  */
 type ControlKey =
   | 'format'
+  | 'blockType'
   | 'layout'
   | 'video'
   | 'theme'
@@ -1354,6 +1363,7 @@ type ControlKey =
   | 'dashboardImage';
 const CONTROL_KEYS: ControlKey[] = [
   'format',
+  'blockType',
   'layout',
   'video',
   'theme',
@@ -1373,7 +1383,8 @@ const CONTROL_KEYS: ControlKey[] = [
  * no timed captions there (they apply in Video). Dashboard is a static canvas
  * with no clock, captions, or managed cover — it shows the format switch,
  * its own layout picker, theme, and summarize. Cover, Theme, and Summarize
- * remain live in every other mode.
+ * remain live in every other mode. The block type is Slideshow's alone: it is
+ * the one mode where a single slide stays on screen until the author moves on.
  */
 function controlKeysForMode(displayMode: string, hasVideoMedia: boolean): ControlKey[] {
   if (displayMode === 'flashcards') {
@@ -1383,6 +1394,9 @@ function controlKeysForMode(displayMode: string, hasVideoMedia: boolean): Contro
     return ['format', 'layout', 'theme', 'transform', 'dashboardImage'];
   }
   let keys = CONTROL_KEYS.filter((key) => key !== 'layout' && key !== 'dashboardImage');
+  if (displayMode !== 'slideshow') {
+    keys = keys.filter((key) => key !== 'blockType');
+  }
   if (displayMode !== 'video') {
     keys = keys.filter((key) => key !== 'loop');
   }
@@ -2198,6 +2212,15 @@ export function PreviewToolbarControls({
               <span>Loop</span>
             </label>
           </div>
+        );
+      case 'blockType':
+        return (
+          <SlideBlockTypeControl
+            key="blockType"
+            compact={compact}
+            activeTheme={s.activeTheme}
+            activeViewport={s.activeViewport}
+          />
         );
       case 'cover':
         return <CoverSlideMenuControl key="cover" compact={compact} />;

@@ -83,7 +83,10 @@ export type {
   MediaEditPreviewResult,
   MediaEditRenderRequest,
   MediaEditRenderResult,
+  MediaEditWaveformRequest,
+  MediaEditWaveformResult,
 } from './mediaEdit/mediaEditEngine.js';
+export type { MediaBakeRequest, MediaBakeResult } from './mediaEdit/mediaBakeEngine.js';
 export { createMediaEditRenderManager } from './mediaEdit/mediaEditRenderManager.js';
 export type {
   MediaEditRenderManager,

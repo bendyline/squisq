@@ -36,6 +36,13 @@ import { isSvgIslandLang } from '../markdown/svgIsland.js';
 import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
 import { isStandaloneHtmlVideo } from './mediaAnnotations.js';
+import {
+  mediaEditValuesFromAttributes,
+  parseMediaEdits,
+  type MediaCut,
+  type MediaEdits,
+} from '../mediaEdit/recipe.js';
+import { taskMarker } from '../schemas/Doc.js';
 import { readMatrixItems, splitConceptItem } from './templates/conceptItems.js';
 import {
   detectAsciiDiagram,
@@ -43,7 +50,11 @@ import {
   isExplicitDiagramLang,
 } from './asciiDiagram/detect.js';
 import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
-import { detectAsciiTimeline, isEligibleAsciiTimelineFenceLang } from './asciiTimeline/detect.js';
+import {
+  detectAsciiTimeline,
+  isEligibleAsciiTimelineFenceLang,
+  isExplicitTimelineLang,
+} from './asciiTimeline/detect.js';
 import { asciiTimelineToTemplateData } from './asciiTimeline/mapping.js';
 import { detectTree, isEligibleTreeFenceLang, isExplicitTreeLang } from './treeview/detect.js';
 import { treeToTemplateData, treeFromMarkdownList, findFirstList } from './treeview/mapping.js';
@@ -66,6 +77,10 @@ export interface EmbeddedVideo {
   /** Source-media in/out points carried by inline video data attributes. */
   clipStart?: number;
   clipEnd?: number;
+  /** Source ranges the clip's edit recipe removes (`data-squisq-video-cuts`). */
+  cuts?: MediaCut[];
+  /** The clip's whole edit recipe (`data-squisq-video-*`), when it has one. */
+  edits?: MediaEdits;
 }
 
 const VIDEO_FILE_RE = /\.(?:webm|mp4|mov|m4v|ogv)(?:[?#].*)?$/i;
@@ -121,14 +136,35 @@ export function isPictureFence(node: MarkdownNode): boolean {
 }
 
 /**
+ * A fence the author tagged ```diagram, ```tree or ```timeline whose art
+ * parses: `appendRichContentLayers` draws it as its own picture beside the
+ * block's words. Its source is box-drawing and marker art (`● Start {#start}
+ * ─────●`), so as prose it would print on the slide next to the picture it
+ * became and be read aloud by narration. An untagged fence stays code; one
+ * whose art does not parse stays visible rather than disappearing.
+ */
+export function isSpatialPictureFence(node: MarkdownNode): boolean {
+  if (node.type !== 'code') return false;
+  if (isExplicitDiagramLang(node.lang)) {
+    return detectAsciiDiagram(node.value, { explicit: true }).isDiagram;
+  }
+  if (isExplicitTreeLang(node.lang)) return detectTree(node.value, { explicit: true }).isTree;
+  if (isExplicitTimelineLang(node.lang)) {
+    return detectAsciiTimeline(node.value, { explicit: true }).isTimeline;
+  }
+  return false;
+}
+
+/**
  * Body nodes that render as their own visual layer rather than as prose: a
- * picture fence ({@link isPictureFence}), a hosted-video paragraph and a
- * standalone `<video>` (players, via `appendRichContentLayers`). Repeating
- * them as body text would print the diagram source, the video's link or its
- * raw tag under the very thing they became.
+ * picture fence ({@link isPictureFence}), a tagged diagram, tree or timeline
+ * ({@link isSpatialPictureFence}), a hosted-video paragraph and a standalone
+ * `<video>` (players, via `appendRichContentLayers`). Repeating them as body
+ * text would print the diagram source, the video's link or its raw tag under
+ * the very thing they became.
  */
 export function isMaterializedMediaNode(node: MarkdownBlockNode): boolean {
-  if (node.type === 'code') return isPictureFence(node);
+  if (node.type === 'code') return isPictureFence(node) || isSpatialPictureFence(node);
   return findBlockVideoEmbed(node) !== null || isStandaloneHtmlVideo(node);
 }
 
@@ -341,18 +377,17 @@ export function renderMarkdownBlocksHtml(
     const start = node.ordered && node.start != null ? ` start="${node.start}"` : '';
     const items = node.children
       .map((item, index) => {
-        const taskMarker =
-          item.checked == null ? '' : `<span>${item.checked ? '[x]' : '[ ]'} </span>`;
+        // A task item shows its box in place of the bullet, not `[ ]` text
+        // after one.
+        const task = item.checked == null ? null : taskMarker(item.checked);
         const step = builds?.targets.get(item);
-        if (step === undefined) return `<li>${taskMarker}${renderBlocks(item.children)}</li>`;
-        const marker =
-          item.checked == null
-            ? node.ordered
-              ? `${(node.start ?? 1) + index}.`
-              : '•'
-            : item.checked
-              ? '[x]'
-              : '[ ]';
+        if (step === undefined) {
+          // `data-squisq-task` hides the item's bullet in the slide stylesheet.
+          return task === null
+            ? `<li>${renderBlocks(item.children)}</li>`
+            : `<li data-squisq-task><span aria-hidden="true">${task} </span>${renderBlocks(item.children)}</li>`;
+        }
+        const marker = task ?? (node.ordered ? `${(node.start ?? 1) + index}.` : '•');
         // A list item can resume its prose after a nested list. Keep those runs
         // in source order, but give every run the same reveal step.
         let first = true;
@@ -610,6 +645,8 @@ export function extractEmbeddedVideos(
         const clipEnd = attrs?.['data-squisq-video-clip-end']
           ? parseTimeSeconds(attrs['data-squisq-video-clip-end'])
           : null;
+        const edits = parseMediaEdits(mediaEditValuesFromAttributes('video', attrs ?? {}));
+        const cuts = edits?.cuts;
         add({
           src,
           ...(attrs?.poster ? { posterSrc: attrs.poster } : {}),
@@ -617,6 +654,8 @@ export function extractEmbeddedVideos(
           ...(startAt != null ? { startAt } : {}),
           ...(clipStart != null ? { clipStart } : {}),
           ...(clipEnd != null ? { clipEnd } : {}),
+          ...(cuts?.length ? { cuts } : {}),
+          ...(edits ? { edits } : {}),
         });
       }
     } else if (
