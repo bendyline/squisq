@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { seekVideoToFrame } from '../docPlayer/renderReadiness';
+import { blockVideoSourceTime, seekVideoToFrame } from '../docPlayer/renderReadiness';
 
 beforeEach(() => {
   vi.spyOn(document, 'hasFocus').mockReturnValue(true);
@@ -57,6 +57,32 @@ function controllableVideo(
     assignedTimes,
   };
 }
+
+describe('blockVideoSourceTime', () => {
+  function blockVideo(attrs: Record<string, string>): HTMLVideoElement {
+    const video = document.createElement('video');
+    Object.assign(video.dataset, attrs);
+    return video;
+  }
+
+  it('advances from the in-point by block time and stops at the out-point', () => {
+    const video = blockVideo({ clipStart: '10', clipEnd: '20' });
+    expect(blockVideoSourceTime(video, 3)).toBe(13);
+    expect(blockVideoSourceTime(video, 30)).toBe(20);
+  });
+
+  it('holds at the in-point until the clip start offset', () => {
+    const video = blockVideo({ clipStart: '10', clipEnd: '20', startAt: '2' });
+    expect(blockVideoSourceTime(video, 1)).toBe(10);
+    expect(blockVideoSourceTime(video, 5)).toBe(13);
+  });
+
+  it('maps played time past a cut to the source time after it', () => {
+    const video = blockVideo({ clipStart: '0', clipEnd: '20', cuts: '2-5' });
+    expect(blockVideoSourceTime(video, 1)).toBe(1);
+    expect(blockVideoSourceTime(video, 3)).toBe(6);
+  });
+});
 
 describe('seekVideoToFrame', () => {
   it('skips an audio-only source authored with a video element', async () => {

@@ -53,7 +53,6 @@ import {
 import { MediaClipLayer } from './MediaClipLayer';
 import { useMediaClipDurations } from './hooks/useMediaClipDurations';
 import { applySurface, pipStyleVars } from '@bendyline/squisq/schemas';
-import { createMediaTimeMap, parseMediaCuts } from '@bendyline/squisq/mediaEdit';
 import { ProcessedAudioContext } from './hooks/MediaContext';
 import { BlockRenderer } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
@@ -89,7 +88,7 @@ import type { DocPlayerProps } from './DocPlayerProps';
 export type { DocPlayerProps } from './DocPlayerProps';
 import { buildSegmentTitleMap } from './docPlayer/segmentTitles';
 import { resolveDocPlayerAppearance } from './docPlayer/playerAppearance';
-import { seekVideoToFrame } from './docPlayer/renderReadiness';
+import { blockVideoSourceTime, seekVideoToFrame } from './docPlayer/renderReadiness';
 
 // Dev-only, browser-safe environment probe. Bundlers substitute the
 // `process.env.NODE_ENV` expression; bare browsers without a bundler have
@@ -867,9 +866,8 @@ function DocPlayerContent({
         if (typeof end !== 'number' || position < end) seekedActiveAnimations += 1;
       });
 
-      // Seek <video> elements in the active block to the correct clip position.
-      // Each <video> carries data-clip-start/data-clip-end attributes set by
-      // VideoLayer.tsx; we calculate targetTime = clipStart + blockElapsed.
+      // Seek <video> elements in the active block to the correct clip position,
+      // read from the data-clip-*/data-start-at/data-cuts attributes VideoLayer sets.
       const blockElapsed = time - blockStartTime;
       const videoSeekPromises: Promise<void>[] = [];
       const activeBlockEl = root.querySelector('.doc-player__block--active');
@@ -877,22 +875,9 @@ function DocPlayerContent({
         const videos = activeBlockEl.querySelectorAll('video[data-clip-start]');
         videos.forEach((el) => {
           const video = el as HTMLVideoElement;
-          const clipStart = parseFloat(video.dataset.clipStart || '0');
-          const clipEnd = parseFloat(video.dataset.clipEnd || '0');
-          // Honor the per-clip startAt offset: before it, hold at the
-          // in-point; after, advance by (blockElapsed - startAt).
-          const startAt = parseFloat(video.dataset.startAt || '0');
-          // A cut clip's played time maps to source time through its cuts.
-          const played = Math.max(0, blockElapsed - startAt);
-          const cuts = parseMediaCuts(video.dataset.cuts);
-          const targetTime = Math.min(
-            cuts
-              ? createMediaTimeMap({ clipStart, cuts }).playedToSource(played)
-              : clipStart + played,
-            clipEnd,
+          videoSeekPromises.push(
+            selectVideoFrame(video, blockVideoSourceTime(video, blockElapsed)),
           );
-
-          videoSeekPromises.push(selectVideoFrame(video, targetTime));
         });
       }
 

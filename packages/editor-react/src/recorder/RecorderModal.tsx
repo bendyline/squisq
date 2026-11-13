@@ -65,8 +65,9 @@ import {
 } from './deviceSettings.js';
 import {
   buildFilename,
+  dualFilenameSeeds,
+  recordingFilenameSeed,
   supportsSystemAudioCapture,
-  type RecordingFilenameSeed,
 } from './formats.js';
 import { recordedMediaKind, type RecordedMediaKind } from './recordedMediaKind.js';
 import {
@@ -679,46 +680,6 @@ function captureSummary(
       : 'Voice-only audio. Pairs with a written script for auto-mapping to blocks.';
   }
   return 'Pick at least one source to record.';
-}
-
-/**
- * Describe the tracks that made it into the acquired stream. This deliberately
- * reads the result instead of trusting the requested toggles: display capture
- * may accept an audio request while returning video only.
- */
-function recordingFilenameSeed(
-  source: RecorderSource,
-  stream: MediaStream | null,
-  audioRequested: boolean,
-): RecordingFilenameSeed {
-  if (source === 'mic') return 'audio';
-  // Before preview, make the filename hint reflect the selected sources. Once
-  // acquired, the stream is authoritative because browsers may omit requested
-  // display audio.
-  const hasAudio = stream ? stream.getAudioTracks().length > 0 : audioRequested;
-  if (source === 'camera') return hasAudio ? 'camera-audio' : 'camera';
-  return hasAudio ? 'screen-audio' : 'screen';
-}
-
-/**
- * The two filename seeds for a `'screen+camera'` save — one per file. Each
- * reads its own acquired stream's audio tracks so the name reflects what the
- * file actually contains (browsers may drop a requested display-audio track).
- */
-function dualFilenameSeeds(
-  screenStream: MediaStream | null,
-  cameraStream: MediaStream | null,
-  systemAudioRequested: boolean,
-  micRequested: boolean,
-): { screen: RecordingFilenameSeed; camera: RecordingFilenameSeed } {
-  const screenHasAudio = screenStream
-    ? screenStream.getAudioTracks().length > 0
-    : systemAudioRequested;
-  const cameraHasAudio = cameraStream ? cameraStream.getAudioTracks().length > 0 : micRequested;
-  return {
-    screen: screenHasAudio ? 'screen-audio' : 'screen',
-    camera: cameraHasAudio ? 'camera-audio' : 'camera',
-  };
 }
 
 // ── Component ──────────────────────────────────────────────────────
