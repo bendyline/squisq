@@ -9,7 +9,25 @@
  */
 
 import { createDocument, type Editor } from '@tiptap/core';
+import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
 import { closeHistory } from '@tiptap/pm/history';
+import { needsTrailingParagraph, withoutTrailingParagraph } from './trailingParagraph';
+
+/**
+ * `next` ending with the editor's own trailing paragraph (the same node) when
+ * the editor would append one to it anyway.
+ *
+ * The source never contains that paragraph, so without this every diff ran to
+ * the end of the document: the replaced range swallowed the block before it,
+ * and a tray clip or diagram there lost its identity and remounted — an Apply
+ * in the media-edit dialog collapsed the clip's tray pill.
+ */
+function keepTrailingParagraph(current: PMNode, next: PMNode): PMNode {
+  const trailing = current.lastChild;
+  if (!trailing || withoutTrailingParagraph(current) === current) return next;
+  if (!needsTrailingParagraph(next)) return next;
+  return next.copy(next.content.append(Fragment.from(trailing)));
+}
 
 /**
  * Replace the editor's document with `content` (Tiptap HTML) as a minimal
@@ -23,13 +41,16 @@ export function replaceDocumentMinimal(
 ): void {
   const { state } = editor;
   try {
-    const next = createDocument(
-      content,
-      editor.schema,
-      {},
-      {
-        errorOnInvalidContent: editor.options.enableContentCheck,
-      },
+    const next = keepTrailingParagraph(
+      state.doc,
+      createDocument(
+        content,
+        editor.schema,
+        {},
+        {
+          errorOnInvalidContent: editor.options.enableContentCheck,
+        },
+      ),
     );
     const start = state.doc.content.findDiffStart(next.content);
     const metadataChanged =
