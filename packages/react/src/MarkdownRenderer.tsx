@@ -40,6 +40,7 @@ import {
 } from '@bendyline/squisq/markdown';
 import { useMediaProvider, useMediaUrl } from './hooks/MediaContext';
 import { useFenceRenderers } from './hooks/FenceRendererContext';
+import { mediaEditValuesFromAttributes, parseMediaEdits } from '@bendyline/squisq/mediaEdit';
 import { InlineVideoPlayer } from './InlineVideoPlayer.js';
 import { InlineAudioPlayer } from './InlineAudioPlayer.js';
 import { VideoEmbedFrame } from './VideoEmbedFrame.js';
@@ -907,6 +908,7 @@ function renderHtmlElement(el: HtmlElement, key: string, ctx: RenderCtx): React.
       <InlineVideoPlayer
         key={key}
         src={src}
+        edits={parseMediaEdits(mediaEditValuesFromAttributes('video', el.attributes))}
         width={el.attributes.width}
         height={el.attributes.height}
         poster={poster}
@@ -929,6 +931,7 @@ function renderHtmlElement(el: HtmlElement, key: string, ctx: RenderCtx): React.
       <InlineAudioPlayer
         key={key}
         src={src}
+        edits={parseMediaEdits(mediaEditValuesFromAttributes('audio', el.attributes))}
         controls={'controls' in el.attributes}
         preload={
           el.attributes.preload === 'none' ||

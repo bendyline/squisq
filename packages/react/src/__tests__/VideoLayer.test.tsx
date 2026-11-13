@@ -96,6 +96,85 @@ describe('VideoLayer playback synchronization', () => {
     expect(video.pause).toHaveBeenCalled();
   });
 
+  describe('a clip with cuts', () => {
+    // 0–30 s of source with 10–20 s cut: 20 s of played time.
+    const cut: VideoLayerType = {
+      ...layer,
+      content: {
+        src: 'clip.mp4',
+        alt: 'Demo clip',
+        clipStart: 0,
+        clipEnd: 30,
+        cuts: [{ start: 10, end: 20 }],
+      },
+    };
+    const at = (blockTime: number, mode?: 'player') => (
+      <svg>
+        <VideoLayer
+          layer={cut}
+          basePath="/media"
+          viewport={{ width: 640, height: 360 }}
+          blockTime={blockTime}
+          isPlaying
+          mode={mode}
+        />
+      </svg>
+    );
+
+    it('maps the doc clock to source time through the cuts', async () => {
+      const { container, rerender } = render(at(4));
+      const video = container.querySelector('video')!;
+      await waitFor(() => expect(video.currentTime).toBe(4));
+      // Twelve seconds in is two seconds past the join: source 22, not 12.
+      rerender(at(12));
+      expect(video.currentTime).toBe(22);
+      rerender(at(40));
+      expect(video.currentTime).toBe(30);
+    });
+
+    it('tells the frame-capture seek handler about the cuts', () => {
+      const { container } = render(at(0));
+      expect(container.querySelector('video')?.dataset.cuts).toBe('10-20');
+      cleanup();
+      const uncut = render(
+        <svg>
+          <VideoLayer
+            layer={layer}
+            basePath="/media"
+            viewport={{ width: 640, height: 360 }}
+            blockTime={0}
+          />
+        </svg>,
+      );
+      expect(uncut.container.querySelector('video')?.dataset.cuts).toBeUndefined();
+    });
+
+    it.each([undefined, 'player'] as const)(
+      'jumps a playing video out of a cut it runs into (mode %s)',
+      async (mode) => {
+        const { container } = render(at(4, mode));
+        const video = container.querySelector('video')!;
+        Object.defineProperty(video, 'paused', { configurable: true, value: false });
+        // The element plays on into the cut between two ticks of the doc clock.
+        video.currentTime = 10.4;
+        await waitFor(() => expect(video.currentTime).toBe(20));
+        // Kept material is left alone.
+        video.currentTime = 24;
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        expect(video.currentTime).toBe(24);
+      },
+    );
+
+    it('leaves a paused video where the viewer put it', async () => {
+      const { container } = render(at(4, 'player'));
+      const video = container.querySelector('video')!;
+      Object.defineProperty(video, 'paused', { configurable: true, value: true });
+      video.currentTime = 12;
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(video.currentTime).toBe(12);
+    });
+  });
+
   it.each(['captureSequential', 'captureDecoded'] as const)(
     'leaves %s videos for frame capture to position',
     async (flag) => {

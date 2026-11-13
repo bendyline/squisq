@@ -10,6 +10,7 @@
  * track and a single video track.
  */
 
+import { markDisplayCaptureError } from '../captureErrors.js';
 import { supportsDisplayMedia, supportsUserMedia } from '../formats.js';
 import {
   cropScreenStream,
@@ -127,10 +128,14 @@ async function requestFullScreenStream(options?: ScreenStreamOptions): Promise<S
   const systemAudio = options?.systemAudio ?? false;
   const includeMic = options?.includeMicrophone ?? false;
 
-  const displayStream = await navigator.mediaDevices.getDisplayMedia({
-    video,
-    audio: systemAudio ? (options?.systemAudioConstraints ?? true) : false,
-  });
+  const displayStream = await navigator.mediaDevices
+    .getDisplayMedia({
+      video,
+      audio: systemAudio ? (options?.systemAudioConstraints ?? true) : false,
+    })
+    .catch((err: unknown) => {
+      throw markDisplayCaptureError(err);
+    });
 
   if (!includeMic) {
     return {

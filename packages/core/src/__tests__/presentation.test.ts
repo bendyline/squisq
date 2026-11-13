@@ -798,6 +798,109 @@ describe('authored sections and summary layouts', () => {
     expect(chosen.block.template).toBe('cards');
   });
 
+  // Illustrate inserts its pictures as layout sections. Only the heading of one
+  // is narrated, so summarized it was an empty "Section break" slide and the
+  // picture itself was in no slide of the deck.
+  it('keeps a section someone drew as its own slide, not an empty section break', () => {
+    const drawn = [
+      '# Survey',
+      '',
+      'We asked 1,250 customers what they think.',
+      '',
+      '## Results at a glance {#glance} {[layout]}',
+      '',
+      '### {#glance-value} {[text x=120 y=300 width=500 height=200 fontSize=84]}',
+      '',
+      '87%',
+      '',
+      '### {#glance-label} {[text x=120 y=540 width=500 height=200 fontSize=36]}',
+      '',
+      'would recommend us',
+      '',
+      '## Next steps',
+      '',
+      'We will run it again in the autumn.',
+    ].join('\n');
+    const doc = parse(drawn);
+    const { plan, beat, block } = slide(doc, defaultPresentationHints(), 'glance');
+    expect(beat).toMatchObject({ layout: 'authored', headline: 'Results at a glance', points: [] });
+    expect(plan.beats.map((item) => item.layout)).not.toContain('divider');
+    // The slide is the drawing: its shapes, not a title on an empty page.
+    expect(block.template).toBe('layout');
+    expect(block.children?.map((child) => child.id)).toEqual(['glance-value', 'glance-label']);
+    expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+    // A layout the designer chose for the section wins.
+    expect(slide(doc, prefer('glance', 'divider'), 'glance').beat.layout).toBe('divider');
+  });
+
+  // A slide beside a diagram kept two points, so the words left the diagram
+  // room. On a drawn layout that removed parts of the picture: a three-step
+  // process showed two steps, a four-date timeline ended at its second date.
+  it('keeps every part of a drawn layout beside a diagram, and short words beside a table', () => {
+    const moves = (feature: string[]) =>
+      [
+        '# Support',
+        '',
+        'We answer every request.',
+        '',
+        '## How a request moves',
+        '',
+        'First the request is logged. Then an agent answers. Then a specialist takes over. Finally the customer confirms the fix.',
+        '',
+        ...feature,
+      ].join('\n');
+    const diagram = ['```mermaid', 'flowchart LR', '  a[Logged] --> b[Answered]', '```'];
+    const table = [
+      '| Stage | Hours |',
+      '| --- | --- |',
+      '| First line | 4 |',
+      '| Specialist | 48 |',
+    ];
+    const section = (doc: Doc, hints: PresentationHints) =>
+      createPresentationPlan(doc, hints).beats.filter(
+        (item) => sectionAt(doc, item.sourceStart) === 'how-a-request-moves',
+      );
+
+    // The automatic summary beside a diagram is words, and stays two points.
+    const drawn = parse(moves(diagram));
+    const [automatic] = section(drawn, defaultPresentationHints());
+    expect(automatic).toMatchObject({ layout: 'list', media: ['how-a-request-moves#0'] });
+    expect(automatic!.points.length).toBeLessThanOrEqual(2);
+
+    // A process the AI worded for the same passage is a drawing: every stage stays.
+    const plan = createPresentationPlan(drawn, defaultPresentationHints());
+    const hints = defaultPresentationHints();
+    hints.blocks.push({
+      blockId: 'how-a-request-moves',
+      ai: [
+        {
+          source: plan.sourceText.slice(automatic!.sourceStart, automatic!.sourceEnd),
+          layout: 'process',
+          headline: 'Escalation and closure',
+          points: ['Log: request recorded', 'Answer: an agent replies', 'Close: customer confirms'],
+        },
+      ],
+    });
+    const [suggested] = section(drawn, hints);
+    expect(suggested).toMatchObject({ headline: 'Escalation and closure', layout: 'process' });
+    expect(suggested!.points).toEqual([
+      'Log: request recorded',
+      'Answer: an agent replies',
+      'Close: customer confirms',
+    ]);
+    const compiled = compilePresentationPlan(drawn, createPresentationPlan(drawn, hints));
+    expect(compiled.blocks.find((item) => item.id === suggested!.id)).toMatchObject({
+      template: 'process',
+      items: ['Log: request recorded', 'Answer: an agent replies', 'Close: customer confirms'],
+    });
+
+    // A table takes the slide's width; the words above it stay two short points.
+    for (const beat of section(parse(moves(table)), defaultPresentationHints())) {
+      expect(beat.media).toEqual(['how-a-request-moves#table-0']);
+      expect(beat.points.length).toBeLessThanOrEqual(2);
+    }
+  });
+
   it('never repeats a nested section or takes AI wording on an authored slide', () => {
     const doc = parse(report);
     const hints = prefer('results', 'authored');

@@ -2,13 +2,16 @@
  * MediaEditModal — non-destructive edits for one media clip.
  *
  * Tabs: audio cleanup (the fixed signal chain, rendered in the background
- * into a processed track), timing (pause tightening, volume, fades) and, for
- * video, frame (crop) — the last two applied at playback and export. Every
- * panel stays mounted while its tab is hidden, so an in-flight preview or
- * pause search survives a tab switch. Nothing touches the source file: Apply
+ * into a processed track), cuts (a timeline for removing sections, with pause
+ * tightening), volume & fades and, for video, frame (crop) — the last three
+ * applied at playback and export. Every panel stays mounted while its tab is
+ * hidden, so an in-flight preview, waveform read or pause search survives a
+ * tab switch. Nothing touches the source file: Apply
  * writes the recipe onto the clip's markdown in one undo step, sharing the
  * signal chain and cuts with grouped companion clips so a screen + camera pair
- * stays in sync.
+ * stays in sync. "Save edited copy" bakes the recipe on screen into one
+ * ordinary file — for use outside the document, where nothing can apply a
+ * recipe.
  */
 
 import {
@@ -20,6 +23,8 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react';
+import { canBakeMedia } from '@bendyline/squisq/mediaEdit';
+import type { MediaClip } from '@bendyline/squisq/schemas';
 import {
   useMediaEditStatus,
   type MediaEditRenderManager,
@@ -29,7 +34,8 @@ import { useEditorContext, type MediaEditTarget } from '../EditorContext';
 import { useModalDialog } from '../modal/useModalDialog';
 import { setMediaClipsInSource } from '../timelineSource';
 import { MediaEditAudioSection } from './MediaEditAudioSection';
-import { MediaEditTimingSection } from './MediaEditTimingSection';
+import { MediaEditCutsSection } from './MediaEditCutsSection';
+import { MediaEditVolumeSection } from './MediaEditVolumeSection';
 import { MediaEditFrameSection } from './MediaEditFrameSection';
 import {
   companionEdits,
@@ -40,17 +46,19 @@ import {
   type RecipeDraft,
 } from './mediaEditDraft';
 import { findEditableMedia, groupCompanions, type EditableMedia } from './mediaEditTargets';
+import { useSaveEditedCopy } from './useSaveEditedCopy';
 
 export interface MediaEditModalProps {
   target: MediaEditTarget;
   onClose: () => void;
 }
 
-type MediaEditTab = 'audio' | 'timing' | 'frame';
+type MediaEditTab = 'audio' | 'cuts' | 'volume' | 'frame';
 
 const TABS: ReadonlyArray<{ id: MediaEditTab; label: string }> = [
   { id: 'audio', label: 'Audio cleanup' },
-  { id: 'timing', label: 'Timing' },
+  { id: 'cuts', label: 'Cuts' },
+  { id: 'volume', label: 'Volume & fades' },
   { id: 'frame', label: 'Frame' },
 ];
 
@@ -59,8 +67,10 @@ function tabHasEdits(tab: MediaEditTab, draft: RecipeDraft): boolean {
   switch (tab) {
     case 'audio':
       return fxFromDraft(draft).ops.length > 0 || draft.unknownFx.length > 0;
-    case 'timing':
-      return draft.cuts.length > 0 || draft.gain !== 0 || draft.fadeIn > 0 || draft.fadeOut > 0;
+    case 'cuts':
+      return draft.cuts.length > 0;
+    case 'volume':
+      return draft.gain !== 0 || draft.fadeIn > 0 || draft.fadeOut > 0;
     case 'frame':
       return draft.crop != null;
   }
@@ -116,7 +126,8 @@ function RenderStatusText({
 }
 
 export function MediaEditModal({ target, onClose }: MediaEditModalProps) {
-  const { doc, markdownSource, setMarkdownSource, mediaEditRenders } = useEditorContext();
+  const { doc, markdownSource, setMarkdownSource, mediaEditRenders, saveMediaEditOutput } =
+    useEditorContext();
   const modalRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -176,8 +187,20 @@ export function MediaEditModal({ target, onClose }: MediaEditModalProps) {
     onClose();
   }, [item, companions, draft, markdownSource, setMarkdownSource, onClose]);
 
+  // The clip as the dialog shows it — what "Save edited copy" bakes, applied or not.
+  const draftClip = useMemo<MediaClip | null>(() => {
+    if (!item) return null;
+    const { edits: _saved, ...clip } = item.clip;
+    const edits = editsFromDraft(draft, item.edits);
+    return edits ? { ...clip, edits } : clip;
+  }, [item, draft]);
+  const copy = useSaveEditedCopy(mediaEditRenders, saveMediaEditOutput);
+  const copying = copy.state.status === 'working';
+
   const title = target.kind === 'video' ? 'Edit clip' : 'Edit audio';
   const tabbed = item != null && mediaEditRenders != null;
+  // A video is edited by looking at it: its dialog takes most of the app.
+  const large = tabbed && item.kind === 'video';
   const tabId = (tab: MediaEditTab) => `${titleId}-tab-${tab}`;
   const panelId = (tab: MediaEditTab) => `${titleId}-panel-${tab}`;
   return (
@@ -191,7 +214,7 @@ export function MediaEditModal({ target, onClose }: MediaEditModalProps) {
     >
       <div
         ref={surfaceRef}
-        className={`squisq-media-edit-modal__surface${tabbed ? ' squisq-media-edit-modal__surface--tabbed' : ''}`}
+        className={`squisq-media-edit-modal__surface${tabbed ? ' squisq-media-edit-modal__surface--tabbed' : ''}${large ? ' squisq-media-edit-modal__surface--large' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -265,17 +288,27 @@ export function MediaEditModal({ target, onClose }: MediaEditModalProps) {
               </div>
               <div
                 role="tabpanel"
-                id={panelId('timing')}
-                aria-labelledby={tabId('timing')}
-                hidden={activeTab !== 'timing'}
+                className="squisq-media-edit-panel--fill"
+                id={panelId('cuts')}
+                aria-labelledby={tabId('cuts')}
+                hidden={activeTab !== 'cuts'}
               >
-                <MediaEditTimingSection
+                <MediaEditCutsSection
                   item={item}
                   draft={draft}
                   onChange={setDraft}
                   manager={mediaEditRenders}
                   idPrefix={titleId}
+                  active={activeTab === 'cuts'}
                 />
+              </div>
+              <div
+                role="tabpanel"
+                id={panelId('volume')}
+                aria-labelledby={tabId('volume')}
+                hidden={activeTab !== 'volume'}
+              >
+                <MediaEditVolumeSection draft={draft} onChange={setDraft} idPrefix={titleId} />
               </div>
               {item.kind === 'video' && (
                 <div
@@ -289,7 +322,7 @@ export function MediaEditModal({ target, onClose }: MediaEditModalProps) {
               )}
               {companions.length > 0 && (
                 <p className="squisq-media-edit-note">
-                  Cleanup and pause cuts also apply to {companions.length} linked{' '}
+                  Cleanup and cuts also apply to {companions.length} linked{' '}
                   {companions.length === 1 ? 'clip' : 'clips'} from the same recording.
                 </p>
               )}
@@ -299,14 +332,38 @@ export function MediaEditModal({ target, onClose }: MediaEditModalProps) {
 
         <footer className="squisq-media-edit-modal__footer">
           {/* Always mounted: a live region must exist before its content changes. */}
-          <p className="squisq-media-edit-status" role="status" data-state={renderStatus?.state}>
-            {renderStatus && item && mediaEditRenders && (
-              <RenderStatusText
-                status={renderStatus}
-                onRetry={() => mediaEditRenders.retry(item.clip)}
-              />
+          <p
+            className="squisq-media-edit-status"
+            role="status"
+            data-state={copy.state.status === 'failed' ? 'failed' : renderStatus?.state}
+          >
+            {copy.state.status === 'saved' ? (
+              <>Saved {copy.state.filename}.</>
+            ) : copy.state.status === 'failed' ? (
+              <>The copy could not be made: {copy.state.error}</>
+            ) : (
+              renderStatus &&
+              item &&
+              mediaEditRenders && (
+                <RenderStatusText
+                  status={renderStatus}
+                  onRetry={() => mediaEditRenders.retry(item.clip)}
+                />
+              )
             )}
           </p>
+          <button
+            type="button"
+            className="squisq-media-edit-modal__copy"
+            title="Save this clip with its edits applied, as one ordinary file"
+            disabled={!draftClip || !mediaEditRenders || copying || !canBakeMedia(draftClip)}
+            aria-busy={copying || undefined}
+            onClick={() => draftClip && void copy.save(draftClip)}
+          >
+            {copy.state.status === 'working'
+              ? `Saving copy… ${Math.round(copy.state.progress * 100)}%`
+              : 'Save edited copy…'}
+          </button>
           <button type="button" onClick={onClose}>
             Cancel
           </button>

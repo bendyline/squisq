@@ -70,6 +70,7 @@ import { asciiDiagramToTemplateData } from './asciiDiagram/mapping.js';
 import { isEligibleAsciiTimelineFenceLang } from './asciiTimeline/detect.js';
 import { parseAsciiTimeline } from './asciiTimeline/parse.js';
 import type { MediaClip } from '../schemas/Media.js';
+import { blockVideoLength, type VideoDurationLookup } from './videoTiming.js';
 
 // ============================================
 // Options
@@ -658,28 +659,88 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
 
   // Calculate reading-time-based durations and generate captions
   const minDuration = 3; // seconds — minimum for blocks with little/no text
-  const phrases: CaptionPhrase[] = [];
 
-  // First pass: compute duration from body-content reading time.
+  // First pass: compute duration from body-content reading time, held open
+  // for any video the block plays (an authored out-point is known here; a
+  // file's own length arrives later through `applyVideoDurations`).
   // Skip blocks that pinned an explicit duration via a heading attribute —
   // author intent wins over reading-time heuristics.
   for (const block of allBlocks) {
     if (pinnedMeta(block).duration != null) continue;
     const bodyText = getBlockBodyText(block);
-    if (bodyText.length > 0) {
-      const estimate = estimateReadingTime(bodyText);
-      block.duration = Math.max(minDuration, estimate.seconds);
-    } else {
-      block.duration = defaultDuration;
+    const estimate =
+      bodyText.length > 0
+        ? Math.max(minDuration, estimateReadingTime(bodyText).seconds)
+        : defaultDuration;
+    block.duration = Math.max(estimate, blockVideoLength(block) ?? 0);
+  }
+
+  // Second pass: start times, caption phrases, and document-timed videos.
+  const { phrases, duration: totalDuration } = sequenceBlockTimeline(allBlocks, documentMedia);
+
+  // `generatedAt` is only stamped when the caller provides a timestamp —
+  // conversion itself never reads the clock, so identical markdown always
+  // converts to an identical Doc.
+  const captions: CaptionTrack | undefined =
+    phrases.length > 0
+      ? {
+          phrases,
+          ...(options?.captionsGeneratedAt ? { generatedAt: options.captionsGeneratedAt } : {}),
+          version: 1,
+        }
+      : undefined;
+
+  const customTemplates = readCustomTemplatesFromFrontmatter(markdownDoc.frontmatter);
+  const customThemes = readCustomThemesFromFrontmatter(markdownDoc.frontmatter);
+  const themeId = readFrontmatterThemeId(markdownDoc.frontmatter);
+  const motion = readFrontmatterMotion(markdownDoc.frontmatter);
+  const doc: Doc = {
+    articleId,
+    duration: totalDuration,
+    blocks: rootBlocks,
+    audio: {
+      segments: [],
+    },
+    ...(captions ? { captions } : {}),
+    ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
+    ...(themeId ? { themeId } : {}),
+    ...(motion ? { motion } : {}),
+    ...(customTemplates ? { customTemplates } : {}),
+    ...(customThemes ? { customThemes } : {}),
+    ...(diagnostics.length > 0 ? { diagnostics } : {}),
+    ...(documentMedia.length > 0 ? { documentMedia } : {}),
+  };
+
+  // Auto-generate the cover startBlock (frontmatter title → shallowest
+  // heading → file name)
+  if (options?.generateCoverBlock ?? true) {
+    const coverConfig = buildStartBlock(markdownDoc, rootBlocks, options?.fileName);
+    if (coverConfig) {
+      doc.startBlock = coverConfig;
     }
   }
 
-  // Second pass: assign start times sequentially and build caption phrases.
-  // Blocks with an explicit `startTime` attribute keep their pinned value;
-  // the running cursor still advances by their duration so following blocks
-  // sequence after them.
+  return doc;
+}
+
+/**
+ * Lay blocks end to end from t=0 (MUTATES `blocks` and `documentMedia`):
+ * each block without a pinned `startTime` starts where the previous one ended,
+ * a pinned block keeps its start but still advances the cursor by its
+ * duration, and its body's sentences become evenly spaced caption phrases.
+ * An unlocked HTML video with no authored start begins with its owning block.
+ * Returns the phrases and the end of the last block.
+ *
+ * `markdownToDoc` and {@link applyVideoDurations} share this, so a re-timed
+ * doc is laid out exactly as a fresh conversion would lay it out.
+ */
+function sequenceBlockTimeline(
+  blocks: Block[],
+  documentMedia: MediaClip[],
+): { phrases: CaptionPhrase[]; duration: number } {
+  const phrases: CaptionPhrase[] = [];
   let currentTime = 0;
-  for (const block of allBlocks) {
+  for (const block of blocks) {
     const explicitStart = pinnedMeta(block).startTime;
     if (explicitStart == null) {
       block.startTime = currentTime;
@@ -709,7 +770,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // explicit absolute start yet, so begin it where its owning block begins.
   // Once the timeline moves it, `data-squisq-video-start-at` is authored and
   // that explicit value wins on every subsequent parse.
-  const blockById = new Map(allBlocks.map((block) => [block.id, block]));
+  const blockById = new Map(blocks.map((block) => [block.id, block]));
   for (const clip of documentMedia) {
     if (
       clip.lockToBlock === false &&
@@ -720,49 +781,54 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     }
   }
 
-  // `generatedAt` is only stamped when the caller provides a timestamp —
-  // conversion itself never reads the clock, so identical markdown always
-  // converts to an identical Doc.
-  const captions: CaptionTrack | undefined =
-    phrases.length > 0
-      ? {
-          phrases,
-          ...(options?.captionsGeneratedAt ? { generatedAt: options.captionsGeneratedAt } : {}),
-          version: 1,
-        }
-      : undefined;
+  return { phrases, duration: currentTime };
+}
 
-  const customTemplates = readCustomTemplatesFromFrontmatter(markdownDoc.frontmatter);
-  const customThemes = readCustomThemesFromFrontmatter(markdownDoc.frontmatter);
-  const themeId = readFrontmatterThemeId(markdownDoc.frontmatter);
-  const motion = readFrontmatterMotion(markdownDoc.frontmatter);
-  const doc: Doc = {
-    articleId,
-    duration: currentTime,
-    blocks: rootBlocks,
-    audio: {
-      segments: [],
-    },
-    ...(captions ? { captions } : {}),
-    ...(markdownDoc.frontmatter ? { frontmatter: markdownDoc.frontmatter } : {}),
-    ...(themeId ? { themeId } : {}),
-    ...(motion ? { motion } : {}),
-    ...(customTemplates ? { customTemplates } : {}),
-    ...(customThemes ? { customThemes } : {}),
-    ...(diagnostics.length > 0 ? { diagnostics } : {}),
-    ...(documentMedia.length > 0 ? { documentMedia } : {}),
-  };
+/** Lengths below this are rounding noise, not a block that needs to grow. */
+const VIDEO_FLOOR_EPSILON = 1e-3;
 
-  // Auto-generate the cover startBlock (frontmatter title → shallowest
-  // heading → file name)
-  if (options?.generateCoverBlock ?? true) {
-    const coverConfig = buildStartBlock(markdownDoc, rootBlocks, options?.fileName);
-    if (coverConfig) {
-      doc.startBlock = coverConfig;
-    }
+/**
+ * Hold each block open for the videos it plays, using media lengths the pure
+ * conversion could not know (see `doc/videoTiming.ts`). `markdownToDoc`
+ * already floors blocks with an authored out-point; this adds the files'
+ * own lengths — typically measured in a browser — and re-lays the timeline
+ * (start times, caption phrases, document-timed videos, `doc.duration`)
+ * exactly as conversion does.
+ *
+ * Run it on `markdownToDoc` output, BEFORE `resolveAudioMapping`: recorded
+ * narration then re-times the blocks it covers and keeps precedence, and the
+ * re-layout here cannot disturb it. A block with a pinned `duration=` keeps it.
+ *
+ * Pure: returns `doc` itself when no block needs to grow (so memoized
+ * consumers see no change), otherwise a new Doc whose block tree is copied —
+ * the input is never mutated.
+ */
+export function applyVideoDurations(doc: Doc, lookup: VideoDurationLookup): Doc {
+  const grownBy = new Map<Block, number>();
+  for (const block of flattenBlocks(doc.blocks)) {
+    if (pinnedMeta(block).duration != null) continue;
+    const floor = blockVideoLength(block, lookup);
+    if (floor != null && floor > block.duration + VIDEO_FLOOR_EPSILON) grownBy.set(block, floor);
   }
+  if (grownBy.size === 0) return doc;
 
-  return doc;
+  const copy = (blocks: Block[]): Block[] =>
+    blocks.map((block) => ({
+      ...block,
+      ...(grownBy.has(block) ? { duration: grownBy.get(block)! } : {}),
+      ...(block.children ? { children: copy(block.children) } : {}),
+    }));
+  const blocks = copy(doc.blocks);
+  const documentMedia = doc.documentMedia?.map((clip) => ({ ...clip }));
+  const { phrases, duration } = sequenceBlockTimeline(flattenBlocks(blocks), documentMedia ?? []);
+
+  return {
+    ...doc,
+    blocks,
+    duration,
+    ...(doc.captions ? { captions: { ...doc.captions, phrases } } : {}),
+    ...(documentMedia ? { documentMedia } : {}),
+  };
 }
 
 // ============================================

@@ -51,6 +51,8 @@ import {
   extractImages,
 } from './templateInputs.js';
 import { parseVideoEmbedUrl } from '../markdown/videoEmbed.js';
+import { normalizeMediaCuts, type MediaEdits } from '../mediaEdit/recipe.js';
+import { createMediaTimeMap } from '../mediaEdit/timeMap.js';
 import { isSvgIslandLang, parseSvgIsland } from '../markdown/svgIsland.js';
 import {
   placeLayersInRect,
@@ -740,10 +742,83 @@ function applyEmbeddedVideoTiming(layers: Layer[], block: Block): Layer[] {
 }
 
 /**
+ * Give each video layer its clip's edit recipe.
+ *
+ * A video laid out in a slide is not a scheduled clip, so nothing else hands
+ * the renderer its recipe: gain, fades, crop and the signal chain ride on the
+ * layer as `edits`, the cuts as `cuts`.
+ *
+ * Whatever made the layer — a template, the rich-media layout — set a LINEAR
+ * source window: the in-point, and the in-point plus the block's length. A
+ * block's length already counts a cut clip's played time (see videoTiming),
+ * so the layer has to skip the same ranges, and its out-point has to reach
+ * far enough into the source to fill that length once they are skipped.
+ * Without this a cut clip played its uncut opening for the cut clip's length.
+ */
+function applyEmbeddedVideoEdits(layers: Layer[], block: Block): Layer[] {
+  const editedBySrc = new Map(
+    extractEmbeddedVideos(block.contents)
+      .filter((video) => video.edits)
+      .map((video) => [video.src, video]),
+  );
+  if (editedBySrc.size === 0) return layers;
+
+  return layers.map((layer) => {
+    if (layer.type !== 'video') return layer;
+    const video = editedBySrc.get(layer.content.src);
+    if (!video?.edits) return layer;
+    // Everything but the cuts (carried apart, clamped to the layer's window)
+    // and the group (an editor concern).
+    const { fx, gain, fadeIn, fadeOut, crop } = video.edits;
+    const edits: MediaEdits = {
+      ...(fx ? { fx } : {}),
+      ...(gain ? { gain } : {}),
+      ...(fadeIn ? { fadeIn } : {}),
+      ...(fadeOut ? { fadeOut } : {}),
+      ...(crop ? { crop } : {}),
+    };
+    // The layer with `content` (which may already carry cuts) plus the recipe.
+    const hasEdits = Object.keys(edits).length > 0;
+    const withEdits = (content: typeof layer.content) =>
+      hasEdits
+        ? { ...layer, content: { ...content, edits } }
+        : content === layer.content
+          ? layer
+          : { ...layer, content };
+    if (!video.cuts?.length) return withEdits(layer.content);
+    const { clipStart } = layer.content;
+    // An authored out-point is a source time and stands. A derived one is the
+    // in-point plus a played length, which the cuts stretch across the source.
+    const clipEnd =
+      video.clipEnd != null
+        ? layer.content.clipEnd
+        : createMediaTimeMap({ clipStart, cuts: video.cuts }).playedToSource(
+            Math.max(0, layer.content.clipEnd - clipStart),
+          );
+    const cuts = normalizeMediaCuts(video.cuts, clipStart, clipEnd);
+    if (cuts.length === 0) return withEdits(layer.content);
+    return withEdits({ ...layer.content, clipEnd, cuts });
+  });
+}
+
+/**
  * Promote unconsumed images, videos (clips and hosted players), rich diagram
  * fences and SVG islands through one layout path.
  */
 function appendRichContentLayers(
+  layers: Layer[],
+  block: Block,
+  theme: Theme,
+  viewport: ViewportConfig,
+  mediaAspectRatios?: Readonly<Record<string, number>>,
+): Layer[] {
+  return applyEmbeddedVideoEdits(
+    placeRichContentLayers(layers, block, theme, viewport, mediaAspectRatios),
+    block,
+  );
+}
+
+function placeRichContentLayers(
   layers: Layer[],
   block: Block,
   theme: Theme,

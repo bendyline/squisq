@@ -14,15 +14,29 @@
  *
  * Only video clips are probed — an over-scheduled audio clip merely goes silent,
  * which is not the visible "frozen frame" bug this addresses.
+ *
+ * The same probe measures the videos a block plays, which hold the block open
+ * for their length (`applyVideoDurations` in core): {@link useVideoDurations}
+ * for any list of sources, and {@link probeVideoDurations} for non-React
+ * callers such as an exporter.
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import type { MediaProvider, ScheduledClip } from '@bendyline/squisq/schemas';
-import { isResourceUrlAllowed, type ResourcePolicy } from '@bendyline/squisq/markdown';
+import type { Doc, MediaProvider, ScheduledClip } from '@bendyline/squisq/schemas';
+import { applyVideoDurations, collectVideoDurationSources } from '@bendyline/squisq/doc';
+import {
+  DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+  isResourceUrlAllowed,
+  type ResourcePolicy,
+} from '@bendyline/squisq/markdown';
 import { useMediaProvider, useResourcePolicy } from './MediaContext.js';
 
-/** Session cache: resolved URL → intrinsic seconds. Shared across all callers. */
-const durationCache = new Map<string, number>();
+/**
+ * Session cache: resolved URL → the probe of it, shared by every caller so a
+ * file several surfaces ask about is decoded once. A probe that fails is
+ * dropped, so a later call can try again (the file may not exist yet).
+ */
+const probeCache = new Map<string, Promise<number | null>>();
 
 /** How long to wait for a file's metadata before giving up (ms). */
 const PROBE_TIMEOUT_MS = 8000;
@@ -117,6 +131,79 @@ function probeVideoDuration(url: string): Promise<number | null> {
   });
 }
 
+/** The cached probe of `url` (see {@link probeCache}). */
+function probeCachedVideoDuration(url: string): Promise<number | null> {
+  let probe = probeCache.get(url);
+  if (!probe) {
+    probe = probeVideoDuration(url).then((seconds) => {
+      if (seconds == null) probeCache.delete(url);
+      return seconds;
+    });
+    probeCache.set(url, probe);
+  }
+  return probe;
+}
+
+/** Where {@link probeVideoDurations} resolves sources from. */
+export interface VideoDurationProbeOptions {
+  /** Resolves document-relative sources (a workspace's files). */
+  provider?: MediaProvider | null;
+  /** Base for relative sources when there is no provider. Default `/`. */
+  basePath?: string;
+  /** URLs the document may load. Default: the interactive policy. */
+  resourcePolicy?: ResourcePolicy;
+}
+
+/**
+ * Measure the length of each video source, resolved the way the player
+ * resolves it. Resolves to a map of the lengths that could be read (keyed by
+ * the raw `src`); an unreadable, disallowed or slow file is left out. Never
+ * rejects. Browser-only — outside a DOM it resolves empty.
+ */
+export async function probeVideoDurations(
+  srcs: Iterable<string>,
+  options: VideoDurationProbeOptions = {},
+): Promise<Map<string, number>> {
+  const {
+    provider = null,
+    basePath = '/',
+    resourcePolicy = DEFAULT_INTERACTIVE_RESOURCE_POLICY,
+  } = options;
+  const durations = new Map<string, number>();
+  const unique = [...new Set(srcs)].filter((src) => src.length > 0);
+  await Promise.all(
+    unique.map(async (src) => {
+      try {
+        const url = await resolveMediaUrl(src, provider, basePath, resourcePolicy);
+        if (!url) return;
+        const seconds = await probeCachedVideoDuration(url);
+        if (seconds != null) durations.set(src, seconds);
+      } catch {
+        /* an unreadable file sets no length */
+      }
+    }),
+  );
+  return durations;
+}
+
+/**
+ * Hold each block of `doc` open for the videos it plays: measure the files
+ * whose length the document does not state and apply core's
+ * `applyVideoDurations`. The async counterpart of what the editor does live,
+ * for pipelines that build their own Doc (exporters). Call it on
+ * `markdownToDoc` output, before `resolveAudioMapping` and `buildPreviewDoc`.
+ * Returns `doc` unchanged when nothing needs measuring or nothing grows.
+ */
+export async function resolveVideoDurations(
+  doc: Doc,
+  options: VideoDurationProbeOptions = {},
+): Promise<Doc> {
+  const sources = collectVideoDurationSources(doc);
+  if (sources.length === 0) return doc;
+  const durations = await probeVideoDurations(sources, options);
+  return durations.size > 0 ? applyVideoDurations(doc, (src) => durations.get(src)) : doc;
+}
+
 /**
  * Probe the intrinsic durations of the video clips in `schedule`. Returns a map
  * keyed by the clip's raw `src`. Pass the resolved `MediaProvider` explicitly
@@ -127,19 +214,37 @@ export function useMediaClipDurations(
   basePath: string,
   mediaProviderOverride?: MediaProvider | null,
 ): Map<string, number> {
+  const srcs = useMemo(
+    () => schedule.filter((clip) => clip.kind === 'video' && clip.src).map((clip) => clip.src),
+    [schedule],
+  );
+  return useVideoDurations(srcs, basePath, mediaProviderOverride);
+}
+
+/**
+ * Probe the intrinsic durations of `srcs` (video files). Returns a map keyed by
+ * the raw `src`, filled in as each file's metadata arrives; a file that cannot
+ * be read is simply absent. Provider resolution follows
+ * {@link useMediaClipDurations}.
+ */
+export function useVideoDurations(
+  srcs: readonly string[],
+  basePath: string,
+  mediaProviderOverride?: MediaProvider | null,
+): Map<string, number> {
   const contextProvider = useMediaProvider();
   const provider = mediaProviderOverride !== undefined ? mediaProviderOverride : contextProvider;
   const resourcePolicy = useResourcePolicy();
 
-  // Distinct video sources, as a stable key so the effect only re-runs when the
-  // actual set of files changes (not on every schedule re-derivation).
-  const srcKey = useMemo(() => {
-    const set = new Set<string>();
-    for (const clip of schedule) {
-      if (clip.kind === 'video' && clip.src) set.add(clip.src);
-    }
-    return Array.from(set).sort().join('\n');
-  }, [schedule]);
+  // Distinct sources, as a stable key so the effect only re-runs when the
+  // actual set of files changes (not on every re-derivation of the list).
+  const srcKey = useMemo(
+    () =>
+      Array.from(new Set(srcs.filter((src) => src.length > 0)))
+        .sort()
+        .join('\n'),
+    [srcs],
+  );
 
   const [durations, setDurations] = useState<Map<string, number>>(() => new Map());
 
@@ -157,21 +262,18 @@ export function useMediaClipDurations(
     };
 
     for (const src of srcs) {
-      resolveMediaUrl(src, provider, basePath, resourcePolicy).then((url) => {
-        if (cancelled || !url) return;
-        const cached = durationCache.get(url);
-        if (cached != null) {
-          resolved.set(src, cached);
-          commit();
-          return;
-        }
-        probeVideoDuration(url).then((seconds) => {
-          if (cancelled || seconds == null) return;
-          durationCache.set(url, seconds);
-          resolved.set(src, seconds);
-          commit();
-        });
-      });
+      resolveMediaUrl(src, provider, basePath, resourcePolicy)
+        .then((url) => (cancelled || !url ? null : probeCachedVideoDuration(url)))
+        .then(
+          (seconds) => {
+            if (cancelled || seconds == null) return;
+            resolved.set(src, seconds);
+            commit();
+          },
+          () => {
+            /* an unreadable file sets no length */
+          },
+        );
     }
 
     return () => {

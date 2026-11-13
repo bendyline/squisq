@@ -9,7 +9,12 @@ vi.mock('mermaid', () => ({
   default: { initialize: mocks.initialize, render: mocks.render },
 }));
 
-import { renderMermaidSvg, withMermaidLabelWrapping } from '../mermaid/mermaidRuntime';
+import { buildMermaidThemeCss, THEMES } from '@bendyline/squisq/schemas';
+import {
+  renderMermaidSvg,
+  renderMermaidSvgForExport,
+  withMermaidLabelWrapping,
+} from '../mermaid/mermaidRuntime';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -29,6 +34,33 @@ function measureEverythingAs(width: number) {
     () => new DOMRect(10, 20, width, 24),
   );
 }
+
+describe('Mermaid theme CSS', () => {
+  const source = 'flowchart TD\n  A -->|Yes| B';
+  const themeCSS = buildMermaidThemeCss(THEMES.standard);
+
+  beforeEach(() => {
+    mocks.initialize.mockClear();
+    mocks.render.mockReset();
+    mocks.render.mockResolvedValue({ svg: '<svg></svg>', diagramType: 'flowchart-v2' });
+  });
+
+  it('keeps edge labels readable on pages and slides', async () => {
+    await renderMermaidSvg('labels-page', source, undefined, THEMES.standard);
+    expect(themeCSS).toContain('.edgeLabel span');
+    expect(themeCSS).toContain(`color: ${THEMES.standard.colors.text};`);
+    expect(mocks.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ themeCSS }));
+  });
+
+  it('keeps edge labels readable in exported pictures, which draw SVG text', async () => {
+    await renderMermaidSvgForExport('labels-export', source, THEMES.standard, 'Arial');
+    expect(themeCSS).toContain('.edgeLabel text');
+    expect(themeCSS).toContain(`fill: ${THEMES.standard.colors.text};`);
+    expect(mocks.initialize).toHaveBeenLastCalledWith(
+      expect.objectContaining({ themeCSS, htmlLabels: false }),
+    );
+  });
+});
 
 describe('withMermaidLabelWrapping', () => {
   beforeEach(() => {

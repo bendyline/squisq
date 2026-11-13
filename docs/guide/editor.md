@@ -312,6 +312,9 @@ The Use view presents the finished document. Pick a display mode from the **▾*
 The toolbar above the preview changes with the mode. Depending on the mode, it offers:
 
 - **Aspect ratio** — 16:9, 1:1, 9:16, or 4:3.
+- **Block:** (Slideshow) — the block type of the slide on screen. Pick another from the gallery
+  to restyle that slide without going back to Write; the choice is saved as the heading's
+  `{[…]}` tag. It is greyed out on the cover and while **Summarize** is choosing the layouts.
 - **Theme:** — the theme picker and its pencil (see [Themes](#themes)).
 - **Summarize:** — turns the document's highlights into slides in a chosen style (Dynamic slides,
   Documentary, Magazine, Data-Driven, Narrative, Minimal, or Headings and features). Your

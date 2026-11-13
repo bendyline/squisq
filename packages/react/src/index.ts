@@ -88,12 +88,26 @@ export { useModalDialog } from './hooks/useModalDialog.js';
 export type { ModalDialogOptions } from './hooks/useModalDialog.js';
 export { useMediaSchedule } from './hooks/useMediaSchedule.js';
 export type { MediaScheduleController } from './hooks/useMediaSchedule.js';
-export { useMediaClipDurations } from './hooks/useMediaClipDurations.js';
+export {
+  useMediaClipDurations,
+  useVideoDurations,
+  probeVideoDurations,
+  resolveVideoDurations,
+} from './hooks/useMediaClipDurations.js';
+export type { VideoDurationProbeOptions } from './hooks/useMediaClipDurations.js';
 export { useDocPlayback } from './hooks/useDocPlayback.js';
 export type { UseDocPlaybackOptions } from './hooks/useDocPlayback.js';
 export { useViewportOrientation } from './hooks/useViewportOrientation.js';
 export {
+  applyMediaLevel,
+  mediaCropStyle,
+  recipeLevelAt,
+  useCutTimeMap,
+  useSkipCuts,
+} from './mediaRecipePlayback.js';
+export {
   MediaContext,
+  ProcessedAudioContext,
   ResourcePolicyContext,
   useMediaProvider,
   useResourcePolicy,

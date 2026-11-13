@@ -16,7 +16,9 @@ import { mediaEditNodeAttributes } from './mediaEditAttributes.js';
 import { MediaEditButton } from '../mediaEdit/MediaEditButton';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { NodeViewProps } from '@tiptap/react';
-import { useEffect, useState, type SyntheticEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
+import { parseMediaCrop, parseMediaCuts } from '@bendyline/squisq/mediaEdit';
+import { mediaCropStyle, useCutTimeMap, useSkipCuts } from '@bendyline/squisq-react';
 import type {
   VideoPipPosition,
   VideoPipShape,
@@ -89,6 +91,8 @@ export function VideoMedia({
     placement: rawPlacement,
     lockToBlock: rawLockToBlock,
     editFx,
+    editCuts,
+    editCrop,
   } = attrs as {
     src: string;
     width: string | number | null;
@@ -98,7 +102,14 @@ export function VideoMedia({
     placement: VideoPlacement;
     lockToBlock: boolean;
     editFx: string | null;
+    editCuts: string | null;
+    editCrop: string | null;
   };
+  // The clip plays here as it is edited: its cuts are skipped and its crop
+  // shown, on the native controls. (Sound stays the file's own.)
+  const mediaRef = useRef<HTMLVideoElement & HTMLAudioElement>(null);
+  const cuts = useMemo(() => parseMediaCuts(editCuts ?? undefined), [editCuts]);
+  const crop = useMemo(() => parseMediaCrop(editCrop ?? undefined), [editCrop]);
   const placement = normalizeVideoPlacement(rawPlacement);
   const lockToBlock = normalizeLockToBlock(rawLockToBlock);
   const resolvedSrc = useResolvedMediaSrc(src ?? '');
@@ -106,6 +117,7 @@ export function VideoMedia({
   // Resolve poster through the same provider when present so a
   // workspace-local frame thumbnail also renders inside the editor.
   const resolvedPoster = useResolvedMediaSrc(poster ?? '');
+  useSkipCuts(mediaRef, useCutTimeMap(cuts), `${resolvedSrc}|${audioOnly}`);
 
   useEffect(() => {
     setAudioOnly(false);
@@ -177,6 +189,7 @@ export function VideoMedia({
       )}
       {audioOnly ? (
         <audio
+          ref={mediaRef}
           data-drag-handle
           draggable
           src={resolvedSrc || undefined}
@@ -189,6 +202,8 @@ export function VideoMedia({
           // never initiate a ProseMirror node drag.
           data-drag-handle
           draggable
+          ref={mediaRef}
+          style={mediaCropStyle(crop)}
           src={resolvedSrc || undefined}
           poster={poster ? resolvedPoster : undefined}
           controls={controls}

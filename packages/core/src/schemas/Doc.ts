@@ -16,6 +16,7 @@ import type { BuildSpec, BuildStep, BuildTiming, BuildAdvance } from './Build.js
  */
 
 import type { Transition } from './Transitions.js';
+import type { MediaCut, MediaEdits } from '../mediaEdit/recipe.js';
 export type { Transition, TransitionType, TransitionDirection } from './Transitions.js';
 
 // ============================================
@@ -812,6 +813,18 @@ export interface VideoLayer extends BaseLayer {
     clipEnd: number;
     /** Total source video duration (for validation) */
     sourceDuration?: number;
+    /**
+     * Source ranges skipped as the clip plays (the clip's `cuts` recipe),
+     * inside `clipStart`…`clipEnd`. With cuts, `clipEnd` is far enough into
+     * the source to fill the block once they are skipped.
+     */
+    cuts?: MediaCut[];
+    /**
+     * The rest of the clip's edit recipe — `fx`, `gain`, `fadeIn`,
+     * `fadeOut`, `crop` — for the renderer to apply. A video laid out in a
+     * slide is not a scheduled clip, so the layer carries its own recipe.
+     */
+    edits?: MediaEdits;
     /**
      * Seconds into the owning block before this video begins playing
      * (the block-relative `startAt`). Default 0 — plays from block start.

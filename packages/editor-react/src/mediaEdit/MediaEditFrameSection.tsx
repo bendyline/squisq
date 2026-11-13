@@ -9,6 +9,7 @@ import {
   useCallback,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
@@ -147,7 +148,15 @@ export function MediaEditFrameSection({ item, draft, onChange }: MediaEditFrameS
       <div
         ref={stageRef}
         className="squisq-media-edit-crop"
-        style={frame ? { aspectRatio: `${frame.w} / ${frame.h}` } : undefined}
+        style={
+          frame
+            ? ({
+                aspectRatio: `${frame.w} / ${frame.h}`,
+                // Lets the large dialog size the stage by its height (see media-edit.css).
+                '--squisq-media-edit-frame-ratio': frame.w / frame.h,
+              } as CSSProperties)
+            : undefined
+        }
       >
         {src && (
           <video

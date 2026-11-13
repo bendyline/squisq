@@ -36,6 +36,12 @@ import { isSvgIslandLang } from '../markdown/svgIsland.js';
 import { findBlockVideoEmbed } from '../markdown/videoEmbed.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
 import { isStandaloneHtmlVideo } from './mediaAnnotations.js';
+import {
+  mediaEditValuesFromAttributes,
+  parseMediaEdits,
+  type MediaCut,
+  type MediaEdits,
+} from '../mediaEdit/recipe.js';
 import { taskMarker } from '../schemas/Doc.js';
 import { readMatrixItems, splitConceptItem } from './templates/conceptItems.js';
 import {
@@ -71,6 +77,10 @@ export interface EmbeddedVideo {
   /** Source-media in/out points carried by inline video data attributes. */
   clipStart?: number;
   clipEnd?: number;
+  /** Source ranges the clip's edit recipe removes (`data-squisq-video-cuts`). */
+  cuts?: MediaCut[];
+  /** The clip's whole edit recipe (`data-squisq-video-*`), when it has one. */
+  edits?: MediaEdits;
 }
 
 const VIDEO_FILE_RE = /\.(?:webm|mp4|mov|m4v|ogv)(?:[?#].*)?$/i;
@@ -635,6 +645,8 @@ export function extractEmbeddedVideos(
         const clipEnd = attrs?.['data-squisq-video-clip-end']
           ? parseTimeSeconds(attrs['data-squisq-video-clip-end'])
           : null;
+        const edits = parseMediaEdits(mediaEditValuesFromAttributes('video', attrs ?? {}));
+        const cuts = edits?.cuts;
         add({
           src,
           ...(attrs?.poster ? { posterSrc: attrs.poster } : {}),
@@ -642,6 +654,8 @@ export function extractEmbeddedVideos(
           ...(startAt != null ? { startAt } : {}),
           ...(clipStart != null ? { clipStart } : {}),
           ...(clipEnd != null ? { clipEnd } : {}),
+          ...(cuts?.length ? { cuts } : {}),
+          ...(edits ? { edits } : {}),
         });
       }
     } else if (

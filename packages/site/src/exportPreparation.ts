@@ -1,8 +1,9 @@
 import { markdownToDoc, docToMarkdown, resolveAudioMapping } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
-import type { Doc } from '@bendyline/squisq/schemas';
+import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
+import { resolveVideoDurations } from '@bendyline/squisq-react';
 import { applyTransform, extractDocImages } from '@bendyline/squisq/transform';
 
 export interface ExportPreparationOptions {
@@ -43,13 +44,17 @@ export function prepareExportDoc(source: string, options: ExportPreparationOptio
  * Resolution deliberately precedes visual transforms: transformed slides then
  * inherit the recorded block timings instead of being paced from reading-time
  * estimates, and the MP4 audio timeline receives the full narration duration.
+ * Before either, each block is held open for the videos it plays (their files
+ * measured through `mediaProvider`), so narration still has the last word.
  */
 export async function prepareVideoExportDoc(
   source: string,
   options: ExportPreparationOptions = {},
   workspaceContainer?: ContentContainer | null,
+  mediaProvider?: MediaProvider | null,
 ): Promise<Doc> {
   let doc = markdownToDoc(parseMarkdown(source));
+  doc = await resolveVideoDurations(doc, { provider: mediaProvider ?? null });
   if (workspaceContainer) {
     doc = await resolveAudioMapping(doc, workspaceContainer);
   }

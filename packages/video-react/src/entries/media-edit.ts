@@ -21,4 +21,7 @@ export type {
   MediaEditPreviewResult,
   MediaEditRenderRequest,
   MediaEditRenderResult,
+  MediaEditWaveformRequest,
+  MediaEditWaveformResult,
 } from '../mediaEdit/mediaEditEngine';
+export type { MediaBakeRequest, MediaBakeResult } from '../mediaEdit/mediaBakeEngine';

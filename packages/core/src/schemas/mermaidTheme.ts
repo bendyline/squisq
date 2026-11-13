@@ -1,8 +1,9 @@
 /**
- * Translate a Squisq Theme into Mermaid's `themeVariables` vocabulary.
+ * Translate a Squisq Theme into Mermaid's theming vocabulary: `themeVariables`,
+ * plus the little `themeCSS` that covers what the variables cannot express.
  *
  * This module deliberately has no Mermaid dependency. Both the editor and
- * read-only React renderers use the returned plain object immediately before
+ * read-only React renderers use the returned plain values immediately before
  * their queued Mermaid render, keeping the two surfaces visually identical.
  */
 
@@ -150,4 +151,39 @@ export function buildMermaidThemeVariables(theme: Theme): MermaidThemeVariables 
   });
 
   return variables;
+}
+
+/**
+ * Labels Mermaid draws on the page itself, not on a node's fill: edge labels,
+ * and the caption beside an icon or image node (`.label` keeps the rule off
+ * the icon's own drawing).
+ */
+const PAGE_LABELS = ['.edgeLabel', '.icon-shape .label', '.image-shape .label'];
+
+/** A color that can be written into a stylesheet without ending the declaration. */
+const PLAIN_CSS_COLOR = /^[\w\s#%(),./-]+$/;
+
+/**
+ * Build the CSS Mermaid needs beyond its theme variables, for the config's
+ * `themeCSS`. Pass it wherever `buildMermaidThemeVariables` is passed.
+ *
+ * Flowcharts, ER, block and requirement diagrams have one text color for every
+ * label, `nodeTextColor`, and it is chosen to read on the node fill. An edge
+ * label, or the caption beside an icon or image node, sits on the page
+ * (`edgeLabelBackground`), where that color can be the page's own: white on
+ * white in the Standard theme. Mermaid has no variable for it, so those labels
+ * are given the page's text color here.
+ *
+ * The rules name only the elements Mermaid's own rule colors (`span` for an
+ * HTML label, `text` for an SVG one) and carry no `!important`. A color the
+ * author sets (`linkStyle 0 color:red`) is written inline on those elements
+ * and still wins, and so does a host stylesheet that retints the labels for
+ * its own surface.
+ */
+export function buildMermaidThemeCss(theme: Theme): string {
+  const color = theme.colors.text.trim();
+  if (!PLAIN_CSS_COLOR.test(color)) return '';
+  const html = PAGE_LABELS.map((label) => `${label} span`).join(', ');
+  const svg = PAGE_LABELS.map((label) => `${label} text`).join(', ');
+  return `${html} { color: ${color}; }\n${svg} { fill: ${color}; }`;
 }

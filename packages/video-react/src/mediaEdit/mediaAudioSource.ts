@@ -38,6 +38,12 @@ export interface DecodedAudioSource extends MediaFxSource {
   /** Whole-track duration in seconds. */
   trackDurationSec: number;
   sourceSampleRate: number;
+  /**
+   * Length of the whole file in seconds: its longest track. A video can run
+   * longer than its sound (or the other way round), and this is how long a
+   * media element plays it.
+   */
+  mediaDuration(): Promise<number>;
   dispose(): void;
 }
 
@@ -52,14 +58,28 @@ export interface OpenMediaAudioOptions {
 // imported audio. Not `ALL_FORMATS` — its HLS and MPEG-TS demuxers are
 // streaming formats no media reference points at, and would ship ~30 KB
 // (gzipped) of dead code in every consumer bundle.
-const INPUT_FORMATS = [MP4, QTFF, WEBM, MATROSKA, WAVE, MP3, OGG, FLAC, ADTS];
+export const MEDIA_INPUT_FORMATS = [MP4, QTFF, WEBM, MATROSKA, WAVE, MP3, OGG, FLAC, ADTS];
+
+/**
+ * Length of a media file in seconds, read from its packets. A recorder's WebM
+ * states no duration, so a media element reports `Infinity` for it; this is
+ * the way to learn how long such a file runs — with or without an audio track.
+ */
+export async function probeMediaDuration(blob: Blob): Promise<number> {
+  const input = new Input({ source: new BlobSource(blob), formats: MEDIA_INPUT_FORMATS });
+  try {
+    return await input.computeDuration();
+  } finally {
+    input.dispose();
+  }
+}
 
 /** Open a media Blob's primary audio track; null when it has none. */
 export async function openMediaAudio(
   blob: Blob,
   options: OpenMediaAudioOptions = {},
 ): Promise<DecodedAudioSource | null> {
-  const input = new Input({ source: new BlobSource(blob), formats: INPUT_FORMATS });
+  const input = new Input({ source: new BlobSource(blob), formats: MEDIA_INPUT_FORMATS });
   const track = await input.getPrimaryAudioTrack();
   if (!track) {
     input.dispose();
@@ -151,6 +171,8 @@ export async function openMediaAudio(
     trackDurationSec,
     sourceSampleRate: sourceRate,
     open,
+    // The same Input has already indexed the file for the audio track.
+    mediaDuration: async () => Math.max(trackDurationSec, await input.computeDuration()),
     dispose: () => input.dispose(),
   };
 }

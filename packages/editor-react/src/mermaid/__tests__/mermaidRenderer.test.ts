@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { THEMES } from '@bendyline/squisq/schemas';
+import { buildMermaidThemeCss, THEMES } from '@bendyline/squisq/schemas';
 
 const mocks = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -52,6 +52,25 @@ describe('Mermaid renderer', () => {
         }),
       }),
     );
+  });
+
+  it('sends the theme CSS that keeps edge labels readable on the page', async () => {
+    mocks.render.mockResolvedValue({
+      svg: '<svg viewBox="0 0 200 100"></svg>',
+      diagramType: 'flowchart-v2',
+    });
+
+    await renderMermaidDiagram(
+      'diagram-labels',
+      'flowchart TD\n  A -->|Yes| B',
+      undefined,
+      THEMES.standard,
+    );
+
+    const themeCSS = buildMermaidThemeCss(THEMES.standard);
+    expect(themeCSS).toContain('.edgeLabel span');
+    expect(themeCSS).toContain(`color: ${THEMES.standard.colors.text};`);
+    expect(mocks.initialize).toHaveBeenLastCalledWith(expect.objectContaining({ themeCSS }));
   });
 
   it('uses Mermaid output without narrowing the authored syntax', async () => {

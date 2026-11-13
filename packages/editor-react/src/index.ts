@@ -55,6 +55,7 @@ export type {
   LayoutMode,
   CoverImageSaveOutput,
   DashboardImageSaveOutput,
+  MediaEditSaveOutput,
 } from './EditorContext.js';
 export { EditorContextMenuProvider, useEditorContextMenuItems } from './EditorContextMenu.js';
 export type {
@@ -120,6 +121,12 @@ export {
   setMediaClipInSource,
 } from './timelineSource.js';
 export type { MediaClipPatch } from './timelineSource.js';
+export { bakeMarkdownMedia } from './mediaEdit/bakedMarkdown.js';
+export type {
+  BakedMarkdown,
+  BakedMediaReference,
+  BakeMarkdownMediaOptions,
+} from './mediaEdit/bakedMarkdown.js';
 
 // File-kind detection — useful for hosts that want to pre-decide chrome
 // around the editor based on whether a file is markdown or code.

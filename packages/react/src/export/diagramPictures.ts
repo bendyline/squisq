@@ -158,12 +158,6 @@ export async function renderMermaidPicture(
   if (!svg) throw new Error('Mermaid produced no SVG.');
   const box = parseViewBox(svg);
   if (!box) throw new Error('The Mermaid SVG has no size.');
-  // With SVG-text labels Mermaid styles edge labels like node labels, so on a
-  // themed node color (white text) they vanish against the page; give them
-  // the theme's body text color.
-  const style = document.createElementNS(SVG_NS, 'style');
-  style.textContent = `.edgeLabel text, .edgeLabel tspan { fill: ${theme.colors.text} !important; }`;
-  svg.append(style);
   const width = Math.min(maxWidth, box.width);
   return svgToPng(svg, width, (box.height * width) / box.width, options);
 }

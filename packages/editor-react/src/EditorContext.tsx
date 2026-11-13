@@ -21,7 +21,7 @@ import {
 } from 'react';
 import type { Doc, MediaProvider } from '@bendyline/squisq/schemas';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
-import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
+import { useVideoDurations, type CodeBlockCopyHandler } from '@bendyline/squisq-react';
 
 export type { FenceRendererMap };
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
@@ -31,7 +31,11 @@ import {
   resolveWikiLinks,
   type WikiLinkSupport,
 } from '@bendyline/squisq/markdown';
-import { markdownToDoc } from '@bendyline/squisq/doc';
+import {
+  applyVideoDurations,
+  collectVideoDurationSources,
+  markdownToDoc,
+} from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
 import type {
@@ -474,6 +478,13 @@ export type CoverImageSaveOutput = (
  */
 export type DashboardImageSaveOutput = CoverImageSaveOutput;
 
+/**
+ * Host-owned persistence for an edited copy of a clip ("Save edited copy" in
+ * the media-edit dialog) — the same contract as {@link CoverImageSaveOutput}
+ * (`false` means the user cancelled). Without one the copy is downloaded.
+ */
+export type MediaEditSaveOutput = CoverImageSaveOutput;
+
 /** Identifies the clip the media-edit panel is open on. */
 export interface MediaEditTarget {
   /** 1-based source line of the clip's annotation or standalone media tag, when known. */
@@ -624,6 +635,8 @@ export interface EditorContextValue extends EditorState, EditorActions {
   saveCoverImageOutput: CoverImageSaveOutput | undefined;
   /** Optional host save flow for dashboard image exports. */
   saveDashboardImageOutput: DashboardImageSaveOutput | undefined;
+  /** Optional host save flow for an edited copy of a clip. */
+  saveMediaEditOutput: MediaEditSaveOutput | undefined;
 }
 
 export type ImageDisplayMode = 'inline' | 'thumbnail';
@@ -704,6 +717,12 @@ export interface EditorProviderProps {
   onSaveVersion?: (result: SaveVersionResult) => void;
   /** MediaProvider for resolving image URLs */
   mediaProvider?: MediaProvider | null;
+  /**
+   * Base for relative media paths when there is no `mediaProvider` (the
+   * player's `basePath`). Used to measure the videos that hold a block open
+   * for their length. Default `/`.
+   */
+  mediaBasePath?: string;
   /** Processed-audio render manager for media-edit recipes; null disables. */
   mediaEditRenders?: MediaEditRenderManager | null;
   /** Display mode for images in the WYSIWYG view. Defaults to `'inline'`. */
@@ -781,6 +800,8 @@ export interface EditorProviderProps {
   saveCoverImageOutput?: CoverImageSaveOutput;
   /** Optional host save flow for dashboard image exports. */
   saveDashboardImageOutput?: DashboardImageSaveOutput;
+  /** Optional host save flow for an edited copy of a clip; default is a download. */
+  saveMediaEditOutput?: MediaEditSaveOutput;
   /** Explicit Monaco language ID — wins over the fileName-derived one. */
   language?: string;
   /**
@@ -900,6 +921,7 @@ export function EditorProvider({
   versioningAutoSaveIdleMs = DEFAULT_AUTOSAVE_IDLE_MS,
   onSaveVersion,
   mediaProvider = null,
+  mediaBasePath = '/',
   mediaEditRenders = null,
   imageDisplayMode = 'inline',
   mentionProvider = null,
@@ -920,6 +942,7 @@ export function EditorProvider({
   fileName,
   saveCoverImageOutput,
   saveDashboardImageOutput,
+  saveMediaEditOutput,
   language,
   findMode: controlledFindMode,
   onFindModeChange,
@@ -1357,6 +1380,26 @@ export function EditorProvider({
       cancelled = true;
     };
   }, [markdownDoc, wikiLinks]);
+
+  // A block plays its videos to their end, so a video holds its block open
+  // for its length. `markdownToDoc` already applies authored out-points; a
+  // file's own length can only be read here, in the browser. Measure the
+  // videos that need it and re-lay the timeline once lengths arrive — the
+  // preview, timeline, recorder deck and every other `doc` consumer then
+  // agree. Until then (or for a file that cannot be read) blocks keep their
+  // text estimate. Like the wiki projection, this never reaches the source.
+  const videoDurationSources = useMemo(
+    () => (presentationDoc ? collectVideoDurationSources(presentationDoc) : []),
+    [presentationDoc],
+  );
+  const videoDurations = useVideoDurations(videoDurationSources, mediaBasePath, mediaProvider);
+  const timedDoc = useMemo(
+    () =>
+      presentationDoc && videoDurations.size > 0
+        ? applyVideoDurations(presentationDoc, (src) => videoDurations.get(src))
+        : presentationDoc,
+    [presentationDoc, videoDurations],
+  );
 
   // Parse on source changes with debounce. Skipped in code/image mode —
   // the WYSIWYG/Preview surfaces that consume markdownDoc/doc aren't
@@ -1829,7 +1872,7 @@ export function EditorProvider({
     () => ({
       markdownSource,
       markdownDoc,
-      doc: presentationDoc,
+      doc: timedDoc,
       activeView,
       parseError,
       isParsing,
@@ -1884,6 +1927,7 @@ export function EditorProvider({
       fileName,
       saveCoverImageOutput,
       saveDashboardImageOutput,
+      saveMediaEditOutput,
       setMarkdownSource,
       setEditorSource,
       setLayoutMode,
@@ -1920,7 +1964,7 @@ export function EditorProvider({
     [
       markdownSource,
       markdownDoc,
-      presentationDoc,
+      timedDoc,
       activeView,
       parseError,
       isParsing,
@@ -1969,6 +2013,7 @@ export function EditorProvider({
       fileName,
       saveCoverImageOutput,
       saveDashboardImageOutput,
+      saveMediaEditOutput,
       setMarkdownSource,
       setEditorSource,
       setLayoutMode,

@@ -20,6 +20,7 @@ import {
 } from '@bendyline/squisq/markdown';
 import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
 import type { Doc } from '@bendyline/squisq/schemas';
+import { resolveVideoDurations } from '@bendyline/squisq-react';
 import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { ExportConfigModal } from './ExportConfigModal';
 import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
@@ -177,7 +178,8 @@ export function FileToolbar({
   const playerScriptRef = useRef<string | null>(null);
 
   // The video exporter needs the audio-resolved doc (narration timing +
-  // segment mapping ride the workspace container, asynchronously).
+  // segment mapping ride the workspace container, asynchronously), with each
+  // block held open for its videos first — narration then still wins.
   useEffect(() => {
     if (!showVideoModal) {
       setVideoExportDoc(null);
@@ -185,22 +187,24 @@ export function FileToolbar({
     }
     let cancelled = false;
     const parsed = markdownToDoc(parseMarkdown(currentSource));
-    if (!workspaceContainer) {
-      setVideoExportDoc(parsed);
-      return;
-    }
-    resolveAudioMapping(parsed, workspaceContainer).then(
-      (resolved) => {
-        if (!cancelled) setVideoExportDoc(resolved);
-      },
-      () => {
-        if (!cancelled) setVideoExportDoc(parsed);
-      },
-    );
+    void resolveVideoDurations(parsed, { provider: mediaProvider })
+      .then((timed) =>
+        workspaceContainer
+          ? resolveAudioMapping(timed, workspaceContainer).catch(() => timed)
+          : timed,
+      )
+      .then(
+        (resolved) => {
+          if (!cancelled) setVideoExportDoc(resolved);
+        },
+        () => {
+          if (!cancelled) setVideoExportDoc(parsed);
+        },
+      );
     return () => {
       cancelled = true;
     };
-  }, [showVideoModal, currentSource, workspaceContainer]);
+  }, [showVideoModal, currentSource, workspaceContainer, mediaProvider]);
 
   // Close dropdown on outside click
   useEffect(() => {

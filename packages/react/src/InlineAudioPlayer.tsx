@@ -10,7 +10,10 @@
  * MarkdownRenderer swaps this in for raw `<audio>` htmlElements; the
  * editor-react Tiptap audio node reuses it for its NodeView.
  */
+import { useRef } from 'react';
+import type { MediaEdits } from '@bendyline/squisq/schemas';
 import { useMediaUrl } from './hooks/MediaContext.js';
+import { useCutTimeMap, useSkipCuts } from './mediaRecipePlayback.js';
 
 export interface InlineAudioPlayerProps {
   /** Source path — resolved through MediaContext when relative. */
@@ -25,6 +28,8 @@ export interface InlineAudioPlayerProps {
   className?: string;
   /** Accessible name — a markdown reference's alt text; `<audio>` has no `alt`. */
   label?: string;
+  /** The clip's edit recipe (`data-squisq-audio-*`); the player skips its cuts. */
+  edits?: MediaEdits;
 }
 
 export function InlineAudioPlayer({
@@ -34,14 +39,18 @@ export function InlineAudioPlayer({
   preload = 'metadata',
   className,
   label,
+  edits,
 }: InlineAudioPlayerProps) {
   const resolvedSrc = useMediaUrl(src, basePath);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  useSkipCuts(audioRef, useCutTimeMap(edits?.cuts), resolvedSrc);
 
   if (!resolvedSrc) return null;
 
   return (
     <span className={`squisq-inline-audio-player ${className ?? ''}`.trim()}>
       <audio
+        ref={audioRef}
         src={resolvedSrc}
         controls={controls}
         preload={preload}

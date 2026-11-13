@@ -144,6 +144,11 @@ Settings in the toolbar:
 - **Format** — the slide shape: landscape (16:9), portrait (9:16), square, or standard (4:3).
   Set the document's default with `document-render-as` (`landscape`, `portrait`, `square`,
   `standard`).
+- **Block** — the block type of the slide you are looking at. Choose another from the gallery and
+  the slide is redrawn in place; the choice is written to that heading as its
+  [tag](tags.md), exactly as if you had picked it in Write. Slides that are not one of your
+  headings — the cover, a slide added for a spare picture, a Summarize deck — show their type
+  greyed out.
 - **Theme** — see [Themes](themes.md).
 - **Summarize** — re-cut the document into a presentation in a style such as Documentary,
   Magazine, Data-Driven, or Minimal, without changing your source (saved as
@@ -161,7 +166,8 @@ block.
 Video mode plays the document like a film: play and pause, a scrub bar, and slides that advance
 on their own. Space plays and pauses; ← and → skip back and forward ten seconds. When the
 document has [narration](narration.md), each block stays up for as long as you speak about it.
-Without narration, each block gets an estimated reading time — or the time you give it with
+Without narration, each block gets an estimated reading time, held open until any
+[video it plays](media.md#a-section-shows-its-whole-video) ends — or the time you give it with
 `duration=` in its [block settings](tags.md#block-settings).
 
 Use it to rehearse timing, to share a self-running presentation, and to preview what an MP4 or

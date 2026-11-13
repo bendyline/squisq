@@ -50,6 +50,7 @@ import { formatRecordingBytes } from './recordingLimits.js';
 import { useStreamPreview } from './hooks/useStreamPreview.js';
 import { requestCameraStream } from './sources/cameraStream.js';
 import { RecorderDeviceSettingsPanel } from './RecorderDeviceSettingsPanel.js';
+import { describeCaptureError, type CaptureErrorContext } from './captureErrors.js';
 import { RecorderDeviceQuickPicks } from './RecorderDeviceQuickPicks.js';
 import { RecorderScreenSettings } from './RecorderScreenSettings.js';
 import { useMediaDevices } from './hooks/useMediaDevices.js';
@@ -1653,6 +1654,16 @@ export function RecorderModal({
   // separate video lane rather than the standalone Camera pill.
   const microphoneEnabled = narrationRecording ? true : micOn;
   const cameraEnabled = narrationRecording ? stage.recorder.withCamera : cameraOn;
+  // What the failing request asked for, so a raw getUserMedia rejection
+  // ("Requested device not found") can name the missing device.
+  const captureErrorContext: CaptureErrorContext = {
+    camera: cameraEnabled,
+    microphone: microphoneEnabled,
+    cameraDeviceId: deviceSettings.camera.deviceId,
+    microphoneDeviceId: deviceSettings.audio.deviceId,
+    devices: mediaDevices,
+  };
+  const narrationError = stage.recorder.error ?? stage.controller.mic.error;
   const narrationToggleFor = (key: ToggleKey) => {
     switch (key) {
       case 'mic':
@@ -1857,7 +1868,9 @@ export function RecorderModal({
             />
 
             {!narrationRecording && recorder.error && (
-              <div style={errorStyle}>{recorder.error.message}</div>
+              <div role="alert" style={errorStyle} data-testid="recorder-error">
+                {describeCaptureError(recorder.error, captureErrorContext)}
+              </div>
             )}
             {!narrationRecording && saveError && (
               <div role="alert" style={errorStyle}>
@@ -1889,9 +1902,9 @@ export function RecorderModal({
                 copy or save it to the document.
               </p>
             )}
-            {narrationOn && (stage.recorder.error ?? stage.controller.mic.error) && (
-              <div style={errorStyle}>
-                {(stage.recorder.error ?? stage.controller.mic.error)?.message}
+            {narrationOn && narrationError && (
+              <div role="alert" style={errorStyle} data-testid="recorder-narration-error">
+                {describeCaptureError(narrationError, captureErrorContext)}
               </div>
             )}
 

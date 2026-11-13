@@ -17,7 +17,8 @@
 
 import JSZip from 'jszip';
 import { parseMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
-import type { MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
+import type { MarkdownBlockNode, MarkdownDocument, HtmlNode } from '@bendyline/squisq/markdown';
+import { isMediaAnnotationName, parseStandaloneAnnotation } from '@bendyline/squisq/doc';
 import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { markdownDocToPlainHtml } from './plainHtml.js';
 import { exportImageBytes } from '../shared/svgIslands.js';
@@ -271,7 +272,16 @@ function collectImageRefs(doc: MarkdownDocument): Set<string> {
     }
     if (Array.isArray(n.children)) for (const c of n.children) visit(c);
   }
-  for (const child of doc.children) visit(child);
+  for (const child of doc.children) {
+    visit(child);
+    // A top-level `{[audio src=…]}` / `{[video …]}` tag renders as its file's
+    // player, so the file has to travel with the page like any other.
+    if (child.type !== 'paragraph') continue;
+    const tag = parseStandaloneAnnotation(child as MarkdownBlockNode);
+    if (tag?.template && isMediaAnnotationName(tag.template) && tag.params.src) {
+      refs.add(tag.params.src);
+    }
+  }
   return refs;
 }
 

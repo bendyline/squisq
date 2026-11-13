@@ -231,6 +231,23 @@ A placed video is locked to its section: it starts with it and stops when it end
 to block** to move and resize it freely on the editor's Timeline (View → Timeline), where it can
 run across several sections.
 
+### A section shows its whole video
+
+A section usually shows for as long as its text takes to read. A section that plays a video shows at
+least until the video ends, so a heading and a one-line caption over a long recording play the whole
+recording instead of moving on after a few seconds. The video's length runs from when it starts
+(`startAt`) to its end, less any trims (`clipStart`, `clipEnd`) and cuts. When the text takes longer
+to read than the video plays, the text sets the time.
+
+Videos in the section's body count, and so do video clips that stop when their section ends. A clip
+with `spillover=true`, a placed video with **Lock to block** turned off, and audio don't lengthen
+their section. A `duration` in the section's [block settings](tags.md#block-settings) always wins,
+and so does a recorded narration, which times each section to your voice.
+
+Without a `clipEnd`, the length comes from the file itself, which the editor, the player, and exports
+started from the editor can read. The command line can't, so give a video a `clipEnd` (on a
+`<video>`, `data-squisq-video-clip-end`) when a document rendered there needs it.
+
 ### Trims, fades, and cleanup
 
 Edits to a clip never change the file; they are more settings on the tag, applied as it plays and
@@ -259,11 +276,21 @@ right-click it and choose **Edit clip…**, to open an editor with these tabs:
   filter, noise reduction, breath reduction, and loudness (with targets for web and podcast,
   streaming, and broadcast). The cleaned-up sound is rendered in the background and kept beside the
   document; the original file is untouched.
-- **Timing** — **Find pauses** shortens every pause longer than the length you choose, and you can
-  set the volume and fades.
+- **Cuts** — a timeline of the clip for removing sections. Drag across the waveform to select a
+  section (or press **Set start** and **Set end** at the playhead) and choose **Cut selection**; drag
+  the edges of a cut to adjust it, or **Restore** it. **Play** with **Result** selected skips the cuts,
+  so you hear the shortened clip before you apply it; **Original** plays everything. **Find pauses**
+  adds a cut for every pause longer than the length you choose. Zoom in for word-level precision on a
+  long recording.
+- **Volume & fades** — the clip's volume, and a fade in and out.
 - **Frame** (video) — crop to a free shape or to 16:9, 1:1, 9:16, or 4:3.
 
-**Apply** writes the settings onto the tag in one undoable step. For a screen recording with a
+**Save edited copy…** saves the clip as one ordinary file with the edits on screen applied — the
+cuts removed, the sound cleaned up, the frame cropped — for use anywhere outside the document. It
+does not change the document or the original file.
+
+**Apply** writes the settings onto the tag in one undoable step. Cuts never change the file: open
+the editor again and every cut is still there to adjust or restore. For a screen recording with a
 camera beside it, the cleanup and cuts apply to both files. Developers can find the full recipe format in
 [Media edits](../media-edits.md).
 

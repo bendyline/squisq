@@ -47,6 +47,33 @@ async function listZipPaths(blob: Blob): Promise<string[]> {
 }
 
 describe('markdownDocsToPlainHtmlBundle', () => {
+  it('carries the files of audio and video clips, whichever way they are written', async () => {
+    const bytes = (n: number) => new Uint8Array(n).buffer;
+    const c = makeContainer(
+      {
+        'notes/home.md': [
+          '# Home',
+          '{[audio src=home_files/audio/take-edited.m4a anchor=document]}',
+          '<video src="home_files/video/screen-edited.mp4" controls></video>',
+          '',
+        ].join('\n\n'),
+      },
+      {
+        'notes/home_files/audio/take-edited.m4a': bytes(3),
+        'notes/home_files/video/screen-edited.mp4': bytes(5),
+      },
+    );
+    const blob = await markdownDocsToPlainHtmlBundle({ entryPath: 'notes/home.md', ...c });
+    expect(await listZipPaths(blob)).toEqual([
+      'notes/home.html',
+      'notes/home_files/audio/take-edited.m4a',
+      'notes/home_files/video/screen-edited.mp4',
+    ]);
+    const html = await readZipPath(blob, 'notes/home.html');
+    expect(html).toContain('<audio class="squisq-media" src="home_files/audio/take-edited.m4a"');
+    expect(html).toContain('src="home_files/video/screen-edited.mp4"');
+  });
+
   it('exports a single doc with no links to a 1-file html', async () => {
     const c = makeContainer({ 'home.md': '# Home\n\nJust a single page.' });
     const blob = await markdownDocsToPlainHtmlBundle({

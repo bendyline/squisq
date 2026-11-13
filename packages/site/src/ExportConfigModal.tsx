@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useId } from 'react';
-import { useModalDialog } from '@bendyline/squisq-react';
+import { resolveVideoDurations, useModalDialog } from '@bendyline/squisq-react';
 import { createPortal } from 'react-dom';
 import { stringifyMarkdown, inferDocumentTitle } from '@bendyline/squisq/markdown';
 import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
@@ -518,6 +518,7 @@ export function ExportConfigModal({
           currentSource,
           { transformStyle, themeId },
           workspaceContainer,
+          mediaProvider,
         );
         if (!playerScriptRef.current) {
           const { PLAYER_BUNDLE } = await import('@bendyline/squisq-react/standalone-source');
@@ -672,7 +673,10 @@ export function ExportConfigModal({
           ]);
           // Narration timing + audio mapping ride the workspace container;
           // without this the exported player paces on reading-time estimates.
-          const parsedDoc = markdownToDoc(mdDoc);
+          // Blocks are held open for their videos first, so narration wins.
+          const parsedDoc = await resolveVideoDurations(markdownToDoc(mdDoc), {
+            provider: mediaProvider,
+          });
           const rawDoc = workspaceContainer
             ? await withDataPreviews(
                 await resolveAudioMapping(parsedDoc, workspaceContainer),

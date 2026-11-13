@@ -21,7 +21,8 @@ import {
   type PauseTightenOptions,
 } from '@bendyline/squisq/mediaEdit';
 import { createAudioRenderSink, type EncodedAudio } from './audioRenderSink.js';
-import { openMediaAudio } from './mediaAudioSource.js';
+import { openMediaAudio, probeMediaDuration } from './mediaAudioSource.js';
+import { WAVEFORM_PEAKS_PER_SEC, createPeakAccumulator } from './waveformPeaks.js';
 
 export interface MediaEditJobOptions {
   onProgress?: (fraction: number) => void;
@@ -69,6 +70,22 @@ export interface MediaEditPreviewResult {
   startSec: number;
   original: Float32Array[];
   processed: Float32Array[];
+}
+
+export interface MediaEditWaveformRequest {
+  source: Blob;
+}
+
+export interface MediaEditWaveformResult {
+  /**
+   * The loudest sample (0…1) in each slice of the audio track, from media
+   * time 0. Empty when the media has no audio track.
+   */
+  peaks: Float32Array;
+  /** Slices per second. */
+  peaksPerSec: number;
+  /** Length of the whole file — its longest track — in seconds. */
+  durationSec: number;
 }
 
 /** Denoiser warm-up before a preview window, so its first frames are settled. */
@@ -208,6 +225,48 @@ export async function previewMediaEditAudio(
       startSec: request.startSec,
       original: trim(concatBlocks(originalBlocks, source.channels)),
       processed: trim(concatBlocks(processedBlocks, source.channels)),
+    };
+  } finally {
+    source.dispose();
+  }
+}
+
+/**
+ * The take's waveform and length, for an editing timeline. A file with no
+ * audio track answers with no peaks — a silent video can still be cut, by
+ * time — and every file answers with its length: a recorder's WebM states
+ * none, so a media element reports `Infinity` and the timeline has nowhere
+ * else to learn it.
+ */
+export async function analyzeMediaEditWaveform(
+  request: MediaEditWaveformRequest,
+  options: MediaEditJobOptions = {},
+): Promise<MediaEditWaveformResult> {
+  const source = await openMediaAudio(request.source);
+  if (!source) {
+    return {
+      peaks: new Float32Array(0),
+      peaksPerSec: WAVEFORM_PEAKS_PER_SEC,
+      durationSec: await probeMediaDuration(request.source),
+    };
+  }
+  try {
+    const accumulator = createPeakAccumulator(
+      source.sampleRate,
+      WAVEFORM_PEAKS_PER_SEC,
+      source.frames,
+    );
+    let seen = 0;
+    for await (const block of source.open()) {
+      options.signal?.throwIfAborted();
+      accumulator.push(block);
+      seen += block[0].length;
+      options.onProgress?.(Math.min(1, seen / Math.max(1, source.frames)));
+    }
+    return {
+      peaks: accumulator.finish(),
+      peaksPerSec: WAVEFORM_PEAKS_PER_SEC,
+      durationSec: await source.mediaDuration(),
     };
   } finally {
     source.dispose();

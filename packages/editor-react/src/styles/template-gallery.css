@@ -34,6 +34,15 @@
   outline-offset: -1px;
 }
 
+/* Shows the current type without offering to change it (the slideshow's
+   cover, a generated slide). Hover passes through to the host element, which
+   carries the reason as its tooltip — so the button never lights up as if it
+   could open, whatever hover styling a host application layers on. */
+.squisq-template-picker-trigger:disabled {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 .squisq-template-picker-trigger-label {
   color: var(--squisq-text-muted);
 }
@@ -73,6 +82,15 @@
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* The Slideshow's picker names a different type on every slide. A fixed-width
+   label keeps the controls beside it — and the toolbar's inline/overflow
+   split, which is measured from these widths — still as the deck is stepped
+   through. */
+.squisq-slide-block-type .squisq-template-picker-trigger-value {
+  width: 88px;
+  text-align: left;
 }
 
 .squisq-template-picker-trigger-caret {

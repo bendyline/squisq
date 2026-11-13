@@ -409,6 +409,15 @@ function fnv1a64Hex(text: string): string {
  * re-render (the render manifest records them instead). 12 hex digits.
  */
 export function mediaRenderKey(src: string, fx: MediaFxChain): string {
-  const canonical = fx.ops.map((op) => `${op.id}:${formatMediaNumber(op.value)}`).join(' ');
-  return fnv1a64Hex(`${src}\n${canonical}`).slice(0, 12);
+  return mediaRecipeHash(`${src}\n${canonicalMediaFx(fx)}`);
+}
+
+/** The known ops of a chain, in chain order with explicit values — what a render applies. */
+export function canonicalMediaFx(fx: MediaFxChain): string {
+  return fx.ops.map((op) => `${op.id}:${formatMediaNumber(op.value)}`).join(' ');
+}
+
+/** 12 hex digits naming a derived file after the text that decides its content. */
+export function mediaRecipeHash(text: string): string {
+  return fnv1a64Hex(text).slice(0, 12);
 }

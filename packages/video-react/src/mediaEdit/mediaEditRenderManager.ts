@@ -12,22 +12,41 @@
  * media, so they travel with it. A render is stale when its source changed
  * size (a re-recorded take under the same name) or when it skipped ops this
  * engine now knows; stale renders are replaced.
+ *
+ * The manager also makes BAKED clips — a clip's whole recipe (trim, cuts,
+ * processed audio, gain, fades, crop) in one ordinary file, for players that
+ * cannot apply a recipe. Those are made only when asked for (`bake`): an
+ * export that needs them, or "Save edited copy". They share the folder and
+ * are replaced as the recipe changes.
  */
 
 import {
+  MEDIA_BAKE_MANIFEST_VERSION,
   MEDIA_FX_ORDER,
   MEDIA_RENDER_MANIFEST_VERSION,
+  buildMediaBakeIndex,
   buildMediaRenderIndex,
   collectDocMediaClips,
+  isMediaBakeStale,
+  mediaBakeCuts,
+  mediaBakeFilePath,
+  mediaBakeKey,
+  mediaBakeManifestPath,
+  mediaBakeSpec,
   mediaClipRenderKey,
   mediaRenderFilePath,
   mediaRenderManifestPath,
   mediaRenderStaleness,
+  parseMediaBakeManifest,
   parseMediaRenderManifest,
   referencedMediaRenderKeys,
   selectMediaRendersForGc,
+  selectSupersededMediaBakes,
+  serializeMediaBakeManifest,
   serializeMediaFx,
   serializeMediaRenderManifest,
+  type MediaBakeEntry,
+  type MediaBakeManifest,
   type MediaRenderEntry,
   type MediaRenderManifest,
 } from '@bendyline/squisq/mediaEdit';
@@ -42,6 +61,12 @@ export interface MediaEditRenderStatus {
   /** 0…1 while rendering. */
   progress?: number;
   error?: string;
+}
+
+export interface MediaBakeOptions {
+  signal?: AbortSignal;
+  /** 0…1 across the whole job, including a processed-audio render it has to wait for. */
+  onProgress?: (fraction: number) => void;
 }
 
 export interface MediaEditRenderManager {
@@ -64,11 +89,22 @@ export interface MediaEditRenderManager {
   retry(clip: MediaClip): void;
   /** Load a media reference as a Blob (sources for previews). */
   loadSource(src: string): Promise<Blob>;
+  /** The baked copy of a clip — its whole recipe in one file — when a current one exists. */
+  bakedMedia(clip: MediaClip): string | undefined;
+  /**
+   * Make the baked copy of a clip, or reuse a current one, and resolve with
+   * its path. A recipe with a signal chain first gets its processed-audio
+   * render (queued here if it is not already), so the baked sound is the
+   * cleaned-up sound. Rejects when the clip cannot be baked (a browser that
+   * cannot encode video, a failed render) or the job is cancelled.
+   */
+  bake(clip: MediaClip, options?: MediaBakeOptions): Promise<string>;
   /**
    * Delete renders of this document's sources that no current recipe
-   * references and that are older than the GC age. Renders of other sources
-   * are never touched — a media folder can be shared by several documents.
-   * Returns the removed paths.
+   * references and that are older than the GC age, and its baked clips that
+   * no current recipe asks for (at once: they are made again on demand).
+   * Files of other sources are never touched — a media folder can be shared
+   * by several documents. Returns the removed paths.
    */
   collectGarbage(doc: Doc, now?: Date): Promise<string[]>;
   /** Change notifications (index, status, progress). Returns an unsubscribe. */
@@ -93,6 +129,9 @@ export interface MediaEditRenderManagerOptions {
   /** Clock for manifests and GC; defaults to `new Date()`. */
   now?: () => Date;
 }
+
+/** Share of a bake's progress bar that waiting for a processed-audio render takes. */
+const RENDER_SHARE_OF_BAKE = 0.6;
 
 interface Job {
   key: string;
@@ -130,6 +169,12 @@ export function createMediaEditRenderManager(
   let disposed = false;
   let latestDoc: Doc | null = null;
   let lastExtras: readonly MediaClip[] = [];
+  let bakeIndex = new Map<string, MediaBakeEntry>();
+  const bakeManifests = new Map<string, MediaBakeManifest | null>();
+  const staleBakes = new Set<string>();
+  const bakesInFlight = new Map<string, Promise<string>>();
+  /** Render keys a bake is waiting on: `sync` must not drop them from the queue. */
+  const pinnedRenders = new Set<string>();
 
   /** What processedAudio can answer: current renders and their paths. */
   const indexSignature = () =>
@@ -164,11 +209,32 @@ export function createMediaEditRenderManager(
     return manifest;
   };
 
+  const bakeManifestFor = async (key: string): Promise<MediaBakeManifest | null> => {
+    if (bakeManifests.has(key)) return bakeManifests.get(key) ?? null;
+    const entry = bakeIndex.get(key);
+    const manifest = entry?.manifestPath
+      ? parseMediaBakeManifest((await loadText(entry.manifestPath)) ?? '')
+      : null;
+    bakeManifests.set(key, manifest);
+    return manifest;
+  };
+
   const refreshIndex = async (): Promise<void> => {
     const entries = await provider.listMedia();
     const before = indexSignature();
     index = buildMediaRenderIndex(entries);
     sourceSizes = new Map(entries.map((e) => [e.name, e.size]));
+    bakeIndex = buildMediaBakeIndex(entries);
+    staleBakes.clear();
+    for (const [key] of bakeIndex) {
+      const manifest = await bakeManifestFor(key);
+      if (
+        manifest &&
+        isMediaBakeStale(manifest, { sourceSize: sourceSizeOf(sourceSizes, manifest.src) })
+      ) {
+        staleBakes.add(key);
+      }
+    }
     staleKeys.clear();
     for (const [key] of index) {
       const manifest = await manifestFor(key);
@@ -192,6 +258,7 @@ export function createMediaEditRenderManager(
   };
 
   const isCurrent = (key: string) => index.has(key) && !staleKeys.has(key);
+  const isBakeCurrent = (key: string) => bakeIndex.has(key) && !staleBakes.has(key);
 
   const pump = async (): Promise<void> => {
     if (running || disposed) return;
@@ -290,6 +357,137 @@ export function createMediaEditRenderManager(
     return response.blob();
   }
 
+  const cancelled = () => new DOMException('The bake was cancelled.', 'AbortError');
+
+  /** The clip's processed-audio render, rendering it first when it is missing. */
+  const processedAudioFor = async (
+    clip: MediaClip,
+    renderKey: string,
+    options: MediaBakeOptions,
+  ): Promise<string> => {
+    if (!isCurrent(renderKey)) {
+      pinnedRenders.add(renderKey);
+      try {
+        // A render that failed earlier gets another try: the caller asked for the result.
+        if (statuses.get(renderKey)?.state === 'failed') statuses.delete(renderKey);
+        enqueue(clip, false);
+        notify();
+        void pump();
+        await new Promise<void>((resolve, reject) => {
+          const check = () => {
+            const status = statuses.get(renderKey);
+            if (options.signal?.aborted) settle(() => reject(cancelled()));
+            else if (isCurrent(renderKey)) settle(resolve);
+            else if (status?.state === 'failed') {
+              settle(() => reject(new Error(`Audio cleanup failed: ${status.error}`)));
+            } else options.onProgress?.((status?.progress ?? 0) * RENDER_SHARE_OF_BAKE);
+          };
+          const settle = (finish: () => void) => {
+            unsubscribe();
+            options.signal?.removeEventListener('abort', check);
+            finish();
+          };
+          const unsubscribe = manager.subscribe(check);
+          options.signal?.addEventListener('abort', check);
+          check();
+        });
+      } finally {
+        pinnedRenders.delete(renderKey);
+      }
+    }
+    const path = index.get(renderKey)?.path;
+    if (!path) throw new Error('The processed audio for this clip is missing.');
+    return path;
+  };
+
+  /** Bake keys the current document — plus the editor's extra clips — asks for. */
+  const referencedBakeKeys = (): Set<string> => {
+    const clips = [...(latestDoc ? collectDocMediaClips(latestDoc) : []), ...lastExtras];
+    return new Set([...clips.map((clip) => mediaBakeKey(clip)), ...bakesInFlight.keys()]);
+  };
+
+  /** Remove baked clips of `sources` that no current recipe asks for. Returns the removed paths. */
+  const pruneBakes = async (sources: ReadonlySet<string>, keep?: string): Promise<string[]> => {
+    const loaded = new Map<string, MediaBakeManifest>();
+    for (const [key] of bakeIndex) {
+      const manifest = await bakeManifestFor(key);
+      if (manifest) loaded.set(key, manifest);
+    }
+    const referenced = referencedBakeKeys();
+    if (keep) referenced.add(keep);
+    const paths = selectSupersededMediaBakes(bakeIndex, loaded, sources, referenced);
+    for (const path of paths) await provider.removeMedia(path).catch(() => {});
+    for (const [key, entry] of [...bakeIndex]) {
+      if (!paths.includes(entry.path)) continue;
+      bakeIndex.delete(key);
+      bakeManifests.delete(key);
+      staleBakes.delete(key);
+    }
+    return paths;
+  };
+
+  const runBake = async (clip: MediaClip, key: string, options: MediaBakeOptions) => {
+    const renderKey = mediaClipRenderKey(clip);
+    const audioPath = renderKey ? await processedAudioFor(clip, renderKey, options) : null;
+    // With a render to wait for, the bake itself fills the rest of the bar.
+    const from = renderKey ? RENDER_SHARE_OF_BAKE : 0;
+    const source = await loadSource(clip.src);
+    const audio = audioPath ? await loadSource(audioPath) : undefined;
+    let lastReported = 0;
+    const result = await renderer.bake(
+      {
+        source,
+        kind: clip.kind,
+        ...(audio ? { audio } : {}),
+        ...(clip.clipStart != null ? { clipStart: clip.clipStart } : {}),
+        ...(clip.clipEnd != null ? { clipEnd: clip.clipEnd } : {}),
+        cuts: mediaBakeCuts(clip),
+        ...(clip.edits?.gain ? { gain: clip.edits.gain } : {}),
+        ...(clip.edits?.fadeIn ? { fadeIn: clip.edits.fadeIn } : {}),
+        ...(clip.edits?.fadeOut ? { fadeOut: clip.edits.fadeOut } : {}),
+        ...(clip.kind === 'video' && clip.edits?.crop ? { crop: clip.edits.crop } : {}),
+      },
+      {
+        signal: options.signal,
+        onProgress: (fraction) => {
+          if (fraction - lastReported < 0.01 && fraction < 1) return;
+          lastReported = fraction;
+          options.onProgress?.(from + fraction * (1 - from));
+        },
+      },
+    );
+    const size = result.bytes.byteLength;
+    const bakePath = await provider.addMedia(
+      mediaBakeFilePath(clip.src, key, result.extension),
+      result.bytes,
+      result.mimeType,
+    );
+    const manifest: MediaBakeManifest = {
+      version: MEDIA_BAKE_MANIFEST_VERSION,
+      src: clip.src,
+      key,
+      spec: mediaBakeSpec(clip),
+      file: bakePath,
+      mimeType: result.mimeType,
+      sourceSize: source.size,
+      duration: result.durationSec,
+      engine: result.engine,
+      createdAt: now().toISOString(),
+    };
+    const manifestPath = await provider.addMedia(
+      mediaBakeManifestPath(clip.src, key),
+      new TextEncoder().encode(serializeMediaBakeManifest(manifest)),
+      'application/json',
+    );
+    bakeIndex.set(key, { key, path: bakePath, manifestPath, size });
+    bakeManifests.set(key, manifest);
+    staleBakes.delete(key);
+    // The recipe moved on: the copies it left behind are only taking up room.
+    await pruneBakes(new Set([clip.src]), key);
+    notify();
+    return bakePath;
+  };
+
   /** Render keys the document — plus the editor's extra clips — needs. */
   const requiredKeys = (doc: Doc): Set<string> => {
     const keys = referencedMediaRenderKeys(doc);
@@ -316,7 +514,7 @@ export function createMediaEditRenderManager(
           clips.map((clip) => mediaClipRenderKey(clip)).filter((key): key is string => key != null),
         );
         for (let i = queue.length - 1; i >= 0; i--) {
-          if (!wanted.has(queue[i].key)) {
+          if (!wanted.has(queue[i].key) && !pinnedRenders.has(queue[i].key)) {
             statuses.delete(queue[i].key);
             queue.splice(i, 1);
           }
@@ -368,6 +566,27 @@ export function createMediaEditRenderManager(
       void pump();
     },
     loadSource,
+    bakedMedia(clip) {
+      const key = mediaBakeKey(clip);
+      return isBakeCurrent(key) ? bakeIndex.get(key)?.path : undefined;
+    },
+    async bake(clip, bakeOptions = {}) {
+      if (bakeOptions.signal?.aborted) throw cancelled();
+      await ensureIndex();
+      const key = mediaBakeKey(clip);
+      const current = isBakeCurrent(key) ? bakeIndex.get(key)?.path : undefined;
+      if (current) {
+        bakeOptions.onProgress?.(1);
+        return current;
+      }
+      // Two requests for the same clip share one job (the first caller's signal governs it).
+      let job = bakesInFlight.get(key);
+      if (!job) {
+        job = runBake(clip, key, bakeOptions).finally(() => bakesInFlight.delete(key));
+        bakesInFlight.set(key, job);
+      }
+      return job;
+    },
     async collectGarbage(doc, at = now()) {
       await refreshIndex();
       const docSources = new Set(
@@ -384,6 +603,8 @@ export function createMediaEditRenderManager(
       }
       const paths = selectMediaRendersForGc(candidates, requiredKeys(doc), loaded, at);
       for (const path of paths) await provider.removeMedia(path);
+      const bakes = latestDoc === doc ? await pruneBakes(docSources) : [];
+      if (bakes.length > 0) notify();
       if (paths.length > 0) {
         for (const key of candidates.keys()) {
           const entry = index.get(key);
@@ -395,7 +616,7 @@ export function createMediaEditRenderManager(
         indexVersion++;
         notify();
       }
-      return paths;
+      return [...paths, ...bakes];
     },
     subscribe(listener) {
       listeners.add(listener);

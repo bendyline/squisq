@@ -167,6 +167,37 @@ describe('computeAudioTimeline', () => {
     ]);
   });
 
+  it('skips a content video’s cuts in the sound, as its picture does', () => {
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '# Camera\n\n<video src="video/camera.webm" controls data-squisq-video-clip-end="30" data-squisq-video-cuts="10-20"></video>',
+      ),
+      { generateCoverBlock: false },
+    );
+    // 30 s of file less the 10 s cut.
+    expect(doc.blocks[0].duration).toBe(20);
+
+    // Two stretches of the file, back to back, with the join faded either side.
+    expect(computeAudioTimeline(doc)).toEqual([
+      {
+        src: 'video/camera.webm',
+        startSec: 0,
+        sourceInSec: 0,
+        durationSec: 10,
+        sourceKind: 'video',
+        fadeOutSec: 0.01,
+      },
+      {
+        src: 'video/camera.webm',
+        startSec: 10,
+        sourceInSec: 20,
+        durationSec: 10,
+        sourceKind: 'video',
+        fadeInSec: 0.01,
+      },
+    ]);
+  });
+
   it('includes video rendered from block content/template layers', () => {
     const doc = markdownToDoc(
       parseMarkdown('# Camera\n\n<video src="video/camera.webm" controls></video>'),

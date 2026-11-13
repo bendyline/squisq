@@ -23,12 +23,6 @@ import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { Block } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
 import { DEFAULT_THEME, flattenBlocks } from '@bendyline/squisq/doc';
-import {
-  KNOWN_BLOCK_META_KEYS,
-  matchTrailingTemplateAnnotation,
-  splitKeyValueToken,
-  tokenizeAttrTokens,
-} from '@bendyline/squisq/markdown';
 import { useEditorContext } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
@@ -51,6 +45,11 @@ import {
   EMPTY_TRANSITION,
   type TransitionFields,
 } from './headingTransition';
+import {
+  keepBlockMetaParamString,
+  readHeadingLineTemplate,
+  setHeadingLineTemplate,
+} from './headingTemplateLine';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceAtLineInDoc, findBlockSliceByHeadingIndexInDoc } from './blockSlice';
 import { LinkDialog } from './LinkDialog';
@@ -96,8 +95,6 @@ import { MermaidDiagramTypeThumbnail } from './mermaid/MermaidDiagramTypeThumbna
 import { FindToolbar } from './find/FindToolbar';
 import { useEscapeDismissal } from './useEscapeDismissal';
 import type { EditorHostMode } from './editorHostMode';
-
-const BLOCK_META_KEYS = new Set<string>(Object.keys(KNOWN_BLOCK_META_KEYS));
 
 export interface ToolbarProps {
   /** Additional class name */
@@ -202,35 +199,6 @@ function findBlockBySourceLine(blocks: readonly Block[], lineNumber: number): Bl
     if (pos.start.line <= lineNumber && pos.end.line >= lineNumber) return block;
   }
   return null;
-}
-
-function splitTemplateAnnotationParams(text: string): { text: string; params: string[] } {
-  const match = matchTrailingTemplateAnnotation(text);
-  if (!match) return { text: text.trimEnd(), params: [] };
-  const tokens = tokenizeAttrTokens(match.inner.trim());
-  const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
-  return {
-    text: text.slice(0, match.index).trimEnd(),
-    params: keepBlockMetaParamTokens(tokens.slice(firstIsParam ? 0 : 1)),
-  };
-}
-
-function buildTemplateAnnotation(template: string, params: string[]): string | null {
-  const parts = template ? [template, ...params] : params;
-  return parts.length > 0 ? `{[${parts.join(' ')}]}` : null;
-}
-
-function keepBlockMetaParamTokens(tokens: readonly string[]): string[] {
-  return tokens.filter((token) => {
-    const kv = splitKeyValueToken(token);
-    return kv ? BLOCK_META_KEYS.has(kv.key) : false;
-  });
-}
-
-function keepBlockMetaParamString(inner: string | null | undefined): string | null {
-  if (!inner) return null;
-  const params = keepBlockMetaParamTokens(tokenizeAttrTokens(inner));
-  return params.length > 0 ? params.join(' ') : null;
 }
 
 /** Apple platforms reserve Cmd+H (hide app), so replace is Cmd+Option+F there. */
@@ -1725,14 +1693,7 @@ export function Toolbar({
       }
       setRawHeadingLine(pos.lineNumber);
       setRawTransition(readHeadingLineTransition(line));
-      const annotMatch = matchTrailingTemplateAnnotation(headingMatch[1]);
-      if (annotMatch) {
-        const tokens = tokenizeAttrTokens(annotMatch.inner.trim());
-        const firstIsParam = tokens.length > 0 && tokens[0].indexOf('=') > 0;
-        setRawTemplate(firstIsParam ? '' : (tokens[0] ?? ''));
-      } else {
-        setRawTemplate('');
-      }
+      setRawTemplate(readHeadingLineTemplate(line) ?? '');
     };
     recompute();
     const cursorSub = monacoEditor.onDidChangeCursorPosition(recompute);
@@ -1860,12 +1821,8 @@ export function Toolbar({
       if (isMarkdownFencedCodeLine(model.getValue(), pos.lineNumber)) return;
       const lineNumber = pos.lineNumber;
       const lineText = model.getLineContent(lineNumber);
-      const headingMatch = lineText.match(/^(#{1,6}\s+)(.+)$/);
-      if (!headingMatch) return;
-      const prefix = headingMatch[1];
-      const { text: bareText, params } = splitTemplateAnnotationParams(headingMatch[2]);
-      const annotation = buildTemplateAnnotation(value, params);
-      const newLine = annotation ? `${prefix}${bareText} ${annotation}` : `${prefix}${bareText}`;
+      if (readHeadingLineTemplate(lineText) === null) return;
+      const newLine = setHeadingLineTemplate(lineText, value);
       monacoEditor.executeEdits('toolbar-template-pick', [
         {
           range: {

@@ -12,13 +12,18 @@ import type {
   MediaEditPreviewResult,
   MediaEditRenderRequest,
   MediaEditRenderResult,
+  MediaEditWaveformRequest,
+  MediaEditWaveformResult,
 } from './mediaEditEngine.js';
+import type { MediaBakeRequest, MediaBakeResult } from './mediaBakeEngine.js';
 
 export type MediaEditWorkerRequest =
   | ({ type: 'render'; id: number } & MediaEditRenderRequest)
   | ({ type: 'analyze'; id: number } & MediaEditRenderRequest)
   | ({ type: 'preview'; id: number } & MediaEditPreviewRequest)
   | ({ type: 'pauses'; id: number } & MediaEditPausesRequest)
+  | ({ type: 'waveform'; id: number } & MediaEditWaveformRequest)
+  | ({ type: 'bake'; id: number } & MediaBakeRequest)
   | { type: 'cancel'; id: number };
 
 export type MediaEditWorkerResponse =
@@ -27,4 +32,6 @@ export type MediaEditWorkerResponse =
   | { type: 'analyzed'; id: number; result: MediaFxAnalysis | null }
   | { type: 'previewed'; id: number; result: MediaEditPreviewResult }
   | { type: 'paused'; id: number; result: MediaEditPausesResult }
+  | { type: 'waveformed'; id: number; result: MediaEditWaveformResult }
+  | { type: 'baked'; id: number; result: MediaBakeResult }
   | { type: 'error'; id: number; message: string; aborted: boolean };

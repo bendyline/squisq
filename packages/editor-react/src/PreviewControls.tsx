@@ -57,6 +57,8 @@ import {
   COVER_SLIDE_TEMPLATE_OPTIONS,
   createTemplateContext,
   expandCoverBlock,
+  flattenBlocks,
+  previewBlockTemplate,
   resolveCoverSlideSettings,
   DASHBOARD_AUTO_LAYOUT_ID,
   DASHBOARD_STYLES,
@@ -80,6 +82,16 @@ import {
   type ThemeSaveExtras,
 } from './customThemes';
 import { Icon } from './Icon';
+import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
+import { findBlockSliceAtLineInDoc } from './blockSlice';
+import { setSourceHeadingTemplate } from './headingTemplateLine';
+import {
+  ActiveSlideProvider,
+  sourceBlockIdOf,
+  useActiveSlide,
+  type ActiveSlide,
+} from './slideshow/ActiveSlide';
+import { TemplatePicker, TEMPLATE_NAMES, templateLabel } from './TemplatePicker';
 import { resolvePersistedTransformStyleId } from './transformStyleId';
 import {
   FRONTMATTER_SETTING_DEFAULTS,
@@ -1187,8 +1199,12 @@ export function PreviewSettingsProvider({
     ],
   );
 
+  // The slide on screen is its own context: it changes as the deck is stepped
+  // through, and nothing that reads the settings above should re-render for it.
   return (
-    <PreviewSettingsContext.Provider value={value}>{children}</PreviewSettingsContext.Provider>
+    <PreviewSettingsContext.Provider value={value}>
+      <ActiveSlideProvider>{children}</ActiveSlideProvider>
+    </PreviewSettingsContext.Provider>
   );
 }
 
@@ -1341,9 +1357,12 @@ const SUMMARIZE_TOOLTIP =
  * first (Cover, then Loop, then Captions, …). Aspect ratio stays inline the
  * longest, but
  * still collapses into the same menu when the toolbar is very constrained.
+ * The block type sits right after it: it is the one control about the slide
+ * on screen rather than the whole deck, so it leads the deck-wide settings.
  */
 type ControlKey =
   | 'format'
+  | 'blockType'
   | 'layout'
   | 'video'
   | 'theme'
@@ -1354,6 +1373,7 @@ type ControlKey =
   | 'dashboardImage';
 const CONTROL_KEYS: ControlKey[] = [
   'format',
+  'blockType',
   'layout',
   'video',
   'theme',
@@ -1373,7 +1393,8 @@ const CONTROL_KEYS: ControlKey[] = [
  * no timed captions there (they apply in Video). Dashboard is a static canvas
  * with no clock, captions, or managed cover — it shows the format switch,
  * its own layout picker, theme, and summarize. Cover, Theme, and Summarize
- * remain live in every other mode.
+ * remain live in every other mode. The block type is Slideshow's alone: it is
+ * the one mode where a single slide stays on screen until the author moves on.
  */
 function controlKeysForMode(displayMode: string, hasVideoMedia: boolean): ControlKey[] {
   if (displayMode === 'flashcards') {
@@ -1383,6 +1404,9 @@ function controlKeysForMode(displayMode: string, hasVideoMedia: boolean): Contro
     return ['format', 'layout', 'theme', 'transform', 'dashboardImage'];
   }
   let keys = CONTROL_KEYS.filter((key) => key !== 'layout' && key !== 'dashboardImage');
+  if (displayMode !== 'slideshow') {
+    keys = keys.filter((key) => key !== 'blockType');
+  }
   if (displayMode !== 'video') {
     keys = keys.filter((key) => key !== 'loop');
   }
@@ -1507,6 +1531,159 @@ function DashboardImageExportControl({ compact }: { compact: boolean }) {
           />,
           document.body,
         )}
+    </div>
+  );
+}
+
+/** What the block-type picker shows for the slide on screen. */
+type SlideBlockType =
+  | {
+      /** The slide is a section of the document, written under a heading. */
+      editable: true;
+      block: Block;
+      /** 1-based source line of the section's heading. */
+      headingLine: number;
+      /** The template the section's slide is built from. */
+      template: string;
+    }
+  | {
+      editable: false;
+      /** Template to show greyed out, when the slide has one worth naming. */
+      template: string;
+      /** Replaces the template's label (the cover is not a block type). */
+      label?: string;
+      /** Why the type cannot be changed here — the trigger's tooltip. */
+      reason: string;
+    };
+
+/**
+ * Resolve the slide on screen back to the document section it shows. Only a
+ * section written under a heading has a type to set from here: the type lives
+ * in that heading's `{[…]}` annotation.
+ */
+function resolveSlideBlockType(doc: Doc | null, slide: ActiveSlide | null): SlideBlockType {
+  if (!doc || !slide) {
+    return { editable: false, template: '', label: '—', reason: 'No slide is showing yet.' };
+  }
+  const shown = slide.template ?? '';
+  if (slide.isCover) {
+    return {
+      editable: false,
+      template: '',
+      label: 'Cover',
+      reason: 'This is the cover slide. Change how it looks from the Cover slide menu.',
+    };
+  }
+  if (slide.generated) {
+    return {
+      editable: false,
+      template: shown,
+      reason:
+        'Summarize builds these slides from your document, so their layout is chosen for you. Set Summarize to None to choose block types yourself.',
+    };
+  }
+  const blockId = slide.blockId;
+  const flat = blockId ? flattenBlocks(doc.blocks) : [];
+  const block =
+    flat.find((candidate) => candidate.id === blockId) ??
+    flat.find((candidate) => blockId != null && candidate.id === sourceBlockIdOf(blockId));
+  if (!block) {
+    return {
+      editable: false,
+      template: shown,
+      reason: 'This slide was added for a picture in your document. It has no block type.',
+    };
+  }
+  const template = previewBlockTemplate(block, doc);
+  const headingLine = block.sourceHeading?.position?.start.line;
+  if (headingLine == null) {
+    return {
+      editable: false,
+      template,
+      reason:
+        'This slide’s content has no heading of its own, so its block type can only be changed in Write.',
+    };
+  }
+  if (block.promotedBodyAnnotation) {
+    return {
+      editable: false,
+      template,
+      reason:
+        'This slide’s block type is written inside its text, so it can only be changed in Write.',
+    };
+  }
+  return { editable: true, block, headingLine, template };
+}
+
+/**
+ * "Block: <type> ▾" — changes the block type of the section the Slideshow is
+ * showing, so retyping a slide no longer means a trip to Write and back. It
+ * opens the same gallery as Write's block picker and writes the same
+ * `{[template]}` heading annotation, as one edit to the document source.
+ */
+function SlideBlockTypeControl({ compact }: { compact: boolean }) {
+  const settings = usePreviewSettings();
+  const slide = useActiveSlide();
+  const { colorScheme, doc, markdownDoc, markdownSource, setMarkdownSource, mediaProvider } =
+    useEditorContext();
+  const state = useMemo(() => resolveSlideBlockType(doc, slide), [doc, slide]);
+  const block = state.editable ? state.block : null;
+  const headingLine = state.editable ? state.headingLine : null;
+  const { activeTheme, activeViewport } = settings;
+
+  const recommended = useMemo(() => {
+    if (headingLine === null || !markdownDoc) return undefined;
+    const slice = findBlockSliceAtLineInDoc(markdownDoc, headingLine);
+    if (slice === null) return undefined;
+    return recommendTemplatesForBlock(profileBlockContents(slice), TEMPLATE_NAMES).recommended;
+  }, [headingLine, markdownDoc]);
+
+  const previewSource = useMemo(
+    () =>
+      block
+        ? {
+            block,
+            theme: activeTheme,
+            viewport: activeViewport,
+            basePath: '/',
+            mediaProvider,
+            customTemplates: doc?.customTemplates,
+          }
+        : undefined,
+    [activeTheme, activeViewport, block, doc?.customTemplates, mediaProvider],
+  );
+
+  const handleChange = useCallback(
+    (template: string) => {
+      if (headingLine === null) return;
+      // Null means the line is no longer that heading (the source moved on
+      // since the last parse); leave the document alone rather than guess.
+      const next = setSourceHeadingTemplate(markdownSource, headingLine, template);
+      if (next !== null && next !== markdownSource) setMarkdownSource(next);
+    },
+    [headingLine, markdownSource, setMarkdownSource],
+  );
+
+  // The trigger's label is a fixed width (see `.squisq-slide-block-type`), so
+  // a long type name is cut short there; the tooltip carries it whole.
+  const label = state.editable
+    ? templateLabel(state.template, doc?.customTemplates)
+    : (state.label ?? (state.template ? templateLabel(state.template) : '—'));
+
+  return (
+    <div
+      className={`squisq-preview-control squisq-slide-block-type${compact ? ' squisq-preview-control--compact' : ''}`}
+    >
+      <TemplatePicker
+        value={state.template}
+        valueLabel={label}
+        onChange={handleChange}
+        colorScheme={colorScheme}
+        recommended={recommended}
+        previewSource={previewSource}
+        disabled={!state.editable}
+        title={state.editable ? `Block type: ${label}. Change it for this slide.` : state.reason}
+      />
     </div>
   );
 }
@@ -2199,6 +2376,8 @@ export function PreviewToolbarControls({
             </label>
           </div>
         );
+      case 'blockType':
+        return <SlideBlockTypeControl key="blockType" compact={compact} />;
       case 'cover':
         return <CoverSlideMenuControl key="cover" compact={compact} />;
       case 'dashboardImage':

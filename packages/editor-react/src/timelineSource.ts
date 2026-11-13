@@ -160,6 +160,8 @@ function setTemplateParam(inner: string | null, key: string, value: string | nul
 
 /** A patch to a media clip; numeric values are seconds, `null` removes the key. */
 export interface MediaClipPatch {
+  /** Point the clip at another file. */
+  src?: string;
   startAt?: number | null;
   clipStart?: number | null;
   clipEnd?: number | null;
@@ -194,6 +196,7 @@ function setHtmlMediaClipInLine(original: string, patch: MediaClipPatch): string
   if (!opening) return null;
   let next = opening[0];
   const timingPrefix = `data-squisq-${tag}`;
+  if (patch.src !== undefined) next = setHtmlAttribute(next, 'src', patch.src);
   if (patch.startAt !== undefined) {
     next = setHtmlAttribute(
       next,
@@ -313,6 +316,7 @@ export function setMediaClipInSource(
       params[key] = value;
     }
   };
+  if (patch.src !== undefined) apply('src', patch.src);
   if (patch.startAt !== undefined)
     apply('startAt', patch.startAt == null ? null : formatSeconds(patch.startAt));
   if (patch.clipStart !== undefined)

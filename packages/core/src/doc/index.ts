@@ -18,8 +18,15 @@ export {
   getBlockDepth,
   getBlockBodyText,
   getPinnedBlockMeta,
+  applyVideoDurations,
 } from './markdownToDoc.js';
 export type { MarkdownToDocOptions } from './markdownToDoc.js';
+// A block's video sets the floor on its length — see videoTiming.ts.
+export {
+  blockVideoLength,
+  collectVideoDurationSources,
+  type VideoDurationLookup,
+} from './videoTiming.js';
 export { docToMarkdown } from './docToMarkdown.js';
 export {
   buildPreviewDoc,

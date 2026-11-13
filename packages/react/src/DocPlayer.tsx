@@ -53,6 +53,8 @@ import {
 import { MediaClipLayer } from './MediaClipLayer';
 import { useMediaClipDurations } from './hooks/useMediaClipDurations';
 import { applySurface, pipStyleVars } from '@bendyline/squisq/schemas';
+import { createMediaTimeMap, parseMediaCuts } from '@bendyline/squisq/mediaEdit';
+import { ProcessedAudioContext } from './hooks/MediaContext';
 import { BlockRenderer } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
 import { useAutoSurface } from './hooks/useAutoSurface';
@@ -880,7 +882,15 @@ function DocPlayerContent({
           // Honor the per-clip startAt offset: before it, hold at the
           // in-point; after, advance by (blockElapsed - startAt).
           const startAt = parseFloat(video.dataset.startAt || '0');
-          const targetTime = Math.min(clipStart + Math.max(0, blockElapsed - startAt), clipEnd);
+          // A cut clip's played time maps to source time through its cuts.
+          const played = Math.max(0, blockElapsed - startAt);
+          const cuts = parseMediaCuts(video.dataset.cuts);
+          const targetTime = Math.min(
+            cuts
+              ? createMediaTimeMap({ clipStart, cuts }).playedToSource(played)
+              : clipStart + played,
+            clipEnd,
+          );
 
           videoSeekPromises.push(selectVideoFrame(video, targetTime));
         });
@@ -1609,374 +1619,381 @@ function DocPlayerContent({
   }
 
   return (
-    <div
-      ref={containerRef}
-      data-player-id={playerId}
-      data-orientation={activeOrientation}
-      data-playback-state={isPlaying ? 'playing' : 'paused'}
-      data-swipe-phase={swipe.phase}
-      tabIndex={renderMode ? -1 : 0}
-      role="region"
-      aria-label="Document player"
-      onKeyDown={renderMode ? undefined : handleKeyDown}
-      className={`doc-player${renderMode ? ' doc-player--render-mode' : ''}${
-        swipeEnabled ? ' doc-player--swipe' : ''
-      }${swipe.phase === 'dragging' ? ' doc-player--grabbing' : ''}`}
-      onClick={handleContainerClick}
-      onPointerDown={swipe.onPointerDown}
-      style={{
-        ...pipVars,
-        position: 'relative',
-        width: '100%',
-        aspectRatio: `${activeViewport.width} / ${activeViewport.height}`,
-        margin: '0 auto',
-        overflow: 'hidden',
-        // Swipe uses the grab/grabbing cursor via CSS classes; let vertical page
-        // scroll through on touch while we own horizontal drags.
-        cursor: renderMode || swipeEnabled ? undefined : 'pointer',
-        touchAction: swipeEnabled ? 'pan-y' : undefined,
-      }}
-    >
-      {/* Hidden audio element */}
-      <audio ref={audioRef} preload="auto" muted={muted} />
+    <ProcessedAudioContext.Provider value={processedAudio}>
+      <div
+        ref={containerRef}
+        data-player-id={playerId}
+        data-orientation={activeOrientation}
+        data-playback-state={isPlaying ? 'playing' : 'paused'}
+        data-swipe-phase={swipe.phase}
+        tabIndex={renderMode ? -1 : 0}
+        role="region"
+        aria-label="Document player"
+        onKeyDown={renderMode ? undefined : handleKeyDown}
+        className={`doc-player${renderMode ? ' doc-player--render-mode' : ''}${
+          swipeEnabled ? ' doc-player--swipe' : ''
+        }${swipe.phase === 'dragging' ? ' doc-player--grabbing' : ''}`}
+        onClick={handleContainerClick}
+        onPointerDown={swipe.onPointerDown}
+        style={{
+          ...pipVars,
+          position: 'relative',
+          width: '100%',
+          aspectRatio: `${activeViewport.width} / ${activeViewport.height}`,
+          margin: '0 auto',
+          overflow: 'hidden',
+          // Swipe uses the grab/grabbing cursor via CSS classes; let vertical page
+          // scroll through on touch while we own horizontal drags.
+          cursor: renderMode || swipeEnabled ? undefined : 'pointer',
+          touchAction: swipeEnabled ? 'pan-y' : undefined,
+        }}
+      >
+        {/* Hidden audio element */}
+        <audio ref={audioRef} preload="auto" muted={muted} />
 
-      {/* Timed media clips (per-block + document-spanning audio/video). */}
-      <MediaClipLayer
-        schedule={mediaSchedule}
-        currentTime={currentTime}
-        isPlaying={isPlaying}
-        basePath={basePath}
-        renderMode={renderMode}
-        muted={muted}
-        presentation={appearance.videoPresentation}
-        pipSize={appearance.pipSize}
-        pipShape={appearance.pipShape}
-        pipPosition={appearance.pipPosition}
-        pipOrientation={activeOrientation}
-        pipFrameStyle={pipFrameStyle}
-      />
+        {/* Timed media clips (per-block + document-spanning audio/video). */}
+        <MediaClipLayer
+          schedule={mediaSchedule}
+          currentTime={currentTime}
+          isPlaying={isPlaying}
+          basePath={basePath}
+          renderMode={renderMode}
+          muted={muted}
+          presentation={appearance.videoPresentation}
+          pipSize={appearance.pipSize}
+          pipShape={appearance.pipShape}
+          pipPosition={appearance.pipPosition}
+          pipOrientation={activeOrientation}
+          pipFrameStyle={pipFrameStyle}
+        />
 
-      {/* Block viewport */}
-      <div className="doc-player__viewport">
-        {/* Cover block (shown at rest before playback) */}
-        {showCoverBlock && coverBlock && (
-          <div className="doc-player__block doc-player__block--cover">
-            <BlockRenderer
-              block={coverBlock}
-              blockTime={0}
-              basePath={basePath}
-              isEntering={false}
-              viewport={activeViewport}
-              muted={renderMode || muted}
-              // Export covers are held still: preroll capture seeks to time 0.
-              // An entrance paused there would hide the title for the entire
-              // cover (and in a single-frame cover-image export).
-              animationsEnabled={animationsEnabled && !renderMode}
-              theme={effectiveTheme}
-              tableContentRenderer={tableContentRenderer}
-              growTextToFit={isSlideshowMode}
-              videoEmbeds={renderMode ? 'placeholder' : 'poster'}
-              staticMedia={renderMode}
-            />
-          </div>
-        )}
+        {/* Block viewport */}
+        <div className="doc-player__viewport">
+          {/* Cover block (shown at rest before playback) */}
+          {showCoverBlock && coverBlock && (
+            <div className="doc-player__block doc-player__block--cover">
+              <BlockRenderer
+                block={coverBlock}
+                blockTime={0}
+                basePath={basePath}
+                isEntering={false}
+                viewport={activeViewport}
+                muted={renderMode || muted}
+                // Export covers are held still: preroll capture seeks to time 0.
+                // An entrance paused there would hide the title for the entire
+                // cover (and in a single-frame cover-image export).
+                animationsEnabled={animationsEnabled && !renderMode}
+                theme={effectiveTheme}
+                tableContentRenderer={tableContentRenderer}
+                growTextToFit={isSlideshowMode}
+                videoEmbeds={renderMode ? 'placeholder' : 'poster'}
+                staticMedia={renderMode}
+              />
+            </div>
+          )}
 
-        {/* Previous block (during transition) */}
-        {animationsEnabled && !showCoverBlock && previousBlock && isExiting && (
-          // Keyed by block id so each block is its own DOM subtree: React never
-          // reconciles one block's layers onto another's (templates reuse layer
-          // ids like `title`/`background`), which would otherwise reuse stale
-          // DOM / skip entrance animations mid-transition.
-          <div key={previousBlock.id} className="doc-player__block doc-player__block--previous">
-            <BlockRenderer
-              respectReducedMotion={!renderMode}
-              buildPlayback={buildsEnabled ? 'timed' : 'all'}
-              block={previousBlock}
-              // The exiting block keeps its own clock: its count-ups and
-              // keyframes must hold their final state through the crossfade
-              // instead of restarting on the incoming block's time.
-              blockTime={Math.max(0, currentTime - previousBlock.startTime)}
-              basePath={basePath}
-              isExiting={true}
-              transition={currentBlock?.transition}
-              viewport={activeViewport}
-              muted={renderMode || muted}
-              animationsEnabled={animationsEnabled}
-              theme={effectiveTheme}
-              tableContentRenderer={tableContentRenderer}
-              growTextToFit={isSlideshowMode}
-              // A slide on its way out shows a still; its player unmounted
-              // (and stopped) with the slide.
-              videoEmbeds={renderMode ? 'placeholder' : 'poster'}
-              staticMedia={renderMode}
-            />
-          </div>
-        )}
+          {/* Previous block (during transition) */}
+          {animationsEnabled && !showCoverBlock && previousBlock && isExiting && (
+            // Keyed by block id so each block is its own DOM subtree: React never
+            // reconciles one block's layers onto another's (templates reuse layer
+            // ids like `title`/`background`), which would otherwise reuse stale
+            // DOM / skip entrance animations mid-transition.
+            <div key={previousBlock.id} className="doc-player__block doc-player__block--previous">
+              <BlockRenderer
+                respectReducedMotion={!renderMode}
+                buildPlayback={buildsEnabled ? 'timed' : 'all'}
+                block={previousBlock}
+                // The exiting block keeps its own clock: its count-ups and
+                // keyframes must hold their final state through the crossfade
+                // instead of restarting on the incoming block's time.
+                blockTime={Math.max(0, currentTime - previousBlock.startTime)}
+                basePath={basePath}
+                isExiting={true}
+                transition={currentBlock?.transition}
+                viewport={activeViewport}
+                muted={renderMode || muted}
+                animationsEnabled={animationsEnabled}
+                theme={effectiveTheme}
+                tableContentRenderer={tableContentRenderer}
+                growTextToFit={isSlideshowMode}
+                // A slide on its way out shows a still; its player unmounted
+                // (and stopped) with the slide.
+                videoEmbeds={renderMode ? 'placeholder' : 'poster'}
+                staticMedia={renderMode}
+              />
+            </div>
+          )}
 
-        {/* Current block
+          {/* Current block
 
             Keep it mounted underneath the managed cover. Embedded videos need
             to exist when the user presses Play so Chromium can authorize their
             audible playback in that gesture. Previously the whole block was
             mounted only after the three-second cover grace period, leaving
             layout/supplemental videos stuck on their first frame. */}
-        {currentBlock && (
-          <div
-            key={currentBlock.id}
-            className={`doc-player__block doc-player__block--active${
-              swipe.phase !== 'idle' ? ` doc-player__block--${swipe.phase}` : ''
-            }`}
-            aria-hidden={showCoverBlock || undefined}
-            style={
-              showCoverBlock || swipe.phase !== 'idle'
-                ? {
-                    ...(swipe.phase !== 'idle'
-                      ? { transform: `translateX(${swipe.offsetPx}px)` }
-                      : {}),
-                    ...(showCoverBlock ? { opacity: 0, pointerEvents: 'none' } : {}),
-                  }
-                : undefined
-            }
-          >
-            <BlockRenderer
-              block={currentBlock}
-              respectReducedMotion={!renderMode}
-              buildPlayback={
-                !buildsEnabled ? 'all' : isSlideshowMode && !renderMode ? buildNav.cursor : 'timed'
+          {currentBlock && (
+            <div
+              key={currentBlock.id}
+              className={`doc-player__block doc-player__block--active${
+                swipe.phase !== 'idle' ? ` doc-player__block--${swipe.phase}` : ''
+              }`}
+              aria-hidden={showCoverBlock || undefined}
+              style={
+                showCoverBlock || swipe.phase !== 'idle'
+                  ? {
+                      ...(swipe.phase !== 'idle'
+                        ? { transform: `translateX(${swipe.offsetPx}px)` }
+                        : {}),
+                      ...(showCoverBlock ? { opacity: 0, pointerEvents: 'none' } : {}),
+                    }
+                  : undefined
               }
-              blockTime={blockTime}
-              basePath={basePath}
-              isEntering={animationsEnabled && isEntering}
-              viewport={activeViewport}
-              isPlaying={isPlaying}
-              muted={renderMode || muted}
-              animationsEnabled={animationsEnabled}
+            >
+              <BlockRenderer
+                block={currentBlock}
+                respectReducedMotion={!renderMode}
+                buildPlayback={
+                  !buildsEnabled
+                    ? 'all'
+                    : isSlideshowMode && !renderMode
+                      ? buildNav.cursor
+                      : 'timed'
+                }
+                blockTime={blockTime}
+                basePath={basePath}
+                isEntering={animationsEnabled && isEntering}
+                viewport={activeViewport}
+                isPlaying={isPlaying}
+                muted={renderMode || muted}
+                animationsEnabled={animationsEnabled}
+                theme={effectiveTheme}
+                tableContentRenderer={tableContentRenderer}
+                growTextToFit={isSlideshowMode}
+                // Only the current slide plays a hosted video; frame capture
+                // draws a still (a cross-origin player cannot be captured).
+                videoEmbeds={renderMode ? 'placeholder' : 'player'}
+                // A slideshow's clock is stepped by hand and never runs, so a
+                // clip on the current slide is the presenter's to play.
+                videoClips={isSlideshowMode && !renderMode ? 'player' : 'timed'}
+                staticMedia={renderMode}
+              />
+            </div>
+          )}
+
+          {/* Caption overlay -- shown during playback and in render mode when captions are enabled */}
+          {hasCaptions && (renderMode ? captionsEnabled : true) && (
+            <CaptionOverlay
+              captions={doc.captions}
+              currentTime={currentTime}
+              enabled={captionsEnabled && captionClockRunning}
+              // Standard captions scale with the frame like the social style
+              // does — a fixed 16px is a whisker on a 1080 basis (broadcast
+              // lower-thirds sit around 2.6% of height).
+              fontSize={Math.min(34, Math.max(16, Math.round(captionViewport.height * 0.026)))}
+              captionStyle={activeCaptionStyle}
+              captionPosition={captionPosition}
               theme={effectiveTheme}
-              tableContentRenderer={tableContentRenderer}
-              growTextToFit={isSlideshowMode}
-              // Only the current slide plays a hosted video; frame capture
-              // draws a still (a cross-origin player cannot be captured).
-              videoEmbeds={renderMode ? 'placeholder' : 'player'}
-              // A slideshow's clock is stepped by hand and never runs, so a
-              // clip on the current slide is the presenter's to play.
-              videoClips={isSlideshowMode && !renderMode ? 'player' : 'timed'}
-              staticMedia={renderMode}
+              viewport={captionViewport}
             />
-          </div>
-        )}
+          )}
 
-        {/* Caption overlay -- shown during playback and in render mode when captions are enabled */}
-        {hasCaptions && (renderMode ? captionsEnabled : true) && (
-          <CaptionOverlay
-            captions={doc.captions}
-            currentTime={currentTime}
-            enabled={captionsEnabled && captionClockRunning}
-            // Standard captions scale with the frame like the social style
-            // does — a fixed 16px is a whisker on a 1080 basis (broadcast
-            // lower-thirds sit around 2.6% of height).
-            fontSize={Math.min(34, Math.max(16, Math.round(captionViewport.height * 0.026)))}
-            captionStyle={activeCaptionStyle}
-            captionPosition={captionPosition}
-            theme={effectiveTheme}
-            viewport={captionViewport}
-          />
-        )}
-
-        {/* Debug overlay (when ?debug=true) */}
-        {isDebugMode && (
-          <div
-            className="doc-player__debug"
-            style={{
-              position: 'absolute',
-              top: '8px',
-              right: '8px',
-              padding: '8px 12px',
-              background: 'rgba(0, 0, 0, 0.85)',
-              borderRadius: '6px',
-              color: '#00ff00',
-              fontFamily: 'monospace',
-              fontSize: '11px',
-              lineHeight: '1.5',
-              zIndex: 200,
-              maxWidth: '280px',
-              pointerEvents: 'none',
-              textAlign: 'left',
-            }}
-          >
-            <div style={{ color: '#ffcc00', fontWeight: 'bold', marginBottom: '4px' }}>
-              DEBUG MODE
-            </div>
-            <div>
-              <span style={{ color: '#888' }}>template:</span>{' '}
-              <span style={{ color: '#ff6b6b' }}>
-                {(currentBlock as DocBlock | null)?.template ?? 'raw'}
-              </span>
-            </div>
-            <div>
-              <span style={{ color: '#888' }}>block:</span> {currentBlockIndex + 1}/
-              {expandedBlocks.length}{' '}
-              <span style={{ color: '#666' }}>({currentBlock?.id || 'none'})</span>
-            </div>
-            <div>
-              <span style={{ color: '#888' }}>time:</span> {currentTime.toFixed(2)}s /{' '}
-              {totalDuration.toFixed(1)}s{' '}
-              <span style={{ color: '#666' }}>
-                (progress: {(docProgress * 100).toFixed(1)}%, scriptDur: {doc.duration.toFixed(1)})
-              </span>
-            </div>
-            <div>
-              <span style={{ color: '#888' }}>blockTime:</span> {blockTime.toFixed(2)}s /{' '}
-              {(currentBlock?.duration || 0).toFixed(1)}s
-            </div>
-            <div>
-              <span style={{ color: '#888' }}>segment:</span> {currentSegment}/
-              {doc.audio.segments.length - 1}{' '}
-              <span style={{ color: '#666' }}>
-                ({doc.audio.segments[currentSegment]?.name || 'none'})
-              </span>
-            </div>
-            <div>
-              <span style={{ color: '#888' }}>viewport:</span>{' '}
-              {activeViewport.name || `${activeViewport.width}x${activeViewport.height}`}{' '}
-              <span style={{ color: '#666' }}>({activeOrientation})</span>
-            </div>
-            <div>
-              <span style={{ color: '#888' }}>playing:</span>{' '}
-              <span style={{ color: isPlaying ? '#4ade80' : '#f87171' }}>
-                {isPlaying ? 'yes' : 'no'}
-              </span>
-              {showCoverBlock && <span style={{ color: '#60a5fa' }}> (cover)</span>}
-            </div>
-            {hasCaptions &&
-              (() => {
-                const debugPhrase = getCaptionAtTime(doc.captions!, currentTime);
-                const debugEnabled = captionsEnabled && captionClockRunning;
-                return (
-                  <Fragment>
-                    <div>
-                      <span style={{ color: '#888' }}>captions:</span>{' '}
-                      {doc.captions?.phrases.length || 0} phrases{' '}
-                      <span style={{ color: captionsEnabled ? '#4ade80' : '#666' }}>
-                        ({captionsEnabled ? 'on' : 'off'})
-                      </span>
-                    </div>
-                    <div>
-                      <span style={{ color: '#888' }}>cc.enabled:</span>{' '}
-                      <span style={{ color: debugEnabled ? '#4ade80' : '#f87171' }}>
-                        {String(debugEnabled)}
-                      </span>{' '}
-                      <span style={{ color: '#666' }}>
-                        (playing={String(isPlaying)} t&gt;0={String(currentTime > 0)})
-                      </span>
-                    </div>
-                    <div>
-                      <span style={{ color: '#888' }}>cc.phrase:</span>{' '}
-                      <span style={{ color: debugPhrase ? '#4ade80' : '#f87171' }}>
-                        {debugPhrase ? `"${debugPhrase.text.slice(0, 30)}..."` : 'null'}
-                      </span>
-                    </div>
-                    {debugPhrase && (
+          {/* Debug overlay (when ?debug=true) */}
+          {isDebugMode && (
+            <div
+              className="doc-player__debug"
+              style={{
+                position: 'absolute',
+                top: '8px',
+                right: '8px',
+                padding: '8px 12px',
+                background: 'rgba(0, 0, 0, 0.85)',
+                borderRadius: '6px',
+                color: '#00ff00',
+                fontFamily: 'monospace',
+                fontSize: '11px',
+                lineHeight: '1.5',
+                zIndex: 200,
+                maxWidth: '280px',
+                pointerEvents: 'none',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ color: '#ffcc00', fontWeight: 'bold', marginBottom: '4px' }}>
+                DEBUG MODE
+              </div>
+              <div>
+                <span style={{ color: '#888' }}>template:</span>{' '}
+                <span style={{ color: '#ff6b6b' }}>
+                  {(currentBlock as DocBlock | null)?.template ?? 'raw'}
+                </span>
+              </div>
+              <div>
+                <span style={{ color: '#888' }}>block:</span> {currentBlockIndex + 1}/
+                {expandedBlocks.length}{' '}
+                <span style={{ color: '#666' }}>({currentBlock?.id || 'none'})</span>
+              </div>
+              <div>
+                <span style={{ color: '#888' }}>time:</span> {currentTime.toFixed(2)}s /{' '}
+                {totalDuration.toFixed(1)}s{' '}
+                <span style={{ color: '#666' }}>
+                  (progress: {(docProgress * 100).toFixed(1)}%, scriptDur: {doc.duration.toFixed(1)}
+                  )
+                </span>
+              </div>
+              <div>
+                <span style={{ color: '#888' }}>blockTime:</span> {blockTime.toFixed(2)}s /{' '}
+                {(currentBlock?.duration || 0).toFixed(1)}s
+              </div>
+              <div>
+                <span style={{ color: '#888' }}>segment:</span> {currentSegment}/
+                {doc.audio.segments.length - 1}{' '}
+                <span style={{ color: '#666' }}>
+                  ({doc.audio.segments[currentSegment]?.name || 'none'})
+                </span>
+              </div>
+              <div>
+                <span style={{ color: '#888' }}>viewport:</span>{' '}
+                {activeViewport.name || `${activeViewport.width}x${activeViewport.height}`}{' '}
+                <span style={{ color: '#666' }}>({activeOrientation})</span>
+              </div>
+              <div>
+                <span style={{ color: '#888' }}>playing:</span>{' '}
+                <span style={{ color: isPlaying ? '#4ade80' : '#f87171' }}>
+                  {isPlaying ? 'yes' : 'no'}
+                </span>
+                {showCoverBlock && <span style={{ color: '#60a5fa' }}> (cover)</span>}
+              </div>
+              {hasCaptions &&
+                (() => {
+                  const debugPhrase = getCaptionAtTime(doc.captions!, currentTime);
+                  const debugEnabled = captionsEnabled && captionClockRunning;
+                  return (
+                    <Fragment>
                       <div>
-                        <span style={{ color: '#888' }}>cc.range:</span>{' '}
-                        <span style={{ color: '#60a5fa' }}>
-                          {debugPhrase.startTime.toFixed(2)}-{debugPhrase.endTime.toFixed(2)}
+                        <span style={{ color: '#888' }}>captions:</span>{' '}
+                        {doc.captions?.phrases.length || 0} phrases{' '}
+                        <span style={{ color: captionsEnabled ? '#4ade80' : '#666' }}>
+                          ({captionsEnabled ? 'on' : 'off'})
                         </span>
                       </div>
-                    )}
-                  </Fragment>
-                );
-              })()}
+                      <div>
+                        <span style={{ color: '#888' }}>cc.enabled:</span>{' '}
+                        <span style={{ color: debugEnabled ? '#4ade80' : '#f87171' }}>
+                          {String(debugEnabled)}
+                        </span>{' '}
+                        <span style={{ color: '#666' }}>
+                          (playing={String(isPlaying)} t&gt;0={String(currentTime > 0)})
+                        </span>
+                      </div>
+                      <div>
+                        <span style={{ color: '#888' }}>cc.phrase:</span>{' '}
+                        <span style={{ color: debugPhrase ? '#4ade80' : '#f87171' }}>
+                          {debugPhrase ? `"${debugPhrase.text.slice(0, 30)}..."` : 'null'}
+                        </span>
+                      </div>
+                      {debugPhrase && (
+                        <div>
+                          <span style={{ color: '#888' }}>cc.range:</span>{' '}
+                          <span style={{ color: '#60a5fa' }}>
+                            {debugPhrase.startTime.toFixed(2)}-{debugPhrase.endTime.toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </Fragment>
+                  );
+                })()}
+            </div>
+          )}
+        </div>
+
+        {/* Audio unavailable overlay */}
+        {!renderMode && !isAvailable && unavailableMessage && (
+          <div
+            className="doc-player__unavailable"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexDirection: 'column',
+              gap: '16px',
+              background: 'rgba(0, 0, 0, 0.7)',
+              color: 'rgba(255, 255, 255, 0.9)',
+              fontSize: '14px',
+              zIndex: 50,
+            }}
+          >
+            <span style={{ fontSize: '32px' }}>&#x1F50A;</span>
+            <span>{unavailableMessage}</span>
           </div>
         )}
-      </div>
 
-      {/* Audio unavailable overlay */}
-      {!renderMode && !isAvailable && unavailableMessage && (
-        <div
-          className="doc-player__unavailable"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'column',
-            gap: '16px',
-            background: 'rgba(0, 0, 0, 0.7)',
-            color: 'rgba(255, 255, 255, 0.9)',
-            fontSize: '14px',
-            zIndex: 50,
-          }}
-        >
-          <span style={{ fontSize: '32px' }}>&#x1F50A;</span>
-          <span>{unavailableMessage}</span>
-        </div>
-      )}
-
-      {/* Full overlay controls (default video layout) */}
-      {!renderMode && !isSlideshowMode && showControls && (
-        <DocControlsOverlay
-          state={playbackState}
-          actions={playbackActions}
-          blockMarkers={blockMarkers}
-          expandedBlocks={expandedBlocks}
-          getBlockTitle={getBlockTitle}
-        />
-      )}
-
-      {/* Scrubber-only mode (for sidebar/bottom layouts where other controls are external) */}
-      {!renderMode && !isSlideshowMode && !showControls && showScrubber && (
-        <div
-          className="doc-player__scrubber"
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: '12px 16px 8px',
-            background: 'linear-gradient(transparent, rgba(0,0,0,0.6))',
-            display: 'flex',
-            alignItems: 'center',
-            zIndex: 100,
-          }}
-        >
-          <DocProgressBar
+        {/* Full overlay controls (default video layout) */}
+        {!renderMode && !isSlideshowMode && showControls && (
+          <DocControlsOverlay
             state={playbackState}
             actions={playbackActions}
             blockMarkers={blockMarkers}
             expandedBlocks={expandedBlocks}
             getBlockTitle={getBlockTitle}
           />
-        </div>
-      )}
+        )}
 
-      {/* Slideshow controls (prev / counter / next) */}
-      {!renderMode && isSlideshowMode && showControls && (
-        <DocControlsSlideshow
-          state={playbackState}
-          slideNav={stepNavActions}
-          slides={slideshowPickerItems}
-          pickerOpen={isSlideshowPickerOpen}
-          onPickerOpenChange={setIsSlideshowPickerOpen}
-        />
-      )}
+        {/* Scrubber-only mode (for sidebar/bottom layouts where other controls are external) */}
+        {!renderMode && !isSlideshowMode && !showControls && showScrubber && (
+          <div
+            className="doc-player__scrubber"
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              padding: '12px 16px 8px',
+              background: 'linear-gradient(transparent, rgba(0,0,0,0.6))',
+              display: 'flex',
+              alignItems: 'center',
+              zIndex: 100,
+            }}
+          >
+            <DocProgressBar
+              state={playbackState}
+              actions={playbackActions}
+              blockMarkers={blockMarkers}
+              expandedBlocks={expandedBlocks}
+              getBlockTitle={getBlockTitle}
+            />
+          </div>
+        )}
 
-      {/* Tap feedback animation -- shows play/pause icon briefly on tap (video mode only) */}
-      {!isSlideshowMode && tapFeedback && (
-        <div className="doc-player__tap-feedback" key={tapFeedback}>
-          <svg viewBox="0 0 24 24" fill="white" width="48" height="48">
-            {tapFeedback === 'pause' ? (
-              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-            ) : (
-              <path d="M8 5v14l11-7z" />
-            )}
-          </svg>
-        </div>
-      )}
-    </div>
+        {/* Slideshow controls (prev / counter / next) */}
+        {!renderMode && isSlideshowMode && showControls && (
+          <DocControlsSlideshow
+            state={playbackState}
+            slideNav={stepNavActions}
+            slides={slideshowPickerItems}
+            pickerOpen={isSlideshowPickerOpen}
+            onPickerOpenChange={setIsSlideshowPickerOpen}
+          />
+        )}
+
+        {/* Tap feedback animation -- shows play/pause icon briefly on tap (video mode only) */}
+        {!isSlideshowMode && tapFeedback && (
+          <div className="doc-player__tap-feedback" key={tapFeedback}>
+            <svg viewBox="0 0 24 24" fill="white" width="48" height="48">
+              {tapFeedback === 'pause' ? (
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+              ) : (
+                <path d="M8 5v14l11-7z" />
+              )}
+            </svg>
+          </div>
+        )}
+      </div>
+    </ProcessedAudioContext.Provider>
   );
 }
 

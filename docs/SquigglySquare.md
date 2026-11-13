@@ -645,7 +645,8 @@ values are dropped (the raw string is preserved for round-tripping) and
 reported as an `invalid-attribute` diagnostic.
 
 When not pinned, `duration` defaults to the block's reading time (min 3s;
-blocks with no body text get 5s) and `startTime` defaults to the running sum
+blocks with no body text get 5s), or the played length of the longest video
+the block plays when that is longer, and `startTime` defaults to the running sum
 of prior durations. A pinned `startTime` keeps its value while the running
 cursor still advances past it, so following blocks sequence after it. The
 editor's **Timeline** view edits these by dragging block edges — see the
