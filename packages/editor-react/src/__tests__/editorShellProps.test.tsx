@@ -601,6 +601,46 @@ describe('<EditorShell> hostMode', () => {
   });
 });
 
+describe('<EditorShell> toolbarPosition', () => {
+  const childClasses = (shell: HTMLElement) =>
+    Array.from(shell.children)
+      .map((child) => child.className)
+      .filter((name) => /squisq-editor-(header|content)|squisq-status-bar/.test(name));
+
+  it('puts the toolbar above the content by default', () => {
+    const { container } = render(<EditorShell initialMarkdown="Draft" hostMode="chat" />);
+
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.dataset.toolbarPosition).toBeUndefined();
+    const order = childClasses(shell);
+    expect(order[0]).toMatch(/squisq-editor-header/);
+    expect(order[1]).toMatch(/squisq-editor-content/);
+  });
+
+  it('renders a bottom toolbar after the content, before the status bar, in DOM order', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="Draft"
+        hostMode="chat"
+        toolbarPosition="bottom"
+        toolbarSlotRight={<button type="button">Send</button>}
+      />,
+    );
+
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.dataset.toolbarPosition).toBe('bottom');
+    const order = childClasses(shell);
+    expect(order[0]).toMatch(/squisq-editor-content/);
+    expect(order[1]).toMatch(/squisq-editor-header/);
+    if (order[2] !== undefined) expect(order[2]).toMatch(/squisq-status-bar/);
+
+    // Focus moves from the draft to the keys in the order they are seen.
+    const editor = within(shell).getByTestId('wysiwyg-editor-stub');
+    const send = within(shell).getByRole('button', { name: 'Send' });
+    expect(editor.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
 describe('<EditorShell> Files badge', () => {
   it('opens the recorder dialog from the Attachments panel Record button', async () => {
     render(

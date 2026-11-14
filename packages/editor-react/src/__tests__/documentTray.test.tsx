@@ -90,6 +90,46 @@ describe('document tray', () => {
     expect(live.ctx!.markdownSource).toBe(source);
   });
 
+  it('keeps a media-only clip expanded when a source change rewrites its recipe', async () => {
+    // A media-only Write view ends with the empty trailing paragraph the
+    // source never has. Applying a recipe from the media-edit dialog goes
+    // through the source; the clip must keep its tray identity, not remount
+    // collapsed.
+    const source = `${AUDIO}\n`;
+    const live: { ctx: EditorContextValue | null } = { ctx: null };
+    function Probe() {
+      live.ctx = useEditorContext();
+      return null;
+    }
+    render(
+      <EditorProvider initialMarkdown={source} initialView="wysiwyg">
+        <WysiwygEditor />
+        <Probe />
+      </EditorProvider>,
+    );
+    const pill = await screen.findByRole('button', { name: 'Audio: narration.mp3' });
+    fireEvent.click(pill);
+    expect(pill.getAttribute('aria-expanded')).toBe('true');
+    const editor = live.ctx!.tiptapEditor!;
+    const [clip] = items(editor);
+    expect(editor.state.doc.lastChild?.type.name).toBe('paragraph');
+
+    act(() => {
+      live.ctx!.setMarkdownSource(
+        source.replace('<audio ', '<audio data-squisq-audio-fx="denoise" '),
+      );
+    });
+    await waitFor(() => expect(items(editor)[0]?.node.attrs.editFx).toBe('denoise'));
+    expect(items(editor)[0].id).toBe(clip.id);
+    expect(
+      screen.getByRole('button', { name: 'Audio: narration.mp3' }).getAttribute('aria-expanded'),
+    ).toBe('true');
+    // The place to type is still there, and still left out of the source.
+    expect(editor.state.doc.lastChild?.type.name).toBe('paragraph');
+    expect(live.ctx!.markdownSource).toContain('data-squisq-audio-fx="denoise"');
+    expect(live.ctx!.markdownSource.trimEnd().endsWith('</audio>')).toBe(true);
+  });
+
   it('collapses opening media, mounts only one expanded player, and never writes Markdown on toggle', async () => {
     const { editor, container, onUpdate } = await mount(
       `${AUDIO}\n\n# Title\n\n${VIDEO}\n\nBody.\n\n${AUDIO}\n`,

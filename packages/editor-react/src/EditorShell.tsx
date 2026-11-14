@@ -130,7 +130,7 @@ import {
 } from '@bendyline/squisq-video-react/media-edit';
 import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
-import type { EditorHostMode } from './editorHostMode';
+import type { EditorHostMode, EditorToolbarPosition } from './editorHostMode';
 import type { FindRequest } from './find/findModel';
 
 export type { EditorColorScheme } from './EditorContext';
@@ -287,6 +287,14 @@ export interface EditorShellProps {
   toolbarSlotAfterActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
   toolbarSlotRight?: ReactNode;
+  /**
+   * Where the toolbar sits relative to the editing surface (default: `'top'`).
+   * `'bottom'` renders it after the content, above the status bar, the way a
+   * chat composer carries its attach and send keys under the draft. The
+   * toolbar follows the content in DOM order too, so keyboard focus moves
+   * from the draft to the keys in the order they are seen.
+   */
+  toolbarPosition?: EditorToolbarPosition;
   /** Optional designer opened beside Summarize in the preview toolbar. */
   summarizationDesigner?: (onClose: () => void) => ReactNode;
   /** Host-supplied content rendered at the right edge of the bottom status bar. */
@@ -769,6 +777,7 @@ export function EditorShell({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  toolbarPosition = 'top',
   summarizationDesigner,
   statusBarSlotRight,
   sidePanelSlot,
@@ -947,6 +956,7 @@ export function EditorShell({
                 toolbarSlotLeft={toolbarSlotLeft}
                 toolbarSlotAfterActions={toolbarSlotAfterActions}
                 toolbarSlotRight={toolbarSlotRight}
+                toolbarPosition={toolbarPosition}
                 summarizationDesigner={summarizationDesigner}
                 statusBarSlotRight={statusBarSlotRight}
                 sidePanelSlot={sidePanelSlot}
@@ -1010,6 +1020,7 @@ interface EditorShellInnerProps {
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
+  toolbarPosition: EditorToolbarPosition;
   /** Optional designer opened beside Summarize in the preview toolbar. */
   summarizationDesigner?: (onClose: () => void) => ReactNode;
   statusBarSlotRight?: ReactNode;
@@ -1113,6 +1124,7 @@ function EditorShellInner({
   toolbarSlotLeft,
   toolbarSlotAfterActions,
   toolbarSlotRight,
+  toolbarPosition,
   summarizationDesigner,
   statusBarSlotRight,
   sidePanelSlot,
@@ -1568,6 +1580,45 @@ function EditorShellInner({
 
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;
 
+  // In image mode the full markdown/code Toolbar is replaced with a minimal
+  // slot bar: view tabs, formatting, and preview controls don't apply to a
+  // binary asset.
+  const header = isImageMode ? (
+    (toolbarSlotLeft || toolbarSlotRight) && (
+      <div className="squisq-editor-header squisq-editor-header--image">
+        {toolbarSlotLeft}
+        <div style={{ flex: 1 }} />
+        {toolbarSlotRight}
+      </div>
+    )
+  ) : (
+    <div className="squisq-editor-header">
+      <Toolbar
+        showFiles={showFiles}
+        fileCount={mediaCount}
+        onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
+        slotLeft={toolbarSlotLeft}
+        slotAfterTabs={
+          !isCodeMode &&
+          isPreview && (
+            <UseModeToolbarControls
+              allowPrint={allowPrint}
+              summarizationDesigner={summarizationDesigner}
+            />
+          )
+        }
+        slotAfterActions={toolbarSlotAfterActions}
+        slotRight={toolbarSlotRight}
+        showPlayTab={showPlayTab}
+        showFormattingControls={showFormattingControls}
+        showInsertControls={showInsertControls}
+        hostMode={hostMode}
+        readOnly={readOnly}
+        findShortcut={findShortcut}
+      />
+    </div>
+  );
+
   const shell = (
     <div
       ref={shellRef}
@@ -1579,6 +1630,7 @@ function EditorShellInner({
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={colorScheme}
       data-host-mode={hostMode}
+      data-toolbar-position={toolbarPosition === 'bottom' ? 'bottom' : undefined}
       data-link-handler={onLinkClick ? 'true' : undefined}
       data-full-width={fullWidth ? 'true' : undefined}
       data-thin-margins={thinMargins ? 'true' : undefined}
@@ -1621,44 +1673,7 @@ function EditorShellInner({
             allowPresentationWindow={allowPresentationWindow}
             allowPresentationFullscreen={allowPresentationFullscreen}
           >
-            {/* Header. In image mode the full markdown/code Toolbar is replaced
-            with a minimal slot bar — view tabs, formatting, and preview
-            controls don't apply to a binary asset. */}
-            {isImageMode ? (
-              (toolbarSlotLeft || toolbarSlotRight) && (
-                <div className="squisq-editor-header squisq-editor-header--image">
-                  {toolbarSlotLeft}
-                  <div style={{ flex: 1 }} />
-                  {toolbarSlotRight}
-                </div>
-              )
-            ) : (
-              <div className="squisq-editor-header">
-                <Toolbar
-                  showFiles={showFiles}
-                  fileCount={mediaCount}
-                  onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
-                  slotLeft={toolbarSlotLeft}
-                  slotAfterTabs={
-                    !isCodeMode &&
-                    isPreview && (
-                      <UseModeToolbarControls
-                        allowPrint={allowPrint}
-                        summarizationDesigner={summarizationDesigner}
-                      />
-                    )
-                  }
-                  slotAfterActions={toolbarSlotAfterActions}
-                  slotRight={toolbarSlotRight}
-                  showPlayTab={showPlayTab}
-                  showFormattingControls={showFormattingControls}
-                  showInsertControls={showInsertControls}
-                  hostMode={hostMode}
-                  readOnly={readOnly}
-                  findShortcut={findShortcut}
-                />
-              </div>
-            )}
+            {toolbarPosition === 'top' && header}
 
             {/* Main content area */}
             <div
@@ -1919,6 +1934,10 @@ function EditorShellInner({
                 basePath={basePath}
               />
             )}
+
+            {/* A bottom toolbar sits under the editing surface (and the
+            timeline, when shown) but above the status bar. */}
+            {toolbarPosition === 'bottom' && header}
 
             {/* Status bar — word / char / line / block counts. Host can
             suppress via `showStatusBar={false}` for embedded chat-style

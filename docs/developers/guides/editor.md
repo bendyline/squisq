@@ -352,8 +352,9 @@ measures that (for example from `visualViewport`), publish it on the root as
 
 Three toolbar slots (`toolbarSlotLeft`, `toolbarSlotAfterActions`, `toolbarSlotRight`),
 `statusBarSlotRight`, and `sidePanelSlot` (a panel docked beside the editor that reflows it) all
-render inside the editor's context, so your components there can call `useEditorContext()`. Other
-host props: `findMode`, `onFindModeChange`, `findRequest`, and `findShortcut` for search;
+render inside the editor's context, so your components there can call `useEditorContext()`.
+`toolbarPosition="bottom"` moves the toolbar under the content, where a chat composer keeps its
+send key; it follows the content in tab order too. Other host props: `findMode`, `onFindModeChange`, `findRequest`, and `findShortcut` for search;
 `fenceRenderers` for your own code-fence widgets; `reviewProviders` for review engines (see the
 [review guide](../../review.md)); `codeContext` for notes in the Source view; and
 `saveCoverImageOutput` and `saveDashboardImageOutput` to route image exports through your own save
