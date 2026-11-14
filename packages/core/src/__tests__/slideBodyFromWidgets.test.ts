@@ -82,6 +82,27 @@ describe('a drawing or layout slide', () => {
   });
 });
 
+describe('footnotes on a slide', () => {
+  const DOC =
+    '# Harbor\n\n## Sources\n\nThe pier was rebuilt in 2019.[^city] Ferries carry 1.2 million riders.\n\n' +
+    '[^city]: City records, 2019 capital budget.\n';
+
+  it('draws neither the marker nor the definition, which PPTX puts in the notes', () => {
+    const nodes = parseMarkdown(DOC).children as MarkdownBlockNode[];
+    const html = renderMarkdownBlocksHtml(nodes);
+    expect(html).not.toContain('[^');
+    expect(html).not.toContain('City records');
+    expect(html).toContain('The pier was rebuilt in 2019. Ferries carry 1.2 million riders.');
+  });
+
+  it('leaves the slide its prose', () => {
+    const text = slideText(layersOf(DOC, 'Sources'));
+    expect(text).toContain('The pier was rebuilt in 2019. Ferries carry 1.2 million riders.');
+    expect(text).not.toContain('[^city]');
+    expect(text).not.toContain('City records');
+  });
+});
+
 describe('a task list on a slide', () => {
   it('shows a box for each item instead of "[ ]" after a bullet', () => {
     const list = parseMarkdown('- [ ] Book the venue\n- [x] Send invitations')

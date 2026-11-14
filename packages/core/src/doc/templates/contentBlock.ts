@@ -31,8 +31,10 @@ function bodyNodes(context: TemplateContext): MarkdownBlockNode[] {
     // already materialized as visual layers (a diagram, a player, the picture
     // itself). Repeating them as prose makes the loss-averse default noisy
     // without preserving any additional meaning — a pasted picture's alt text
-    // is just its generated file name.
+    // is just its generated file name. A footnote's definition belongs in the
+    // speaker notes, where the PPTX export puts it, not in the slide's text.
     (node) =>
+      node.type !== 'footnoteDefinition' &&
       !isMaterializedMediaNode(node) &&
       !isPictureParagraph(node) &&
       !(summary && (node.type === 'table' || node.type === 'code')),

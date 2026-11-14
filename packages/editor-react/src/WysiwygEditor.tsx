@@ -103,6 +103,7 @@ import { ProofingExtension } from './proofing/ProofingExtension';
 import { ReviewExtension } from './review/ReviewExtension';
 import { DictationExtension } from './speech/DictationExtension';
 import { TrailingParagraphExtension, withoutTrailingParagraph } from './trailingParagraph';
+import { FootnoteSyntaxExtension } from './footnotes/FootnoteSyntaxExtension';
 import { syncAccessoryFileLinkPlaceholders } from './accessoryFileLinks';
 import { replaceDocumentMinimal } from './wysiwygMinimalSync';
 
@@ -505,6 +506,8 @@ export function WysiwygEditor({
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
       WikiLink.configure({ getSupport: () => wikiLinksRef.current }),
+      // `[^note]` and `[^note]: …` read as footnotes; the Markdown is unchanged.
+      FootnoteSyntaxExtension,
       FindHighlightExtension,
       ProofingExtension,
       ReviewExtension,
