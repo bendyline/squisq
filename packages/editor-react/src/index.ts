@@ -20,7 +20,7 @@
 // Shell (top-level component)
 export { EditorShell } from './EditorShell.js';
 export type { EditorShellProps, EditorColorScheme } from './EditorShell.js';
-export type { EditorHostMode } from './editorHostMode.js';
+export type { EditorHostMode, EditorToolbarPosition } from './editorHostMode.js';
 export type { FindOptions, FindRequest } from './find/findModel.js';
 
 // Code-context sections (host-supplied markdown injected into the code surface)

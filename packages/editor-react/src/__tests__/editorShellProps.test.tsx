@@ -583,6 +583,29 @@ describe('<EditorShell> hostMode', () => {
     expect(within(shell).getByRole('button', { name: 'Send' })).toBeTruthy();
   });
 
+  it('lets a document host hide the view tabs and stay in its initial view', () => {
+    const { container } = render(
+      <EditorShell initialMarkdown="Brief" initialView="wysiwyg" showViewTabs={false} />,
+    );
+
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.dataset.hostMode).toBe('document');
+    expect(within(shell).queryByRole('tablist', { name: 'Editor view' })).toBeNull();
+    expect(within(shell).queryByRole('tab', { name: /Source/ })).toBeNull();
+    expect(within(shell).getByRole('button', { name: /^Bold/ })).toBeTruthy();
+    expect(within(shell).getByRole('button', { name: 'Insert' })).toBeTruthy();
+
+    // With no tab to press, the view shortcut has nowhere to go.
+    fireEvent.keyDown(within(shell).getByTestId('wysiwyg-editor-stub'), {
+      key: '@',
+      code: 'Digit2',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    expect(within(shell).getByTestId('wysiwyg-editor-stub')).toBeTruthy();
+    expect(within(shell).queryByTestId('raw-editor-stub')).toBeNull();
+  });
+
   it('allows chat hosts to opt back into formatting controls', () => {
     const { container } = render(
       <EditorShell
@@ -598,6 +621,46 @@ describe('<EditorShell> hostMode', () => {
     expect(within(shell).getByRole('button', { name: 'Insert' })).toBeTruthy();
     expect(within(shell).getByRole('toolbar', { name: 'Formatting toolbar' })).toBeTruthy();
     expect(within(shell).getByRole('button', { name: 'Send' })).toBeTruthy();
+  });
+});
+
+describe('<EditorShell> toolbarPosition', () => {
+  const childClasses = (shell: HTMLElement) =>
+    Array.from(shell.children)
+      .map((child) => child.className)
+      .filter((name) => /squisq-editor-(header|content)|squisq-status-bar/.test(name));
+
+  it('puts the toolbar above the content by default', () => {
+    const { container } = render(<EditorShell initialMarkdown="Draft" hostMode="chat" />);
+
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.dataset.toolbarPosition).toBeUndefined();
+    const order = childClasses(shell);
+    expect(order[0]).toMatch(/squisq-editor-header/);
+    expect(order[1]).toMatch(/squisq-editor-content/);
+  });
+
+  it('renders a bottom toolbar after the content, before the status bar, in DOM order', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="Draft"
+        hostMode="chat"
+        toolbarPosition="bottom"
+        toolbarSlotRight={<button type="button">Send</button>}
+      />,
+    );
+
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.dataset.toolbarPosition).toBe('bottom');
+    const order = childClasses(shell);
+    expect(order[0]).toMatch(/squisq-editor-content/);
+    expect(order[1]).toMatch(/squisq-editor-header/);
+    if (order[2] !== undefined) expect(order[2]).toMatch(/squisq-status-bar/);
+
+    // Focus moves from the draft to the keys in the order they are seen.
+    const editor = within(shell).getByTestId('wysiwyg-editor-stub');
+    const send = within(shell).getByRole('button', { name: 'Send' });
+    expect(editor.compareDocumentPosition(send) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 

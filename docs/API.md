@@ -3422,6 +3422,7 @@ interface EditorShellProps {
   onNavigationSheetChange?: (panel: NavigationSheetPanel | null) => void;
   showStatusBar?: boolean; // default true
   showPlayTab?: boolean; // default true
+  showViewTabs?: boolean; // default true; false keeps the editor in initialView
   blockTags?: boolean; // default true
   blockTagVisibility?: BlockTagVisibility; // 'none' | 'active' | 'always'; overrides blockTags
   imageDisplayMode?: ImageDisplayMode; // 'inline' (default) | 'thumbnail'
@@ -3459,6 +3460,7 @@ interface EditorShellProps {
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
+  toolbarPosition?: 'top' | 'bottom'; // default 'top'; 'bottom' puts the toolbar under the content
   placeholder?: string;
   submitOnEnter?: () => void;
 }
