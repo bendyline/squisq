@@ -122,6 +122,11 @@ export interface ToolbarProps {
    */
   showPlayTab?: boolean;
   /**
+   * Whether to render the view tabs and their mode menus at all. Defaults to
+   * true. See `EditorShellProps.showViewTabs`.
+   */
+  showViewTabs?: boolean;
+  /**
    * Whether to render Squisq's built-in text, block, and contextual
    * formatting controls. The toolbar, Insert menu, view tabs, and host slots
    * remain mounted when false. Defaults to true.
@@ -221,6 +226,7 @@ export function Toolbar({
   slotAfterActions,
   slotRight,
   showPlayTab = true,
+  showViewTabs = true,
   showFormattingControls = true,
   showInsertControls = true,
   hostMode = 'document',
@@ -1979,7 +1985,7 @@ export function Toolbar({
       />
       {/* Left slot — before view tabs */}
       {!findMode && slotLeft}
-      <EditorViewTabs showPlayTab={showPlayTab} hostMode={hostMode} />
+      {showViewTabs && <EditorViewTabs showPlayTab={showPlayTab} hostMode={hostMode} />}
       {/* After-tabs slot — left side, before formatting or preview controls. */}
       {findMode ? (
         <FindToolbar

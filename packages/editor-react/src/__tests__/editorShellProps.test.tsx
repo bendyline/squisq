@@ -583,6 +583,29 @@ describe('<EditorShell> hostMode', () => {
     expect(within(shell).getByRole('button', { name: 'Send' })).toBeTruthy();
   });
 
+  it('lets a document host hide the view tabs and stay in its initial view', () => {
+    const { container } = render(
+      <EditorShell initialMarkdown="Brief" initialView="wysiwyg" showViewTabs={false} />,
+    );
+
+    const shell = container.querySelector<HTMLElement>('.squisq-editor-shell')!;
+    expect(shell.dataset.hostMode).toBe('document');
+    expect(within(shell).queryByRole('tablist', { name: 'Editor view' })).toBeNull();
+    expect(within(shell).queryByRole('tab', { name: /Source/ })).toBeNull();
+    expect(within(shell).getByRole('button', { name: /^Bold/ })).toBeTruthy();
+    expect(within(shell).getByRole('button', { name: 'Insert' })).toBeTruthy();
+
+    // With no tab to press, the view shortcut has nowhere to go.
+    fireEvent.keyDown(within(shell).getByTestId('wysiwyg-editor-stub'), {
+      key: '@',
+      code: 'Digit2',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    expect(within(shell).getByTestId('wysiwyg-editor-stub')).toBeTruthy();
+    expect(within(shell).queryByTestId('raw-editor-stub')).toBeNull();
+  });
+
   it('allows chat hosts to opt back into formatting controls', () => {
     const { container } = render(
       <EditorShell

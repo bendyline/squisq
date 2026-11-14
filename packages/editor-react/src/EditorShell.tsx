@@ -330,6 +330,15 @@ export interface EditorShellProps {
    */
   showPlayTab?: boolean;
   /**
+   * Whether to show the view tabs (Write, Source, Use) and their mode menus.
+   * Defaults to true. When false the editor stays in `initialView` — the
+   * Ctrl/Cmd+Shift+1/2/3 view shortcuts act through the tabs, so they do
+   * nothing either — while the formatting and Insert controls remain. Use it
+   * for a small field inside a form, where switching views is not a choice
+   * the person should face. `hostMode="chat"` already hides the tabs.
+   */
+  showViewTabs?: boolean;
+  /**
    * Whether Use mode may open its audience view in a separate browser window.
    * Defaults to true. Disable this in embedded hosts that block popups.
    */
@@ -783,6 +792,7 @@ export function EditorShell({
   sidePanelSlot,
   reviewProviders,
   showPlayTab = true,
+  showViewTabs = true,
   allowPresentationWindow = true,
   allowPresentationFullscreen = true,
   allowPrint = true,
@@ -961,6 +971,7 @@ export function EditorShell({
                 statusBarSlotRight={statusBarSlotRight}
                 sidePanelSlot={sidePanelSlot}
                 showPlayTab={showPlayTab}
+                showViewTabs={showViewTabs}
                 hostMode={hostMode}
                 allowPresentationWindow={allowPresentationWindow}
                 allowPresentationFullscreen={allowPresentationFullscreen}
@@ -1026,6 +1037,7 @@ interface EditorShellInnerProps {
   statusBarSlotRight?: ReactNode;
   sidePanelSlot?: ReactNode;
   showPlayTab: boolean;
+  showViewTabs: boolean;
   hostMode: EditorHostMode;
   allowPresentationWindow: boolean;
   allowPresentationFullscreen: boolean;
@@ -1129,6 +1141,7 @@ function EditorShellInner({
   statusBarSlotRight,
   sidePanelSlot,
   showPlayTab,
+  showViewTabs,
   hostMode,
   allowPresentationWindow,
   allowPresentationFullscreen,
@@ -1610,6 +1623,7 @@ function EditorShellInner({
         slotAfterActions={toolbarSlotAfterActions}
         slotRight={toolbarSlotRight}
         showPlayTab={showPlayTab}
+        showViewTabs={showViewTabs}
         showFormattingControls={showFormattingControls}
         showInsertControls={showInsertControls}
         hostMode={hostMode}
