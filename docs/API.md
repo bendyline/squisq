@@ -3459,6 +3459,7 @@ interface EditorShellProps {
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
+  toolbarPosition?: 'top' | 'bottom'; // default 'top'; 'bottom' puts the toolbar under the content
   placeholder?: string;
   submitOnEnter?: () => void;
 }

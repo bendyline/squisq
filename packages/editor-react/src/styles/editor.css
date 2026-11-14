@@ -50,6 +50,12 @@
   flex-shrink: 0;
 }
 
+/* A bottom toolbar keeps its seam on the side that faces the content. */
+.squisq-editor-shell[data-toolbar-position='bottom'] > .squisq-editor-header {
+  border-bottom: 0;
+  border-top: 1px solid var(--squisq-border-subtle);
+}
+
 .squisq-editor-header--image {
   display: flex;
   align-items: center;
