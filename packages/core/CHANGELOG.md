@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.13.17](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.16...@bendyline/squisq@2.13.17) (2026-11-15)
+
+### Bug Fixes
+
+* Footnote work ([#126](https://github.com/bendyline/squisq/issues/126)) ([7f9f4b5](https://github.com/bendyline/squisq/commit/7f9f4b5d37d30831de95c4f34e043b1b694c46a2))
+
 ## @bendyline/squisq [2.13.16](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.15...@bendyline/squisq@2.13.16) (2026-11-13)
 
 ### Bug Fixes

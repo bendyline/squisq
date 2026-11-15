@@ -1,3 +1,12 @@
+## @bendyline/squisq-video-react [2.5.30](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.5.29...@bendyline/squisq-video-react@2.5.30) (2026-11-15)
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.17
+* **@bendyline/squisq-video:** upgraded to 2.4.23
+* **@bendyline/squisq-react:** upgraded to 2.12.29
+
 ## @bendyline/squisq-video-react [2.5.29](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.5.28...@bendyline/squisq-video-react@2.5.29) (2026-11-13)
 
 ### Bug Fixes
