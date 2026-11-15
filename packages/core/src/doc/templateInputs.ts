@@ -317,8 +317,11 @@ function renderInlineHtml(nodes: MarkdownInlineNode[]): string {
           return escapeInlineHtml(node.alt ?? '');
         case 'inlineMath':
           return escapeInlineHtml(`$${node.value}$`);
+        // A slide shows no footnote marker: the footnote goes to the speaker
+        // notes (PPTX export), and `[^note]` printed as text told the
+        // audience nothing.
         case 'footnoteReference':
-          return escapeInlineHtml(`[^${node.label ?? node.identifier}]`);
+          return '';
         case 'linkReference':
         case 'textDirective':
           return renderInlineHtml(node.children);
@@ -452,6 +455,10 @@ export function renderMarkdownBlocksHtml(
       case 'math':
         return `<pre><code>${escapeInlineHtml(node.value)}</code></pre>`;
       case 'definition':
+        return '';
+      // Footnotes belong in the presenter's notes, not on the slide, as in
+      // the PPTX export; drawn here, the definition read as stray body text.
+      case 'footnoteDefinition':
         return '';
       default: {
         const text = extractPlainText(node).trim();

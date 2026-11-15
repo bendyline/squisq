@@ -1,0 +1,38 @@
+/* Footnotes in the Write view (FootnoteSyntaxExtension.ts). The Markdown is
+   left exactly as written; these rules only make it read as a footnote. */
+
+/* `[^note]` in the prose: a small raised marker. */
+.squisq-footnote-ref {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 0;
+  padding: 0 0.2em;
+  border-radius: 3px;
+  color: var(--squisq-accent);
+  background: var(--squisq-accent-subtle);
+  white-space: nowrap;
+}
+
+/* A marker with no definition yet: quieter, and its tooltip says why. No
+   underline of its own, so it never stacks on a spelling squiggle. */
+.squisq-footnote-ref--missing {
+  color: var(--squisq-text-muted);
+  background: transparent;
+}
+
+/* `[^note]: …` lines: footnote text, set apart from the prose above. */
+.squisq-footnote-definition {
+  font-size: 0.875em;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-footnote-definition:not(.squisq-footnote-definition + .squisq-footnote-definition) {
+  margin-top: 1.25em;
+  padding-top: 0.5em;
+  border-top: 1px solid var(--squisq-border-subtle);
+}
+
+.squisq-footnote-label {
+  color: var(--squisq-accent);
+  font-weight: 600;
+}
