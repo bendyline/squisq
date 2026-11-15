@@ -1,3 +1,14 @@
+## @bendyline/squisq-editor-react [2.13.25](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.24...@bendyline/squisq-editor-react@2.13.25) (2026-11-15)
+
+### Bug Fixes
+
+* Harden touch UX and WebCodecs H.264 export ([#127](https://github.com/bendyline/squisq/issues/127)) ([ce508fb](https://github.com/bendyline/squisq/commit/ce508fb8be07ca013a07ad2b236a2ae4ad7fe479))
+
+
+### Dependencies
+
+* **@bendyline/squisq-video-react:** upgraded to 2.5.31
+
 ## @bendyline/squisq-editor-react [2.13.24](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.23...@bendyline/squisq-editor-react@2.13.24) (2026-11-15)
 
 ### Bug Fixes
