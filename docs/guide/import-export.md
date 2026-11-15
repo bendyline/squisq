@@ -113,7 +113,7 @@ slideshow sizes it.
 - Drawings, timelines and box diagrams become native shapes. Mermaid needs a picture; the editor's
   **Export…** dialog draws one.
 - Footnotes become speaker notes. The marker leaves the slide, and each slide's notes list the
-  footnotes it cites, numbered from 1.
+  footnotes it cites, numbered from 1. The Slideshow view leaves them off its slides the same way.
 
 > [!NOTE]
 > Apple's Quick Look shows every gradient as a flat color. Check gradient backgrounds in
