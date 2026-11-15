@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core';
 import { NodeSelection, Plugin, PluginKey, Selection, TextSelection } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Decoration, DecorationSet, type EditorView } from '@tiptap/pm/view';
 import type { Node as PMNode } from '@tiptap/pm/model';
 import type { EditorState, Transaction } from '@tiptap/pm/state';
 import { mapFenceEntries } from '../fenceWidgets/fenceRegistry';
@@ -20,6 +20,12 @@ export interface DocumentTrayState {
 export const DOCUMENT_TRAY_KEY = new PluginKey<DocumentTrayState>('squisq-document-tray');
 export const DOCUMENT_TRAY_ATTRIBUTE = 'data-squisq-document-tray';
 export const DOCUMENT_TRAY_BODY_START_CLASS = 'squisq-document-tray-body-start';
+
+/** Turn the tray on or off for the current document; a no-op when it already matches. */
+export function syncDocumentTray(view: EditorView, enabled: boolean): void {
+  if (DOCUMENT_TRAY_KEY.getState(view.state)?.enabled === enabled) return;
+  view.dispatch(view.state.tr.setMeta(DOCUMENT_TRAY_KEY, enabled));
+}
 
 /** Node views must not mount a second player behind the hidden source node. */
 export function isDocumentTrayDecoration(decorations: readonly Decoration[]): boolean {

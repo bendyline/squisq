@@ -292,6 +292,11 @@ export function createMp4Muxer(options: Mp4MuxerOptions): Mp4MuxerHandle {
     fastStart: false,
   });
 
+  // Chromium 151+ reports `EncodedVideoChunk.duration` as null unless the
+  // source frame carried a duration, and mp4-muxer rejects such a chunk.
+  // Every chunk here is one frame, so its nominal duration stands in.
+  const nominalVideoDurationMicros = Math.round(1_000_000 / options.fps);
+
   let finalized = false;
   const finalizeMuxer = (): void => {
     if (finalized) throw new Error('MP4 muxer already finalized');
@@ -303,7 +308,17 @@ export function createMp4Muxer(options: Mp4MuxerOptions): Mp4MuxerHandle {
     hasAudioTrack: options.audio !== undefined,
 
     addVideoChunk(chunk: EncodedVideoChunk, meta?: EncodedVideoChunkMetadata) {
-      muxer.addVideoChunk(chunk, meta);
+      if (
+        typeof chunk.duration === 'number' &&
+        Number.isFinite(chunk.duration) &&
+        chunk.duration >= 0
+      ) {
+        muxer.addVideoChunk(chunk, meta);
+        return;
+      }
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      muxer.addVideoChunkRaw(data, chunk.type, chunk.timestamp, nominalVideoDurationMicros, meta);
     },
 
     addVideoChunkRaw(

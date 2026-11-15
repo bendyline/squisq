@@ -21,8 +21,8 @@ import {
 import { markdownToDoc, resolveAudioMapping } from '@bendyline/squisq/doc';
 import type { Doc } from '@bendyline/squisq/schemas';
 import { resolveVideoDurations } from '@bendyline/squisq-react';
-import { VideoExportModal } from '@bendyline/squisq-video-react';
 import { ExportConfigModal } from './ExportConfigModal';
+import { LazyVideoExportModal } from './LazyVideoExportModal';
 import { SITE_FFMPEG_WASM_CONFIG } from './ffmpegWasmConfig';
 import { collectAudioForHtmlExport, collectImagesForHtmlExport } from './exportHelpers';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
@@ -583,7 +583,7 @@ export function FileToolbar({
         playerScriptRef.current &&
         videoExportDoc &&
         createPortal(
-          <VideoExportModal
+          <LazyVideoExportModal
             doc={videoExportDoc}
             playerScript={playerScriptRef.current}
             mediaProvider={mediaProvider ?? undefined}

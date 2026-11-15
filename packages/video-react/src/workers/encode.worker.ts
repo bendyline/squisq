@@ -40,6 +40,11 @@ let videoEncoder: VideoEncoder | null = null;
 let muxer: Mp4MuxerHandle | null = null;
 let webCodecsQueueLimit = 1;
 let webCodecsFramesSinceFlush = 0;
+/**
+ * Microseconds per frame. Chromium 151+ leaves `EncodedVideoChunk.duration`
+ * null unless the frame carried one, and the muxer rejects such a chunk.
+ */
+let webCodecsFrameDuration = 0;
 
 // ffmpeg.wasm state
 let ffmpegInstance: FFmpeg | null = null;
@@ -136,7 +141,13 @@ function initWebCodecs(config: InitMessage) {
   videoEncoder = new VideoEncoder({
     output(chunk, meta) {
       if (cancelled) return;
-      muxer!.addVideoChunk(chunk, meta ?? undefined);
+      try {
+        muxer!.addVideoChunk(chunk, meta ?? undefined);
+      } catch (err) {
+        // An exception here would be lost in the browser callback, leaving
+        // finalize to fail later on an empty track with an unrelated message.
+        postError(`MP4 muxing failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     },
     error(err) {
       postError(`WebCodecs encoder error: ${err.message}`);
@@ -155,6 +166,7 @@ function initWebCodecs(config: InitMessage) {
   });
   webCodecsQueueLimit = resolveWebCodecsQueueLimit(config);
   webCodecsFramesSinceFlush = 0;
+  webCodecsFrameDuration = Math.round(1_000_000 / config.fps);
 }
 
 async function encodeFrameWebCodecs(msg: FrameMessage) {
@@ -172,7 +184,10 @@ async function encodeFrameWebCodecs(msg: FrameMessage) {
     if (drained) webCodecsFramesSinceFlush = 0;
     if (cancelled || videoEncoder.state === 'closed') return;
 
-    const frame = new VideoFrame(msg.bitmap, { timestamp: msg.timestamp });
+    const frame = new VideoFrame(msg.bitmap, {
+      timestamp: msg.timestamp,
+      duration: webCodecsFrameDuration,
+    });
     try {
       const keyFrame = msg.frameIndex % 30 === 0; // Key frame every 30 frames
       videoEncoder.encode(frame, { keyFrame });

@@ -37,6 +37,7 @@ import {
   imageExportFilename,
   type ImageExportFormat,
 } from './imageExportShared.js';
+import { safeAreaPadding } from './safeArea.js';
 
 export type DashboardImageExportFormat = ImageExportFormat;
 
@@ -72,6 +73,8 @@ function documentTitleFromFileName(fileName?: string): string {
 const overlayStyle: CSSProperties = {
   position: 'fixed',
   inset: 0,
+  boxSizing: 'border-box',
+  padding: safeAreaPadding(16),
   zIndex: 10000,
   display: 'flex',
   alignItems: 'center',
@@ -256,7 +259,9 @@ export function DashboardImageExportModal({
         style={{
           position: 'relative',
           boxSizing: 'border-box',
-          width: 'min(440px, calc(100vw - 32px))',
+          width: 'min(440px, 100%)',
+          maxHeight: '100%',
+          overflowY: 'auto',
           padding: 24,
           border: `1px solid ${border}`,
           borderRadius: 8,

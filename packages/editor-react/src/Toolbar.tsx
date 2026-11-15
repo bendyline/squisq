@@ -1628,6 +1628,7 @@ export function Toolbar({
   const hasVisibleMediaButtons = MEDIA_BUTTONS.some((b) => isButtonVisible(b.id));
   const showInsertInOverflow =
     showInsertControls && collapsed.has('insert') && hasVisibleMediaButtons;
+  const insertShownInline = showInsertControls && !collapsed.has('insert');
   // Formatting buttons in the ··· menu, in their usual toolbar order. Media
   // buttons never appear inline: the Insert dropdown stands in for them.
   const collapsedFormatButtons = showFormattingControls
@@ -2001,16 +2002,45 @@ export function Toolbar({
       {/* Built-in actions — formatting and Insert can be controlled independently. */}
       {actionsLaneShown && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>
+          {/* Insert menu button — leads the lane. It collapses all media-group
+              actions into a single dropdown and is the last item to move
+              into the ··· menu (toolbar/toolbarCollapse.ts). */}
+          {showInsertControls && (
+            <div
+              className={`squisq-toolbar-group${collapsed.has('insert') ? ' squisq-toolbar-group--collapsed' : ''}`}
+            >
+              <button
+                ref={insertMenuButtonRef}
+                className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}${collapsed.has('insert') ? ' squisq-toolbar-button--overflowed' : ''}`}
+                data-toolbar-item="insert"
+                data-tooltip={
+                  dataCardFocused
+                    ? 'Inserts land in document text — click into the prose first'
+                    : 'Insert...'
+                }
+                onClick={() => (insertMenuAnchor ? closeInsertMenu() : openInsertMenu())}
+                aria-label="Insert"
+                aria-expanded={insertMenuAnchor !== null}
+                aria-haspopup="menu"
+                disabled={dataCardFocused}
+              >
+                <Icon icon="fa-solid fa-plus" />
+              </button>
+            </div>
+          )}
+
           {/* Collapsed buttons stay mounted (display: none) so the
               measurement always sees the whole structure; a group whose
-              buttons are all collapsed hides with its separator. */}
+              buttons are all collapsed hides with its separator. Every shown
+              group after the first in the lane opens with a separator. */}
           {showFormattingControls &&
             groups.map((group) => (
               <div
                 key={group}
                 className={`squisq-toolbar-group${shownFormatGroups.includes(group) ? '' : ' squisq-toolbar-group--collapsed'}`}
               >
-                {shownFormatGroups.indexOf(group) > 0 && (
+                {(shownFormatGroups.indexOf(group) > 0 ||
+                  (shownFormatGroups.indexOf(group) === 0 && insertShownInline)) && (
                   <div className="squisq-toolbar-separator" />
                 )}
                 {BUTTONS.filter((b) => b.group === group && isButtonVisible(b.id)).map((btn) => {
@@ -2047,32 +2077,6 @@ export function Toolbar({
                 })}
               </div>
             ))}
-
-          {/* Insert menu button — collapses all media-group actions into a single dropdown */}
-          {showInsertControls && (
-            <div
-              className={`squisq-toolbar-group${collapsed.has('insert') ? ' squisq-toolbar-group--collapsed' : ''}`}
-            >
-              {shownFormatGroups.length > 0 && <div className="squisq-toolbar-separator" />}
-              <button
-                ref={insertMenuButtonRef}
-                className={`squisq-toolbar-button${insertMenuAnchor ? ' squisq-toolbar-button--active' : ''}${collapsed.has('insert') ? ' squisq-toolbar-button--overflowed' : ''}`}
-                data-toolbar-item="insert"
-                data-tooltip={
-                  dataCardFocused
-                    ? 'Inserts land in document text — click into the prose first'
-                    : 'Insert...'
-                }
-                onClick={() => (insertMenuAnchor ? closeInsertMenu() : openInsertMenu())}
-                aria-label="Insert"
-                aria-expanded={insertMenuAnchor !== null}
-                aria-haspopup="menu"
-                disabled={dataCardFocused}
-              >
-                <Icon icon="fa-solid fa-plus" />
-              </button>
-            </div>
-          )}
 
           {/* Template picker — visible when the cursor is in a heading.
               In WYSIWYG, reads from the heading node's `dataTemplate`; in
@@ -2311,6 +2315,27 @@ export function Toolbar({
                 data-theme={colorScheme}
                 style={overflowStyle}
               >
+                {showInsertInOverflow && (
+                  <button
+                    className={`squisq-toolbar-overflow-item${insertMenuAnchor ? ' squisq-toolbar-overflow-item--active' : ''}`}
+                    onClick={(event) => {
+                      if (insertMenuAnchor) {
+                        closeInsertMenu();
+                      } else {
+                        openInsertMenu(event.currentTarget);
+                      }
+                      setShowOverflow(false);
+                    }}
+                    aria-haspopup="menu"
+                    aria-expanded={insertMenuAnchor !== null}
+                  >
+                    <span className="squisq-toolbar-overflow-icon">
+                      <Icon icon="fa-solid fa-plus" />
+                    </span>
+                    <span>Insert...</span>
+                  </button>
+                )}
+
                 {collapsedFormatButtons.map((btn) => {
                   const active =
                     btn.id === 'emoji'
@@ -2339,27 +2364,6 @@ export function Toolbar({
                     </button>
                   );
                 })}
-
-                {showInsertInOverflow && (
-                  <button
-                    className={`squisq-toolbar-overflow-item${insertMenuAnchor ? ' squisq-toolbar-overflow-item--active' : ''}`}
-                    onClick={(event) => {
-                      if (insertMenuAnchor) {
-                        closeInsertMenu();
-                      } else {
-                        openInsertMenu(event.currentTarget);
-                      }
-                      setShowOverflow(false);
-                    }}
-                    aria-haspopup="menu"
-                    aria-expanded={insertMenuAnchor !== null}
-                  >
-                    <span className="squisq-toolbar-overflow-icon">
-                      <Icon icon="fa-solid fa-plus" />
-                    </span>
-                    <span>Insert...</span>
-                  </button>
-                )}
 
                 {/* Document chrome collapses here when the row is too narrow to
                   keep it alongside the formatting controls. */}

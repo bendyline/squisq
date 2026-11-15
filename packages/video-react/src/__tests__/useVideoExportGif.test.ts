@@ -12,7 +12,9 @@ const mocks = vi.hoisted(() => {
     captureCanvasFrame: vi.fn(async () => ({}) as HTMLCanvasElement),
     setCoverVisible: vi.fn(async () => {}),
     destroy: vi.fn(),
-    supportsH264: vi.fn(async () => true),
+    probeH264: vi.fn(async (): Promise<{ profile: 'high' | 'baseline' } | null> => ({
+      profile: 'high',
+    })),
     createWorkerEncoder: vi.fn(),
     encodeFrame: vi.fn(async (frame: ImageBitmap | HTMLCanvasElement) => {
       if ('close' in frame) frame.close();
@@ -41,7 +43,8 @@ vi.mock('../hooks/useFrameCapture.js', () => {
 
 vi.mock('../mainThreadEncoder.js', () => ({
   supportsWebCodecs: () => true,
-  supportsWebCodecsH264: mocks.supportsH264,
+  probeWebCodecsH264: mocks.probeH264,
+  H264_PROBE_FLUSH_TIMEOUT_MS: 3_000,
   createEncoder: () => ({
     encodeFrame: mocks.encodeFrame,
     finalize: mocks.finalize,
@@ -116,7 +119,7 @@ describe('useVideoExport GIF flow', () => {
         if ('close' in frame) frame.close();
       });
     mocks.finalize.mockReset().mockResolvedValue(new Uint8Array([0, 0, 0, 1]).buffer);
-    mocks.supportsH264.mockResolvedValue(true);
+    mocks.probeH264.mockResolvedValue({ profile: 'high' });
     mocks.createWorkerEncoder.mockReset();
     mocks.gifTranscode.mockResolvedValue(new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]));
     createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:gif-output');
@@ -699,7 +702,7 @@ describe('useVideoExport GIF flow', () => {
   });
 
   it('cancels a fallback encoder while it is still starting', async () => {
-    mocks.supportsH264.mockResolvedValue(false);
+    mocks.probeH264.mockResolvedValue(null);
     let rejectReady!: (reason: Error) => void;
     const ready = new Promise<'webcodecs' | 'ffmpeg-wasm'>((_resolve, reject) => {
       rejectReady = reject;

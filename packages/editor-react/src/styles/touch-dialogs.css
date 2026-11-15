@@ -6,15 +6,16 @@
    screen instead, before the keyboard rises, so they don't jump when it does.
    A host that measures the keyboard publishes its height as
    `--squisq-keyboard-inset` (DocBlocks does). The dialog then stays inside
-   what the keyboard leaves visible, and its body scrolls. index.css loads this
-   after editor.css, whose base dialog rules it overrides at equal specificity. */
+   what the keyboard leaves visible, and its body scrolls. The safe-area insets
+   come from dialogs.css, whose margins (and editor.css's base dialog rules)
+   this overrides at equal specificity, so index.css loads it after both. */
 @media (pointer: coarse) {
   .squisq-link-dialog-overlay,
   .squisq-doc-settings-overlay {
     align-items: flex-start;
-    padding-top: max(calc(env(safe-area-inset-top, 0px) + 16px), min(12vh, 96px));
+    padding-top: max(calc(var(--squisq-dialog-safe-top) + 16px), min(12vh, 96px));
     padding-bottom: calc(
-      max(env(safe-area-inset-bottom, 0px), var(--squisq-keyboard-inset, 0px)) + 16px
+      max(var(--squisq-dialog-safe-bottom), var(--squisq-keyboard-inset, 0px)) + 16px
     );
   }
 

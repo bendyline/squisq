@@ -375,6 +375,16 @@ export default defineConfig({
     modulePreload: false,
     rolldownOptions: {
       output: {
+        // A chunk is named after its module, so core's `@bendyline/squisq/markdown`
+        // entry (a chunk of its own wherever startup code and a lazy chunk both
+        // import it) would be `markdown-<hash>.js`, the name Monaco's markdown
+        // language chunk has. e2e/monaco-loading.spec.ts tells Monaco's
+        // demand-loaded chunks apart by name, so core's gets a name of its own.
+        chunkFileNames: (chunk) =>
+          chunk.name === 'markdown' &&
+          !chunk.moduleIds.some((id) => /[\\/]monaco-editor[\\/]/.test(id))
+            ? 'assets/squisq-markdown-[hash].js'
+            : 'assets/[name]-[hash].js',
         codeSplitting: {
           groups: [
             {

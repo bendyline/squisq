@@ -6,7 +6,8 @@ import { waitForAppReady } from './appReady';
 test('startup keeps optional encoders and diagrams out of the initial script payload', async ({
   page,
 }, testInfo) => {
-  test.setTimeout(60_000);
+  // The proofing engine's cold setup (a WASM compile) can take a while.
+  test.setTimeout(90_000);
   const scripts: Promise<{ name: string; bytes: number }>[] = [];
   const collectScript = (response: Response) => {
     if (
@@ -24,11 +25,19 @@ test('startup keeps optional encoders and diagrams out of the initial script pay
   await page.goto('/');
   await waitForAppReady(page);
   await expect(page.locator('.tiptap.ProseMirror')).toBeVisible();
+  // The proofing engine (harper.js and its binary module) loads after mount —
+  // lazily, but on every visit, so it belongs in the count. Its chunks land
+  // right around the moment the network first goes quiet, so waiting on
+  // network quiet alone counted them on some runs and not others (43 KB that
+  // decided the budget). The status bar leaves "Proofing…" only once the
+  // engine is set up, by which point every one of its scripts has loaded.
+  await expect(page.locator('.squisq-proof-status')).toHaveText(/^(✓ Proofing|\d+ issues?)$/, {
+    timeout: 60_000,
+  });
   await page.waitForLoadState('networkidle');
-  // Stop collecting before awaiting. The proofing engine's chunks load lazily
-  // right around the moment the network first goes quiet; a body() read started
-  // after Promise.all took its snapshot is awaited by nothing, and Playwright
-  // rejects it with "Test ended" at teardown, failing a test whose budget held.
+  // Stop collecting before awaiting: a body() read started after Promise.all
+  // took its snapshot is awaited by nothing, and Playwright rejects it with
+  // "Test ended" at teardown, failing a test whose budget held.
   page.off('response', collectScript);
   const payload = await Promise.all(scripts);
   const total = payload.reduce((sum, script) => sum + script.bytes, 0);

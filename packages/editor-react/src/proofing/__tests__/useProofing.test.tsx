@@ -821,6 +821,90 @@ describe('tap card', () => {
     expect(card()?.getAttribute('data-trigger')).toBe('tap');
   });
 
+  it('a finger whose click WebKit reports as "mouse" still raises the card', async () => {
+    mount();
+    await ready();
+    // iOS and iPadOS: the press says "touch", the click it produces "mouse".
+    press(squiggle(), 'touch');
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 });
+    Object.defineProperty(event, 'pointerType', { value: 'mouse' });
+    act(() => {
+      squiggle().dispatchEvent(event);
+    });
+    expect(card()?.getAttribute('data-trigger')).toBe('tap');
+  });
+
+  /**
+   * A tap's click aimed at the editor itself — what the browser does when the
+   * squiggle moved or was redrawn between press and release — with `under`
+   * being what now sits where the finger lifted.
+   */
+  function clickEditorOver(under: Element): void {
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => under,
+    });
+    try {
+      const event = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+        clientX: 5,
+        clientY: 5,
+      });
+      act(() => {
+        tiptap!.view.dom.dispatchEvent(event);
+      });
+    } finally {
+      delete (document as { elementFromPoint?: unknown }).elementFromPoint;
+    }
+  }
+
+  it('still raises the card when the word moved out from under the finger', async () => {
+    mount();
+    await ready();
+    press(squiggle(), 'touch');
+    // Focusing the editor revealed chrome above the word and pushed it down,
+    // so the finger lifted over the editor rather than the squiggle.
+    clickEditorOver(tiptap!.view.dom);
+    expect(card()?.getAttribute('data-trigger')).toBe('tap');
+  });
+
+  it('still raises the card when the squiggle was redrawn under the finger', async () => {
+    mount();
+    await ready();
+    // The squiggle pressed is gone by the time the finger lifts; its
+    // replacement is what sits under the finger.
+    const pressed = document.createElement('span');
+    pressed.setAttribute('data-proof-id', 'retired');
+    document.body.appendChild(pressed);
+    press(pressed, 'touch');
+    pressed.remove();
+    clickEditorOver(squiggle());
+    expect(card()?.getAttribute('data-trigger')).toBe('tap');
+  });
+
+  it('a tap that began off any squiggle raises nothing, wherever it lifts', async () => {
+    mount();
+    await ready();
+    press(tiptap!.view.dom, 'touch');
+    clickEditorOver(tiptap!.view.dom);
+    expect(card()).toBeNull();
+  });
+
+  it('a keyboard click after a tap raises nothing', async () => {
+    mount();
+    await ready();
+    press(document.body, 'touch');
+    // `detail` 0: no press began this click, so the finger's says nothing.
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 });
+    Object.defineProperty(event, 'pointerType', { value: '' });
+    act(() => {
+      squiggle().dispatchEvent(event);
+    });
+    expect(card()).toBeNull();
+  });
+
   it('a mouse click raises nothing — the mouse has the hover card', async () => {
     mount();
     await ready();

@@ -43,8 +43,9 @@ import { resolveDimensions, resolveFfmpegWasmLoad, QUALITY_PRESETS } from '@bend
 import type { CaptionMode } from '@bendyline/squisq-react';
 import {
   createEncoder,
+  H264_PROBE_FLUSH_TIMEOUT_MS,
+  probeWebCodecsH264,
   supportsWebCodecs,
-  supportsWebCodecsH264,
   type EncoderFrameSource,
   type MainThreadEncoder,
 } from '../mainThreadEncoder.js';
@@ -67,7 +68,11 @@ import { transcodeMp4ToGifWithFfmpegWasm } from '../gifTranscode.js';
 import { useFrameCapture } from './useFrameCapture.js';
 
 const MAX_EXPORT_MEDIA_FILES = 256;
-const ENCODER_PROBE_TIMEOUT_MS = 5_000;
+/**
+ * Bounds the whole H.264 probe: capability checks plus up to two short test
+ * encodes (High, then Baseline where High stalls, as on WebKit).
+ */
+const ENCODER_PROBE_TIMEOUT_MS = 5_000 + 2 * H264_PROBE_FLUSH_TIMEOUT_MS;
 const ENCODER_START_TIMEOUT_MS = 60_000;
 const FRAME_CAPTURE_TIMEOUT_MS = 60_000;
 /**
@@ -808,16 +813,18 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         // Prefer main-thread WebCodecs (fast), but probe whether H.264
         // is actually supported. Linux Chromium has VideoEncoder but
         // no proprietary H.264 codec — fall back to the worker, which
-        // loads ffmpeg.wasm in that case.
-        const canUseWebCodecs =
-          webCodecsAvailable &&
-          (await settleWithin(
-            supportsWebCodecsH264({ width, height, fps, quality }),
-            ENCODER_PROBE_TIMEOUT_MS,
-            'The browser did not finish checking WebCodecs support.',
-            undefined,
-            document,
-          ).catch(() => false));
+        // loads ffmpeg.wasm in that case. The probe also picks the profile:
+        // WebKit cannot drain High, so it gets Baseline.
+        const h264Support = webCodecsAvailable
+          ? await settleWithin(
+              probeWebCodecsH264({ width, height, fps, quality }),
+              ENCODER_PROBE_TIMEOUT_MS,
+              'The browser did not finish checking WebCodecs support.',
+              undefined,
+              document,
+            ).catch(() => null)
+          : null;
+        const canUseWebCodecs = h264Support !== null;
         if (cancelled()) return;
 
         // ── Audio: tier selection + render ───────────────────────
@@ -905,12 +912,13 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         if (cancelled()) return;
 
         let encoder: MainThreadEncoder;
-        if (canUseWebCodecs) {
+        if (h264Support) {
           encoder = createEncoder({
             width,
             height,
             fps,
             quality,
+            h264Profile: h264Support.profile,
             ...(useInlineAudio && renderedAudio
               ? {
                   audio: {

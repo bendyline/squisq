@@ -56,8 +56,19 @@ export type {
 } from './hooks/useFrameCapture.js';
 
 // ── Encoder Utilities (for advanced usage) ─────────────────────────
-export { supportsWebCodecs, supportsWebCodecsH264, createEncoder } from './mainThreadEncoder.js';
-export type { MainThreadEncoder, EncoderConfig, EncoderFrameSource } from './mainThreadEncoder.js';
+export {
+  supportsWebCodecs,
+  supportsWebCodecsH264,
+  probeWebCodecsH264,
+  createEncoder,
+} from './mainThreadEncoder.js';
+export type {
+  MainThreadEncoder,
+  EncoderConfig,
+  EncoderFrameSource,
+  WebCodecsH264Support,
+  WebCodecsH264Profile,
+} from './mainThreadEncoder.js';
 export type { FfmpegWasmLoadConfig } from '@bendyline/squisq-video';
 
 // ── Audio (capability probe, document mix, audio-file encoding) ────

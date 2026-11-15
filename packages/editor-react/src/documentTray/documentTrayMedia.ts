@@ -91,13 +91,14 @@ export interface LocatedTrayMedia extends DocumentTrayMedia {
   node: PMNode;
 }
 
-/**
- * The opening media run, allowing blanks and one opening heading. Recorder
- * narrations live immediately after that heading. A second heading or any
- * other content (including images, lists, tables and fences) ends the run.
- * Never descend into nested content or promote a later document-anchored clip.
- */
-export function collectDocumentTrayMedia(doc: PMNode): LocatedTrayMedia[] {
+interface OpeningRun {
+  items: LocatedTrayMedia[];
+  /** Something other than blanks, media or the first heading ended the run. */
+  stopped: boolean;
+  headingSeen: boolean;
+}
+
+function scanOpeningRun(doc: PMNode): OpeningRun {
   const items: LocatedTrayMedia[] = [];
   let stopped = false;
   let headingSeen = false;
@@ -119,5 +120,25 @@ export function collectDocumentTrayMedia(doc: PMNode): LocatedTrayMedia[] {
     if (media) items.push({ ...media, node, pos });
     else stopped = true;
   });
-  return items;
+  return { items, stopped, headingSeen };
+}
+
+/**
+ * The opening media run, allowing blanks and one opening heading. Recorder
+ * narrations live immediately after that heading. A second heading or any
+ * other content (including images, lists, tables and fences) ends the run.
+ * Never descend into nested content or promote a later document-anchored clip.
+ */
+export function collectDocumentTrayMedia(doc: PMNode): LocatedTrayMedia[] {
+  return scanOpeningRun(doc).items;
+}
+
+/**
+ * Whether `doc` is a preamble made only of opening media: no heading, and
+ * nothing that ends the run. Content after it continues the same run, so the
+ * media under the first heading that follows belongs to the tray as well.
+ */
+export function isMediaOnlyPreamble(doc: PMNode): boolean {
+  const run = scanOpeningRun(doc);
+  return !run.stopped && !run.headingSeen;
 }

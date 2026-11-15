@@ -12,6 +12,17 @@
  * double-clicking a clip toggles `spillover`. All edits are written back to the
  * markdown source via {@link timelineSource}.
  *
+ * The playhead scrubs when dragged, and so does a press on the ruler or on the
+ * lane above the bars that holds the playhead's knob. Scrubbing against either
+ * edge of the viewport scrolls the track so a long document can be scrubbed end
+ * to end on a narrow screen.
+ *
+ * Touch: a swipe across the bars scrolls the track, so a finger only edits
+ * through dedicated handles. The selected block's edges grab at once (they opt
+ * out of browser panning); a media clip, or its trimming edge, lifts after a
+ * long press — a finger that travels before then is scrolling, and the press
+ * is dropped. A press the browser takes over (`pointercancel`) never commits.
+ *
  * A dynamic-slides document times its own summary slides, so its section bars
  * offer no edge drags and their menu can only clear a pin: one pinned section
  * would stop a narrated deck from compiling and fall back to the authored blocks.
@@ -69,6 +80,14 @@ const ZOOM_FACTOR = 1.4;
 const MIN_DURATION = 0.5; // seconds — floor when dragging a block edge
 /** Pointer travel (px) before a press counts as a drag rather than a click. */
 const DRAG_THRESHOLD_PX = 4;
+/** A fingertip jitters more than a mouse; touch uses a wider click/drag slop. */
+const TOUCH_SLOP_PX = 8;
+/** Hold time (ms) before a touch on a media clip lifts it for moving/trimming. */
+const LONG_PRESS_MS = 350;
+/** Width (px) of the zone at each viewport edge that auto-scrolls a scrub. */
+const SCRUB_EDGE_PX = 28;
+/** Fastest auto-scroll (px per frame) while scrubbing against an edge. */
+const SCRUB_EDGE_SPEED = 12;
 /** Candidate ruler-tick intervals (seconds); the first wide enough is used. */
 const TICK_STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600];
 /** Minimum pixels between ruler ticks. */
@@ -141,9 +160,33 @@ function seekTimelineFrame(video: HTMLVideoElement, sampleTime: number): void {
 type DragKind =
   'block-right' | 'block-left' | 'clip-move' | 'clip-right' | 'embed-move' | 'embed-right';
 
+/**
+ * Drags a finger only starts after a long press. Media bars fill most of the
+ * track, so an immediate grab would turn every swipe-to-scroll into an edit.
+ */
+const LONG_PRESS_KINDS: ReadonlySet<DragKind> = new Set([
+  'clip-move',
+  'clip-right',
+  'embed-move',
+  'embed-right',
+]);
+
 interface DragState {
   kind: DragKind;
   startX: number;
+  startY: number;
+  /** Pointer that owns the drag; other pointers (a second finger) are ignored. */
+  pointerId?: number;
+  /** Travel (px) before the press counts as a drag rather than a click. */
+  threshold: number;
+  /**
+   * False while a touch waits out its long press. Travel before then is the
+   * user scrolling the track, so the press is dropped and the browser pans.
+   * True from the start for mouse/pen drags and for touch-only handles.
+   */
+  armed: boolean;
+  /** True once a long press lifted the item (drives the lifted styling). */
+  lifted?: boolean;
   /** Lower bound (seconds) for the dragged value (0 for position drags). */
   floor: number;
   /** Value (seconds) at drag start, added to the pointer delta. */
@@ -240,6 +283,12 @@ export function TimelineTrack({
   const [itemMenu, setItemMenu] = useState<TimelineMenuState | null>(null);
   const [pxPerSecond, setPxPerSecond] = useState(DEFAULT_PX_PER_SECOND);
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** The ruler starts at time 0 (past the leading gutter), so it anchors x↔time. */
+  const rulerRef = useRef<HTMLDivElement>(null);
+  // Window-level gesture handlers read the current scale from a ref so they
+  // don't re-bind on zoom.
+  const scaleRef = useRef(pxPerSecond);
+  scaleRef.current = pxPerSecond;
 
   const blocks = useMemo(() => (doc ? flattenBlocks(doc.blocks) : []), [doc]);
   const timingLocked = doc ? usesDynamicPresentation(doc) : false;
@@ -281,26 +330,93 @@ export function TimelineTrack({
     play();
   }, [play]);
 
-  // Scrubbing the playhead: drag the red bar to seek. Pauses playback while
-  // dragging; seeks continuously from the pointer position.
+  // Scrubbing: drag the playhead — or press the ruler / the knob lane and drag —
+  // to seek. Pauses playback, follows the one pointer that started it, and ends
+  // on release or when the browser cancels the gesture.
   const [scrubbing, setScrubbing] = useState(false);
+  const scrubRef = useRef<{
+    pointerId?: number;
+    startX: number;
+    clientX: number;
+    moved: boolean;
+  } | null>(null);
+  const timeAtClientX = useCallback((clientX: number) => {
+    const origin = rulerRef.current?.getBoundingClientRect().left ?? 0;
+    return (clientX - origin) / scaleRef.current;
+  }, []);
+  const beginScrub = useCallback(
+    (e: React.PointerEvent, jumpToPointer: boolean) => {
+      if (e.button > 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      pause();
+      scrubRef.current = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        clientX: e.clientX,
+        moved: false,
+      };
+      if (jumpToPointer) seek(timeAtClientX(e.clientX));
+      setScrubbing(true);
+    },
+    [pause, seek, timeAtClientX],
+  );
   useEffect(() => {
     if (!scrubbing) return;
+    const owns = (e: PointerEvent) => {
+      const s = scrubRef.current;
+      return s != null && (s.pointerId === undefined || e.pointerId === s.pointerId);
+    };
     const onMove = (e: PointerEvent) => {
+      const s = scrubRef.current;
+      if (!s || !owns(e)) return;
+      s.clientX = e.clientX;
+      if (Math.abs(e.clientX - s.startX) >= DRAG_THRESHOLD_PX) s.moved = true;
+      seek(timeAtClientX(e.clientX));
+    };
+    const onEnd = (e: PointerEvent) => {
+      if (!owns(e)) return;
+      scrubRef.current = null;
+      setScrubbing(false);
+    };
+    // Holding the pointer against either edge keeps the track scrolling (and
+    // the playhead seeking) — on a phone the viewport shows only a few seconds.
+    // Only after the pointer has moved, so pressing a playhead that already
+    // sits near an edge doesn't set the track sliding.
+    let frame = 0;
+    const step = () => {
+      const s = scrubRef.current;
       const scroll = scrollRef.current;
-      if (!scroll) return;
-      const rect = scroll.getBoundingClientRect();
-      const x = e.clientX - rect.left + scroll.scrollLeft;
-      seek(x / pxPerSecond);
+      const rect = s?.moved ? scroll?.getBoundingClientRect() : undefined;
+      if (s && scroll && rect && rect.width > SCRUB_EDGE_PX * 2) {
+        const leftZone = rect.left + SCRUB_EDGE_PX;
+        const rightZone = rect.right - SCRUB_EDGE_PX;
+        const depth =
+          s.clientX < leftZone
+            ? s.clientX - leftZone
+            : s.clientX > rightZone
+              ? s.clientX - rightZone
+              : 0;
+        if (depth !== 0) {
+          const before = scroll.scrollLeft;
+          const speed = Math.min(SCRUB_EDGE_SPEED, Math.max(2, Math.abs(depth) / 2));
+          scroll.scrollLeft = before + Math.sign(depth) * speed;
+          if (scroll.scrollLeft !== before) seek(timeAtClientX(s.clientX));
+        }
+      }
+      frame = window.requestAnimationFrame(step);
     };
-    const onUp = () => setScrubbing(false);
+    frame = window.requestAnimationFrame(step);
     window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
     };
-  }, [scrubbing, pxPerSecond, seek]);
+  }, [scrubbing, seek, timeAtClientX]);
 
   // Raw clip lookup (keeps clipStart/clipEnd/spillover that the schedule drops)
   // so a clip can be rebuilt verbatim when relocated to another block.
@@ -350,7 +466,7 @@ export function TimelineTrack({
     if (!isPlaying) return;
     const scroll = scrollRef.current;
     if (!scroll) return;
-    const x = currentTime * pxPerSecond;
+    const x = currentTime * pxPerSecond + (rulerRef.current?.offsetLeft ?? 0);
     const left = scroll.scrollLeft;
     const right = left + scroll.clientWidth;
     if (x < left || x > right - 80) {
@@ -425,26 +541,47 @@ export function TimelineTrack({
     return () => ro.disconnect();
   }, []);
 
-  // Live drag handling on the window so the pointer can leave the bar. The
-  // current scale is read from a ref so the handler doesn't re-bind on zoom.
-  const scaleRef = useRef(pxPerSecond);
-  scaleRef.current = pxPerSecond;
+  // Live drag handling on the window so the pointer can leave the bar.
   const dragRef = useRef<DragState | null>(null);
   dragRef.current = drag;
   const isDragging = drag != null && !drag.committed;
+  // Latest pointer position, so a long press lifts the item where the finger
+  // now rests rather than where it first landed.
+  const lastPointerRef = useRef({ x: 0, y: 0 });
+  const longPressTimerRef = useRef<number | null>(null);
+  const clearLongPress = useCallback(() => {
+    if (longPressTimerRef.current != null) {
+      window.clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+  useEffect(() => clearLongPress, [clearLongPress]);
   useEffect(() => {
     if (!isDragging) return;
+    const owns = (d: DragState, e: PointerEvent) =>
+      d.pointerId === undefined || e.pointerId === d.pointerId;
     const onMove = (e: PointerEvent) => {
       const d = dragRef.current;
-      if (!d) return;
+      if (!d || !owns(d, e)) return;
+      lastPointerRef.current = { x: e.clientX, y: e.clientY };
+      if (!d.armed) {
+        // Travel before the long press elapses is a scroll: let the browser
+        // have the gesture and forget the press.
+        if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > d.threshold) {
+          clearLongPress();
+          setDrag(null);
+        }
+        return;
+      }
       const deltaPx = e.clientX - d.startX;
-      const moved = d.moved || Math.abs(deltaPx) >= DRAG_THRESHOLD_PX;
+      const moved = d.moved || Math.abs(deltaPx) >= d.threshold;
       const deltaSec = deltaPx / scaleRef.current;
       setDrag({ ...d, moved, preview: Math.max(d.floor, d.previewBase + deltaSec) });
     };
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
       const d = dragRef.current;
-      if (!d) return;
+      if (!d || !owns(d, e)) return;
+      clearLongPress();
       if (!d.moved) {
         // A click, not a drag: never mutate the source. Committing here is what
         // silently turned an embedded <video> into a {[video …]} tag. Run the
@@ -463,13 +600,47 @@ export function TimelineTrack({
         if (dragRef.current?.committed) setDrag(null);
       }, 500);
     };
+    // The browser took the gesture over (it began a scroll, or a system
+    // gesture): drop the edit. Without this a cancelled touch stayed "dragging"
+    // and the next tap anywhere committed it.
+    const onCancel = (e: PointerEvent) => {
+      const d = dragRef.current;
+      if (!d || !owns(d, e)) return;
+      clearLongPress();
+      setDrag(null);
+    };
+    // A long press raises the context menu on Android; the press is ours.
+    const onContextMenu = (e: Event) => e.preventDefault();
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onCancel);
+    window.addEventListener('contextmenu', onContextMenu);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onCancel);
+      window.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [isDragging]);
+  }, [isDragging, clearLongPress]);
+
+  // Once a finger has lifted a clip, its travel moves the clip, not the track.
+  // Bound for the timeline's lifetime rather than per drag: browsers decide at
+  // touchstart whether a touch sequence can be cancelled at all (iOS and
+  // Chromium scroll off the main thread otherwise), so a listener added once
+  // the press is underway arrives too late. Non-passive so preventDefault holds.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const hasDoc = doc != null;
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const onTouchMove = (e: TouchEvent) => {
+      if (dragRef.current?.armed && !dragRef.current.committed && e.cancelable) {
+        e.preventDefault();
+      }
+    };
+    root.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => root.removeEventListener('touchmove', onTouchMove);
+  }, [hasDoc]);
 
   // Drop the committed preview once the doc re-parses with the new value.
   useEffect(() => {
@@ -485,14 +656,33 @@ export function TimelineTrack({
       commit: (seconds: number) => void,
       opts?: { pivotIndex?: number; floor?: number; onClick?: () => void },
     ) => {
+      if (e.button > 0) return;
       e.preventDefault();
       e.stopPropagation();
       // Position drags (moving a clip) floor at 0; length drags floor at MIN_DURATION.
       const floor =
         opts?.floor ?? (kind === 'clip-move' || kind === 'embed-move' ? 0 : MIN_DURATION);
+      const touch = e.pointerType === 'touch';
+      const armed = !(touch && LONG_PRESS_KINDS.has(kind));
+      clearLongPress();
+      lastPointerRef.current = { x: e.clientX, y: e.clientY };
+      if (!armed) {
+        longPressTimerRef.current = window.setTimeout(() => {
+          longPressTimerRef.current = null;
+          const d = dragRef.current;
+          if (!d || d.armed || d.targetId !== targetId) return;
+          // Re-anchor on the resting finger so the lift itself moves nothing.
+          setDrag({ ...d, armed: true, lifted: true, startX: lastPointerRef.current.x });
+          navigator.vibrate?.(10);
+        }, LONG_PRESS_MS);
+      }
       setDrag({
         kind,
         startX: e.clientX,
+        startY: e.clientY,
+        pointerId: e.pointerId,
+        threshold: touch ? TOUCH_SLOP_PX : DRAG_THRESHOLD_PX,
+        armed,
         floor,
         preview: base,
         previewBase: base,
@@ -502,7 +692,7 @@ export function TimelineTrack({
         onClick: opts?.onClick,
       });
     },
-    [],
+    [clearLongPress],
   );
 
   // Non-destructive click on a timeline clip: move the playhead to its start and
@@ -591,7 +781,7 @@ export function TimelineTrack({
   for (let t = 0; t <= rulerEnd + 0.001 && ticks.length < 1000; t += tickSeconds) ticks.push(t);
 
   return (
-    <div className="squisq-timeline" style={{ height }} data-testid="timeline-track">
+    <div ref={rootRef} className="squisq-timeline" style={{ height }} data-testid="timeline-track">
       <div className="squisq-timeline-controls">
         <button
           type="button"
@@ -628,7 +818,12 @@ export function TimelineTrack({
         </button>
       </div>
       <div className="squisq-timeline-scroll" ref={scrollRef}>
-        <div className="squisq-timeline-inner" style={{ width }}>
+        {/* The leading gutter (CSS) keeps time 0 — and a playhead parked there —
+            clear of the viewport's left edge, where half its grip was clipped. */}
+        <div
+          className="squisq-timeline-inner"
+          style={{ width: `calc(${width}px + var(--squisq-timeline-gutter, 0px))` }}
+        >
           <div className="squisq-timeline-row squisq-timeline-row--blocks">
             {blocks.map((b, i) => {
               const line = headingLine(b);
@@ -741,6 +936,7 @@ export function TimelineTrack({
                 clipWidth = Math.max(drag.preview * pxPerSecond, 4);
               }
               const editable = c.sourceLine != null && c.lockToBlock !== true;
+              const lifted = drag?.targetId === c.id && drag.lifted === true && !drag.committed;
               const specOf = (): ClipSpec => {
                 const raw = rawClipById.get(c.segment?.groupId ?? c.id);
                 return raw
@@ -769,7 +965,9 @@ export function TimelineTrack({
                   <div
                     className={`squisq-timeline-clip squisq-timeline-clip--${c.kind}${
                       c.anchor === 'document' ? ' squisq-timeline-clip--document' : ''
-                    }${c.lockToBlock === true ? ' squisq-timeline-clip--locked' : ''}`}
+                    }${c.lockToBlock === true ? ' squisq-timeline-clip--locked' : ''}${
+                      lifted ? ' squisq-timeline-clip--lifted' : ''
+                    }`}
                     style={{ left, width: clipWidth }}
                     title={`${c.src} — ${formatDur(length)}${
                       c.lockToBlock === true
@@ -918,7 +1116,11 @@ export function TimelineTrack({
                     data-track-id={id}
                   >
                     <div
-                      className={`squisq-timeline-clip squisq-timeline-clip--${m.kind} squisq-timeline-clip--embedded`}
+                      className={`squisq-timeline-clip squisq-timeline-clip--${m.kind} squisq-timeline-clip--embedded${
+                        drag?.targetId === id && drag.lifted === true && !drag.committed
+                          ? ' squisq-timeline-clip--lifted'
+                          : ''
+                      }`}
                       style={{ left, width: clipWidth }}
                       title={`${m.src} — drag to time / move between blocks`}
                       onPointerDown={(e) =>
@@ -997,11 +1199,10 @@ export function TimelineTrack({
           </div>
 
           <div
+            ref={rulerRef}
             className="squisq-timeline-row squisq-timeline-row--ruler"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              seek((e.clientX - rect.left) / pxPerSecond);
-            }}
+            data-testid="timeline-ruler"
+            onPointerDown={(e) => beginScrub(e, true)}
           >
             {ticks.map((t) => (
               <div key={t} className="squisq-timeline-tick" style={{ left: t * pxPerSecond }}>
@@ -1010,18 +1211,25 @@ export function TimelineTrack({
             ))}
           </div>
 
+          {/* The lane above the bars that the playhead's knob rides in. Pressing
+              anywhere along it jumps the playhead there and keeps scrubbing, so
+              a finger that lands beside the knob still catches it. */}
+          <div
+            className="squisq-timeline-scrub-lane"
+            data-testid="timeline-scrub-lane"
+            aria-hidden
+            onPointerDown={(e) => beginScrub(e, true)}
+          />
+
           {/* Playhead — vertical line at the current time, over all rows.
               Drag the bar (or its knob) to scrub. */}
           <div
-            className="squisq-timeline-playhead"
+            className={`squisq-timeline-playhead${
+              scrubbing ? ' squisq-timeline-playhead--scrubbing' : ''
+            }`}
             style={{ left: currentTime * pxPerSecond }}
             data-testid="timeline-playhead"
-            onPointerDown={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              pause();
-              setScrubbing(true);
-            }}
+            onPointerDown={(e) => beginScrub(e, false)}
           >
             <div className="squisq-timeline-playhead-knob" />
           </div>

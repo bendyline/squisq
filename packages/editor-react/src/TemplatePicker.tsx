@@ -20,6 +20,7 @@ import {
   type TemplatePreviewSource,
 } from './templateContentPreviewResolver';
 import { useModalDialog } from './modal/useModalDialog';
+import { dialogFillsWindow } from './dialogLayout';
 
 // ── Template metadata ─────────────────────────────────────────────
 //
@@ -1173,6 +1174,9 @@ function TemplateGalleryDialog({
       id={dialogId}
       className="squisq-template-gallery-dialog"
       data-theme={colorScheme}
+      // Covering the whole window, the panel keeps clear of the system bars
+      // itself (styles/dialogs.css); a host's editor shell already does.
+      data-fills-window={coversWindow(style) ? '' : undefined}
       style={style}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -1617,10 +1621,17 @@ export function TemplateBadgePopover({
   const dialogRef = useRef<HTMLDivElement>(null);
   const dialogId = `${TEMPLATE_GALLERY_DIALOG_ID}-${useId().replace(/:/g, '')}`;
 
-  // Reposition once after mount so the dialog covers the current editor shell.
+  // Reposition once after mount so the dialog covers the current editor shell,
+  // and again when the window resizes — turning a phone can move the dialog
+  // between covering the shell and filling the window.
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setStyle(computeDialogStyle(anchorRect)));
-    return () => cancelAnimationFrame(frame);
+    const reposition = () => setStyle(computeDialogStyle(anchorRect));
+    const frame = requestAnimationFrame(reposition);
+    window.addEventListener('resize', reposition);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', reposition);
+    };
   }, [anchorRect]);
 
   // Outside click + Escape close
@@ -1688,8 +1699,16 @@ function templateDialogBlockTitle(previewSource?: TemplatePreviewSource): string
   return title || 'this block';
 }
 
+/**
+ * Cover the editor shell the gallery was opened from, or, on a phone-sized
+ * window, the whole window: there the panel drops its frame and its header
+ * runs up under the status bar (styles/dialogs.css), which a shell laid out
+ * below the status bar would leave showing above it.
+ */
 function computeDialogStyle(anchor: Element | DOMRect): React.CSSProperties {
-  const shellRect = findEditorShellRect(anchor);
+  const shellRect = dialogFillsWindow()
+    ? new DOMRect(0, 0, window.innerWidth, window.innerHeight)
+    : findEditorShellRect(anchor);
   const left = Math.max(0, shellRect.left);
   const top = Math.max(0, shellRect.top);
   const right = Math.min(window.innerWidth, shellRect.right);
@@ -1703,6 +1722,15 @@ function computeDialogStyle(anchor: Element | DOMRect): React.CSSProperties {
     height: Math.max(0, bottom - top),
     zIndex: 9999,
   };
+}
+
+function coversWindow(style: React.CSSProperties): boolean {
+  return (
+    style.top === 0 &&
+    style.left === 0 &&
+    style.width === window.innerWidth &&
+    style.height === window.innerHeight
+  );
 }
 
 function findEditorShellRect(anchor: Element | DOMRect): DOMRect {

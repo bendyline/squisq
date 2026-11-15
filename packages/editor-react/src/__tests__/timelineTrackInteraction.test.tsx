@@ -37,13 +37,26 @@ function SourceProbe() {
  * support is patchy) and satisfies both React's delegated `onPointerDown` and
  * the component's own `window` pointer listeners.
  */
-function firePointer(
-  target: EventTarget,
-  type: 'pointerdown' | 'pointermove' | 'pointerup',
-  clientX: number,
-) {
+type PointerType = 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel';
+
+function firePointer(target: EventTarget, type: PointerType, clientX: number) {
   act(() => {
     target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX }));
+  });
+}
+
+/** As {@link firePointer}, but from a finger: `pointerType: 'touch'` + an id. */
+function fireTouch(
+  target: EventTarget,
+  type: PointerType,
+  clientX: number,
+  { clientY = 0, pointerId = 1 }: { clientY?: number; pointerId?: number } = {},
+) {
+  act(() => {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, clientX, clientY });
+    Object.defineProperty(event, 'pointerType', { value: 'touch' });
+    Object.defineProperty(event, 'pointerId', { value: pointerId });
+    target.dispatchEvent(event);
   });
 }
 
@@ -367,5 +380,133 @@ describe('TimelineTrack block-edge drags', () => {
     firePointer(window, 'pointerup', 302); // < 4px travel — a click, not a drag
 
     expect(latestSource).toBe(before);
+  });
+
+  it('drops a drag the browser cancels, so a later release cannot commit it', () => {
+    renderTimeline();
+    const before = latestSource;
+    const intro = screen.getByTitle(/Intro/) as HTMLElement;
+    const edge = intro.querySelector('.squisq-timeline-edge--right') as HTMLElement;
+
+    firePointer(edge, 'pointerdown', 300);
+    firePointer(window, 'pointermove', 336);
+    firePointer(window, 'pointercancel', 336);
+    firePointer(window, 'pointerup', 336);
+
+    expect(latestSource).toBe(before);
+    expect(intro.style.width).toBe(`${12 * 18}px`);
+  });
+});
+
+describe('TimelineTrack touch', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('a finger swiping across a clip scrolls the track instead of moving the clip', () => {
+    vi.useFakeTimers();
+    const clip = renderTimeline();
+    const before = latestSource;
+
+    fireTouch(clip, 'pointerdown', 100);
+    fireTouch(window, 'pointermove', 160); // travels before the long press
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    fireTouch(window, 'pointerup', 160);
+
+    expect(latestSource).toBe(before);
+    expect(clip.classList.contains('squisq-timeline-clip--lifted')).toBe(false);
+  });
+
+  it('a long press lifts a clip, and the finger then moves it', () => {
+    vi.useFakeTimers();
+    const clip = renderTimeline();
+
+    fireTouch(clip, 'pointerdown', 100);
+    fireTouch(window, 'pointermove', 103); // jitter within the touch slop
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(clip.classList.contains('squisq-timeline-clip--lifted')).toBe(true);
+    fireTouch(window, 'pointermove', 163);
+    fireTouch(window, 'pointerup', 163);
+
+    expect(latestSource).toContain('<video src="video/rec.webm"');
+    expect(latestSource).toContain('data-squisq-video-start-at=');
+    expect(latestSource).not.toContain('{[video');
+  });
+
+  it('a tap on a clip never edits it', () => {
+    vi.useFakeTimers();
+    const clip = renderTimeline();
+    const before = latestSource;
+
+    fireTouch(clip, 'pointerdown', 100);
+    fireTouch(window, 'pointerup', 106); // inside the wider touch slop
+
+    expect(latestSource).toBe(before);
+  });
+
+  it('a second finger cannot hijack or end a block-edge drag', () => {
+    renderTimeline();
+    const intro = screen.getByTitle(/Intro/) as HTMLElement;
+    const edge = intro.querySelector('.squisq-timeline-edge--right') as HTMLElement;
+
+    // Block edges are dedicated handles: a finger grabs them at once.
+    fireTouch(edge, 'pointerdown', 300, { pointerId: 1 });
+    fireTouch(window, 'pointermove', 400, { pointerId: 2 });
+    fireTouch(window, 'pointerup', 400, { pointerId: 2 });
+    fireTouch(window, 'pointermove', 336, { pointerId: 1 });
+    fireTouch(window, 'pointerup', 336, { pointerId: 1 });
+
+    expect(latestSource.split('\n')[0]).toBe('# Intro {[duration=14]}');
+  });
+});
+
+describe('TimelineTrack scrubbing', () => {
+  // jsdom lays nothing out, so the ruler's left edge (time 0) is clientX 0.
+  const playheadLeft = () => screen.getByTestId('timeline-playhead').style.left;
+
+  it('pressing the ruler seeks there and dragging keeps scrubbing until cancelled', () => {
+    renderTimeline();
+    const ruler = screen.getByTestId('timeline-ruler');
+
+    fireTouch(ruler, 'pointerdown', 36);
+    expect(playheadLeft()).toBe('36px');
+    fireTouch(window, 'pointermove', 90);
+    expect(playheadLeft()).toBe('90px');
+    fireTouch(window, 'pointercancel', 90);
+    fireTouch(window, 'pointermove', 180);
+    expect(playheadLeft()).toBe('90px');
+  });
+
+  it('pressing the knob lane jumps the playhead there', () => {
+    renderTimeline();
+
+    fireTouch(screen.getByTestId('timeline-scrub-lane'), 'pointerdown', 72);
+    fireTouch(window, 'pointerup', 72);
+    expect(playheadLeft()).toBe('72px');
+  });
+
+  it('grabbing the playhead does not jump it; dragging it scrubs', () => {
+    renderTimeline();
+    const playhead = screen.getByTestId('timeline-playhead');
+
+    fireTouch(playhead, 'pointerdown', 4);
+    expect(playheadLeft()).toBe('0px');
+    expect(playhead.classList.contains('squisq-timeline-playhead--scrubbing')).toBe(true);
+    fireTouch(window, 'pointermove', 54);
+    fireTouch(window, 'pointerup', 54);
+    expect(playheadLeft()).toBe('54px');
+    expect(playhead.classList.contains('squisq-timeline-playhead--scrubbing')).toBe(false);
+  });
+
+  it('stops at the end of the document', () => {
+    renderTimeline();
+
+    fireTouch(screen.getByTestId('timeline-ruler'), 'pointerdown', 5000);
+    fireTouch(window, 'pointerup', 5000);
+    expect(playheadLeft()).toBe(`${20 * 18}px`);
   });
 });

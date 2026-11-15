@@ -24,7 +24,8 @@ vi.mock('../hooks/useFrameCapture.js', () => {
 });
 vi.mock('../mainThreadEncoder.js', () => ({
   supportsWebCodecs: () => true,
-  supportsWebCodecsH264: async () => true,
+  probeWebCodecsH264: async () => ({ profile: 'high' as const }),
+  H264_PROBE_FLUSH_TIMEOUT_MS: 3_000,
   createEncoder: () => ({
     encodeFrame: mocks.encodeFrame,
     finalize: mocks.finalize,
