@@ -11,6 +11,8 @@
 @import './template-picker.css';
 @import './template-gallery.css';
 @import './editor.css';
+/* Timeline view; split out of editor.css and loads where it used to sit. */
+@import './timeline-track.css';
 /* Phone-width overrides for editor.css's toolbar popovers; must follow it. */
 @import './narrow-screens.css';
 @import './navigation-sheet.css';
