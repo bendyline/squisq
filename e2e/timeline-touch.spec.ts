@@ -62,6 +62,18 @@ async function centerOf(locator: Locator): Promise<{ x: number; y: number }> {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
+/**
+ * Where a finger grabs a clip: its body, near the left end. The right end
+ * carries the options button and the resize grip, which keep a press for
+ * themselves — and a clip trimmed by its block can be narrow enough that they
+ * cover its center.
+ */
+async function bodyOf(clip: Locator): Promise<{ x: number; y: number }> {
+  const box = await clip.boundingBox();
+  if (!box) throw new Error('element not laid out');
+  return { x: box.x + 24, y: box.y + box.height / 2 };
+}
+
 const playhead = (page: Page) => page.getByTestId('timeline-playhead');
 const scroller = (page: Page) => page.locator('.squisq-timeline-scroll');
 const playheadLeft = (page: Page) =>
@@ -158,7 +170,7 @@ test.describe('Timeline under a finger', () => {
     const clip = page.locator('.squisq-timeline-clip--embedded');
     const clipLeft = () => clip.evaluate((node) => (node as HTMLElement).style.left);
     const before = await clipLeft();
-    const start = await centerOf(clip);
+    const start = await bodyOf(clip);
     const finger = await Finger.on(page);
     await finger.down(start.x + 60, start.y);
     await finger.move({ x: start.x + 60, y: start.y }, { x: start.x - 100, y: start.y });
@@ -174,22 +186,29 @@ test.describe('Timeline under a finger', () => {
     await openTimeline(page);
     const clip = page.locator('.squisq-timeline-clip--embedded');
     const beforeBox = await clip.boundingBox();
-    const start = await centerOf(clip);
+    const start = await bodyOf(clip);
     const finger = await Finger.on(page);
     await finger.down(start.x, start.y);
     await expect(clip).toHaveClass(/squisq-timeline-clip--lifted/);
+    // 90px is 5s: the clip now starts halfway through its pinned 10s block.
     await finger.move(start, { x: start.x + 90, y: start.y });
     await finger.up();
 
     await expect
       .poll(async () => (await clip.boundingBox())?.x ?? 0)
       .toBeGreaterThan(beforeBox!.x + 40);
+    // An embedded video ends with its block, so once the edit re-parses the
+    // clip draws only the 5s the block has left. Waiting for that keeps the
+    // next press off a bar that is about to change shape under the finger.
+    await expect
+      .poll(async () => (await clip.boundingBox())?.width ?? 0)
+      .toBeLessThan(beforeBox!.width * 0.75);
     await expect(clip).not.toHaveClass(/squisq-timeline-clip--lifted/);
 
     // Back to the left — the direction a pan would scroll the track. Once the
     // clip is lifted the finger's travel belongs to the clip: no scroll.
     const movedBox = await clip.boundingBox();
-    const again = await centerOf(clip);
+    const again = await bodyOf(clip);
     await finger.down(again.x, again.y);
     await expect(clip).toHaveClass(/squisq-timeline-clip--lifted/);
     await finger.move(again, { x: again.x - 60, y: again.y });
