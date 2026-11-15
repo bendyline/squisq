@@ -217,8 +217,13 @@ if (!supportsWebCodecs()) {
 (`supportsWebCodecsAac()`), then via ffmpeg.wasm when cross-origin isolation is
 available, and otherwise skipped with `audioIncluded: false` plus an
 `audioSkippedReason`. Audio problems never fail the export — the video always
-completes. GIF skips audio preparation entirely. `supportsWebCodecsH264(config)` probes a specific encoder
-configuration; `EncoderConfig` and `FfmpegWasmLoadConfig` are also exported.
+completes. GIF skips audio preparation entirely. `supportsWebCodecsH264(config)` checks whether a
+specific encoder configuration is reported as supported. Hosts that drive `createEncoder` themselves
+should call `probeWebCodecsH264(config)` instead and pass its `profile` to `createEncoder` as
+`h264Profile`. WebKit (Safari and every iOS WebView) reports H.264 High profile as supported but stalls
+once five frames are pending, so it gets Baseline. The probe detects the stall by test-encoding the
+same batch of frames the export queues before each flush. `EncoderConfig`
+and `FfmpegWasmLoadConfig` are also exported.
 
 ### RNNoise WASM for Vite hosts (recommended)
 

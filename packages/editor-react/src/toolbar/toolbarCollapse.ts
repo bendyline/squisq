@@ -10,7 +10,8 @@
  * reach tables, images and links, and it has no keyboard shortcut.
  *
  * Items now collapse by priority instead, in TOOLBAR_COLLAPSE_ORDER, while
- * the visible ones keep their usual left-to-right order.
+ * the visible ones keep their usual left-to-right order — which now opens
+ * with Insert, ahead of Bold and Italic.
  */
 
 /**

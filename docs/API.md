@@ -4212,15 +4212,21 @@ interface FrameCaptureHandle {
 
 ```ts
 function supportsWebCodecs(): boolean; // VideoEncoder/VideoFrame present
-function supportsWebCodecsH264(config: EncoderConfig): Promise<boolean>; // H.264 config supported
+function supportsWebCodecsH264(config: EncoderConfig): Promise<boolean>; // H.264 config reported as supported (capability check only)
+// Test-encodes one export-sized batch and returns the H.264 profile that actually drains, or null.
+// WebKit reports High as supported but stalls once five frames are pending; it gets 'baseline'.
+function probeWebCodecsH264(
+  config: EncoderConfig,
+  options?: { flushTimeoutMs?: number },
+): Promise<{ profile: 'high' | 'baseline' } | null>;
 function supportsWebCodecsAac(sampleRate?: number, channels?: number): Promise<boolean>; // AAC audio encode supported (defaults to the export sample rate / channels)
-// EncoderConfig: { width, height, fps, quality }
 function createEncoder(config: EncoderConfig): MainThreadEncoder; // throws if WebCodecs unavailable
 interface EncoderConfig {
   width: number;
   height: number;
   fps: number;
   quality: VideoQuality;
+  h264Profile?: 'high' | 'baseline'; // default 'high'; pass probeWebCodecsH264()'s choice
 }
 interface MainThreadEncoder {
   encodeFrame(bitmap: ImageBitmap, frameIndex: number): Promise<void>;

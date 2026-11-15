@@ -48,6 +48,23 @@ export interface EncoderConfig {
    * consumers (GIF transcode, ffmpeg audio muxing) must leave this off.
    */
   spillOutputToBlob?: boolean;
+  /**
+   * H.264 profile to encode with. Defaults to `'high'`. Pass the profile
+   * {@link probeWebCodecsH264} chose: WebKit's High-profile encoder stalls.
+   */
+  h264Profile?: WebCodecsH264Profile;
+}
+
+/**
+ * `'high'` is H.264 High@4.0 (`avc1.640028`), the better-compressing default.
+ * `'baseline'` is Baseline@4.2 (`avc1.42002a`), for encoders that cannot
+ * drain High.
+ */
+export type WebCodecsH264Profile = 'high' | 'baseline';
+
+/** A WebCodecs H.264 configuration that {@link probeWebCodecsH264} saw drain. */
+export interface WebCodecsH264Support {
+  profile: WebCodecsH264Profile;
 }
 
 export type EncoderFrameSource = ImageBitmap | HTMLCanvasElement;
@@ -77,25 +94,160 @@ export function supportsWebCodecs(): boolean {
 }
 
 /**
- * Probe whether the WebCodecs encoder actually supports the H.264 profile
- * we use. The `VideoEncoder` global can exist while the specific codec is
- * unavailable — this is the case on Linux Chromium, which ships without
- * the proprietary H.264 encoder.
+ * Codec strings by profile. Both levels cover every export size up to 1080p
+ * in either orientation. (The ffmpeg.wasm fallback worker has its own
+ * Baseline configuration.)
+ */
+const H264_CODECS: Readonly<Record<WebCodecsH264Profile, string>> = {
+  high: 'avc1.640028',
+  baseline: 'avc1.42002a',
+};
+
+/** The H.264 configuration for the primary WebCodecs path. */
+function h264EncoderConfig(config: EncoderConfig): VideoEncoderConfig {
+  return {
+    codec: H264_CODECS[config.h264Profile ?? 'high'],
+    width: config.width,
+    height: config.height,
+    bitrate: bitrateForQuality(config.quality, config.width, config.height),
+    framerate: config.fps,
+  };
+}
+
+/** Microseconds per frame, rounded the way every frame timestamp is. */
+function frameDurationMicros(fps: number): number {
+  return Math.round(1_000_000 / fps);
+}
+
+/**
+ * Whether the browser reports support for the H.264 profile we use (High,
+ * unless `config.h264Profile` says otherwise). The `VideoEncoder` global can
+ * exist while the specific codec is unavailable — this is the case on Linux
+ * Chromium, which ships without the proprietary H.264 encoder.
+ *
+ * This is a capability check only. WebKit reports High as supported yet
+ * never drains it; {@link probeWebCodecsH264} detects that and picks a
+ * profile that works.
  */
 export async function supportsWebCodecsH264(config: EncoderConfig): Promise<boolean> {
   if (!supportsWebCodecs()) return false;
   try {
-    const support = await VideoEncoder.isConfigSupported({
-      codec: 'avc1.640028',
-      width: config.width,
-      height: config.height,
-      bitrate: bitrateForQuality(config.quality, config.width, config.height),
-      framerate: config.fps,
-    });
+    const support = await VideoEncoder.isConfigSupported(h264EncoderConfig(config));
     return support.supported === true;
   } catch {
     return false;
   }
+}
+
+/**
+ * How long a probe attempt waits for its flush. Chromium drains a 1080p batch
+ * in tens of milliseconds; the WebKit stall never ends. The margin is for a
+ * slow device bringing up its hardware encoder.
+ */
+export const H264_PROBE_FLUSH_TIMEOUT_MS = 3_000;
+
+type H264ProbeOutcome = 'drained' | 'stalled' | 'inconclusive';
+
+function probeFrameSource(width: number, height: number): HTMLCanvasElement | OffscreenCanvas {
+  const canvas: HTMLCanvasElement | OffscreenCanvas =
+    typeof document !== 'undefined'
+      ? Object.assign(document.createElement('canvas'), { width, height })
+      : new OffscreenCanvas(width, height);
+  const context = canvas.getContext('2d') as
+    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+  if (context) {
+    context.fillStyle = '#000';
+    context.fillRect(0, 0, width, height);
+  }
+  return canvas;
+}
+
+/**
+ * Encode one backpressure batch and report whether the encoder delivered
+ * output and finished its flush in time.
+ *
+ * The batch is exactly what {@link createEncoder} queues before it flushes
+ * (8 frames at 1080p, up to a second's worth at small sizes), so no flush
+ * during the export has more frames pending than the probe did. That matters:
+ * WebKit's High profile drains up to four pending frames and stalls from five.
+ */
+async function probeH264Drain(
+  config: EncoderConfig,
+  flushTimeoutMs: number,
+): Promise<H264ProbeOutcome> {
+  let outputs = 0;
+  let errored = false;
+  let encoder: VideoEncoder | null = null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    encoder = new VideoEncoder({
+      output: () => {
+        outputs++;
+      },
+      error: () => {
+        errored = true;
+      },
+    });
+    encoder.configure(h264EncoderConfig(config));
+    const source = probeFrameSource(config.width, config.height);
+    const duration = frameDurationMicros(config.fps);
+    const frames = resolveWebCodecsQueueLimit(config);
+    for (let i = 0; i < frames; i++) {
+      const frame = new VideoFrame(source, { timestamp: i * duration, duration });
+      try {
+        encoder.encode(frame, { keyFrame: i === 0 });
+      } finally {
+        frame.close();
+      }
+    }
+  } catch {
+    // The probe could not even submit frames (an unexpected frame source
+    // restriction, say). That says nothing about the export's own frames.
+    if (encoder && encoder.state !== 'closed') encoder.close();
+    return 'inconclusive';
+  }
+  try {
+    const flushed = await Promise.race([
+      encoder.flush().then(
+        () => true,
+        () => false,
+      ),
+      new Promise<false>((resolve) => {
+        timer = setTimeout(() => resolve(false), flushTimeoutMs);
+      }),
+    ]);
+    return flushed && outputs > 0 && !errored ? 'drained' : 'stalled';
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+    // Closing also abandons a flush that never settled.
+    if (encoder.state !== 'closed') encoder.close();
+  }
+}
+
+/**
+ * Choose an H.264 profile that WebCodecs can actually encode with, or null
+ * when there is none.
+ *
+ * WebKit (Safari, and every iOS WebView) reports High profile as supported,
+ * but once five frames are pending it stops emitting chunks and never
+ * settles `flush()`, so an export stalled at its first flush. Realtime
+ * latency mode avoids that in macOS WebKit but not in iOS WebKit, while
+ * Baseline drains in both. Rather than sniff the user agent, encode one
+ * export-sized batch with High and fall back to Baseline only when that
+ * stalls, so browsers that drain High keep its better compression.
+ */
+export async function probeWebCodecsH264(
+  config: EncoderConfig,
+  options: { flushTimeoutMs?: number } = {},
+): Promise<WebCodecsH264Support | null> {
+  const flushTimeoutMs = options.flushTimeoutMs ?? H264_PROBE_FLUSH_TIMEOUT_MS;
+  for (const profile of ['high', 'baseline'] as const) {
+    const candidate: EncoderConfig = { ...config, h264Profile: profile };
+    if (!(await supportsWebCodecsH264(candidate))) continue;
+    // An inconclusive probe keeps the profile, as before this probe existed.
+    if ((await probeH264Drain(candidate, flushTimeoutMs)) !== 'stalled') return { profile };
+  }
+  return null;
 }
 
 const RECLAIMED_CODEC_ERROR = /codec reclaimed due to inactivity/i;
@@ -152,6 +304,9 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
    */
   let recoverableError: Error | null = null;
   const frameDuration = 1_000_000 / config.fps; // microseconds per frame
+  // Chromium 151+ leaves `EncodedVideoChunk.duration` null unless the frame
+  // carried one, and the muxer rejects a chunk without a duration.
+  const frameDurationRounded = frameDurationMicros(config.fps);
   const queueLimit = resolveWebCodecsQueueLimit(config);
   let framesSinceFlush = 0;
   let forceNextKeyFrame = false;
@@ -165,24 +320,21 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
     return fatalError ?? err;
   }
 
-  const videoEncoderConfig: VideoEncoderConfig = {
-    // Deliberate profile split from the fallback worker (avc1.42001f,
-    // Baseline): this primary WebCodecs path targets H.264 High@4.0 for
-    // better quality up to 1080p; the wasm-fallback worker uses Baseline for
-    // maximum decoder compatibility.
-    codec: 'avc1.640028',
-    width: config.width,
-    height: config.height,
-    bitrate: bitrateForQuality(config.quality, config.width, config.height),
-    framerate: config.fps,
-  };
+  const videoEncoderConfig = h264EncoderConfig(config);
 
   function createConfiguredVideoEncoder(): VideoEncoder {
     const generation = ++encoderGeneration;
     const nextEncoder = new VideoEncoder({
       output(chunk, meta) {
-        if (closed || generation !== encoderGeneration) return;
-        muxer.addVideoChunk(chunk, meta ?? undefined);
+        if (closed || generation !== encoderGeneration || fatalError) return;
+        try {
+          muxer.addVideoChunk(chunk, meta ?? undefined);
+        } catch (caught: unknown) {
+          // Thrown from a browser callback, this would vanish as an uncaught
+          // error, and finalize() would later fail on an empty track with an
+          // unrelated message. Latch it so the export reports the cause.
+          fatalError = new Error(`MP4 muxing failed: ${toError(caught).message}`);
+        }
       },
       error(err) {
         if (closed || generation !== encoderGeneration || fatalError || recoverableError) return;
@@ -276,7 +428,7 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
               if (closed) throw new Error('Encoder already closed');
 
               const timestamp = Math.round(frameIndex * frameDuration);
-              const frame = new VideoFrame(source, { timestamp });
+              const frame = new VideoFrame(source, { timestamp, duration: frameDurationRounded });
               try {
                 const keyFrame = forceNextKeyFrame || frameIndex % 30 === 0;
                 encoder.encode(frame, { keyFrame });

@@ -11,8 +11,6 @@
 @import './template-picker.css';
 @import './template-gallery.css';
 @import './editor.css';
-/* Touch-screen placement for editor.css's text-entry dialogs; must follow it. */
-@import './touch-dialogs.css';
 /* Phone-width overrides for editor.css's toolbar popovers; must follow it. */
 @import './narrow-screens.css';
 @import './navigation-sheet.css';
@@ -44,3 +42,8 @@
 @import './widget-error.css';
 @import '../scene/scene.css';
 @import '../customTemplates/designer.css';
+/* Modal dialogs keep clear of the device's safe areas, and the large ones fill
+   a phone's window. Overrides the dialog rules above, so must follow them all. */
+@import './dialogs.css';
+/* Touch-screen placement for the text-entry dialogs; must follow dialogs.css. */
+@import './touch-dialogs.css';

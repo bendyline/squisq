@@ -8,7 +8,11 @@ import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import { DocumentTray } from '../documentTray/DocumentTray';
-import { DocumentTrayExtension, DOCUMENT_TRAY_KEY } from '../documentTray/DocumentTrayExtension';
+import {
+  DocumentTrayExtension,
+  DOCUMENT_TRAY_ATTRIBUTE,
+  DOCUMENT_TRAY_KEY,
+} from '../documentTray/DocumentTrayExtension';
 import { TiptapAudio } from '../tiptap/TiptapAudio';
 import { TiptapVideo } from '../tiptap/TiptapVideo';
 import { VideoEmbedExtension } from '../videoEmbed/VideoEmbedExtension';
@@ -53,6 +57,28 @@ async function mount(markdown: string, enabled = true, editable = true) {
   return { editor, onUpdate, ...rendered };
 }
 const items = (editor: Editor) => DOCUMENT_TRAY_KEY.getState(editor.state)!.items;
+
+/** The full editor, as hosts mount it, with a handle on its context. */
+function renderWithContext(source: string) {
+  const live: { ctx: EditorContextValue | null } = { ctx: null };
+  function Probe() {
+    live.ctx = useEditorContext();
+    return null;
+  }
+  const rendered = render(
+    <EditorProvider initialMarkdown={source} initialView="wysiwyg">
+      <WysiwygEditor />
+      <Probe />
+    </EditorProvider>,
+  );
+  return { ...rendered, ctx: () => live.ctx! };
+}
+
+/** The `{[audio …]}` paragraph in the editor, hidden or not. */
+const annotation = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll('.ProseMirror p')).find((p) =>
+    p.textContent?.startsWith('{[audio'),
+  );
 const AUDIO = '<audio src="audio/narration.mp3" controls data-squisq-audio-clip-start="2"></audio>';
 const VIDEO =
   '<video src="video/background.mp4" controls width="480" data-squisq-video-placement="overlay" data-squisq-video-lock-to-block="false"></video>';
@@ -78,7 +104,19 @@ describe('document tray', () => {
     act(() => {
       live.ctx!.setLayoutMode('block');
     });
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Document tray' })).toBeNull());
+    // Each card's tray holds the part of the opening run that card shows: the
+    // preamble's narration, then the overlay under the first heading.
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Video: background.mp4' })).toBeNull(),
+    );
+    screen.getByRole('button', { name: 'Audio: take.webm' });
+    expect(live.ctx!.markdownSource).toBe(source);
+    act(() => {
+      live.ctx!.goToBlock(1);
+    });
+    await screen.findByRole('button', { name: 'Video: background.mp4' });
+    expect(screen.queryByRole('button', { name: 'Audio: take.webm' })).toBeNull();
+    expect(document.querySelectorAll('.ProseMirror video')).toHaveLength(0);
     expect(live.ctx!.markdownSource).toBe(source);
     act(() => {
       live.ctx!.setLayoutMode('document');
@@ -88,6 +126,63 @@ describe('document tray', () => {
       screen.getByRole('button', { name: 'Audio: take.webm' }).getAttribute('aria-expanded'),
     ).toBe('false');
     expect(live.ctx!.markdownSource).toBe(source);
+  });
+
+  it('shows a preamble narration in the first block card instead of its annotation text', async () => {
+    const source =
+      '{[audio src=audio/narration.webm anchor=document]}\n\n# Test123\n\n# Fighter Jets\n\nThe F-16.\n\n## Later\n\n{[audio src=music.mp3]}\n';
+    const { container, ctx } = renderWithContext(source);
+    await screen.findByRole('region', { name: 'Document tray' });
+    act(() => {
+      ctx().setLayoutMode('block');
+    });
+    await waitFor(() => expect(container.querySelector('.ProseMirror h1')).toBeNull());
+    const tray = screen.getByRole('region', { name: 'Document tray' });
+    expect(within(tray).getAllByRole('button')).toHaveLength(1);
+    expect(annotation(container)?.hasAttribute(DOCUMENT_TRAY_ATTRIBUTE)).toBe(true);
+
+    act(() => {
+      ctx().goToBlock(3);
+    });
+    await screen.findByRole('heading', { name: 'Later' });
+    // A later block's clip is that block's media, not the document's.
+    expect(screen.queryByRole('region', { name: 'Document tray' })).toBeNull();
+    expect(annotation(container)?.hasAttribute(DOCUMENT_TRAY_ATTRIBUTE)).toBe(false);
+
+    act(() => {
+      ctx().goToBlock(0);
+    });
+    await screen.findByRole('region', { name: 'Document tray' });
+    expect(annotation(container)?.textContent).toContain('narration.webm');
+    expect(annotation(container)?.hasAttribute(DOCUMENT_TRAY_ATTRIBUTE)).toBe(true);
+    expect(ctx().markdownSource).toBe(source);
+  });
+
+  it('trays a narration under the first heading in block layout exactly when the document does', async () => {
+    const recorded = renderWithContext(
+      '# Title\n\n{[audio src=take.webm anchor=document]}\n\nBody.\n\n# Next\n\nMore.\n',
+    );
+    act(() => {
+      recorded.ctx().setLayoutMode('block');
+    });
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Next' })).toBeNull());
+    await screen.findByRole('button', { name: 'Audio: take.webm' });
+    recorded.unmount();
+
+    // Prose before the first heading ends the opening run in either layout.
+    const source = 'Intro.\n\n# Title\n\n{[audio src=take.webm anchor=document]}\n';
+    const { container, ctx } = renderWithContext(source);
+    await screen.findByRole('heading', { name: 'Title' });
+    expect(screen.queryByRole('region', { name: 'Document tray' })).toBeNull();
+    act(() => {
+      ctx().setLayoutMode('block');
+      ctx().goToBlock(1);
+    });
+    await waitFor(() => expect(screen.queryByText('Intro.')).toBeNull());
+    screen.getByRole('heading', { name: 'Title' });
+    expect(screen.queryByRole('region', { name: 'Document tray' })).toBeNull();
+    expect(annotation(container)?.hasAttribute(DOCUMENT_TRAY_ATTRIBUTE)).toBe(false);
+    expect(ctx().markdownSource).toBe(source);
   });
 
   it('keeps a media-only clip expanded when a source change rewrites its recipe', async () => {

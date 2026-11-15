@@ -11,6 +11,7 @@
 import { createDocument, type Editor } from '@tiptap/core';
 import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
 import { closeHistory } from '@tiptap/pm/history';
+import type { Transaction } from '@tiptap/pm/state';
 import { needsTrailingParagraph, withoutTrailingParagraph } from './trailingParagraph';
 
 /**
@@ -32,12 +33,14 @@ function keepTrailingParagraph(current: PMNode, next: PMNode): PMNode {
 /**
  * Replace the editor's document with `content` (Tiptap HTML) as a minimal
  * change. Falls back to a full `setContent` when the documents cannot be
- * diffed or the change does not fit.
+ * diffed or the change does not fit. `prepare` adds to whichever transaction
+ * carries the change; nothing is dispatched when there is no change.
  */
 export function replaceDocumentMinimal(
   editor: Editor,
   content: string,
   frontmatter?: string,
+  prepare?: (tr: Transaction) => void,
 ): void {
   const { state } = editor;
   try {
@@ -74,6 +77,7 @@ export function replaceDocumentMinimal(
     }
     closeHistory(tr);
     tr.setMeta('preventUpdate', true);
+    prepare?.(tr);
     editor.view.dispatch(tr);
   } catch {
     editor
@@ -81,6 +85,7 @@ export function replaceDocumentMinimal(
       .setContent(content)
       .command(({ tr }) => {
         if (frontmatter !== undefined) tr.setDocAttribute('sourceFrontmatter', frontmatter);
+        prepare?.(tr);
         return true;
       })
       .run();

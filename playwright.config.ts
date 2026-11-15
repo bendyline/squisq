@@ -26,6 +26,9 @@ process.env.SQUISQ_E2E_SELECTED_PORT = String(e2ePort);
 const e2eBaseUrl = `http://127.0.0.1:${e2ePort}`;
 const htmlReportOpenMode = 'never';
 
+/** Specs that run on the touch-device projects instead of desktop Chromium. */
+const TOUCH_SPECS = /-touch\.spec\.ts/;
+
 // Keep repo test scripts non-interactive even if a shell has
 // PLAYWRIGHT_HTML_OPEN configured globally.
 process.env.PLAYWRIGHT_HTML_OPEN = htmlReportOpenMode;
@@ -61,6 +64,20 @@ export default defineConfig({
       // (the browser MP4/GIF export pipeline) — headed runs and full Chromium
       // both encode fine. See e2e/video-export.spec.ts.
       use: { ...devices['Desktop Chrome'], channel: 'chromium' },
+      testIgnore: TOUCH_SPECS,
+    },
+    // A finger on each engine a phone runs. WebKit stands in for iOS and
+    // iPadOS, whose taps differ from Chromium's in ways synthetic events
+    // cannot show (see e2e/proofing-touch.spec.ts).
+    {
+      name: 'android-touch',
+      testMatch: TOUCH_SPECS,
+      use: { ...devices['Pixel 7'], channel: 'chromium' },
+    },
+    {
+      name: 'iphone-touch',
+      testMatch: TOUCH_SPECS,
+      use: { ...devices['iPhone 13'] },
     },
     {
       name: 'firefox-smoke',

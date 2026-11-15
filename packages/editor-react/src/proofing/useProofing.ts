@@ -104,6 +104,21 @@ function findSquiggle(root: HTMLElement, findingId: string): HTMLElement | null 
   return null;
 }
 
+/** A squiggle's on-screen box, in client coordinates. */
+interface SquiggleRect {
+  left: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * How far a finger may drift, and how long it may rest, and still have made
+ * a tap rather than a scroll or a long press. Monaco swallows a tap's
+ * `click`, so the Source view tells one from its pointer events.
+ */
+const TAP_SLOP_PX = 10;
+const TAP_MAX_MS = 500;
+
 export type ProofingStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 export interface ProofingMenuAnchor {
@@ -476,10 +491,24 @@ export function useProofing({
         if (!collectionRef.current) {
           collectionRef.current = editor.createDecorationsCollection([]);
         }
+        // As in the Write pass: a tapped card names a finding this pass
+        // retires, so find its squiggle before the decorations are replaced
+        // and re-point the card at whatever this pass flags in its place.
+        const openId = hoveredFindingRef.current;
+        const openIndex = openId === null ? -1 : sourceOrderRef.current.indexOf(openId);
+        const openRange = openIndex >= 0 ? collectionRef.current.getRange(openIndex) : null;
+        const openStart = openRange ? model.getOffsetAt(openRange.getStartPosition()) : -1;
+        const openEnd = openRange ? model.getOffsetAt(openRange.getEndPosition()) : -1;
         collectionRef.current.set(buildMonacoProofDecorations(model, kept));
         sourceOrderRef.current = kept.map((finding) => finding.id);
         setFindings(kept);
         setFindingsView('raw');
+        if (openId !== null) {
+          const successor = kept.find(
+            (finding) => finding.start === openStart && finding.end === openEnd,
+          );
+          carryHoverRef.current(successor?.id ?? null);
+        }
       }
     } catch (err: unknown) {
       if (passId === passIdRef.current) {
@@ -795,6 +824,52 @@ export function useProofing({
     scheduleHoverClose();
   }, [scheduleHoverClose]);
 
+  /**
+   * Where a finding's squiggle is on screen, in the view showing it: the
+   * Write view's rendered span, or the Source view's decoration range as
+   * Monaco currently lays it out. Null once the squiggle is gone.
+   */
+  const squiggleRect = useCallback((findingId: string): SquiggleRect | null => {
+    if (activeViewRef.current === 'raw') {
+      const editor = monacoRef.current;
+      const collection = collectionRef.current;
+      const index = sourceOrderRef.current.indexOf(findingId);
+      const range = index >= 0 ? collection?.getRange(index) : null;
+      const dom = editor?.getDomNode();
+      if (!editor || !range || !dom) return null;
+      const start = editor.getScrolledVisiblePosition({
+        lineNumber: range.startLineNumber,
+        column: range.startColumn,
+      });
+      if (!start) return null;
+      const box = dom.getBoundingClientRect();
+      const top = box.top + start.top;
+      return { left: box.left + start.left, top, bottom: top + start.height };
+    }
+    const editor = tiptapRef.current;
+    const span = editor && !editor.isDestroyed ? findSquiggle(editor.view.dom, findingId) : null;
+    if (!span) return null;
+    const rect = span.getBoundingClientRect();
+    return { left: rect.left, top: rect.top, bottom: rect.bottom };
+  }, []);
+
+  /** A finger or pen tapped a squiggle: raise its card at once, with no dwell. */
+  const openTapCard = useCallback(
+    (findingId: string, rect: SquiggleRect, linkHref?: string | null) => {
+      cancelHoverTimers();
+      hoverHeldRef.current = false;
+      hoveredFindingRef.current = findingId;
+      tapCardRef.current = findingId;
+      setHoverAnchor({
+        findingId,
+        ...rect,
+        trigger: 'tap',
+        ...(linkHref ? { linkHref } : {}),
+      });
+    },
+    [cancelHoverTimers],
+  );
+
   useEffect(() => {
     if (!enabled || status !== 'ready') return;
     const editor = tiptapEditor;
@@ -856,22 +931,6 @@ export function useProofing({
       if (hoveredFindingRef.current !== null) scheduleHoverClose();
     };
 
-    // Every press, anywhere: one outside a tapped card dismisses it.
-    const onPress = (event: PointerEvent) => {
-      tapDismissedRef.current = null;
-      const open = tapCardRef.current;
-      if (open === null) return;
-      const target = event.target as Element | null;
-      if (target?.closest?.('.squisq-proof-tooltip')) return;
-      // Pressing the word whose card is up puts the card away, and the
-      // click completing that press must not raise it again.
-      const pressed = target?.closest?.('[data-proof-id]');
-      if (pressed && dom.contains(pressed) && pressed.getAttribute('data-proof-id') === open) {
-        tapDismissedRef.current = open;
-      }
-      closeHover();
-    };
-
     const onClick = (event: MouseEvent) => {
       const span = proofingTapTarget(event);
       const findingId = span?.getAttribute('data-proof-id');
@@ -886,19 +945,8 @@ export function useProofing({
       // The card offers the link, so a read-only surface (where a link is
       // live) must not follow it as well.
       if (linkHref) event.preventDefault();
-      cancelHoverTimers();
-      hoverHeldRef.current = false;
-      hoveredFindingRef.current = findingId;
-      tapCardRef.current = findingId;
       const rect = span.getBoundingClientRect();
-      setHoverAnchor({
-        findingId,
-        left: rect.left,
-        top: rect.top,
-        bottom: rect.bottom,
-        trigger: 'tap',
-        ...(linkHref ? { linkHref } : {}),
-      });
+      openTapCard(findingId, { left: rect.left, top: rect.top, bottom: rect.bottom }, linkHref);
     };
 
     // A hovered card is tied to where the pointer rests, which a scroll
@@ -919,7 +967,6 @@ export function useProofing({
     dom.addEventListener('mousedown', closeHover);
     dom.addEventListener('click', onClick);
     dom.addEventListener('keydown', onKeyDown);
-    document.addEventListener('pointerdown', onPress, true);
     window.addEventListener('scroll', onScroll, true);
     return () => {
       releaseTapPointers();
@@ -928,36 +975,44 @@ export function useProofing({
       dom.removeEventListener('mousedown', closeHover);
       dom.removeEventListener('click', onClick);
       dom.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('pointerdown', onPress, true);
       window.removeEventListener('scroll', onScroll, true);
       tapDismissedRef.current = null;
       closeHover();
     };
-  }, [tiptapEditor, enabled, status, cancelHoverTimers, closeHover, scheduleHoverClose]);
+  }, [
+    tiptapEditor,
+    enabled,
+    status,
+    cancelHoverTimers,
+    closeHover,
+    scheduleHoverClose,
+    openTapCard,
+  ]);
 
   // ── A tapped card follows its word ──────────────────────────────────
   // The tap that raises a card also puts the caret in the word, which on
   // a phone raises the keyboard and scrolls the caret clear of it. Closing
   // on that scroll, as a hovered card does, would dismiss the card before
   // it had been read.
+  //
+  // The Source view's card is the same card, so it follows its word the same
+  // way: through the page's scrolling and through Monaco's own.
   const tapCardId = hoverAnchor?.trigger === 'tap' ? hoverAnchor.findingId : null;
   useEffect(() => {
     if (tapCardId === null) return;
     let frame = 0;
     const follow = () => {
       frame = 0;
-      const editor = tiptapRef.current;
-      const span = editor && !editor.isDestroyed ? findSquiggle(editor.view.dom, tapCardId) : null;
-      if (!span) {
+      const rect = squiggleRect(tapCardId);
+      if (!rect) {
         closeHover();
         return;
       }
-      const rect = span.getBoundingClientRect();
       setHoverAnchor((current) =>
         current &&
         current.findingId === tapCardId &&
         (current.left !== rect.left || current.top !== rect.top || current.bottom !== rect.bottom)
-          ? { ...current, left: rect.left, top: rect.top, bottom: rect.bottom }
+          ? { ...current, ...rect }
           : current,
       );
     };
@@ -966,12 +1021,18 @@ export function useProofing({
     };
     window.addEventListener('scroll', schedule, true);
     window.addEventListener('resize', schedule);
+    // Monaco scrolls its own viewport, which no DOM scroll event reports.
+    const monaco = activeViewRef.current === 'raw' ? monacoRef.current : null;
+    const monacoSubscriptions = monaco
+      ? [monaco.onDidScrollChange(schedule), monaco.onDidLayoutChange(schedule)]
+      : [];
     return () => {
       if (frame !== 0) cancelAnimationFrame(frame);
       window.removeEventListener('scroll', schedule, true);
       window.removeEventListener('resize', schedule);
+      for (const subscription of monacoSubscriptions) subscription.dispose();
     };
-  }, [tapCardId, closeHover]);
+  }, [tapCardId, closeHover, squiggleRect]);
 
   /** The Source view's finding at a Monaco position, or null. */
   const sourceFindingAt = useCallback(
@@ -998,10 +1059,57 @@ export function useProofing({
     if (!editor || !dom) return;
     const findingAt = (position: { lineNumber: number; column: number }) =>
       sourceFindingAt(editor, position);
+
+    // ── A finger's tap on a squiggle raises the card, as in the Write view.
+    // Monaco takes a tap over with its own gesture handling and no `click`
+    // ever reaches the page, so a tap is read off the pointer events: a
+    // touch or pen press that lifts close to where it went down, before it
+    // could have become a long press (which is the menu, below).
+    let press: { pointerId: number; x: number; y: number; time: number } | null = null;
+    const onPointerDown = (event: PointerEvent) => {
+      const finger = event.pointerType === 'touch' || event.pointerType === 'pen';
+      const target = event.target as Element | null;
+      press =
+        finger && event.isPrimary && target?.closest?.('.squisq-proof-underline')
+          ? {
+              pointerId: event.pointerId,
+              x: event.clientX,
+              y: event.clientY,
+              time: event.timeStamp,
+            }
+          : null;
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      const start = press;
+      press = null;
+      if (!start || event.pointerId !== start.pointerId) return;
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > TAP_SLOP_PX) return;
+      if (event.timeStamp - start.time > TAP_MAX_MS) return;
+      const position = editor.getTargetAtClientPoint(start.x, start.y)?.position;
+      const findingId = position ? findingAt(position) : null;
+      if (!findingId) return;
+      // The press that put this word's card away must not raise it again.
+      if (tapDismissedRef.current === findingId) {
+        tapDismissedRef.current = null;
+        return;
+      }
+      const rect = squiggleRect(findingId);
+      if (rect) openTapCard(findingId, rect);
+    };
+    const onPointerCancel = () => {
+      press = null;
+    };
+    // Typing is the reader moving on, as in the Write view.
+    const contentSubscription = editor.onDidChangeModelContent(() => {
+      if (tapCardRef.current !== null) closeHover();
+    });
+
     // Capture phase so we win against Monaco's own context-menu listener
     // when (and only when) a finger's long press lands on a squiggle. A
     // mouse right-click is the shell's editor menu, as in the Write view.
     const onContextMenu = (event: MouseEvent) => {
+      // A press that became a long press is not also a tap.
+      press = null;
       if (!isTapClick(event)) return;
       const target = editor.getTargetAtClientPoint(event.clientX, event.clientY);
       const position = target?.position;
@@ -1028,13 +1136,55 @@ export function useProofing({
         y: rect.top + (visible?.top ?? 0) + (visible?.height ?? 16),
       });
     };
+    dom.addEventListener('pointerdown', onPointerDown, true);
+    dom.addEventListener('pointerup', onPointerUp, true);
+    dom.addEventListener('pointercancel', onPointerCancel, true);
     dom.addEventListener('contextmenu', onContextMenu, true);
     dom.addEventListener('keydown', onKeyDown, true);
     return () => {
+      dom.removeEventListener('pointerdown', onPointerDown, true);
+      dom.removeEventListener('pointerup', onPointerUp, true);
+      dom.removeEventListener('pointercancel', onPointerCancel, true);
       dom.removeEventListener('contextmenu', onContextMenu, true);
       dom.removeEventListener('keydown', onKeyDown, true);
+      contentSubscription.dispose();
+      if (tapCardRef.current !== null) closeHover();
     };
-  }, [monacoEditor, enabled, status, sourceFindingAt]);
+  }, [monacoEditor, enabled, status, sourceFindingAt, squiggleRect, openTapCard, closeHover]);
+
+  // ── A tapped card answers to presses (both views) ───────────────────
+  // Every press, anywhere: one outside a tapped card dismisses it. Pressing
+  // the word whose card is up puts the card away too, and the tap that press
+  // completes must not raise it again. Held here rather than in either
+  // view's effect because each view unmounts the other's editor.
+  useEffect(() => {
+    if (!enabled || status !== 'ready') return;
+    const pressedFinding = (event: PointerEvent): string | null => {
+      const target = event.target as Element | null;
+      const writeDom = tiptapRef.current?.isDestroyed === false ? tiptapRef.current.view.dom : null;
+      const span = target?.closest?.('[data-proof-id]');
+      if (span && writeDom?.contains(span)) return span.getAttribute('data-proof-id');
+      const monaco = monacoRef.current;
+      if (!monaco || !target?.closest?.('.squisq-proof-underline')) return null;
+      if (!monaco.getDomNode()?.contains(target)) return null;
+      const position = monaco.getTargetAtClientPoint(event.clientX, event.clientY)?.position;
+      return position ? sourceFindingAt(monaco, position) : null;
+    };
+    const onPress = (event: PointerEvent) => {
+      tapDismissedRef.current = null;
+      const open = tapCardRef.current;
+      if (open === null) return;
+      const target = event.target as Element | null;
+      if (target?.closest?.('.squisq-proof-tooltip')) return;
+      if (pressedFinding(event) === open) tapDismissedRef.current = open;
+      closeHover();
+    };
+    document.addEventListener('pointerdown', onPress, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPress, true);
+      tapDismissedRef.current = null;
+    };
+  }, [enabled, status, closeHover, sourceFindingAt]);
 
   const findingAtPoint = useCallback(
     (view: EditorView, clientX: number, clientY: number): string | null => {

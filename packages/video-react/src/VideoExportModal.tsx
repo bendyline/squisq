@@ -14,6 +14,7 @@ import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { MediaEditRenderManager } from './mediaEdit/mediaEditRenderManager.js';
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 import { useModalDialog, type CaptionMode } from '@bendyline/squisq-react';
+import { safeAreaPadding } from './safeArea.js';
 import {
   useVideoExport,
   type VideoExportConfig,
@@ -202,9 +203,12 @@ const VIDEO_EXPORT_PALETTES: Record<'light' | 'dark', VideoExportPalette> = {
   },
 };
 
+/** The panel keeps a 12px margin inside the device's safe areas. */
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
+  boxSizing: 'border-box',
+  padding: safeAreaPadding(12),
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -216,9 +220,9 @@ const modalStyle: React.CSSProperties = {
   borderRadius: 0,
   boxSizing: 'border-box',
   padding: '20px clamp(12px, 4vw, 28px)',
-  width: 'min(480px, calc(100vw - 24px))',
+  width: 'min(480px, 100%)',
   minWidth: 0,
-  maxHeight: 'calc(100dvh - 24px)',
+  maxHeight: '100%',
   overflowY: 'auto',
   overscrollBehavior: 'contain',
   boxShadow: '0 8px 32px rgba(0,0,0,0.18)',

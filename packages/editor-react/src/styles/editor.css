@@ -4355,6 +4355,10 @@ button.squisq-view-menu-radio-row:focus-visible {
   background: var(--squisq-desk-rail);
   border-top: 1px solid var(--squisq-desk-border);
   user-select: none;
+  -webkit-user-select: none;
+  /* A long press lifts a clip; iOS must not raise its callout over it. */
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .squisq-timeline-controls {
@@ -4659,6 +4663,14 @@ button.squisq-view-menu-radio-row:focus-visible {
 }
 
 .squisq-timeline-inner {
+  /* Space before time 0, so the playhead (and its grip) parked at 0 isn't
+     clipped by the viewport's left edge. The rows shift by the padding; the
+     absolutely positioned playhead adds it back through its margin. */
+  --squisq-timeline-gutter: 8px;
+  /* Height of the lane above the rows that the playhead's knob rides in. */
+  --squisq-timeline-lane: 14px;
+  /* Width of the playhead's transparent grab column. */
+  --squisq-timeline-playhead-hit: 14px;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -4669,7 +4681,21 @@ button.squisq-view-menu-radio-row:focus-visible {
      to the padding-box top (absolute `top: 0`) and so stays above the rows
      while this padding pushes the track down — the notch reads as a handle
      sitting above the timeline rather than overlapping the first block. */
-  padding-top: 14px;
+  padding-top: var(--squisq-timeline-lane);
+  padding-left: var(--squisq-timeline-gutter);
+}
+
+/* The knob's lane doubles as a scrub strip: press anywhere along it to jump
+   the playhead there and keep dragging. */
+.squisq-timeline-scrub-lane {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--squisq-timeline-lane);
+  z-index: 1;
+  cursor: pointer;
+  touch-action: none;
 }
 
 /* Playhead — draggable scrubber. A wide transparent column is the hit area;
@@ -4678,8 +4704,8 @@ button.squisq-view-menu-radio-row:focus-visible {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 14px;
-  margin-left: -7px;
+  width: var(--squisq-timeline-playhead-hit);
+  margin-left: calc(var(--squisq-timeline-gutter) - var(--squisq-timeline-playhead-hit) / 2);
   z-index: 20;
   cursor: ew-resize;
   touch-action: none;
@@ -4690,7 +4716,7 @@ button.squisq-view-menu-radio-row:focus-visible {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 6px;
+  left: calc(50% - 1px);
   width: 2px;
   background: var(--squisq-danger);
   pointer-events: none;
@@ -4699,9 +4725,10 @@ button.squisq-view-menu-radio-row:focus-visible {
 .squisq-timeline-playhead-knob {
   position: absolute;
   top: 0;
-  left: 2px;
+  left: 50%;
   width: 10px;
   height: 9px;
+  translate: -50% 0;
   border-radius: 2px;
   background: var(--squisq-danger);
   pointer-events: none;
@@ -4709,6 +4736,8 @@ button.squisq-view-menu-radio-row:focus-visible {
 
 .squisq-timeline-row--ruler {
   cursor: pointer;
+  /* Dragging along the ruler scrubs rather than scrolling the track. */
+  touch-action: none;
 }
 
 .squisq-timeline-row {
@@ -4838,8 +4867,11 @@ button.squisq-view-menu-radio-row:focus-visible {
   font-size: 13px;
 }
 
+/* Without hover, a clip's menu stays visible. A block's menu follows the
+   selection (the `--active` rule above): showing it on every bar buried the
+   narrow bars' labels, and a tap selects a bar anyway. */
 @media (hover: none) {
-  .squisq-timeline-item-menu-trigger {
+  .squisq-timeline-item-menu-trigger--clip {
     opacity: 1;
     pointer-events: auto;
   }
@@ -4928,6 +4960,16 @@ button.squisq-view-menu-radio-row:focus-visible {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
 }
 
+/* A clip a long press picked up: raised above its neighbours until dropped. */
+.squisq-timeline-clip--lifted {
+  z-index: 5;
+  opacity: 1;
+  cursor: grabbing;
+  box-shadow:
+    0 0 0 2px var(--squisq-outline-accent),
+    0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
 .squisq-timeline-clip-label {
   white-space: nowrap;
   overflow: hidden;
@@ -4951,6 +4993,13 @@ button.squisq-view-menu-radio-row:focus-visible {
 
 .squisq-timeline-edge--right {
   right: -1px;
+}
+
+/* A block edge is a dedicated handle: a finger dragging it resizes rather
+   than scrolling the track. (A clip's edge keeps panning until a long press
+   lifts it — see TimelineTrack.) */
+.squisq-timeline-block > .squisq-timeline-edge {
+  touch-action: none;
 }
 
 /* Time ruler pinned to the bottom of the track — spans the full width. */
@@ -5010,6 +5059,117 @@ button.squisq-view-menu-radio-row:focus-visible {
 .squisq-editor-shell[data-theme='dark'] .squisq-timeline-row--ruler,
 .squisq-editor-shell[data-theme='dark'] .squisq-timeline-tick {
   border-color: var(--squisq-desk-border);
+}
+
+/* ─── Timeline on touch screens ──────────────────────────
+   A fingertip needs a far larger target than a cursor. The playhead grows a
+   notched head in a taller lane, the transport buttons, media rows and ruler
+   grow, and resize grips show only on the selected block — so a tap anywhere
+   else on a bar still selects it and a swipe still scrolls the track. */
+@media (pointer: coarse) {
+  .squisq-timeline-controls {
+    gap: 4px;
+    padding: 6px;
+  }
+
+  .squisq-timeline-zoom-button {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    font-size: 19px;
+  }
+
+  .squisq-timeline-play-button {
+    font-size: 14px;
+  }
+
+  .squisq-timeline-time {
+    font-size: 11px;
+  }
+
+  .squisq-timeline-inner {
+    --squisq-timeline-gutter: 22px;
+    --squisq-timeline-lane: 24px;
+    --squisq-timeline-playhead-hit: 32px;
+  }
+
+  .squisq-timeline-playhead-knob {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    clip-path: polygon(0 0, 100% 0, 100% 60%, 50% 100%, 0 60%);
+    transition: scale 0.12s ease-out;
+  }
+
+  .squisq-timeline-playhead--scrubbing .squisq-timeline-playhead-knob {
+    scale: 1.2;
+  }
+
+  /* Widen the grab area around the knob beyond the line's own column. */
+  .squisq-timeline-playhead::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 48px;
+    height: calc(var(--squisq-timeline-lane) + 12px);
+    translate: -50% 0;
+  }
+
+  .squisq-timeline-row--media {
+    height: 32px;
+    flex-basis: 32px;
+  }
+
+  .squisq-timeline-row--ruler {
+    height: 26px;
+  }
+
+  .squisq-timeline-tick-label {
+    font-size: 11px;
+  }
+
+  .squisq-timeline-edge {
+    width: 20px;
+  }
+
+  .squisq-timeline-block:not(.squisq-timeline-block--active) > .squisq-timeline-edge {
+    display: none;
+  }
+
+  /* A visible grip, so the handles read as draggable without hover. */
+  .squisq-timeline-edge::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 4px;
+    height: 18px;
+    translate: -50% -50%;
+    border-radius: 2px;
+    background: var(--squisq-outline-accent);
+    pointer-events: none;
+  }
+
+  .squisq-timeline-clip .squisq-timeline-edge::after {
+    width: 3px;
+    height: 14px;
+    background: rgba(255, 255, 255, 0.7);
+  }
+
+  .squisq-timeline-item-menu-trigger {
+    right: 24px;
+    width: 28px;
+    height: 28px;
+    font-size: 17px;
+  }
+
+  .squisq-timeline-item-menu-trigger--clip {
+    right: 22px;
+    width: 24px;
+    height: 24px;
+    font-size: 15px;
+  }
 }
 /* Portaled timeline item menu opened by the ellipsis buttons on block/video
    bars. It shares the block-properties palette's controls and color tokens. */

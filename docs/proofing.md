@@ -157,13 +157,16 @@ Two surfaces, same actions, different amounts of intent:
   pointer leaves the word — leaving only _arms_ a close ~260 ms out,
   which is cancelled when the pointer lands on the card. A click in the
   text or a scroll dismisses it at once. "+N more" opens the full menu.
-- **Tap** (Write view, touch and pen). A finger cannot hover, so tapping
+- **Tap** (both views, touch and pen). A finger cannot hover, so tapping
   a squiggle raises the same card at once, with buttons sized for a
   finger. It stays until the reader taps anywhere outside it — the same
   word included, so a second tap puts it away — or starts typing, and it
   follows its word through a scroll rather than closing on one: the tap
   also places the caret, which on a phone raises the keyboard and
-  scrolls the page.
+  scrolls the page. A tap is told from a mouse click by the press that
+  began it, because WebKit (iOS, iPadOS) reports a finger's click as
+  `pointerType: "mouse"`; the Source view reads it off the pointer events
+  alone, because Monaco takes a tap over and no click reaches the page.
 - **Right-click menu** (both views). A mouse right-click on a squiggle
   opens the shell's editor context menu, led by the finding's message,
   its suggestions and the same Ignore/dictionary items, with Cut, Copy,
@@ -190,9 +193,10 @@ link with no squiggle opens on a tap as before. Without `onLinkClick`
 nothing changes: the card shows no link, and the tap is left to do
 whatever the surface did with it.
 
-The Source view's explanation is Monaco's own hover card (built from the
-decoration's `hoverMessage`), so it reads the same but carries no
-buttons; act there through the right-click menu.
+For a mouse, the Source view's explanation is Monaco's own hover card
+(built from the decoration's `hoverMessage`), so it reads the same but
+carries no buttons; act there through the right-click menu. A finger's
+tap raises the shared card in the Source view too.
 
 ## The two dictionary scopes
 

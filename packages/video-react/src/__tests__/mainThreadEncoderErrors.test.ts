@@ -38,9 +38,13 @@ vi.mock('../mp4Mux.js', () => ({
 import { createEncoder } from '../mainThreadEncoder.js';
 
 type EncoderErrorCallback = (err: DOMException) => void;
+type EncoderOutputCallback = (chunk: unknown, meta?: unknown) => void;
 
 /** Captured constructor callbacks, including replaced encoder generations. */
 let errorCallbacks: EncoderErrorCallback[] = [];
+let outputCallbacks: EncoderOutputCallback[] = [];
+let configuredWith: VideoEncoderConfig[] = [];
+let frameInits: VideoFrameInit[] = [];
 let flushBehavior: () => Promise<void> = async () => {};
 let encoderState: 'unconfigured' | 'configured' | 'closed' = 'unconfigured';
 let encodeQueueSize = 0;
@@ -53,11 +57,13 @@ class FakeVideoEncoder {
   get encodeQueueSize() {
     return encodeQueueSize;
   }
-  constructor(init: { output: (chunk: unknown) => void; error: (err: DOMException) => void }) {
+  constructor(init: { output: EncoderOutputCallback; error: (err: DOMException) => void }) {
     errorCallbacks.push(init.error);
+    outputCallbacks.push(init.output);
     encoderCount++;
   }
-  configure() {
+  configure(config: VideoEncoderConfig) {
+    configuredWith.push(config);
     this.state = 'configured';
     encoderState = 'configured';
   }
@@ -79,8 +85,10 @@ class FakeVideoEncoder {
 class FakeVideoFrame {
   constructor(
     public bitmap: unknown,
-    public init: unknown,
-  ) {}
+    public init: VideoFrameInit,
+  ) {
+    frameInits.push(init);
+  }
   close() {}
 }
 
@@ -93,6 +101,9 @@ const CONFIG = { width: 640, height: 480, fps: 30, quality: 'normal' as const };
 describe('mainThreadEncoder error propagation', () => {
   beforeEach(() => {
     errorCallbacks = [];
+    outputCallbacks = [];
+    configuredWith = [];
+    frameInits = [];
     encoderState = 'unconfigured';
     encodeQueueSize = 0;
     flushCount = 0;
@@ -269,6 +280,40 @@ describe('mainThreadEncoder error propagation', () => {
 
     expect(flushCount).toBe(1);
     expect(encodeQueueSize).toBe(1);
+  });
+
+  // Chromium 151+ only reports an EncodedVideoChunk duration when the frame had one.
+  it('gives every frame its duration so encoded chunks carry one', async () => {
+    const encoder = createEncoder(CONFIG);
+
+    await encoder.encodeFrame(fakeBitmap(), 0);
+    await encoder.encodeFrame(fakeBitmap(), 1);
+
+    expect(frameInits).toEqual([
+      { timestamp: 0, duration: 33_333 },
+      { timestamp: 33_333, duration: 33_333 },
+    ]);
+  });
+
+  it('reports a muxer rejection instead of losing it in the output callback', async () => {
+    const encoder = createEncoder(CONFIG);
+    muxerState.addVideoChunk.mockImplementationOnce(() => {
+      throw new TypeError('duration must be a non-negative real number.');
+    });
+
+    expect(() => outputCallbacks[0]({}, {})).not.toThrow();
+
+    await expect(encoder.finalize()).rejects.toThrow(
+      'MP4 muxing failed: duration must be a non-negative real number.',
+    );
+    expect(muxerState.finalize).not.toHaveBeenCalled();
+  });
+
+  it('encodes High profile unless the probe chose Baseline', () => {
+    createEncoder(CONFIG);
+    createEncoder({ ...CONFIG, h264Profile: 'baseline' });
+
+    expect(configuredWith.map((config) => config.codec)).toEqual(['avc1.640028', 'avc1.42002a']);
   });
 
   it('flushes periodically when Chromium drains the visible queue early', async () => {

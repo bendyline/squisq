@@ -1,0 +1,152 @@
+/* ── Modal dialogs: safe areas and phone-sized windows ──────────────
+   A page laid out under the system bars (viewport-fit=cover) shares the
+   screen with a notch or Dynamic Island, the status bar and the home
+   indicator. Every modal here keeps its margin inside those safe areas, so
+   none of them reaches underneath.
+
+   A host can publish the insets it wants dialogs to clear as
+   `--squisq-safe-area-top`, `-right`, `-bottom` and `-left`; otherwise the
+   browser's env(safe-area-inset-*) apply. DocBlocks passes its own, which
+   correct for the zoom its iPhone app renders at. dialogLayout.ts carries the
+   same contract for the dialogs styled inline.
+
+   On a phone-sized window, the dialogs that browse or edit at length fill
+   the window instead: no margin and no frame, and the header runs up under
+   the status bar with its title just below it, the way a full-screen sheet
+   meets the top of the screen. The query matches FULL_WINDOW_DIALOG_QUERY in
+   dialogLayout.ts, which the block type gallery's placement also reads.
+
+   index.css loads this after every sheet whose dialogs it places, which it
+   overrides at equal specificity, and before touch-dialogs.css, which
+   re-anchors the text-entry dialogs on touch screens. */
+
+.squisq-template-gallery-dialog,
+.squisq-link-dialog-overlay,
+.squisq-doc-settings-overlay,
+.squisq-media-preview,
+.squisq-media-edit-modal,
+.squisq-image-edit-modal,
+.squisq-diagram-maximized-overlay,
+.squisq-template-designer-overlay,
+.squisq-layout-manager-overlay {
+  --squisq-dialog-safe-top: var(--squisq-safe-area-top, env(safe-area-inset-top, 0px));
+  --squisq-dialog-safe-right: var(--squisq-safe-area-right, env(safe-area-inset-right, 0px));
+  --squisq-dialog-safe-bottom: var(--squisq-safe-area-bottom, env(safe-area-inset-bottom, 0px));
+  --squisq-dialog-safe-left: var(--squisq-safe-area-left, env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+}
+
+/* ── Margins inside the safe areas ── */
+
+.squisq-link-dialog-overlay,
+.squisq-doc-settings-overlay,
+.squisq-layout-manager-overlay {
+  padding: calc(var(--squisq-dialog-safe-top) + 16px) calc(var(--squisq-dialog-safe-right) + 16px)
+    calc(var(--squisq-dialog-safe-bottom) + 16px) calc(var(--squisq-dialog-safe-left) + 16px);
+}
+
+.squisq-media-preview,
+.squisq-media-edit-modal,
+.squisq-image-edit-modal,
+.squisq-template-designer-overlay {
+  padding: calc(var(--squisq-dialog-safe-top) + 24px) calc(var(--squisq-dialog-safe-right) + 24px)
+    calc(var(--squisq-dialog-safe-bottom) + 24px) calc(var(--squisq-dialog-safe-left) + 24px);
+}
+
+/* The panel keeps its own 24px margin inside this. */
+.squisq-diagram-maximized-overlay {
+  padding: var(--squisq-dialog-safe-top) var(--squisq-dialog-safe-right)
+    var(--squisq-dialog-safe-bottom) var(--squisq-dialog-safe-left);
+}
+
+/* Sized to the viewport, so capped to what the margin leaves. */
+.squisq-doc-settings-dialog,
+.squisq-layout-manager-panel {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* The block type gallery covers the editor shell it was opened from, which a
+   host lays out clear of the system bars already. Only when it covers the
+   whole window does its panel need to keep clear of them itself. */
+.squisq-template-gallery-dialog[data-fills-window] {
+  padding: var(--squisq-dialog-safe-top) var(--squisq-dialog-safe-right)
+    var(--squisq-dialog-safe-bottom) var(--squisq-dialog-safe-left);
+}
+
+/* ── Full window on a phone ── */
+
+@media (max-width: 720px), (max-height: 520px) {
+  .squisq-template-gallery-dialog[data-fills-window],
+  .squisq-image-edit-modal,
+  .squisq-diagram-maximized-overlay,
+  .squisq-template-designer-overlay,
+  .squisq-layout-manager-overlay {
+    padding: 0;
+    backdrop-filter: none;
+  }
+
+  /* The frame goes, and the panel keeps the safe areas clear itself: its own
+     background fills the strips beside and below the content. With the
+     on-screen keyboard up (`--squisq-keyboard-inset`, from a host that
+     measures it) the gallery's list ends above the keyboard instead. */
+  .squisq-template-gallery-dialog[data-fills-window] .squisq-template-gallery-dialog-panel,
+  .squisq-image-edit-modal__surface,
+  .squisq-diagram-maximized-content,
+  .squisq-template-designer-overlay > .squisq-template-designer-panel,
+  .squisq-layout-manager-panel {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    padding: 0 var(--squisq-dialog-safe-right) var(--squisq-dialog-safe-bottom)
+      var(--squisq-dialog-safe-left);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .squisq-template-gallery-dialog[data-fills-window] .squisq-template-gallery-dialog-panel {
+    padding-bottom: max(var(--squisq-dialog-safe-bottom), var(--squisq-keyboard-inset, 0px));
+  }
+
+  /* The diagram canvas has no header; the whole panel clears the status bar. */
+  .squisq-diagram-maximized-content {
+    padding-top: var(--squisq-dialog-safe-top);
+  }
+
+  /* The header runs edge to edge and up under the status bar, its content
+     dropping below it, so the dialog meets the top of the screen as one
+     surface. The negative margins carry it across the panel's side
+     padding. */
+  .squisq-template-gallery-dialog[data-fills-window] .squisq-template-gallery-dialog-header,
+  .squisq-image-edit-modal__header,
+  .squisq-template-designer-overlay .squisq-template-designer-header,
+  .squisq-layout-manager-header {
+    margin-right: calc(-1 * var(--squisq-dialog-safe-right));
+    margin-left: calc(-1 * var(--squisq-dialog-safe-left));
+  }
+
+  .squisq-template-gallery-dialog[data-fills-window] .squisq-template-gallery-dialog-header {
+    padding: calc(var(--squisq-dialog-safe-top) + 12px) calc(var(--squisq-dialog-safe-right) + 14px)
+      12px calc(var(--squisq-dialog-safe-left) + 16px);
+  }
+
+  .squisq-image-edit-modal__header {
+    padding: calc(var(--squisq-dialog-safe-top) + 8px) calc(var(--squisq-dialog-safe-right) + 12px)
+      8px calc(var(--squisq-dialog-safe-left) + 12px);
+  }
+
+  .squisq-template-designer-overlay .squisq-template-designer-header,
+  .squisq-layout-manager-header {
+    padding: calc(var(--squisq-dialog-safe-top) + 14px) calc(var(--squisq-dialog-safe-right) + 20px)
+      14px calc(var(--squisq-dialog-safe-left) + 20px);
+  }
+
+  /* A finger needs more than the 28px desktop close button. */
+  .squisq-template-gallery-dialog[data-fills-window] .squisq-template-gallery-dialog-close {
+    width: 36px;
+    height: 36px;
+  }
+}

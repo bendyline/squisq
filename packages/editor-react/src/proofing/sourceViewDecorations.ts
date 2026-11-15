@@ -20,9 +20,10 @@ export function proofDecorationOptions(
 ): MonacoEditorNs.IModelDecorationOptions {
   return {
     inlineClassName: `squisq-proof-underline squisq-proof-underline--${finding.category}`,
-    // Monaco's own hover card is the Source view's tooltip — it shows
-    // the same category / message / suggestions the Write view's
-    // `ProofingTooltip` does.
+    // Monaco's own hover card is the Source view's tooltip for a mouse —
+    // it shows the same category / message / suggestions the Write view's
+    // `ProofingTooltip` does. A finger's tap raises `ProofingTooltip`
+    // itself (see `useProofing`).
     hoverMessage: { value: proofHoverMarkdown(finding) },
     // NeverGrowsWhenTypingAtEdges (1) — typing at a squiggle's edge
     // belongs to the surrounding text, not the finding.

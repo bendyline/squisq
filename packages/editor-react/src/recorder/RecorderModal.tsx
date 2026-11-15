@@ -88,6 +88,7 @@ import {
 import { buildRecorderSlideDeck } from './slides/slideDeck.js';
 import { RecorderSlidesPanel } from './slides/RecorderSlidesPanel.js';
 import { useModalDialog } from '../modal/useModalDialog.js';
+import { safeAreaPadding } from '../dialogLayout.js';
 import {
   useNarrationStage,
   type TeleprompterRecordingDeps,
@@ -255,9 +256,12 @@ export interface SlideTimingSaveResult {
 
 // ── Styles ─────────────────────────────────────────────────────────
 
+/** The panel keeps a 24px margin inside the device's safe areas. */
 const overlayStyle: CSSProperties = {
   position: 'fixed',
   inset: 0,
+  boxSizing: 'border-box',
+  padding: safeAreaPadding(24),
   background: 'rgba(0, 0, 0, 0.5)',
   display: 'flex',
   alignItems: 'center',
@@ -297,8 +301,8 @@ const modalStyle: CSSProperties = {
   borderRadius: 0,
   padding: '24px 28px',
   boxSizing: 'border-box',
-  width: 'min(560px, calc(100vw - 48px))',
-  maxHeight: 'calc(100dvh - 48px)',
+  width: 'min(560px, 100%)',
+  maxHeight: '100%',
   overflowY: 'auto',
   overscrollBehaviorY: 'contain',
   boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
@@ -516,8 +520,8 @@ const recordingStatusStyle: CSSProperties = {
  */
 const modalExpandedStyle: CSSProperties = {
   ...modalStyle,
-  width: 'calc(100vw - 48px)',
-  height: 'calc(100dvh - 48px)',
+  width: '100%',
+  height: '100%',
   overflowY: 'hidden',
   display: 'flex',
   flexDirection: 'column',

@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
-import { Selection } from '@tiptap/pm/state';
+import { Selection, type Transaction } from '@tiptap/pm/state';
 import { Extension } from '@tiptap/core';
 import type { EditorView as ProseMirrorView } from '@tiptap/pm/view';
 import StarterKit from '@tiptap/starter-kit';
@@ -61,7 +61,12 @@ import { ImageWithMediaProvider } from './ImageNodeView';
 import { TiptapVideo } from './tiptap/TiptapVideo';
 import { TiptapAudio } from './tiptap/TiptapAudio';
 import { DocumentTray } from './documentTray/DocumentTray';
-import { DocumentTrayExtension, DOCUMENT_TRAY_KEY } from './documentTray/DocumentTrayExtension';
+import {
+  DocumentTrayExtension,
+  DOCUMENT_TRAY_KEY,
+  syncDocumentTray,
+} from './documentTray/DocumentTrayExtension';
+import { blockShowsDocumentTray } from './documentTray/documentTrayScope';
 import { TemplateBadgePopover, TEMPLATE_NAMES } from './TemplatePicker';
 import { BlockPropertiesPopover } from './BlockPropertiesPopover';
 import {
@@ -74,7 +79,8 @@ import { useDocCustomTemplates } from './customTemplates/useDocCustomTemplates';
 import type { CustomTemplateDefinition, MediaProvider } from '@bendyline/squisq/schemas';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
 import { findBlockSliceByHeadingIndex } from './blockSlice';
-import { stripFrontmatter } from './frontmatter';
+import { frontmatterEndOffset, stripFrontmatter } from './frontmatter';
+import { lineToOffset } from './blockRange';
 import { ingestForWrite, persistFromWrite } from './wrapPolicy';
 import { createSourceBaseline, preserveSource } from './sourcePreservation';
 import { createDocumentHtmlSerializer } from './documentHtml';
@@ -251,6 +257,9 @@ export function WysiwygEditor({
     sceneTextChannel,
     preserveSourceWrapping,
     layoutMode,
+    activeBlockKey,
+    activeBlockStartLine,
+    markdownSource,
     linkSchemes,
   } = useEditorContext();
   // Read by the Link extension's href check, which is created once at mount.
@@ -498,8 +507,9 @@ export function WysiwygEditor({
       ImageWithMediaProvider.configure({ inline: false }),
       TiptapVideo,
       TiptapAudio,
+      // Initial setting only; `documentTrayEnabled` below keeps it current.
       DocumentTrayExtension.configure({
-        enabled: layoutMode === 'document',
+        enabled: layoutMode === 'document' || activeBlockKey === 0,
         placeholder: resolvedPlaceholder,
       }),
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
@@ -755,6 +765,29 @@ export function WysiwygEditor({
     },
   });
 
+  // The tray holds the document's opening media. Block and timeline layouts
+  // show one block at a time, so only the block that media lives in gets the
+  // tray — elsewhere, and before this, a narration annotation read as raw
+  // `{[audio …]}` text on the first card.
+  const leadingMarkdown =
+    layoutMode !== 'document' && activeBlockKey === 1 && activeBlockStartLine !== null
+      ? markdownSource.slice(
+          frontmatterEndOffset(markdownSource),
+          lineToOffset(markdownSource, activeBlockStartLine),
+        )
+      : '';
+  const schema = editor?.schema;
+  const documentTrayEnabled = useMemo(() => {
+    if (layoutMode === 'document') return true;
+    return schema
+      ? blockShowsDocumentTray(activeBlockKey, leadingMarkdown, schema)
+      : activeBlockKey === 0;
+  }, [layoutMode, activeBlockKey, leadingMarkdown, schema]);
+  // Read when a queued source apply runs, so the setting lands in the same
+  // transaction as the block it belongs to.
+  const documentTrayEnabledRef = useRef(documentTrayEnabled);
+  documentTrayEnabledRef.current = documentTrayEnabled;
+
   // Index updates can finish after the caret's first lookup. Notify the
   // suggestion plugin even when the document and selection have not changed.
   useEffect(() => {
@@ -950,12 +983,17 @@ export function WysiwygEditor({
         layoutMode === 'document'
           ? frontmatter
           : String(target.state.doc.attrs.sourceFrontmatter ?? '');
+      // Whether this block shows the tray changes with the block itself; set
+      // it in the same transaction so a clip never mounts as a player, or
+      // shows its annotation text, between the two.
+      const trayEnabled = documentTrayEnabledRef.current;
+      const withTraySetting = (tr: Transaction) => tr.setMeta(DOCUMENT_TRAY_KEY, trayEnabled);
       if (layoutMode === 'document' || layoutChanged) {
         // Replace only what changed: unchanged nodes keep their widgets, the
         // caret and scroll survive, and the update is one undo step.
         // Entering a block/timeline layout also keeps the active block's media
         // mounted instead of restarting it when the surrounding blocks leave.
-        replaceDocumentMinimal(target, content, storedFrontmatter);
+        replaceDocumentMinimal(target, content, storedFrontmatter, withTraySetting);
       } else {
         // Navigation within block/timeline layouts swaps in another block's
         // slice; a diff against the previous block gains nothing.
@@ -964,10 +1002,13 @@ export function WysiwygEditor({
           .setContent(content)
           .command(({ tr }) => {
             tr.setDocAttribute('sourceFrontmatter', storedFrontmatter);
+            withTraySetting(tr);
             return true;
           })
           .run();
       }
+      // A minimal replace with nothing to change dispatches nothing.
+      syncDocumentTray(target.view, trayEnabled);
       lastSourceRef.current = editorSource;
       isExternalUpdate.current = false;
     };
@@ -1059,10 +1100,20 @@ export function WysiwygEditor({
     return out as CSSProperties;
   }, [activeTheme, themeInheritance]);
 
+  // For setting changes no source apply carries (a layout switch that shows
+  // the same text). Queued after any apply from this commit, which already
+  // set it, and outside the commit for the same flushSync reason as that apply.
   useEffect(() => {
-    if (!editor || editor.isDestroyed) return;
-    editor.view.dispatch(editor.state.tr.setMeta(DOCUMENT_TRAY_KEY, layoutMode === 'document'));
-  }, [editor, layoutMode]);
+    if (!editor) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled && !editor.isDestroyed)
+        syncDocumentTray(editor.view, documentTrayEnabledRef.current);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editor, documentTrayEnabled]);
 
   // A drop on the desk beside the page never reaches ProseMirror. Take it at
   // the nearest point of the page rather than letting it vanish.
@@ -1104,7 +1155,8 @@ export function WysiwygEditor({
         ref={containerRef}
         onDrop={handleDeskDrop}
       >
-        {editor && layoutMode === 'document' && <DocumentTray editor={editor} />}
+        {/* Shown whenever the tray plugin holds clips, the same state that hides their source. */}
+        {editor && <DocumentTray editor={editor} />}
         <EditorContent editor={editor} style={{ height: '100%' }} />
         {badgeMenu && (
           <TemplateBadgePopover

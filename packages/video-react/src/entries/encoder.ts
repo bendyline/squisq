@@ -1,5 +1,16 @@
-export { supportsWebCodecs, supportsWebCodecsH264, createEncoder } from '../mainThreadEncoder.js';
-export type { MainThreadEncoder, EncoderConfig, EncoderFrameSource } from '../mainThreadEncoder.js';
+export {
+  supportsWebCodecs,
+  supportsWebCodecsH264,
+  probeWebCodecsH264,
+  createEncoder,
+} from '../mainThreadEncoder.js';
+export type {
+  MainThreadEncoder,
+  EncoderConfig,
+  EncoderFrameSource,
+  WebCodecsH264Support,
+  WebCodecsH264Profile,
+} from '../mainThreadEncoder.js';
 export { supportsWebCodecsAac, renderAudioTimeline } from '../audioTrack.js';
 export type { FfmpegWasmLoadConfig, AudioTimelineClip } from '@bendyline/squisq-video';
 export {

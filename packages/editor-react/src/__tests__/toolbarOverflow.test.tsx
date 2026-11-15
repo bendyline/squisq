@@ -134,6 +134,20 @@ describe('<Toolbar> overflow', () => {
     expect(within(menu).queryByText('Insert...')).toBeNull();
   });
 
+  it('leads the lane with Insert, separated from Bold and Italic', () => {
+    renderToolbar();
+
+    const insert = screen.getByRole('button', { name: 'Insert' });
+    const lane = laneButtons(insert);
+    expect(lane[0]).toBe(insert);
+    expect(lane[1]).toBe(screen.getByRole('button', { name: 'Bold (Ctrl+B)' }));
+    expect(
+      insert.closest('.squisq-toolbar-group')!.querySelector('.squisq-toolbar-separator'),
+    ).toBeNull();
+    const formatGroup = lane[1].closest('.squisq-toolbar-group')!;
+    expect(formatGroup.firstElementChild!.classList).toContain('squisq-toolbar-separator');
+  });
+
   it('drops Subscript and Superscript before anything else', () => {
     // Twelve of the fourteen lane buttons fit beside the ··· trigger.
     layOut(12 * BUTTON_WIDTH + BUTTON_WIDTH);
@@ -191,6 +205,8 @@ describe('<Toolbar> overflow', () => {
     expect(overflowed('Insert')).toBe(true);
     const menu = openOverflowMenu();
     expect(within(menu).getByText('Insert...')).toBeTruthy();
+    // The menu keeps the row's order: Insert first.
+    expect(menu.firstElementChild!.textContent).toBe('Insert...');
   });
 
   it('keeps every button inline when they all fit', () => {
