@@ -59,9 +59,11 @@
     var(--squisq-dialog-safe-bottom) var(--squisq-dialog-safe-left);
 }
 
-/* Sized to the viewport, so capped to what the margin leaves. */
+/* Sized to the viewport, so capped to what the margin leaves, border and
+   padding included. */
 .squisq-doc-settings-dialog,
 .squisq-layout-manager-panel {
+  box-sizing: border-box;
   max-width: 100%;
   max-height: 100%;
 }
@@ -89,12 +91,19 @@
   /* The frame goes, and the panel keeps the safe areas clear itself: its own
      background fills the strips beside and below the content. With the
      on-screen keyboard up (`--squisq-keyboard-inset`, from a host that
-     measures it) the gallery's list ends above the keyboard instead. */
+     measures it) the gallery's list ends above the keyboard instead.
+
+     Border-box, so that padding stays inside the window rather than adding
+     to it. A host without a global box-sizing reset otherwise gets a panel
+     taller than its overlay by the padding, which the overlay's centering
+     splits above and below: with the keyboard up, half the keyboard's
+     height pushes the header up under the status bar. */
   .squisq-template-gallery-dialog[data-fills-window] .squisq-template-gallery-dialog-panel,
   .squisq-image-edit-modal__surface,
   .squisq-diagram-maximized-content,
   .squisq-template-designer-overlay > .squisq-template-designer-panel,
   .squisq-layout-manager-panel {
+    box-sizing: border-box;
     width: 100%;
     max-width: none;
     height: 100%;

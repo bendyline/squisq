@@ -35,6 +35,21 @@ function containsFourCC(buffer: ArrayBuffer, needle: string): boolean {
   return false;
 }
 
+/**
+ * The AudioSpecificConfig in the MP4's `esds`: the payload of its
+ * DecoderSpecificInfo (tag 5), which mp4-muxer writes with a 4-byte length.
+ */
+function esdsAudioSpecificConfig(buffer: ArrayBuffer): number[] {
+  const bytes = Array.from(new Uint8Array(buffer));
+  const esds = bytes.findIndex((_, i) => String.fromCharCode(...bytes.slice(i, i + 4)) === 'esds');
+  expect(esds).toBeGreaterThan(0);
+  const tag = bytes.findIndex(
+    (byte, i) => i > esds && byte === 0x05 && bytes[i + 1] === 0x80 && bytes[i + 2] === 0x80,
+  );
+  const length = bytes[tag + 4];
+  return bytes.slice(tag + 5, tag + 5 + length);
+}
+
 describe('createMp4Muxer audio track', () => {
   it('writes an mp4a sample entry when an audio track is configured', () => {
     const muxer = createMp4Muxer({
@@ -68,6 +83,58 @@ describe('createMp4Muxer audio track', () => {
     addStubVideoSample(muxer);
     const mp4 = muxer.finalize();
     expect(containsFourCC(mp4, 'mp4a')).toBe(false);
+  });
+
+  it("keeps WebKit's AudioToolbox cookie out of the esds", () => {
+    const muxer = createMp4Muxer({
+      width: 320,
+      height: 240,
+      fps: 30,
+      audio: { numberOfChannels: 2, sampleRate: 48_000 },
+    });
+    addStubVideoSample(muxer);
+    // The DecoderSpecificInfo an iPhone export carried, byte for byte: a
+    // whole ES_Descriptor wrapping the real config (`11 90`), which left the
+    // track as AAC object type 0 and silent in every player.
+    const webKitCookie = new Uint8Array([
+      0x03, 0x80, 0x80, 0x80, 0x22, 0x00, 0x00, 0x00, 0x04, 0x80, 0x80, 0x80, 0x14, 0x40, 0x14,
+      0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x80, 0x80, 0x80,
+      0x02, 0x11, 0x90, 0x06, 0x80, 0x80, 0x80, 0x01, 0x02,
+    ]).buffer;
+
+    muxer.addAudioChunkRaw(new Uint8Array([0x21, 0x10]), 'key', 0, 21_333, {
+      decoderConfig: {
+        codec: 'mp4a.40.2',
+        sampleRate: 48_000,
+        numberOfChannels: 2,
+        description: webKitCookie,
+      },
+    });
+
+    // AAC-LC (2), 48 kHz (index 3), stereo (2).
+    expect(esdsAudioSpecificConfig(muxer.finalize())).toEqual([0x11, 0x90]);
+  });
+
+  it('keeps a valid AudioSpecificConfig the encoder reports', () => {
+    const muxer = createMp4Muxer({
+      width: 320,
+      height: 240,
+      fps: 30,
+      audio: { numberOfChannels: 2, sampleRate: 48_000 },
+    });
+    addStubVideoSample(muxer);
+    // 44.1 kHz rather than the derived 48 kHz `11 90`, so the test can tell
+    // whose config landed.
+    muxer.addAudioChunkRaw(new Uint8Array([0x21, 0x10]), 'key', 0, 21_333, {
+      decoderConfig: {
+        codec: 'mp4a.40.2',
+        sampleRate: 48_000,
+        numberOfChannels: 2,
+        description: new Uint8Array([0x12, 0x10]),
+      },
+    });
+
+    expect(esdsAudioSpecificConfig(muxer.finalize())).toEqual([0x12, 0x10]);
   });
 
   it('finalizes the streamed chunks directly into an MP4 Blob', () => {

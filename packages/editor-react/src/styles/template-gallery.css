@@ -22,7 +22,7 @@
     border-color 0.1s;
 }
 
-.squisq-template-picker-trigger:hover {
+.squisq-template-picker-trigger:not([aria-disabled='true']):hover {
   background: var(--squisq-surface-hover);
   border-color: var(--squisq-border-strong);
 }
@@ -35,12 +35,18 @@
 }
 
 /* Shows the current type without offering to change it (the slideshow's
-   cover, a generated slide). Hover passes through to the host element, which
-   carries the reason as its tooltip — so the button never lights up as if it
-   could open, whatever hover styling a host application layers on. */
-.squisq-template-picker-trigger:disabled {
+   cover, a generated slide). It still takes a press, which shows why beneath
+   it, so it is `aria-disabled` rather than `disabled`; hover never lights it
+   as if it could open (a host layering its own hover must exclude it too). */
+.squisq-template-picker-trigger[aria-disabled='true'] {
   opacity: 0.6;
-  pointer-events: none;
+  cursor: default;
+}
+
+/* The reason a disabled picker gives when pressed: the tooltip chip, held to
+   a readable measure since it runs to a sentence or two. */
+.squisq-tooltip.squisq-template-picker-reason {
+  max-width: min(280px, calc(100vw - 16px));
 }
 
 .squisq-template-picker-trigger-label {
@@ -91,6 +97,18 @@
 .squisq-slide-block-type .squisq-template-picker-trigger-value {
   width: 88px;
   text-align: left;
+}
+
+/* "Slide:" ahead of the picker, set like the toolbar's other control labels.
+   In the overflow menu it stays beside the picker rather than across the row. */
+.squisq-slide-block-type-label {
+  color: var(--squisq-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.squisq-slide-block-type.squisq-preview-control--compact {
+  justify-content: flex-start;
 }
 
 .squisq-template-picker-trigger-caret {

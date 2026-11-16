@@ -61,6 +61,17 @@ describe('modal dialogs and the safe areas', () => {
     );
   });
 
+  it('keep the full-window panels border-box, so their padding stays inside the window', () => {
+    // A host need not reset box-sizing (DocBlocks does not); a content-box
+    // panel grows by its padding, the keyboard's height included.
+    const phone = dialogs.slice(dialogs.indexOf('@media'));
+    const panels = /([^{}]*\.squisq-layout-manager-panel)\s*\{([^}]*)\}/s.exec(phone);
+    expect(panels).not.toBeNull();
+    expect(panels![1]).toContain('.squisq-template-gallery-dialog-panel');
+    expect(panels![2]).toContain('box-sizing: border-box;');
+    expect(panels![2]).toContain('height: 100%;');
+  });
+
   it('load after every sheet they override, and before the touch placement', () => {
     const own = importAt('./dialogs.css');
     expect(own).toBeGreaterThan(-1);

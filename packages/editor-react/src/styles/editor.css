@@ -1990,7 +1990,8 @@
   border-color: var(--squisq-border);
 }
 
-.squisq-editor-shell[data-theme='dark'] .squisq-template-picker-trigger:hover {
+.squisq-editor-shell[data-theme='dark']
+  .squisq-template-picker-trigger:not([aria-disabled='true']):hover {
   background: var(--squisq-surface-hover);
   border-color: var(--squisq-border-strong);
 }

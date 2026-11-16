@@ -35,7 +35,7 @@ vi.mock('../mp4Mux.js', () => ({
   },
 }));
 
-import { createEncoder } from '../mainThreadEncoder.js';
+import { createEncoder, VideoEncodingInterruptedError } from '../mainThreadEncoder.js';
 
 type EncoderErrorCallback = (err: DOMException) => void;
 type EncoderOutputCallback = (chunk: unknown, meta?: unknown) => void;
@@ -51,15 +51,21 @@ let encodeQueueSize = 0;
 let flushCount = 0;
 let encodeOptions: VideoEncoderEncodeOptions[] = [];
 let encoderCount = 0;
+/** Emit one chunk per encode, as hardware codecs do. Off models a codec that stops delivering. */
+let emitOutputs = true;
+let encoders: FakeVideoEncoder[] = [];
 
 class FakeVideoEncoder {
   state = 'unconfigured';
   get encodeQueueSize() {
     return encodeQueueSize;
   }
+  private readonly output: EncoderOutputCallback;
   constructor(init: { output: EncoderOutputCallback; error: (err: DOMException) => void }) {
     errorCallbacks.push(init.error);
     outputCallbacks.push(init.output);
+    this.output = init.output;
+    encoders.push(this);
     encoderCount++;
   }
   configure(config: VideoEncoderConfig) {
@@ -67,9 +73,10 @@ class FakeVideoEncoder {
     this.state = 'configured';
     encoderState = 'configured';
   }
-  encode(_frame: unknown, options?: VideoEncoderEncodeOptions) {
+  encode(frame: FakeVideoFrame, options?: VideoEncoderEncodeOptions) {
     encodeQueueSize++;
     encodeOptions.push(options ?? {});
+    if (emitOutputs) this.output({ timestamp: frame.init.timestamp });
   }
   async flush() {
     flushCount++;
@@ -109,6 +116,8 @@ describe('mainThreadEncoder error propagation', () => {
     flushCount = 0;
     encodeOptions = [];
     encoderCount = 0;
+    emitOutputs = true;
+    encoders = [];
     flushBehavior = async () => {};
     muxerState.create.mockClear();
     muxerState.finalize.mockClear();
@@ -328,5 +337,159 @@ describe('mainThreadEncoder error propagation', () => {
     await encoder.encodeFrame(fakeBitmap(), 10);
 
     expect(flushCount).toBe(1);
+  });
+
+  describe('resuming after the app was in the background', () => {
+    const reclaimed = () => new DOMException('Codec reclaimed due to inactivity.', 'EncodingError');
+
+    it('reports the first lost frame when a reclaimed codec took pending frames with it', async () => {
+      const encoder = createEncoder(CONFIG);
+      await encoder.encodeFrame(fakeBitmap(), 0);
+      await encoder.encodeFrame(fakeBitmap(), 1);
+      emitOutputs = false;
+      await encoder.encodeFrame(fakeBitmap(), 2);
+      await encoder.encodeFrame(fakeBitmap(), 3);
+      emitOutputs = true;
+      errorCallbacks[0](reclaimed());
+
+      const error = await encoder.encodeFrame(fakeBitmap(), 4).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(VideoEncodingInterruptedError);
+      expect((error as VideoEncodingInterruptedError).resumeFrom).toBe(2);
+
+      // The replacement codec continues the same MP4 from the first lost frame.
+      for (let i = 2; i < 5; i++) await encoder.encodeFrame(fakeBitmap(), i);
+      expect(encoderCount).toBe(2);
+      expect(encodeOptions.at(-3)).toEqual({ keyFrame: true });
+      expect(frameInits.slice(-3).map((init) => init.timestamp)).toEqual([
+        66_667, 100_000, 133_333,
+      ]);
+      await expect(encoder.finalize()).resolves.toBeInstanceOf(ArrayBuffer);
+      expect(muxerState.create).toHaveBeenCalledOnce();
+    });
+
+    it('drain reports the frames a reclaimed codec lost', async () => {
+      const encoder = createEncoder(CONFIG);
+      emitOutputs = false;
+      await encoder.encodeFrame(fakeBitmap(), 0);
+      flushBehavior = async () => {
+        errorCallbacks[0](reclaimed());
+      };
+
+      const error = await encoder.drain?.().catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(VideoEncodingInterruptedError);
+      expect((error as VideoEncodingInterruptedError).resumeFrom).toBe(0);
+    });
+
+    it('drains every submitted frame and stays usable', async () => {
+      const encoder = createEncoder(CONFIG);
+      await encoder.encodeFrame(fakeBitmap(), 0);
+
+      await expect(encoder.drain?.()).resolves.toBeUndefined();
+
+      expect(flushCount).toBe(1);
+      await expect(encoder.encodeFrame(fakeBitmap(), 1)).resolves.toBeUndefined();
+      expect(encoderCount).toBe(1);
+    });
+
+    // iOS invalidates a backgrounded app's hardware encoder without reporting
+    // an error: pending frames never arrive and flush() never settles.
+    it('abandons a stalled flush and resumes from the first frame missing from the MP4', async () => {
+      const encoder = createEncoder({ ...CONFIG, width: 1920, height: 1080 });
+      for (let i = 0; i < 5; i++) await encoder.encodeFrame(fakeBitmap(), i);
+      emitOutputs = false;
+      for (let i = 5; i < 8; i++) await encoder.encodeFrame(fakeBitmap(), i);
+      let rejectStalledFlush!: (reason: unknown) => void;
+      flushBehavior = () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectStalledFlush = reject;
+        });
+      // The ninth 1080p frame waits on a backpressure flush that never ends.
+      const stalled = encoder.encodeFrame(fakeBitmap(), 8);
+
+      emitOutputs = true;
+      flushBehavior = async () => {};
+      expect(encoder.restartCodec?.()).toBe(5);
+      // The abandoned codec's flush finally rejects; that must not disturb
+      // the replacement.
+      rejectStalledFlush(new DOMException('Aborted', 'AbortError'));
+      await expect(stalled).rejects.toBeInstanceOf(VideoEncodingInterruptedError);
+      expect(encoders[0].state).toBe('closed');
+      expect(encoders[1].state).toBe('configured');
+
+      for (let i = 5; i < 9; i++) await encoder.encodeFrame(fakeBitmap(), i);
+      expect(encodeOptions.slice(-4)).toEqual([
+        { keyFrame: true },
+        { keyFrame: false },
+        { keyFrame: false },
+        { keyFrame: false },
+      ]);
+      await expect(encoder.finalize()).resolves.toBeInstanceOf(ArrayBuffer);
+      expect(muxerState.create).toHaveBeenCalledOnce();
+    });
+
+    it('revives a codec that failed while the app was in the background', async () => {
+      const encoder = createEncoder(CONFIG);
+      await encoder.encodeFrame(fakeBitmap(), 0);
+      errorCallbacks[0](new DOMException('Encoder session invalidated', 'EncodingError'));
+
+      expect(encoder.restartCodec?.()).toBe(1);
+
+      await expect(encoder.encodeFrame(fakeBitmap(), 1)).resolves.toBeUndefined();
+      expect(encodeOptions.at(-1)).toEqual({ keyFrame: true });
+      await expect(encoder.finalize()).resolves.toBeInstanceOf(ArrayBuffer);
+    });
+
+    it('cannot restart once the MP4 itself has failed', async () => {
+      const encoder = createEncoder(CONFIG);
+      muxerState.addVideoChunk.mockImplementationOnce(() => {
+        throw new TypeError('bad chunk');
+      });
+      await encoder.encodeFrame(fakeBitmap(), 0);
+
+      expect(() => encoder.restartCodec?.()).toThrow('MP4 muxing failed: bad chunk');
+    });
+
+    it('cannot restart a closed encoder', () => {
+      const encoder = createEncoder(CONFIG);
+      encoder.close();
+
+      expect(() => encoder.restartCodec?.()).toThrow('Encoder already closed');
+    });
+
+    it('splices a replacement codec whose stream format matches', async () => {
+      const encoder = createEncoder(CONFIG);
+      const decoderConfig = (bytes: number[]) => ({
+        decoderConfig: { codec: 'avc1.640028', description: new Uint8Array(bytes) },
+      });
+      outputCallbacks[0]({ timestamp: 0 }, decoderConfig([1, 2, 3]));
+      encoder.restartCodec?.();
+      outputCallbacks[1]({ timestamp: 33_333 }, decoderConfig([1, 2, 3]));
+
+      await expect(encoder.finalize()).resolves.toBeInstanceOf(ArrayBuffer);
+      expect(muxerState.addVideoChunk).toHaveBeenCalledTimes(2);
+    });
+
+    it('refuses to splice a replacement codec whose stream format differs', async () => {
+      const encoder = createEncoder(CONFIG);
+      const decoderConfig = (bytes: number[]) => ({
+        decoderConfig: { codec: 'avc1.640028', description: new Uint8Array(bytes) },
+      });
+      outputCallbacks[0]({ timestamp: 0 }, decoderConfig([1, 2, 3]));
+      encoder.restartCodec?.();
+      outputCallbacks[1]({ timestamp: 33_333 }, decoderConfig([1, 2, 4]));
+
+      await expect(encoder.finalize()).rejects.toThrow('incompatible H.264 stream');
+      expect(muxerState.finalize).not.toHaveBeenCalled();
+    });
+
+    it('ignores output from an abandoned codec', async () => {
+      const encoder = createEncoder(CONFIG);
+      encoder.restartCodec?.();
+      outputCallbacks[0]({ timestamp: 0 });
+
+      expect(muxerState.addVideoChunk).not.toHaveBeenCalled();
+      await expect(encoder.finalize()).resolves.toBeInstanceOf(ArrayBuffer);
+    });
   });
 });

@@ -49,6 +49,7 @@ import {
   type EncoderFrameSource,
   type MainThreadEncoder,
 } from '../mainThreadEncoder.js';
+import { VideoEncodingInterruptedError } from '../encodingInterruption.js';
 import { createWorkerEncoder } from '../workerEncoder.js';
 import {
   supportsWebCodecsAac,
@@ -83,6 +84,13 @@ const FRAME_CAPTURE_TIMEOUT_MS = 60_000;
  */
 const FRAME_CAPTURE_RECOVERY_TIMEOUT_MS = 120_000;
 const FRAME_ENCODE_TIMEOUT_MS = 60_000;
+/**
+ * How long encoder work may take once the app is back in the foreground after
+ * being hidden. A healthy codec drains its few pending frames in well under a
+ * second; one the OS invalidated never does, and replacing it costs at most a
+ * second of recaptured frames.
+ */
+const RESUMED_ENCODER_TIMEOUT_MS = 10_000;
 const CAPTURE_PROGRESS_START = 7;
 const CAPTURE_PROGRESS_END = 95;
 const FRAME_RATE_WINDOW_SIZE = 30;
@@ -119,6 +127,11 @@ function releaseEncoderFrame(frame: EncoderFrameSource): void {
  * when a tab or window is hidden/minimized; that temporary suspension must not
  * discard a long-running export. Mere loss of focus is not suspension: a
  * visible browser covered by another window should continue exporting.
+ *
+ * `resumedTimeoutMs` shortens the deadline once the document is visible again
+ * after being hidden. Work a phone OS suspended along with the app — an iOS
+ * hardware encoder session — never settles, and a caller that can recover
+ * should not have to wait out the full budget to find out.
  */
 export function settleWithin<T>(
   operation: Promise<T>,
@@ -126,10 +139,12 @@ export function settleWithin<T>(
   timeoutMessage: string,
   onLateResult?: (value: T) => void,
   activityDocument?: Document,
+  resumedTimeoutMs?: number,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     let settled = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
+    let budgetMs = timeoutMs;
 
     const isInactive = (): boolean =>
       activityDocument !== undefined && activityDocument.visibilityState !== 'visible';
@@ -151,14 +166,16 @@ export function settleWithin<T>(
     };
     const armDeadline = (): void => {
       clearDeadline();
-      if (settled || isInactive()) return;
-      timeout = globalThis.setTimeout(fail, timeoutMs);
-    };
-    function handleVisibilityChange(): void {
-      if (activityDocument?.visibilityState !== 'visible') {
-        clearDeadline();
+      if (settled) return;
+      if (isInactive()) {
+        // Hidden while pending (possibly before this call began): whenever
+        // the document returns, only the resumed budget remains.
+        if (resumedTimeoutMs !== undefined) budgetMs = Math.min(timeoutMs, resumedTimeoutMs);
         return;
       }
+      timeout = globalThis.setTimeout(fail, budgetMs);
+    };
+    function handleVisibilityChange(): void {
       armDeadline();
     }
 
@@ -242,6 +259,128 @@ export async function settleFrameCaptureWithRecovery<T>({
       activityDocument,
     );
   }
+}
+
+export interface BackgroundInterruptionMonitor {
+  /** Whether the page is hidden right now. */
+  readonly hidden: boolean;
+  /** Whether the page went to the background since the last {@link takeInterruption}. */
+  readonly interrupted: boolean;
+  /** Report, and clear, whether the page went to the background since the last call. */
+  takeInterruption(): boolean;
+  /** Resolve once the page is visible, immediately when it already is or on abort. */
+  waitUntilVisible(signal?: AbortSignal): Promise<void>;
+  dispose(): void;
+}
+
+/**
+ * Track the page leaving the foreground during an export.
+ *
+ * Phone OSes suspend a backgrounded app's web view, and iOS also invalidates
+ * its hardware encoder session, so work in flight when the user switched apps
+ * cannot be trusted. Hidden visibility is the standard signal. The Page
+ * Lifecycle `freeze` event and the Cordova/Capacitor `pause` event also count,
+ * for web views that report a suspension without changing visibility.
+ */
+export function watchBackgroundInterruptions(doc: Document): BackgroundInterruptionMonitor {
+  let interrupted = doc.visibilityState !== 'visible';
+  const waiters = new Set<() => void>();
+  const markInterrupted = (): void => {
+    interrupted = true;
+  };
+  const handleVisibilityChange = (): void => {
+    if (doc.visibilityState !== 'visible') {
+      interrupted = true;
+      return;
+    }
+    for (const wake of [...waiters]) wake();
+  };
+  doc.addEventListener('visibilitychange', handleVisibilityChange);
+  doc.addEventListener('freeze', markInterrupted);
+  doc.addEventListener('pause', markInterrupted);
+
+  return {
+    get hidden() {
+      return doc.visibilityState !== 'visible';
+    },
+    get interrupted() {
+      return interrupted;
+    },
+    takeInterruption() {
+      const result = interrupted;
+      interrupted = false;
+      return result;
+    },
+    waitUntilVisible(signal?: AbortSignal) {
+      if (doc.visibilityState === 'visible' || signal?.aborted) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const wake = (): void => {
+          waiters.delete(wake);
+          signal?.removeEventListener('abort', wake);
+          resolve();
+        };
+        waiters.add(wake);
+        signal?.addEventListener('abort', wake);
+      });
+    },
+    dispose() {
+      doc.removeEventListener('visibilitychange', handleVisibilityChange);
+      doc.removeEventListener('freeze', markInterrupted);
+      doc.removeEventListener('pause', markInterrupted);
+      for (const wake of [...waiters]) wake();
+    },
+  };
+}
+
+/**
+ * Keep the screen on while an export runs, so auto-lock does not send the app
+ * to the background partway through. Best effort: some web views lack the
+ * Screen Wake Lock API, and the platform drops the lock whenever the page is
+ * hidden, so it is requested again each time the page is visible. Returns the
+ * release function.
+ */
+export function holdScreenWakeLock(doc: Document): () => void {
+  const wakeLock =
+    typeof navigator === 'undefined'
+      ? undefined
+      : (navigator as Partial<Pick<Navigator, 'wakeLock'>>).wakeLock;
+  if (!wakeLock) return () => {};
+  let released = false;
+  let requesting = false;
+  let sentinel: WakeLockSentinel | null = null;
+
+  const request = (): void => {
+    if (released || requesting || sentinel || doc.visibilityState !== 'visible') return;
+    requesting = true;
+    wakeLock.request('screen').then(
+      (lock) => {
+        requesting = false;
+        if (released) {
+          void lock.release().catch(() => {});
+          return;
+        }
+        sentinel = lock;
+        lock.addEventListener('release', () => {
+          if (sentinel === lock) sentinel = null;
+        });
+      },
+      () => {
+        // Denied or unsupported here; exporting does not depend on it.
+        requesting = false;
+      },
+    );
+  };
+  doc.addEventListener('visibilitychange', request);
+  request();
+
+  return () => {
+    if (released) return;
+    released = true;
+    doc.removeEventListener('visibilitychange', request);
+    const lock = sentinel;
+    sentinel = null;
+    if (lock) void lock.release().catch(() => {});
+  };
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -585,16 +724,23 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
   const downloadUrlRef = useRef<string | null>(null);
   const startTimeRef = useRef<number>(0);
   const elapsedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const releaseWakeLockRef = useRef<(() => void) | null>(null);
   const previewOptionsRef = useRef(options);
   previewOptionsRef.current = options;
 
   const frameCapture = useFrameCapture();
+
+  const releaseWakeLock = useCallback(() => {
+    releaseWakeLockRef.current?.();
+    releaseWakeLockRef.current = null;
+  }, []);
 
   // Clean up on unmount
   useEffect(() => {
     return () => {
       runRef.current?.abort();
       runRef.current = null;
+      releaseWakeLock();
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
       if (downloadUrlRef.current) {
         URL.revokeObjectURL(downloadUrlRef.current);
@@ -605,11 +751,12 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
       gifAbortRef.current?.abort();
       frameCapture.destroy();
     };
-  }, [frameCapture]);
+  }, [frameCapture, releaseWakeLock]);
 
   const reset = useCallback(() => {
     runRef.current?.abort();
     runRef.current = null;
+    releaseWakeLock();
     if (downloadUrlRef.current) {
       URL.revokeObjectURL(downloadUrlRef.current);
       downloadUrlRef.current = null;
@@ -638,11 +785,12 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
     setElapsed(0);
     setEstimatedRemaining(0);
     if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
-  }, [frameCapture]);
+  }, [frameCapture, releaseWakeLock]);
 
   const cancel = useCallback(() => {
     runRef.current?.abort();
     runRef.current = null;
+    releaseWakeLock();
     if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
     if (encoderRef.current) {
       encoderRef.current.close();
@@ -654,7 +802,7 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
     setState('idle');
     setProgress(0);
     setPhase('Cancelled');
-  }, [frameCapture]);
+  }, [frameCapture, releaseWakeLock]);
 
   const startExport = useCallback(
     async (doc: Doc, config: VideoExportConfig) => {
@@ -663,6 +811,12 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
       const run = new AbortController();
       runRef.current = run;
       const cancelled = () => run.signal.aborted || runRef.current !== run;
+      // Requested before the first await, while the Export click still
+      // counts as a user gesture for platforms that require one.
+      releaseWakeLockRef.current = holdScreenWakeLock(document);
+      const finishRun = (): void => {
+        if (runRef.current === run) releaseWakeLock();
+      };
       if (downloadUrlRef.current) {
         URL.revokeObjectURL(downloadUrlRef.current);
         downloadUrlRef.current = null;
@@ -1003,107 +1157,252 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         // ── Step 3: Capture frames and encode ─────────────────────
         setState('capturing');
 
-        const captureStartTime = performance.now();
-        const frameBoundaryTimes = [captureStartTime];
-        if (coverFrameCount > 0) await frameCapture.setCoverVisible(true);
+        // Switching apps on a phone suspends this page, and iOS also
+        // invalidates its hardware encoder session, after which pending
+        // WebCodecs work never settles. Capture pauses while the page is
+        // hidden. On return, frames the lost codec never delivered are
+        // captured and encoded again, so the export carries on.
+        const background = watchBackgroundInterruptions(document);
+        let outputBytes: ArrayBuffer | Uint8Array | Blob | null = null;
+        try {
+          const captureStartTime = performance.now();
+          let frameBoundaryTimes = [captureStartTime];
+          let pausedMs = 0;
+          let framesProcessed = 0;
+          let coverVisible = false;
+          let frameIndex = 0;
 
-        for (let i = 0; i < totalFrames; i++) {
-          if (cancelled()) return;
+          // Progress represents completed work, not the frame we are about
+          // to start. Tenths keep long exports visibly moving without
+          // inventing progress or waiting for ten-frame batches.
+          const reportProgress = (completedFrames: number): void => {
+            setCurrentFrameTime(Math.min(completedFrames / fps, exportDuration));
+            const captureRatio = completedFrames / totalFrames;
+            const captureProgress =
+              CAPTURE_PROGRESS_START +
+              captureRatio * (CAPTURE_PROGRESS_END - CAPTURE_PROGRESS_START);
+            setProgress(Math.round(captureProgress * 10) / 10);
+            if (framesProcessed > 0) {
+              // Time spent in the background is not throughput.
+              const activeSeconds = (performance.now() - captureStartTime - pausedMs) / 1000;
+              const avgPerFrame = activeSeconds / framesProcessed;
+              setEstimatedRemaining(Math.round(avgPerFrame * (totalFrames - completedFrames)));
+            }
+            setElapsed(Math.floor((performance.now() - startTimeRef.current) / 1000));
+          };
 
-          if (coverFrameCount > 0 && i === coverFrameCount) {
-            await frameCapture.setCoverVisible(false);
-            if (cancelled()) return;
-          }
-          const time = i / fps;
-          const captureTime = coverPlan.captureTimeForFrame(i);
+          /** Wait out a hidden page. False when the export was cancelled meanwhile. */
+          const pauseWhileHidden = async (): Promise<boolean> => {
+            if (background.hidden) {
+              const pausedAt = performance.now();
+              setPhase('Paused while in the background');
+              await background.waitUntilVisible(run.signal);
+              pausedMs += performance.now() - pausedAt;
+            }
+            return !cancelled();
+          };
 
-          const captureOperation: Promise<EncoderFrameSource> = canUseWebCodecs
-            ? frameCapture.captureCanvasFrame(captureTime, { reuseIfUnchanged: true })
-            : frameCapture.captureFrame(captureTime, { reuseIfUnchanged: true });
-          const frame = await settleFrameCaptureWithRecovery({
-            operation: captureOperation,
-            frameNumber: i + 1,
-            totalFrames,
-            onLateResult: releaseEncoderFrame,
-            activityDocument: document,
-            onRecoveryWait: () => {
-              if (!cancelled())
-                setPhase(`Frame ${i + 1}/${totalFrames} is taking unusually long — still waiting…`);
-            },
-          });
-
-          if (cancelled()) {
-            releaseEncoderFrame(frame);
-            return;
-          }
-
-          const previewOptions = previewOptionsRef.current;
-          const previewInterval = Math.max(1, Math.floor(previewOptions.previewEveryNFrames ?? 1));
-          if (
-            previewOptions.onFramePreview &&
-            (i === 0 || i === totalFrames - 1 || i % previewInterval === 0)
-          ) {
+          /**
+           * The page went to the background since the codec last proved
+           * healthy. Give it a moment to drain; when it cannot, replace it.
+           * Returns the frame to resume from, or null when nothing was lost.
+           */
+          const checkEncoderAfterInterruption = async (): Promise<number | null> => {
+            if (!encoder.drain || !encoder.restartCodec) return null;
+            setPhase('Resuming export…');
             try {
-              previewOptions.onFramePreview({ source: frame, frameIndex: i, totalFrames, time });
-            } catch {
-              // A display-only observer must never make the export fail.
+              await settleWithin(
+                encoder.drain(),
+                RESUMED_ENCODER_TIMEOUT_MS,
+                'The video encoder did not resume.',
+                undefined,
+                document,
+              );
+              return null;
+            } catch (error: unknown) {
+              if (error instanceof VideoEncodingInterruptedError) return error.resumeFrom;
+              return encoder.restartCodec();
+            }
+          };
+
+          /** The frame to resume from after an encoder failure, or null when it is fatal. */
+          const resumeFrameAfterFailure = (error: unknown): number | null => {
+            if (error instanceof VideoEncodingInterruptedError) return error.resumeFrom;
+            if (background.takeInterruption() && encoder.restartCodec) {
+              return encoder.restartCodec();
+            }
+            return null;
+          };
+
+          const resumeAt = (resumeFrom: number | null): void => {
+            if (resumeFrom !== null) frameIndex = resumeFrom;
+            // The platform may have purged canvas backing stores while hidden.
+            frameCapture.discardCachedFrames();
+            frameBoundaryTimes = [performance.now()];
+            setState('capturing');
+            setProcessingFps(null);
+            reportProgress(frameIndex);
+            setPhase(
+              frameIndex < totalFrames
+                ? `Resuming at frame ${frameIndex + 1}/${totalFrames}`
+                : 'Resuming export…',
+            );
+          };
+
+          while (outputBytes === null) {
+            while (frameIndex < totalFrames) {
+              if (!(await pauseWhileHidden())) return;
+              if (background.takeInterruption()) {
+                const resumeFrom = await checkEncoderAfterInterruption();
+                if (cancelled()) return;
+                resumeAt(resumeFrom);
+                continue;
+              }
+
+              const i = frameIndex;
+              const showCover = i < coverFrameCount;
+              if (showCover !== coverVisible) {
+                await frameCapture.setCoverVisible(showCover);
+                coverVisible = showCover;
+                if (cancelled()) return;
+              }
+              const time = i / fps;
+              const captureTime = coverPlan.captureTimeForFrame(i);
+
+              const captureOperation: Promise<EncoderFrameSource> = canUseWebCodecs
+                ? frameCapture.captureCanvasFrame(captureTime, { reuseIfUnchanged: true })
+                : frameCapture.captureFrame(captureTime, { reuseIfUnchanged: true });
+              const frame = await settleFrameCaptureWithRecovery({
+                operation: captureOperation,
+                frameNumber: i + 1,
+                totalFrames,
+                onLateResult: releaseEncoderFrame,
+                activityDocument: document,
+                onRecoveryWait: () => {
+                  if (!cancelled())
+                    setPhase(
+                      `Frame ${i + 1}/${totalFrames} is taking unusually long — still waiting…`,
+                    );
+                },
+              });
+
+              if (cancelled()) {
+                releaseEncoderFrame(frame);
+                return;
+              }
+              // Backgrounded mid-capture: the raster may predate a purge and
+              // the codec may be gone. Check the codec, then capture again.
+              if (background.interrupted) {
+                releaseEncoderFrame(frame);
+                continue;
+              }
+
+              const previewOptions = previewOptionsRef.current;
+              const previewInterval = Math.max(
+                1,
+                Math.floor(previewOptions.previewEveryNFrames ?? 1),
+              );
+              if (
+                previewOptions.onFramePreview &&
+                (i === 0 || i === totalFrames - 1 || i % previewInterval === 0)
+              ) {
+                try {
+                  previewOptions.onFramePreview({
+                    source: frame,
+                    frameIndex: i,
+                    totalFrames,
+                    time,
+                  });
+                } catch {
+                  // A display-only observer must never make the export fail.
+                }
+              }
+
+              // Normally this state is too brief to paint. When backpressure has
+              // paused capture to drain a saturated encoder queue, it makes the
+              // actual wait visible instead of blaming the next frame capture.
+              setPhase(`Encoding frame ${i + 1}/${totalFrames}`);
+              setCurrentFrameTime(time);
+              try {
+                await settleWithin(
+                  encoder.encodeFrame(frame, i),
+                  FRAME_ENCODE_TIMEOUT_MS,
+                  `Video encoding stopped responding at frame ${i + 1}/${totalFrames}.`,
+                  undefined,
+                  document,
+                  RESUMED_ENCODER_TIMEOUT_MS,
+                );
+              } catch (error: unknown) {
+                if (cancelled()) return;
+                const resumeFrom = resumeFrameAfterFailure(error);
+                if (resumeFrom === null) throw error;
+                resumeAt(resumeFrom);
+                continue;
+              }
+              if (cancelled()) return;
+
+              frameIndex = i + 1;
+              framesProcessed++;
+              frameBoundaryTimes.push(performance.now());
+              if (frameBoundaryTimes.length > FRAME_RATE_WINDOW_SIZE + 1) {
+                frameBoundaryTimes.shift();
+              }
+              setProcessingFps(calculateRollingFramesPerSecond(frameBoundaryTimes));
+              setPhase(
+                frameIndex < totalFrames
+                  ? `Capturing frame ${frameIndex + 1}/${totalFrames}`
+                  : `Captured ${totalFrames.toLocaleString()} frames…`,
+              );
+              reportProgress(frameIndex);
+            }
+
+            // ── Step 4: Finalize MP4 (or GIF's MP4 intermediate) ─────
+            if (!(await pauseWhileHidden())) return;
+            if (background.takeInterruption()) {
+              const resumeFrom = await checkEncoderAfterInterruption();
+              if (cancelled()) return;
+              if (resumeFrom !== null && resumeFrom < totalFrames) {
+                resumeAt(resumeFrom);
+                continue;
+              }
+            }
+            setState('encoding');
+            setPhase(
+              effectiveOutputFormat === 'gif' ? 'Finalizing GIF frames…' : 'Finalizing video…',
+            );
+            setProgress(95);
+
+            try {
+              // Drain under a deadline first: finalizing waits on the codec
+              // with none, and a codec the OS suspended never settles.
+              if (encoder.drain) {
+                await settleWithin(
+                  encoder.drain(),
+                  FRAME_ENCODE_TIMEOUT_MS,
+                  'Video encoding stopped responding while finalizing.',
+                  undefined,
+                  document,
+                  RESUMED_ENCODER_TIMEOUT_MS,
+                );
+                if (cancelled()) return;
+              }
+              // Normal MP4 downloads can keep the muxer's exact-sized chunks
+              // as Blob parts. GIF and ffmpeg audio muxing still require
+              // contiguous bytes.
+              outputBytes =
+                effectiveOutputFormat === 'mp4' && !useFfmpegAudio && encoder.finalizeBlob
+                  ? await encoder.finalizeBlob()
+                  : await encoder.finalize();
+            } catch (error: unknown) {
+              if (cancelled()) return;
+              const resumeFrom = resumeFrameAfterFailure(error);
+              if (resumeFrom === null) throw error;
+              resumeAt(resumeFrom);
             }
           }
-
-          // Normally this state is too brief to paint. When backpressure has
-          // paused capture to drain a saturated encoder queue, it makes the
-          // actual wait visible instead of blaming the next frame capture.
-          setPhase(`Encoding frame ${i + 1}/${totalFrames}`);
-          setCurrentFrameTime(time);
-          await settleWithin(
-            encoder.encodeFrame(frame, i),
-            FRAME_ENCODE_TIMEOUT_MS,
-            `Video encoding stopped responding at frame ${i + 1}/${totalFrames}.`,
-            undefined,
-            document,
-          );
-          if (cancelled()) return;
-
-          // Progress represents completed work, not the frame we are about to
-          // start. Tenths keep long exports visibly moving without inventing
-          // progress or waiting for ten-frame batches.
-          const completedFrames = i + 1;
-          const completedAt = performance.now();
-          frameBoundaryTimes.push(completedAt);
-          if (frameBoundaryTimes.length > FRAME_RATE_WINDOW_SIZE + 1) {
-            frameBoundaryTimes.shift();
-          }
-          setProcessingFps(calculateRollingFramesPerSecond(frameBoundaryTimes));
-          setCurrentFrameTime(Math.min(completedFrames / fps, exportDuration));
-          setPhase(
-            completedFrames < totalFrames
-              ? `Capturing frame ${completedFrames + 1}/${totalFrames}`
-              : `Captured ${totalFrames.toLocaleString()} frames…`,
-          );
-          const captureRatio = completedFrames / totalFrames;
-          const captureProgress =
-            CAPTURE_PROGRESS_START + captureRatio * (CAPTURE_PROGRESS_END - CAPTURE_PROGRESS_START);
-          setProgress(Math.round(captureProgress * 10) / 10);
-
-          const elapsedCapture = (performance.now() - captureStartTime) / 1000;
-          const avgPerFrame = elapsedCapture / completedFrames;
-          setEstimatedRemaining(Math.round(avgPerFrame * (totalFrames - completedFrames)));
-          setElapsed(Math.floor((performance.now() - startTimeRef.current) / 1000));
+        } finally {
+          background.dispose();
         }
-
-        if (cancelled()) return;
-
-        // ── Step 4: Finalize MP4 (or GIF's MP4 intermediate) ─────
-        setState('encoding');
-        setPhase(effectiveOutputFormat === 'gif' ? 'Finalizing GIF frames…' : 'Finalizing video…');
-        setProgress(95);
-
-        // Normal MP4 downloads can keep the muxer's exact-sized chunks as Blob
-        // parts. GIF and ffmpeg audio muxing still require contiguous bytes.
-        let outputBytes: ArrayBuffer | Uint8Array | Blob =
-          effectiveOutputFormat === 'mp4' && !useFfmpegAudio && encoder.finalizeBlob
-            ? await encoder.finalizeBlob()
-            : await encoder.finalize();
         if (cancelled()) return;
         if (encoderRef.current === encoder) encoderRef.current = null;
 
@@ -1209,9 +1508,11 @@ export function useVideoExport(options: UseVideoExportOptions = {}): VideoExport
         gifAbortRef.current?.abort();
         gifAbortRef.current = null;
         frameCapture.destroy();
+      } finally {
+        finishRun();
       }
     },
-    [frameCapture, cancel],
+    [frameCapture, cancel, releaseWakeLock],
   );
 
   return {

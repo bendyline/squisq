@@ -6,9 +6,10 @@
  * with a wireframe fallback, a label, and a one-sentence description.
  */
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscapeDismissal } from './useEscapeDismissal';
+import { clampTooltipLeft } from './tooltipPlacement';
 import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
 import { TEMPLATE_METADATA, resolveTemplateName } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
@@ -962,7 +963,9 @@ export interface TemplatePickerProps {
   previewSource?: TemplatePreviewSource;
   /**
    * Shows the current type but cannot be opened — for a host whose active
-   * block has no type to change. Pair with {@link title} to say why.
+   * block has no type to change. Pair with {@link title} to say why: pressing
+   * the trigger shows that reason beneath it, since a finger has no hover to
+   * raise the tooltip.
    */
   disabled?: boolean;
   /** Tooltip for the trigger. Defaults to "Choose block type". */
@@ -972,6 +975,26 @@ export interface TemplatePickerProps {
    * for a host that shows something `value` cannot name (e.g. "Cover").
    */
   valueLabel?: string;
+  /** Id for the trigger button, so a host's `<label htmlFor>` can point at it. */
+  id?: string;
+  /**
+   * Id of a label the host renders beside the picker. The trigger then drops
+   * its own "Block:" and is named by that label followed by the type it shows
+   * ("Slide: Title").
+   */
+  labelledBy?: string;
+}
+
+/** Where a note hung beneath an element starts: just below it, centred on it. */
+interface NoteAnchor {
+  top: number;
+  anchorX: number;
+}
+
+function noteAnchorBelow(element: HTMLElement | null): NoteAnchor | null {
+  if (!element) return null;
+  const rect = element.getBoundingClientRect();
+  return { top: rect.bottom + 6, anchorX: rect.left + rect.width / 2 };
 }
 
 export function TemplatePicker({
@@ -985,15 +1008,24 @@ export function TemplatePicker({
   disabled = false,
   title = 'Choose block type',
   valueLabel,
+  id,
+  labelledBy,
 }: TemplatePickerProps) {
   const [open, setOpen] = useState(false);
+  // Where the reason a disabled picker gives is showing, or null when it is not.
+  const [reasonAnchor, setReasonAnchor] = useState<NoteAnchor | null>(null);
   const [dialogStyle, setDialogStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const dialogId = `${TEMPLATE_GALLERY_DIALOG_ID}-${useId().replace(/:/g, '')}`;
+  const reasonRef = useRef<HTMLDivElement>(null);
+  const instanceId = useId().replace(/:/g, '');
+  const dialogId = `${TEMPLATE_GALLERY_DIALOG_ID}-${instanceId}`;
+  const triggerId = id ?? `squisq-template-picker-trigger-${instanceId}`;
+  const reasonId = `squisq-template-picker-reason-${instanceId}`;
 
   useEscapeDismissal(open, () => setOpen(false), triggerRef);
+  useEscapeDismissal(reasonAnchor !== null, () => setReasonAnchor(null), triggerRef);
 
   const updateDialogBounds = () => {
     if (!triggerRef.current) return;
@@ -1001,16 +1033,60 @@ export function TemplatePicker({
   };
 
   const handleOpen = () => {
+    if (disabled) {
+      // Nothing to open, so say why. The tooltip holds the same words, but a
+      // touch screen never hovers to raise it, and a press that did nothing
+      // read as a control that was broken.
+      setReasonAnchor(reasonAnchor ? null : noteAnchorBelow(triggerRef.current));
+      return;
+    }
     updateDialogBounds();
     setOpen((v) => !v);
   };
 
   // The block under the picker can stop being changeable while the gallery is
   // open (the slideshow advanced to its cover, say); close rather than leave a
-  // gallery whose choices would no longer apply.
+  // gallery whose choices would no longer apply. Once it can change again the
+  // reason it could not no longer applies either.
   useEffect(() => {
     if (disabled) setOpen(false);
+    else setReasonAnchor(null);
   }, [disabled]);
+
+  // The reason is a note, not a menu: a press anywhere but the trigger (which
+  // toggles it) puts it away, and it follows the trigger as the page moves. A
+  // host's label for the trigger counts as the trigger — its click lands there.
+  const reasonShowing = reasonAnchor !== null;
+  useEffect(() => {
+    if (!reasonShowing) return;
+    const dismiss = (event: PointerEvent) => {
+      const trigger = triggerRef.current;
+      const target = event.target as Element | null;
+      if (trigger?.contains(target)) return;
+      if (trigger && target?.closest?.('label')?.control === trigger) return;
+      setReasonAnchor(null);
+    };
+    const follow = () => setReasonAnchor(noteAnchorBelow(triggerRef.current));
+    document.addEventListener('pointerdown', dismiss, true);
+    window.addEventListener('scroll', follow, true);
+    window.addEventListener('resize', follow);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss, true);
+      window.removeEventListener('scroll', follow, true);
+      window.removeEventListener('resize', follow);
+    };
+  }, [reasonShowing]);
+
+  // Centre the note under the trigger, kept inside the window. Its width is
+  // known only once it has rendered, so it starts hidden and is placed here.
+  useLayoutEffect(() => {
+    const note = reasonRef.current;
+    if (!reasonAnchor || !note) return;
+    const width = note.getBoundingClientRect().width || note.offsetWidth;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+    note.style.left = `${clampTooltipLeft(reasonAnchor.anchorX, width, viewportWidth)}px`;
+    note.style.visibility = 'visible';
+  }, [reasonAnchor, title]);
 
   // Close on outside click
   useEffect(() => {
@@ -1095,26 +1171,46 @@ export function TemplatePicker({
         )
       : null;
 
+  const reasonNote =
+    reasonAnchor && disabled
+      ? createPortal(
+          <div
+            ref={reasonRef}
+            id={reasonId}
+            role="tooltip"
+            className="squisq-tooltip squisq-template-picker-reason"
+            style={{
+              position: 'fixed',
+              top: reasonAnchor.top,
+              left: reasonAnchor.anchorX,
+              visibility: 'hidden',
+            }}
+          >
+            {title}
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    // The disabled trigger takes no pointer events (see its CSS), so hover
-    // reaches this element, which carries the reason as its tooltip.
-    <div
-      className="squisq-template-picker-popover-host"
-      ref={containerRef}
-      title={disabled ? title : undefined}
-    >
+    <div className="squisq-template-picker-popover-host" ref={containerRef}>
+      {/* A disabled picker stays pressable — `aria-disabled`, not `disabled` —
+          so that a press can show why it will not open. */}
       <button
         ref={triggerRef}
+        id={triggerId}
         type="button"
         className={`squisq-template-picker-trigger${open ? ' squisq-template-picker-trigger--open' : ''}`}
         onClick={handleOpen}
-        disabled={disabled}
-        aria-haspopup="dialog"
-        aria-expanded={open}
+        aria-disabled={disabled || undefined}
+        aria-haspopup={disabled ? undefined : 'dialog'}
+        aria-expanded={disabled ? undefined : open}
         aria-controls={open ? dialogId : undefined}
+        aria-labelledby={labelledBy ? `${labelledBy} ${triggerId}` : undefined}
+        aria-describedby={reasonNote ? reasonId : undefined}
         title={title}
       >
-        <span className="squisq-template-picker-trigger-label">Block:</span>
+        {!labelledBy && <span className="squisq-template-picker-trigger-label">Block:</span>}
         <span className="squisq-template-picker-trigger-thumb" aria-hidden="true">
           {currentEntry.icon}
         </span>
@@ -1139,6 +1235,7 @@ export function TemplatePicker({
         </svg>
       </button>
       {gallery}
+      {reasonNote}
     </div>
   );
 }

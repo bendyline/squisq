@@ -109,7 +109,7 @@ describe('VideoExportModal progress palette', () => {
 
     await waitFor(() => expect(saveOutput).toHaveBeenCalledOnce());
     expect(saveOutput.mock.calls[0]?.[0]).toBe(outputBlob);
-    expect(saveOutput.mock.calls[0]?.[1]).toMatch(/^document-\d{4}-\d{2}-\d{2}\.mp4$/);
+    expect(saveOutput.mock.calls[0]?.[1]).toBe('document.mp4');
   });
 
   it('letterboxes portrait previews instead of stretching them', () => {

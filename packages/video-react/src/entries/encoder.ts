@@ -3,6 +3,7 @@ export {
   supportsWebCodecsH264,
   probeWebCodecsH264,
   createEncoder,
+  VideoEncodingInterruptedError,
 } from '../mainThreadEncoder.js';
 export type {
   MainThreadEncoder,

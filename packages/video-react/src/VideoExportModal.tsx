@@ -15,6 +15,7 @@ import type { MediaEditRenderManager } from './mediaEdit/mediaEditRenderManager.
 import type { VideoQuality, VideoOrientation } from '@bendyline/squisq-video';
 import { useModalDialog, type CaptionMode } from '@bendyline/squisq-react';
 import { safeAreaPadding } from './safeArea.js';
+import { exportFileBaseName } from './exportFilename.js';
 import {
   useVideoExport,
   type VideoExportConfig,
@@ -56,6 +57,13 @@ export interface VideoExportModalProps {
   colorScheme?: 'light' | 'dark';
   /** Optional host overrides for dialog surfaces, controls, status, and accent colors. */
   uiPalette?: Partial<VideoExportPalette>;
+  /**
+   * Name for the saved file, without its extension — typically the
+   * document's title, or its file name when it has none. Made
+   * filesystem-safe before use. Defaults to the doc's frontmatter `title`,
+   * then its cover title (the top heading), then `document`.
+   */
+  fileBaseName?: string;
   /** Optional host save flow. Return false when the user cancels a picker. */
   saveOutput?: (blob: Blob, filename: string) => boolean | void | Promise<boolean | void>;
   /** Host-aware label for the completed export action. */
@@ -88,6 +96,25 @@ export function resolveVideoSaveActionLabel(
   formatter?: (format: VideoOutputFormat) => string,
 ): string {
   return formatter?.(format) ?? `Save ${format.toUpperCase()} to Downloads`;
+}
+
+/**
+ * The saved file's name: the host's base name, else the doc's authored
+ * frontmatter `title`, else its cover title (the top heading), else
+ * `document`. No date is added; save pickers handle name clashes.
+ */
+export function videoExportFilename(
+  doc: Doc,
+  format: VideoOutputFormat,
+  fileBaseName?: string,
+): string {
+  const frontmatterTitle = doc.frontmatter?.title;
+  const base =
+    exportFileBaseName(fileBaseName) ??
+    exportFileBaseName(typeof frontmatterTitle === 'string' ? frontmatterTitle : undefined) ??
+    exportFileBaseName(doc.startBlock?.title) ??
+    'document';
+  return `${base}.${format}`;
 }
 
 const VIDEO_PRESETS = [
@@ -315,6 +342,7 @@ export function VideoExportModal({
   defaultConfig,
   colorScheme = 'light',
   uiPalette,
+  fileBaseName,
   saveOutput,
   saveActionLabel,
   saveOptions,
@@ -497,8 +525,7 @@ export function VideoExportModal({
   const [savedOutput, setSavedOutput] = useState<Blob | null>(null);
   const handleSave = useCallback(async () => {
     if (!downloadUrl || !outputBlob) return;
-    const ts = new Date().toISOString().slice(0, 10);
-    const filename = `document-${ts}.${completedOutputFormat}`;
+    const filename = videoExportFilename(doc, completedOutputFormat, fileBaseName);
     setSaveError(null);
 
     if (!saveOutput) {
@@ -521,7 +548,7 @@ export function VideoExportModal({
     } finally {
       setSaving(false);
     }
-  }, [completedOutputFormat, downloadUrl, outputBlob, saveOutput]);
+  }, [completedOutputFormat, doc, downloadUrl, fileBaseName, outputBlob, saveOutput]);
 
   const handleClose = useCallback(() => {
     if (state === 'capturing' || state === 'encoding' || state === 'preparing') {
