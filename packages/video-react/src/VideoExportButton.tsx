@@ -41,6 +41,8 @@ export interface VideoExportButtonProps {
   colorScheme?: 'light' | 'dark';
   /** Optional host palette overrides forwarded to the portaled modal. */
   uiPalette?: Partial<VideoExportPalette>;
+  /** Saved file's name without its extension, forwarded to the portaled modal. */
+  fileBaseName?: VideoExportModalProps['fileBaseName'];
   /** Optional host save flow forwarded to the portaled modal. */
   saveOutput?: VideoExportModalProps['saveOutput'];
   /** Host-aware completed-export action label forwarded to the modal. */
@@ -62,6 +64,7 @@ export function VideoExportButton({
   defaultConfig,
   colorScheme,
   uiPalette,
+  fileBaseName,
   saveOutput,
   saveActionLabel,
   label,
@@ -92,6 +95,7 @@ export function VideoExportButton({
             defaultConfig={defaultConfig}
             colorScheme={colorScheme}
             uiPalette={uiPalette}
+            fileBaseName={fileBaseName}
             saveOutput={saveOutput}
             saveActionLabel={saveActionLabel}
             onClose={handleClose}

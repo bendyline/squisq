@@ -59,6 +59,11 @@ export interface FrameCaptureHandle {
    * The canvas remains valid until the next capture or destroy call.
    */
   captureCanvasFrame: (time: number, options?: FrameCaptureOptions) => Promise<HTMLCanvasElement>;
+  /**
+   * Forget every cached raster so the next capture draws from scratch. A
+   * platform may purge canvas backing stores while the page is hidden.
+   */
+  discardCachedFrames: () => void;
   /** Clean up resources. */
   destroy: () => void;
 }
@@ -2228,10 +2233,26 @@ export function useFrameCapture(): FrameCaptureHandle {
     renderAPIRef.current = null;
   }, []);
 
+  const discardCachedFrames = useCallback(() => {
+    captionLayerKeyRef.current = null;
+    captionLayerHasContentRef.current = false;
+    lastVisualStateKeyRef.current = null;
+    hasCapturedFrameRef.current = false;
+    releaseCaptureSvgRasterCache(captureSvgRasterCacheRef.current);
+    captureSvgRasterCacheRef.current = createCaptureSvgRasterCache();
+  }, []);
+
   // Return a stable object to prevent useEffect cleanup loops
   // in consumers that depend on the handle reference.
   return useMemo(
-    () => ({ init, setCoverVisible, captureFrame, captureCanvasFrame, destroy }),
-    [init, setCoverVisible, captureFrame, captureCanvasFrame, destroy],
+    () => ({
+      init,
+      setCoverVisible,
+      captureFrame,
+      captureCanvasFrame,
+      discardCachedFrames,
+      destroy,
+    }),
+    [init, setCoverVisible, captureFrame, captureCanvasFrame, discardCachedFrames, destroy],
   );
 }

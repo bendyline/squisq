@@ -6,7 +6,7 @@
  * rewriting that heading's `{[template]}` annotation.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useId, useMemo } from 'react';
 import type { Block, Doc, Theme, ViewportConfig } from '@bendyline/squisq/schemas';
 import { flattenBlocks, previewBlockTemplate } from '@bendyline/squisq/doc';
 import { profileBlockContents, recommendTemplatesForBlock } from '@bendyline/squisq/recommend';
@@ -97,10 +97,11 @@ function resolveSlideBlockType(doc: Doc | null, slide: ActiveSlide | null): Slid
 }
 
 /**
- * "Block: <type> ▾" — changes the block type of the section the Slideshow is
+ * "Slide: <type> ▾" — changes the block type of the section the Slideshow is
  * showing, so retyping a slide no longer means a trip to Write and back. It
  * opens the same gallery as Write's block picker and writes the same
  * `{[template]}` heading annotation, as one edit to the document source.
+ * When the slide on screen has no type to change, pressing it says why.
  *
  * `activeTheme` / `activeViewport` are the preview settings' own, passed in
  * so this module does not import `PreviewControls` (which renders it).
@@ -119,6 +120,8 @@ export function SlideBlockTypeControl({
     useEditorContext();
   const state = useMemo(() => resolveSlideBlockType(doc, slide), [doc, slide]);
   const block = state.editable ? state.block : null;
+  const labelId = useId();
+  const triggerId = useId();
   const headingLine = state.editable ? state.headingLine : null;
 
   const recommended = useMemo(() => {
@@ -164,7 +167,12 @@ export function SlideBlockTypeControl({
     <div
       className={`squisq-preview-control squisq-slide-block-type${compact ? ' squisq-preview-control--compact' : ''}`}
     >
+      <label id={labelId} htmlFor={triggerId} className="squisq-slide-block-type-label">
+        Slide:
+      </label>
       <TemplatePicker
+        id={triggerId}
+        labelledBy={labelId}
         value={state.template}
         valueLabel={label}
         onChange={handleChange}

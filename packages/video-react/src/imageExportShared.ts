@@ -5,6 +5,8 @@
  * download fallback. Pure module-level functions with no component state.
  */
 
+import { exportFileBaseName } from './exportFilename.js';
+
 export type ImageExportFormat = 'png' | 'jpeg' | 'webp';
 
 export const IMAGE_FORMAT_DETAILS: Record<
@@ -37,8 +39,8 @@ interface ImageExportPickerWindow {
 
 /**
  * Sanitize a requested file name into `<base>-<suffix>.<ext>` — strips any
- * extension, replaces characters Windows rejects, drops control characters
- * and trailing dots/spaces, and falls back to `document`.
+ * extension, makes the rest filesystem-safe ({@link exportFileBaseName}),
+ * and falls back to `document`.
  */
 export function imageExportFilename(
   requestedName: string | undefined,
@@ -46,15 +48,7 @@ export function imageExportFilename(
   format: ImageExportFormat,
 ): string {
   const extension = IMAGE_FORMAT_DETAILS[format].extension;
-  const base =
-    requestedName
-      ?.replace(/\.[^.]+$/, '')
-      .replace(/[<>:"/\\|?*]/g, '-')
-      .split('')
-      .map((character) => (character.charCodeAt(0) < 32 ? '-' : character))
-      .join('')
-      .trim()
-      .replace(/[. ]+$/g, '') || 'document';
+  const base = exportFileBaseName(requestedName?.replace(/\.[^.]+$/, '')) ?? 'document';
   return `${base}-${suffix}.${extension}`;
 }
 

@@ -258,6 +258,37 @@ class ChunkedMp4Output {
 }
 
 /**
+ * Audio chunk metadata safe to hand mp4-muxer: an encoder's `description` is
+ * kept only when it is a usable AAC AudioSpecificConfig.
+ *
+ * WebKit's `AudioEncoder` reports AudioToolbox's magic cookie as the AAC
+ * description — a whole ES_Descriptor rather than the AudioSpecificConfig
+ * WebCodecs specifies (https://bugs.webkit.org/show_bug.cgi?id=302253).
+ * mp4-muxer nests it inside its own `esds`, so the track names AAC object
+ * type 0 and no player can decode it: an iPhone export carried every audio
+ * sample and played silent. An AudioSpecificConfig never starts with object
+ * type 0, so such a description is dropped, and the muxer keeps the AAC-LC
+ * config it derives from the track's sample rate and channel count — the
+ * `mp4a.40.2` stream {@link encodeAacTrack} asks for.
+ */
+export function withUsableAacDescription(
+  meta: EncodedAudioChunkMetadata | undefined,
+): EncodedAudioChunkMetadata | undefined {
+  const decoderConfig = meta?.decoderConfig;
+  if (!decoderConfig?.description) return meta;
+  const description = decoderConfig.description;
+  const bytes = ArrayBuffer.isView(description)
+    ? new Uint8Array(description.buffer, description.byteOffset, description.byteLength)
+    : new Uint8Array(description);
+  // The first five bits are the audio object type.
+  if (bytes.byteLength >= 2 && bytes[0] >> 3 !== 0) return meta;
+  // Omit the key outright: mp4-muxer `Object.assign`s the encoder's config
+  // over its own, so even `description: undefined` would erase its default.
+  const { description: _unusable, ...derived } = decoderConfig;
+  return { ...meta, decoderConfig: derived };
+}
+
+/**
  * Create an MP4 muxer configured for H.264 video, plus an optional AAC track.
  */
 export function createMp4Muxer(options: Mp4MuxerOptions): Mp4MuxerHandle {
@@ -332,7 +363,7 @@ export function createMp4Muxer(options: Mp4MuxerOptions): Mp4MuxerHandle {
     },
 
     addAudioChunk(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata) {
-      muxer.addAudioChunk(chunk, meta);
+      muxer.addAudioChunk(chunk, withUsableAacDescription(meta));
     },
 
     addAudioChunkRaw(
@@ -342,7 +373,13 @@ export function createMp4Muxer(options: Mp4MuxerOptions): Mp4MuxerHandle {
       durationMicros: number,
       meta?: EncodedAudioChunkMetadata,
     ) {
-      muxer.addAudioChunkRaw(data, type, timestampMicros, durationMicros, meta);
+      muxer.addAudioChunkRaw(
+        data,
+        type,
+        timestampMicros,
+        durationMicros,
+        withUsableAacDescription(meta),
+      );
     },
 
     finalize(): ArrayBuffer {

@@ -19,6 +19,9 @@ import {
   type Mp4MuxerHandle,
 } from './mp4Mux.js';
 import { applyWebCodecsBackpressure, resolveWebCodecsQueueLimit } from './encoderMemory.js';
+import { VideoEncodingInterruptedError } from './encodingInterruption.js';
+
+export { VideoEncodingInterruptedError };
 
 export interface EncoderConfig {
   width: number;
@@ -78,6 +81,20 @@ export interface MainThreadEncoder {
    * no-op. Must be called before {@link finalize}.
    */
   addAudioChunk?(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata): void;
+  /**
+   * Wait until every submitted frame is in the MP4. Rejects with
+   * {@link VideoEncodingInterruptedError} when the codec was lost with frames
+   * still pending, after starting a replacement codec.
+   */
+  drain?(): Promise<void>;
+  /**
+   * Abandon the current codec and start a replacement, for a codec whose
+   * pending work will never settle — iOS invalidates the hardware encoder
+   * session of a backgrounded app without reporting an error. Returns the index
+   * of the first frame whose output is not in the MP4; the caller submits
+   * frames again from there. Throws when the MP4 itself cannot continue.
+   */
+  restartCodec?(): number;
   /** Flush pending frames and finalize the MP4. Returns the MP4 ArrayBuffer. */
   finalize(): Promise<ArrayBuffer>;
   /** Finalize directly into a Blob, avoiding a second full-file allocation. */
@@ -261,6 +278,18 @@ function isReclaimedCodecError(error: Error): boolean {
   return RECLAIMED_CODEC_ERROR.test(error.message);
 }
 
+function copyBytes(source: AllowSharedBufferSource): Uint8Array {
+  return ArrayBuffer.isView(source)
+    ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength).slice()
+    : new Uint8Array(source).slice();
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /**
  * Create a main-thread WebCodecs encoder.
  *
@@ -285,9 +314,11 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
       : {}),
   });
 
-  let closed = false;
+  /** Closed by the caller or finalized: nothing more may be encoded. */
+  let disposed = false;
   /**
-   * First fatal error reported by the encoder's async error callback.
+   * First fatal codec failure, reported by the encoder's async error callback
+   * or thrown by one of its methods.
    *
    * `VideoEncoder` surfaces failures out-of-band, so this must be latched and
    * re-thrown from the next caller-facing operation. Previously it was only
@@ -295,8 +326,13 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
    * `InvalidStateError` from `encode()`/`flush()`, or — when the encoder dropped
    * frames without entering a closed state — never surfaced at all, and the
    * export reported "Export complete" over a truncated MP4.
+   *
+   * {@link MainThreadEncoder.restartCodec} clears it: the caller has decided
+   * the codec was interrupted, and a replacement continues the same MP4.
    */
-  let fatalError: Error | null = null;
+  let failure: Error | null = null;
+  /** The MP4 itself cannot continue. Unlike {@link failure}, never cleared. */
+  let muxError: Error | null = null;
   /**
    * Chromium may reclaim an idle hardware codec while a tab is hidden. Unlike
    * other encoder errors, this is recoverable without replacing the muxer or
@@ -310,39 +346,79 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
   const queueLimit = resolveWebCodecsQueueLimit(config);
   let framesSinceFlush = 0;
   let forceNextKeyFrame = false;
+  /** Frames [0, nextFrameToMux) are in the MP4. */
+  let nextFrameToMux = 0;
+  /** One past the highest frame index handed to a codec. */
+  let nextFrameToSubmit = 0;
+  /**
+   * The first codec's `avcC`. A replacement codec continues the same track, so
+   * its stream must decode with the parameter sets already in the MP4.
+   */
+  let decoderDescription: Uint8Array | null = null;
   let encoderGeneration = 0;
   let encoder: VideoEncoder;
 
-  /** Tear the encoder down and surface the latched (or supplied) failure. */
+  /** Tear the codec down and surface the latched (or supplied) failure. */
   function fail(err: Error): Error {
-    closed = true;
-    if (encoder.state !== 'closed') encoder.close();
-    return fatalError ?? err;
+    failure ??= err;
+    closeCodec(encoder);
+    return muxError ?? failure;
+  }
+
+  function closeCodec(codec: VideoEncoder): void {
+    if (codec.state !== 'closed') codec.close();
+  }
+
+  /** Throw when no further work may be submitted. */
+  function assertUsable(): void {
+    if (muxError || failure) throw fail(muxError ?? failure ?? new Error('Encoder failed'));
+    if (disposed) throw new Error('Encoder already closed');
   }
 
   const videoEncoderConfig = h264EncoderConfig(config);
 
-  function createConfiguredVideoEncoder(): VideoEncoder {
-    const generation = ++encoderGeneration;
+  function createConfiguredVideoEncoder(generation: number): VideoEncoder {
     const nextEncoder = new VideoEncoder({
       output(chunk, meta) {
-        if (closed || generation !== encoderGeneration || fatalError) return;
+        if (disposed || generation !== encoderGeneration || failure || muxError) return;
+        const description = meta?.decoderConfig?.description;
+        if (description !== undefined) {
+          const bytes = copyBytes(description);
+          if (decoderDescription === null) {
+            decoderDescription = bytes;
+          } else if (!sameBytes(decoderDescription, bytes)) {
+            muxError = new Error(
+              'Video encoding could not resume: the restarted encoder produced an incompatible H.264 stream.',
+            );
+            return;
+          }
+        }
         try {
           muxer.addVideoChunk(chunk, meta ?? undefined);
         } catch (caught: unknown) {
           // Thrown from a browser callback, this would vanish as an uncaught
           // error, and finalize() would later fail on an empty track with an
           // unrelated message. Latch it so the export reports the cause.
-          fatalError = new Error(`MP4 muxing failed: ${toError(caught).message}`);
+          muxError = new Error(`MP4 muxing failed: ${toError(caught).message}`);
+          return;
+        }
+        // H.264 from WebCodecs carries no B-frames, so chunks arrive in frame
+        // order and the latest timestamp marks everything before it as muxed.
+        if (Number.isFinite(chunk.timestamp)) {
+          nextFrameToMux = Math.max(
+            nextFrameToMux,
+            Math.round(chunk.timestamp / frameDuration) + 1,
+          );
         }
       },
       error(err) {
-        if (closed || generation !== encoderGeneration || fatalError || recoverableError) return;
+        if (disposed || generation !== encoderGeneration) return;
+        if (failure || muxError || recoverableError) return;
         const wrapped = new Error(`WebCodecs encoder error: ${err.message}`);
         if (isReclaimedCodecError(wrapped)) {
           recoverableError = wrapped;
         } else {
-          fatalError = wrapped;
+          failure = wrapped;
         }
       },
     });
@@ -350,34 +426,55 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
     return nextEncoder;
   }
 
-  function recoverCodec(): void {
-    const previousEncoder = encoder;
+  /**
+   * Swap in a fresh codec. Bumping the generation first silences every
+   * callback and settles every pending operation of the abandoned one.
+   */
+  function replaceCodec(): void {
+    const previous = encoder;
+    const generation = ++encoderGeneration;
     recoverableError = null;
-    if (previousEncoder.state !== 'closed') previousEncoder.close();
-    encoder = createConfiguredVideoEncoder();
+    closeCodec(previous);
+    encoder = createConfiguredVideoEncoder(generation);
     framesSinceFlush = 0;
     // A replacement H.264 encoder has no reference frames from its
     // predecessor. Start its segment with an independently decodable frame.
     forceNextKeyFrame = true;
   }
 
-  encoder = createConfiguredVideoEncoder();
+  /**
+   * Replace a codec the browser reclaimed. A submitted frame that never
+   * reached the MP4 is lost with it and has to be submitted again — unless it
+   * is the frame the caller is about to resubmit anyway (`resubmitFrom`).
+   */
+  function recoverReclaimedCodec(resubmitFrom = Number.POSITIVE_INFINITY): void {
+    replaceCodec();
+    if (nextFrameToMux < Math.min(nextFrameToSubmit, resubmitFrom)) {
+      nextFrameToSubmit = nextFrameToMux;
+      throw new VideoEncodingInterruptedError(nextFrameToMux);
+    }
+  }
 
-  async function finishVideoEncoding(): Promise<void> {
-    if (closed) throw new Error('Encoder already closed');
+  encoder = createConfiguredVideoEncoder(encoderGeneration);
+
+  /** Flush the codec until every submitted frame is in the MP4. */
+  async function drainCodec(): Promise<void> {
     let recoveryAttempts = 0;
     while (true) {
-      if (fatalError) throw fail(fatalError);
+      assertUsable();
       if (recoverableError) {
-        if (recoveryAttempts >= MAX_CODEC_RECOVERY_ATTEMPTS) {
-          throw fail(recoverableError);
-        }
-        recoverCodec();
+        if (recoveryAttempts >= MAX_CODEC_RECOVERY_ATTEMPTS) throw fail(recoverableError);
         recoveryAttempts++;
+        recoverReclaimedCodec();
       }
+      const generation = encoderGeneration;
       try {
         await encoder.flush();
       } catch (caught: unknown) {
+        // restartCodec() abandoned this codec while it was flushing.
+        if (generation !== encoderGeneration) {
+          throw new VideoEncodingInterruptedError(nextFrameToMux);
+        }
         const error = toError(caught);
         if (!recoverableError && isReclaimedCodecError(error)) {
           recoverableError = error;
@@ -385,83 +482,110 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
         // `flush()` commonly rejects with a generic InvalidStateError after
         // the error callback reported the recoverable inactivity cause.
         if (recoverableError && recoveryAttempts < MAX_CODEC_RECOVERY_ATTEMPTS) continue;
-        throw fail(fatalError ?? recoverableError ?? error);
+        throw fail(failure ?? recoverableError ?? error);
+      }
+      if (generation !== encoderGeneration) {
+        throw new VideoEncodingInterruptedError(nextFrameToMux);
       }
       // Either callback can fire while in-flight frames drain.
-      if (fatalError) throw fail(fatalError);
+      if (muxError || failure) throw fail(muxError ?? failure ?? new Error('Encoder failed'));
       if (recoverableError) continue;
-      break;
+      framesSinceFlush = 0;
+      return;
     }
-    encoder.close();
-    closed = true;
+  }
+
+  async function finishVideoEncoding(): Promise<void> {
+    if (disposed) throw new Error('Encoder already closed');
+    await drainCodec();
+    closeCodec(encoder);
+    disposed = true;
   }
 
   return {
     async encodeFrame(source: EncoderFrameSource, frameIndex: number): Promise<void> {
       try {
-        try {
-          let recoveryAttempts = 0;
-          while (true) {
-            if (fatalError) throw fail(fatalError);
-            if (closed) throw new Error('Encoder already closed');
-            if (recoverableError) {
-              if (recoveryAttempts >= MAX_CODEC_RECOVERY_ATTEMPTS) {
-                throw fail(recoverableError);
-              }
-              recoverCodec();
-              recoveryAttempts++;
+        let recoveryAttempts = 0;
+        while (true) {
+          assertUsable();
+          if (recoverableError) {
+            if (recoveryAttempts >= MAX_CODEC_RECOVERY_ATTEMPTS) {
+              throw fail(recoverableError);
             }
-
-            try {
-              // `encode()` is asynchronous and closing the VideoFrame does not
-              // mean Chromium has released its pixels. A software encoder can
-              // otherwise trail capture by hundreds of frames and eventually
-              // force the renderer into memory-pressure thrashing.
-              const drained = await applyWebCodecsBackpressure(
-                encoder,
-                queueLimit,
-                framesSinceFlush,
-              );
-              if (drained) framesSinceFlush = 0;
-              if (fatalError) throw fail(fatalError);
-              if (recoverableError) continue;
-              if (closed) throw new Error('Encoder already closed');
-
-              const timestamp = Math.round(frameIndex * frameDuration);
-              const frame = new VideoFrame(source, { timestamp, duration: frameDurationRounded });
-              try {
-                const keyFrame = forceNextKeyFrame || frameIndex % 30 === 0;
-                encoder.encode(frame, { keyFrame });
-                framesSinceFlush++;
-                forceNextKeyFrame = false;
-              } finally {
-                frame.close();
-              }
-              // A test double may report synchronously, and browsers may queue
-              // the callback before this continuation. Retrying here keeps the
-              // current raster available for the replacement codec.
-              if (recoverableError) continue;
-              return;
-            } catch (caught: unknown) {
-              const error = toError(caught);
-              if (!recoverableError && isReclaimedCodecError(error)) {
-                recoverableError = error;
-              }
-              if (recoverableError && recoveryAttempts < MAX_CODEC_RECOVERY_ATTEMPTS) continue;
-              throw fail(fatalError ?? recoverableError ?? error);
-            }
+            recoveryAttempts++;
+            recoverReclaimedCodec(frameIndex);
           }
-        } catch (caught: unknown) {
-          throw fail(toError(caught));
+
+          const generation = encoderGeneration;
+          try {
+            // `encode()` is asynchronous and closing the VideoFrame does not
+            // mean Chromium has released its pixels. A software encoder can
+            // otherwise trail capture by hundreds of frames and eventually
+            // force the renderer into memory-pressure thrashing.
+            const drained = await applyWebCodecsBackpressure(encoder, queueLimit, framesSinceFlush);
+            if (generation !== encoderGeneration) {
+              throw new VideoEncodingInterruptedError(nextFrameToMux);
+            }
+            if (drained) framesSinceFlush = 0;
+            if (recoverableError) continue;
+            assertUsable();
+
+            const timestamp = Math.round(frameIndex * frameDuration);
+            const frame = new VideoFrame(source, { timestamp, duration: frameDurationRounded });
+            try {
+              const keyFrame = forceNextKeyFrame || frameIndex % 30 === 0;
+              encoder.encode(frame, { keyFrame });
+              framesSinceFlush++;
+              forceNextKeyFrame = false;
+              nextFrameToSubmit = frameIndex + 1;
+            } finally {
+              frame.close();
+            }
+            // A test double may report synchronously, and browsers may queue
+            // the callback before this continuation. Retrying here keeps the
+            // current raster available for the replacement codec.
+            if (recoverableError) continue;
+            return;
+          } catch (caught: unknown) {
+            if (caught instanceof VideoEncodingInterruptedError) throw caught;
+            // restartCodec() abandoned this codec while it was flushing.
+            if (generation !== encoderGeneration) {
+              throw new VideoEncodingInterruptedError(nextFrameToMux);
+            }
+            const error = toError(caught);
+            if (!recoverableError && isReclaimedCodecError(error)) {
+              recoverableError = error;
+            }
+            if (recoverableError && recoveryAttempts < MAX_CODEC_RECOVERY_ATTEMPTS) continue;
+            throw fail(failure ?? recoverableError ?? error);
+          }
         }
+      } catch (caught: unknown) {
+        // An interruption leaves a working replacement codec behind.
+        if (caught instanceof VideoEncodingInterruptedError) throw caught;
+        throw fail(toError(caught));
       } finally {
         if ('close' in source) source.close();
       }
     },
 
     addAudioChunk(chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata) {
-      if (closed || !muxer.hasAudioTrack) return;
+      if (disposed || !muxer.hasAudioTrack) return;
       muxer.addAudioChunk(chunk, meta);
+    },
+
+    async drain(): Promise<void> {
+      await drainCodec();
+    },
+
+    restartCodec(): number {
+      if (muxError) throw muxError;
+      if (disposed) throw new Error('Encoder already closed');
+      failure = null;
+      replaceCodec();
+      // Whatever the abandoned codec held is gone; it is submitted again.
+      nextFrameToSubmit = nextFrameToMux;
+      return nextFrameToMux;
     },
 
     async finalize(): Promise<ArrayBuffer> {
@@ -475,11 +599,9 @@ export function createEncoder(config: EncoderConfig): MainThreadEncoder {
     },
 
     close() {
-      if (closed) return;
-      closed = true;
-      if (encoder.state !== 'closed') {
-        encoder.close();
-      }
+      if (disposed) return;
+      disposed = true;
+      closeCodec(encoder);
     },
   };
 }

@@ -64,6 +64,18 @@ function trigger(): HTMLButtonElement {
   return button;
 }
 
+/**
+ * A picker with no type to change stays pressable, so a press can say why;
+ * it is disabled to assistive technology, not to the pointer.
+ */
+function disabled(): boolean {
+  return trigger().getAttribute('aria-disabled') === 'true';
+}
+
+function reason(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('.squisq-template-picker-reason');
+}
+
 function source(): string {
   return screen.getByTestId('markdown-source').textContent ?? '';
 }
@@ -104,7 +116,7 @@ afterEach(() => {
 describe('Slideshow block-type control', () => {
   it('names the type the slide on screen is drawn with', async () => {
     renderControl(DECK, { blockIndex: 1 });
-    await waitFor(() => expect(trigger().disabled).toBe(false));
+    await waitFor(() => expect(disabled()).toBe(false));
     // No annotation on the heading: the section shows as a content slide.
     expect(trigger().textContent).toContain('Content');
     expect(trigger().title).toBe('Block type: Content. Change it for this slide.');
@@ -115,12 +127,12 @@ describe('Slideshow block-type control', () => {
     // annotation; the control shows what is on screen, not "(No visual)".
     renderControl('# Intro\n\n## Numbers\n\nRevenue grew 40% this year.\n', { blockIndex: 1 });
     await waitFor(() => expect(trigger().textContent).toContain('Stat Highlight'));
-    expect(trigger().disabled).toBe(false);
+    expect(disabled()).toBe(false);
   });
 
   it('writes the chosen type onto that section’s heading and nowhere else', async () => {
     renderControl(DECK, { blockIndex: 1 });
-    await waitFor(() => expect(trigger().disabled).toBe(false));
+    await waitFor(() => expect(disabled()).toBe(false));
 
     await chooseBlockType('Stat Highlight');
 
@@ -133,7 +145,7 @@ describe('Slideshow block-type control', () => {
 
   it('titles the gallery with the section it will change', async () => {
     renderControl(DECK, { blockIndex: 1 });
-    await waitFor(() => expect(trigger().disabled).toBe(false));
+    await waitFor(() => expect(disabled()).toBe(false));
     fireEvent.click(trigger());
     expect(await screen.findByRole('dialog', { name: 'Block Type for Numbers' })).toBeTruthy();
   });
@@ -177,10 +189,24 @@ describe('Slideshow block-type control', () => {
     expect(document.querySelector('.squisq-slide-block-type')).not.toBeNull();
   });
 
+  it('is labelled "Slide:" and named for the type it shows', async () => {
+    renderControl(DECK, { blockIndex: 1 });
+    await waitFor(() => expect(disabled()).toBe(false));
+    const control = document.querySelector('.squisq-slide-block-type')!;
+    const label = control.querySelector('label')!;
+    expect(label.textContent).toBe('Slide:');
+    // The host's label stands in for the picker's own "Block:".
+    expect(trigger().textContent).not.toContain('Block:');
+    const [labelRef, selfRef] = trigger().getAttribute('aria-labelledby')!.split(' ');
+    expect(document.getElementById(labelRef)).toBe(label);
+    expect(selfRef).toBe(trigger().id);
+    expect(label.htmlFor).toBe(trigger().id);
+  });
+
   it('shows the cover but leaves it to the cover menu', async () => {
     renderControl(DECK, { cover: true });
     await waitFor(() => expect(trigger().textContent).toContain('Cover'));
-    expect(trigger().disabled).toBe(true);
+    expect(disabled()).toBe(true);
     expect(trigger().title).toMatch(/Cover slide menu/);
     fireEvent.click(trigger());
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -189,30 +215,70 @@ describe('Slideshow block-type control', () => {
   it('explains that Summarize chooses the layout of generated slides', async () => {
     renderControl(DECK, { blockIndex: 1, generated: true });
     await waitFor(() => expect(trigger().title).toMatch(/Set Summarize to None/));
-    expect(trigger().disabled).toBe(true);
+    expect(disabled()).toBe(true);
+  });
+
+  it('says why at a press when the slide has no type to change', async () => {
+    // A finger cannot hover to raise the tooltip, so the press says it.
+    renderControl(DECK, { blockIndex: 1, generated: true });
+    await waitFor(() => expect(disabled()).toBe(true));
+    expect(reason()).toBeNull();
+
+    fireEvent.click(trigger());
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('tooltip').textContent).toMatch(/Set Summarize to None/);
+    expect(trigger().getAttribute('aria-describedby')).toBe(reason()!.id);
+
+    // Pressing again puts it away…
+    fireEvent.click(trigger());
+    expect(reason()).toBeNull();
+
+    // …and so does a press anywhere else.
+    fireEvent.click(trigger());
+    expect(reason()).not.toBeNull();
+    fireEvent.pointerDown(document.body);
+    expect(reason()).toBeNull();
+  });
+
+  it('puts the reason away with Escape', async () => {
+    renderControl(DECK, { cover: true });
+    await waitFor(() => expect(disabled()).toBe(true));
+    fireEvent.click(trigger());
+    expect(reason()?.textContent).toMatch(/Cover slide menu/);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(reason()).toBeNull();
+  });
+
+  it('keeps the reason up when its own label is pressed', async () => {
+    renderControl(DECK, { cover: true });
+    await waitFor(() => expect(disabled()).toBe(true));
+    fireEvent.click(trigger());
+    const label = document.querySelector<HTMLLabelElement>('.squisq-slide-block-type label')!;
+    fireEvent.pointerDown(label);
+    expect(reason()).not.toBeNull();
   });
 
   it('is disabled for a slide that is no section of the document', async () => {
     renderControl(DECK, { blockId: 'img-interleave-0' });
     await waitFor(() => expect(trigger().title).toMatch(/has no block type/));
-    expect(trigger().disabled).toBe(true);
+    expect(disabled()).toBe(true);
   });
 
   it('is disabled for content that has no heading to carry a type', async () => {
     renderControl('Opening words before any heading.\n\n# Later\n\nBody.\n', { blockIndex: 0 });
     await waitFor(() => expect(trigger().title).toMatch(/only be changed in Write/));
-    expect(trigger().disabled).toBe(true);
+    expect(disabled()).toBe(true);
   });
 
   it('is disabled until a slide is showing', () => {
     renderControl(DECK, null);
-    expect(trigger().disabled).toBe(true);
+    expect(disabled()).toBe(true);
     expect(trigger().title).toBe('No slide is showing yet.');
   });
 
   it('resolves a slide the player paced into parts back to its section', async () => {
     renderControl(DECK, { blockId: 'numbers-split-1' });
-    await waitFor(() => expect(trigger().disabled).toBe(false));
+    await waitFor(() => expect(disabled()).toBe(false));
     await chooseBlockType('Quote');
     await waitFor(() => expect(source()).toContain('## Numbers {[quote]}'));
   });
@@ -239,7 +305,7 @@ describe('Slideshow block-type control with the real player', () => {
       </EditorProvider>,
     );
 
-    await waitFor(() => expect(trigger().disabled).toBe(false));
+    await waitFor(() => expect(disabled()).toBe(false));
     expect(trigger().textContent).toContain('Content');
 
     await chooseBlockType('Title');
