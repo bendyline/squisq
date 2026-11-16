@@ -1,3 +1,9 @@
+## @bendyline/squisq-video-react [2.5.32](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.5.31...@bendyline/squisq-video-react@2.5.32) (2026-11-16)
+
+### Bug Fixes
+
+* Windows build fix ([#128](https://github.com/bendyline/squisq/issues/128)) ([dbd98ae](https://github.com/bendyline/squisq/commit/dbd98ae7321482d27c3553334dd2b8aa23f73dd5))
+
 ## @bendyline/squisq-video-react [2.5.31](https://github.com/bendyline/squisq/compare/@bendyline/squisq-video-react@2.5.30...@bendyline/squisq-video-react@2.5.31) (2026-11-15)
 
 ### Bug Fixes

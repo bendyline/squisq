@@ -1,3 +1,14 @@
+## @bendyline/squisq-editor-react [2.13.26](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.25...@bendyline/squisq-editor-react@2.13.26) (2026-11-16)
+
+### Bug Fixes
+
+* Windows build fix ([#128](https://github.com/bendyline/squisq/issues/128)) ([dbd98ae](https://github.com/bendyline/squisq/commit/dbd98ae7321482d27c3553334dd2b8aa23f73dd5))
+
+
+### Dependencies
+
+* **@bendyline/squisq-video-react:** upgraded to 2.5.32
+
 ## @bendyline/squisq-editor-react [2.13.25](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.24...@bendyline/squisq-editor-react@2.13.25) (2026-11-15)
 
 ### Bug Fixes
