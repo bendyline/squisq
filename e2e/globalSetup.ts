@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { preview } from 'vite';
+import { watchOrphanedCrashHandlers } from '../scripts/orphanedCrashHandlers';
 import { ensureTeleprompterFakeMic } from './fakeMicFixture';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -17,6 +18,10 @@ function readSelectedPort(): number {
 export default async function globalSetup(): Promise<() => Promise<void>> {
   await ensureTeleprompterFakeMic();
 
+  // On Windows a test browser's crash handler can outlive the browser and
+  // hold Playwright's browser.close() open forever; this stops such handlers.
+  const stopCrashHandlerWatch = watchOrphanedCrashHandlers();
+
   const server = await preview({
     root: path.join(repoRoot, 'packages/site'),
     logLevel: 'warn',
@@ -28,6 +33,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   });
 
   return async () => {
+    stopCrashHandlerWatch();
     await server.close();
   };
 }
