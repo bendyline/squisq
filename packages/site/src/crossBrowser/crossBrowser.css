@@ -1,7 +1,9 @@
 body {
   margin: 0;
   background: #7a7a7a;
-  font: 12px system-ui, sans-serif;
+  font:
+    12px system-ui,
+    sans-serif;
 }
 .xb-grid {
   display: flex;
@@ -28,7 +30,9 @@ body {
   background: #fff;
 }
 .xb-cell figcaption {
-  font: 11px ui-monospace, monospace;
+  font:
+    11px ui-monospace,
+    monospace;
   color: #fff;
   padding-top: 2px;
 }
