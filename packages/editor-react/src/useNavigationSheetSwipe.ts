@@ -15,6 +15,11 @@ const PREVIEWS_PULL_PX = 48;
 const COMMIT_FRACTION = 0.4;
 /** px per ms — a fast flick commits regardless of distance. */
 const COMMIT_VELOCITY = 0.5;
+/**
+ * Marks an element that runs its own touch drag. A touch that starts on one
+ * is never the start of an edge swipe, however close to the edge it lands.
+ */
+const TOUCH_DRAG_SELECTOR = '[data-squisq-touch-drag]';
 
 export interface NavigationSheetSwipeOptions {
   /** The sheet root; its parent, the editor body, is where touches are read. */
@@ -83,6 +88,9 @@ export function useNavigationSheetSwipe({
 
     const onPointerDown = (event: PointerEvent): void => {
       if (pointerId !== null || event.pointerType !== 'touch' || !event.isPrimary) return;
+      // A control that runs its own touch drag (an image's resize grip) keeps
+      // the touch even inside the edge zone.
+      if (event.target instanceof Element && event.target.closest(TOUCH_DRAG_SELECTOR)) return;
       const bounds = surface.getBoundingClientRect();
       if (open) {
         // Only a drag on the panel closes it; the scrim closes on tap.

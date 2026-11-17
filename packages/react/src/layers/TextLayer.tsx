@@ -46,6 +46,7 @@ import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue } from '../utils/layerUtils';
 import { defsIdFor } from '../utils/defsId';
 import { resolveFill, borderDashArray } from '../utils/fillStyle';
+import { paintsForeignObjectLayersUnscaled } from '../utils/foreignObjectPaint';
 
 interface TextLayerProps {
   layer: TextLayerType;
@@ -206,6 +207,12 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
 
   const textAnchor = getTextAnchor(style.textAlign, position.anchor);
   const dominantBaseline = getDominantBaseline(style.verticalAlign, position.anchor);
+  // WebKit (Safari, iOS/iPadOS web views) treats dominant-baseline as
+  // non-inherited, per SVG 1.1: set only on <text>, the glyphs inside each
+  // <tspan> fall back to the alphabetic baseline and sit ~one ascent above
+  // where Chromium draws them, out of line with foreignObject rich text.
+  // Every tspan that holds text therefore carries the baseline itself.
+  const tspanBaseline = dominantBaseline as 'text-before-edge' | 'middle' | 'text-after-edge';
 
   // Place the text's pivot at the box edge/centre matching the chosen
   // alignment. This is algebraically identical to the legacy point-anchor
@@ -362,7 +369,11 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
       return (
         <Fragment key={w}>
           {w > 0 ? ' ' : null}
-          <tspan className="anim-word" style={{ '--anim-delay': `${delay}s` } as CSSProperties}>
+          <tspan
+            className="anim-word"
+            dominantBaseline={tspanBaseline}
+            style={{ '--anim-delay': `${delay}s` } as CSSProperties}
+          >
             {word}
           </tspan>
         </Fragment>
@@ -429,13 +440,23 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
           x={x}
           y={y}
           textAnchor={textAnchor as 'start' | 'middle' | 'end'}
-          dominantBaseline={dominantBaseline as 'text-before-edge' | 'middle' | 'text-after-edge'}
+          dominantBaseline={tspanBaseline}
+          // WebKit lays SVG text out at its on-screen size and rounds each
+          // glyph there, so small labels on a scaled-down slide ran ~10% wider
+          // than Chromium draws them and than the wrap estimates assume.
+          // Geometric precision lays text out at its authored size in both.
+          textRendering="geometricPrecision"
           style={textStyles}
           filter={filterId ? `url(#${filterId})` : undefined}
           transform={fitTransform}
         >
           {lines.map((line, i) => (
-            <tspan key={i} x={x} dy={i === 0 ? firstLineDy + baselineShiftPx : lineHeightPx}>
+            <tspan
+              key={i}
+              x={x}
+              dy={i === 0 ? firstLineDy + baselineShiftPx : lineHeightPx}
+              dominantBaseline={tspanBaseline}
+            >
               {renderLine(line)}
               {/* Words either side of a line break stay apart in the text content
                   (copy, screen readers) through a space with no advance: a plain
@@ -524,6 +545,7 @@ function RichTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
   // Scoped reset so authored block elements (headings, lists, paragraphs)
   // render tightly inside the box rather than with the UA's large margins.
   const cls = `squisq-rich-text-${cssId(layer.id)}`;
+  const stickyHeader = !paintsForeignObjectLayersUnscaled();
   const listStylePosition =
     style.textAlign === 'center' || style.textAlign === 'right' ? 'inside' : 'outside';
   const stopEmbeddedTableEvent = (event: React.SyntheticEvent): void => {
@@ -556,7 +578,9 @@ function RichTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
     `.${cls} [data-squisq-table-scroll]{width:100%;max-height:20em;margin:.35em 0;overflow:auto;overscroll-behavior:contain;box-sizing:border-box}` +
     `.${cls} table{width:100%;min-width:48em;margin:0;border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:.76em;line-height:1.2}` +
     `.${cls} th,.${cls} td{box-sizing:border-box;padding:.28em .45em;border:1px solid rgba(127,127,127,.55);border-color:color-mix(in srgb,currentColor 32%,transparent);vertical-align:top;white-space:normal;overflow-wrap:anywhere}` +
-    `.${cls} th{position:sticky;top:0;z-index:1;background:rgba(127,127,127,.16);background:color-mix(in srgb,currentColor 12%,transparent);font-weight:600}` +
+    // WebKit paints a sticky cell in a foreignObject without the slide's scale
+    // (utils/foreignObjectPaint.ts), blanking the table: there the header scrolls.
+    `.${cls} th{${stickyHeader ? 'position:sticky;top:0;z-index:1;' : ''}background:rgba(127,127,127,.16);background:color-mix(in srgb,currentColor 12%,transparent);font-weight:600}` +
     `.${cls} tbody tr:nth-child(even){background:rgba(127,127,127,.07);background:color-mix(in srgb,currentColor 5%,transparent)}` +
     `.${cls} *:first-child{margin-top:0}.${cls} *:last-child{margin-bottom:0}` +
     `.${cls} a{color:inherit;text-decoration:underline}`;

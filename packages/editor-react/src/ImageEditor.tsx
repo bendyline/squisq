@@ -21,6 +21,7 @@ import { CanvasSurface } from './imageEditor/CanvasSurface.js';
 import { ImageVersionHistoryDropdown } from './imageEditor/ImageVersionHistoryDropdown.js';
 import { LayersPanel, type AddableLayerKind } from './imageEditor/LayersPanel.js';
 import { PropertiesPanel } from './imageEditor/PropertiesPanel.js';
+import { SidePanelDrawer } from './imageEditor/SidePanelDrawer.js';
 import { Toolbar } from './imageEditor/Toolbar.js';
 import { useImageEditor } from './imageEditor/useImageEditor.js';
 import { useImageEditorTokens } from './imageEditor/useImageEditorTokens.js';
@@ -376,7 +377,7 @@ export function ImageEditor(props: ImageEditorProps) {
             requestEditLayerId={requestEditLayerId}
           />
         </div>
-        <div className="squisq-image-editor-side">
+        <SidePanelDrawer>
           <LayersPanel
             doc={state.doc}
             selectedLayerId={state.selectedLayerId}
@@ -388,7 +389,7 @@ export function ImageEditor(props: ImageEditorProps) {
             selectedLayerId={state.selectedLayerId}
             dispatch={dispatch}
           />
-        </div>
+        </SidePanelDrawer>
       </div>
     </div>
   );

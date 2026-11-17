@@ -106,7 +106,7 @@ describe('RecorderModal — Show narration mode', () => {
     // Expanded layout marker + the teleprompter stage with its control rail.
     expect(dialog().getAttribute('data-narration')).toBe('true');
     expect(screen.getByTestId('teleprompter-controls')).toBeTruthy();
-    expect(screen.getByText('⇱ Pop out')).toBeTruthy();
+    expect(screen.getByText('Pop out')).toBeTruthy();
     expect(screen.getByLabelText('Countdown')).toBeTruthy();
 
     // The dialog's left column is the source of truth for starting: the

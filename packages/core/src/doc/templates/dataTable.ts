@@ -20,9 +20,19 @@ import {
 } from '../utils/themeUtils.js';
 import { pickContrastingText, withAlpha } from '../../schemas/colorUtils.js';
 import { createBackgroundLayer } from './captionUtils.js';
+import { featureTableWidthEm, fitFeatureTable } from '../featureTable.js';
 
 /** Body rows the slide viewport is designed to show before scrolling. */
 const MAX_VISIBLE_ROWS = 10;
+/** Share of the frame the table band may take. */
+const MAX_TABLE_HEIGHT_PCT = 74;
+/** Table width, as a share of the frame. */
+const TABLE_WIDTH_PCT = 80;
+/**
+ * Smallest share of its themed size a too-wide table's type may shrink to
+ * while its cells wrap. Below it the table keeps that size and scrolls.
+ */
+const MIN_WRAPPED_TYPE_SHARE = 0.6;
 
 export function dataTable(input: DataTableInput, context: TemplateContext): Layer[] {
   const { title, headers, rows, align, colorScheme } = input;
@@ -36,7 +46,7 @@ export function dataTable(input: DataTableInput, context: TemplateContext): Laye
 
   const colors = resolveColorScheme(context, colorScheme);
   const titleFontSize = themedFontSize(48, context, true);
-  const tableFontSize = themedFontSize(28, context, false);
+  let tableFontSize = themedFontSize(28, context, false);
 
   const layers: Layer[] = [createBackgroundLayer('bg', themedSurfaceGradient(context, 170))];
 
@@ -53,11 +63,39 @@ export function dataTable(input: DataTableInput, context: TemplateContext): Laye
   // by a few pixels, which scrolled the table and clipped its last row. The
   // extra pixel absorbs sub-pixel row rounding.
   const ruleHeight = (hasHeader ? 2 : 0) + Math.max(0, visibleRows - 1) + 2 + 1;
-  const naturalTableHPct = Math.min(
-    74,
+  let naturalTableHPct = Math.min(
+    MAX_TABLE_HEIGHT_PCT,
     ((rowCount * tableFontSize * 2.4 + ruleHeight) / viewport.height) * 100,
   );
   const titleBandPct = title ? (titleFontSize * 2.2 * 100) / viewport.height : 0;
+
+  // A table wider than its box ran off the slide's right edge: one-line cells
+  // in a sideways scroller, which a still slide, a video, or a phone in
+  // portrait never shows. Such a table wraps its cells to the box instead, at
+  // the largest type size (down to a readable floor) at which the visible
+  // rows still fit the band.
+  const tableWidthPx = (TABLE_WIDTH_PCT / 100) * viewport.width;
+  const visibleTable = {
+    headers: resolvedHeaders.map(String),
+    rows: resolvedRows
+      .slice(0, MAX_VISIBLE_ROWS)
+      .map((row) => (Array.isArray(row) ? row.map(String) : [])),
+  };
+  let wrap = false;
+  if (
+    visibleTable.headers.length + visibleTable.rows.length > 0 &&
+    featureTableWidthEm(visibleTable) * tableFontSize > tableWidthPx
+  ) {
+    const fit = fitFeatureTable(
+      visibleTable,
+      { width: tableWidthPx, height: (MAX_TABLE_HEIGHT_PCT / 100) * viewport.height },
+      tableFontSize,
+      Math.max(1, Math.round(tableFontSize * MIN_WRAPPED_TYPE_SHARE)),
+    );
+    wrap = true;
+    tableFontSize = fit.fontSize;
+    naturalTableHPct = Math.min(MAX_TABLE_HEIGHT_PCT, (fit.height / viewport.height) * 100);
+  }
   const groupTopPct = Math.max(8, (100 - titleBandPct - naturalTableHPct) / 2);
 
   // Optional title above the table
@@ -97,6 +135,7 @@ export function dataTable(input: DataTableInput, context: TemplateContext): Laye
       rows: resolvedRows,
       maxVisibleRows: MAX_VISIBLE_ROWS,
       align,
+      ...(wrap ? { wrap } : {}),
       style: {
         headerBackground: colors.accent,
         headerColor: pickContrastingText(colors.accent),
@@ -110,9 +149,9 @@ export function dataTable(input: DataTableInput, context: TemplateContext): Laye
       },
     },
     position: {
-      x: '10%',
+      x: `${(100 - TABLE_WIDTH_PCT) / 2}%`,
       y: `${groupTopPct + titleBandPct}%`,
-      width: '80%',
+      width: `${TABLE_WIDTH_PCT}%`,
       height: `${naturalTableHPct}%`,
     },
     animation: { type: 'fadeIn', duration: 1, delay: title ? 0.4 : 0 },

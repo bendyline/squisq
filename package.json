@@ -39,6 +39,7 @@
     "screenshots:templates": "node scripts/generate-template-screenshots.mjs",
     "screenshots:swatches": "tsx scripts/generate-swatches.ts",
     "screenshots:decks": "tsx scripts/generate-deck-review.ts",
+    "screenshots:cross-browser": "tsx scripts/generate-cross-browser-review.ts",
     "docs:check": "tsx scripts/check-docs.ts",
     "site": "npm run dev",
     "dev": "npm run build:dev && node scripts/run-dev.mjs",

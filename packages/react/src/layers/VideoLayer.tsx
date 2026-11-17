@@ -22,6 +22,16 @@
  * A timed <video> carries data-clip-start and data-clip-end attributes so the
  * seekTo handler can calculate the correct video time for any doc time.
  *
+ * A <video> is always composited, and WebKit paints composited HTML in a
+ * foreignObject without the slide's scale or letterbox offset
+ * (utils/foreignObjectPlacement.ts). It also composites — and so misplaces —
+ * any foreignObject text drawn over the video, so on WebKit a clip that is not
+ * playing draws its poster as a still <img> and keeps the <video> undrawn
+ * (`display: none`, still loading). A slideshow clip shows a play button on
+ * its poster; a timed clip shows its video while the doc clock runs it. A
+ * shown video gets its on-screen box, except during frame capture, which
+ * places video frames from the element's layout box.
+ *
  * ## The clip's edit recipe
  *
  * A video laid out in a slide is not a scheduled clip, so this layer applies
@@ -44,10 +54,11 @@
  * - shared/doc/templates/videoWithCaption.ts — template producing VideoLayers
  * - site/src/components/doc/DocPlayer.tsx — seekTo handler for video sync
  * - site/src/components/doc/layers/ImageLayer.tsx — similar foreignObject pattern
+ * - utils/foreignObjectPlacement.ts — WebKit's on-screen box for the clip
  * - mediaRecipePlayback.ts — the recipe pieces shared with the inline players
  */
 
-import { useContext, useEffect, useMemo, useRef } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   createMediaTimeMap,
   hasRenderableFx,
@@ -56,6 +67,8 @@ import {
 } from '@bendyline/squisq/mediaEdit';
 import type { MediaClip, VideoLayer as VideoLayerType } from '@bendyline/squisq/schemas';
 import { isCaptureDrivenVideo } from '../docPlayer/renderReadiness';
+import { useForeignObjectScreenPlacement } from '../utils/foreignObjectPlacement';
+import { paintsForeignObjectLayersUnscaled } from '../utils/foreignObjectPaint';
 import { ProcessedAudioContext, useMediaUrl } from '../hooks/MediaContext';
 import {
   applyMediaLevel,
@@ -85,6 +98,8 @@ interface VideoLayerProps {
   muted?: boolean;
   /** How the clip plays (see the component docs). Default `timed`. */
   mode?: VideoClipMode;
+  /** Frame capture: keep the slide-unit box it reads the frame's place from. */
+  capture?: boolean;
 }
 
 export function VideoLayer({
@@ -95,11 +110,13 @@ export function VideoLayer({
   isPlaying,
   muted = false,
   mode = 'timed',
+  capture = false,
 }: VideoLayerProps) {
   const { content, position } = layer;
   const edits = content.edits;
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const foreignObjectRef = useRef<SVGForeignObjectElement>(null);
   const hasStartedRef = useRef(false);
   const isPlayer = mode === 'player';
 
@@ -292,9 +309,101 @@ export function VideoLayer({
     if (heard) applyMediaLevel(heard, level);
   }, [hasLevel, level, companion, src, processedUrl]);
 
+  // WebKit paints the composited <video> at its foreignObject's numbers read as
+  // CSS px: hand it the clip's on-screen box there.
+  const screen = useForeignObjectScreenPlacement(foreignObjectRef, !capture);
+  // On WebKit a clip that is not playing is its poster, drawn natively, so no
+  // composited video displaces the text over it (see the component docs).
+  const [viewerStarted, setViewerStarted] = useState(false);
+  const playing = isPlayer ? viewerStarted : Boolean(isPlaying) && !gated;
+  const idlePoster = !capture && !playing && paintsForeignObjectLayersUnscaled();
+  const startViewing = (): void => {
+    const video = videoRef.current;
+    if (!video) return;
+    // Show and start the clip within the tap: iOS only plays sound from a
+    // user gesture, and the state update would arrive a frame later.
+    video.style.display = 'block';
+    setViewerStarted(true);
+    void video.play()?.catch(() => undefined);
+  };
+  const box = screen
+    ? {
+        x: screen.offsetX + finalX * screen.scale,
+        y: screen.offsetY + finalY * screen.scale,
+        width: width * screen.scale,
+        height: height * screen.scale,
+      }
+    : { x: finalX, y: finalY, width, height };
+
+  const playSize = Math.min(width, height) * 0.16;
+
   return (
     <g className="block-layer block-layer--video" data-layer-id={layer.id}>
-      <foreignObject x={finalX} y={finalY} width={width} height={height}>
+      {idlePoster && (
+        <g data-video-poster="">
+          {posterSrc ? (
+            // A still <img> in a foreignObject is not composited, so WebKit
+            // draws it where it belongs; object-fit crops any image format.
+            <foreignObject
+              x={finalX}
+              y={finalY}
+              width={width}
+              height={height}
+              style={{ pointerEvents: 'none' }}
+            >
+              <img
+                src={posterSrc}
+                alt=""
+                style={{
+                  width: `${width}px`,
+                  height: `${height}px`,
+                  objectFit: content.fit || 'cover',
+                  objectPosition: 'center',
+                  display: 'block',
+                }}
+              />
+            </foreignObject>
+          ) : (
+            <rect x={finalX} y={finalY} width={width} height={height} fill="#000" />
+          )}
+          {isPlayer && (
+            <g
+              role="button"
+              tabIndex={0}
+              aria-label={content.alt ? `Play ${content.alt}` : 'Play video'}
+              data-no-swipe=""
+              style={{ cursor: 'pointer' }}
+              onClick={startViewing}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                startViewing();
+              }}
+            >
+              <circle
+                cx={finalX + width / 2}
+                cy={finalY + height / 2}
+                r={playSize / 2}
+                fill="rgba(0,0,0,0.55)"
+                stroke="rgba(255,255,255,0.85)"
+                strokeWidth={Math.max(1, playSize * 0.04)}
+              />
+              <path
+                d={`M ${finalX + width / 2 - playSize * 0.14} ${finalY + height / 2 - playSize * 0.2} L ${finalX + width / 2 + playSize * 0.22} ${finalY + height / 2} L ${finalX + width / 2 - playSize * 0.14} ${finalY + height / 2 + playSize * 0.2} Z`}
+                fill="#fff"
+              />
+            </g>
+          )}
+        </g>
+      )}
+      <foreignObject
+        ref={foreignObjectRef}
+        x={box.x}
+        y={box.y}
+        width={box.width}
+        height={box.height}
+        data-screen-placed={screen ? '' : undefined}
+      >
         <video
           ref={videoRef}
           src={src}
@@ -320,11 +429,11 @@ export function VideoLayer({
                 'data-cuts': cutsKey || undefined,
               })}
           style={{
-            width: `${width}px`,
-            height: `${height}px`,
+            width: `${box.width}px`,
+            height: `${box.height}px`,
             objectFit: content.fit || 'cover',
             objectPosition: 'center',
-            display: 'block',
+            display: idlePoster ? 'none' : 'block',
             pointerEvents: isPlayer ? undefined : 'none',
             ...mediaCropStyle(edits?.crop),
           }}

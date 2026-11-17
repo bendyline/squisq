@@ -17,6 +17,7 @@ import type { Theme } from '@bendyline/squisq/schemas';
 import { TeleprompterSurface } from './TeleprompterSurface';
 import { TeleprompterControls } from './TeleprompterControls';
 import { TeleprompterSelfView } from './TeleprompterSelfView';
+import { Icon } from '../Icon';
 import { drawPrompterFrame, type CanvasPrompterFrame } from './canvasRenderer';
 import { ensureTeleprompterStyles } from './teleprompterTheme';
 import type { NarrationStageHandle } from './useNarrationStage';
@@ -261,44 +262,61 @@ export function NarrationStage(props: NarrationStageProps) {
 
   const recordSlot =
     recording && showRecordSlot ? (
-      <span className="squisq-teleprompter-group" data-testid="teleprompter-record">
-        <span>Auto-stops at {formatRecordingBytes(recorder.maxRecordingBytes)}.</span>
+      <div className="squisq-teleprompter-record" data-testid="teleprompter-record">
         {recorder.state === 'idle' || recorder.state === 'error' ? (
           <>
             <button
               type="button"
+              className="squisq-teleprompter-tool squisq-teleprompter-tool--record"
               onClick={() => void recorder.start()}
               title="Record narration while you read"
             >
-              ⏺ Record
+              <Icon icon="fa-solid fa-circle" />
+              Record
             </button>
             {showCameraToggleInRecordSlot ? (
-              <label title="Also capture your camera as a separate video file">
+              <label
+                className="squisq-teleprompter-check"
+                title="Also capture your camera as a separate video file"
+              >
                 <input
                   type="checkbox"
                   checked={recorder.withCamera}
                   onChange={(e) => recorder.setWithCamera(e.target.checked)}
                 />
-                camera
+                Camera
               </label>
             ) : null}
+            <span className="squisq-teleprompter-hint">
+              Auto-stops at {formatRecordingBytes(recorder.maxRecordingBytes)}
+            </span>
             {recorder.state === 'error' ? (
-              <span title={recorder.error?.message}>⚠ {recorder.error?.message}</span>
+              <span className="squisq-teleprompter-warning" title={recorder.error?.message}>
+                <Icon icon="fa-solid fa-triangle-exclamation" /> {recorder.error?.message}
+              </span>
             ) : null}
           </>
         ) : busyRecording ? (
           <>
-            <span>{formatRecordingBytes(recorder.recordedBytes)} recorded</span>
-            <button type="button" onClick={() => void recorder.stop()}>
-              ⏹ Stop
+            <button
+              type="button"
+              className="squisq-teleprompter-tool squisq-teleprompter-tool--stop"
+              onClick={() => void recorder.stop()}
+            >
+              <Icon icon="fa-solid fa-stop" />
+              Stop
             </button>
+            <span className="squisq-teleprompter-hint">
+              {formatRecordingBytes(recorder.recordedBytes)} recorded · auto-stops at{' '}
+              {formatRecordingBytes(recorder.maxRecordingBytes)}
+            </span>
           </>
         ) : recorder.state === 'processing' ? (
-          <span>Aligning take…</span>
+          <span className="squisq-teleprompter-hint">Aligning take…</span>
         ) : recorder.state === 'saving' ? (
-          <span>Saving…</span>
+          <span className="squisq-teleprompter-hint">Saving…</span>
         ) : null}
-      </span>
+      </div>
     ) : null;
 
   return (
@@ -307,8 +325,9 @@ export function NarrationStage(props: NarrationStageProps) {
         {portalOpen ? (
           <div className="squisq-teleprompter-float-note">
             <p>The prompter is floating in its own window.</p>
-            <button type="button" onClick={float.close}>
-              ⇤ Bring it back
+            <button type="button" className="squisq-teleprompter-tool" onClick={float.close}>
+              <Icon icon="fa-solid fa-compress" />
+              Bring it back
             </button>
           </div>
         ) : (
@@ -364,21 +383,36 @@ export function NarrationStage(props: NarrationStageProps) {
           <NarrationTakeBackups take={recorder.take} baseWpm={controller.prefs.baseWpm} />
           {showReviewActions ? (
             <>
-              <button type="button" onClick={() => void stage.handleSave()}>
-                ✓ Save narration
+              <button
+                type="button"
+                className="squisq-teleprompter-tool squisq-teleprompter-tool--primary"
+                onClick={() => void stage.handleSave()}
+              >
+                <Icon icon="fa-solid fa-check" />
+                Save narration
               </button>
-              <button type="button" onClick={stage.handleRetake}>
-                ↺ Retake
+              <button
+                type="button"
+                className="squisq-teleprompter-tool"
+                onClick={stage.handleRetake}
+              >
+                <Icon icon="fa-solid fa-rotate-left" />
+                Retake
               </button>
-              <button type="button" onClick={stage.handleDiscard}>
-                ✕ Discard
+              <button
+                type="button"
+                className="squisq-teleprompter-tool"
+                onClick={stage.handleDiscard}
+              >
+                <Icon icon="fa-solid fa-xmark" />
+                Discard
               </button>
             </>
           ) : null}
           {recorder.error ? (
-            <span role="alert">
-              ⚠ {recorder.error.message} Your take is still available. Download a backup before
-              leaving.
+            <span role="alert" className="squisq-teleprompter-warning">
+              <Icon icon="fa-solid fa-triangle-exclamation" /> {recorder.error.message} Your take is
+              still available. Download a backup before leaving.
             </span>
           ) : null}
         </div>
@@ -386,7 +420,11 @@ export function NarrationStage(props: NarrationStageProps) {
       {stage.saveNotice ? (
         <div className="squisq-teleprompter-review" data-testid="teleprompter-save-notice">
           <span>{stage.saveNotice}</span>
-          <button type="button" onClick={stage.dismissSaveNotice}>
+          <button
+            type="button"
+            className="squisq-teleprompter-tool"
+            onClick={stage.dismissSaveNotice}
+          >
             Dismiss
           </button>
         </div>

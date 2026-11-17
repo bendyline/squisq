@@ -219,3 +219,82 @@ describe('<Toolbar> overflow', () => {
     expect(screen.queryByRole('button', { name: 'More actions' })).toBeNull();
   });
 });
+
+// iOS WebKit sends no mousedown for a tap on plain document canvas, so the
+// menus must close on the pointer press itself.
+describe('<Toolbar> menu dismissal', () => {
+  // The Insert menu re-anchors itself through a ResizeObserver jsdom lacks.
+  const originalResizeObserver = globalThis.ResizeObserver;
+  beforeEach(() => {
+    class ResizeObserverStub implements ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    globalThis.ResizeObserver = ResizeObserverStub;
+  });
+  afterEach(() => {
+    if (originalResizeObserver) globalThis.ResizeObserver = originalResizeObserver;
+    else Reflect.deleteProperty(globalThis, 'ResizeObserver');
+  });
+
+  function canvas(): HTMLElement {
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    return element;
+  }
+
+  function openInsertMenu(): HTMLElement {
+    fireEvent.click(screen.getByRole('button', { name: 'Insert' }));
+    const menu = document.querySelector<HTMLElement>('.squisq-insert-menu');
+    expect(menu).not.toBeNull();
+    return menu!;
+  }
+
+  it('closes the Insert menu on a pointer press outside it', () => {
+    renderToolbar();
+    openInsertMenu();
+
+    fireEvent.pointerDown(canvas());
+
+    expect(document.querySelector('.squisq-insert-menu')).toBeNull();
+  });
+
+  it('keeps the Insert menu open on a pointer press inside it', () => {
+    renderToolbar();
+    const menu = openInsertMenu();
+
+    fireEvent.pointerDown(menu.querySelector('[role="menuitem"]')!);
+
+    expect(document.querySelector('.squisq-insert-menu')).not.toBeNull();
+  });
+
+  it('closes the Insert menu even when the pressed element stops propagation', () => {
+    renderToolbar();
+    openInsertMenu();
+    const block = canvas();
+    block.addEventListener('pointerdown', (event) => event.stopPropagation());
+
+    fireEvent.pointerDown(block);
+
+    expect(document.querySelector('.squisq-insert-menu')).toBeNull();
+  });
+
+  it('closes the overflow menu on a pointer press outside it', () => {
+    renderToolbar();
+    openOverflowMenu();
+
+    fireEvent.pointerDown(canvas());
+
+    expect(document.querySelector('.squisq-toolbar-overflow-menu')).toBeNull();
+  });
+
+  it('keeps the overflow menu open on a pointer press inside it', () => {
+    renderToolbar();
+    const menu = openOverflowMenu();
+
+    fireEvent.pointerDown(menu.querySelector('button')!);
+
+    expect(document.querySelector('.squisq-toolbar-overflow-menu')).not.toBeNull();
+  });
+});

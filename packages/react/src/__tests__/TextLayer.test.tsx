@@ -302,6 +302,35 @@ describe('TextLayer', () => {
     expect(lines[1].querySelector('tspan')).toBeNull();
   });
 
+  it('repeats the baseline on every line tspan, which WebKit does not inherit', () => {
+    // Safari / iOS web views ignore a dominant-baseline set only on <text>
+    // for text inside a <tspan>, so a top-anchored list marker or plain item
+    // drew one ascent above the foreignObject rich-text item beside it.
+    const layer: TextLayerType = {
+      id: 'item-0',
+      type: 'text',
+      content: { text: 'First line\nsecond line', style: { fontSize: 51, color: '#fff' } },
+      position: { x: 100, y: 200, width: 900 },
+    };
+    const { container } = render(
+      <svg>
+        <TextLayer layer={layer} viewport={viewport} blockTime={0} />
+      </svg>,
+    );
+    expect(container.querySelector('text')!.getAttribute('dominant-baseline')).toBe(
+      'text-before-edge',
+    );
+    const lines = [...container.querySelectorAll('text > tspan')];
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(line.getAttribute('dominant-baseline')).toBe('text-before-edge');
+    }
+    // WebKit otherwise lays small scaled-down labels out ~10% wider.
+    expect(container.querySelector('text')!.getAttribute('text-rendering')).toBe(
+      'geometricPrecision',
+    );
+  });
+
   it('shifts rich text down by baselineShift em of its own size', () => {
     const layer: TextLayerType = {
       id: 'rich',
@@ -411,6 +440,9 @@ describe('TextLayer motion', () => {
       words[2].style.getPropertyValue('--anim-delay'),
     ]);
     expect(parseFloat(words[2].style.getPropertyValue('--anim-delay'))).toBeCloseTo(0.4, 5);
+    // Each word's tspan is its glyphs' direct parent, so it needs the baseline too.
+    const baseline = container.querySelector('text')!.getAttribute('dominant-baseline');
+    expect(words.every((w) => w.getAttribute('dominant-baseline') === baseline)).toBe(true);
     expect(container.querySelector('text')!.textContent).toContain('Hello wide world');
   });
 });

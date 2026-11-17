@@ -11,6 +11,7 @@ import type { ThemeColorScheme, RenderStyle } from '../../schemas/Theme.js';
 import type { Animation, AnimationType, ImageTreatment } from '../../schemas/Doc.js';
 import { MOTION_PROFILES, type MotionProfile } from '../../schemas/Motion.js';
 import { resolveFontFamily } from '../../schemas/fontStacks.js';
+import { titleTypeScale } from '../../schemas/LayoutStrategy.js';
 import { oklchDarken, withAlpha } from '../../schemas/colorUtils.js';
 
 // ============================================
@@ -90,7 +91,7 @@ export function themedFontSize(
   const { fontScale, layout, theme } = context;
 
   // Base scale from viewport + orientation
-  const layoutScale = isTitle ? layout.titleScale : layout.bodyScale;
+  const layoutScale = isTitle ? titleTypeScale(basePx, layout) : layout.bodyScale;
 
   // Theme multiplier (defaults to 1.0 when not set)
   const themeScale = isTitle

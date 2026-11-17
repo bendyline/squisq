@@ -89,8 +89,16 @@ function tableHeight(table: ExtractedTableData, widths: readonly number[]): numb
 export function featureTableAspect(table: ExtractedTableData): number {
   const cols = columns(table);
   const widths = cols.map((column) => column.line);
-  const width = widths.reduce((sum, value) => sum + value + CELL_SIDE_EM, 0);
-  return width / Math.max(1, tableHeight(table, widths));
+  return featureTableWidthEm(table) / Math.max(1, tableHeight(table, widths));
+}
+
+/**
+ * The table's width set as written, every cell on its own lines, in em of
+ * its type size — cell padding included, with the estimate's safety margin,
+ * so `widthEm * fontSize <= boxWidth` means it fits without wrapping.
+ */
+export function featureTableWidthEm(table: ExtractedTableData): number {
+  return columns(table).reduce((sum, column) => sum + column.line + CELL_SIDE_EM, 0) / SAFETY;
 }
 
 /** The largest type size, in px, from `max` down to `min`, at which every row

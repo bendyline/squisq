@@ -182,3 +182,38 @@ describe('dataTable template', () => {
     expect(bandHeight).toBeGreaterThanOrEqual(rendered);
   });
 });
+
+describe('dataTable width', () => {
+  const wide = makeDataTableBlock({
+    title: 'Theme Sweep Results',
+    headers: ['Area', 'Signal', 'Status', 'Owner'],
+    rows: [
+      ['Contrast', 'Text vs. surface across every theme', 'Review pending', 'Design'],
+      ['Spacing', 'Card and gutter rhythm on phones', 'Review pending', 'Layout'],
+      ['Media', 'Crop and captions for portrait frames', 'Approved', 'Media'],
+    ],
+  });
+  const portrait: MaterializeBlockLayersOptions = {
+    ...defaultContext,
+    viewport: VIEWPORT_PRESETS.portrait,
+  };
+  const table = (block: TemplateBlock, context: MaterializeBlockLayersOptions) =>
+    materializeLayers(block, context).find((l) => l.type === 'table') as TableLayer;
+
+  // A table wider than its box ran off the slide's right edge in a sideways
+  // scroller, which a still slide, a video, or a portrait phone never shows.
+  it('wraps a table too wide for its box and keeps its type readable', () => {
+    const fitted = table(wide, portrait);
+    expect(fitted.content.wrap).toBe(true);
+    expect(fitted.position.width).toBe('80%');
+    const base = table(makeDataTableBlock(), portrait).content.style.fontSize;
+    expect(fitted.content.style.fontSize).toBeLessThanOrEqual(base);
+    expect(fitted.content.style.fontSize).toBeGreaterThanOrEqual(Math.round(base * 0.6));
+  });
+
+  it('keeps a table that fits as written on one line per cell', () => {
+    const fits = table(makeDataTableBlock(), defaultContext);
+    expect(fits.content.wrap).toBeUndefined();
+    expect(fits.position.width).toBe('80%');
+  });
+});

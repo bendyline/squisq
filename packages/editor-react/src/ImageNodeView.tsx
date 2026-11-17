@@ -53,7 +53,7 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
   const [hovered, setHovered] = useState(false);
   const imgRef = useRef<HTMLImageElement | null>(null);
   // Live preview width while a resize gesture is in flight. Null means
-  // "use the persisted width attr". Committed to node attrs on mouseup.
+  // "use the persisted width attr". Committed to node attrs on pointerup.
   const [previewWidth, setPreviewWidth] = useState<number | null>(null);
   const isThumbnail = imageDisplayMode === 'thumbnail';
   const isEditable = editor?.isEditable ?? true;
@@ -143,36 +143,66 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
   // ratio of the image element so authors can't accidentally squash it.
   const effectiveWidth = previewWidth ?? width ?? null;
 
-  const beginResize = (event: React.MouseEvent) => {
-    if (!canResize) return;
-    event.preventDefault();
+  // Pointer Events, not mouse events: a finger dragging the grip never
+  // produces mousedown/mousemove (phones synthesize those only for a tap),
+  // so a mouse-only gesture could not start on a touch screen at all.
+  const beginResize = (event: React.PointerEvent<HTMLSpanElement>) => {
+    if (!canResize || !event.isPrimary || event.button !== 0) return;
     event.stopPropagation();
+    // A mouse still needs its mousedown, which `blockMouseDown` cancels to
+    // keep ProseMirror and the browser from starting a selection or a node
+    // drag. Touch and pen have no such follow-up worth keeping.
+    if (event.pointerType !== 'mouse') event.preventDefault();
     const imgEl = imgRef.current;
     if (!imgEl) return;
+    const handle = event.currentTarget;
+    const pointerId = event.pointerId;
     const startWidth = imgEl.getBoundingClientRect().width;
     const startX = event.clientX;
     // Cap at the image's natural width so dragging out doesn't upscale
     // past the source pixels (which just looks blurry).
     const maxWidth = imgEl.naturalWidth || Infinity;
     const minWidth = 24;
+    const widthAt = (clientX: number) =>
+      Math.round(Math.max(minWidth, Math.min(maxWidth, startWidth + (clientX - startX))));
 
-    const onMove = (e: MouseEvent) => {
-      const next = Math.max(minWidth, Math.min(maxWidth, startWidth + (e.clientX - startX)));
-      setPreviewWidth(Math.round(next));
+    // Keep the moves coming to the grip even when the finger or mouse
+    // leaves it. Synthetic or already-released pointers make this throw;
+    // the window listeners below still see every move either way.
+    try {
+      handle.setPointerCapture(pointerId);
+    } catch {
+      // Nothing to capture — the window listeners carry the gesture.
+    }
+
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      setPreviewWidth(widthAt(e.clientX));
     };
-    const onUp = (e: MouseEvent) => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      const finalWidth = Math.max(minWidth, Math.min(maxWidth, startWidth + (e.clientX - startX)));
+    const onEnd = (e: PointerEvent) => {
+      if (e.pointerId !== pointerId) return;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onEnd);
+      window.removeEventListener('pointercancel', onEnd);
+      setPreviewWidth(null);
+      // The system took the pointer (a scroll, a system gesture): it reports
+      // no usable position, so the image keeps the size it had.
+      if (e.type === 'pointercancel') return;
+      const w = widthAt(e.clientX);
       const naturalW = imgEl.naturalWidth;
       const naturalH = imgEl.naturalHeight;
-      const w = Math.round(finalWidth);
       const h = naturalW > 0 && naturalH > 0 ? Math.round((w * naturalH) / naturalW) : null;
-      setPreviewWidth(null);
       updateAttributes({ width: w, height: h });
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onEnd);
+    window.addEventListener('pointercancel', onEnd);
+  };
+
+  const blockMouseDown = (event: React.MouseEvent) => {
+    if (!canResize) return;
+    event.preventDefault();
+    event.stopPropagation();
   };
 
   const resetSize = (event: React.MouseEvent) => {
@@ -313,7 +343,12 @@ function ImageComponent({ node, selected, editor, updateAttributes }: NodeViewPr
           <span
             className="squisq-image-resize-handle"
             data-testid="image-resize-handle"
-            onMouseDown={beginResize}
+            // The grip runs its own touch drag; a full-width picture puts it
+            // inside the navigation sheet's edge zone, where a leftward drag
+            // would otherwise open the outline instead of shrinking the image.
+            data-squisq-touch-drag=""
+            onPointerDown={beginResize}
+            onMouseDown={blockMouseDown}
             // Double-click clears the persisted width/height so the image
             // returns to its natural rendered size.
             onDoubleClick={resetSize}
