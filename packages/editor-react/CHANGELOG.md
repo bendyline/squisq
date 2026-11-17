@@ -1,3 +1,9 @@
+## @bendyline/squisq-editor-react [2.13.28](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.27...@bendyline/squisq-editor-react@2.13.28) (2026-11-17)
+
+### Bug Fixes
+
+* Source scoping and image save-on-close ([#130](https://github.com/bendyline/squisq/issues/130)) ([7682556](https://github.com/bendyline/squisq/commit/7682556f4ecf4ad64991a4a16ed37d622d99eb7e))
+
 ## @bendyline/squisq-editor-react [2.13.27](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.26...@bendyline/squisq-editor-react@2.13.27) (2026-11-17)
 
 ### Bug Fixes
