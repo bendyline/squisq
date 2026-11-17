@@ -3661,6 +3661,11 @@ Legacy `blockTags` booleans remain supported (`false` = `none`, `true` =
 `setMarkdownSource`, `setEditorSource`, `setActiveView`, `setLayoutMode`), plus
 the live `tiptapEditor` / `monacoEditor` instances.
 
+`layoutMode` is a Write mode. While `blockScoped` is true (a `'block'` or
+`'timeline'` layout with Write as the `editingView`), `editorSource` is the
+active block's slice and `setEditorSource` splices it back. Source binds the
+whole file in every layout.
+
 ### Individual editors & panels
 
 `RawEditor` (Monaco), `WysiwygEditor` (Tiptap), `PreviewPanel`,

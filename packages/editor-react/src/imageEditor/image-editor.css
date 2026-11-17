@@ -46,6 +46,38 @@
   color: var(--squisq-danger);
 }
 
+/* A failed save stays on screen until dismissed or the next save starts. */
+.squisq-image-editor-save-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  color: var(--squisq-danger, #ff6b6b);
+  background: color-mix(
+    in srgb,
+    var(--squisq-danger, #ff6b6b) 14%,
+    var(--squisq-image-editor-panel-bg)
+  );
+  border-bottom: 1px solid var(--squisq-image-editor-panel-border);
+}
+.squisq-image-editor-save-error > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.squisq-image-editor-save-error__dismiss {
+  flex: none;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  color: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
 /* ── Toolbar ───────────────────────────────────────────────────────── */
 .squisq-image-editor-toolbar {
   display: flex;

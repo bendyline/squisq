@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DARK_SURFACE, LIGHT_SURFACE, type MediaProvider } from '@bendyline/squisq/schemas';
+import {
+  DARK_SURFACE,
+  LIGHT_SURFACE,
+  type ImageEditDoc,
+  type MediaProvider,
+} from '@bendyline/squisq/schemas';
 import {
   MemoryContentContainer,
   scopeContainer,
   type ContentContainer,
 } from '@bendyline/squisq/storage';
-import { ImageEditor } from '../ImageEditor';
+import { ImageEditor, type ImageEditorHandle } from '../ImageEditor';
 import { useModalDialog } from '../modal/useModalDialog';
+import {
+  imageEditSignature,
+  needsWriteBack,
+  readWriteBackSignature,
+  writeWriteBackSignature,
+} from './writeBack';
 
 interface ImageEditModalProps {
   relativePath: string;
@@ -36,6 +47,11 @@ interface ImageEditModalProps {
  * image in the WYSIWYG view; on Export, rewrites the original image bytes
  * via `mediaProvider.addMedia(relativePath, blob, mime)` and bumps
  * `mediaRevision` so live `<img>` nodes pick up the new content.
+ *
+ * Closing (×, Escape, backdrop) saves too: the layers persist to the
+ * sidecar as the user works, so a close that left the picture behind them
+ * would show edits on reopen that the document never got. When the
+ * picture already matches the layers, closing just closes.
  */
 export function ImageEditModal({
   relativePath,
@@ -49,7 +65,7 @@ export function ImageEditModal({
 }: ImageEditModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
-  useModalDialog({ rootRef: modalRef, dialogRef: surfaceRef, onClose });
+  const editorRef = useRef<ImageEditorHandle>(null);
   const extension = relativePath.split(/[?#]/, 1)[0]?.split('.').pop()?.toLowerCase();
   const saveFormat: 'png' | 'jpeg' | 'webp' | null =
     extension === 'png'
@@ -97,18 +113,74 @@ export function ImageEditModal({
     };
   }, [mediaProvider, relativePath]);
 
+  // Signature of the layer state the picture was last written from: the
+  // sidecar's record until this session writes back, then what it wrote.
+  const recordedSignature = useMemo(() => readWriteBackSignature(sidecar), [sidecar]);
+  const writtenSignatureRef = useRef<{ sidecar: ContentContainer; signature: string } | null>(null);
+
   const handleExport = useCallback(
-    (blob: Blob, format: 'png' | 'jpeg' | 'webp') => {
+    async (blob: Blob, format: 'png' | 'jpeg' | 'webp', doc: ImageEditDoc) => {
       const mime = `image/${format}`;
-      mediaProvider.addMedia(relativePath, blob, mime).then(
-        () => onSaved(),
-        (err: unknown) => {
-          console.error('Failed to write image back:', err instanceof Error ? err.message : err);
-        },
-      );
+      try {
+        await mediaProvider.addMedia(relativePath, blob, mime);
+      } catch (err: unknown) {
+        console.error('Failed to write image back:', err instanceof Error ? err.message : err);
+        // Rethrow so the editor shows the failure and stays open.
+        throw err;
+      }
+      const signature = imageEditSignature(doc);
+      writtenSignatureRef.current = { sidecar, signature };
+      try {
+        await writeWriteBackSignature(sidecar, signature);
+      } catch (err: unknown) {
+        // The picture is saved; a lost record costs at most one redundant
+        // save on a later close.
+        console.warn(
+          '[squisq-editor] image write-back record failed:',
+          err instanceof Error ? err.message : err,
+        );
+      }
+      onSaved();
     },
-    [mediaProvider, relativePath, onSaved],
+    [mediaProvider, relativePath, sidecar, onSaved],
   );
+
+  // 'saving' while a close-triggered save runs; 'failed' after it failed,
+  // when the next close discards instead of retrying forever.
+  const [closeState, setCloseState] = useState<'idle' | 'saving' | 'failed'>('idle');
+  const closeStateRef = useRef(closeState);
+  closeStateRef.current = closeState;
+
+  const requestClose = useCallback(async () => {
+    if (closeStateRef.current === 'saving') return;
+    const editor = editorRef.current;
+    const doc = editor?.getDoc() ?? null;
+    if (closeStateRef.current === 'failed' || !editor || !doc) {
+      onClose();
+      return;
+    }
+    const written =
+      writtenSignatureRef.current?.sidecar === sidecar
+        ? writtenSignatureRef.current.signature
+        : await recordedSignature;
+    if (!needsWriteBack(doc, written)) {
+      onClose();
+      return;
+    }
+    closeStateRef.current = 'saving';
+    setCloseState('saving');
+    // On success the export path calls onSaved(), which closes the modal.
+    const saved = await editor.save();
+    if (!saved) {
+      closeStateRef.current = 'failed';
+      setCloseState('failed');
+    }
+  }, [onClose, recordedSignature, sidecar]);
+
+  const handleCloseRequest = useCallback(() => {
+    void requestClose();
+  }, [requestClose]);
+  useModalDialog({ rootRef: modalRef, dialogRef: surfaceRef, onClose: handleCloseRequest });
 
   return (
     <div
@@ -120,23 +192,36 @@ export function ImageEditModal({
       aria-label={`Edit ${relativePath}`}
       onClick={(e) => {
         // Click on the dim backdrop (but not on the surface) → close.
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) handleCloseRequest();
       }}
     >
       <div ref={surfaceRef} className="squisq-image-edit-modal__surface">
         <header className="squisq-image-edit-modal__header">
           <span className="squisq-image-edit-modal__title">Edit image</span>
           <span className="squisq-image-edit-modal__path">{relativePath}</span>
+          {closeState === 'saving' && (
+            <span className="squisq-image-edit-modal__status" role="status">
+              Saving…
+            </span>
+          )}
           <button
             type="button"
             className="squisq-image-edit-modal__close"
             data-testid="image-edit-modal-close"
-            onClick={onClose}
-            aria-label="Close image editor"
+            onClick={handleCloseRequest}
+            disabled={closeState === 'saving'}
+            aria-label={
+              closeState === 'failed' ? 'Close without saving' : 'Save and close image editor'
+            }
           >
             ×
           </button>
         </header>
+        {closeState === 'failed' && (
+          <div className="squisq-image-edit-modal__notice" role="status">
+            Your edits weren’t saved to the image. Tap × again to close without saving them.
+          </div>
+        )}
         <div className="squisq-image-edit-modal__body">
           {resolveError ? (
             <div className="squisq-image-edit-modal__error">
@@ -150,6 +235,7 @@ export function ImageEditModal({
             <div className="squisq-image-edit-modal__loading">Loading image…</div>
           ) : (
             <ImageEditor
+              ref={editorRef}
               filesContainer={sidecar}
               initialSrc={initialSrc}
               allowVersioning={allowVersioning}

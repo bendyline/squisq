@@ -83,6 +83,7 @@ import {
   readMonacoScrollRatio,
   readWysiwygScrollRatio,
   restoreMonacoScrollRatio,
+  applyAsMonacoLayoutSettles,
   restoreWysiwygScrollRatio,
 } from './editorScrollSync';
 
@@ -143,6 +144,18 @@ export type DocumentLinkProvider = (query: string) => Promise<DocumentLinkCandid
 
 export type EditorView = 'raw' | 'wysiwyg' | 'preview';
 
+/**
+ * A view with an editing surface. While Preview is showing, the editing view
+ * is the one kept mounted behind it.
+ */
+export type EditingView = Exclude<EditorView, 'preview'>;
+
+/** Where the editor being switched to should open (see `setActiveView`). */
+type PendingEditorScroll =
+  | { view: EditingView; ratio: number }
+  /** A 1-based Source line: the start of the block Write was showing. */
+  | { view: 'raw'; line: number };
+
 /** Options for {@link EditorActions.applySourceEdits}. */
 export interface ApplySourceEditsOptions {
   /**
@@ -184,12 +197,12 @@ export interface EditorSelectionInfo {
  */
 export type EditorColorScheme = 'light' | 'dark';
 /**
- * Document layout mode. `'document'` shows the whole markdown document in
- * the active view (the historical behavior). `'block'` is the
- * block-at-a-time view — one heading-defined block on a card at a time,
- * with the editor scoped to just that block. `'timeline'` is block mode plus
- * a horizontal timeline track for editing block durations and media slices.
- * See {@link useBlockNavigator}.
+ * Write layout mode. `'document'` shows the whole markdown document (the
+ * historical behavior). `'block'` is the block-at-a-time view — one
+ * heading-defined block on a card at a time, with Write scoped to just that
+ * block. `'timeline'` is block mode plus a horizontal timeline track for
+ * editing block durations and media slices. These are Write modes: Source
+ * always shows and edits the whole file. See {@link useBlockNavigator}.
  */
 export type LayoutMode = 'document' | 'block' | 'timeline';
 /**
@@ -220,6 +233,8 @@ export interface EditorState {
   doc: Doc | null;
   /** Currently active editor view */
   activeView: EditorView;
+  /** The active view, or while previewing, the editing view kept behind it. */
+  editingView: EditingView;
   /** Parse error, if any */
   parseError: string | null;
   /** Whether a parse is pending */
@@ -311,16 +326,23 @@ export interface EditorState {
    */
   preserveSourceWrapping: boolean;
   /**
-   * Document layout mode. `'document'` (default) edits the whole document;
+   * Write layout mode. `'document'` (default) edits the whole document;
    * `'block'` activates the block-at-a-time card view. Initialized from the
-   * EditorShell `layoutMode` prop; the View menu can toggle it at runtime.
+   * EditorShell `layoutMode` prop; the Write mode menu can toggle it at
+   * runtime. Source ignores it — see {@link blockScoped}.
    */
   layoutMode: LayoutMode;
   /**
-   * The markdown the active text editor should bind to: the full source in
-   * `'document'` mode, or just the active block's slice in `'block'` mode.
+   * True while the editing surface shows one block at a time: a `'block'` or
+   * `'timeline'` layout with Write as the editing view. Source always shows
+   * the whole file, so this is false whenever Source is the editing view.
+   */
+  blockScoped: boolean;
+  /**
+   * The markdown the active text editor should bind to: just the active
+   * block's slice while {@link blockScoped}, otherwise the full source.
    * Editors read this instead of `markdownSource` so the same surfaces work
-   * in both layouts.
+   * in every layout.
    */
   editorSource: string;
   /** Number of navigable blocks (cards) in the current document. */
@@ -343,16 +365,20 @@ export interface EditorActions {
   /** Set markdown source and trigger re-parse */
   setMarkdownSource: (source: string) => void;
   /**
-   * Write through the active editor channel. In `'document'` mode this is
-   * `setMarkdownSource`; in `'block'` mode it splices the edited block back
-   * into the full document. Editors call this instead of `setMarkdownSource`.
+   * Write through the active editor channel. While `blockScoped` it splices
+   * the edited block back into the full document; otherwise it is
+   * `setMarkdownSource`. Editors call this instead of `setMarkdownSource`.
    */
   setEditorSource: (source: string) => void;
   /** Switch between Document and Block-at-a-time layouts. */
   setLayoutMode: (mode: LayoutMode) => void;
   /** Show a block by index in block mode (clamped to range). */
   goToBlock: (key: number) => void;
-  /** Show the block that owns a given 1-based source line (used by the outline). */
+  /**
+   * Show the block that owns a given 1-based source line (used by the
+   * outline). Called while Write is not block-scoped (Source is open), it
+   * records the block, and Write opens on it when it is block-scoped again.
+   */
   goToBlockByLine: (line: number) => void;
   /** Move the card to the previous block. */
   prevBlock: () => void;
@@ -995,6 +1021,9 @@ export function EditorProvider({
   const [activeView, setActiveViewRaw] = useState<EditorView>(
     editorMode === 'markdown' ? initialView : 'raw',
   );
+  const [editingView, setEditingView] = useState<EditingView>(
+    editorMode === 'markdown' && initialView !== 'raw' ? 'wysiwyg' : 'raw',
+  );
   const [uncontrolledFindMode, setUncontrolledFindMode] = useState(false);
   const findMode = editorMode !== 'image' && (controlledFindMode ?? uncontrolledFindMode);
   const setFindMode = useCallback(
@@ -1009,7 +1038,14 @@ export function EditorProvider({
   activeViewRef.current = activeView;
   const tiptapEditorRef = useRef<TiptapEditor | null>(null);
   const monacoEditorRef = useRef<MonacoEditor | null>(null);
-  const pendingEditorScrollRef = useRef<{ view: 'raw' | 'wysiwyg'; ratio: number } | null>(null);
+  const pendingEditorScrollRef = useRef<PendingEditorScroll | null>(null);
+  // What a Write ⇄ Source switch carries in a block layout. Filled in below,
+  // once the block navigator exists; read only when the view switches.
+  const blockHandoffRef = useRef({
+    blockLayout: false,
+    activeBlockStartLine: null as number | null,
+    goToBlockByLine: (() => undefined) as (line: number) => void,
+  });
   const setActiveView = useCallback(
     (view: EditorView) => {
       // In code mode only the raw view is valid. In image mode no text view
@@ -1021,20 +1057,36 @@ export function EditorProvider({
       if (view === currentView) return;
 
       // Write and Source are separate editor instances and are unmounted as
-      // their tabs are hidden. Capture a proportional document position
-      // before the current instance disappears, then restore it after the
-      // destination has mounted and completed layout.
-      let ratio: number | null = null;
-      let targetView: 'raw' | 'wysiwyg' | null = null;
-      if (currentView === 'raw' && view === 'wysiwyg' && monacoEditorRef.current) {
-        ratio = readMonacoScrollRatio(monacoEditorRef.current);
-        targetView = 'wysiwyg';
-      } else if (currentView === 'wysiwyg' && view === 'raw' && tiptapEditorRef.current) {
-        ratio = readWysiwygScrollRatio(tiptapEditorRef.current);
-        targetView = 'raw';
+      // their tabs are hidden. Capture a document position before the current
+      // instance disappears, then restore it after the destination has
+      // mounted and completed layout. In Document layout both show the whole
+      // file, so a proportional scroll position carries over. Block layouts
+      // scope Write to one block while Source shows the whole file, so the
+      // block carries over instead: Source opens at the block Write showed,
+      // and Write opens on the block holding the Source caret.
+      const handoff = blockHandoffRef.current;
+      let pending: PendingEditorScroll | null = null;
+      const monaco = monacoEditorRef.current;
+      const tiptap = tiptapEditorRef.current;
+      if (currentView === 'raw' && view === 'wysiwyg' && monaco) {
+        if (handoff.blockLayout) {
+          const line = monaco.getPosition()?.lineNumber;
+          if (line !== undefined) handoff.goToBlockByLine(line);
+        } else {
+          pending = { view: 'wysiwyg', ratio: readMonacoScrollRatio(monaco) };
+        }
+      } else if (currentView === 'wysiwyg' && view === 'raw') {
+        if (handoff.blockLayout) {
+          if (handoff.activeBlockStartLine !== null) {
+            pending = { view: 'raw', line: handoff.activeBlockStartLine };
+          }
+        } else if (tiptap) {
+          const ratio = readWysiwygScrollRatio(tiptap);
+          if (ratio !== null) pending = { view: 'raw', ratio };
+        }
       }
-      pendingEditorScrollRef.current =
-        ratio === null || targetView === null ? null : { view: targetView, ratio };
+      pendingEditorScrollRef.current = pending;
+      if (view !== 'preview') setEditingView(view);
       setActiveViewRaw(view);
     },
     [editorMode],
@@ -1235,18 +1287,31 @@ export function EditorProvider({
     const pending = pendingEditorScrollRef.current;
     if (!pending || pending.view !== activeView) return;
 
-    const restore =
-      activeView === 'raw' && monacoEditor
-        ? () => restoreMonacoScrollRatio(monacoEditor, pending.ratio)
-        : activeView === 'wysiwyg' && tiptapEditor
-          ? () => restoreWysiwygScrollRatio(tiptapEditor, pending.ratio)
-          : null;
+    // Each restore may return a function that stops it settling (Source).
+    let restore: (() => (() => void) | void) | null = null;
+    if (activeView === 'raw' && monacoEditor) {
+      const toPending =
+        'line' in pending
+          ? () => {
+              // Caret at the block's heading, its line near the top.
+              monacoEditor.setPosition({ lineNumber: pending.line, column: 1 });
+              monacoEditor.revealLineNearTop(pending.line);
+            }
+          : () => restoreMonacoScrollRatio(monacoEditor, pending.ratio);
+      restore = () => applyAsMonacoLayoutSettles(monacoEditor, toPending);
+    } else if (activeView === 'wysiwyg' && tiptapEditor && 'ratio' in pending) {
+      restore = () => {
+        restoreWysiwygScrollRatio(tiptapEditor, pending.ratio);
+      };
+    }
     if (!restore) return;
+    const run = restore;
 
     let cancelled = false;
+    let stopSettling: (() => void) | undefined;
     const apply = () => {
       if (cancelled) return;
-      restore();
+      stopSettling = run() ?? undefined;
       if (pendingEditorScrollRef.current === pending) pendingEditorScrollRef.current = null;
     };
 
@@ -1255,6 +1320,7 @@ export function EditorProvider({
       return () => {
         cancelled = true;
         cancelAnimationFrame(frame);
+        stopSettling?.();
       };
     }
 
@@ -1262,6 +1328,7 @@ export function EditorProvider({
     return () => {
       cancelled = true;
       clearTimeout(timeout);
+      stopSettling?.();
     };
   }, [activeView, monacoEditor, tiptapEditor]);
   // Mirror the focused canvas textbox editor (published by the inline
@@ -1439,13 +1506,18 @@ export function EditorProvider({
     setMarkdownSourceRaw(source);
   }, []);
 
-  // Block-at-a-time navigation. In 'document' mode the channel passes
-  // through to the full source; in 'block' mode `editorSource` is the active
-  // block's slice and `setEditorSource` splices edits back in. Gated to
-  // markdown mode — code/image surfaces always edit the whole file.
+  // Block-at-a-time navigation. In a block layout with Write as the editing
+  // view, `editorSource` is the active block's slice and `setEditorSource`
+  // splices edits back in. Everywhere else the channel passes through to the
+  // full source: Document layout, and Source in every layout, because Source
+  // is the file itself — a Source view showing one block read as a document
+  // that had lost everything else. Gated to markdown mode — code/image
+  // surfaces always edit the whole file.
+  const blockLayout =
+    editorMode === 'markdown' && (layoutModeState === 'block' || layoutModeState === 'timeline');
+  const blockScoped = blockLayout && editingView === 'wysiwyg';
   const blockNav = useBlockNavigator(markdownSource, setMarkdownSource, {
-    enabled:
-      (layoutModeState === 'block' || layoutModeState === 'timeline') && editorMode === 'markdown',
+    enabled: blockScoped,
   });
   const {
     editorSource,
@@ -1459,6 +1531,7 @@ export function EditorProvider({
     nextBlock,
     addBlock,
   } = blockNav;
+  blockHandoffRef.current = { blockLayout, activeBlockStartLine, goToBlockByLine };
 
   const [selectionVersion, setSelectionVersion] = useState(0);
   useEffect(() => {
@@ -1576,8 +1649,9 @@ export function EditorProvider({
 
   const applySourceEdits = useCallback(
     (edits: readonly MarkdownSourceEdit[], options?: ApplySourceEditsOptions): boolean => {
-      // Offsets address the full document, which only Document layout binds.
-      if (editorMode !== 'markdown' || layoutModeState !== 'document') return false;
+      // Offsets address the full document. Source always binds it; Write
+      // binds only one block while block-scoped.
+      if (editorMode !== 'markdown' || blockScoped) return false;
       if ((activeView === 'raw' || activeView === 'preview') && monacoEditor) {
         const model = monacoEditor.getModel();
         if (!model) return false;
@@ -1618,21 +1692,22 @@ export function EditorProvider({
       }
       return false;
     },
-    [activeView, editorMode, layoutModeState, monacoEditor, tiptapEditor],
+    [activeView, blockScoped, editorMode, monacoEditor, tiptapEditor],
   );
 
   /**
    * Replace the whole document (file drop, version revert, host reset).
    *
-   * With a live editing surface in Document layout this goes through
-   * `applySourceEdits` as the smallest edit that produces `text`, so it is one
-   * undo step that keeps the caret: Monaco is edited in place (a `setValue`
-   * would wipe its undo history) and the Write view loads a minimal change.
+   * With a live editing surface bound to the whole document (Source, or Write
+   * in Document layout) this goes through `applySourceEdits` as the smallest
+   * edit that produces `text`, so it is one undo step that keeps the caret:
+   * Monaco is edited in place (a `setValue` would wipe its undo history) and
+   * the Write view loads a minimal change.
    *
    * Otherwise it only writes `markdownSource`: both editing surfaces sync
    * themselves from `editorSource`, each applying the transform its view
    * needs — Tiptap strips frontmatter and holds it aside, Monaco keeps the raw
-   * text, and in `block` layout both scope to the active block's slice. (This
+   * text, and a block-scoped Write view loads the active block's slice. (This
    * used to also push `text` straight into the editors, which bypassed those
    * transforms: YAML flashed as an `<hr>` plus literal paragraphs, and in
    * block mode the whole document briefly loaded into a block editor.)
@@ -1874,6 +1949,7 @@ export function EditorProvider({
       markdownDoc,
       doc: timedDoc,
       activeView,
+      editingView,
       parseError,
       isParsing,
       colorScheme,
@@ -1888,6 +1964,7 @@ export function EditorProvider({
       blockTagsVisible,
       themeInheritance: themeInheritanceState,
       layoutMode: layoutModeState,
+      blockScoped,
       editorSource,
       blockCount,
       activeBlockKey,
@@ -1966,6 +2043,7 @@ export function EditorProvider({
       markdownDoc,
       timedDoc,
       activeView,
+      editingView,
       parseError,
       isParsing,
       colorScheme,
@@ -1980,6 +2058,7 @@ export function EditorProvider({
       blockTagsVisible,
       themeInheritanceState,
       layoutModeState,
+      blockScoped,
       editorSource,
       blockCount,
       activeBlockKey,

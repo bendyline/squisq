@@ -199,19 +199,29 @@ describe('TransformMenu', () => {
     expect(screen.getByText(/Switch to Write or Source view/)).toBeTruthy();
   });
 
-  it('disables actions outside the document layout with a hint', async () => {
+  it('transforms the whole file from Source in a block layout', async () => {
+    // Block layouts scope Write only; Source holds the whole file, so a
+    // transform there edits all of it in place.
+    const fake = makeFakeMonaco(WRAPPED);
     render(
       <EditorProvider initialMarkdown={WRAPPED} layoutMode="block">
-        <Harness />
+        <Harness monaco={fake.editor} />
       </EditorProvider>,
     );
+    fireEvent.click(screen.getByTestId('go-raw'));
     openMenu();
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: 'Transform document' })).toBeTruthy();
     });
     const action = screen.getByText('Unwrap paragraphs').closest('button');
-    expect(action?.disabled).toBe(true);
-    expect(screen.getByText(/Document layout/)).toBeTruthy();
+    expect(action?.disabled).toBe(false);
+    fireEvent.click(screen.getByText('Unwrap paragraphs'));
+
+    await waitFor(() => {
+      expect(fake.executeEdits).toHaveBeenCalledTimes(1);
+    });
+    const expected = applyMarkdownSourceTransform('unwrap', WRAPPED, { strict: true });
+    expect(fake.executed.map((op) => op.text)).toEqual(expected.edits.map((e) => e.text));
   });
 
   it('applies minimal Monaco edits between undo stops in Source view', async () => {

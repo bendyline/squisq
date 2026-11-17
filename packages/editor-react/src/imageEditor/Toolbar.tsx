@@ -24,6 +24,8 @@ export interface ToolbarProps {
   onExport: (format: 'png' | 'jpeg' | 'webp') => void;
   /** Force-flush the state.json (host's "save" button). */
   onSave?: () => void;
+  /** True while a save is in flight: the Save button reads "Saving…" and is disabled. */
+  saving?: boolean;
   /** Override the Save button label. Default: "Save". */
   saveLabel?: string;
   /** Override the Save button tooltip. Default: "Save state.json". */
@@ -147,6 +149,7 @@ export function Toolbar({
   imageInputRef,
   onExport,
   onSave,
+  saving = false,
   saveLabel = 'Save',
   saveTitle = 'Save state.json',
   extraTools,
@@ -354,8 +357,10 @@ export function Toolbar({
             className="squisq-image-editor-tool-button"
             onClick={onSave}
             title={saveTitle}
+            disabled={saving}
+            aria-busy={saving || undefined}
           >
-            {saveLabel}
+            {saving ? 'Saving…' : saveLabel}
           </button>
         )}
         <ExportDropdown onExport={onExport} />

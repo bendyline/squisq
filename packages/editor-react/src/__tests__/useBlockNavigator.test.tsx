@@ -64,4 +64,16 @@ describe('useBlockNavigator', () => {
     expect(result.current.nav.activeBlockKey).toBe(1);
     expect(result.current.nav.activeBlockStartLine).toBe(5);
   });
+
+  it('remembers a block chosen by line while disabled and shows it once enabled', () => {
+    // Source runs with the navigator off; Write turns it back on.
+    const { result, rerender } = renderHook(({ enabled }) => useHarness(DOC, enabled), {
+      initialProps: { enabled: false },
+    });
+    act(() => result.current.nav.goToBlockByLine(7));
+    expect(result.current.nav.editorSource).toBe(DOC);
+    rerender({ enabled: true });
+    expect(result.current.nav.activeBlockKey).toBe(1);
+    expect(result.current.nav.editorSource).toBe('# Two\n\nbeta\n');
+  });
 });

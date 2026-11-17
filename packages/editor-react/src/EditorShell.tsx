@@ -1196,6 +1196,8 @@ function EditorShellInner({
     statusBarVisible,
     outlineVisible,
     layoutMode,
+    blockScoped,
+    editingView,
     blockCount,
     activeBlockKey,
     prevBlock,
@@ -1215,24 +1217,20 @@ function EditorShellInner({
   // CustomTemplateProvider is fed. Wraps the preview subtree so the theme
   // picker + designer can read/write both pools.
   const { docThemes, onDocThemesChange } = useDocCustomThemes();
-  // Keep the last editing surface mounted behind preview. Besides preserving
-  // selection and undo, preview settings can then make one undoable source edit.
-  const lastEditingView = useRef(activeView === 'raw' ? 'raw' : 'wysiwyg');
-  useEffect(() => {
-    if (activeView !== 'preview') lastEditingView.current = activeView;
-  }, [activeView]);
-  const editingView = activeView === 'preview' ? lastEditingView.current : activeView;
+  // `editingView` (from context) is the last editing surface; it stays mounted
+  // behind preview. Besides preserving selection and undo, preview settings
+  // can then make one undoable source edit.
   const isPreview = activeView === 'preview';
   const isCodeMode = editorMode === 'code';
   const isImageMode = editorMode === 'image';
   const isMarkdownMode = editorMode === 'markdown';
-  // The block card (one block at a time) applies to the editing surfaces (raw /
-  // wysiwyg) in markdown mode — never to preview, code, or image. Both the
-  // block-at-a-time and timeline layouts scope the editor to a single block.
-  const isCardMode =
-    isMarkdownMode && (layoutMode === 'block' || layoutMode === 'timeline') && !isPreview;
+  // The block card (one block at a time) applies to Write in markdown mode —
+  // never to Source, preview, code, or image. Both the block-at-a-time and
+  // timeline layouts are Write modes that scope Write to a single block;
+  // Source always shows the whole file (`blockScoped` is false there).
+  const isCardMode = blockScoped && !isPreview;
   // Timeline mode additionally shows the horizontal timeline track below.
-  const isTimelineMode = isMarkdownMode && layoutMode === 'timeline' && !isPreview;
+  const isTimelineMode = isCardMode && layoutMode === 'timeline';
   // The timeline mirrors the *played* document, not the raw parse: block bars,
   // the playhead, and the clock use the same narration-timed projection the
   // Video composition renders, so an unpinned slide occupies its recorded-voice
@@ -1740,14 +1738,16 @@ function EditorShellInner({
                     {isMarkdownMode && outlineVisible && (
                       <OutlinePanel key="outline" width={outlineWidth} readOnly={readOnly} />
                     )}
+                    {/* Source is the whole file in every layout, so its frame
+                    never shows card chrome; the neutral frame keeps its
+                    layout identical to Write's. */}
                     <BlockCardView
                       key="raw-frame"
-                      active={isCardMode}
+                      active={false}
                       blockCount={blockCount}
                       activeBlockKey={activeBlockKey}
                       onPrev={prevBlock}
                       onNext={nextBlock}
-                      onAdd={addBlock}
                     >
                       <div key="raw-editor" className="squisq-raw-editor-container">
                         <RawEditor
@@ -1764,10 +1764,7 @@ function EditorShellInner({
                     {isCodeMode && codeContext && (
                       <CodeContextZones key="code-context" options={codeContext} />
                     )}
-                    {isMarkdownMode && isCardMode && inlinePreviewVisible && (
-                      <BlockPreviewPanel key="block-preview" basePath={basePath} />
-                    )}
-                    {isMarkdownMode && !isCardMode && inlinePreviewVisible && (
+                    {isMarkdownMode && inlinePreviewVisible && (
                       <InlinePreviewGutter
                         key="inline"
                         width={inlinePreviewWidth}

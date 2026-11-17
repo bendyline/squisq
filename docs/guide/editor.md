@@ -56,8 +56,9 @@ and Write leaves the parts of your file you didn't touch exactly as they were.
 
 ### Write modes: Write, Blocks, Timeline
 
-The **▾** beside the first tab changes how Write and Source lay out the document. The tab is
-named after the mode, and Source keeps the same layout:
+The **▾** beside the first tab changes how Write lays out the document, and the tab is named after
+the mode. Source always shows the whole file: switching to it from Blocks or Timeline opens it at
+the block you were on, and switching back opens Write on the block holding the Source cursor.
 
 - **Write** — the whole document in one scrolling column. The default.
 - **Blocks** — one block on a card, with **Previous**, **Next**, a "Block N of M"
