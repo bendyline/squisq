@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.12.30](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.29...@bendyline/squisq-react@2.12.30) (2026-11-17)
+
+### Bug Fixes
+
+* Add image editor drawer and touch drag fixes; safari pass  ([#129](https://github.com/bendyline/squisq/issues/129)) ([9b04efe](https://github.com/bendyline/squisq/commit/9b04efe4f16898ae736a77bedaa42ec273e7cec0))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.18
+
 ## @bendyline/squisq-react [2.12.29](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.28...@bendyline/squisq-react@2.12.29) (2026-11-15)
 
 
