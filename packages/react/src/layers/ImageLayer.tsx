@@ -6,17 +6,24 @@
  * with proper aspect ratio handling.
  *
  * Cover images draw as an HTML <img> inside a <foreignObject> (object-fit),
- * and Ken Burns motion animates that <img>. WebKit paints an animated element
- * there without the slide's scale, so on WebKit the Ken Burns branch uses an
- * SVG <image> instead (utils/foreignObjectPaint.ts).
+ * and Ken Burns motion animates that <img>. WebKit paints an <img> there that
+ * has any CSS filter or transform — a theme's photographic grade, a blur's
+ * over-scan, a Ken Burns move — without the slide's scale, over the layers
+ * above it, and it ignores CSS filter functions on SVG elements. So on WebKit
+ * the grade is an equivalent SVG <filter> on the group around the
+ * foreignObject, the over-scan a larger box, and Ken Burns runs on an SVG
+ * <image> (utils/foreignObjectPaint.ts, utils/svgFilter.tsx).
  */
 
+import { useId, type CSSProperties, type ReactNode } from 'react';
 import type { ImageLayer as ImageLayerType, Animation } from '@bendyline/squisq/schemas';
 import { cssFilterForTreatment } from '@bendyline/squisq/doc';
 import { getAnimationStyle } from '../utils/animationUtils';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
 import { useMediaUrl } from '../hooks/MediaContext';
 import { paintsForeignObjectLayersUnscaled } from '../utils/foreignObjectPaint';
+import { svgFilterFromCss } from '../utils/svgFilter';
+import { defsIdFor } from '../utils/defsId';
 
 interface ImageLayerProps {
   layer: ImageLayerType;
@@ -41,6 +48,7 @@ export function ImageLayer({
   isStatic = false,
 }: ImageLayerProps) {
   const { content, position, animation } = layer;
+  const defsId = defsIdFor(useId(), layer.id);
 
   // Resolve position values to pixels
   const x = resolveValue(position.x, viewport.width);
@@ -66,6 +74,37 @@ export function ImageLayer({
   // SVG preserveAspectRatio based on fit mode
   const preserveAspectRatio = getPreserveAspectRatio(content.fit);
   const isCover = content.fit === 'cover';
+  // WebKit draws an <img> with a CSS filter or transform unscaled over the
+  // slide (see the component docs): there the grade is an SVG filter on the
+  // group around the foreignObject and the blur's over-scan a larger box.
+  const svgNative = paintsForeignObjectLayersUnscaled();
+  const gradeId = `${defsId}-grade`;
+  const svgGrade = svgNative ? svgFilterFromCss(gradeId, filter) : null;
+  const blurred = Boolean(content.blur && content.blur > 0);
+  const imgGrade: CSSProperties = svgNative
+    ? blurred
+      ? {
+          width: `${width * BLUR_OVERSCAN}px`,
+          height: `${height * BLUR_OVERSCAN}px`,
+          margin: `${(-height * (BLUR_OVERSCAN - 1)) / 2}px 0 0 ${(-width * (BLUR_OVERSCAN - 1)) / 2}px`,
+          maxWidth: 'none',
+        }
+      : {}
+    : {
+        ...(filter ? { filter } : {}),
+        // Over-scan blurred imagery so the soft edges never reveal the frame
+        // behind the layer.
+        ...(blurred ? { transform: `scale(${BLUR_OVERSCAN})` } : {}),
+      };
+  const graded = (children: ReactNode): ReactNode =>
+    svgGrade ? (
+      <>
+        <defs>{svgGrade}</defs>
+        <g filter={`url(#${gradeId})`}>{children}</g>
+      </>
+    ) : (
+      children
+    );
 
   // Detect spatial (transform-based) animations that need Ken Burns treatment.
   // These animations should move the image *content* within fixed bounds rather
@@ -97,32 +136,33 @@ export function ImageLayer({
         data-layer-id={layer.id}
         data-image-framing="portrait-pan"
       >
-        <foreignObject x={finalX} y={finalY} width={width} height={height}>
-          <div
-            style={{
-              width: `${width}px`,
-              height: `${height}px`,
-              overflow: 'hidden',
-            }}
-          >
-            <img
-              src={src}
-              alt={content.alt || ''}
-              className={panClass}
+        {graded(
+          <foreignObject x={finalX} y={finalY} width={width} height={height}>
+            <div
               style={{
                 width: `${width}px`,
                 height: `${height}px`,
-                objectFit: 'cover',
-                objectPosition: 'center',
-                display: 'block',
-                pointerEvents: 'none',
-                ...(filter ? { filter } : {}),
-                ...(content.blur && content.blur > 0 ? { transform: 'scale(1.06)' } : {}),
-                ...panStyle,
+                overflow: 'hidden',
               }}
-            />
-          </div>
-        </foreignObject>
+            >
+              <img
+                src={src}
+                alt={content.alt || ''}
+                className={panClass}
+                style={{
+                  width: `${width}px`,
+                  height: `${height}px`,
+                  objectFit: 'cover',
+                  objectPosition: 'center',
+                  display: 'block',
+                  pointerEvents: 'none',
+                  ...imgGrade,
+                  ...panStyle,
+                }}
+              />
+            </div>
+          </foreignObject>,
+        )}
       </g>
     );
   }
@@ -136,30 +176,23 @@ export function ImageLayer({
     // WebKit paints the animated <img> without the slide's scale (see
     // utils/foreignObjectPaint.ts), so there the same keyframes run on an SVG
     // <image>, clipped by a nested <svg> the size of the layer.
-    if (paintsForeignObjectLayersUnscaled()) {
+    if (svgNative) {
       return (
         <g
           className="block-layer block-layer--image"
           data-layer-id={layer.id}
           data-image-framing="svg-ken-burns"
         >
-          <svg x={finalX} y={finalY} width={width} height={height} style={{ overflow: 'hidden' }}>
-            <image
-              href={src}
-              width={width}
-              height={height}
-              preserveAspectRatio="xMidYMid slice"
-              className={kbStyle.className}
-              {...(content.alt ? { role: 'img', 'aria-label': content.alt } : {})}
-              style={{
-                pointerEvents: 'none',
-                transformBox: 'fill-box',
-                transformOrigin: 'center center',
-                ...(filter ? { filter } : {}),
-                ...kbStyle.style,
-              }}
-            />
-          </svg>
+          <SvgCoverImage
+            layerId={layer.id}
+            src={src}
+            alt={content.alt}
+            box={{ x: finalX, y: finalY, width, height }}
+            grade={svgGrade}
+            gradeId={gradeId}
+            className={kbStyle.className}
+            style={kbStyle.style}
+          />
         </g>
       );
     }
@@ -205,24 +238,23 @@ export function ImageLayer({
         style={animStyle.style}
         data-layer-id={layer.id}
       >
-        <foreignObject x={finalX} y={finalY} width={width} height={height}>
-          <img
-            src={src}
-            alt={content.alt || ''}
-            style={{
-              width: `${width}px`,
-              height: `${height}px`,
-              objectFit: 'cover',
-              objectPosition: 'center',
-              display: 'block',
-              pointerEvents: 'none',
-              ...(filter ? { filter } : {}),
-              // Over-scan blurred imagery so the soft edges never reveal
-              // the frame behind the layer.
-              ...(content.blur && content.blur > 0 ? { transform: 'scale(1.06)' } : {}),
-            }}
-          />
-        </foreignObject>
+        {graded(
+          <foreignObject x={finalX} y={finalY} width={width} height={height}>
+            <img
+              src={src}
+              alt={content.alt || ''}
+              style={{
+                width: `${width}px`,
+                height: `${height}px`,
+                objectFit: 'cover',
+                objectPosition: 'center',
+                display: 'block',
+                pointerEvents: 'none',
+                ...imgGrade,
+              }}
+            />
+          </foreignObject>,
+        )}
       </g>
     );
   }
@@ -234,6 +266,7 @@ export function ImageLayer({
       style={animStyle.style}
       data-layer-id={layer.id}
     >
+      {svgGrade && <defs>{svgGrade}</defs>}
       <image
         href={src}
         x={finalX}
@@ -241,11 +274,69 @@ export function ImageLayer({
         width={width}
         height={height}
         preserveAspectRatio={preserveAspectRatio}
-        style={{ pointerEvents: 'none', ...(filter ? { filter } : {}) }}
+        filter={svgGrade ? `url(#${defsId}-grade)` : undefined}
+        style={{ pointerEvents: 'none', ...(filter && !svgGrade ? { filter } : {}) }}
       />
     </g>
   );
 }
+
+/**
+ * A cover-fitted SVG `<image>` clipped to its layer box, graded by an SVG
+ * filter: the WebKit form of the Ken Burns `<img>`, whose moving transform
+ * WebKit would otherwise paint unscaled.
+ */
+function SvgCoverImage({
+  layerId,
+  src,
+  alt,
+  box,
+  grade,
+  gradeId,
+  className,
+  style,
+}: {
+  layerId: string;
+  src: string;
+  alt?: string;
+  box: { x: number; y: number; width: number; height: number };
+  grade: ReturnType<typeof svgFilterFromCss>;
+  gradeId: string;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  const { x, y, width, height } = box;
+  return (
+    <svg
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      style={{ overflow: 'hidden' }}
+      data-image-layer={layerId}
+    >
+      {grade && <defs>{grade}</defs>}
+      <image
+        href={src}
+        width={width}
+        height={height}
+        preserveAspectRatio="xMidYMid slice"
+        className={className}
+        filter={grade ? `url(#${gradeId})` : undefined}
+        {...(alt ? { role: 'img', 'aria-label': alt } : {})}
+        style={{
+          pointerEvents: 'none',
+          transformBox: 'fill-box',
+          transformOrigin: 'center center',
+          ...style,
+        }}
+      />
+    </svg>
+  );
+}
+
+/** How far a blurred photo is over-scanned, so its soft edge stays outside the frame. */
+const BLUR_OVERSCAN = 1.06;
 
 /**
  * Map fit mode to SVG preserveAspectRatio.

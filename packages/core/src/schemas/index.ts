@@ -23,6 +23,7 @@ export {
   getTwoColumnPositions,
   getSafeTextBounds,
   scaledFontSize as layoutScaledFontSize,
+  titleTypeScale,
 } from './LayoutStrategy.js';
 export type { LayoutHints } from './LayoutStrategy.js';
 export type { MediaProvider, MediaEntry } from './MediaProvider.js';

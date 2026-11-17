@@ -49,8 +49,10 @@
 }
 /* ── Resize handle ──────────────────────────────────────────────
    Small grip at the bottom-right corner of a hovered/selected image.
-   Mousedown starts an aspect-locked resize; double-click clears the
-   width/height attrs (returns image to natural rendered size). */
+   A pointer drag (mouse, pen or finger) starts an aspect-locked resize;
+   double-click clears the width/height attrs (returns image to natural
+   rendered size). `touch-action: none` hands the finger's moves to the
+   drag instead of scrolling the page. */
 .squisq-image-resize-handle {
   position: absolute;
   right: -4px;
@@ -63,8 +65,31 @@
   cursor: nwse-resize;
   z-index: 5;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  -webkit-user-select: none;
   user-select: none;
+  -webkit-touch-callout: none;
   touch-action: none;
+}
+
+/* A fingertip needs a bigger target than the grip a mouse uses. The hit
+   area grows up and left, over the picture, and only a few px past its
+   right and bottom edges: a full-width image sits against the page's
+   narrow phone margin, and a hit area past it would widen the page. */
+@media (pointer: coarse) {
+  .squisq-image-resize-handle {
+    right: -2px;
+    bottom: -2px;
+    width: 20px;
+    height: 20px;
+    border-width: 2px;
+    border-radius: 4px;
+  }
+
+  .squisq-image-resize-handle::before {
+    content: '';
+    position: absolute;
+    inset: -14px -6px -6px -14px;
+  }
 }
 
 .squisq-image-resize-handle:hover {

@@ -66,7 +66,7 @@ test('manual constant-rate mode scrolls without a mic', async ({ page }) => {
   await openTeleprompter(page);
 
   // Turn voice pacing OFF (manual mode) and skip the countdown.
-  await page.getByRole('button', { name: '🎙 Voice pace' }).click();
+  await page.getByRole('button', { name: 'Voice pace', exact: true }).click();
   await page.locator('#squisq-prompter-countdown').selectOption('0');
   await page.getByRole('button', { name: 'Start prompter', exact: true }).click();
 
@@ -92,9 +92,9 @@ test('mirror and font-size controls restyle the surface', async ({ page }) => {
 
   const surface = page.getByTestId('teleprompter-surface');
   await expect(surface).not.toHaveClass(/--mirrored/);
-  await page.getByRole('button', { name: '⇋ Mirror' }).click();
+  await page.getByRole('button', { name: 'Mirror', exact: true }).click();
   await expect(surface).toHaveClass(/--mirrored/);
-  await page.getByRole('button', { name: '⇋ Mirror' }).click();
+  await page.getByRole('button', { name: 'Mirror', exact: true }).click();
 
   const sizeBefore = await surface.evaluate((el) => getComputedStyle(el).fontSize);
   await page.locator('#squisq-prompter-fontsize').fill('96');
@@ -190,14 +190,14 @@ test('popup float tier opens a window hosting the surface and comes back', async
     await tierSelect.selectOption('popup');
   }
   const popupPromise = context.waitForEvent('page');
-  await page.getByRole('button', { name: '⇱ Pop out' }).click();
+  await page.getByRole('button', { name: 'Pop out', exact: true }).click();
   const popup = await popupPromise;
 
   // The surface now lives in the popup; the docked area shows the note.
   await popup.locator('.squisq-teleprompter-surface').waitFor({ state: 'visible', timeout: 5_000 });
   await expect(page.getByText('The prompter is floating in its own window.')).toBeVisible();
 
-  await page.getByRole('button', { name: '⇤ Bring back' }).click();
+  await page.getByRole('button', { name: 'Bring back', exact: true }).click();
   await expect(page.getByTestId('teleprompter-surface')).toBeVisible();
   expect(popup.isClosed()).toBe(true);
 });
@@ -208,7 +208,7 @@ test('recording a take saves the narration and rewrites the markdown preamble', 
   await openTeleprompter(page);
   await page.locator('#squisq-prompter-countdown').selectOption('0');
 
-  await page.getByRole('button', { name: '⏺ Record' }).click();
+  await page.getByRole('button', { name: 'Record', exact: true }).click();
   // Capture is live: recording dot on the surface, prompter rolling.
   await expect(page.locator('.squisq-teleprompter-recdot')).toBeVisible({ timeout: 5_000 });
   const recordingStartIdx = Number(
@@ -225,11 +225,11 @@ test('recording a take saves the narration and rewrites the markdown preamble', 
       { timeout: 8_000 },
     )
     .toBeGreaterThan(recordingStartIdx + 1);
-  await page.getByRole('button', { name: '⏹ Stop' }).click();
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
 
   // Decode + DTW alignment runs on the take, then the review strip appears.
   await page.getByTestId('teleprompter-review').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.getByRole('button', { name: '✓ Save narration' }).click();
+  await page.getByRole('button', { name: 'Save narration', exact: true }).click();
   await page.getByTestId('teleprompter-save-notice').waitFor({ state: 'visible', timeout: 15_000 });
 
   // The markdown now references the take at the very top (preamble

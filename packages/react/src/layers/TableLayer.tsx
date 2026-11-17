@@ -12,6 +12,7 @@ import type { ComponentType, ReactNode } from 'react';
 import type { Block, TableLayer as TableLayerType } from '@bendyline/squisq/schemas';
 import { resolveValue, getAnchorOffset } from '../utils/layerUtils';
 import { getAnimationStyle } from '../utils/animationUtils';
+import { paintsForeignObjectLayersUnscaled } from '../utils/foreignObjectPaint';
 
 export interface TableLayerContentRendererProps {
   /** Owning block, including sourceBlockId for transformed projections. */
@@ -73,6 +74,12 @@ export function TableLayer({
     return a ? { textAlign: a } : undefined;
   };
 
+  // A sticky header keeps column names in view while rows scroll. WebKit
+  // paints a sticky cell inside a foreignObject without the slide's scale
+  // (utils/foreignObjectPaint.ts), which blanked the header row and, inside
+  // the scroller, the whole table — so there the header scrolls with it.
+  const stickyHeader = !paintsForeignObjectLayersUnscaled();
+
   const borderRadius = style.borderRadius ?? 8;
   const frame = `1px solid ${style.borderColor}`;
   // Keep the layout heuristic in the dataTable template and the rendered row
@@ -108,9 +115,7 @@ export function TableLayer({
                   fontFamily: style.headerFontFamily ?? style.fontFamily ?? 'system-ui, sans-serif',
                   fontWeight: 600,
                   padding: `${verticalCellPadding}px ${horizontalCellPadding}px`,
-                  position: 'sticky',
-                  top: 0,
-                  zIndex: 1,
+                  ...(stickyHeader ? { position: 'sticky', top: 0, zIndex: 1 } : {}),
                   ...cellWrap,
                   borderBottom: `2px solid ${style.borderColor}`,
                   borderRight:

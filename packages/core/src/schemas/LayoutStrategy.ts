@@ -24,10 +24,23 @@ export interface LayoutHints {
   secondaryY: string;
   /** Tertiary/detail Y position (percentage string) */
   tertiaryY: string;
-  /** Title font size multiplier (relative to base) */
+  /**
+   * Title font size multiplier (relative to base). With `titleCapPx` set this
+   * is the floor for display type; see {@link titleTypeScale}.
+   */
   titleScale: number;
   /** Body text font size multiplier (relative to base) */
   bodyScale: number;
+  /**
+   * Largest size, in reference px (before the viewport font scale), a title
+   * may reach by scaling like body text. Set where `titleScale` is below
+   * `bodyScale` because large display type is bound by a narrow frame: a
+   * title then scales with the body up to this cap, so a section heading
+   * keeps the hierarchy over its body text it has in landscape, while type
+   * already past the cap keeps `titleScale`. Absent → every title takes
+   * `titleScale`.
+   */
+  titleCapPx?: number;
   /** Two-column: left X position (percentage string) */
   columnLeftX: string;
   /** Two-column: right X position (percentage string) */
@@ -73,9 +86,13 @@ const LAYOUT_CONFIGS: Record<ViewportOrientation, LayoutHints> = {
     primaryY: '25%',
     secondaryY: '42%',
     tertiaryY: '58%',
-    // Titles scale down for narrower width; body text scales up to fill vertical space
+    // Body text scales up to fill vertical space. Titles scale with it up to
+    // the size a 96px hero title takes at `titleScale` (67px): larger display
+    // type is bound by the narrow frame and scales down instead. One flat
+    // 0.7 put every section heading below its own 1.5× body text.
     titleScale: 0.7,
     bodyScale: 1.5,
+    titleCapPx: 67,
     // Stacked columns instead of side-by-side
     columnLeftX: '50%',
     columnRightX: '50%',
@@ -129,8 +146,21 @@ export function scaledFontSize(
 ): number {
   const fontScale = calculateFontScale(viewport);
   const layout = getLayoutHints(orientation);
-  const typeScale = isTitle ? layout.titleScale : layout.bodyScale;
+  const typeScale = isTitle ? titleTypeScale(basePx, layout) : layout.bodyScale;
   return Math.round(basePx * fontScale * typeScale);
+}
+
+/**
+ * The layout multiplier for title text of a given base size. Without a
+ * `titleCapPx` it is `titleScale`. With one, a title scales like body text
+ * until it reaches the cap, holds at the cap, and never falls below
+ * `titleScale` — so small headings and labels keep their landscape
+ * proportion to the body, and big display type still shrinks to the frame.
+ */
+export function titleTypeScale(basePx: number, layout: LayoutHints): number {
+  const { titleScale, bodyScale, titleCapPx } = layout;
+  if (titleCapPx === undefined || basePx <= 0 || bodyScale <= titleScale) return titleScale;
+  return Math.max(titleScale, Math.min(bodyScale, titleCapPx / basePx));
 }
 
 /**

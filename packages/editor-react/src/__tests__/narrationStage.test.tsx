@@ -147,12 +147,12 @@ describe('NarrationStage', () => {
     expect(screen.getByTestId('teleprompter-controls')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Start prompter' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Restart prompter' })).toBeTruthy();
-    expect(screen.getByText('🎙 Voice pace')).toBeTruthy();
-    expect(screen.getByText('⇋ Mirror')).toBeTruthy();
-    expect(screen.getByText('⇱ Pop out')).toBeTruthy();
+    expect(screen.getByText('Voice pace')).toBeTruthy();
+    expect(screen.getByText('Mirror')).toBeTruthy();
+    expect(screen.getByText('Pop out')).toBeTruthy();
     // Record slot (recording deps present, idle state) with its camera toggle.
     expect(screen.getByTestId('teleprompter-record')).toBeTruthy();
-    expect(screen.getByText('camera')).toBeTruthy();
+    expect(screen.getByText('Camera')).toBeTruthy();
   });
 
   it('hides the record slot entirely without recording deps', () => {
@@ -169,7 +169,7 @@ describe('NarrationStage', () => {
       />,
     );
     expect(screen.getByTestId('teleprompter-record')).toBeTruthy();
-    expect(screen.queryByText('camera')).toBeNull();
+    expect(screen.queryByText('Camera')).toBeNull();
   });
 
   it('showRecordSlot/showTransportPlay={false} strip only the dialog-owned controls', () => {
@@ -186,7 +186,7 @@ describe('NarrationStage', () => {
     // Restart, Countdown, and the rest of the rail survive.
     expect(screen.getByRole('button', { name: 'Restart prompter' })).toBeTruthy();
     expect(screen.getByLabelText('Countdown')).toBeTruthy();
-    expect(screen.getByText('🎙 Voice pace')).toBeTruthy();
+    expect(screen.getByText('Voice pace')).toBeTruthy();
   });
 
   it('showSelfView={false} suppresses the camera corner overlay', () => {
@@ -224,15 +224,15 @@ describe('NarrationStage', () => {
     render(<NarrationStage stage={handle} theme={DEFAULT_THEME} />);
 
     expect(screen.getByTestId('teleprompter-review')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '✓ Save narration' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Save narration' })).toBeTruthy();
     expect(
       screen.getByRole('link', { name: 'Download audio backup' }).getAttribute('download'),
     ).toBe('narration.webm');
     expect(
       screen.getByRole('link', { name: 'Download timing backup' }).getAttribute('download'),
     ).toBe('narration.webm.timing.json');
-    expect(screen.getByRole('button', { name: '↺ Retake' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '✕ Discard' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retake' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeTruthy();
   });
 
   it('retains complete download links after a save failure and releases them on unmount', () => {
@@ -292,8 +292,8 @@ describe('NarrationStage', () => {
     // that render Save/Retake in their own action row.
     expect(screen.getByTestId('teleprompter-review')).toBeTruthy();
     expect(screen.getByText(/Take: 4\.2s/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: '✓ Save narration' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '↺ Retake' })).toBeNull();
-    expect(screen.queryByRole('button', { name: '✕ Discard' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save narration' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retake' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull();
   });
 });

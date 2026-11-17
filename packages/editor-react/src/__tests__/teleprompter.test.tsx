@@ -2,7 +2,15 @@
  * @vitest-environment jsdom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  within,
+} from '@testing-library/react';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { markdownToDoc } from '@bendyline/squisq/doc';
 import { buildNarrationScript } from '@bendyline/squisq/narration';
@@ -447,8 +455,51 @@ describe('TeleprompterView', () => {
     renderView(MD);
     const surface = screen.getByTestId('teleprompter-surface');
     expect(surface.className).not.toContain('--mirrored');
-    fireEvent.click(screen.getByRole('button', { name: '⇋ Mirror' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mirror' }));
     expect(screen.getByTestId('teleprompter-surface').className).toContain('--mirrored');
+  });
+
+  it('groups the rail into playback, countdown, and Pacing / Microphone / Display areas', () => {
+    renderView(MD);
+    const controls = screen.getByTestId('teleprompter-controls');
+
+    // Playback is one connected segment; the countdown sits beside it, in no
+    // settings area.
+    const playback = within(controls).getByRole('group', { name: 'Playback' });
+    expect(within(playback).getByRole('button', { name: 'Start prompter' })).toBeTruthy();
+    expect(within(playback).getByRole('button', { name: 'Restart prompter' })).toBeTruthy();
+    const countdown = within(controls).getByLabelText('Countdown');
+    expect(countdown.closest('[data-section]')).toBeNull();
+
+    const pacing = within(controls).getByRole('group', { name: 'Pacing' });
+    expect(within(pacing).getByLabelText('Speed')).toBeTruthy();
+    expect(within(pacing).getByRole('button', { name: 'Voice pace' })).toBeTruthy();
+    const mic = within(controls).getByRole('group', { name: 'Microphone' });
+    expect(within(mic).getByRole('combobox', { name: 'Microphone input' })).toBeTruthy();
+    expect(within(mic).getByLabelText('Sensitivity')).toBeTruthy();
+    expect(within(mic).getByRole('meter', { name: 'Mic level' })).toBeTruthy();
+    const display = within(controls).getByRole('group', { name: 'Display' });
+    expect(within(display).getByLabelText('Text size')).toBeTruthy();
+    expect(within(display).getByRole('button', { name: 'Mirror' })).toBeTruthy();
+    expect(within(display).getByRole('button', { name: 'Guide' })).toBeTruthy();
+
+    // Labels are words plus chrome icons — no emoji or Unicode arrow glyphs.
+    expect(controls.textContent).not.toMatch(/\p{Extended_Pictographic}|[⇋⇱⇤⟲▸▶⏸⏺⏹⚠]/u);
+  });
+
+  it('switches the settings area a narrow rail shows through its tab strip', () => {
+    renderView(MD);
+    const sections = document.querySelector('.squisq-teleprompter-sections')!;
+    // The strip is display:none on a wide rail, so query the hidden tree too.
+    const tab = (name: string) => screen.getByRole('button', { name, hidden: true });
+    expect(sections.getAttribute('data-active-section')).toBe('pacing');
+    expect(tab('Pacing').getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(tab('Display'));
+    expect(sections.getAttribute('data-active-section')).toBe('display');
+    expect(tab('Display').getAttribute('aria-pressed')).toBe('true');
+    expect(tab('Pacing').getAttribute('aria-pressed')).toBe('false');
+    expect(tab('Mic').getAttribute('aria-controls')).toBe('squisq-prompter-section-mic');
   });
 
   it('nudges one word with left/right arrows while preserving line-sized up/down jumps', () => {

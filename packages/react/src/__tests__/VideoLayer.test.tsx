@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { VideoLayer as VideoLayerType } from '@bendyline/squisq/schemas';
 import { VideoLayer } from '../layers/VideoLayer';
 
@@ -266,5 +266,108 @@ describe('VideoLayer player mode', () => {
 
     expect(video.currentTime).toBe(30);
     expect(video.pause).not.toHaveBeenCalled();
+  });
+});
+
+describe('VideoLayer on WebKit', () => {
+  const iphoneSafari =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
+  const restores: Array<() => void> = [];
+
+  // A 1920×1080 slide shown in a 480×400 box: a quarter scale, letterboxed
+  // 65px from the top. jsdom has no layout, so stand in for it.
+  function slideBox(): void {
+    const define = (name: string, value: unknown) => {
+      Object.defineProperty(SVGSVGElement.prototype, name, {
+        configurable: true,
+        get: () => value,
+      });
+      restores.push(
+        () => delete (SVGSVGElement.prototype as unknown as Record<string, unknown>)[name],
+      );
+    };
+    define('viewBox', { baseVal: { x: 0, y: 0, width: 1920, height: 1080 } });
+    define('clientWidth', 480);
+    define('clientHeight', 400);
+    const spy = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(iphoneSafari);
+    restores.push(() => spy.mockRestore());
+  }
+  afterEach(() => {
+    while (restores.length) restores.pop()!();
+  });
+
+  const clip: VideoLayerType = {
+    ...layer,
+    position: { x: 960, y: 540, width: 480, height: 270 },
+  };
+  const renderClip = (capture = false) =>
+    render(
+      <svg viewBox="0 0 1920 1080">
+        <VideoLayer
+          layer={clip}
+          basePath="/media"
+          viewport={{ width: 1920, height: 1080 }}
+          blockTime={0}
+          mode="player"
+          capture={capture}
+        />
+      </svg>,
+    );
+
+  it('gives the foreignObject the on-screen box WebKit paints it at', async () => {
+    slideBox();
+    const { container } = renderClip();
+    const fo = container.querySelector('foreignObject')!;
+    await waitFor(() => expect(fo.hasAttribute('data-screen-placed')).toBe(true));
+    expect(fo.getAttribute('x')).toBe('240');
+    expect(fo.getAttribute('y')).toBe(String(65 + 135));
+    expect(fo.getAttribute('width')).toBe('120');
+    expect(fo.getAttribute('height')).toBe('67.5');
+    expect(container.querySelector('video')!.style.width).toBe('120px');
+  });
+
+  it('keeps the slide-unit box for frame capture, which reads it', () => {
+    slideBox();
+    const { container } = renderClip(true);
+    const fo = container.querySelector('foreignObject')!;
+    expect(fo.hasAttribute('data-screen-placed')).toBe(false);
+    expect(fo.getAttribute('x')).toBe('960');
+    expect(fo.getAttribute('width')).toBe('480');
+  });
+
+  it('draws an idle clip as its poster, so no composited video covers the slide', () => {
+    slideBox();
+    const { container } = render(
+      <svg viewBox="0 0 1920 1080">
+        <VideoLayer
+          layer={{ ...clip, content: { ...clip.content, posterSrc: 'poster.jpg' } }}
+          basePath="/media"
+          viewport={{ width: 1920, height: 1080 }}
+          blockTime={0}
+          mode="player"
+        />
+      </svg>,
+    );
+    const poster = container.querySelector<HTMLImageElement>('[data-video-poster] img')!;
+    expect(poster.getAttribute('src')).toBe('/media/poster.jpg');
+    expect(poster.style.objectFit).toBe('cover');
+    expect(poster.closest('foreignObject')!.getAttribute('x')).toBe('960');
+    const video = container.querySelector('video')!;
+    expect(video.style.display).toBe('none');
+
+    const play = container.querySelector<SVGGElement>('[role="button"]')!;
+    expect(play.getAttribute('aria-label')).toBe('Play Demo clip');
+    fireEvent.click(play);
+    // Shown and started inside the tap, as iOS requires for sound.
+    expect(video.style.display).toBe('block');
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+    expect(container.querySelector('[data-video-poster]')).toBeNull();
+  });
+
+  it('keeps the slide-unit box on other engines', () => {
+    const { container } = renderClip();
+    const fo = container.querySelector('foreignObject')!;
+    expect(fo.getAttribute('x')).toBe('960');
+    expect(fo.hasAttribute('data-screen-placed')).toBe(false);
   });
 });

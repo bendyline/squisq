@@ -64,6 +64,9 @@ function Harness({
             <p>Alpha body.</p>
             <h2>Beta</h2>
             <p>Beta body.</p>
+            <figure>
+              <span data-testid="own-drag-grip" data-squisq-touch-drag="" />
+            </figure>
           </div>
         </div>
         <NavigationSheet
@@ -218,6 +221,23 @@ describe('NavigationSheet', () => {
     ]);
     touch('pointerup', editor, 200, 300);
     expect(sheet.dataset.state).toBe('closed');
+  });
+
+  it('leaves a touch on a control with its own drag alone, even at the edge', () => {
+    const { sheet, surface } = renderSheet();
+    const grip = screen.getByTestId('own-drag-grip');
+
+    // An image's resize grip sits in the edge zone when the picture is full
+    // width, and shrinking it is exactly a leftward drag.
+    drag(grip, [
+      [312, 400],
+      [290, 400],
+      [150, 402],
+    ]);
+    touch('pointerup', grip, 150, 402, 400);
+    expect(surface.setPointerCapture).not.toHaveBeenCalled();
+    expect(sheet.dataset.state).toBe('closed');
+    expect(screen.getByTestId('panel').textContent).toBe('null');
   });
 
   it('cancels the touch moves of a drag it follows, and only those', () => {

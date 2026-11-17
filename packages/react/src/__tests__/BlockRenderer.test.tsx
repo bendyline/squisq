@@ -1,7 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { act, render, waitFor } from '@testing-library/react';
 import { BlockRenderer } from '../BlockRenderer';
-import { largestFittingTextScale } from '../utils/textFit';
+import { largestFittingTextScale, largestShrunkTextScale } from '../utils/textFit';
 import type { Block } from '@bendyline/squisq/schemas';
 
 vi.mock('mermaid', () => ({
@@ -27,6 +27,13 @@ describe('BlockRenderer', () => {
     expect(largestFittingTextScale((scale) => scale <= 1.63)).toBe(1.62);
     expect(largestFittingTextScale(() => true)).toBe(2);
     expect(largestFittingTextScale(() => false)).toBe(1);
+  });
+
+  it('shrinks to the largest readable scale that fits, or not at all', () => {
+    expect(largestShrunkTextScale((scale) => scale <= 0.9)).toBe(0.89);
+    expect(largestShrunkTextScale((scale) => scale <= 0.75)).toBe(0.75);
+    // Past the readable floor the authored size stays: shrinking cannot help.
+    expect(largestShrunkTextScale(() => false)).toBe(1);
   });
 
   it('renders an SVG element', () => {
@@ -337,5 +344,118 @@ describe('BlockRenderer grow-text-to-fit', () => {
     expect(
       chart.container.querySelector('.block-svg')?.hasAttribute('data-squisq-text-scale'),
     ).toBe(false);
+  });
+});
+
+describe('BlockRenderer shrink-to-fit', () => {
+  const BOX_HEIGHT = 180;
+  const richBlock: Block = {
+    id: 'rich',
+    startTime: 0,
+    duration: 5,
+    audioSegment: 0,
+    layers: [
+      {
+        type: 'text',
+        id: 'item-0',
+        content: {
+          text: 'Choose Source to see the Markdown text behind this page.',
+          html: 'Choose <strong>Source</strong> to see the Markdown text behind this page.',
+          style: { fontSize: 50, color: '#fff' },
+        },
+        position: { x: 100, y: 100, width: 900, height: BOX_HEIGHT },
+      },
+    ],
+  };
+  let lines = 4;
+  const restores: Array<() => void> = [];
+
+  // jsdom lays nothing out, so stand in for the browser: rich text is `lines`
+  // lines tall at its current font size, inside a BOX_HEIGHT box.
+  function stubLayout(name: string, value: (element: HTMLElement) => number): void {
+    Object.defineProperty(HTMLElement.prototype, name, {
+      configurable: true,
+      get(this: HTMLElement) {
+        return value(this);
+      },
+    });
+    restores.push(() => delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name]);
+  }
+  const fontPx = (element: HTMLElement): number =>
+    parseFloat(
+      element.closest<HTMLElement>('[data-squisq-text-fit="html"]')?.style.fontSize ?? '0',
+    );
+  const isContent = (element: HTMLElement): boolean => element.dataset.squisqTextContent === 'true';
+  const isBox = (element: HTMLElement): boolean => element.dataset.squisqTextFit === 'html';
+
+  beforeEach(() => {
+    lines = 4;
+    stubLayout('scrollHeight', (el) => (isContent(el) ? fontPx(el) * lines : 0));
+    stubLayout('scrollWidth', (el) => (isContent(el) ? 800 : 0));
+    stubLayout('clientHeight', (el) => (isBox(el) ? BOX_HEIGHT : 0));
+    stubLayout('clientWidth', (el) => (isBox(el) ? 900 : 0));
+  });
+  afterEach(() => {
+    while (restores.length) restores.pop()!();
+  });
+
+  const scaleOf = (container: HTMLElement): number =>
+    Number(container.querySelector('.block-svg')?.getAttribute('data-squisq-text-scale'));
+
+  it('shrinks clipped rich text just enough to show every line', async () => {
+    // Four 50px lines need 200px of a 180px box: a scale of at most 0.9.
+    const { container } = render(
+      <BlockRenderer block={richBlock} blockTime={0} basePath="." growTextToFit />,
+    );
+    await waitFor(() => expect(scaleOf(container)).toBeLessThan(1));
+    expect(scaleOf(container)).toBeGreaterThan(0.85);
+    expect(scaleOf(container)).toBeLessThanOrEqual(0.9);
+  });
+
+  it('shrinks clipped text on every surface, not only a growing slideshow', async () => {
+    // A video export draws without growTextToFit and clipped the same way.
+    const { container } = render(<BlockRenderer block={richBlock} blockTime={0} basePath="." />);
+    await waitFor(() => expect(scaleOf(container)).toBeLessThanOrEqual(0.9));
+    expect(scaleOf(container)).toBeGreaterThan(0.85);
+  });
+
+  it('leaves clipped text alone when the host opts out', () => {
+    const { container } = render(
+      <BlockRenderer block={richBlock} blockTime={0} basePath="." shrinkTextToFit={false} />,
+    );
+    expect(container.querySelector('.block-svg')?.hasAttribute('data-squisq-text-scale')).toBe(
+      false,
+    );
+  });
+
+  it('keeps the authored size when the readable floor still clips', () => {
+    lines = 6; // 300px would need a scale of 0.6
+    const { container } = render(
+      <BlockRenderer block={richBlock} blockTime={0} basePath="." growTextToFit />,
+    );
+    expect(scaleOf(container)).toBe(1);
+  });
+
+  it('re-measures when a webfont finishes loading after the first pass', async () => {
+    // WebKit can report the font set loaded before it requests the slide's
+    // face; the wider real face then arrives with no pending `ready`.
+    const fonts = Object.assign(new EventTarget(), {
+      status: 'loaded',
+      ready: Promise.resolve(),
+    });
+    Object.defineProperty(document, 'fonts', { configurable: true, value: fonts });
+    restores.push(() => delete (document as unknown as Record<string, unknown>).fonts);
+
+    lines = 3; // the fallback face fits, with room to grow
+    const { container } = render(
+      <BlockRenderer block={richBlock} blockTime={0} basePath="." growTextToFit />,
+    );
+    await waitFor(() => expect(scaleOf(container)).toBeGreaterThan(1));
+
+    lines = 4; // the designed face wraps one more line
+    act(() => {
+      fonts.dispatchEvent(new Event('loadingdone'));
+    });
+    await waitFor(() => expect(scaleOf(container)).toBeLessThanOrEqual(0.9));
   });
 });

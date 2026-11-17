@@ -94,3 +94,61 @@ describe('ImageLayer Ken Burns', () => {
     expect(container.querySelector('foreignObject img')).not.toBeNull();
   });
 });
+
+describe('ImageLayer graded cover on WebKit', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  // WebKit draws a filtered <img> in a foreignObject at full canvas size over
+  // the slide, and ignores CSS filter functions on SVG elements.
+  const graded = (): ImageLayerType => ({
+    id: 'photo',
+    type: 'image',
+    position: { x: 0, y: 0, width: '35%', height: '100%' },
+    content: {
+      src: 'photo.jpg',
+      alt: 'Harbor',
+      fit: 'cover',
+      treatment: { type: 'cool', strength: 0.6 },
+      blur: 4,
+    },
+  });
+
+  it('keeps the CSS filter and over-scan on the <img> elsewhere', () => {
+    const container = renderLayer(graded());
+    const img = container.querySelector<HTMLImageElement>('foreignObject img')!;
+    expect(img.style.filter).toContain('saturate');
+    expect(img.style.transform).toBe('scale(1.06)');
+    expect(container.querySelector('filter')).toBeNull();
+  });
+
+  it('grades the <img> with an SVG filter on its group on WebKit', () => {
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(UA.iphoneSafari);
+    const container = renderLayer(graded());
+    const img = container.querySelector<HTMLImageElement>('foreignObject img')!;
+    // No CSS filter or transform: either would composite the <img>.
+    expect(img.style.filter).toBe('');
+    expect(img.style.transform).toBe('');
+    // object-fit still crops it, whatever its format.
+    expect(img.style.objectFit).toBe('cover');
+    // The blur's over-scan is a larger box, centered by negative margins.
+    expect(parseFloat(img.style.width)).toBeCloseTo(672 * 1.06, 3);
+    expect(parseFloat(img.style.marginTop)).toBeCloseTo((-1080 * 0.06) / 2, 3);
+
+    const group = img.closest('foreignObject')!.parentElement!;
+    const filter = container.querySelector('filter')!;
+    expect(group.getAttribute('filter')).toBe(`url(#${filter.id})`);
+    expect(filter.getAttribute('color-interpolation-filters')).toBe('sRGB');
+    expect(filter.querySelector('feGaussianBlur')?.getAttribute('stdDeviation')).toBe('4');
+    expect(filter.querySelector('feColorMatrix[type="hueRotate"]')).not.toBeNull();
+  });
+
+  it('adds no filter for an ungraded cover photo on WebKit', () => {
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(UA.iphoneSafari);
+    const layer = graded();
+    layer.content.treatment = undefined;
+    layer.content.blur = undefined;
+    const container = renderLayer(layer);
+    expect(container.querySelector('foreignObject img')).not.toBeNull();
+    expect(container.querySelector('filter')).toBeNull();
+  });
+});

@@ -262,3 +262,24 @@ describe('TableLayer', () => {
     });
   });
 });
+
+describe('TableLayer header on WebKit', () => {
+  const iphoneSafari =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1';
+
+  it('pins the header while rows scroll', () => {
+    const { container } = renderTableLayer();
+    expect(container.querySelector<HTMLElement>('th')!.style.position).toBe('sticky');
+  });
+
+  it('lets the header scroll on WebKit, which blanked a sticky table', () => {
+    const spy = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue(iphoneSafari);
+    try {
+      const { container } = renderTableLayer();
+      expect(container.querySelector<HTMLElement>('th')!.style.position).toBe('');
+      expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

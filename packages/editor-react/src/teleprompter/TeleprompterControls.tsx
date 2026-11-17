@@ -1,11 +1,24 @@
 /**
- * Docked controls rail for the Narrate mode: transport, pacing, mic,
- * display, and pop-out. Lives under the surface (never in the main
- * toolbar). The Record affordance mounts through `recordSlot` in
- * Phase B so scenario 2 (prompter-only) has zero recording code paths.
+ * Docked controls rail for the Narrate mode. Lives under the surface (never
+ * in the main toolbar) and is organized in two tiers:
+ *
+ * 1. A toolbar row of actions — Start/Pause + Restart as one segmented
+ *    control, the start countdown, the Record slot (mounted by
+ *    NarrationStage so scenario 2, prompter-only, has zero recording code
+ *    paths), and Pop out.
+ * 2. Three settings areas — Pacing (speed, voice pace), Microphone
+ *    (input, level, sensitivity), and Display (text size, mirror, eye-line
+ *    guide). A wide rail shows them side by side; a narrow one (a phone, the
+ *    recorder dialog's column) shows one at a time behind a tab strip. The
+ *    switch is a container query in teleprompterTheme.ts, so the rail adapts
+ *    to the width it is given rather than to the viewport.
+ *
+ * Glyphs come from the chrome icon set (Icon.tsx), never emoji or Unicode
+ * arrows, so the rail matches the editor toolbar on every platform.
  */
 
-import type { ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
+import { Icon } from '../Icon';
 import type { TeleprompterController } from './useTeleprompter';
 import type { FloatingWindowHandle } from './useFloatingWindow';
 import { TELEPROMPTER_PREF_LIMITS, type FloatTier } from './types';
@@ -16,6 +29,24 @@ const TIER_LABELS: Record<FloatTier, string> = {
   popup: 'Popup window',
   docked: 'Docked',
 };
+
+type SettingsSection = 'pacing' | 'mic' | 'display';
+
+/** `tab` is the narrow-rail tab label; `title` heads the area on a wide rail. */
+const SECTIONS: readonly { id: SettingsSection; tab: string; title: string }[] = [
+  { id: 'pacing', tab: 'Pacing', title: 'Pacing' },
+  { id: 'mic', tab: 'Mic', title: 'Microphone' },
+  { id: 'display', tab: 'Display', title: 'Display' },
+];
+
+const sectionId = (id: SettingsSection) => `squisq-prompter-section-${id}`;
+
+/** Feeds the slider's accent fill (the track gradient in teleprompterTheme). */
+function rangeFill(value: number, limits: { min: number; max: number }): CSSProperties {
+  const span = limits.max - limits.min;
+  const pct = span > 0 ? ((value - limits.min) / span) * 100 : 0;
+  return { '--squisq-range-pct': `${Math.min(100, Math.max(0, pct))}%` } as CSSProperties;
+}
 
 export interface TeleprompterControlsProps {
   controller: TeleprompterController;
@@ -39,6 +70,19 @@ export function TeleprompterControls({
   const { transport, prefs, setPrefs, mic } = controller;
   const rolling = transport === 'rolling' || transport === 'countdown';
   const voiceLive = prefs.voiceTracking && mic.status === 'live';
+  const [activeSection, setActiveSection] = useState<SettingsSection>('pacing');
+  const [chosenTier, setChosenTier] = useState<FloatTier | null>(null);
+  const floatTier =
+    chosenTier && float.supportedTiers.includes(chosenTier) ? chosenTier : float.supportedTiers[0];
+
+  const playLabel = rolling ? 'Pause' : transport === 'paused' ? 'Resume' : 'Start';
+
+  const toggleVoicePace = () => {
+    const next = !prefs.voiceTracking;
+    setPrefs({ voiceTracking: next });
+    if (next && mic.status === 'idle') void mic.start(prefs.micDeviceId);
+    if (!next && mic.status !== 'idle') mic.stop();
+  };
 
   return (
     <div
@@ -48,80 +92,181 @@ export function TeleprompterControls({
       data-transport={transport}
       data-voice-live={voiceLive || undefined}
     >
-      <span className="squisq-teleprompter-group">
-        {showPlayPause ? (
+      <div className="squisq-teleprompter-bar">
+        {/* Not role="toolbar": that promises arrow-key focus movement, and
+            Narrate's arrows nudge the script from anywhere on the page. */}
+        <div className="squisq-teleprompter-seg" role="group" aria-label="Playback">
+          {showPlayPause ? (
+            <button
+              type="button"
+              className="squisq-teleprompter-tool squisq-teleprompter-tool--play"
+              onClick={() => (rolling ? controller.pause() : controller.play())}
+              aria-label={`${playLabel} prompter`}
+              data-rolling={rolling || undefined}
+            >
+              <Icon icon={rolling ? 'fa-solid fa-pause' : 'fa-solid fa-play'} />
+              <span className="squisq-teleprompter-tool-label">{playLabel}</span>
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => (rolling ? controller.pause() : controller.play())}
-            aria-label={rolling ? 'Pause prompter' : 'Start prompter'}
+            className="squisq-teleprompter-tool squisq-teleprompter-tool--restart"
+            onClick={controller.restart}
+            aria-label="Restart prompter"
+            title="Back to the top"
           >
-            {rolling ? '⏸ Pause' : transport === 'paused' ? '▶ Resume' : '▶ Start'}
+            <Icon icon="fa-solid fa-rotate-left" />
+            <span className="squisq-teleprompter-tool-label">Restart</span>
           </button>
+        </div>
+
+        <div
+          className="squisq-teleprompter-countdown-field"
+          title="Seconds to count down before the prompter starts rolling"
+        >
+          <Icon icon="fa-solid fa-stopwatch" />
+          <label htmlFor="squisq-prompter-countdown" className="squisq-teleprompter-bar-label">
+            Countdown
+          </label>
+          <select
+            id="squisq-prompter-countdown"
+            value={prefs.countdownSec}
+            onChange={(e) => setPrefs({ countdownSec: Number(e.target.value) as 0 | 3 | 5 | 10 })}
+          >
+            <option value={0}>Off</option>
+            <option value={3}>3s</option>
+            <option value={5}>5s</option>
+            <option value={10}>10s</option>
+          </select>
+        </div>
+
+        {recordSlot}
+
+        {float.supportedTiers.length > 0 ? (
+          <div className="squisq-teleprompter-float">
+            {float.isOpen ? (
+              <button type="button" className="squisq-teleprompter-tool" onClick={float.close}>
+                <Icon icon="fa-solid fa-compress" />
+                <span className="squisq-teleprompter-tool-label">Bring back</span>
+              </button>
+            ) : (
+              <div className="squisq-teleprompter-split">
+                <button
+                  type="button"
+                  className="squisq-teleprompter-tool"
+                  onClick={() => void float.open(floatTier)}
+                  title={`Pop the prompter out so it can sit next to your camera — ${
+                    floatTier ? TIER_LABELS[floatTier] : ''
+                  }`}
+                >
+                  <Icon icon="picture-in-picture" />
+                  <span className="squisq-teleprompter-tool-label">Pop out</span>
+                </button>
+                {float.supportedTiers.length > 1 ? (
+                  <span className="squisq-teleprompter-split-menu">
+                    <Icon icon="fa-solid fa-chevron-down" />
+                    <select
+                      aria-label="Pop-out window type"
+                      data-testid="teleprompter-float-tier"
+                      value={floatTier}
+                      onChange={(e) => setChosenTier(e.target.value as FloatTier)}
+                    >
+                      {float.supportedTiers.map((tier) => (
+                        <option key={tier} value={tier}>
+                          {TIER_LABELS[tier]}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                ) : null}
+              </div>
+            )}
+          </div>
         ) : null}
-        <button type="button" onClick={controller.restart} aria-label="Restart prompter">
-          ⟲ Restart
-        </button>
-      </span>
+      </div>
 
-      <span className="squisq-teleprompter-group">
-        <label htmlFor="squisq-prompter-countdown">Countdown</label>
-        <select
-          id="squisq-prompter-countdown"
-          value={prefs.countdownSec}
-          onChange={(e) => setPrefs({ countdownSec: Number(e.target.value) as 0 | 3 | 5 | 10 })}
+      {/* Narrow rails only (see the container query); wide rails show every area. */}
+      <div className="squisq-teleprompter-tabs" role="group" aria-label="Prompter settings">
+        {SECTIONS.map((section) => (
+          <button
+            key={section.id}
+            type="button"
+            className="squisq-teleprompter-tab"
+            aria-pressed={activeSection === section.id}
+            aria-controls={sectionId(section.id)}
+            onClick={() => setActiveSection(section.id)}
+          >
+            {section.tab}
+          </button>
+        ))}
+      </div>
+
+      <div className="squisq-teleprompter-sections" data-active-section={activeSection}>
+        <div
+          id={sectionId('pacing')}
+          className="squisq-teleprompter-section"
+          data-section="pacing"
+          role="group"
+          aria-labelledby={`${sectionId('pacing')}-title`}
         >
-          <option value={0}>Off</option>
-          <option value={3}>3s</option>
-          <option value={5}>5s</option>
-          <option value={10}>10s</option>
-        </select>
-      </span>
-
-      <span className="squisq-teleprompter-group">
-        <label htmlFor="squisq-prompter-wpm">Speed</label>
-        <input
-          id="squisq-prompter-wpm"
-          type="range"
-          min={TELEPROMPTER_PREF_LIMITS.baseWpm.min}
-          max={TELEPROMPTER_PREF_LIMITS.baseWpm.max}
-          step={5}
-          value={prefs.baseWpm}
-          onChange={(e) => setPrefs({ baseWpm: Number(e.target.value) })}
-        />
-        <span aria-live="off">{prefs.baseWpm} wpm</span>
-      </span>
-
-      <span className="squisq-teleprompter-group">
-        <button
-          type="button"
-          aria-pressed={prefs.voiceTracking}
-          onClick={() => {
-            const next = !prefs.voiceTracking;
-            setPrefs({ voiceTracking: next });
-            if (next && mic.status === 'idle') void mic.start(prefs.micDeviceId);
-            if (!next && mic.status !== 'idle') mic.stop();
-          }}
-          title="Match the prompter speed to your voice (halts when you stop speaking)"
-        >
-          🎙 Voice pace
-        </button>
-        {prefs.voiceTracking ? (
-          <>
-            <label htmlFor="squisq-prompter-sensitivity" title="Voice detection sensitivity">
-              Sens.
+          <div id={`${sectionId('pacing')}-title`} className="squisq-teleprompter-section-title">
+            {SECTIONS[0].title}
+          </div>
+          <div className="squisq-teleprompter-row">
+            <label htmlFor="squisq-prompter-wpm" className="squisq-teleprompter-row-label">
+              <Icon icon="fa-solid fa-gauge" />
+              Speed
             </label>
             <input
-              id="squisq-prompter-sensitivity"
+              id="squisq-prompter-wpm"
               type="range"
-              min={TELEPROMPTER_PREF_LIMITS.vadSensitivity.min}
-              max={TELEPROMPTER_PREF_LIMITS.vadSensitivity.max}
-              step={0.05}
-              value={prefs.vadSensitivity}
-              onChange={(e) => setPrefs({ vadSensitivity: Number(e.target.value) })}
-              style={{ width: 70 }}
+              min={TELEPROMPTER_PREF_LIMITS.baseWpm.min}
+              max={TELEPROMPTER_PREF_LIMITS.baseWpm.max}
+              step={5}
+              value={prefs.baseWpm}
+              onChange={(e) => setPrefs({ baseWpm: Number(e.target.value) })}
+              style={rangeFill(prefs.baseWpm, TELEPROMPTER_PREF_LIMITS.baseWpm)}
             />
+            <output htmlFor="squisq-prompter-wpm" className="squisq-teleprompter-value">
+              {prefs.baseWpm} wpm
+            </output>
+          </div>
+          <div className="squisq-teleprompter-row">
+            <button
+              type="button"
+              className="squisq-teleprompter-toggle"
+              aria-pressed={prefs.voiceTracking}
+              onClick={toggleVoicePace}
+              title="Match the prompter speed to your voice (halts when you stop speaking)"
+            >
+              <Icon icon="fa-solid fa-microphone-lines" />
+              <span>Voice pace</span>
+            </button>
+            <span className="squisq-teleprompter-hint">
+              {!prefs.voiceTracking
+                ? 'Fixed speed'
+                : mic.status === 'error'
+                  ? 'Mic unavailable — fixed speed'
+                  : 'Follows your voice'}
+            </span>
+          </div>
+        </div>
+
+        <div
+          id={sectionId('mic')}
+          className="squisq-teleprompter-section"
+          data-section="mic"
+          data-inactive={!prefs.voiceTracking || undefined}
+          role="group"
+          aria-labelledby={`${sectionId('mic')}-title`}
+        >
+          <div id={`${sectionId('mic')}-title`} className="squisq-teleprompter-section-title">
+            {SECTIONS[1].title}
+          </div>
+          <div className="squisq-teleprompter-row">
             <select
-              aria-label="Microphone"
+              className="squisq-teleprompter-mic-select"
+              aria-label="Microphone input"
               value={prefs.micDeviceId ?? ''}
               disabled={mic.sourceManaged}
               title={mic.sourceManaged ? 'Microphone selected in recording settings' : undefined}
@@ -147,87 +292,91 @@ export function TeleprompterControls({
                 style={{ width: `${Math.round(controller.micLevel * 100)}%` }}
               />
             </span>
-            {mic.status === 'error' ? (
-              <span title={mic.error?.message ?? 'Microphone unavailable'}>
-                ⚠ mic unavailable — constant speed
-              </span>
-            ) : null}
-          </>
-        ) : null}
-      </span>
+          </div>
+          <div className="squisq-teleprompter-row">
+            <label
+              htmlFor="squisq-prompter-sensitivity"
+              className="squisq-teleprompter-row-label"
+              title="How readily the prompter treats sound as speech"
+            >
+              Sensitivity
+            </label>
+            <input
+              id="squisq-prompter-sensitivity"
+              type="range"
+              min={TELEPROMPTER_PREF_LIMITS.vadSensitivity.min}
+              max={TELEPROMPTER_PREF_LIMITS.vadSensitivity.max}
+              step={0.05}
+              value={prefs.vadSensitivity}
+              onChange={(e) => setPrefs({ vadSensitivity: Number(e.target.value) })}
+              style={rangeFill(prefs.vadSensitivity, TELEPROMPTER_PREF_LIMITS.vadSensitivity)}
+            />
+          </div>
+          {prefs.voiceTracking && mic.status === 'error' ? (
+            <div
+              className="squisq-teleprompter-row squisq-teleprompter-warning"
+              title={mic.error?.message ?? 'Microphone unavailable'}
+            >
+              <Icon icon="fa-solid fa-triangle-exclamation" />
+              Mic unavailable — using fixed speed
+            </div>
+          ) : !prefs.voiceTracking ? (
+            <div className="squisq-teleprompter-row squisq-teleprompter-hint">
+              Used when Voice pace is on.
+            </div>
+          ) : null}
+        </div>
 
-      <span className="squisq-teleprompter-group">
-        <label htmlFor="squisq-prompter-fontsize">Aa</label>
-        <input
-          id="squisq-prompter-fontsize"
-          type="range"
-          min={TELEPROMPTER_PREF_LIMITS.fontSizePx.min}
-          max={TELEPROMPTER_PREF_LIMITS.fontSizePx.max}
-          step={2}
-          value={prefs.fontSizePx}
-          onChange={(e) => setPrefs({ fontSizePx: Number(e.target.value) })}
-          style={{ width: 80 }}
-          aria-label="Prompter font size"
-        />
-        <button
-          type="button"
-          aria-pressed={prefs.mirrored}
-          onClick={() => setPrefs({ mirrored: !prefs.mirrored })}
-          title="Mirror for beam-splitter teleprompter rigs (M)"
+        <div
+          id={sectionId('display')}
+          className="squisq-teleprompter-section"
+          data-section="display"
+          role="group"
+          aria-labelledby={`${sectionId('display')}-title`}
         >
-          ⇋ Mirror
-        </button>
-        <button
-          type="button"
-          aria-pressed={prefs.lineGuide}
-          onClick={() => setPrefs({ lineGuide: !prefs.lineGuide })}
-          title="Eye-line guide"
-        >
-          ▸ Guide
-        </button>
-      </span>
-
-      {recordSlot}
-
-      {float.supportedTiers.length > 0 ? (
-        <span className="squisq-teleprompter-group" style={{ marginLeft: 'auto' }}>
-          {float.isOpen ? (
-            <button type="button" onClick={float.close}>
-              ⇤ Bring back
+          <div id={`${sectionId('display')}-title`} className="squisq-teleprompter-section-title">
+            {SECTIONS[2].title}
+          </div>
+          <div className="squisq-teleprompter-row">
+            <label htmlFor="squisq-prompter-fontsize" className="squisq-teleprompter-row-label">
+              <Icon icon="fa-solid fa-text-height" />
+              Text size
+            </label>
+            <input
+              id="squisq-prompter-fontsize"
+              type="range"
+              min={TELEPROMPTER_PREF_LIMITS.fontSizePx.min}
+              max={TELEPROMPTER_PREF_LIMITS.fontSizePx.max}
+              step={2}
+              value={prefs.fontSizePx}
+              onChange={(e) => setPrefs({ fontSizePx: Number(e.target.value) })}
+              style={rangeFill(prefs.fontSizePx, TELEPROMPTER_PREF_LIMITS.fontSizePx)}
+            />
+          </div>
+          <div className="squisq-teleprompter-row">
+            <button
+              type="button"
+              className="squisq-teleprompter-toggle"
+              aria-pressed={prefs.mirrored}
+              onClick={() => setPrefs({ mirrored: !prefs.mirrored })}
+              title="Mirror for beam-splitter teleprompter rigs (M)"
+            >
+              <Icon icon="flip-horizontal" />
+              <span>Mirror</span>
             </button>
-          ) : (
-            <>
-              {float.supportedTiers.length > 1 ? (
-                <select
-                  aria-label="Float mode"
-                  data-testid="teleprompter-float-tier"
-                  defaultValue={float.supportedTiers[0]}
-                  id="squisq-prompter-float-tier"
-                >
-                  {float.supportedTiers.map((tier) => (
-                    <option key={tier} value={tier}>
-                      {TIER_LABELS[tier]}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => {
-                  const select = document.getElementById(
-                    'squisq-prompter-float-tier',
-                  ) as HTMLSelectElement | null;
-                  const preferred = (select?.value as FloatTier | undefined) ?? undefined;
-                  void float.open(preferred);
-                }}
-                title="Pop the prompter out so it can sit next to your camera"
-              >
-                ⇱ Pop out
-              </button>
-            </>
-          )}
-        </span>
-      ) : null}
+            <button
+              type="button"
+              className="squisq-teleprompter-toggle"
+              aria-pressed={prefs.lineGuide}
+              onClick={() => setPrefs({ lineGuide: !prefs.lineGuide })}
+              title="Eye-line guide"
+            >
+              <Icon icon="fa-solid fa-crosshairs" />
+              <span>Guide</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

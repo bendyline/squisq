@@ -30,7 +30,7 @@ import { TreeLayer } from './layers/TreeLayer';
 import { MermaidLayer } from './layers/MermaidLayer';
 import { SvgLayer } from './layers/SvgLayer';
 import { getTransitionClass } from './utils/animationUtils';
-import { largestFittingTextScale } from './utils/textFit';
+import { largestFittingTextScale, largestShrunkTextScale } from './utils/textFit';
 
 /** Default viewport dimensions (1080p landscape). */
 const DEFAULT_VIEWPORT = {
@@ -58,7 +58,19 @@ function cssPixels(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function htmlTargetFits(target: HTMLElement): boolean {
+/**
+ * Rich text renders in a hidden-overflow box sized from an estimate of its
+ * wrapped lines. A wider real face (or bold runs) can wrap to more lines than
+ * the estimate reserved, and the box then cuts off the last of them.
+ */
+function htmlTextClipped(target: TextFitTarget): boolean {
+  if (target.dataset.squisqTextFit !== 'html') return false;
+  const content = target.querySelector<HTMLElement>('[data-squisq-text-content="true"]');
+  if (!content || content.scrollWidth <= 0 || content.scrollHeight <= 0) return false;
+  return !htmlTargetFits(target as HTMLElement, false);
+}
+
+function htmlTargetFits(target: HTMLElement, includeScrollRegions = true): boolean {
   const content = target.querySelector<HTMLElement>('[data-squisq-text-content="true"]');
   if (!content || content.scrollWidth <= 0 || content.scrollHeight <= 0) return false;
 
@@ -84,6 +96,7 @@ function htmlTargetFits(target: HTMLElement): boolean {
   ) {
     return false;
   }
+  if (!includeScrollRegions) return true;
 
   // A bounded table scrollbar means some authored cells are no longer all
   // visible together, so it also limits the shared slide scale.
@@ -202,8 +215,19 @@ interface BlockRendererProps {
   theme?: Theme;
   /** Optional host renderer for interactive table content. */
   tableContentRenderer?: TableLayerContentRenderer;
-  /** Grow all slide text by one shared factor without overflow or new overlap. */
+  /**
+   * Grow all slide text by one shared factor while it still fits without
+   * overflow or new overlap. For a slideshow's frame, which has room to fill.
+   */
   growTextToFit?: boolean;
+  /**
+   * When rich text would be clipped by its box — the real face wrapped to
+   * more lines than the template reserved — shrink all slide text by one
+   * shared factor just enough to show every line, no smaller than
+   * `MIN_SHRUNK_TEXT_SCALE` (default true). Every surface that draws a slide
+   * needs it: a video export clips the same way a slideshow does.
+   */
+  shrinkTextToFit?: boolean;
   /**
    * How hosted-video layers (YouTube, Vimeo, …) draw: a live `player`, a
    * `poster` (default — thumbnails and previews never load a player), or a
@@ -241,6 +265,7 @@ export function BlockRenderer({
   theme,
   tableContentRenderer,
   growTextToFit = false,
+  shrinkTextToFit = true,
   videoEmbeds = 'poster',
   videoClips = 'timed',
   staticMedia = false,
@@ -377,9 +402,10 @@ export function BlockRenderer({
     return start === undefined || delay === undefined ? 0 : start - delay;
   };
   // Charts, timelines and diagrams position their labels against drawn
-  // geometry; growing that text would detach it from the marks it labels.
-  const growText =
-    growTextToFit && !isGeometryBoundTemplate((block as { template?: string }).template);
+  // geometry; rescaling that text would detach it from the marks it labels.
+  const fitsText = !isGeometryBoundTemplate((block as { template?: string }).template);
+  const growText = growTextToFit && fitsText;
+  const shrinkText = shrinkTextToFit && fitsText;
 
   useLayoutEffect(() => {
     const svg = svgRef.current;
@@ -389,15 +415,33 @@ export function BlockRenderer({
     const measure = (): void => {
       if (cancelled) return;
       const targets = Array.from(svg.querySelectorAll<TextFitTarget>('[data-squisq-text-fit]'));
-      if (!growText || targets.length === 0) {
-        applyTextScale(targets, 1);
+      applyTextScale(targets, 1);
+      if ((!growText && !shrinkText) || targets.length === 0) {
+        setTextScale(1);
+        return;
+      }
+
+      // Rich text that wraps past its box loses its last lines. Shrink every
+      // text layer together, just far enough to show them — one shared scale
+      // keeps the slide's hierarchy — or keep the authored size when even the
+      // smallest readable scale cannot.
+      if (shrinkText && targets.some(htmlTextClipped)) {
+        const shrunk = largestShrunkTextScale((scale) => {
+          applyTextScale(targets, scale);
+          return !targets.some(htmlTextClipped);
+        });
+        applyTextScale(targets, shrunk);
+        setTextScale((current) => (current === shrunk ? current : shrunk));
+        return;
+      }
+
+      if (!growText) {
         setTextScale(1);
         return;
       }
 
       // Existing overlaps are part of the authored layout. A larger candidate
       // is rejected only when it introduces an additional collision.
-      applyTextScale(targets, 1);
       const baselineOverlaps = overlapPairs(renderedTextRects(targets));
       const fits = (scale: number): boolean => {
         applyTextScale(targets, scale);
@@ -426,13 +470,18 @@ export function BlockRenderer({
     measure();
     // Re-evaluate once webfonts have their final glyph metrics; otherwise a
     // fallback face can approve a scale that the designed face cannot hold.
+    // WebKit can report the font set `loaded` before it has requested a face
+    // this slide uses, so the one-shot `ready` check misses that late load —
+    // every completed load batch re-measures too.
     const fonts = svg.ownerDocument?.fonts;
     if (fonts && fonts.status !== 'loaded') void fonts.ready.then(measure);
+    fonts?.addEventListener?.('loadingdone', measure);
 
     return () => {
       cancelled = true;
+      fonts?.removeEventListener?.('loadingdone', measure);
     };
-  }, [block.layers, growText, viewport.height, viewport.width]);
+  }, [block.layers, growText, shrinkText, viewport.height, viewport.width]);
 
   return (
     <svg
@@ -443,7 +492,7 @@ export function BlockRenderer({
       preserveAspectRatio="xMidYMid meet"
       overflow="hidden"
       data-block-id={block.id}
-      data-squisq-text-scale={growText ? textScale : undefined}
+      data-squisq-text-scale={growText || textScale !== 1 ? textScale : undefined}
     >
       {/* Clip path matching the viewBox -- prevents Ken Burns animations from
           bleeding outside the block area (foreignObject + transform: scale
@@ -474,6 +523,7 @@ export function BlockRenderer({
               videoEmbeds={videoEmbeds}
               videoClips={videoClips}
               staticMedia={staticMedia || reducedMotion || !animationsEnabled}
+              capture={staticMedia}
             />
           );
           // A layer that belongs to a build step reveals with it (see `blockBuildSteps`).
@@ -505,6 +555,8 @@ interface LayerRendererProps {
   videoEmbeds: VideoEmbedMode;
   videoClips: VideoClipMode;
   staticMedia: boolean;
+  /** Frame capture (the caller's `staticMedia`, without reduced motion). */
+  capture: boolean;
 }
 
 /**
@@ -525,6 +577,7 @@ function LayerRenderer({
   videoEmbeds,
   videoClips,
   staticMedia,
+  capture,
 }: LayerRendererProps) {
   // Render policy must not mutate caller-owned Docs. A shallow copy is enough:
   // every layer renderer reads animation only from the base layer field.
@@ -575,6 +628,7 @@ function LayerRenderer({
           isPlaying={isPlaying}
           muted={muted}
           mode={videoClips}
+          capture={capture}
         />
       );
     case 'videoEmbed':

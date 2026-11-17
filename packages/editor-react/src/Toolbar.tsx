@@ -531,13 +531,19 @@ export function Toolbar({
     actionsLaneShown,
   );
 
-  // Close overflow menu on outside click. Clicks inside the template
+  // Close overflow menu on an outside press. Clicks inside the template
   // gallery / transition flyout portals count as inside: those popovers are
   // hosted by pickers living in this menu, and closing the menu on their
-  // mousedown would unmount them before the click completes.
+  // press would unmount them before the click completes.
+  //
+  // Both toolbar menus listen for capture-phase `pointerdown`, not
+  // `mousedown`: iOS WebKit only synthesizes mouse events for a tap on an
+  // element it deems "clickable", so tapping plain document canvas never
+  // dismissed them on a phone. Capture also keeps blocks that stop their
+  // own presses from propagating (code snippets, scenes) from swallowing it.
   useEffect(() => {
     if (!showOverflow) return;
-    const handleClick = (e: MouseEvent) => {
+    const handlePress = (e: PointerEvent) => {
       const target = e.target as Node;
       if (overflowRef.current?.contains(target) || overflowMenuRef.current?.contains(target))
         return;
@@ -549,14 +555,14 @@ export function Toolbar({
       }
       setShowOverflow(false);
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('pointerdown', handlePress, true);
+    return () => document.removeEventListener('pointerdown', handlePress, true);
   }, [showOverflow]);
 
-  // Close insert menu on outside click
+  // Close insert menu on an outside press (see the overflow menu above).
   useEffect(() => {
     if (!insertMenuAnchor) return;
-    const handleClick = (e: MouseEvent) => {
+    const handlePress = (e: PointerEvent) => {
       if (insertMenuButtonRef.current?.contains(e.target as Node)) return;
       if (insertMenuRef.current?.contains(e.target as Node)) return;
       if (codeSnippetMenuRef.current?.contains(e.target as Node)) return;
@@ -564,8 +570,8 @@ export function Toolbar({
       if (chartTypeMenuRef.current?.contains(e.target as Node)) return;
       closeInsertMenu();
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('pointerdown', handlePress, true);
+    return () => document.removeEventListener('pointerdown', handlePress, true);
   }, [insertMenuAnchor, closeInsertMenu]);
 
   const insertMenuOpen = insertMenuAnchor !== null;

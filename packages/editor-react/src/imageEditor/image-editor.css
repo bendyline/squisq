@@ -49,8 +49,12 @@
 /* ── Toolbar ───────────────────────────────────────────────────────── */
 .squisq-image-editor-toolbar {
   display: flex;
+  /* A phone-width editor cannot fit every group on one row; wrapping keeps
+     Save and Export reachable instead of clipped past the right edge. The
+     popovers hang from their groups, so a scrolling row would clip them. */
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.4rem 0.75rem;
   padding: 0.4rem 0.75rem;
   background: var(--squisq-image-editor-panel-bg);
   border-bottom: 1px solid var(--squisq-image-editor-panel-border);
@@ -129,22 +133,163 @@
 
 /* ── Body / layout ─────────────────────────────────────────────────── */
 .squisq-image-editor-body {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  /* Clips the side panel while it waits past the right edge as a drawer. */
+  overflow: hidden;
+  container-type: inline-size;
+  container-name: squisq-image-editor-body;
 }
 .squisq-image-editor-center {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
 }
+
+/* ── Side panel / drawer ───────────────────────────────────────────────
+   Layers and properties (SidePanelDrawer.tsx). Wide, a column beside the
+   canvas. Phone-width, a drawer past the right edge with only its tab showing.
+   The root is `display: contents`; it carries the state and the progress (0
+   closed, 1 open) that its children read. useSidePanelDrawerSwipe writes the
+   progress straight onto it, and zeroes the duration, while a finger drags. */
+.squisq-image-editor-drawer {
+  --squisq-image-editor-drawer-progress: 0;
+  --squisq-image-editor-drawer-duration: 220ms;
+  display: contents;
+}
+.squisq-image-editor-drawer[data-state='open'] {
+  --squisq-image-editor-drawer-progress: 1;
+}
+.squisq-image-editor-drawer-scrim,
+.squisq-image-editor-drawer-edge,
+.squisq-image-editor-drawer-tab {
+  display: none;
+}
 .squisq-image-editor-side {
   flex: 0 0 280px;
   display: flex;
   flex-direction: column;
+  /* Its content scrolls, so it never widens the column. */
+  min-width: 0;
+  min-height: 0;
   border-left: 1px solid var(--squisq-image-editor-panel-border);
   background: var(--squisq-image-editor-panel-bg);
+}
+.squisq-image-editor-side-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
+}
+
+/* The width matches SIDE_PANEL_DRAWER_MAX_BODY_WIDTH, and the navigation
+   sheet's, so the image editor and the outline give way at the same size. */
+@container squisq-image-editor-body (max-width: 720px) {
+  .squisq-image-editor-drawer-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    background: var(--squisq-scrim, rgba(0, 0, 0, 0.45));
+    opacity: var(--squisq-image-editor-drawer-progress);
+    transition: opacity var(--squisq-image-editor-drawer-duration) ease;
+    pointer-events: none;
+  }
+  .squisq-image-editor-drawer:not([data-state='closed']) .squisq-image-editor-drawer-scrim {
+    pointer-events: auto;
+  }
+
+  /* The canvas keeps the whole width; the panel slides over it. Closed, it
+     sits just past the edge, which the body clips, with its tab hanging back
+     into view. The shadow fades with it, so none shows at the edge. */
+  .squisq-image-editor-side {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 32;
+    width: min(320px, calc(100% - 56px));
+    box-shadow: -8px 0 24px rgb(0 0 0 / calc(0.35 * var(--squisq-image-editor-drawer-progress)));
+    transform: translateX(calc((1 - var(--squisq-image-editor-drawer-progress)) * 100%));
+    transition: transform var(--squisq-image-editor-drawer-duration) ease;
+  }
+
+  /* Pinned to the panel's left edge, so it rides along: at the screen's edge
+     while closed, beside the open panel as its handle. */
+  .squisq-image-editor-drawer-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    width: 32px;
+    height: 72px;
+    margin-top: -36px;
+    padding: 0;
+    color: var(--squisq-image-editor-text);
+    background: var(--squisq-image-editor-panel-bg);
+    border: 1px solid var(--squisq-image-editor-panel-border);
+    border-right: 0;
+    border-radius: 10px 0 0 10px;
+    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.35);
+    font: inherit;
+    font-size: 16px;
+    cursor: pointer;
+    /* Every sideways move on the tab belongs to the drawer. */
+    touch-action: none;
+  }
+  .squisq-image-editor-drawer-tab:focus-visible {
+    outline: 2px solid var(--squisq-image-editor-accent);
+    outline-offset: -2px;
+  }
+
+  /* Out of the tab order and the accessibility tree once the slide-out ends. */
+  .squisq-image-editor-side-content {
+    visibility: hidden;
+    transition: visibility 0s linear var(--squisq-image-editor-drawer-duration);
+  }
+  .squisq-image-editor-drawer:not([data-state='closed']) .squisq-image-editor-side-content {
+    visibility: visible;
+    transition: none;
+  }
+}
+
+/* Touch only: a strip along the right edge to swipe the drawer in from, as
+   the outline sheet's edge zone does. It is a real element over the canvas so
+   the touch never reaches the canvas, which acts on pointerdown. A mouse has
+   the tab, and keeps the scrollbar the strip would cover.
+
+   Inside the drawer, pan-y on everything lets a sideways drag reach the
+   swipe as pointer events: a scroller restarts touch-action for what it
+   holds, so setting it on the panel alone would not reach its fields. */
+@media (pointer: coarse) {
+  @container squisq-image-editor-body (max-width: 720px) {
+    .squisq-image-editor-drawer[data-state='closed'] .squisq-image-editor-drawer-edge {
+      display: block;
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 31;
+      width: 24px;
+      touch-action: none;
+    }
+
+    .squisq-image-editor-side-content,
+    .squisq-image-editor-side-content * {
+      touch-action: pan-y;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squisq-image-editor-drawer {
+    --squisq-image-editor-drawer-duration: 0ms;
+  }
 }
 
 /* ── Canvas surface ────────────────────────────────────────────────── */
