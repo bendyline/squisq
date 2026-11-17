@@ -342,6 +342,15 @@ export function WysiwygEditor({
   const isExternalUpdate = useRef(false);
   /** An external source is queued for Tiptap but not yet applied. */
   const externalApplyPendingRef = useRef(false);
+  /**
+   * The last external source failed to load into Tiptap. Tiptap then still
+   * holds the previous source while the channel points at the new one (the
+   * next block, in block layouts), so serializing an edit would write the old
+   * content over it. Editing stays paused, and says so, until a later source
+   * loads; the ref guards writes, the state drives the notice.
+   */
+  const syncFailedRef = useRef(false);
+  const [syncFailed, setSyncFailed] = useState(false);
   const lastSourceRef = useRef(editorSource);
   const serializeHtml = useMemo(createDocumentHtmlSerializer, []);
   const sourceLayoutRef = useRef(layoutMode);
@@ -537,7 +546,9 @@ export function WysiwygEditor({
       // previous one, and the source channel already points at the incoming
       // source's range (the next block, in block layouts). Serializing now
       // would splice the old content into the wrong range.
-      if (isExternalUpdate.current || externalApplyPendingRef.current) return;
+      if (isExternalUpdate.current || externalApplyPendingRef.current || syncFailedRef.current) {
+        return;
+      }
       // Keep the source channel synchronous with Tiptap. Structural actions
       // such as block navigation/addition may run in the very next browser
       // event; deferring this write lets a stale callback serialize the newly
@@ -823,10 +834,10 @@ export function WysiwygEditor({
 
   // Tiptap reads `editable` only at creation; mirror later changes via
   // setEditable so flipping readOnly from the host takes effect without
-  // remounting the editor.
+  // remounting the editor. A failed source load pauses editing the same way.
   useEffect(() => {
-    if (editor) editor.setEditable(!readOnly);
-  }, [editor, readOnly]);
+    if (editor && !editor.isDestroyed) editor.setEditable(!readOnly && !syncFailed);
+  }, [editor, readOnly, syncFailed]);
 
   // ── Template badge → popover ─────────────────────────────────────
   // The HeadingWithTemplate extension renders an inert `.squisq-template-badge`
@@ -959,58 +970,75 @@ export function WysiwygEditor({
     // runs before the next browser event and before paint.
     const applyExternalSource = (target: NonNullable<typeof editor>): void => {
       isExternalUpdate.current = true;
-      const { body, frontmatter } = stripFrontmatter(editorSource);
-      pendingLocalSourcesRef.current = [];
-      frontmatterRef.current = frontmatter;
-      loadedSourceRef.current = { body, baseline: null };
-      // Re-detect the wrap convention on every external ingest (echoes of our
-      // own writes were dropped above, so a manual Wrap/Unwrap transform or a
-      // Source-view edit updates the convention we persist with).
-      let displayBody = body;
-      if (wrapPolicyEnabled) {
-        const ingest = ingestForWrite(body);
-        wrapStateRef.current = ingest.state;
-        displayBody = ingest.displayBody;
-      } else {
-        wrapStateRef.current = null;
+      try {
+        const { body, frontmatter } = stripFrontmatter(editorSource);
+        pendingLocalSourcesRef.current = [];
+        frontmatterRef.current = frontmatter;
+        loadedSourceRef.current = { body, baseline: null };
+        // Re-detect the wrap convention on every external ingest (echoes of our
+        // own writes were dropped above, so a manual Wrap/Unwrap transform or a
+        // Source-view edit updates the convention we persist with).
+        let displayBody = body;
+        if (wrapPolicyEnabled) {
+          const ingest = ingestForWrite(body);
+          wrapStateRef.current = ingest.state;
+          displayBody = ingest.displayBody;
+        } else {
+          wrapStateRef.current = null;
+        }
+        const content = markdownToTiptap(displayBody);
+        // Frontmatter belongs to the whole document, not the selected slice.
+        // Changing a root-node attribute makes ProseMirror rebuild every node
+        // view, even with a minimal content diff. Keep it stable in scoped
+        // layouts; onUpdate emits only the bound channel's frontmatter there.
+        const storedFrontmatter =
+          layoutMode === 'document'
+            ? frontmatter
+            : String(target.state.doc.attrs.sourceFrontmatter ?? '');
+        // Whether this block shows the tray changes with the block itself; set
+        // it in the same transaction so a clip never mounts as a player, or
+        // shows its annotation text, between the two.
+        const trayEnabled = documentTrayEnabledRef.current;
+        const withTraySetting = (tr: Transaction) => tr.setMeta(DOCUMENT_TRAY_KEY, trayEnabled);
+        if (layoutMode === 'document' || layoutChanged) {
+          // Replace only what changed: unchanged nodes keep their widgets, the
+          // caret and scroll survive, and the update is one undo step.
+          // Entering a block/timeline layout also keeps the active block's media
+          // mounted instead of restarting it when the surrounding blocks leave.
+          replaceDocumentMinimal(target, content, storedFrontmatter, withTraySetting);
+        } else {
+          // Navigation within block/timeline layouts swaps in another block's
+          // slice; a diff against the previous block gains nothing.
+          target
+            .chain()
+            .setContent(content)
+            .command(({ tr }) => {
+              tr.setDocAttribute('sourceFrontmatter', storedFrontmatter);
+              withTraySetting(tr);
+              return true;
+            })
+            .run();
+        }
+        // A minimal replace with nothing to change dispatches nothing.
+        syncDocumentTray(target.view, trayEnabled);
+        lastSourceRef.current = editorSource;
+        if (syncFailedRef.current) {
+          // Editing resumes through the editable sync effect.
+          syncFailedRef.current = false;
+          setSyncFailed(false);
+        }
+      } catch (error: unknown) {
+        // Tiptap still shows the previous source (or part of it), so an edit
+        // now would be written over the new one. Pause editing at once, before
+        // the next keystroke, rather than let typing land nowhere or in the
+        // wrong place. The next source to load resumes it.
+        syncFailedRef.current = true;
+        if (!target.isDestroyed) target.setEditable(false, false);
+        setSyncFailed(true);
+        console.error('Write view could not load the document:', error);
+      } finally {
+        isExternalUpdate.current = false;
       }
-      const content = markdownToTiptap(displayBody);
-      // Frontmatter belongs to the whole document, not the selected slice.
-      // Changing a root-node attribute makes ProseMirror rebuild every node
-      // view, even with a minimal content diff. Keep it stable in scoped
-      // layouts; onUpdate emits only the bound channel's frontmatter there.
-      const storedFrontmatter =
-        layoutMode === 'document'
-          ? frontmatter
-          : String(target.state.doc.attrs.sourceFrontmatter ?? '');
-      // Whether this block shows the tray changes with the block itself; set
-      // it in the same transaction so a clip never mounts as a player, or
-      // shows its annotation text, between the two.
-      const trayEnabled = documentTrayEnabledRef.current;
-      const withTraySetting = (tr: Transaction) => tr.setMeta(DOCUMENT_TRAY_KEY, trayEnabled);
-      if (layoutMode === 'document' || layoutChanged) {
-        // Replace only what changed: unchanged nodes keep their widgets, the
-        // caret and scroll survive, and the update is one undo step.
-        // Entering a block/timeline layout also keeps the active block's media
-        // mounted instead of restarting it when the surrounding blocks leave.
-        replaceDocumentMinimal(target, content, storedFrontmatter, withTraySetting);
-      } else {
-        // Navigation within block/timeline layouts swaps in another block's
-        // slice; a diff against the previous block gains nothing.
-        target
-          .chain()
-          .setContent(content)
-          .command(({ tr }) => {
-            tr.setDocAttribute('sourceFrontmatter', storedFrontmatter);
-            withTraySetting(tr);
-            return true;
-          })
-          .run();
-      }
-      // A minimal replace with nothing to change dispatches nothing.
-      syncDocumentTray(target.view, trayEnabled);
-      lastSourceRef.current = editorSource;
-      isExternalUpdate.current = false;
     };
 
     // Apply outside React's commit. Content that creates a React node view
@@ -1156,6 +1184,12 @@ export function WysiwygEditor({
         onDrop={handleDeskDrop}
       >
         {/* Shown whenever the tray plugin holds clips, the same state that hides their source. */}
+        {syncFailed && (
+          <p className="squisq-wysiwyg-sync-error" role="alert">
+            Write couldn&rsquo;t show this part of the document, so editing here is paused to keep
+            your text safe. You can still edit it in Source.
+          </p>
+        )}
         {editor && <DocumentTray editor={editor} />}
         <EditorContent editor={editor} style={{ height: '100%' }} />
         {badgeMenu && (

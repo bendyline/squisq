@@ -35,6 +35,7 @@ export type { FolderViewProps, FolderEntry } from './FolderView.js';
 export { EditorProvider, useEditorContext } from './EditorContext.js';
 export type {
   EditorView,
+  EditingView,
   EditorMode,
   EditorState,
   EditorActions,

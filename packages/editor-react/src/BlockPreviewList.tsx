@@ -34,7 +34,8 @@ export function BlockPreviewList({
   mediaProvider = null,
   onNavigate,
 }: BlockPreviewListProps) {
-  const { doc, activeView, layoutMode, goToBlockByLine, monacoEditor } = useEditorContext();
+  const { doc, activeView, layoutMode, blockScoped, goToBlockByLine, monacoEditor } =
+    useEditorContext();
   const items = useBlockPreviewItems(viewport);
   const listRef = useRef<HTMLUListElement | null>(null);
 
@@ -43,7 +44,9 @@ export function BlockPreviewList({
   const handleSelect = useCallback(
     (item: BlockPreviewItem) => {
       const line = blockStartLine(item.sourceBlock);
-      if (layoutMode === 'block') {
+      // Source shows the whole file in every layout, so only a block-scoped
+      // Write view moves its card.
+      if (layoutMode === 'block' && blockScoped) {
         if (typeof line !== 'number') return;
         goToBlockByLine(line);
       } else if (activeView === 'wysiwyg') {
@@ -65,7 +68,7 @@ export function BlockPreviewList({
       }
       onNavigate?.();
     },
-    [activeView, doc, goToBlockByLine, layoutMode, monacoEditor, onNavigate],
+    [activeView, blockScoped, doc, goToBlockByLine, layoutMode, monacoEditor, onNavigate],
   );
 
   if (items.length === 0) {

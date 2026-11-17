@@ -194,6 +194,25 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+.squisq-image-edit-modal__close:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.squisq-image-edit-modal__status {
+  color: var(--squisq-text-muted);
+  white-space: nowrap;
+}
+
+/* Shown after a save-on-close failed: the next close discards. */
+.squisq-image-edit-modal__notice {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--squisq-editor-control-border);
+  font: 500 13px/1.35 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+  color: var(--squisq-danger);
+  background: color-mix(in srgb, var(--squisq-danger) 10%, var(--squisq-bg));
+}
+
 .squisq-image-edit-modal__body {
   flex: 1;
   min-height: 0;

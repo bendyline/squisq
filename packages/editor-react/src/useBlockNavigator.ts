@@ -56,8 +56,9 @@ export interface UseBlockNavigatorOptions {
   /**
    * When false (the default), the channel passes through to the full source
    * and navigation is inert: the source is not sliced, so `blockCount` is 0
-   * and `activeBlockStartLine` is null. Hosts flip this on to enter
-   * block-at-a-time mode.
+   * and `activeBlockStartLine` is null. `goToBlockByLine` still records the
+   * block it names, so enabling the navigator again shows that block. Hosts
+   * flip this on to enter block-at-a-time mode.
    */
   enabled?: boolean;
 }
@@ -104,11 +105,14 @@ export function useBlockNavigator(
   }, [activeBlockKey]);
   const goToBlockByLine = useCallback(
     (line: number) => {
+      // While disabled the source is not sliced; slice it for this one call so
+      // the block is remembered and shown once the navigator is enabled again.
+      const current = enabled ? slices : getBlockSlices(source);
       const offset = lineToOffset(source, line);
-      const idx = sliceIndexAtOffset(slices, offset);
+      const idx = sliceIndexAtOffset(current, offset);
       if (idx >= 0) setRawKey(idx);
     },
-    [source, slices],
+    [enabled, source, slices],
   );
 
   const activeBlockStartLine = active ? offsetToLine(source, active.range.startOffset) : null;

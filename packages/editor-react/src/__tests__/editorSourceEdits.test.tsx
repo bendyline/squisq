@@ -142,13 +142,30 @@ describe('applySourceEdits in Source view', () => {
     expect(calls).toEqual([]);
   });
 
-  it('refuses in Preview and outside the Document layout', () => {
+  it('refuses in Preview with no editor behind it', () => {
     const ctx = captureContext();
     act(() => ctx.current?.setActiveView('preview'));
     expect(ctx.current?.applySourceEdits([{ start: 0, end: 0, text: 'x' }])).toBe(false);
+  });
 
+  it('applies in a block layout, where Source still holds the whole file', () => {
+    const calls: string[] = [];
+    const edits: RecordedEdit[] = [];
     const block = captureContext('block');
-    sourceView(block, fakeMonaco(DOC, [], []));
+    sourceView(block, fakeMonaco(DOC, calls, edits));
+    expect(block.current?.blockScoped).toBe(false);
+    expect(block.current?.editorSource).toBe(DOC);
+    const start = DOC.indexOf('Second');
+    expect(
+      block.current?.applySourceEdits([{ start, end: start + 'Second'.length, text: 'Last' }]),
+    ).toBe(true);
+    expect(edits[0].ops[0].range.startLineNumber).toBe(7);
+  });
+
+  it('refuses while Write is scoped to one block', () => {
+    const block = captureContext('block');
+    act(() => block.current?.setActiveView('wysiwyg'));
+    expect(block.current?.blockScoped).toBe(true);
     expect(block.current?.applySourceEdits([{ start: 0, end: 0, text: 'x' }])).toBe(false);
   });
 });

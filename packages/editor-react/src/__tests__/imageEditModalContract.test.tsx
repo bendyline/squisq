@@ -3,21 +3,30 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
-import type { MediaProvider } from '@bendyline/squisq/schemas';
+import type { ImageEditDoc, MediaProvider } from '@bendyline/squisq/schemas';
+import { createEmptyImageEditDoc } from '@bendyline/squisq/imageEdit';
 import { useEditorContext } from '../EditorContext';
 
 const imageEditorProps: Array<{
   filesContainer: ContentContainer;
   saveFormat: 'png' | 'jpeg' | 'webp';
-  onExport: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
+  onExport: (blob: Blob, format: 'png' | 'jpeg' | 'webp', doc: ImageEditDoc) => Promise<void>;
 }> = [];
 
-vi.mock('../ImageEditor', () => ({
-  ImageEditor: (props: (typeof imageEditorProps)[number]) => {
-    imageEditorProps.push(props);
-    return <div data-testid="image-editor-contract-stub" />;
-  },
-}));
+// The modal holds a ref to the editor, so the stub must accept one like the
+// real (forwardRef) component does.
+vi.mock('../ImageEditor', async () => {
+  const { forwardRef } = await import('react');
+  return {
+    ImageEditor: forwardRef(function ImageEditorStub(
+      props: (typeof imageEditorProps)[number],
+      _ref,
+    ) {
+      imageEditorProps.push(props);
+      return <div data-testid="image-editor-contract-stub" />;
+    }),
+  };
+});
 vi.mock('../RawEditor', () => ({ RawEditor: () => <div /> }));
 vi.mock('../WysiwygEditor', () => ({ WysiwygEditor: () => <div /> }));
 vi.mock('../PreviewPanel', () => ({ PreviewPanel: () => <div /> }));
@@ -63,7 +72,9 @@ describe('ImageEditModal storage contract', () => {
     await waitFor(() => expect(screen.getByTestId('image-editor-contract-stub')).toBeTruthy());
     const props = imageEditorProps[imageEditorProps.length - 1]!;
     expect(props.saveFormat).toBe('jpeg');
-    await act(async () => props.onExport(new Blob(['jpeg']), 'jpeg'));
+    await act(async () =>
+      props.onExport(new Blob(['jpeg']), 'jpeg', createEmptyImageEditDoc(1, 1)),
+    );
     expect(mediaProvider.addMedia).toHaveBeenCalledWith(
       'photo.jpg',
       expect.any(Blob),

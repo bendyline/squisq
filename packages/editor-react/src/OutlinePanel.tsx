@@ -89,12 +89,16 @@ export function OutlinePanel({
     setMarkdownSource,
     isParsing,
     layoutMode,
+    blockScoped,
     goToBlockByLine,
     activeBlockStartLine,
     activeView,
     monacoEditor,
     tiptapEditor,
   } = useEditorContext();
+  // The card follows the outline only while Write shows one block at a time;
+  // Source shows the whole file in every layout, as Document layout does.
+  const cardLayout = layoutMode === 'block' && blockScoped;
   const paneRef = useRef<HTMLElement | null>(null);
   const cursorActiveId = useActiveOutlineBlockId();
   const activeDragRef = useRef<ActiveOutlineDrag | null>(null);
@@ -120,7 +124,7 @@ export function OutlinePanel({
     markdownSource,
     setMarkdownSource,
     isParsing,
-    layoutMode,
+    cardLayout,
     goToBlockByLine,
     activeView,
     monacoEditor,
@@ -133,7 +137,7 @@ export function OutlinePanel({
     markdownSource,
     setMarkdownSource,
     isParsing,
-    layoutMode,
+    cardLayout,
     goToBlockByLine,
     activeView,
     monacoEditor,
@@ -146,13 +150,13 @@ export function OutlinePanel({
   // (only the active block is mounted), so the highlight follows the card:
   // match the block whose heading begins on the active slice's source line.
   const blockModeActiveId = useMemo(() => {
-    if (layoutMode !== 'block' || activeBlockStartLine == null || !doc) return null;
+    if (!cardLayout || activeBlockStartLine == null || !doc) return null;
     const match = flattenBlocks(doc.blocks).find(
       (b) => b.sourceHeading?.position?.start.line === activeBlockStartLine,
     );
     return match?.id ?? null;
-  }, [layoutMode, activeBlockStartLine, doc]);
-  const activeBlockId = layoutMode === 'block' ? blockModeActiveId : cursorActiveId;
+  }, [cardLayout, activeBlockStartLine, doc]);
+  const activeBlockId = cardLayout ? blockModeActiveId : cursorActiveId;
 
   // Clicking a row jumps the card to that block in block mode, or scrolls the
   // editor to it in document mode.
@@ -162,7 +166,7 @@ export function OutlinePanel({
 
     const focusEditor = current.presentation !== 'sheet';
 
-    if (current.layoutMode === 'block') {
+    if (current.cardLayout) {
       const line = block.sourceHeading?.position?.start.line;
       if (typeof line === 'number') {
         current.goToBlockByLine(line);

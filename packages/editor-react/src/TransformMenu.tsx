@@ -59,7 +59,6 @@ function TransformActionIcon({ id }: { id: MarkdownSourceTransformId }) {
 export function TransformMenu() {
   const {
     editorMode,
-    layoutMode,
     activeView,
     markdownSource,
     setMarkdownSource,
@@ -98,14 +97,13 @@ export function TransformMenu() {
     [open, markdownSource],
   );
 
+  // Both apply paths transform the whole file in every layout: Source always
+  // holds all of it, and the Write path rewrites `markdownSource`.
   const inPreview = activeView === 'preview';
-  const inBlockLayout = layoutMode !== 'document';
-  const disabled = inPreview || inBlockLayout;
-  const disabledNote = inBlockLayout
-    ? 'Transforms apply to the whole document — switch to the Document layout first.'
-    : inPreview
-      ? 'Switch to Write or Source view to apply (transforms are undoable there).'
-      : null;
+  const disabled = inPreview;
+  const disabledNote = inPreview
+    ? 'Switch to Write or Source view to apply (transforms are undoable there).'
+    : null;
 
   const applyTransform = useCallback(
     (id: MarkdownSourceTransformId) => {

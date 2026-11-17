@@ -1,13 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { selectWriteMode } from './view-tabs';
+import { selectWriteMode, switchView } from './view-tabs';
 
 /**
  * E2E tests for the block-at-a-time view.
  *
  * Verifies the Write tab's Blocks mode, that the editing surface is scoped to a
- * single block, that Prev/Next navigate, and that "Add block" both inserts
- * into the full document and advances the card.
+ * single block, that Prev/Next navigate, that "Add block" both inserts into
+ * the full document and advances the card, and that Source still shows the
+ * whole file.
  */
 
 async function loadFeaturesSample(page: Page) {
@@ -77,5 +78,31 @@ test.describe('Block-at-a-time view', () => {
       `Block 2 of ${total + 1}`,
     );
     await expect(page.locator('.tiptap.ProseMirror')).toContainText('New section');
+  });
+
+  test('Source shows the whole file, opened at the block Write was on', async ({ page }) => {
+    // Blocks is a Write mode. A Source view scoped to the active block read
+    // as a document that had lost everything but that block.
+    await loadFeaturesSample(page);
+    await enterBlockMode(page);
+    const position = page.locator('.squisq-block-card-position');
+    await page.getByRole('button', { name: 'Next block' }).click();
+    await page.getByRole('button', { name: 'Next block' }).click();
+    await expect(position).toContainText('Block 3 of');
+
+    await switchView(page, 'Markdown');
+    const lines = page.locator('[data-testid="raw-editor"] .monaco-editor .view-lines');
+    await expect(lines).toContainText(/##.Lists/);
+    await expect(page.locator('[data-testid="block-card-view"]')).toHaveCount(0);
+
+    // The rest of the file is there too: scroll Source to the top.
+    await lines.hover();
+    await page.mouse.wheel(0, -100_000);
+    await expect(lines).toContainText(/#.Features.Demo/);
+
+    // Back in Write, the card is on the block the Source caret is in.
+    await switchView(page, 'Editor');
+    await expect(position).toContainText('Block 3 of');
+    await expect(page.locator(HEADINGS)).toHaveText('Lists');
   });
 });

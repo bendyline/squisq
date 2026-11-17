@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  applyAsMonacoLayoutSettles,
   readMonacoScrollRatio,
   readWysiwygScrollRatio,
   restoreMonacoScrollRatio,
@@ -61,5 +62,58 @@ describe('editor scroll synchronization', () => {
     const editor = { view: { dom: document.createElement('div') } };
     expect(readWysiwygScrollRatio(editor)).toBeNull();
     expect(restoreWysiwygScrollRatio(editor, 0.5)).toBe(false);
+  });
+});
+
+describe('applyAsMonacoLayoutSettles', () => {
+  function settlingEditor() {
+    const listeners: Array<() => void> = [];
+    const node = document.createElement('div');
+    const editor = {
+      onDidLayoutChange: (listener: () => void) => {
+        listeners.push(listener);
+        return { dispose: () => listeners.splice(listeners.indexOf(listener), 1) };
+      },
+      onDidContentSizeChange: () => ({ dispose: () => undefined }),
+      getDomNode: () => node,
+    };
+    const relayout = () => [...listeners].forEach((listener) => listener());
+    return { editor, node, relayout, listeners };
+  }
+
+  it('re-applies on each layout change until the user takes over', () => {
+    const { editor, node, relayout, listeners } = settlingEditor();
+    const apply = vi.fn();
+    applyAsMonacoLayoutSettles(editor, apply);
+    expect(apply).toHaveBeenCalledTimes(1);
+
+    // Monaco's first real layout replaces its placeholder size.
+    relayout();
+    expect(apply).toHaveBeenCalledTimes(2);
+
+    node.dispatchEvent(new Event('pointerdown'));
+    relayout();
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(listeners).toHaveLength(0);
+  });
+
+  it('stops after the settle window, or when stopped', () => {
+    vi.useFakeTimers();
+    try {
+      const timed = settlingEditor();
+      const apply = vi.fn();
+      applyAsMonacoLayoutSettles(timed.editor, apply, 100);
+      vi.advanceTimersByTime(100);
+      timed.relayout();
+      expect(apply).toHaveBeenCalledTimes(1);
+
+      const stopped = settlingEditor();
+      const again = vi.fn();
+      applyAsMonacoLayoutSettles(stopped.editor, again)();
+      stopped.relayout();
+      expect(again).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

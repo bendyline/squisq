@@ -81,8 +81,9 @@ test.describe('Timeline view', () => {
       .poll(async () => (await embedded.boundingBox())?.x ?? 0)
       .toBeGreaterThan(targetBox.x);
 
-    // Timeline mode scopes Source view to the selected block. Select block Two
-    // and verify the playable HTML element moved there with authored timing.
+    // Source shows the whole file, opened at the block selected on the
+    // timeline. Select block Two and verify the playable HTML element moved
+    // there with authored timing.
     await targetBlock.click();
     await switchView(page, 'Markdown');
     await page.locator('[data-testid="raw-editor"]').waitFor({ state: 'visible' });

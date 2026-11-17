@@ -55,6 +55,61 @@ export function restoreMonacoScrollRatio(editor: MonacoScrollEditor, ratio: numb
   );
 }
 
+interface Disposable {
+  dispose(): void;
+}
+
+interface MonacoSettlingEditor {
+  onDidLayoutChange?(listener: () => void): Disposable;
+  onDidContentSizeChange?(listener: () => void): Disposable;
+  getDomNode?(): HTMLElement | null;
+}
+
+/** Input that means the user has taken over the editor's scroll and caret. */
+const USER_TAKEOVER_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+
+/**
+ * Apply a scroll position to a freshly mounted Monaco editor, and again each
+ * time its layout or wrapped height changes, until the user takes over or
+ * `settleMs` passes. Returns a function that stops early.
+ *
+ * Monaco mounts at a placeholder size (a few pixels wide, zero tall) and wraps
+ * every line for it before its first real layout. A position computed then is
+ * measured against that tall placeholder document, and once the real layout
+ * arrives the scroll clamps to the end of the file.
+ *
+ * The events are feature-detected: an editor without them (a test double, an
+ * older Monaco) gets the single application.
+ */
+export function applyAsMonacoLayoutSettles(
+  editor: MonacoSettlingEditor,
+  apply: () => void,
+  settleMs = 1500,
+): () => void {
+  apply();
+  if (
+    typeof editor.onDidLayoutChange !== 'function' ||
+    typeof editor.onDidContentSizeChange !== 'function'
+  ) {
+    return () => undefined;
+  }
+  const subscriptions = [editor.onDidLayoutChange(apply), editor.onDidContentSizeChange(apply)];
+  const node = typeof editor.getDomNode === 'function' ? editor.getDomNode() : null;
+  let stopped = false;
+  const stop = (): void => {
+    if (stopped) return;
+    stopped = true;
+    clearTimeout(timer);
+    for (const subscription of subscriptions) subscription.dispose();
+    for (const type of USER_TAKEOVER_EVENTS) node?.removeEventListener(type, stop, true);
+  };
+  for (const type of USER_TAKEOVER_EVENTS) {
+    node?.addEventListener(type, stop, { capture: true, passive: true });
+  }
+  const timer = setTimeout(stop, settleMs);
+  return stop;
+}
+
 function findWysiwygScrollElement(editor: WysiwygScrollEditor): HTMLElement | null {
   return editor.view.dom.closest<HTMLElement>('.squisq-wysiwyg-container');
 }
