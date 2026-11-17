@@ -56,6 +56,7 @@ import { withoutBlockTags } from '../shared/blockTags.js';
 import { authoredImageSize, fitWithin, readImageDimensions } from '../shared/images.js';
 import { stripHtmlTags } from '../shared/text.js';
 import { normalizeOoxmlHex } from '../shared/ooxmlColor.js';
+import { paperPalette } from '../shared/paperPalette.js';
 import { sanitizeOfficeHyperlink } from '../shared/officeHyperlinks.js';
 import { buildWordVideoRun, wordVideoSize } from './videoEmbed.js';
 import { buildWordSvgIslandRun } from './svgIsland.js';
@@ -354,16 +355,21 @@ class ExportContext {
       // installed on the reader's machine).
       themeFont = firstFontFromStack(resolveFontFamily(theme.typography?.bodyFont, ''));
       themeTitleFont = firstFontFromStack(resolveFontFamily(theme.typography?.titleFont, ''));
-      // Normalize at the boundary: `ST_HexColorRGB` is exactly six hex
-      // digits, but a valid theme may carry `#rgb` shorthand and a
-      // programmatic Doc's `customThemes` skip validation entirely — so an
-      // arbitrary string can reach here. Anything unparseable becomes
-      // `undefined`, which omits the color and lets Word use its default.
-      themeHeadingColor = normalizeOoxmlHex(theme.colors?.primary);
-      themeBodyColor = normalizeOoxmlHex(theme.colors?.text);
-      themeMutedColor = normalizeOoxmlHex(theme.colors?.textMuted);
-      themeBackgroundColor = normalizeOoxmlHex(theme.colors?.background);
-      themeTextColor = theme.colors?.text;
+      // Word is read on paper, and Word prints no page colour by default: a
+      // dark theme turns over onto white paper with its own dark background
+      // as the ink (`paperPalette`), so a printed copy is never cream text
+      // on white and code stays legible on its pale shading. A light theme
+      // keeps its page tint. The palette normalizes at the boundary too:
+      // `ST_HexColorRGB` is exactly six hex digits, a valid theme may carry
+      // `#rgb` shorthand, and a programmatic Doc's `customThemes` skip
+      // validation, so anything unparseable becomes `undefined` (Word's
+      // default) rather than reaching an attribute.
+      const palette = paperPalette(theme.colors, { paintPage: true });
+      themeHeadingColor = normalizeOoxmlHex(palette.heading);
+      themeBodyColor = normalizeOoxmlHex(palette.text);
+      themeMutedColor = normalizeOoxmlHex(palette.muted);
+      themeBackgroundColor = normalizeOoxmlHex(palette.page);
+      themeTextColor = palette.text;
     }
 
     this.font = options.defaultFont ?? themeFont ?? DEFAULT_FONT;

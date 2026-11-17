@@ -301,6 +301,13 @@ export interface MarkdownTableCell extends MarkdownNodeBase {
   /** Whether this cell is in the header row */
   isHeader?: boolean;
   children: MarkdownInlineNode[];
+  /**
+   * The Write view's rich-cell envelope (`<div data-squisq-table-cell="">…`)
+   * when the cell holds blocks such as a checklist. `children` is then its
+   * readable inline form (see `readRichTableCell`), and serializing writes
+   * this HTML back so the editor can reopen the cell as it was.
+   */
+  richHtml?: string;
 }
 
 /**

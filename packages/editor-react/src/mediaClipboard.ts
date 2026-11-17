@@ -28,6 +28,7 @@ import { NodeSelection, Plugin, PluginKey, type EditorState } from '@tiptap/pm/s
 import type { EditorView } from '@tiptap/pm/view';
 import type { MediaEntry, MediaProvider } from '@bendyline/squisq/schemas';
 import { mediaMimeType } from './mediaDragMime';
+import { caretAfterSelectedMedia } from './caretAfterInsert';
 import { normalizeMalformedAssetUrl } from './utils/normalizeMalformedAssetUrl';
 import {
   insertImageWhileStoring,
@@ -429,6 +430,7 @@ function insertPastedMedia(view: EditorView, node: ProseMirrorNode): void {
       .setMeta('paste', true)
       .setMeta('uiEvent', 'paste'),
   );
+  caretAfterSelectedMedia(view);
 }
 
 /**

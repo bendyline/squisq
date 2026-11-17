@@ -19,6 +19,11 @@ import { extractPlainText } from '../markdown/utils.js';
 export function coverRepeatsLeadingBlock(doc: Doc): boolean {
   const cover = doc.startBlock;
   const first: Block | undefined = doc.blocks[0];
+  // The slideshow projection records the answer it computed from the source
+  // blocks; its slides no longer carry the heading checked below.
+  if (doc.coverRepeatsSlideId !== undefined) {
+    return !!cover && first?.id === doc.coverRepeatsSlideId;
+  }
   if (!cover || !first?.sourceHeading) return false;
   if (first.sourceHeading.templateAnnotation?.template || first.promotedBodyAnnotation) {
     return false;

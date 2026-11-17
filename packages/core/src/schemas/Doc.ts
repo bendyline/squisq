@@ -142,6 +142,15 @@ export interface Doc {
   startBlock?: StartBlockConfig;
 
   /**
+   * Set by the slideshow projection (`buildPreviewDoc`): the id of the first
+   * slide when the cover only repeats that slide's words, so players and
+   * exporters draw that slide as the cover instead of showing both. Computed
+   * from the source blocks, whose headings the projected slides no longer
+   * carry; read it through `coverRepeatsLeadingBlock`.
+   */
+  coverRepeatsSlideId?: string;
+
+  /**
    * Persistent layers rendered on every block (behind and/or on top of content).
    * Used for consistent branding overlays, background gradients, etc.
    */

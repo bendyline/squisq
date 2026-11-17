@@ -687,6 +687,20 @@ describe('docToPptx markdown-authored parity', () => {
     expect(texts.slice(1).join(' ')).not.toContain('Video review');
   });
 
+  it('does the same for the slideshow projection hosts export', async () => {
+    // DocBlocks hands the exporter `buildPreviewDoc(doc)`, whose slides no
+    // longer carry their headings; the deck opened with the same slide twice.
+    const doc = markdownToDoc(
+      parseMarkdown('# Video review\n\nA clear opening sentence.\n\n## Next\n\nMore.'),
+      { articleId: 'cover-repeat-projected' },
+    );
+    const texts = await pptxSlideTexts(await docToPptx(buildPreviewDoc(doc)));
+
+    expect(texts).toHaveLength(slideshowBlockCount(doc));
+    expect(texts[0]).toContain('Video review');
+    expect(texts.slice(1).join(' ')).not.toContain('Video review');
+  });
+
   it('keeps the body prose of headings that carry no template annotation', async () => {
     // The visual path renders an unannotated heading through `sectionHeader`,
     // which draws the heading alone. Running the doc through the slideshow

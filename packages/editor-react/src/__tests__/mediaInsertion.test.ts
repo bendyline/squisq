@@ -16,7 +16,12 @@ import {
   squisqMediaNode,
   type SquisqMediaDragPayload,
 } from '../mediaDragMime';
-import { asOwnParagraph, insertMediaReference, type MediaInsertionTarget } from '../mediaInsertion';
+import {
+  asOwnParagraph,
+  insertMediaReference,
+  insertVideoEmbedReference,
+  type MediaInsertionTarget,
+} from '../mediaInsertion';
 
 const video: SquisqMediaDragPayload = {
   name: 'media/clip.mp4',
@@ -165,6 +170,69 @@ describe('insertMediaReference — Write view', () => {
     editor.destroy();
     expect(text).toContain('"text":"brief"');
     expect(text).toContain('"href":"media/brief.pdf"');
+  });
+});
+
+/** Type the way a keystroke does: replace whatever is selected. */
+function typeText(editor: Editor, text: string): void {
+  editor.view.dispatch(editor.state.tr.insertText(text));
+}
+
+describe('insertMediaReference — typing straight after', () => {
+  // An inserted atom was left node-selected when nothing followed it, so the
+  // first letter of a caption replaced the picture the author had just added.
+  for (const [label, payload, expected] of [
+    ['an image', image, '![party](media/party.gif)'],
+    ['a video player', video, '<video src="media/clip.mp4"'],
+    ['an audio player', audio, '<audio src="media/take.mp3"'],
+  ] as const) {
+    it(`keeps ${label} and puts the typing on a line after it`, () => {
+      const editor = makeEditor();
+      // The author makes an empty line for it, the usual way.
+      editor.commands.setContent('<p>Intro text</p><p></p>');
+      editor.commands.focus('end');
+      insertMediaReference(wysiwygTarget(editor), payload);
+      expect(editor.state.selection.empty).toBe(true);
+      typeText(editor, 'A caption.');
+      const md = tiptapToMarkdown(editor.getHTML());
+      editor.destroy();
+      expect(md).toContain(expected);
+      expect(md.indexOf(expected)).toBeLessThan(md.indexOf('A caption.'));
+      expect(md).toMatch(/\n\nA caption\.\s*$/);
+    });
+  }
+
+  it('does not leave a blank line behind when nothing is typed', () => {
+    const editor = makeEditor();
+    editor.commands.setContent('<p>Intro text</p><p></p>');
+    editor.commands.focus('end');
+    insertMediaReference(wysiwygTarget(editor), image);
+    const md = tiptapToMarkdown(editor.getHTML());
+    editor.destroy();
+    expect(md.trimEnd()).toMatch(/!\[party\]\(media\/party\.gif\)$/);
+  });
+
+  it('uses the following empty line rather than adding another', () => {
+    const editor = makeEditor();
+    editor.commands.setContent('<p>Intro text</p><p></p><p></p><p>Later</p>');
+    editor.commands.setTextSelection(13); // the first empty line
+    insertMediaReference(wysiwygTarget(editor), image);
+    typeText(editor, 'Caption');
+    const blocks = (editor.getJSON().content ?? []).map((node) => node.type);
+    editor.destroy();
+    expect(blocks).toEqual(['paragraph', 'image', 'paragraph', 'paragraph']);
+  });
+
+  it('keeps an untitled online video a video, with the typing on a new line', () => {
+    const editor = makeEditor();
+    editor.commands.setContent('<p>Intro text</p><p></p>');
+    editor.commands.focus('end');
+    insertVideoEmbedReference(wysiwygTarget(editor), 'https://www.youtube.com/watch?v=abc123XYZ_0');
+    typeText(editor, 'A caption.');
+    const md = tiptapToMarkdown(editor.getHTML());
+    editor.destroy();
+    expect(md).toMatch(/^https:\/\/www\.youtube\.com\/watch\?v=abc123XYZ_0\s*$/m);
+    expect(md).toMatch(/\n\nA caption\.\s*$/);
   });
 });
 
