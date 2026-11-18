@@ -30,6 +30,15 @@ import type { ProofRange } from './types.js';
  */
 const ANNOTATION_RE = /\{\[[^\n]*?\]\}/g;
 
+/**
+ * GFM footnote syntax: a reference `[^label]` anywhere, and a definition's
+ * `[^label]:` at the start of a line. The label is an id, not prose: the Write
+ * view draws `[^src]` as a raised marker, and proofing flagged `src` under it.
+ * The editor keeps footnotes as plain text, so both views see this syntax.
+ */
+const FOOTNOTE_REFERENCE_RE = /\[\^[^\]\s]+\]/g;
+const FOOTNOTE_DEFINITION_RE = /^\[\^[^\]\s]+\]:/gm;
+
 export interface BlankedText {
   /** Input with every protected span replaced by spaces; same length. */
   text: string;
@@ -47,17 +56,17 @@ export interface BlankProtectedSpansOptions {
 
 /**
  * Blank protected spans to equal-length runs of spaces: `{[…]}` annotations
- * always, and markdown code when `markdownCode` is set.
+ * and footnote labels always, and markdown code when `markdownCode` is set.
  */
 export function blankProtectedSpans(
   text: string,
   options: BlankProtectedSpansOptions = {},
 ): BlankedText {
   const ranges: ProofRange[] = [];
-  ANNOTATION_RE.lastIndex = 0;
-  let match: RegExpExecArray | null;
-  while ((match = ANNOTATION_RE.exec(text)) !== null) {
-    ranges.push({ start: match.index, end: match.index + match[0].length });
+  for (const pattern of [ANNOTATION_RE, FOOTNOTE_REFERENCE_RE, FOOTNOTE_DEFINITION_RE]) {
+    for (const match of text.matchAll(pattern)) {
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+    }
   }
   if (options.markdownCode) ranges.push(...markdownCodeRanges(text));
   if (ranges.length === 0) return { text, blanked: [] };

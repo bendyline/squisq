@@ -1212,3 +1212,102 @@ describe('EditorShell accessible names', () => {
     expect(wysiwygEditorProps[wysiwygEditorProps.length - 1]?.ariaLabel).toBe('Edit notes.md');
   });
 });
+
+describe('<EditorShell> link safety', () => {
+  const renderWithLink = (
+    href: string,
+    text: string,
+    safety: Partial<import('../linkSafety/useLinkSafety').LinkSafety> = {},
+    onLinkClick?: (href: string) => boolean | undefined,
+  ) => {
+    const open = vi.fn();
+    render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        linkSafety={{ open, ...safety }}
+        {...(onLinkClick ? { onLinkClick } : {})}
+        toolbarSlotRight={<a href={href}>{text}</a>}
+      />,
+    );
+    const click = () => {
+      const event = new MouseEvent('click', { bubbles: true, cancelable: true });
+      act(() => {
+        screen.getByRole('link', { name: text }).dispatchEvent(event);
+      });
+      return event;
+    };
+    return { open, click };
+  };
+
+  it('asks before opening a web link, and opens it only on Open link', () => {
+    const { open, click } = renderWithLink('https://accounts.example.com/a?b=1', 'Check activity');
+    expect(click().defaultPrevented).toBe(true);
+    const dialog = screen.getByTestId('link-safety-dialog');
+    expect(within(dialog).getByText('accounts.example.com')).toBeTruthy();
+    expect(within(dialog).getByText('https://accounts.example.com/a?b=1')).toBeTruthy();
+    expect(document.activeElement?.textContent).toBe('Cancel');
+    expect(open).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Open link' }));
+    expect(open).toHaveBeenCalledWith('https://accounts.example.com/a?b=1');
+    expect(screen.queryByTestId('link-safety-dialog')).toBeNull();
+  });
+
+  it('opens nothing on Cancel', () => {
+    const { open, click } = renderWithLink('https://x.example.com/', 'X');
+    click();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(open).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('link-safety-dialog')).toBeNull();
+  });
+
+  it('remembers a trusted site through the host, and skips the question for it', () => {
+    const trusted = new Set<string>();
+    const trust = vi.fn((host: string) => trusted.add(host));
+    const { open, click } = renderWithLink('https://Docs.Example.com/a', 'Docs', {
+      trust,
+      isTrusted: (host) => trusted.has(host),
+    });
+    click();
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Always open links to docs.example.com' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Open link' }));
+    expect(trust).toHaveBeenCalledWith('docs.example.com');
+    expect(open).toHaveBeenCalledTimes(1);
+
+    click();
+    expect(screen.queryByTestId('link-safety-dialog')).toBeNull();
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers no "Always open" without a place to remember it', () => {
+    const { click } = renderWithLink('https://x.example.com/', 'X');
+    click();
+    expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+
+  it('warns when the link text names another site', () => {
+    const { click } = renderWithLink('https://evil.example.net/login', 'paypal.com');
+    click();
+    expect(
+      screen.getByText('The link says paypal.com, but it goes to evil.example.net.'),
+    ).toBeTruthy();
+  });
+
+  it('leaves other links to the host delegate, or to the browser without one', () => {
+    const onLinkClick = vi.fn(() => true as const);
+    const { open, click } = renderWithLink('notes/other.md', 'Other', {}, onLinkClick);
+    expect(click().defaultPrevented).toBe(true);
+    expect(onLinkClick).toHaveBeenCalledWith('notes/other.md');
+    expect(open).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('link-safety-dialog')).toBeNull();
+  });
+
+  it('lets the browser handle a non-web link when there is no host delegate', () => {
+    const { click } = renderWithLink('#top', 'Back to top');
+    expect(click().defaultPrevented).toBe(false);
+    expect(screen.queryByTestId('link-safety-dialog')).toBeNull();
+  });
+});

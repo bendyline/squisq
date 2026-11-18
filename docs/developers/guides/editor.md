@@ -91,20 +91,23 @@ five Monaco worker scripts; `configureMonacoWorkers` only needs `new () => Worke
 remount it with a new `key`, or replace the content from inside with `useEditorContext()` (see
 [Talk to the editor](#talk-to-the-editor)).
 
-| Prop                     | Default      | What it does                                                                                                                 |
-| ------------------------ | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| `initialMarkdown`        | `''`         | The starting Markdown.                                                                                                       |
-| `initialView`            | `'wysiwyg'`  | `'wysiwyg'` (Write), `'raw'` (Source), or `'preview'` (Use).                                                                 |
-| `onChange`               | —            | `(source: string) => void`, called with the whole source.                                                                    |
-| `articleId`              | `'untitled'` | An id for the document, passed to proofing storage and the generated `Doc`.                                                  |
-| `fileName`               | —            | The file the content represents. A non-Markdown extension (`deploy.ts`) switches to a code editor with only the Source view. |
-| `language`               | —            | A Monaco language id that overrides the one `fileName` implies.                                                              |
-| `basePath`               | `'/'`        | Prefix for relative media paths in previews when there's no media provider.                                                  |
-| `preserveSourceWrapping` | `true`       | Edit hard-wrapped prose as whole paragraphs in Write view and re-wrap it on save.                                            |
-| `onLinkClick`            | —            | `(href) => boolean \| undefined`. Return `false` to let the browser follow the link; anything else means you handled it.     |
+| Prop                     | Default      | What it does                                                                                                                                                    |
+| ------------------------ | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `initialMarkdown`        | `''`         | The starting Markdown.                                                                                                                                          |
+| `initialView`            | `'wysiwyg'`  | `'wysiwyg'` (Write), `'raw'` (Source), or `'preview'` (Use).                                                                                                    |
+| `onChange`               | —            | `(source: string) => void`, called with the whole source.                                                                                                       |
+| `articleId`              | `'untitled'` | An id for the document, passed to proofing storage and the generated `Doc`.                                                                                     |
+| `fileName`               | —            | The file the content represents. A non-Markdown extension (`deploy.ts`) switches to a code editor with only the Source view.                                    |
+| `language`               | —            | A Monaco language id that overrides the one `fileName` implies.                                                                                                 |
+| `basePath`               | `'/'`        | Prefix for relative media paths in previews when there's no media provider.                                                                                     |
+| `preserveSourceWrapping` | `true`       | Edit hard-wrapped prose as whole paragraphs in Write view and re-wrap it on save.                                                                               |
+| `onLinkClick`            | —            | `(href) => boolean \| undefined`. Return `false` to let the browser follow the link; anything else means you handled it.                                        |
+| `linkSafety`             | —            | `{ open, isTrusted?, trust? }`. Ask before a web link opens, naming the real site and flagging look-alike addresses; the host opens it and keeps trusted sites. |
 
 The Write view saves only what an edit touched, so an untouched document round-trips byte for
-byte.
+byte. Addresses written as autolinks (`<https://…>`, `<me@x.test>`) or GFM's bare `https://…` and
+`www.…` show as links there and are written back in the form they came in, until their text is
+edited.
 
 ## Media and the workspace
 

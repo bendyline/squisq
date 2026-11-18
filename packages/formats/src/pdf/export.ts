@@ -199,6 +199,7 @@ export async function markdownDocToPdf(
   ctx.images = await embedDocumentImages(pdfDoc, doc, options.images);
 
   renderBlocks(doc.children, ctx, 0);
+  renderFootnotesSection(ctx);
 
   // Report unencodable-character substitution ONCE for the whole export,
   // rather than per character (a CJK document would emit thousands).
@@ -947,14 +948,27 @@ function renderBlocks(nodes: MarkdownBlockNode[], ctx: ExportContext, extraInden
   for (let index = 0; index < nodes.length; index++) {
     if ((index & 255) === 0) ctx.signal?.throwIfAborted();
     const node = nodes[index]!;
-    renderBlock(node, ctx, extraIndent);
+    // A heading is kept with what it introduces. Footnote definitions print
+    // at the end, so that is the next block that is not one.
+    let next: MarkdownBlockNode | undefined;
+    if (node.type === 'heading') {
+      for (let after = index + 1; after < nodes.length && !next; after++) {
+        if (nodes[after]!.type !== 'footnoteDefinition') next = nodes[after];
+      }
+    }
+    renderBlock(node, ctx, extraIndent, next);
   }
 }
 
-function renderBlock(node: MarkdownBlockNode, ctx: ExportContext, extraIndent: number): void {
+function renderBlock(
+  node: MarkdownBlockNode,
+  ctx: ExportContext,
+  extraIndent: number,
+  next?: MarkdownBlockNode,
+): void {
   switch (node.type) {
     case 'heading':
-      renderHeading(node as MarkdownHeading, ctx, extraIndent);
+      renderHeading(node as MarkdownHeading, ctx, extraIndent, next);
       break;
     case 'paragraph':
       renderParagraph(node as MarkdownParagraph, ctx, extraIndent);
@@ -981,7 +995,7 @@ function renderBlock(node: MarkdownBlockNode, ctx: ExportContext, extraIndent: n
       renderMathBlock(node as MarkdownMathBlock, ctx, extraIndent);
       break;
     case 'footnoteDefinition':
-      renderFootnoteDefinition(node as MarkdownFootnoteDefinition, ctx, extraIndent);
+      // Printed with the others after the text: see renderFootnotesSection.
       break;
     default:
       // containerDirective, leafDirective, definitionList, etc.
@@ -993,11 +1007,16 @@ function renderBlock(node: MarkdownBlockNode, ctx: ExportContext, extraIndent: n
 
 // ---- Heading ----
 
-function renderHeading(node: MarkdownHeading, ctx: ExportContext, extraIndent: number): void {
+function renderHeading(
+  node: MarkdownHeading,
+  ctx: ExportContext,
+  extraIndent: number,
+  next?: MarkdownBlockNode,
+): void {
   const origFontSize = ctx.fontSize;
+  // Measured at the body size, before the heading's own size is set.
+  let following = next ? openingHeight(next, ctx, extraIndent) : 0;
   ctx.fontSize = HEADING_SIZES[node.depth] ?? DEFAULT_FONT_SIZE;
-
-  ctx.y -= HEADING_SPACE_BEFORE;
 
   const x0 = ctx.margin + extraIndent;
   const w = ctx.contentWidth - extraIndent;
@@ -1009,10 +1028,57 @@ function renderHeading(node: MarkdownHeading, ctx: ExportContext, extraIndent: n
     color: ctx.colors.heading,
   });
 
+  // A heading alone at the foot of a page, with its picture or text on the
+  // next, reads as a mistake: start a new page unless the heading and the
+  // start of what follows fit. When even a fresh page cannot hold both (a
+  // full-page picture), keep the heading with two lines' worth only.
+  const height = wrapSpans(spans, w).reduce((sum, line) => sum + getLineHeight(line), 0);
+  const block = HEADING_SPACE_BEFORE + height + HEADING_SPACE_AFTER;
+  if (block + following > ctx.pageHeight - ctx.margin - ctx.bottomY) {
+    following = Math.min(following, 2 * origFontSize * LINE_HEIGHT_FACTOR);
+  }
+  const atTop = ctx.y >= ctx.pageHeight - ctx.margin;
+  if (!atTop && ctx.y - block - following < ctx.bottomY) newPage(ctx);
+  else ctx.y -= HEADING_SPACE_BEFORE;
+
   drawSpans(spans, ctx, w, x0);
 
   ctx.y -= HEADING_SPACE_AFTER;
   ctx.fontSize = origFontSize;
+}
+
+/**
+ * How much of `node` should share a page with the heading above it: a block
+ * picture whole, two lines of text, a table's first two rows, or the first
+ * lines of code. Measured at the body font size.
+ */
+function openingHeight(node: MarkdownBlockNode, ctx: ExportContext, extraIndent: number): number {
+  const line = ctx.fontSize * LINE_HEIGHT_FACTOR;
+  switch (node.type) {
+    case 'paragraph': {
+      const first = drawnImages(node as MarkdownParagraph, ctx)?.[0];
+      const embedded = first && ctx.images.get(first.url);
+      if (first && embedded) {
+        return imageDrawSize(first, embedded, ctx, ctx.contentWidth - extraIndent).height;
+      }
+      return 2 * line;
+    }
+    case 'heading': {
+      const size = HEADING_SIZES[(node as MarkdownHeading).depth] ?? DEFAULT_FONT_SIZE;
+      return HEADING_SPACE_BEFORE + size * LINE_HEIGHT_FACTOR + HEADING_SPACE_AFTER + 2 * line;
+    }
+    case 'list':
+    case 'blockquote':
+      return 2 * line;
+    case 'table':
+      return 2 * (line + 2 * TABLE_CELL_PAD_Y);
+    case 'code':
+    case 'math':
+    case 'htmlBlock':
+      return 3 * CODE_FONT_SIZE * LINE_HEIGHT_FACTOR + 12;
+    default:
+      return 0;
+  }
 }
 
 // ---- Paragraph ----
@@ -1050,16 +1116,8 @@ function renderImageParagraph(
   x0: number,
   width: number,
 ): boolean {
-  const images = node.children.filter((child) => child.type === 'image') as MarkdownImage[];
-  const onlyImages = node.children.every(
-    (child) =>
-      child.type === 'image' ||
-      child.type === 'break' ||
-      (child.type === 'text' && !(child as MarkdownText).value.trim()),
-  );
-  if (!onlyImages || images.length === 0) return false;
-  if (!images.some((image) => ctx.images.has(image.url))) return false;
-  const maxHeight = ctx.pageHeight - 2 * ctx.margin;
+  const images = drawnImages(node, ctx);
+  if (!images) return false;
   for (const imageNode of images) {
     const embedded = ctx.images.get(imageNode.url);
     if (!embedded) {
@@ -1067,14 +1125,7 @@ function renderImageParagraph(
       drawSpans(note, ctx, width, x0);
       continue;
     }
-    // The size the author resized the picture to in the editor, else its own.
-    const display = authoredImageSize(imageNode, embedded) ?? embedded;
-    const size = fitWithin(
-      display.width * POINTS_PER_CSS_PIXEL,
-      display.height * POINTS_PER_CSS_PIXEL,
-      width,
-      maxHeight,
-    );
+    const size = imageDrawSize(imageNode, embedded, ctx, width);
     ensureSpace(ctx, size.height);
     ctx.page.drawImage(embedded.image, {
       x: x0 + (width - size.width) / 2,
@@ -1085,6 +1136,39 @@ function renderImageParagraph(
     ctx.y -= size.height + PARAGRAPH_SPACING;
   }
   return true;
+}
+
+/**
+ * The images of a paragraph that holds only images, at least one of them
+ * supplied, which {@link renderImageParagraph} draws as blocks. Null for any
+ * other paragraph.
+ */
+function drawnImages(node: MarkdownParagraph, ctx: ExportContext): MarkdownImage[] | null {
+  const images = node.children.filter((child) => child.type === 'image') as MarkdownImage[];
+  const onlyImages = node.children.every(
+    (child) =>
+      child.type === 'image' ||
+      child.type === 'break' ||
+      (child.type === 'text' && !(child as MarkdownText).value.trim()),
+  );
+  if (!onlyImages || images.length === 0) return null;
+  return images.some((image) => ctx.images.has(image.url)) ? images : null;
+}
+
+/** The size a block image is drawn at: as resized in the editor, else its own, fitted to the page. */
+function imageDrawSize(
+  imageNode: MarkdownImage,
+  embedded: EmbeddedPdfImage,
+  ctx: ExportContext,
+  width: number,
+): { width: number; height: number } {
+  const display = authoredImageSize(imageNode, embedded) ?? embedded;
+  return fitWithin(
+    display.width * POINTS_PER_CSS_PIXEL,
+    display.height * POINTS_PER_CSS_PIXEL,
+    width,
+    ctx.pageHeight - 2 * ctx.margin,
+  );
 }
 
 // ---- Blockquote ----
@@ -1499,6 +1583,34 @@ function renderMathBlock(node: MarkdownMathBlock, ctx: ExportContext, extraInden
 }
 
 // ---- Footnote Definition ----
+
+/** Space above the rule that opens the footnotes. */
+const FOOTNOTE_RULE_GAP = 12;
+/** The rule's length, as a share of the text width. */
+const FOOTNOTE_RULE_SHARE = 1 / 3;
+
+/**
+ * Every footnote, after the text, in number order and under a short rule, as
+ * the HTML exporters print them. A GFM definition sits wherever its author
+ * wrote it, so printed in place it ran on from the block before it.
+ */
+function renderFootnotesSection(ctx: ExportContext): void {
+  const notes = (ctx.footnotes?.ordered() ?? []).flatMap((note) =>
+    note.definition ? [note.definition] : [],
+  );
+  if (notes.length === 0) return;
+  // The rule never ends a page: it moves with the first footnote's first line.
+  ensureSpace(ctx, FOOTNOTE_RULE_GAP + PARAGRAPH_SPACING + ctx.fontSize * LINE_HEIGHT_FACTOR);
+  ctx.y -= FOOTNOTE_RULE_GAP;
+  ctx.page.drawLine({
+    start: { x: ctx.margin, y: ctx.y },
+    end: { x: ctx.margin + ctx.contentWidth * FOOTNOTE_RULE_SHARE, y: ctx.y },
+    thickness: 0.5,
+    color: rgb(COLOR_THEMATIC_BREAK.r, COLOR_THEMATIC_BREAK.g, COLOR_THEMATIC_BREAK.b),
+  });
+  ctx.y -= PARAGRAPH_SPACING;
+  for (const note of notes) renderFootnoteDefinition(note, ctx, 0);
+}
 
 function renderFootnoteDefinition(
   node: MarkdownFootnoteDefinition,

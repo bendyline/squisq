@@ -122,18 +122,18 @@ The third argument is `ConvertOptions`. Every field is optional.
 `formatOptions` is keyed by format id. Each entry takes the options of that format's importer and
 exporter, so one bag serves both directions. The ones you'll reach for most:
 
-| Key       | Options worth knowing                                                                                                              |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `md`      | `parse`, `stringify` — Markdown parser and serializer options                                                                      |
-| `docx`    | `author`, `description`, `defaultFont`, `defaultFontSize`, `images` (extra image bytes), `extractImages`                           |
-| `pdf`     | `pageSize` (`'letter'` or `'a4'`), `margin`, `images`, `unicodeFonts`; import `detectTables` and friends                           |
-| `pptx`    | `inferTheme`, `inferLayouts` (both default on for import), `includeCoverSlide`, `diagramImages`, `images`                          |
-| `xlsx`    | Import `regions`, `formulas`, `sheet`, `sidecar`, `maxInlineRows`, `maxInlineCells`, `sourceName`; export `inferNumericCells`      |
-| `csv`     | `delimiter`, `hasHeader`, `sidecar`, `sourceName`; export `tableIndex`, `formulaHandling`                                          |
-| `html`    | `mode` (`'static'`, `'slideshow'`, or `'video'`), `captionStyle`, `autoPlay`, `images`, `audio`; import `sanitize`, `headMetadata` |
-| `htmlzip` | Same export options as `html`                                                                                                      |
-| `epub`    | `author`, `language`, `publisher`, `coverImage`, `audio`                                                                           |
-| `dbk`     | `compression`, `compressionLevel`, and the ZIP safety limits                                                                       |
+| Key       | Options worth knowing                                                                                                                                                                                                                   |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `md`      | `parse`, `stringify` — Markdown parser and serializer options                                                                                                                                                                           |
+| `docx`    | `author`, `description`, `defaultFont`, `defaultFontSize`, `images` (extra image bytes), `extractImages`                                                                                                                                |
+| `pdf`     | `pageSize` (`'letter'` or `'a4'`), `margin`, `images`, `unicodeFonts`; import `detectTables` and friends                                                                                                                                |
+| `pptx`    | `inferTheme`, `inferLayouts` (both default on for import), `includeCoverSlide`, `diagramImages`, `images`                                                                                                                               |
+| `xlsx`    | Import `regions`, `formulas`, `sheet`, `sidecar`, `maxInlineRows`, `maxInlineCells`, `sourceName`; export `inferNumericCells`                                                                                                           |
+| `csv`     | `delimiter`, `hasHeader`, `sidecar`, `sourceName`; export `tableIndex`, `formulaHandling`                                                                                                                                               |
+| `html`    | `mode` (`'static'`, `'slideshow'`, or `'video'`), `captionStyle`, `autoPlay`, `images`, `audio`; import `sanitize`, `headMetadata`, `dropHidden`, `dropTrackingPixels`, `layoutTables`, `images`, `baseUrl`, `embeddedDocs`, `oversize` |
+| `htmlzip` | Same export options as `html`                                                                                                                                                                                                           |
+| `epub`    | `author`, `language`, `publisher`, `coverImage`, `audio`                                                                                                                                                                                |
+| `dbk`     | `compression`, `compressionLevel`, and the ZIP safety limits                                                                                                                                                                            |
 
 ```ts
 const result = await convert({ kind: 'bytes', data, filename: 'budget.xlsx' }, 'md', {
@@ -247,16 +247,16 @@ is reported in the result's `warnings`.
 Each format also has its own subpath with direct functions. They work on core's `MarkdownDocument`
 (from `parseMarkdown` in `@bendyline/squisq/markdown`) or on a `Doc`.
 
-| Subpath                               | Import                                                                 | Export                                                                 |
-| ------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `@bendyline/squisq-formats/docx`      | `docxToMarkdownDoc`, `docxToDoc`, `docxToContainer`                    | `markdownDocToDocx`, `docToDocx`                                       |
-| `@bendyline/squisq-formats/pdf`       | `pdfToMarkdownDoc`, `pdfToDoc`, `pdfToContainer`                       | `markdownDocToPdf`, `docToPdf`                                         |
-| `@bendyline/squisq-formats/pptx`      | `pptxToMarkdownDoc`, `pptxToDoc`, `pptxToContainer`                    | `docToPptx`, `markdownDocToPptx`                                       |
-| `@bendyline/squisq-formats/xlsx`      | `xlsxToMarkdownDoc`, `xlsxToDoc`, `xlsxToContainer`, `xlsxToCellGrids` | `markdownDocToXlsx`, `docToXlsx`                                       |
-| `@bendyline/squisq-formats/csv`       | `csvToMarkdownDoc`, `csvToDoc`, `csvToContainer`, `parseCsv`           | `markdownDocToCsv`                                                     |
-| `@bendyline/squisq-formats/html`      | `htmlToMarkdownDoc`, `htmlToMarkdownDocSync`, `htmlToMarkdown`         | `docToHtml`, `docToHtmlZip`, `markdownDocToPlainHtml`, and the bundles |
-| `@bendyline/squisq-formats/epub`      | —                                                                      | `markdownDocToEpub`, `docToEpub`                                       |
-| `@bendyline/squisq-formats/container` | `zipToContainer`                                                       | `containerToZip`                                                       |
+| Subpath                               | Import                                                                            | Export                                                                 |
+| ------------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `@bendyline/squisq-formats/docx`      | `docxToMarkdownDoc`, `docxToDoc`, `docxToContainer`                               | `markdownDocToDocx`, `docToDocx`                                       |
+| `@bendyline/squisq-formats/pdf`       | `pdfToMarkdownDoc`, `pdfToDoc`, `pdfToContainer`                                  | `markdownDocToPdf`, `docToPdf`                                         |
+| `@bendyline/squisq-formats/pptx`      | `pptxToMarkdownDoc`, `pptxToDoc`, `pptxToContainer`                               | `docToPptx`, `markdownDocToPptx`                                       |
+| `@bendyline/squisq-formats/xlsx`      | `xlsxToMarkdownDoc`, `xlsxToDoc`, `xlsxToContainer`, `xlsxToCellGrids`            | `markdownDocToXlsx`, `docToXlsx`                                       |
+| `@bendyline/squisq-formats/csv`       | `csvToMarkdownDoc`, `csvToDoc`, `csvToContainer`, `parseCsv`                      | `markdownDocToCsv`                                                     |
+| `@bendyline/squisq-formats/html`      | `htmlToMarkdownDoc`, `htmlToMarkdownDocSync`, `htmlToMarkdown`, `htmlToPlainText` | `docToHtml`, `docToHtmlZip`, `markdownDocToPlainHtml`, and the bundles |
+| `@bendyline/squisq-formats/epub`      | —                                                                                 | `markdownDocToEpub`, `docToEpub`                                       |
+| `@bendyline/squisq-formats/container` | `zipToContainer`                                                                  | `containerToZip`                                                       |
 
 ```ts
 import { parseMarkdown } from '@bendyline/squisq/markdown';

@@ -103,6 +103,7 @@ import {
   uploadAndInsertMediaPlayers,
 } from './wysiwygImageUpload';
 import { isAllowedLinkHref } from './tiptap/linkHrefPolicy';
+import { autolinkAttribute } from './tiptap/autolinkAttribute';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
 import { FindHighlightExtension } from './find/FindHighlightExtension';
 import { ProofingExtension } from './proofing/ProofingExtension';
@@ -144,6 +145,7 @@ export const LinkWithTitle = Link.extend({
     return {
       ...this.parent?.(),
       title: { default: null },
+      ...autolinkAttribute,
     };
   },
 });

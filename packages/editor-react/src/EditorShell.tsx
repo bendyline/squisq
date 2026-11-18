@@ -35,6 +35,7 @@ import type { NavigationSheetPanel } from './useNavigationSheetSwipe';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
 import { ProofingRoot } from './proofing/ProofingContext';
 import { proofingTapTarget } from './proofing/proofingTap';
+import { useLinkSafety, type LinkDelegate, type LinkSafety } from './linkSafety/useLinkSafety';
 import {
   clearLinkHoverTitle,
   clearStaleLinkHoverTitle,
@@ -169,6 +170,15 @@ export interface EditorShellProps {
    * navigation; any other return (or void) marks the link as handled.
    */
   onLinkClick?: (href: string) => boolean | undefined;
+  /**
+   * Ask the reader before a web (`http:`/`https:`) link opens, wherever it is
+   * followed from. The dialog names the site the browser will contact, shows
+   * the full address, and points out an address that is not what it looks
+   * like. The host opens the address (`open`) and keeps the sites the reader
+   * trusts (`isTrusted` / `trust`); squisq stores nothing. Other links still
+   * go to `onLinkClick`.
+   */
+  linkSafety?: LinkSafety;
   /** Show a Copy button on ordinary fenced code blocks (default: false). */
   showCodeCopyButton?: boolean;
   /**
@@ -762,7 +772,8 @@ export function EditorShell({
   articleId = 'untitled',
   basePath = '/',
   onChange,
-  onLinkClick,
+  onLinkClick: hostOnLinkClick,
+  linkSafety,
   showCodeCopyButton = false,
   onCopyCode,
   colorScheme = 'light',
@@ -852,6 +863,11 @@ export function EditorShell({
   pageTemplates = null,
 }: EditorShellProps) {
   const effectiveContainer = workspaceContainer ?? null;
+  const { onLinkClick, dialog: linkSafetyDialog } = useLinkSafety(
+    linkSafety,
+    hostOnLinkClick,
+    colorScheme,
+  );
 
   // If the host gave us a `workspaceContainer` but no explicit `mediaProvider`,
   // derive one automatically. Without this, drag-and-drop of an image
@@ -1002,6 +1018,7 @@ export function EditorShell({
               />
             </PageTemplateContext.Provider>
           </ReviewRoot>
+          {linkSafetyDialog}
         </ProofingRoot>
       </EditorProvider>
     </MediaContext.Provider>
@@ -1013,7 +1030,7 @@ interface EditorShellInnerProps {
   basePath: string;
   defaultViewportPreset: ViewportPreset;
   onChange?: (source: string) => void;
-  onLinkClick?: (href: string) => boolean | undefined;
+  onLinkClick?: LinkDelegate;
   showCodeCopyButton: boolean;
   onCopyCode?: CodeBlockCopyHandler;
   className?: string;
@@ -1561,7 +1578,7 @@ function EditorShellInner({
       // would take the reader away before the card could be seen.
       if (proofingTapTarget(event.nativeEvent)) return;
       const href = anchor.getAttribute('href');
-      if (!href || onLinkClick(href) === false) return;
+      if (!href || onLinkClick(href, anchor.textContent ?? undefined) === false) return;
       event.preventDefault();
       event.stopPropagation();
     },

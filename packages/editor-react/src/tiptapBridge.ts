@@ -26,6 +26,14 @@ import { mediaEditKeysFor } from './tiptap/mediaEditAttributes';
 import { needsAngleDestination, unwrapLinkDestination } from './markdownDestination';
 import { escapeHtml, unescapeHtml } from './htmlEntities';
 import {
+  escapeLinkTitleAttr,
+  isEscapedMarkdownCharacter,
+  replaceMarkdownLinks,
+  restoreAutolinkSource,
+  splitLinkDestination,
+  stageAutolinks,
+} from './markdownLinks';
+import {
   fenceContentLine,
   fencedCodeToHtml,
   fencedCodeToMarkdown,
@@ -1576,7 +1584,7 @@ function escapedDestination(attrValue: string): string {
 }
 
 /** Convert inline markdown to HTML for Tiptap consumption */
-function inlineToHtml(text: string): string {
+function inlineToHtml(text: string, options: { autolinks?: boolean } = {}): string {
   // Extract code/images/mentions/links to opaque placeholders BEFORE running
   // any other inline-formatting regexes. Otherwise `_` characters inside a URL
   // (e.g. `mikehome_files/IMG_6829.JPEG`) get turned into `<em>` tags by
@@ -1657,8 +1665,14 @@ function inlineToHtml(text: string): string {
   staged = replaceMarkdownLinks(staged, (linkText, destination) => {
     const { url, title } = splitLinkDestination(destination);
     const titleAttr = title === null ? '' : ` title="${escapeHtml(title)}"`;
-    return stash(`<a href="${escapeHtml(url)}"${titleAttr}>${inlineToHtml(linkText)}</a>`);
+    const label = inlineToHtml(linkText, { autolinks: false });
+    return stash(`<a href="${escapeHtml(url)}"${titleAttr}>${label}</a>`);
   });
+
+  // Autolinks: `<https://…>` and GFM's literal `https://…` / `www.…`. A
+  // link's own text cannot hold another link, so not there. Before the
+  // escape pass: a backslash inside an autolink is part of the address.
+  if (options.autolinks !== false) staged = stageAutolinks(staged, stash);
 
   // Escaped punctuation the emphasis pass below does not own (`\$`, `\#`,
   // `\[` …) becomes a `MarkdownEscape` mark: the Write view shows the bare
@@ -1723,133 +1737,6 @@ function inlineToHtml(text: string): string {
   }
 
   return preserveLeadingSpaces(result);
-}
-
-/**
- * Replace inline links while respecting balanced label brackets. A regex like
- * `\[(.+?)\]\((.+?)\)` incorrectly joins the two bracket pairs in prose such
- * as `[squiggly square], or [squisq](https://squisq.com)`, creating one giant
- * link. The small delimiter scanner also preserves valid nested link labels.
- */
-function replaceMarkdownLinks(
-  text: string,
-  replace: (label: string, href: string) => string,
-): string {
-  let output = '';
-  let consumedThrough = 0;
-  let searchFrom = 0;
-
-  while (searchFrom < text.length) {
-    const labelOpen = text.indexOf('[', searchFrom);
-    if (labelOpen < 0) break;
-    if (isEscapedMarkdownCharacter(text, labelOpen)) {
-      searchFrom = labelOpen + 1;
-      continue;
-    }
-
-    const labelClose = findMatchingMarkdownDelimiter(text, labelOpen, '[', ']');
-    const destinationOpen = labelClose + 1;
-    if (labelClose < 0 || text[destinationOpen] !== '(') {
-      searchFrom = labelOpen + 1;
-      continue;
-    }
-
-    const destinationClose = findMatchingMarkdownDelimiter(text, destinationOpen, '(', ')');
-    if (destinationClose < 0) {
-      searchFrom = labelOpen + 1;
-      continue;
-    }
-
-    const label = text.slice(labelOpen + 1, labelClose);
-    const href = text.slice(destinationOpen + 1, destinationClose);
-    // Match the bridge's historical regex behavior: empty labels or
-    // destinations remain literal source.
-    if (!label || !href) {
-      searchFrom = labelOpen + 1;
-      continue;
-    }
-
-    output += text.slice(consumedThrough, labelOpen) + replace(label, href);
-    consumedThrough = destinationClose + 1;
-    searchFrom = consumedThrough;
-  }
-
-  return output + text.slice(consumedThrough);
-}
-
-/**
- * Split a link destination into its URL and optional title.
- *
- * CommonMark allows `[t](url "title")`, `'title'` and `(title)`. Only a title
- * that runs to the very end of the destination counts, which is what keeps a
- * URL that merely CONTAINS quotes or parens — `http://x.com/a_(b)` — intact:
- * no separating whitespace, so the whole string stays the URL.
- */
-function splitLinkDestination(destination: string): { url: string; title: string | null } {
-  // Keyed by CLOSER: the title always ends the destination, so the final
-  // character is what tells us which delimiter to look for.
-  const OPENER_FOR: Record<string, string> = { '"': '"', "'": "'", ')': '(' };
-  const trimmed = destination.trimEnd();
-  const opener = OPENER_FOR[trimmed[trimmed.length - 1] ?? ''];
-  if (!opener) return { url: unwrapLinkDestination(destination.trim()), title: null };
-
-  // Walk backwards from just inside the closer. `"` and `'` are their own
-  // closer, so scanning FORWARD (or taking the last index outright) would
-  // land on the closing delimiter rather than the opening one.
-  for (let index = trimmed.length - 2; index > 0; index--) {
-    if (trimmed[index] !== opener) continue;
-    if (isEscapedMarkdownCharacter(trimmed, index)) continue;
-    // A title must be separated from the URL by whitespace. Without this,
-    // `http://x.com/a_(b)` would lose `(b)` to a phantom title.
-    if (!/\s/.test(trimmed[index - 1])) continue;
-    const url = trimmed.slice(0, index).trim();
-    if (!url) continue;
-    return {
-      url: unwrapLinkDestination(url),
-      // Backslash escapes inside a title are real escapes (`\"` is a literal
-      // quote), matching core's parser.
-      title: trimmed.slice(index + 1, -1).replace(/\\([\\"'()])/g, '$1'),
-    };
-  }
-  return { url: unwrapLinkDestination(destination.trim()), title: null };
-}
-
-/**
- * Markdown-escape a link title that is still in its HTML-ESCAPED form.
- *
- * Every `htmlToInline` handler leaves attribute values entity-encoded and lets
- * the single trailing `unescapeHtml` decode them once; unescaping here instead
- * would decode a title twice (a literal `&amp;` would collapse to `&`). So the
- * quote is escaped through its entity: `\&quot;` decodes to `\"` on that final
- * pass. Backslashes go first so the one added for the quote isn't doubled.
- */
-function escapeLinkTitleAttr(attrValue: string): string {
-  return attrValue.replace(/\\/g, '\\\\').replace(/&quot;/g, '\\&quot;');
-}
-
-function findMatchingMarkdownDelimiter(
-  text: string,
-  start: number,
-  open: '[' | '(',
-  close: ']' | ')',
-): number {
-  let depth = 0;
-  for (let index = start; index < text.length; index++) {
-    if (isEscapedMarkdownCharacter(text, index)) continue;
-    if (text[index] === open) depth++;
-    if (text[index] !== close) continue;
-    depth--;
-    if (depth === 0) return index;
-  }
-  return -1;
-}
-
-function isEscapedMarkdownCharacter(text: string, index: number): boolean {
-  let backslashes = 0;
-  for (let cursor = index - 1; cursor >= 0 && text[cursor] === '\\'; cursor--) {
-    backslashes++;
-  }
-  return backslashes % 2 === 1;
 }
 
 function isMarkdownWordChar(ch: string | undefined): boolean {
@@ -2066,6 +1953,10 @@ function htmlToInline(html: string): string {
   // Soft line breaks — convert <br> to GFM hard-break syntax (two trailing
   // spaces + newline) before stripping tags so the newline survives.
   result = result.replace(/<br\s*\/?>/gi, '  \n');
+
+  // Autolinks go back out in the form they came in, vaulted before the
+  // escaping below: a backslash inside one is part of the address.
+  result = restoreAutolinkSource(result, (raw) => vault.protect(raw));
 
   // Escape literal markdown delimiters in the text BEFORE any tag becomes
   // markdown. Without this, prose the user typed as `\*not italic\*` came
