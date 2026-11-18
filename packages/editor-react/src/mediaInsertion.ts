@@ -13,6 +13,7 @@
  */
 import type { Editor, JSONContent } from '@tiptap/core';
 import { caretAfterInsertedBlock } from './caretAfterInsert';
+import { tiptapBlockInsertion } from './blockInsertion';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -69,8 +70,10 @@ export function asOwnParagraph(snippet: string, context: SourceLineContext): str
 /**
  * Insert block content at the top level: in place of the caret's paragraph
  * when that paragraph is empty (the line the author just made for it),
- * otherwise after the caret's top-level block — never inside a list item,
- * whose serializer would drop a nested block.
+ * otherwise where any block insert goes after the caret's block
+ * (`tiptapBlockInsertion`) — past a chart heading's data table, so a picture
+ * never splits a chart from its data, and never inside a list item, whose
+ * serializer would drop a nested block.
  */
 function insertTopLevel(editor: Editor, content: JSONContent[]): void {
   const { $from } = editor.state.selection;
@@ -82,7 +85,7 @@ function insertTopLevel(editor: Editor, content: JSONContent[]): void {
   const range =
     block.type.name === 'paragraph' && block.content.size === 0
       ? { from: $from.before(1), to: $from.after(1) }
-      : $from.after(1);
+      : tiptapBlockInsertion(editor.state, 'afterBlock').pos;
   editor.chain().focus().insertContentAt(range, content).run();
 }
 

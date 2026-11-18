@@ -21,6 +21,7 @@ import { coerceTemplateParams } from './templates/inputDescriptors.js';
 import { deriveTemplateInputs, extractBlockquote, isPictureFence } from './templateInputs.js';
 import { flattenRenderableBlocks, getBlockBodyText } from './markdownToDoc.js';
 import { coverRepeatsLeadingBlock } from './coverLeadingBlock.js';
+import { isUntouchedScenePlaceholder } from './scenePlaceholders.js';
 import { hasTemplate } from './templates/index.js';
 import { isContainerTemplate } from './templates/templateNames.js';
 import { KNOWN_BLOCK_META_KEYS } from '../markdown/annotationCoercion.js';
@@ -474,6 +475,13 @@ export interface BuildPreviewDocOptions {
    * false so synthetic filler slides never compete with real blocks.
    */
   interleaveImages?: boolean;
+  /**
+   * Leave out drawings and layouts still exactly as Insert left them
+   * (`isUntouchedScenePlaceholder`). Exported decks and videos pass true so
+   * an empty canvas never takes a scene; the live slideshow keeps them
+   * (default false), where the author needs the slide to open its designer.
+   */
+  omitUntouchedPlaceholders?: boolean;
 }
 
 /**
@@ -504,7 +512,9 @@ export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc
   if (doc.presentationApplied) options = { ...options, interleaveImages: false };
   // Container templates (`diagram`, `drawing`) render their children as
   // nodes/shapes, so those children must not also become preview slides.
-  const flat = flattenRenderableBlocks(doc.blocks);
+  const flat = flattenRenderableBlocks(doc.blocks).filter(
+    (block) => !(options?.omitUntouchedPlaceholders && isUntouchedScenePlaceholder(block)),
+  );
   const buildScript = flat.some((block) => block.build && block.build.mode !== 'off')
     ? buildNarrationScript(sourceDoc)
     : undefined;

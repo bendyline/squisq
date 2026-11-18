@@ -99,8 +99,9 @@ Supporting context that must remain visible.
     expect(body?.content.html).toContain(
       '<tbody><tr><td align="left">Alpha</td><td align="right">100</td></tr></tbody></table>',
     );
-    expect(body?.position.y).toBe('20%');
-    expect(body?.position.height).toBe('72%');
+    // Beneath the 60px lockup headline, down to the 92% bottom margin.
+    expect(body?.position.y).toBe('24%');
+    expect(body?.position.height).toBe('68%');
   });
 
   it('preserves additional authored blank lines between body blocks', () => {

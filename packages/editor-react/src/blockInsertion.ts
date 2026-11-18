@@ -9,7 +9,11 @@
 
 import type { EditorState } from '@tiptap/pm/state';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { isContainerTemplate } from '@bendyline/squisq/doc';
+import {
+  isContainerTemplate,
+  resolveTemplateName,
+  TABLE_FED_TEMPLATES,
+} from '@bendyline/squisq/doc';
 import {
   resolveOutlineInsertion,
   type BlockInsertionContext,
@@ -24,13 +28,21 @@ export function tiptapOutline(doc: ProseMirrorNode): {
 } {
   const blocks: OutlineBlock[] = [];
   const positions: number[] = [];
-  doc.forEach((node, offset) => {
+  doc.forEach((node, offset, index) => {
     positions.push(offset);
     if (node.type.name === 'heading') {
       const attrs = node.attrs as { level?: number; dataTemplate?: string | null };
+      const template = attrs.dataTemplate ?? undefined;
+      // A chart's or data table's heading owns the table under it: its data.
+      const next = index + 1 < doc.childCount ? doc.child(index + 1) : null;
+      const ownsTable =
+        !!template &&
+        TABLE_FED_TEMPLATES.has(resolveTemplateName(template)) &&
+        next?.type.name === 'table';
       blocks.push({
         headingDepth: attrs.level ?? 1,
-        container: isContainerTemplate(attrs.dataTemplate ?? undefined),
+        container: isContainerTemplate(template),
+        ...(ownsTable ? { ownsFollowing: 1 } : {}),
       });
     } else {
       blocks.push({ headingDepth: null, container: false });

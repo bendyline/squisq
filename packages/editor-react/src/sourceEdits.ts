@@ -16,7 +16,11 @@
  */
 
 import { parseMarkdown, type MarkdownSourceEdit } from '@bendyline/squisq/markdown';
-import { isContainerTemplate } from '@bendyline/squisq/doc';
+import {
+  isContainerTemplate,
+  resolveTemplateName,
+  TABLE_FED_TEMPLATES,
+} from '@bendyline/squisq/doc';
 import { frontmatterEndOffset } from './frontmatter';
 
 export type { MarkdownSourceEdit };
@@ -52,6 +56,12 @@ export interface OutlineBlock {
   headingDepth: number | null;
   /** True for a heading whose template consumes the headings under it. */
   container: boolean;
+  /**
+   * Blocks right after this one that belong to it: a chart's or data table's
+   * heading owns the table beneath it (its data). An `afterBlock` insert
+   * goes past them, so it never lands between a chart's title and its data.
+   */
+  ownsFollowing?: number;
 }
 
 /** An insertion point in an outline: insert before `blocks[index]`. */
@@ -177,7 +187,8 @@ export function resolveOutlineInsertion(
       }
     }
   } else if (placement === 'afterBlock') {
-    index = cursor + 1;
+    // Past whatever the block owns (a chart heading's data table).
+    index = Math.min(blocks.length, cursor + 1 + (blocks[cursor]?.ownsFollowing ?? 0));
   } else {
     index = firstHeadingFrom(cursor + 1);
   }
@@ -241,20 +252,27 @@ export function sourceOutline(source: string): {
   } catch {
     return { blocks, ranges };
   }
-  for (const node of children) {
+  children.forEach((node, i) => {
     const start = node.position?.start.offset;
     const end = node.position?.end.offset;
-    if (typeof start !== 'number' || typeof end !== 'number' || start < bodyStart) continue;
+    if (typeof start !== 'number' || typeof end !== 'number' || start < bodyStart) return;
     if (node.type === 'heading') {
+      const template = node.templateAnnotation?.template;
+      // A chart's or data table's heading owns the table under it: its data.
+      const ownsTable =
+        !!template &&
+        TABLE_FED_TEMPLATES.has(resolveTemplateName(template)) &&
+        children[i + 1]?.type === 'table';
       blocks.push({
         headingDepth: node.depth,
-        container: isContainerTemplate(node.templateAnnotation?.template),
+        container: isContainerTemplate(template),
+        ...(ownsTable ? { ownsFollowing: 1 } : {}),
       });
     } else {
       blocks.push({ headingDepth: null, container: false });
     }
     ranges.push({ start, end });
-  }
+  });
   return { blocks, ranges };
 }
 

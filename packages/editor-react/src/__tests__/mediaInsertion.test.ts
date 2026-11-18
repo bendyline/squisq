@@ -4,8 +4,13 @@ import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
+import StarterKit from '@tiptap/starter-kit';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import { HeadingWithTemplate } from '../TemplateAnnotation';
+import { AlignedTableCell, AlignedTableHeader } from '../tiptap/alignedTableCells';
 import { describe, expect, it, vi } from 'vitest';
-import { tiptapToMarkdown } from '../tiptapBridge';
+import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 import { TiptapVideo } from '../tiptap/TiptapVideo';
 import { TiptapAudio } from '../tiptap/TiptapAudio';
 import {
@@ -288,5 +293,33 @@ describe('insertMediaReference — no live editor', () => {
       audio,
     );
     expect(appendMarkdown).toHaveBeenCalledWith('<audio src="media/take.mp3" controls></audio>');
+  });
+});
+
+describe('insertMediaReference — after a chart title', () => {
+  it('lands after the chart’s data table, never between the title and its data', () => {
+    const chart = '## Revenue {[barChart]}\n\n| Q | Sales |\n| --- | --- |\n| Q1 | 4 |';
+    const editor = new Editor({
+      extensions: [
+        StarterKit.configure({ heading: false }),
+        HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+        Table,
+        TableRow,
+        AlignedTableCell,
+        AlignedTableHeader,
+        Image.configure({ inline: false }),
+      ],
+      content: markdownToTiptap(`${chart}\n\nAfter.`),
+    });
+    // Insert → Chart leaves the caret in the title, so typing renames it.
+    editor.commands.setTextSelection(4);
+    expect(editor.state.selection.$from.parent.type.name).toBe('heading');
+
+    insertMediaReference(wysiwygTarget(editor), image);
+    const types = (editor.getJSON().content ?? []).map((node) => node.type);
+    expect(types.slice(0, 3)).toEqual(['heading', 'table', 'image']);
+    // The chart's data still follows its title directly.
+    expect(tiptapToMarkdown(editor.getHTML())).toContain('{[barChart]}\n\n| Q');
+    editor.destroy();
   });
 });

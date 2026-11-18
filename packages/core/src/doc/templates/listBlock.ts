@@ -15,7 +15,7 @@ import type { MarkdownBlockNode } from '../../markdown/types.js';
  * This is shared code used by both site and efb-app doc renderers.
  */
 
-import type { Layer } from '../../schemas/Doc.js';
+import { taskMarker, type Layer, type TextLayer } from '../../schemas/Doc.js';
 import type { ListBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
 import { extractRichListItems } from '../templateInputs.js';
 import {
@@ -34,6 +34,9 @@ import {
   accentForViewport,
 } from './accentImage.js';
 import { estimateProseLineCount, estimateWrappedLineCount } from './captionUtils.js';
+// conceptBlocks imports this module too; `frame` is only called at render
+// time, so the cycle never reads an uninitialized binding.
+import { frame } from './conceptBlocks.js';
 
 /** Flow id tying the marker and item layers into one native list (see TextFlow). */
 const LIST_ITEMS_FLOW = 'list-items';
@@ -110,6 +113,167 @@ function listItemGeometry(
   };
 }
 
+/**
+ * How far a short list's items may grow past their base size: the concept
+ * ramp's top step (`PLAIN_BASE × MAX_SCALE`, 45px at 1080p), filling no more
+ * than `LIST_GROW_SHARE` of the room beneath the headline.
+ */
+const LIST_ITEM_GROWN_FONT_PX = 45;
+const LIST_GROW_SHARE = 0.9;
+/** The largest an item may be as a share of the headline above it. */
+const LIST_ITEM_HEADLINE_SHARE = 0.8;
+
+/**
+ * A list slide in the shared lockup the concept slides use (`frame`: themed
+ * surface, accent rule, 60px headline), its items set as large as the room
+ * allows. The relaxed layout this replaces set a 44px title over 34px items
+ * in the top half of the frame — a heading barely larger than its body, and
+ * an empty lower half — and the player cannot grow these items itself, since
+ * each item's box is sized to its lines. So short lists grow here, up to the
+ * ramp's top step, and long ones shrink to the readable floor as before.
+ */
+function lockupListLayers(
+  input: ListBlockInput,
+  items: string[],
+  richItems: ReturnType<typeof extractRichListItems>,
+  ordered: boolean,
+  context: TemplateContext,
+): Layer[] {
+  const { theme } = context;
+  const lockup = frame({ title: input.title, colorScheme: input.colorScheme }, context);
+  // The list's headline keeps the layer id it has always had.
+  const layers: Layer[] = lockup.layers.map((layer) =>
+    layer.id === 'title' ? { ...layer, id: 'list-title' } : layer,
+  );
+  const widthPx = lockup.right - lockup.left;
+  const baseFontSize = themedFontSize(LIST_ITEM_BASE_FONT_PX, context, false);
+  // Items never grow past this share of the headline, so the heading stays
+  // the clear top of the hierarchy (in portrait the ramp's top step would
+  // otherwise overtake it).
+  const headline = layers.find(
+    (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'list-title',
+  )?.content.style.fontSize;
+  const grownFontSize = Math.max(
+    baseFontSize,
+    Math.min(
+      themedFontSize(LIST_ITEM_GROWN_FONT_PX, context, false),
+      headline ? Math.floor(headline * LIST_ITEM_HEADLINE_SHARE) : Infinity,
+    ),
+  );
+  const minFontSize = Math.min(baseFontSize, themedFontSize(LIST_ITEM_MIN_FONT_PX, context, false));
+  const heightAt = (fontSize: number) =>
+    measureListHeightPx(
+      items,
+      fontSize,
+      listItemGeometry(fontSize, baseFontSize, items.length, widthPx, ordered),
+    );
+  // A dense list starts right under the headline, as the old condensed
+  // layout did, before it spends any type size.
+  const { height: H } = context.viewport;
+  const top =
+    heightAt(baseFontSize) > lockup.bottom - lockup.top
+      ? Math.max(H * 0.1, lockup.top - H * (lockup.portrait ? 0.05 : 0.07) + H * 0.025)
+      : lockup.top;
+  const availablePx = Math.max(0, lockup.bottom - top);
+
+  let fontSize = baseFontSize;
+  // Grow a short list: the largest size whose items fill no more than the
+  // grow share of the room.
+  for (let size = grownFontSize; size > baseFontSize; size -= 1) {
+    if (heightAt(size) <= availablePx * LIST_GROW_SHARE) {
+      fontSize = size;
+      break;
+    }
+  }
+  // Shrink a long one to the floor; past it the tail runs off the slide.
+  while (fontSize > minFontSize && heightAt(fontSize) > availablePx) fontSize -= 1;
+
+  const { markerWidthPx, bodyIndentPx, bodyWidthPx, gapPx } = listItemGeometry(
+    fontSize,
+    baseFontSize,
+    items.length,
+    widthPx,
+    ordered,
+  );
+  const checks = itemChecks(context, items.length);
+  let itemTop = top;
+  for (let i = 0; i < items.length; i++) {
+    const itemText = items[i]!;
+    const itemHtml = richItems[i]?.text === itemText ? richItems[i]?.html : undefined;
+    const lineCount = estimateProseLineCount(itemText, fontSize, bodyWidthPx);
+    const animation = motionEntrance(context, {
+      type: 'fadeIn',
+      duration: 0.8,
+      delay: 0.3 + 0.3 * i,
+    });
+    const style = {
+      fontSize,
+      fontFamily: getThemeFont(context, 'body'),
+      color: theme.colors.text,
+      lineHeight: LIST_ITEM_LINE_HEIGHT,
+      shadow: shouldUseShadow(context),
+    };
+    layers.push({
+      type: 'text',
+      id: `item-${i}-marker`,
+      content: {
+        text: checks[i] !== undefined ? taskMarker(checks[i]!) : ordered ? `${i + 1}.` : '•',
+        flow: { id: LIST_ITEMS_FLOW, role: 'marker' },
+        // Markers in the lockup's accent, as the concept slides set theirs.
+        style: { ...style, color: lockup.accent, textAlign: 'right' },
+      },
+      position: { x: lockup.left, y: itemTop, width: markerWidthPx },
+      animation,
+    });
+    layers.push({
+      type: 'text',
+      id: `item-${i}`,
+      content: {
+        text: itemText,
+        ...(itemHtml ? { html: itemHtml } : {}),
+        paragraphs: [
+          {
+            text: itemText,
+            list: {
+              ordered,
+              level: 0,
+              ...(ordered ? { number: i + 1 } : {}),
+              ...(checks[i] !== undefined ? { checked: checks[i] } : {}),
+            },
+          },
+        ],
+        flow: { id: LIST_ITEMS_FLOW },
+        style: { ...style, textAlign: 'left' },
+      },
+      position: {
+        x: lockup.left + bodyIndentPx,
+        y: itemTop,
+        width: bodyWidthPx,
+        // Sized from the same line count that reserved the room, so nested
+        // sub-items in a rich item's hidden-overflow box are not cut off.
+        height: lineCount * fontSize * LIST_ITEM_LINE_HEIGHT + fontSize * 0.5,
+      },
+      animation,
+    });
+    itemTop += lineCount * fontSize * LIST_ITEM_LINE_HEIGHT + gapPx;
+  }
+  return layers;
+}
+
+/**
+ * Each item's task state (`- [ ]` / `- [x]`), read from the block's list,
+ * when its items are the slide's items. A task item shows its box as its
+ * marker; every renderer and the PPTX export key off `list.checked`.
+ */
+function itemChecks(context: TemplateContext, count: number): Array<boolean | undefined> {
+  const list = context.block?.contents?.find((node) => node.type === 'list');
+  const items = list && list.type === 'list' ? list.children : [];
+  return Array.from({ length: count }, (_, i) => {
+    const checked = items.length === count ? items[i]?.checked : undefined;
+    return typeof checked === 'boolean' ? checked : undefined;
+  });
+}
+
 /** Total height the list occupies at a font size, gaps included. */
 function measureListHeightPx(
   items: string[],
@@ -179,13 +343,20 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
           themedImageTreatment(context, input.imageTreatment),
         ),
       );
+      const textLeft = `${parseFloat(layout.textCenterX) - parseFloat(layout.textWidth) / 2}%`;
       for (const layer of layers) {
+        // The headline's accent rule moves with the headline.
+        if (layer.id === 'accent-rule') {
+          layer.position.x = textLeft;
+          layer.position.y = adjustY(String(layer.position.y), layout);
+          continue;
+        }
         if (layer.type !== 'text' || (layer.id !== 'title' && layer.id !== 'body')) continue;
-        layer.position.x = `${parseFloat(layout.textCenterX) - parseFloat(layout.textWidth) / 2}%`;
+        layer.position.x = textLeft;
         layer.position.width = layout.textWidth;
         layer.position.y = adjustY(String(layer.position.y), layout);
         if (layer.id === 'body' && accent.position === 'bottom-strip')
-          layer.position.height = `${72 - ACCENT_STRIP_SIZE}%`;
+          layer.position.height = `${68 - ACCENT_STRIP_SIZE}%`;
       }
     }
     return layers;
@@ -200,6 +371,8 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
   // inputs keep the `1.` markers.
   const ordered = input.ordered !== false;
   const richItems = extractRichListItems(context.block?.contents);
+  // An accent image shares the frame; its layouts keep the relaxed plan below.
+  if (!accentImage) return lockupListLayers(input, items, richItems, ordered, context);
   const { theme } = context;
 
   // Get layout adjustments if accent image is present
@@ -332,6 +505,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
   // producing a hanging indent instead of wrapping underneath the number.
   const { markerWidthPx, bodyIndentPx, bodyWidthPx, gapPx } = geometry;
   const bodyLeftX = `${leftPct + (bodyIndentPx / context.viewport.width) * 100}%`;
+  const checks = itemChecks(context, items.length);
   let itemY = startY;
 
   // List items with staggered animation
@@ -350,7 +524,7 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
       id: `item-${i}-marker`,
       content: {
         // Bullets stay bullets; only ordered (or legacy, unflagged) lists count.
-        text: ordered ? `${i + 1}.` : '•',
+        text: checks[i] !== undefined ? taskMarker(checks[i]!) : ordered ? `${i + 1}.` : '•',
         flow: { id: LIST_ITEMS_FLOW, role: 'marker' },
         style: {
           fontSize: itemFontSize,
@@ -378,7 +552,12 @@ export function listBlock(input: ListBlockInput, context: TemplateContext): Laye
         paragraphs: [
           {
             text: itemText,
-            list: { ordered, level: 0, ...(ordered ? { number: i + 1 } : {}) },
+            list: {
+              ordered,
+              level: 0,
+              ...(ordered ? { number: i + 1 } : {}),
+              ...(checks[i] !== undefined ? { checked: checks[i] } : {}),
+            },
           },
         ],
         flow: { id: LIST_ITEMS_FLOW },

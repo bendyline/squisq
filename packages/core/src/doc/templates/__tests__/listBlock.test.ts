@@ -6,6 +6,12 @@ import { DEFAULT_THEME } from '../../../schemas/themeLibrary.js';
 import { VIEWPORT_PRESETS } from '../../../schemas/Viewport.js';
 import { themedFontSize } from '../../utils/themeUtils.js';
 import { estimateWrappedLineCount, listBlock } from '../listBlock.js';
+import { estimateProseLineCount } from '../captionUtils.js';
+
+/** A layer coordinate in viewport percent, whether authored as `'34%'` or in px. */
+function pct(value: number | string | undefined, span: number): number {
+  return typeof value === 'number' ? (value / span) * 100 : parseFloat(String(value));
+}
 
 const ITEMS = [
   'We launched the scripting platform for Minecraft, which was essential for launching new categories of content for Minecraft (add-ons)',
@@ -34,11 +40,16 @@ describe('listBlock', () => {
     const markerLayers = layers.filter(
       (layer): layer is TextLayer => layer.type === 'text' && /^item-\d+-marker$/.test(layer.id),
     );
-    const yPositions = itemLayers.map((layer) => parseFloat(String(layer.position.y)));
+    const H = context.viewport.height;
+    const W = context.viewport.width;
+    const yPositions = itemLayers.map((layer) => pct(layer.position.y, H));
 
     expect(itemLayers).toHaveLength(4);
     expect(markerLayers).toHaveLength(4);
-    expect(yPositions[0]).toBe(34);
+    // The items start below the lockup's headline.
+    const title = layers.find((layer) => layer.id === 'list-title');
+    expect(title).toBeDefined();
+    expect(yPositions[0]).toBeGreaterThan(pct(title!.position.y, H));
 
     // The marker has its own right-aligned column, while all body lines are
     // rendered by one layer beginning after that column (a hanging indent).
@@ -46,22 +57,23 @@ describe('listBlock', () => {
     expect(markerLayers[0]!.content.style.textAlign).toBe('right');
     expect(itemLayers[0]!.content.text).toBe(ITEMS[0]);
     const markerRightPx =
-      (parseFloat(String(markerLayers[0]!.position.x)) / 100) * context.viewport.width +
-      Number(markerLayers[0]!.position.width);
-    const bodyLeftPx =
-      (parseFloat(String(itemLayers[0]!.position.x)) / 100) * context.viewport.width;
+      (pct(markerLayers[0]!.position.x, W) / 100) * W + Number(markerLayers[0]!.position.width);
+    const bodyLeftPx = (pct(itemLayers[0]!.position.x, W) / 100) * W;
     expect(bodyLeftPx).toBeGreaterThan(markerRightPx);
 
-    // The first two entries wrap to two lines. Their following baselines
-    // therefore advance by two line-heights plus the inter-item gap.
+    // Each entry's following item starts after the lines it wraps to plus
+    // the inter-item gap, so a wrapped entry never overlaps the next one.
     const fontSize = itemLayers[0]!.content.style.fontSize;
-    const twoLineAdvance = ((2 * fontSize * 1.2 + 18) / context.viewport.height) * 100;
-    expect(yPositions[1]! - yPositions[0]!).toBeCloseTo(twoLineAdvance);
-    expect(yPositions[2]! - yPositions[1]!).toBeCloseTo(twoLineAdvance);
-
-    // The third entry fits on one line, so the final advance is compact.
-    const oneLineAdvance = ((fontSize * 1.2 + 18) / context.viewport.height) * 100;
-    expect(yPositions[3]! - yPositions[2]!).toBeCloseTo(oneLineAdvance);
+    // The gap between items scales with the type from 18px at the base size.
+    const gap = 18 * (fontSize / themedFontSize(34, context, false));
+    const lines = itemLayers.map((layer) =>
+      estimateProseLineCount(layer.content.text, fontSize, Number(layer.position.width)),
+    );
+    expect(Math.max(...lines)).toBeGreaterThan(1);
+    for (let i = 0; i < itemLayers.length - 1; i++) {
+      const advance = ((lines[i]! * fontSize * 1.2 + gap) / H) * 100;
+      expect(yPositions[i + 1]! - yPositions[i]!).toBeCloseTo(advance);
+    }
   });
 
   it('preserves authored links as rich HTML on slideshow item layers', () => {
@@ -163,8 +175,9 @@ describe('listBlock', () => {
       const titleLayer = layers.find(
         (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'list-title',
       );
-      const titleTopPct = titleLayer ? parseFloat(String(titleLayer.position.y)) : undefined;
-      const firstItemTopPct = parseFloat(String(itemLayers[0]!.position.y));
+      const H = context.viewport.height;
+      const titleTopPct = titleLayer ? pct(titleLayer.position.y, H) : undefined;
+      const firstItemTopPct = pct(itemLayers[0]!.position.y, H);
       const baseFontSize = themedFontSize(34, context, false);
       const minFontSize = themedFontSize(16, context, false);
       // The bottom edge of the last item, in viewport percent, using the
@@ -177,7 +190,7 @@ describe('listBlock', () => {
         Number(last.position.width),
       );
       const lastBottomPct =
-        parseFloat(String(last.position.y)) +
+        pct(last.position.y, H) +
         ((lastLines * fontSize * LINE_HEIGHT) / context.viewport.height) * 100;
       return {
         context,
@@ -193,65 +206,57 @@ describe('listBlock', () => {
       };
     }
 
-    it('keeps the relaxed layout — title at 20%, items from 34% — for a short list', () => {
-      const { titleTopPct, firstItemTopPct, fontSize, baseFontSize } = render(
-        LONG_ITEMS.slice(0, 3),
-      );
-      expect(titleTopPct).toBe(20);
-      expect(firstItemTopPct).toBe(34);
-      expect(fontSize).toBe(baseFontSize);
-    });
-
-    it('condenses the top margin before it spends any type size', () => {
-      // Eight wrapped items overflow the relaxed layout at the base size, but
-      // pulling the title up to the top of the frame and starting the items
-      // right beneath it recovers enough height that no shrink is needed.
+    // Lists share the concept slides' lockup: an accent rule over a 60px
+    // headline. The relaxed layout set a 44px title over 34px items in the
+    // top half of the frame, and the player cannot grow fixed item boxes.
+    it('sets a short list in the lockup, its items grown beneath a clearly larger headline', () => {
       const {
-        context,
+        layers,
         titleLayer,
-        titleTopPct,
         firstItemTopPct,
+        titleTopPct,
         fontSize,
         baseFontSize,
         lastBottomPct,
-      } = render(LONG_ITEMS);
-
-      expect(titleTopPct).toBe(8);
-      expect(fontSize).toBe(baseFontSize);
-      expect(lastBottomPct).toBeLessThanOrEqual(92);
-
-      // The first item sits directly under the (one-line) title.
-      const titleFontSize = titleLayer!.content.style.fontSize;
-      const expectedFirstItemTop =
-        8 + ((titleFontSize * 1.15 + 22) / context.viewport.height) * 100;
-      expect(firstItemTopPct).toBeCloseTo(expectedFirstItemTop, 5);
-      expect(firstItemTopPct).toBeLessThan(34);
+      } = render(LONG_ITEMS.slice(0, 3));
+      expect(layers.some((layer) => layer.id === 'accent-rule')).toBe(true);
+      expect(titleLayer!.content.style.fontSize).toBeGreaterThanOrEqual(fontSize / 0.8);
+      expect(firstItemTopPct).toBeGreaterThan(titleTopPct!);
+      // A short list grows to fill the room rather than leaving it empty.
+      expect(fontSize).toBeGreaterThan(baseFontSize);
+      expect(lastBottomPct).toBeLessThanOrEqual(90);
     });
 
-    it('condenses an untitled dense list from 26% up to the top of the frame', () => {
+    it('starts a dense list right under the headline before it spends type', () => {
+      const short = render(LONG_ITEMS.slice(0, 3));
+      const dense = render(LONG_ITEMS);
+      expect(dense.firstItemTopPct).toBeLessThan(short.firstItemTopPct);
+      expect(dense.fontSize).toBeLessThanOrEqual(dense.baseFontSize);
+      expect(dense.lastBottomPct).toBeLessThanOrEqual(90);
+    });
+
+    it('starts an untitled list at the top of the frame', () => {
       const { titleLayer, firstItemTopPct } = render(LONG_ITEMS, { title: undefined });
       expect(titleLayer).toBeUndefined();
-      expect(firstItemTopPct).toBe(8);
+      expect(firstItemTopPct).toBeCloseTo(10, 5);
     });
 
     it('steps the item type down when even the condensed layout overflows', () => {
       const dense = [...LONG_ITEMS, ...LONG_ITEMS.slice(0, 4)];
-      const { itemLayers, titleTopPct, baseFontSize, minFontSize, fontSize, lastBottomPct } =
-        render(dense);
+      const { itemLayers, baseFontSize, minFontSize, fontSize, lastBottomPct } = render(dense);
 
       expect(itemLayers).toHaveLength(dense.length);
-      expect(titleTopPct).toBe(8);
       expect(fontSize).toBeLessThan(baseFontSize);
       expect(fontSize).toBeGreaterThan(minFontSize);
       // Every marker and body shares the one shrunken size.
       for (const layer of itemLayers) expect(layer.content.style.fontSize).toBe(fontSize);
-      expect(lastBottomPct).toBeLessThanOrEqual(92);
+      expect(lastBottomPct).toBeLessThanOrEqual(90);
 
       // Sanity: at the base size the same list would have run off the slide,
       // so the shrink is what brought it back on.
       const context = createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape);
-      const y0 = parseFloat(String(itemLayers[0]!.position.y));
-      const y1 = parseFloat(String(itemLayers[1]!.position.y));
+      const y0 = pct(itemLayers[0]!.position.y, context.viewport.height);
+      const y1 = pct(itemLayers[1]!.position.y, context.viewport.height);
       const advancePx = ((y1 - y0) / 100) * context.viewport.height;
       const scaledGap = BASE_GAP * (fontSize / baseFontSize);
       // The gap after the first (two-line) item scales with the type.
@@ -267,9 +272,10 @@ describe('listBlock', () => {
       expect(lastBottomPct).toBeGreaterThan(100);
     });
 
-    it('leaves a short list at its base size', () => {
-      const { fontSize, baseFontSize } = render(LONG_ITEMS.slice(0, 3));
-      expect(fontSize).toBe(baseFontSize);
+    it('grows a short list no further than the ramp’s top step', () => {
+      const { context, fontSize, baseFontSize } = render(['One', 'Two', 'Three']);
+      expect(fontSize).toBeGreaterThan(baseFontSize);
+      expect(fontSize).toBeLessThanOrEqual(themedFontSize(45, context, false));
     });
 
     it('keeps a long list clear of a bottom accent strip', () => {
@@ -292,5 +298,32 @@ describe('listBlock', () => {
       // The strip occupies the bottom 35%; the list ends above it with clearance.
       expect(lastBottomPct).toBeLessThanOrEqual(63);
     });
+  });
+
+  it('marks task items with their box, ticked when done', () => {
+    const contents = parseMarkdown(
+      ['- [ ] Book the venue', '- [x] Pay the deposit'].join('\n'),
+    ).children;
+    const context = {
+      ...createTemplateContext(DEFAULT_THEME, 0, 1, VIEWPORT_PRESETS.landscape),
+      block: { id: 'tasks', startTime: 0, duration: 10, audioSegment: 0, contents },
+    };
+    const layers = listBlock(
+      {
+        template: 'list',
+        id: 'tasks',
+        duration: 10,
+        audioSegment: 0,
+        title: 'To do',
+        ordered: false,
+        items: ['Book the venue', 'Pay the deposit'],
+      },
+      context,
+    );
+    const text = (id: string) =>
+      (layers.find((layer) => layer.id === id) as TextLayer | undefined)?.content;
+    expect(text('item-0-marker')?.text).toBe('☐');
+    expect(text('item-1-marker')?.text).toBe('☑');
+    expect(text('item-1')?.paragraphs?.[0]?.list?.checked).toBe(true);
   });
 });

@@ -118,6 +118,7 @@ import {
   type PathSegment,
 } from './pathGeometry.js';
 import { buildLayerTextShape } from './layerText.js';
+import { hasTableParagraphs, tableLayerXml, textLayerWithTablesXml } from './tables.js';
 import {
   buildDeckLayoutXml,
   buildDeckMasterXml,
@@ -939,7 +940,14 @@ function buildLayerSlideXml(block: Block, ctx: SlideContext, plan: SlidePlan): s
         : Math.max(currentY + 1, nextTextY - 8);
     shapes.push(
       ...(layer.type === 'text'
-        ? [buildLayerTextShape(layer, ctx.allocShapeId(), textBottom, listIndentPx, textScale)]
+        ? hasTableParagraphs(layer)
+          ? textLayerWithTablesXml(layer, {
+              textBottom,
+              listIndentPx,
+              textScale,
+              allocShapeId: () => ctx.allocShapeId(),
+            })
+          : [buildLayerTextShape(layer, ctx.allocShapeId(), textBottom, listIndentPx, textScale)]
         : convertLayerToShapes(layer, ctx, textBottom)),
     );
   }
@@ -961,7 +969,13 @@ function buildLayerSlideXml(block: Block, ctx: SlideContext, plan: SlidePlan): s
 function convertLayerToShapes(layer: Layer, ctx: SlideContext, textBottom?: number): string[] {
   switch (layer.type) {
     case 'text':
-      return [buildLayerTextShape(layer, ctx.allocShapeId(), textBottom)];
+      return hasTableParagraphs(layer)
+        ? textLayerWithTablesXml(layer, {
+            textBottom,
+            textScale: 1,
+            allocShapeId: () => ctx.allocShapeId(),
+          })
+        : [buildLayerTextShape(layer, ctx.allocShapeId(), textBottom)];
     case 'shape':
       // SVG noise replaces the shape's paint with translucent film grain.
       // DrawingML cannot reproduce that filter: exporting its unfiltered
@@ -1153,56 +1167,21 @@ function buildTableLayerShapes(layer: TableLayer, ctx: SlideContext): string[] {
   const visibleBodyRows = layer.content.maxVisibleRows
     ? layer.content.rows.slice(0, Math.max(1, Math.floor(layer.content.maxVisibleRows)))
     : layer.content.rows;
-  const rows = [layer.content.headers, ...visibleBodyRows];
-  const columnCount = Math.max(1, ...rows.map((row) => row.length));
-  const rowCount = Math.max(1, rows.length);
-  const rect = resolveLayerRect(layer.position, 1920, 1080);
-  const cellWidth = rect.width / columnCount;
-  const cellHeight = rect.height / rowCount;
-  const shapes: string[] = [];
-
-  for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-    for (let columnIndex = 0; columnIndex < columnCount; columnIndex++) {
-      const isHeader = rowIndex === 0;
-      const text = rows[rowIndex]?.[columnIndex] ?? '';
-      shapes.push(
-        buildLayerTextShape(
-          {
-            id: `${layer.id}-${rowIndex}-${columnIndex}`,
-            type: 'text',
-            position: {
-              x: rect.x + columnIndex * cellWidth,
-              y: rect.y + rowIndex * cellHeight,
-              width: cellWidth,
-              height: cellHeight,
-            },
-            content: {
-              text,
-              style: {
-                fontSize: layer.content.style.fontSize,
-                fontFamily: isHeader
-                  ? (layer.content.style.headerFontFamily ?? layer.content.style.fontFamily)
-                  : layer.content.style.fontFamily,
-                fontWeight: isHeader ? 'bold' : 'normal',
-                color: isHeader ? layer.content.style.headerColor : layer.content.style.cellColor,
-                background: isHeader
-                  ? layer.content.style.headerBackground
-                  : layer.content.style.cellBackground,
-                borderColor: layer.content.style.borderColor,
-                borderWidth: 1,
-                padding: Math.max(4, layer.content.style.fontSize * 0.25),
-                verticalAlign: 'middle',
-                textAlign: layer.content.align?.[columnIndex] ?? 'left',
-                lineHeight: 1.2,
-              },
-            },
-          },
-          ctx.allocShapeId(),
-        ),
-      );
-    }
-  }
-  return shapes;
+  // One native table (an `a:tbl` frame), not a grid of text boxes: the deck
+  // can then edit, resize and restyle it as a table.
+  return [
+    tableLayerXml(
+      layer,
+      {
+        header: layer.content.headers,
+        rows: visibleBodyRows,
+        ...(layer.content.align
+          ? { align: layer.content.align.map((value) => value ?? null) }
+          : {}),
+      },
+      ctx.allocShapeId(),
+    ),
+  ];
 }
 
 function treeItemsToText(items: TreeLayerItem[], depth = 0): string {

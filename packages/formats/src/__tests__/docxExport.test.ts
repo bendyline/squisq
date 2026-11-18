@@ -759,6 +759,23 @@ describe('DOCX export — images resized in the editor', () => {
   });
 });
 
+describe('task lists', () => {
+  it('lead each task with its box instead of a bullet', async () => {
+    const zip = await exportAndParse(
+      parseMarkdown('- [ ] Book the venue\n- [x] Pay the deposit\n\n- A plain point\n'),
+    );
+    const xml = await zip.file('word/document.xml')!.async('text');
+    const paragraph = (text: string) =>
+      xml.split('<w:p>').find((part) => part.includes(text)) ?? '';
+    expect(paragraph('Book the venue')).toContain('☐ </w:t>');
+    expect(paragraph('Book the venue')).toContain('<w:numId w:val="0"/>');
+    expect(paragraph('Pay the deposit')).toContain('☑ </w:t>');
+    // An ordinary item keeps its list numbering (its bullet).
+    expect(paragraph('A plain point')).not.toContain('<w:numId w:val="0"/>');
+    expect(paragraph('A plain point')).not.toMatch(/[☐☑]/);
+  });
+});
+
 describe('<br> in a table cell', () => {
   it('writes a line break, not run-together text', async () => {
     const zip = await exportAndParse(

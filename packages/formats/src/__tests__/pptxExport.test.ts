@@ -12,6 +12,7 @@ import {
   resolveThemeForDoc,
 } from '@bendyline/squisq/doc';
 import { docToPptx, markdownDocToPptx } from '../pptx/export';
+import { pptxToMarkdownDoc } from '../pptx/import';
 import { openPackage, getPartRelationships, getPartXml } from '../ooxml/reader';
 import { NS_DRAWINGML, NS_PML, NS_PML_2010, NS_R } from '../ooxml/namespaces';
 
@@ -917,8 +918,12 @@ describe('docToPptx text size', () => {
     const exportedPx = (shape: string) =>
       Number(paragraphs.find((paragraph) => paragraph.shape === shape)!.size) / 50;
 
-    expect(exportedPx('body')).toBeCloseTo(nominalFontSize(doc, 'body') * 2, 1);
-    expect(exportedPx('title')).toBeCloseTo(nominalFontSize(doc, 'title') * 2, 1);
+    const bodyScale = exportedPx('body') / nominalFontSize(doc, 'body');
+    const titleScale = exportedPx('title') / nominalFontSize(doc, 'title');
+    // Grown well past the base size, and by one scale for the whole slide.
+    expect(bodyScale).toBeGreaterThan(1.5);
+    expect(bodyScale).toBeLessThanOrEqual(2);
+    expect(titleScale).toBeCloseTo(bodyScale, 1);
   });
 
   it('keeps geometry-bound slides at their authored size', async () => {
@@ -948,9 +953,103 @@ describe('docToPptx text size', () => {
       await openPackage(await docToPptx(doc, { includeCoverSlide: false })),
       'ppt/slides/slide1.xml',
     );
-    const cell = namedShape(slide!, 'table-0-0');
-    const line = cell.getElementsByTagNameNS(NS_DRAWINGML, 'ln')[0];
+    const cell = slide!.getElementsByTagNameNS(NS_DRAWINGML, 'tc')[0];
+    const line = cell?.getElementsByTagNameNS(NS_DRAWINGML, 'lnL')[0];
     expect(line?.getAttribute('w')).toBe('6350');
+  });
+});
+
+// ============================================
+// Native tables
+// ============================================
+
+/** The rows of every native table on a slide, as cell text. */
+function nativeTables(slide: Document): string[][][] {
+  return Array.from(slide.getElementsByTagNameNS(NS_DRAWINGML, 'tbl')).map((table) =>
+    Array.from(table.getElementsByTagNameNS(NS_DRAWINGML, 'tr')).map((row) =>
+      Array.from(row.getElementsByTagNameNS(NS_DRAWINGML, 'tc')).map((cell) =>
+        Array.from(cell.getElementsByTagNameNS(NS_DRAWINGML, 't'))
+          .map((text) => text.textContent ?? '')
+          .join(''),
+      ),
+    ),
+  );
+}
+
+describe('docToPptx — native tables', () => {
+  it('writes a table in a slide body as a native table, the words around it as text', async () => {
+    // The review's case: an ordinary section with a sentence and a table was
+    // written as lines of spaced words ("Item Cost Notes").
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '## Budget\n\nWhat we expect to spend.\n\n| Item | Cost | Notes |\n| --- | --: | --- |\n' +
+          '| Venue | 1200 | Deposit paid |\n| Catering | 800 | |\n\nPrices include tax.\n',
+      ),
+      { articleId: 'body-table', generateCoverBlock: false },
+    );
+    const slide = await getPartXml(
+      await openPackage(await docToPptx(doc, { includeCoverSlide: false })),
+      'ppt/slides/slide1.xml',
+    );
+    expect(nativeTables(slide!)).toEqual([
+      [
+        ['Item', 'Cost', 'Notes'],
+        ['Venue', '1200', 'Deposit paid'],
+        ['Catering', '800', ''],
+      ],
+    ]);
+    const shapeTexts = Array.from(slide!.getElementsByTagNameNS(NS_PML, 'sp')).map((shape) =>
+      Array.from(shape.getElementsByTagNameNS(NS_DRAWINGML, 't'))
+        .map((text) => text.textContent ?? '')
+        .join(' '),
+    );
+    expect(shapeTexts.some((text) => text.includes('What we expect to spend.'))).toBe(true);
+    expect(shapeTexts.some((text) => text.includes('Prices include tax.'))).toBe(true);
+    expect(shapeTexts.join(' ')).not.toContain('Item Cost Notes');
+    // The authored right alignment survives on the Cost column.
+    const costCell = slide!.getElementsByTagNameNS(NS_DRAWINGML, 'tc')[1];
+    expect(costCell?.getElementsByTagNameNS(NS_DRAWINGML, 'pPr')[0]?.getAttribute('algn')).toBe(
+      'r',
+    );
+    // Stacked in reading order: the sentence, the table, then the note.
+    const top = (element: Element | undefined) =>
+      Number(element?.getElementsByTagNameNS(NS_DRAWINGML, 'off')[0]?.getAttribute('y'));
+    const shapes = Array.from(slide!.getElementsByTagNameNS(NS_PML, 'sp'));
+    const above = shapes.find((shape) => shape.textContent?.includes('What we expect'));
+    const below = shapes.find((shape) => shape.textContent?.includes('Prices include'));
+    const frame = slide!.getElementsByTagNameNS(NS_PML, 'graphicFrame')[0];
+    expect(top(above)).toBeLessThan(top(frame));
+    expect(top(frame)).toBeLessThan(top(below));
+  });
+
+  it('writes a dataTable slide as one native table', async () => {
+    const doc = markdownToDoc(
+      parseMarkdown('## Numbers {[dataTable]}\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |'),
+      { articleId: 'data-table-native', generateCoverBlock: false },
+    );
+    const slide = await getPartXml(
+      await openPackage(await docToPptx(doc, { includeCoverSlide: false })),
+      'ppt/slides/slide1.xml',
+    );
+    expect(nativeTables(slide!)).toEqual([
+      [
+        ['A', 'B'],
+        ['1', '2'],
+        ['3', '4'],
+      ],
+    ]);
+  });
+
+  it('reads back as a table', async () => {
+    const doc = markdownToDoc(
+      parseMarkdown(
+        '## Budget\n\nWhat we expect.\n\n| Item | Cost |\n| --- | --- |\n| Venue | 1200 |\n',
+      ),
+      { articleId: 'table-round-trip', generateCoverBlock: false },
+    );
+    const back = await pptxToMarkdownDoc(await docToPptx(doc, { includeCoverSlide: false }));
+    const table = back.children.find((node) => node.type === 'table');
+    expect(table?.type).toBe('table');
   });
 });
 

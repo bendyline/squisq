@@ -135,6 +135,14 @@ describe('resolveOutlineInsertion', () => {
     expect(resolveOutlineInsertion([p, h(2), p], -1, 'sectionEnd').index).toBe(1);
   });
 
+  it('puts an afterBlock insert past the data table a chart heading owns', () => {
+    // ## Revenue {[chart]} / table / para
+    const chart: OutlineBlock = { headingDepth: 2, container: false, ownsFollowing: 1 };
+    expect(resolveOutlineInsertion([chart, p, p], 0, 'afterBlock').index).toBe(2);
+    // Clamped at the document end.
+    expect(resolveOutlineInsertion([chart], 0, 'afterBlock').index).toBe(1);
+  });
+
   describe('inside a container template', () => {
     // ## Intro / para / ## Map {[drawing]} / ### a / ### b / para / ## Next
     const withDrawing = [h(2), p, h(2, true), h(3), h(3), p, h(2)];
@@ -219,6 +227,16 @@ describe('blockInsertionPoint and joinBlockAt', () => {
     // "## Next" is still a top-level section, not absorbed by the layout.
     const headings = parseMarkdown(output).children.filter((n) => n.type === 'heading');
     expect(headings.map((n) => (n.type === 'heading' ? n.depth : 0))).toEqual([1, 2, 3, 4, 2]);
+  });
+
+  it('never splits a chart heading from its data table', () => {
+    const chart = ['## Revenue {[barChart]}', '', '| Q | Sales |', '| --- | --- |', '| Q1 | 4 |'];
+    const source = [...chart, '', 'After.', ''].join('\n');
+    const { output } = insertAt(source, 'Revenue', fence, 'afterBlock');
+    expect(output).toBe([...chart, '', fence, '', 'After.', ''].join('\n'));
+    // A plain heading owns nothing: the fence goes straight after it.
+    const plain = insertAt('## Notes\n\n| a |\n| - |\n| 1 |\n', 'Notes', fence, 'afterBlock');
+    expect(plain.output.startsWith('## Notes\n\n' + fence)).toBe(true);
   });
 
   it('appends at the document end with a single trailing newline', () => {

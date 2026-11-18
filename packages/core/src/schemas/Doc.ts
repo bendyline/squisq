@@ -592,6 +592,20 @@ export interface TextParagraph {
   list?: TextParagraphList;
   /** Extra space above the paragraph, in canvas px. */
   spaceBefore?: number;
+  /**
+   * Present when the paragraph stands for a table in the body. Its `text` is
+   * still the table's plain projection (one row per line, cells spaced), and
+   * consumers that write native tables (PPTX) draw this structure instead.
+   */
+  table?: TextParagraphTable;
+}
+
+/** A table's cells for a {@link TextParagraph}, as plain text per cell. */
+export interface TextParagraphTable {
+  header: string[];
+  rows: string[][];
+  /** Column alignment, as authored (`:--`, `:-:`, `--:`); null for none. */
+  align?: Array<'left' | 'center' | 'right' | null>;
 }
 
 /** List-item facts for a {@link TextParagraph}. */

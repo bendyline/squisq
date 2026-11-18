@@ -674,18 +674,34 @@ function convertListItem(
   depth: number,
 ): string {
   const parts: string[] = [];
+  // A task item (`- [ ]` / `- [x]`) shows its box, not a bullet: numbering
+  // off for its paragraph, the list's indent kept, a ballot box leading.
+  const task = typeof item.checked === 'boolean';
+  let first = true;
   for (const child of item.children) {
     if (child.type === 'paragraph') {
       const runs = convertInlines(child.children, ctx, bodyFormat(ctx));
+      const numbering = task
+        ? `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="0"/></w:numPr>` +
+          `<w:ind w:left="${720 * (depth + 1)}" w:hanging="360"/>`
+        : `<w:numPr><w:ilvl w:val="${depth}"/><w:numId w:val="${numId}"/></w:numPr>`;
+      const box =
+        task && first
+          ? `<w:r><w:rPr><w:rFonts w:ascii="Segoe UI Symbol" w:hAnsi="Segoe UI Symbol" ` +
+            `w:eastAsia="Segoe UI Symbol" w:cs="Segoe UI Symbol"/></w:rPr>` +
+            `<w:t xml:space="preserve">${item.checked ? '☑' : '☐'} </w:t></w:r>`
+          : '';
       parts.push(
         `<w:p>` +
           `<w:pPr>` +
           `<w:pStyle w:val="ListParagraph"/>` +
-          `<w:numPr><w:ilvl w:val="${depth}"/><w:numId w:val="${numId}"/></w:numPr>` +
+          numbering +
           `</w:pPr>` +
+          box +
           runs +
           `</w:p>`,
       );
+      first = false;
     } else if (child.type === 'list') {
       // Nested list — increase depth
       parts.push(convertList(child, ctx, depth + 1));
