@@ -20,6 +20,7 @@
 // Shell (top-level component)
 export { EditorShell } from './EditorShell.js';
 export type { EditorShellProps, EditorColorScheme } from './EditorShell.js';
+export type { LinkSafety } from './linkSafety/useLinkSafety.js';
 export type { EditorHostMode, EditorToolbarPosition } from './editorHostMode.js';
 export type { FindOptions, FindRequest } from './find/findModel.js';
 

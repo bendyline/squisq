@@ -98,6 +98,8 @@ export type {
 // Parser + serializer
 export { parseMarkdown } from './parse.js';
 export { stringifyMarkdown } from './stringify.js';
+export { plainTextToMarkdown, plainTextToMarkdownDoc } from './plainText.js';
+export type { PlainTextToMarkdownOptions } from './plainText.js';
 export { readRichTableCell, RICH_TABLE_CELL_OPEN } from './richTableCell.js';
 
 // Conversion layer (for advanced use: working with remark plugins directly)

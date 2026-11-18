@@ -18,7 +18,14 @@ import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import { MarkdownEscape } from '../../MarkdownEscape';
 import { PlainTextClipboard } from '../../PlainTextClipboard';
+import { autolinkAttribute } from '../../tiptap/autolinkAttribute';
 import type { SceneTextLevel } from './sceneTextConfig';
+
+const SceneLink = Link.extend({
+  addAttributes() {
+    return { ...this.parent?.(), ...autolinkAttribute };
+  },
+});
 
 export function buildSceneTextExtensions(level: SceneTextLevel): Extensions {
   const starter =
@@ -34,5 +41,5 @@ export function buildSceneTextExtensions(level: SceneTextLevel): Extensions {
       : level === 'block'
         ? StarterKit.configure({ heading: false, horizontalRule: false })
         : StarterKit.configure({ horizontalRule: false });
-  return [starter, Link.configure({ openOnClick: false }), MarkdownEscape, PlainTextClipboard];
+  return [starter, SceneLink.configure({ openOnClick: false }), MarkdownEscape, PlainTextClipboard];
 }

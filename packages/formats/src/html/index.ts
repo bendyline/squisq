@@ -281,5 +281,15 @@ export { markdownDocsToHtmlBundle } from './docsHtmlBundle.js';
 export type { HtmlBundleOptions } from './docsHtmlBundle.js';
 
 // ── Import (HTML → MarkdownDocument) ────────────────────────────────
-export { htmlToMarkdown, htmlToMarkdownDoc, htmlToMarkdownDocSync } from './import.js';
-export type { HtmlImportOptions } from './import.js';
+export {
+  htmlToMarkdown,
+  htmlToMarkdownDoc,
+  htmlToMarkdownDocSync,
+  htmlToPlainText,
+} from './import.js';
+export type {
+  HtmlImageDecision,
+  HtmlImageInfo,
+  HtmlImageResolver,
+  HtmlImportOptions,
+} from './import.js';

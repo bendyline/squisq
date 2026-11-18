@@ -1575,8 +1575,94 @@ function escapedDestination(attrValue: string): string {
   return needsAngleDestination(attrValue) ? `&lt;${attrValue}&gt;` : attrValue;
 }
 
+/**
+ * `<https://…>` or `<me@x.test>`: CommonMark autolinks for the schemes the
+ * editor opens. Other schemes stay literal text, as they always have.
+ * Control characters end an address: CommonMark excludes them, and the
+ * bridge's own placeholders (`\u0000PH0\u0000`) must never fall inside one.
+ */
+const RE_ANGLE_AUTOLINK =
+  // eslint-disable-next-line no-control-regex -- see above
+  /<(https?:\/\/[^\s<>\u0000-\u001f]+)>|<([A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*)>/gi;
+
+/** Text wrapped only in emphasis, strong or strike tags: opening tags, text, closing tags. */
+const RE_MARKED_TEXT = /^((?:<(?:em|strong|s)>)*)([^<]*)((?:<\/(?:em|strong|s)>)*)$/i;
+
+/** A GFM literal autolink candidate, before its trailing punctuation is trimmed. */
+// eslint-disable-next-line no-control-regex -- placeholders end an address (see RE_ANGLE_AUTOLINK)
+const RE_GFM_LITERAL = /(?:https?:\/\/|www\.)[^\s<>\u0000-\u001f]+/gi;
+
+/** Characters GFM never ends a literal autolink on. */
+const GFM_TRAILING_PUNCTUATION = new Set(['?', '!', '.', ',', ':', '*', '_', '~']);
+
+/**
+ * The part of a literal autolink candidate GFM links: trailing punctuation,
+ * unmatched closing parentheses and a trailing entity reference stay text.
+ */
+function trimGfmLiteral(candidate: string): string {
+  let open = 0;
+  let close = 0;
+  for (const ch of candidate) {
+    if (ch === '(') open++;
+    else if (ch === ')') close++;
+  }
+  let end = candidate.length;
+  for (;;) {
+    const last = candidate[end - 1];
+    if (last === undefined) break;
+    if (GFM_TRAILING_PUNCTUATION.has(last)) {
+      end--;
+    } else if (last === ')' && close > open) {
+      close--;
+      end--;
+    } else if (last === ';') {
+      const entity = /&[A-Za-z0-9]+;$/.exec(candidate.slice(0, end));
+      if (!entity) break;
+      end -= entity[0].length;
+    } else {
+      break;
+    }
+  }
+  return candidate.slice(0, end);
+}
+
+/**
+ * Autolinks as links that remember how they were written (`data-autolink`),
+ * so `htmlToInline` writes each back in its own form. GFM links a literal
+ * address only at the start of text or after whitespace, `*`, `_`, `~` or
+ * `(`, and only when something follows the scheme or `www.`.
+ */
+function stageAutolinks(text: string, stash: (html: string) => string): string {
+  const angled = text.replace(
+    RE_ANGLE_AUTOLINK,
+    (full, uri: string | undefined, email: string | undefined, offset: number, whole: string) => {
+      if (isEscapedMarkdownCharacter(whole, offset)) return full;
+      const address = uri ?? email ?? '';
+      const href = uri ?? `mailto:${address}`;
+      return stash(
+        `<a href="${escapeHtml(href)}" data-autolink="angle">${escapeHtml(address)}</a>`,
+      );
+    },
+  );
+  let out = '';
+  let at = 0;
+  for (const match of angled.matchAll(RE_GFM_LITERAL)) {
+    const start = match.index ?? 0;
+    const before = angled[start - 1];
+    if (before !== undefined && !/[\s*_~(]/.test(before)) continue;
+    const address = trimGfmLiteral(match[0]);
+    if (!/^(?:https?:\/\/|www\.)[A-Za-z0-9]/i.test(address)) continue;
+    const href = /^www\./i.test(address) ? `http://${address}` : address;
+    out +=
+      angled.slice(at, start) +
+      stash(`<a href="${escapeHtml(href)}" data-autolink="bare">${escapeHtml(address)}</a>`);
+    at = start + address.length;
+  }
+  return out + angled.slice(at);
+}
+
 /** Convert inline markdown to HTML for Tiptap consumption */
-function inlineToHtml(text: string): string {
+function inlineToHtml(text: string, options: { autolinks?: boolean } = {}): string {
   // Extract code/images/mentions/links to opaque placeholders BEFORE running
   // any other inline-formatting regexes. Otherwise `_` characters inside a URL
   // (e.g. `mikehome_files/IMG_6829.JPEG`) get turned into `<em>` tags by
@@ -1657,8 +1743,14 @@ function inlineToHtml(text: string): string {
   staged = replaceMarkdownLinks(staged, (linkText, destination) => {
     const { url, title } = splitLinkDestination(destination);
     const titleAttr = title === null ? '' : ` title="${escapeHtml(title)}"`;
-    return stash(`<a href="${escapeHtml(url)}"${titleAttr}>${inlineToHtml(linkText)}</a>`);
+    const label = inlineToHtml(linkText, { autolinks: false });
+    return stash(`<a href="${escapeHtml(url)}"${titleAttr}>${label}</a>`);
   });
+
+  // Autolinks: `<https://…>` and GFM's literal `https://…` / `www.…`. A
+  // link's own text cannot hold another link, so not there. Before the
+  // escape pass: a backslash inside an autolink is part of the address.
+  if (options.autolinks !== false) staged = stageAutolinks(staged, stash);
 
   // Escaped punctuation the emphasis pass below does not own (`\$`, `\#`,
   // `\[` …) becomes a `MarkdownEscape` mark: the Write view shows the bare
@@ -2066,6 +2158,29 @@ function htmlToInline(html: string): string {
   // Soft line breaks — convert <br> to GFM hard-break syntax (two trailing
   // spaces + newline) before stripping tags so the newline survives.
   result = result.replace(/<br\s*\/?>/gi, '  \n');
+
+  // An autolink still showing its own address goes back out in the form it
+  // came in (`<https://…>`, `<me@x.test>`, bare `https://…`), vaulted before
+  // the escaping below: a backslash inside one is part of the address. Once
+  // its text is edited or marked up, it is an ordinary `[text](url)` link.
+  // ProseMirror puts the link mark outside emphasis (`<a><em>…</em></a>`), so
+  // marks wrapping the whole address stay around it.
+  result = result.replace(RE_A_TAG, (full, attrs: string, inner: string) => {
+    const form = /\bdata-autolink="(angle|bare)"/i.exec(attrs)?.[1];
+    const href = /\bhref="([^"]*)"/i.exec(attrs)?.[1];
+    const parts = RE_MARKED_TEXT.exec(inner);
+    if (!form || href === undefined || !parts) return full;
+    const [, open = '', text = '', close = ''] = parts;
+    const address = unescapeHtml(text);
+    const target = unescapeHtml(href);
+    if (form === 'angle' && (target === address || target === `mailto:${address}`)) {
+      return `${open}${vault.protect(`&lt;${text}&gt;`)}${close}`;
+    }
+    if (form === 'bare' && (target === address || target === `http://${address}`)) {
+      return `${open}${vault.protect(text)}${close}`;
+    }
+    return full;
+  });
 
   // Escape literal markdown delimiters in the text BEFORE any tag becomes
   // markdown. Without this, prose the user typed as `\*not italic\*` came

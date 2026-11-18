@@ -1104,6 +1104,39 @@ interface StringifyOptions {
 }
 ```
 
+Text longer than 1,024 characters is written in pieces cut between two ASCII
+letters, which gives byte-identical output and keeps the writer linear: the
+upstream escaper is quadratic in the number of characters it escapes, so a
+run of 100,000 `[` used to take 1.4 s. A run with no such boundary is cut at
+1,024 characters, where a character can at worst gain an escape it did not
+need. For the same reason the escaper sees at most the last 64 characters
+before each fragment as its context (the link writer used to pass a link's
+whole label when escaping its URL).
+
+#### Plain Text
+
+```ts
+function plainTextToMarkdown(text: string, options?: PlainTextToMarkdownOptions): string;
+function plainTextToMarkdownDoc(
+  text: string,
+  options?: PlainTextToMarkdownOptions,
+): MarkdownDocument;
+
+interface PlainTextToMarkdownOptions {
+  linkify?: boolean; // default true: http(s) addresses, and the <https://…> / [https://…] forms, become links
+  lineBreaks?: 'hard' | 'soft'; // default 'hard': each line kept as written; 'soft' reflows the paragraph
+}
+```
+
+Plain text laid into paragraphs (split at blank lines) and escaped by the
+stringifier, so the Markdown reads back as the same text: `be**t@x.com`, a
+line starting `# `, `> ` or `1. ` stay literal. Mail clients write an HTML
+message's links into its plain-text copy as `text <https://…>` (Gmail) or
+`text [https://…]` (Outlook); with `linkify` the brackets go with the address.
+Sentence punctuation and an unmatched closing bracket after a bare address are
+left outside it. Leading and trailing whitespace on each line is dropped,
+since Markdown cannot keep indentation inside a paragraph.
+
 #### AST
 
 `MarkdownDocument` is the root (`{ type: 'root'; children: MarkdownBlockNode[];
@@ -3135,6 +3168,7 @@ function htmlToMarkdownDoc(
   options?: HtmlImportOptions,
 ): Promise<MarkdownDocument>;
 function htmlToMarkdown(html: string, options?: HtmlImportOptions): string;
+function htmlToPlainText(html: string, options?: HtmlImportOptions): string; // images → alt text by default
 
 interface PlainHtmlExportOptions {
   title?: string;
@@ -3150,8 +3184,56 @@ interface PlainHtmlExportOptions {
 interface HtmlImportOptions {
   sanitize?: boolean; // default true
   headMetadata?: boolean; // default true: <title> / <meta name="description"> → frontmatter
+  maxInputChars?: number; // default 16 MiB
+  oversize?: 'throw' | 'truncate'; // default 'throw'; 'truncate' converts the first maxInputChars
+  dropHidden?: boolean; // default false: hidden attr, display:none, visibility:hidden, mso-hide:all, opacity:0, zero size + overflow:hidden
+  dropTrackingPixels?: boolean; // default false: images declared ≤ 1 px wide or tall
+  layoutTables?: 'table' | 'unwrap'; // default 'table'
+  images?: 'keep' | 'alt' | 'drop' | HtmlImageResolver; // default 'keep'
+  baseUrl?: string; // resolve relative href/src/poster to http(s)
+  embeddedDocs?: boolean; // default true: an embedded <script data-squisq-doc> replaces the page
+  signal?: AbortSignal;
 }
+interface HtmlImageInfo {
+  src: string; // as written, before sanitizing (cid: included), resolved against baseUrl
+  alt: string; // collapsed; '' for a decorative image
+  title?: string;
+  width?: number; // declared CSS px, attribute else inline style
+  height?: number;
+}
+type HtmlImageDecision =
+  | { action: 'image'; url: string; alt?: string } // url written as given
+  | { action: 'text'; text: string } // nothing when blank
+  | { action: 'drop' };
+type HtmlImageResolver = (image: HtmlImageInfo) => HtmlImageDecision;
 ```
+
+The import flags are independent; mail and other untrusted HTML wants most of
+them at once:
+
+```ts
+htmlToMarkdown(html, {
+  headMetadata: false,
+  embeddedDocs: false,
+  dropHidden: true, // preview lines, duplicate mobile copy
+  dropTrackingPixels: true,
+  layoutTables: 'unwrap', // nested presentation tables → content
+  images: (image) =>
+    image.src.startsWith('cid:') ? keepPart(image) : { action: 'text', text: image.alt },
+  oversize: 'truncate',
+});
+```
+
+`layoutTables: 'unwrap'` reads a table as layout when it is marked
+`role="presentation"` or `"none"`, holds another table, has a single column
+(and no `<caption>` or `<thead>`), or has a cell holding a heading, list,
+quote, rule or more than one block; its cells' content follows in reading
+order, and rows left empty are dropped from the tables that remain. With
+`images` other than `'keep'`, a link or heading whose only content was an
+image that is gone is dropped. A resolver sees each image before the
+sanitizer runs, so `cid:` sources reach it; the URL it returns is written as
+given (a `javascript:` or `vbscript:` one is refused), and it is never asked
+about an image `dropHidden` or `dropTrackingPixels` removed.
 
 HTML import never turns head content into body text: `<head>`, `<title>`,
 `<script>`, `<style>` and similar elements are removed before sanitizing (the
@@ -3388,6 +3470,7 @@ interface EditorShellProps {
   basePath?: string; // default '/'
   onChange?: (source: string) => void;
   onLinkClick?: (href: string) => boolean | undefined; // false allows browser navigation
+  linkSafety?: LinkSafety; // ask before a web link opens; see below
   showCodeCopyButton?: boolean; // default false; Document/Page preview fences
   onCopyCode?: CodeBlockCopyHandler; // Electron/native clipboard bridge; browser fallback.
   // Also backs the Copy button on Write-view code snippets, which is always shown
@@ -3465,6 +3548,26 @@ interface EditorShellProps {
   submitOnEnter?: () => void;
 }
 ```
+
+```ts
+interface LinkSafety {
+  open: (href: string) => void; // open an address the reader agreed to
+  isTrusted?: (host: string) => boolean; // lowercase host; true opens without asking
+  trust?: (host: string) => void; // remember "Always open links to <host>"; omit to not offer it
+}
+```
+
+With `linkSafety`, every web (`http:`, `https:`, `//host`) link the shell can
+follow — in Write, Preview, a plain-HTML preview, or the proofing card — asks
+first. The dialog names the site the browser contacts and shows the full
+address, and it warns when the address starts with a user name dressed as a
+site (`https://paypal.com@evil.test`), when the link's text names a different
+site, when a redirect parameter passes the reader on to another site, when the
+site's name is in another alphabet (shown in its `xn--` form), and when the
+page is not encrypted. Cancel has the focus. Squisq stores nothing: the host
+opens the address and keeps the trusted sites. Other links go to
+`onLinkClick` as before, or to the browser without one, and the link's address
+shows as its tooltip on hover.
 
 `defaultThemeId` is a host default for the document theme with fallback
 semantics: a document whose frontmatter names no theme (`squisq-theme`, legacy

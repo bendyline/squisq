@@ -868,7 +868,11 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
 
     it('keeps escaped brackets from becoming a link', () => {
       const md = 'See \\[not a link\\](https://example.com) here.';
-      expect(markdownToTiptap(md)).not.toContain('<a ');
+      // GFM still links the bare address after `(`; the label never becomes one.
+      const html = markdownToTiptap(md);
+      expect(html).not.toContain('>not a link</a>');
+      expect(html.match(/<a /g)).toHaveLength(1);
+      expect(html).toContain('data-autolink="bare">https://example.com</a>)');
       expect(throughEditor(md)).toBe(`${md}\n`);
     });
 

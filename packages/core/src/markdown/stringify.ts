@@ -5,7 +5,7 @@
  * using the unified/remark ecosystem with GFM, math, and directive extensions.
  */
 
-import { unified } from 'unified';
+import { unified, type Processor } from 'unified';
 import { remarkWikiLinks } from './remarkWikiLinks.js';
 import remarkStringify from 'remark-stringify';
 import remarkGfm from 'remark-gfm';
@@ -18,6 +18,161 @@ import { assertMarkdownDocumentWithinLimits } from './limits.js';
 
 // Cache the default processor (all extensions, default formatting) to avoid rebuilding on every call.
 let defaultProcessor: any;
+
+// ============================================
+// Long text, in pieces
+// ============================================
+
+/**
+ * mdast-util-to-markdown's `safe()` checks each character it escapes against
+ * every one before it (`positions.includes`), so a text node of n
+ * markdown-significant characters costs O(n²): 100,000 `[` took 1.4 s, and a
+ * document at the 16 MiB source limit would take hours. Text from mail and web
+ * pages is untrusted, so long text is handed to the writer in pieces.
+ *
+ * The writer escapes adjacent text nodes with one character of context on each
+ * side, the same context it uses inside one node. A piece cut between two
+ * ASCII letters, which no escape rule matches or looks back past, therefore
+ * writes byte-identical Markdown. A run with no such boundary is cut at the
+ * hard limit, where at worst a character gets an escape it did not need.
+ */
+const TEXT_PIECE_MIN_CHARS = 512;
+const TEXT_PIECE_MAX_CHARS = 1024;
+
+interface MdastLike {
+  type: string;
+  value?: unknown;
+  url?: unknown;
+  children?: MdastLike[];
+}
+
+const isAsciiLetter = (code: number): boolean =>
+  (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+
+function textPieces(value: string): string[] {
+  const pieces: string[] = [];
+  let start = 0;
+  while (value.length - start > TEXT_PIECE_MAX_CHARS) {
+    const limit = start + TEXT_PIECE_MAX_CHARS;
+    let cut = limit;
+    for (let i = start + TEXT_PIECE_MIN_CHARS; i < limit; i++) {
+      if (isAsciiLetter(value.charCodeAt(i - 1)) && isAsciiLetter(value.charCodeAt(i))) {
+        cut = i;
+        break;
+      }
+    }
+    pieces.push(value.slice(start, cut));
+    start = cut;
+  }
+  pieces.push(value.slice(start));
+  return pieces;
+}
+
+// ============================================
+// Bounded escape context
+// ============================================
+
+/** mdast phrasing node types, as mdast-util-phrasing lists them (`html` is not one). */
+const PHRASING_TYPES = new Set([
+  'break',
+  'delete',
+  'emphasis',
+  'footnote',
+  'footnoteReference',
+  'image',
+  'imageReference',
+  'inlineCode',
+  'inlineMath',
+  'link',
+  'linkReference',
+  'mdxJsxTextElement',
+  'mdxTextExpression',
+  'strong',
+  'text',
+  'textDirective',
+]);
+
+/** Text before a fragment that an escape rule can need: a line start, its indent, a list number. */
+const ESCAPE_CONTEXT_CHARS = 64;
+
+interface SafeConfig {
+  before?: string;
+  [key: string]: unknown;
+}
+
+interface WriterState {
+  safe: (this: WriterState, value: string | null | undefined, config: SafeConfig) => string;
+  containerFlow: (parent: unknown, info: unknown) => string;
+  containerPhrasing: (parent: unknown, info: unknown) => string;
+}
+
+/**
+ * The link writer escapes a URL with the whole label written so far as its
+ * left context (`before`), and every escape rule in scope scans that context
+ * again; GFM's footnote rule matches each `[` in it, checked against every
+ * other, so a 200,000-character label took 3 s. Only the last few characters
+ * of the context can decide an escape, so the writer gets the last 64. The
+ * root handler is the upstream one (a phrasing root is written as phrasing),
+ * with `safe` bounded for the length of the write.
+ */
+function remarkBoundedEscapeContext(this: Processor): undefined {
+  const data = this.data() as { toMarkdownExtensions?: unknown[] };
+  (data.toMarkdownExtensions ??= []).push({
+    handlers: {
+      root(
+        node: { children: Array<{ type: string }> },
+        _parent: unknown,
+        state: WriterState,
+        info: unknown,
+      ): string {
+        const safe = state.safe;
+        state.safe = function boundedSafe(value, config) {
+          const before = config?.before;
+          return safe.call(
+            this,
+            value,
+            before && before.length > ESCAPE_CONTEXT_CHARS
+              ? { ...config, before: before.slice(-ESCAPE_CONTEXT_CHARS) }
+              : config,
+          );
+        };
+        try {
+          const container = node.children.some((child) => PHRASING_TYPES.has(child.type))
+            ? state.containerPhrasing
+            : state.containerFlow;
+          return container.call(state, node, info);
+        } finally {
+          state.safe = safe;
+        }
+      },
+    },
+  });
+  return undefined;
+}
+
+/**
+ * Cut every long text node into pieces, in place. A link whose only text is
+ * its URL is left whole, because the writer recognizes it as `<url>` only so.
+ */
+function splitLongTextNodes(node: MdastLike): void {
+  if (!node.children) return;
+  const only = node.children.length === 1 ? node.children[0] : undefined;
+  if (node.type === 'link' && only?.type === 'text' && only.value === node.url) return;
+  const children: MdastLike[] = [];
+  for (const child of node.children) {
+    if (
+      child.type === 'text' &&
+      typeof child.value === 'string' &&
+      child.value.length > TEXT_PIECE_MAX_CHARS
+    ) {
+      for (const value of textPieces(child.value)) children.push({ type: 'text', value });
+    } else {
+      splitLongTextNodes(child);
+      children.push(child);
+    }
+  }
+  node.children = children;
+}
 
 // ============================================
 // Annotation-span unescaping
@@ -321,6 +476,7 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
   assertMarkdownDocumentWithinLimits(doc, options?.limits, options?.signal);
   // Convert MarkdownDocument → mdast tree
   const mdastTree = toMdast(doc);
+  splitLongTextNodes(mdastTree as MdastLike);
 
   // Use cached default processor when all extensions and default formatting are used.
   const useDefaults =
@@ -345,6 +501,7 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
         .use(remarkGfm)
         .use(remarkMath)
         .use(remarkDirective)
+        .use(remarkBoundedEscapeContext)
         .use(remarkStringify, {
           bullet: '-',
           bulletOrdered: '.',
@@ -373,7 +530,7 @@ export function stringifyMarkdown(doc: MarkdownDocument, options?: StringifyOpti
       processor = processor.use(remarkDirective);
     }
 
-    processor = processor.use(remarkStringify, {
+    processor = processor.use(remarkBoundedEscapeContext).use(remarkStringify, {
       bullet: options?.bullet ?? '-',
       bulletOrdered: options?.bulletOrdered ?? '.',
       emphasis: options?.emphasis ?? '*',
