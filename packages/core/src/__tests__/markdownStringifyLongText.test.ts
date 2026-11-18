@@ -6,6 +6,11 @@ import {
   type MarkdownDocument,
   type MarkdownInlineNode,
 } from '../markdown/index.js';
+import {
+  GROWTH_TEST_TIMEOUT_MS,
+  LINEAR_GROWTH_LIMIT,
+  growthOnFourfoldInput,
+} from './scalingTestUtils.js';
 
 const paragraphOf = (...children: MarkdownInlineNode[]): MarkdownDocument => ({
   type: 'document',
@@ -45,21 +50,34 @@ describe('stringifyMarkdown on long text', () => {
     expect(md.trimEnd()).toBe(`<${url}>`);
   });
 
-  it('stays linear on a long link label, and reads back the same', () => {
-    const value = '['.repeat(200_000);
-    const started = performance.now();
-    const md = stringifyMarkdown(
-      paragraphOf({ type: 'link', url: 'https://x.test', children: [{ type: 'text', value }] }),
-    );
-    expect(performance.now() - started).toBeLessThan(2_000);
-    expect(extractPlainText(parseMarkdown(md))).toBe(value);
-  });
+  // Without the bounded escape context, 20,000 → 80,000 `[` in a label grew
+  // the write about 16×.
+  it(
+    'stays linear on a long link label, and reads back the same',
+    () => {
+      const linkOf = (value: string) =>
+        paragraphOf({ type: 'link', url: 'https://x.test', children: [{ type: 'text', value }] });
+      expect(
+        growthOnFourfoldInput((n) => stringifyMarkdown(linkOf('['.repeat(n))), 20_000),
+      ).toBeLessThan(LINEAR_GROWTH_LIMIT);
 
-  it('stays linear on runs of escaped characters', () => {
-    const started = performance.now();
-    for (const char of ['[', '*', '_']) {
-      stringifyMarkdown(paragraphOf({ type: 'text', value: char.repeat(400_000) }));
-    }
-    expect(performance.now() - started).toBeLessThan(3_000);
-  });
+      const value = '['.repeat(20_000);
+      expect(extractPlainText(parseMarkdown(stringifyMarkdown(linkOf(value))))).toBe(value);
+    },
+    GROWTH_TEST_TIMEOUT_MS,
+  );
+
+  // Without text pieces, 20,000 → 80,000 of any of these grew the write 14–16×.
+  it.each(['[', '*', '_'])(
+    'stays linear on a run of escaped %s',
+    (char) => {
+      expect(
+        growthOnFourfoldInput(
+          (n) => stringifyMarkdown(paragraphOf({ type: 'text', value: char.repeat(n) })),
+          20_000,
+        ),
+      ).toBeLessThan(LINEAR_GROWTH_LIMIT);
+    },
+    GROWTH_TEST_TIMEOUT_MS,
+  );
 });
