@@ -6,6 +6,11 @@ import {
   plainTextToMarkdownDoc,
   type MarkdownInlineNode,
 } from '../markdown/index.js';
+import {
+  GROWTH_TEST_TIMEOUT_MS,
+  LINEAR_GROWTH_LIMIT,
+  growthOnFourfoldInput,
+} from './scalingTestUtils.js';
 
 /** The links a Markdown string reads back with. */
 function linksOf(markdown: string): string[] {
@@ -98,10 +103,20 @@ describe('plainTextToMarkdown', () => {
     expect(plainTextToMarkdownDoc('\n\n  \n').children).toEqual([]);
   });
 
-  it('stays linear on hostile input', () => {
-    const started = performance.now();
-    plainTextToMarkdown(`${'<https://'.repeat(50_000)}\n${'['.repeat(200_000)}`);
-    plainTextToMarkdown(`https://${')'.repeat(200_000)}`);
-    expect(performance.now() - started).toBeLessThan(2_000);
-  });
+  it(
+    'stays linear on hostile input',
+    () => {
+      expect(
+        growthOnFourfoldInput(
+          (n) => plainTextToMarkdown(`${'<https://'.repeat(n / 4)}\n${'['.repeat(n)}`),
+          20_000,
+        ),
+      ).toBeLessThan(LINEAR_GROWTH_LIMIT);
+      // Cheap per character, so it needs a longer run to time reliably.
+      expect(
+        growthOnFourfoldInput((n) => plainTextToMarkdown(`https://${')'.repeat(n)}`), 200_000),
+      ).toBeLessThan(LINEAR_GROWTH_LIMIT);
+    },
+    GROWTH_TEST_TIMEOUT_MS,
+  );
 });
