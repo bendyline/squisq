@@ -143,3 +143,42 @@ describe('theme inference defaults (ON)', () => {
     expect(doc.frontmatter).toBeUndefined();
   });
 });
+
+describe('pptxToMarkdownDoc — decks built from text boxes', () => {
+  // A deck with no title placeholders (Squisq's own exports, and many other
+  // generators) read back as "Slide 1", "Slide 2"… with every line a bullet.
+  it('reads a Squisq deck back with its titles, paragraphs, lists and tasks', async () => {
+    const { docToPptx } = await import('../pptx/export');
+    const { markdownToDoc, buildPreviewDoc } = await import('@bendyline/squisq/doc');
+    const { parseMarkdown } = await import('@bendyline/squisq/markdown');
+    const source = markdownToDoc(
+      parseMarkdown(
+        '# Offsite plan\n\nTwo days by the water.\n\n## Agenda\n\nWhy we meet.\n\n- Arrive\n- Workshop\n\n' +
+          '## To do\n\n- [ ] Book the venue\n- [x] Pay the deposit\n',
+      ),
+      { articleId: 'import-text-boxes', generateCoverBlock: false },
+    );
+    const doc = await pptxToMarkdownDoc(await docToPptx(buildPreviewDoc(source)));
+    const headings = doc.children
+      .filter((node): node is MarkdownHeading => node.type === 'heading')
+      .map((heading) => (heading.children[0] as MarkdownText).value);
+    expect(headings).toEqual(['Offsite plan', 'Agenda', 'To do']);
+    expect(headings.join(' ')).not.toMatch(/Slide \d/);
+
+    const agenda = doc.children.indexOf(
+      doc.children.find(
+        (node) =>
+          node.type === 'heading' &&
+          (node as MarkdownHeading).children.some((c) => (c as MarkdownText).value === 'Agenda'),
+      )!,
+    );
+    expect(doc.children[agenda + 1]?.type).toBe('paragraph');
+    const list = doc.children[agenda + 2] as MarkdownList;
+    expect(list.type).toBe('list');
+    expect(list.children).toHaveLength(2);
+
+    const lists = doc.children.filter((node): node is MarkdownList => node.type === 'list');
+    const tasks = lists[lists.length - 1];
+    expect(tasks?.children.map((item) => item.checked)).toEqual([false, true]);
+  });
+});

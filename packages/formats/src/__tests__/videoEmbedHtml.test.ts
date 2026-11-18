@@ -34,10 +34,16 @@ describe('markdownDocToPlainHtml video embeds', () => {
     expect(body).not.toContain('<p>');
   });
 
-  it('renders a bare URL as an uncaptioned player', () => {
+  it('links an untitled player to its page, for a page opened from disk', () => {
+    // YouTube refuses to play without a referrer (Error 153), and file:// sends none.
     const body = bodyOf(render('https://vimeo.com/76979871'));
     expect(body).toContain('<iframe src="https://player.vimeo.com/video/76979871"');
-    expect(body).not.toContain('<figcaption');
+    expect(body).toContain(
+      '<figcaption class="squisq-video-embed-caption"><a href="https://vimeo.com/76979871">Watch on Vimeo</a></figcaption>',
+    );
+    // A poster is itself the link: no second one beneath it.
+    const poster = bodyOf(render(`https://youtu.be/${YT}`, { videoEmbeds: 'poster' }));
+    expect(poster).not.toContain('<figcaption');
   });
 
   it('keeps a video link in a list or blockquote as a link', () => {

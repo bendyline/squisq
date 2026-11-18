@@ -21,6 +21,7 @@ import {
   blockGapsEm,
   estimateTextHeight,
   hasBlockGaps,
+  isHtmlText,
   layerParagraphs,
   LIST_INDENT_EM,
   measurableText,
@@ -61,9 +62,11 @@ export function buildLayerTextShape(
       : estimatedWidth;
   // Large one-line display titles are authored to stay on one line. Cap them
   // so the estimated advance fits the box before PowerPoint wraps one into
-  // a second line that collides with the next layer.
+  // a second line that collides with the next layer. Rich (HTML) text is
+  // not a display title: the player reflows it, so a one-sentence body grown
+  // past 80px wraps there and must wrap here, at its full size.
   const fittedFontSize =
-    rawLines.length === 1 && style.fontSize >= 80 && text.length > 0
+    rawLines.length === 1 && style.fontSize >= 80 && text.length > 0 && !isHtmlText(layer)
       ? Math.min(style.fontSize, (boxWidth - padding * 2) / (text.length * charEm * 1.05))
       : style.fontSize;
   const blockGaps = hasBlockGaps(layer);

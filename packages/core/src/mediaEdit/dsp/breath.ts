@@ -145,7 +145,10 @@ export function createBreathAnalyzer(sampleRate: number): BreathAnalyzer {
         const rms = Math.sqrt(sumSq / frameLen);
         out.push({
           t: centerFull / sampleRate,
-          rmsDb: rms > 0 ? 20 * Math.log10(rms) : SILENT_DB,
+          // Floor at SILENT_DB, not only at exact zero: in digital silence the
+          // filters leave vanishing tails (−400 dB and below) that would drag
+          // the percentile noise floor out of reach of every quiet frame.
+          rmsDb: rms > 0 ? Math.max(SILENT_DB, 20 * Math.log10(rms)) : SILENT_DB,
           voicing: voicingAt(centerLow),
           zcr: crossings / (frameLen - 1),
         });

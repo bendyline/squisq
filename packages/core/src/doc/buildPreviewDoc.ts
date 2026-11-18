@@ -20,6 +20,8 @@ import { applySavedPresentation } from '../transform/presentationCompiler.js';
 import { coerceTemplateParams } from './templates/inputDescriptors.js';
 import { deriveTemplateInputs, extractBlockquote, isPictureFence } from './templateInputs.js';
 import { flattenRenderableBlocks, getBlockBodyText } from './markdownToDoc.js';
+import { coverRepeatsLeadingBlock } from './coverLeadingBlock.js';
+import { isUntouchedScenePlaceholder } from './scenePlaceholders.js';
 import { hasTemplate } from './templates/index.js';
 import { isContainerTemplate } from './templates/templateNames.js';
 import { KNOWN_BLOCK_META_KEYS } from '../markdown/annotationCoercion.js';
@@ -473,6 +475,13 @@ export interface BuildPreviewDocOptions {
    * false so synthetic filler slides never compete with real blocks.
    */
   interleaveImages?: boolean;
+  /**
+   * Leave out drawings and layouts still exactly as Insert left them
+   * (`isUntouchedScenePlaceholder`). Exported decks and videos pass true so
+   * an empty canvas never takes a scene; the live slideshow keeps them
+   * (default false), where the author needs the slide to open its designer.
+   */
+  omitUntouchedPlaceholders?: boolean;
 }
 
 /**
@@ -503,7 +512,9 @@ export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc
   if (doc.presentationApplied) options = { ...options, interleaveImages: false };
   // Container templates (`diagram`, `drawing`) render their children as
   // nodes/shapes, so those children must not also become preview slides.
-  const flat = flattenRenderableBlocks(doc.blocks);
+  const flat = flattenRenderableBlocks(doc.blocks).filter(
+    (block) => !(options?.omitUntouchedPlaceholders && isUntouchedScenePlaceholder(block)),
+  );
   const buildScript = flat.some((block) => block.build && block.build.mode !== 'off')
     ? buildNarrationScript(sourceDoc)
     : undefined;
@@ -608,6 +619,16 @@ export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc
           segments: t > 0 ? [{ src: '', name: 'preview', duration: t, startTime: 0 }] : [],
         };
 
+  // Decide here, while the source block still has its heading, whether the
+  // cover only repeats the first slide; the slides below no longer carry it.
+  const firstSlideId = slides[0]?.id;
+  const coverRepeatsSlideId =
+    typeof firstSlideId === 'string' &&
+    firstSlideId === doc.blocks[0]?.id &&
+    coverRepeatsLeadingBlock(doc)
+      ? firstSlideId
+      : undefined;
+
   return {
     // Preserve document-wide capabilities (custom themes, persistent layers,
     // scheduled media, frontmatter, captions, and future schema fields).
@@ -617,5 +638,6 @@ export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc
     ...(buildScript ? { buildSourceText: doc.buildSourceText ?? buildScript.sourceText } : {}),
     blocks: slides as unknown as Block[],
     audio,
+    ...(coverRepeatsSlideId ? { coverRepeatsSlideId } : {}),
   };
 }

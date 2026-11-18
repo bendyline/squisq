@@ -206,12 +206,19 @@ describe('dropped video and audio players', () => {
     expect(uploaded).toHaveBeenCalledOnce();
   });
 
-  it('replaces the empty paragraph the caret sits in', async () => {
+  it('replaces the empty paragraph the caret sits in, leaving the caret on a line after it', async () => {
     const view = blockView([''], 1);
     await uploadAndInsertMediaPlayers(view, [mediaFile('clip.mp4', 'video/mp4')], storingProvider);
 
-    expect(view.state.doc.childCount).toBe(1);
+    const children = view.state.doc.children.map((node) => node.type.name);
+    expect(children).toEqual(['video', 'paragraph']);
+    // Not node-selected: the next key typed must not replace the player.
+    const { selection } = view.state;
+    expect(selection.empty).toBe(true);
+    expect(selection.$from.parent.type.name).toBe('paragraph');
+    view.dispatch(view.state.tr.insertText('Caption'));
     expect(view.state.doc.firstChild?.type.name).toBe('video');
+    expect(view.state.doc.lastChild?.textContent).toBe('Caption');
   });
 
   it('leaves the document alone when no file could be stored', async () => {

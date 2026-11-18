@@ -3,8 +3,11 @@
  *
  * Reuses the shared ooxml/ reader. Reads slide order from
  * `ppt/presentation.xml` (`<p:sldIdLst>`), resolves each slide part via
- * relationships, and converts each slide to: an H2 of the title placeholder
- * (or "Slide N"), the remaining text as a bullet list, and any slide tables
+ * relationships, and converts each slide to: an H2 of its title (the title
+ * placeholder, else the one text box set clearly larger than the rest, else
+ * "Slide N"), the remaining text as paragraphs and lists — a paragraph is a
+ * list item only when it has a bullet or number, or sits in a body
+ * placeholder, which bullets by default — and any slide tables
  * (`<a:tbl>`) as markdown tables. Text lives in the DrawingML namespace
  * (`a:p` / `a:r` / `a:t`) inside PresentationML shapes (`p:sp`).
  *
@@ -115,6 +118,78 @@ function paragraphText(para: Element): string {
   return s.trim();
 }
 
+/** One paragraph of a slide's text, with its list formatting. */
+interface SlideParagraph {
+  text: string;
+  /** `bullet`/`number` for a list item, null for a plain paragraph. */
+  list: 'bullet' | 'number' | null;
+  /** A ☐ / ☑ bullet: the deck's (or Squisq's) task-list marker. */
+  checked?: boolean;
+}
+
+/** The first child element of `parent` named `local` in DrawingML. */
+function drawingChild(parent: Element | undefined, local: string): Element | undefined {
+  if (!parent) return undefined;
+  for (let i = 0; i < parent.childNodes.length; i++) {
+    const node = parent.childNodes[i] as Element;
+    if (node.nodeType === 1 && node.localName === local && node.namespaceURI === NS_DRAWINGML) {
+      return node;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A paragraph and whether it is a list item: an explicit bullet character or
+ * auto-number makes it one, `buNone` makes it plain, and otherwise it follows
+ * its shape (a body placeholder bullets by default; a text box does not).
+ */
+function slideParagraph(para: Element, bulletByDefault: boolean): SlideParagraph {
+  const pPr = drawingChild(para, 'pPr');
+  const buChar = drawingChild(pPr, 'buChar');
+  const marker = buChar?.getAttribute('char') ?? '';
+  const list = drawingChild(pPr, 'buNone')
+    ? null
+    : drawingChild(pPr, 'buAutoNum')
+      ? 'number'
+      : buChar || drawingChild(pPr, 'buBlip') || bulletByDefault
+        ? 'bullet'
+        : null;
+  return {
+    text: paragraphText(para),
+    list,
+    ...(list && (marker === '☐' || marker === '☑') ? { checked: marker === '☑' } : {}),
+  };
+}
+
+/** The largest run size in a shape (hundredths of a point), 0 when none is set. */
+function shapeTextSize(sp: Element): number {
+  let size = 0;
+  for (const tag of ['rPr', 'endParaRPr']) {
+    const props = sp.getElementsByTagNameNS(NS_DRAWINGML, tag);
+    for (let i = 0; i < props.length; i++) {
+      size = Math.max(size, Number(props[i]!.getAttribute('sz')) || 0);
+    }
+  }
+  return size;
+}
+
+/**
+ * Whether a shape's paragraphs are list items unless they say otherwise. In
+ * PowerPoint only a body placeholder bullets by default; a text box or any
+ * other described shape does not. A shape with no description at all
+ * (`p:nvSpPr` missing) cannot be told apart, and keeps the bullets every
+ * shape got before.
+ */
+function bulletsByDefault(sp: Element): boolean {
+  const ph = sp.getElementsByTagNameNS(NS_PML, 'ph')[0];
+  if (ph) {
+    const type = ph.getAttribute('type') ?? '';
+    return type === '' || type === 'body' || type === 'obj';
+  }
+  return sp.getElementsByTagNameNS(NS_PML, 'nvSpPr').length === 0;
+}
+
 function isTitleShape(sp: Element): boolean {
   const ph = sp.getElementsByTagNameNS(NS_PML, 'ph');
   if (!ph.length) return false;
@@ -199,6 +274,9 @@ interface SlideTextEntry {
   rawType: string;
   idx: number;
   texts: string[];
+  paragraphs: SlideParagraph[];
+  /** Largest run size, hundredths of a point (0 when inherited). */
+  size: number;
 }
 
 /** Annotation params live on a single heading line — flatten whitespace. */
@@ -297,11 +375,13 @@ async function convertSlide(
     const txBody = sp.getElementsByTagNameNS(NS_PML, 'txBody');
     if (!txBody.length) continue;
     const paras = txBody[0]!.getElementsByTagNameNS(NS_DRAWINGML, 'p');
-    const texts: string[] = [];
+    const bulletByDefault = bulletsByDefault(sp);
+    const paragraphs: SlideParagraph[] = [];
     for (let p = 0; p < paras.length; p++) {
-      const t = paragraphText(paras[p]!);
-      if (t) texts.push(t);
+      const paragraph = slideParagraph(paras[p]!, bulletByDefault);
+      if (paragraph.text) paragraphs.push(paragraph);
     }
+    const texts = paragraphs.map((paragraph) => paragraph.text);
     if (texts.length === 0) continue;
     if (isTitleShape(sp) && !title) {
       title = texts.join(' ');
@@ -311,7 +391,25 @@ async function convertSlide(
     const rawType = phs.length ? (phs[0]!.getAttribute('type') ?? '') : '';
     const idxRaw = phs.length ? phs[0]!.getAttribute('idx') : null;
     const idx = idxRaw ? parseInt(idxRaw, 10) || 0 : 0;
-    entries.push({ rawType, idx, texts });
+    entries.push({ rawType, idx, texts, paragraphs, size: shapeTextSize(sp) });
+  }
+
+  // No title placeholder (a deck built from text boxes, as Squisq's own
+  // exports are): the one short, non-list text box set clearly larger than
+  // every other is the title, rather than "Slide N" over the whole slide.
+  if (!title && entries.length > 1) {
+    const largest = entries.reduce((a, b) => (b.size > a.size ? b : a));
+    const clearlyLargest = entries.every((entry) => entry === largest || entry.size < largest.size);
+    const titleText = largest.texts.join(' ');
+    if (
+      largest.size > 0 &&
+      clearlyLargest &&
+      titleText.length <= 150 &&
+      largest.paragraphs.every((paragraph) => !paragraph.list)
+    ) {
+      title = titleText;
+      entries.splice(entries.indexOf(largest), 1);
+    }
   }
 
   // Images are extracted before annotation building so feature/photoGrid
@@ -330,14 +428,35 @@ async function convertSlide(
     ...(annotation ? { templateAnnotation: annotation } : {}),
   });
 
-  const bullets = entries.filter((e) => !omitted.has(e)).flatMap((e) => e.texts);
-  if (bullets.length > 0) {
-    const items: MarkdownListItem[] = bullets.map((text) => ({
-      type: 'listItem',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-    }));
-    out.push({ type: 'list', ordered: false, children: items });
+  // The body as written: plain paragraphs stay paragraphs, and each run of
+  // list items becomes one list (numbered when its first item is).
+  let list: { ordered: boolean; items: MarkdownListItem[] } | null = null;
+  const flush = () => {
+    if (list) out.push({ type: 'list', ordered: list.ordered, children: list.items });
+    list = null;
+  };
+  for (const entry of entries.filter((e) => !omitted.has(e))) {
+    for (const paragraph of entry.paragraphs) {
+      const content: MarkdownBlockNode = {
+        type: 'paragraph',
+        children: [{ type: 'text', value: paragraph.text }],
+      };
+      if (!paragraph.list) {
+        flush();
+        out.push(content);
+        continue;
+      }
+      list ??= { ordered: paragraph.list === 'number', items: [] };
+      list.items.push({
+        type: 'listItem',
+        ...(paragraph.checked !== undefined ? { checked: paragraph.checked } : {}),
+        children: [content],
+      });
+    }
   }
+  // A list runs on across shapes: a two-column layout's columns are one
+  // list whose items its template deals into the columns.
+  flush();
 
   // Embedded pictures land after the bullet list and before any tables.
   for (const image of images) {

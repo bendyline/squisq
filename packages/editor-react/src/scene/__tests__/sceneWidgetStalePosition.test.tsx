@@ -46,7 +46,7 @@ function drawingHeading(e: Editor): { pos: number; key: string } {
   e.state.doc.descendants((node, pos) => {
     if (found || node.type.name !== 'heading') return;
     if ((node.attrs as { dataTemplate?: string }).dataTemplate === 'drawing') {
-      found = { pos, key: getHeadingKey(node, pos) };
+      found = { pos, key: getHeadingKey(e.state.doc, pos, 'drawing') ?? '' };
     }
   });
   if (!found) throw new Error('fixture has no drawing heading');
@@ -82,12 +82,36 @@ describe('scene widget with a stale heading position', () => {
     const { container } = render(
       <SceneBlockWidget
         editor={editor}
-        headingKey="sketch@999"
+        headingKey="sketch-gone"
         fallbackParentPos={999}
         mode="drawing"
       />,
     );
     expect(container.childElementCount).toBe(0);
+  });
+});
+
+describe('scene widget under an edit above it', () => {
+  it('keeps its canvas when text is typed above the heading', () => {
+    // The heading key used to carry the heading's position, so any edit above
+    // a canvas orphaned it: it drew nothing until ProseMirror rebuilt the
+    // widget, and the page shifted by the canvas's height.
+    editor = new Editor({
+      extensions: [StarterKit.configure({ heading: false }), HeadingWithTemplate],
+      content: markdownToTiptap(DOC),
+    });
+    const { pos, key } = drawingHeading(editor);
+    const { container } = render(
+      <SceneBlockWidget editor={editor} headingKey={key} fallbackParentPos={pos} mode="drawing" />,
+    );
+    expect(container.childElementCount).toBeGreaterThan(0);
+
+    act(() => {
+      editor!.commands.insertContentAt(3, 'More words. ');
+    });
+    expect(drawingHeading(editor).pos).toBeGreaterThan(pos);
+    expect(drawingHeading(editor).key).toBe(key);
+    expect(container.childElementCount).toBeGreaterThan(0);
   });
 });
 

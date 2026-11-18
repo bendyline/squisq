@@ -4,8 +4,13 @@ import Paragraph from '@tiptap/extension-paragraph';
 import Text from '@tiptap/extension-text';
 import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
+import StarterKit from '@tiptap/starter-kit';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import { HeadingWithTemplate } from '../TemplateAnnotation';
+import { AlignedTableCell, AlignedTableHeader } from '../tiptap/alignedTableCells';
 import { describe, expect, it, vi } from 'vitest';
-import { tiptapToMarkdown } from '../tiptapBridge';
+import { markdownToTiptap, tiptapToMarkdown } from '../tiptapBridge';
 import { TiptapVideo } from '../tiptap/TiptapVideo';
 import { TiptapAudio } from '../tiptap/TiptapAudio';
 import {
@@ -16,7 +21,12 @@ import {
   squisqMediaNode,
   type SquisqMediaDragPayload,
 } from '../mediaDragMime';
-import { asOwnParagraph, insertMediaReference, type MediaInsertionTarget } from '../mediaInsertion';
+import {
+  asOwnParagraph,
+  insertMediaReference,
+  insertVideoEmbedReference,
+  type MediaInsertionTarget,
+} from '../mediaInsertion';
 
 const video: SquisqMediaDragPayload = {
   name: 'media/clip.mp4',
@@ -168,6 +178,69 @@ describe('insertMediaReference — Write view', () => {
   });
 });
 
+/** Type the way a keystroke does: replace whatever is selected. */
+function typeText(editor: Editor, text: string): void {
+  editor.view.dispatch(editor.state.tr.insertText(text));
+}
+
+describe('insertMediaReference — typing straight after', () => {
+  // An inserted atom was left node-selected when nothing followed it, so the
+  // first letter of a caption replaced the picture the author had just added.
+  for (const [label, payload, expected] of [
+    ['an image', image, '![party](media/party.gif)'],
+    ['a video player', video, '<video src="media/clip.mp4"'],
+    ['an audio player', audio, '<audio src="media/take.mp3"'],
+  ] as const) {
+    it(`keeps ${label} and puts the typing on a line after it`, () => {
+      const editor = makeEditor();
+      // The author makes an empty line for it, the usual way.
+      editor.commands.setContent('<p>Intro text</p><p></p>');
+      editor.commands.focus('end');
+      insertMediaReference(wysiwygTarget(editor), payload);
+      expect(editor.state.selection.empty).toBe(true);
+      typeText(editor, 'A caption.');
+      const md = tiptapToMarkdown(editor.getHTML());
+      editor.destroy();
+      expect(md).toContain(expected);
+      expect(md.indexOf(expected)).toBeLessThan(md.indexOf('A caption.'));
+      expect(md).toMatch(/\n\nA caption\.\s*$/);
+    });
+  }
+
+  it('does not leave a blank line behind when nothing is typed', () => {
+    const editor = makeEditor();
+    editor.commands.setContent('<p>Intro text</p><p></p>');
+    editor.commands.focus('end');
+    insertMediaReference(wysiwygTarget(editor), image);
+    const md = tiptapToMarkdown(editor.getHTML());
+    editor.destroy();
+    expect(md.trimEnd()).toMatch(/!\[party\]\(media\/party\.gif\)$/);
+  });
+
+  it('uses the following empty line rather than adding another', () => {
+    const editor = makeEditor();
+    editor.commands.setContent('<p>Intro text</p><p></p><p></p><p>Later</p>');
+    editor.commands.setTextSelection(13); // the first empty line
+    insertMediaReference(wysiwygTarget(editor), image);
+    typeText(editor, 'Caption');
+    const blocks = (editor.getJSON().content ?? []).map((node) => node.type);
+    editor.destroy();
+    expect(blocks).toEqual(['paragraph', 'image', 'paragraph', 'paragraph']);
+  });
+
+  it('keeps an untitled online video a video, with the typing on a new line', () => {
+    const editor = makeEditor();
+    editor.commands.setContent('<p>Intro text</p><p></p>');
+    editor.commands.focus('end');
+    insertVideoEmbedReference(wysiwygTarget(editor), 'https://www.youtube.com/watch?v=abc123XYZ_0');
+    typeText(editor, 'A caption.');
+    const md = tiptapToMarkdown(editor.getHTML());
+    editor.destroy();
+    expect(md).toMatch(/^https:\/\/www\.youtube\.com\/watch\?v=abc123XYZ_0\s*$/m);
+    expect(md).toMatch(/\n\nA caption\.\s*$/);
+  });
+});
+
 /** Just enough of a Monaco editor for an insertion over `lines`. */
 function fakeMonaco(lines: string[], line: number, column: number) {
   const edits: string[] = [];
@@ -220,5 +293,33 @@ describe('insertMediaReference — no live editor', () => {
       audio,
     );
     expect(appendMarkdown).toHaveBeenCalledWith('<audio src="media/take.mp3" controls></audio>');
+  });
+});
+
+describe('insertMediaReference — after a chart title', () => {
+  it('lands after the chart’s data table, never between the title and its data', () => {
+    const chart = '## Revenue {[barChart]}\n\n| Q | Sales |\n| --- | --- |\n| Q1 | 4 |';
+    const editor = new Editor({
+      extensions: [
+        StarterKit.configure({ heading: false }),
+        HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+        Table,
+        TableRow,
+        AlignedTableCell,
+        AlignedTableHeader,
+        Image.configure({ inline: false }),
+      ],
+      content: markdownToTiptap(`${chart}\n\nAfter.`),
+    });
+    // Insert → Chart leaves the caret in the title, so typing renames it.
+    editor.commands.setTextSelection(4);
+    expect(editor.state.selection.$from.parent.type.name).toBe('heading');
+
+    insertMediaReference(wysiwygTarget(editor), image);
+    const types = (editor.getJSON().content ?? []).map((node) => node.type);
+    expect(types.slice(0, 3)).toEqual(['heading', 'table', 'image']);
+    // The chart's data still follows its title directly.
+    expect(tiptapToMarkdown(editor.getHTML())).toContain('{[barChart]}\n\n| Q');
+    editor.destroy();
   });
 });

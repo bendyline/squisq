@@ -22,30 +22,58 @@ import { parsePandocAttrTokens } from '@bendyline/squisq/markdown';
 import { SceneBlockWidget, type SceneBlockMode } from './SceneBlockWidget';
 import type { SceneTextChannel } from './text/sceneTextChannel';
 
-/**
- * Stable identifier for a layout/drawing heading — used as part of the
- * widget decoration's `key` so the canvas survives attribute-only doc
- * changes (drag/resize commits write into the heading's
- * `data-block-attrs`).
- */
-export function getHeadingKey(node: PMNode, position?: number): string {
+/** A scene heading's own identity: its `{#id}`, else its text as a slug. */
+function headingIdentity(node: PMNode): string {
   const raw = (node.attrs as Record<string, unknown>).dataBlockAttrs;
   if (typeof raw === 'string' && raw.length > 0) {
     const attrs = parsePandocAttrTokens(raw);
-    if (attrs.id) return position == null ? attrs.id : `${attrs.id}@${position}`;
+    if (attrs.id) return attrs.id;
   }
   let text = '';
   node.content.forEach((child) => {
     if (child.isText) text += child.text ?? '';
   });
-  const slug =
+  return (
     text
       .toLowerCase()
       .replace(/[^\w\s-]/g, '')
       .replace(/[\s_]+/g, '-')
       .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || 'block';
-  return position == null ? slug : `${slug}@${position}`;
+      .replace(/^-|-$/g, '') || 'block'
+  );
+}
+
+/**
+ * The key of every `mode` heading in `doc`, by position: the heading's
+ * identity, with its ordinal from the second heading of the same identity on
+ * (`sketch`, `sketch~2`). The key is part of the widget decoration's `key`,
+ * so the canvas survives attribute-only commits (drag/resize write the
+ * heading's `data-block-attrs`) and edits above it. It once carried the
+ * heading's position: typing above a canvas then orphaned it — it drew
+ * nothing until ProseMirror rebuilt the widget, and the page shifted by the
+ * canvas's height.
+ */
+export function sceneHeadingKeys(doc: PMNode, mode: SceneBlockMode): Map<number, string> {
+  const keys = new Map<number, string>();
+  const seen = new Map<string, number>();
+  doc.descendants((node, pos) => {
+    if (node.type.name === 'heading') {
+      if ((node.attrs as { dataTemplate?: string }).dataTemplate === mode) {
+        const identity = headingIdentity(node);
+        const ordinal = (seen.get(identity) ?? 0) + 1;
+        seen.set(identity, ordinal);
+        keys.set(pos, ordinal === 1 ? identity : `${identity}~${String(ordinal)}`);
+      }
+      return false;
+    }
+    return node.isTextblock ? false : undefined;
+  });
+  return keys;
+}
+
+/** The key of the `mode` heading at `position`, or null when there is none. */
+export function getHeadingKey(doc: PMNode, position: number, mode: SceneBlockMode): string | null {
+  return sceneHeadingKeys(doc, mode).get(position) ?? null;
 }
 
 /**
@@ -57,19 +85,10 @@ export function findSceneHeadingPos(
   headingKey: string,
   mode: SceneBlockMode,
 ): number | null {
-  const expectedTemplate = mode;
-  let found: number | null = null;
-  editor.state.doc.descendants((node, pos) => {
-    if (found != null) return false;
-    if (node.type.name !== 'heading') return;
-    const attrs = node.attrs as { dataTemplate?: string };
-    if (attrs.dataTemplate !== expectedTemplate) return;
-    if (getHeadingKey(node, pos) === headingKey) {
-      found = pos;
-      return false;
-    }
-  });
-  return found;
+  for (const [pos, key] of sceneHeadingKeys(editor.state.doc, mode)) {
+    if (key === headingKey) return pos;
+  }
+  return null;
 }
 
 const KEY = new PluginKey('squisq-scene-block');
@@ -89,6 +108,10 @@ function buildDecorations(
   textChannel?: SceneTextChannel,
 ): DecorationSet {
   const decos: Decoration[] = [];
+  const keys: Record<SceneBlockMode, Map<number, string>> = {
+    layout: sceneHeadingKeys(state.doc, 'layout'),
+    drawing: sceneHeadingKeys(state.doc, 'drawing'),
+  };
 
   state.doc.descendants((node, pos) => {
     if (node.type.name !== 'heading') return;
@@ -98,7 +121,8 @@ function buildDecorations(
     const parentDepth = attrs.level;
     const widgetPos = pos + node.nodeSize;
     const parentPos = pos;
-    const headingKey = getHeadingKey(node, pos);
+    const headingKey = keys[mode].get(pos);
+    if (headingKey === undefined) return;
     decos.push(
       Decoration.widget(
         widgetPos,

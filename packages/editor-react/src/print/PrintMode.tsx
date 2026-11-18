@@ -198,24 +198,31 @@ export function PrintPreviewToolbar() {
     <div className="squisq-print-toolbar" aria-label="Print preview controls">
       <span className="squisq-print-toolbar-title">Print preview</span>
       {activeDisplayMode === 'slideshow' && (
-        <div className="squisq-print-density" role="group" aria-label="Slides per page">
-          {SLIDES_PER_PAGE_OPTIONS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              className={`squisq-print-density-button${slidesPerPage === value ? ' squisq-print-density-button--active' : ''}`}
-              aria-pressed={slidesPerPage === value}
-              aria-label={`${value} ${value === 1 ? 'slide' : 'slides'} per page`}
-              onClick={() => setSlidesPerPage(value)}
-            >
-              <span>{value}</span>
-              <span className="squisq-print-density-label">
-                {' '}
-                {value === 1 ? 'slide' : 'slides'} per page
-              </span>
-            </button>
-          ))}
-        </div>
+        <>
+          {/* Said once beside compact number buttons: repeated on each
+              button ("9 slides per page"), the group outgrew the toolbar and
+              its last button was cut to "9 slides pe". */}
+          <span className="squisq-print-density-label" aria-hidden="true">
+            Slides per page
+          </span>
+          <div className="squisq-print-density" role="group" aria-label="Slides per page">
+            {SLIDES_PER_PAGE_OPTIONS.map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={`squisq-print-density-button${slidesPerPage === value ? ' squisq-print-density-button--active' : ''}`}
+                aria-pressed={slidesPerPage === value}
+                aria-label={`${value} ${value === 1 ? 'slide' : 'slides'} per page`}
+                // The caption hides when the controls are narrow; the number
+                // alone still says what it does on hover.
+                data-tooltip={`${value} ${value === 1 ? 'slide' : 'slides'} per page`}
+                onClick={() => setSlidesPerPage(value)}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </>
       )}
       <div className="squisq-print-toolbar-spacer" />
       <button type="button" className="squisq-print-action" onClick={print}>

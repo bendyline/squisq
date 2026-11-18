@@ -353,6 +353,10 @@ export function VideoExportModal({
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const titleId = useId();
   const initialOutputFormat = defaultConfig?.outputFormat ?? 'mp4';
+  // GIF always ends with an ffmpeg.wasm palette pass, so offer it only when
+  // the host configured a core: otherwise choosing it can only fail.
+  const gifAvailable =
+    initialOutputFormat === 'gif' || Boolean(defaultConfig?.ffmpegWasm?.coreURL?.trim());
   const [outputFormat, setOutputFormat] = useState<VideoOutputFormat>(initialOutputFormat);
   const [quality, setQuality] = useState<VideoQuality>(defaultConfig?.quality ?? 'normal');
   const [fps, setFps] = useState(defaultConfig?.fps ?? (initialOutputFormat === 'gif' ? 10 : 30));
@@ -608,18 +612,20 @@ export function VideoExportModal({
         {/* ── Configure State ── */}
         {state === 'idle' && (
           <>
-            <div>
-              <label style={themedLabelStyle}>Format</label>
-              <select
-                aria-label="Format"
-                style={themedSelectStyle}
-                value={outputFormat}
-                onChange={(e) => handleOutputFormatChange(e.target.value as VideoOutputFormat)}
-              >
-                <option value="mp4">MP4 video</option>
-                <option value="gif">Animated GIF</option>
-              </select>
-            </div>
+            {gifAvailable && (
+              <div>
+                <label style={themedLabelStyle}>Format</label>
+                <select
+                  aria-label="Format"
+                  style={themedSelectStyle}
+                  value={outputFormat}
+                  onChange={(e) => handleOutputFormatChange(e.target.value as VideoOutputFormat)}
+                >
+                  <option value="mp4">MP4 video</option>
+                  <option value="gif">Animated GIF</option>
+                </select>
+              </div>
+            )}
 
             {outputFormat === 'mp4' && (
               <div>

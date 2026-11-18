@@ -417,4 +417,35 @@ describe('pause tightening', () => {
   it('proposes nothing for a take with no speech contrast', () => {
     expect(detectPauseCuts(framesOf(bandNoise(3, 100, 8000, 0.01, 27)))).toEqual([]);
   });
+
+  // Screen recordings, noise-suppressed phone audio and generated narration
+  // have true digital silence between phrases. The analyzer's filters leave
+  // vanishing tails there (frames read −400 to −800 dB), which once dragged the
+  // noise floor so low that no frame of the pause counted as quiet.
+  it('shortens pauses that are digital silence', () => {
+    const x = new Float32Array(Math.round(5.5 * SR));
+    x.set(phrase(5, 31), Math.round(0.2 * SR)); // 0.2–1.1, then 2 s of zeros
+    x.set(phrase(5, 32), Math.round(3.1 * SR)); // 3.1–4.0, then zeros to the end
+    const frames = framesOf(x);
+    expect(Math.min(...frames.map((f) => f.rmsDb))).toBeGreaterThanOrEqual(-120);
+    const cuts = detectPauseCuts(frames, { maxPauseSec: 0.8, keepSec: 0.4 });
+    expect(cuts).toHaveLength(2);
+    expect(cuts[0].start).toBeGreaterThan(1.1);
+    expect(cuts[0].start).toBeLessThan(1.45);
+    expect(cuts[0].end).toBeGreaterThan(2.75);
+    expect(cuts[0].end).toBeLessThan(3.1);
+    // The trailing silence is shortened too.
+    expect(cuts[1].start).toBeGreaterThan(4.0);
+  });
+});
+
+describe('breath detection on digital silence', () => {
+  it('does not mistake the silence between phrases for breaths', () => {
+    const x = new Float32Array(Math.round(4.5 * SR));
+    x.set(phrase(5, 41), Math.round(0.2 * SR));
+    x.set(phrase(5, 42), Math.round(2.6 * SR));
+    const analyzer = createBreathAnalyzer(SR);
+    for (let i = 0; i < x.length; i += 4096) analyzer.push(x.subarray(i, i + 4096));
+    expect(detectBreaths(analyzer.frames())).toEqual([]);
+  });
 });

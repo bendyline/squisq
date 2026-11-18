@@ -58,8 +58,8 @@ const lineStyleOf = (dasharray: string | undefined): string =>
 
 /**
  * The heading's live position, or null once it is gone. `hint` (the position
- * it was last seen at) is checked first; the key embeds the position, so a
- * heading that moved is a different widget and also resolves to null.
+ * it was last seen at) is checked first; a heading that an edit above moved
+ * keeps its key and is found at its new position.
  */
 function resolveSceneHeadingPos(
   editor: Editor,
@@ -71,7 +71,7 @@ function resolveSceneHeadingPos(
   if (
     node?.type.name === 'heading' &&
     (node.attrs as { dataTemplate?: string }).dataTemplate === mode &&
-    getHeadingKey(node, hint) === headingKey
+    getHeadingKey(editor.state.doc, hint, mode) === headingKey
   ) {
     return hint;
   }

@@ -12,6 +12,8 @@
  * paragraph that is only a link to the video's page.
  */
 import type { Editor, JSONContent } from '@tiptap/core';
+import { caretAfterInsertedBlock } from './caretAfterInsert';
+import { tiptapBlockInsertion } from './blockInsertion';
 import type { editor as MonacoEditorNs } from 'monaco-editor';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
@@ -68,8 +70,10 @@ export function asOwnParagraph(snippet: string, context: SourceLineContext): str
 /**
  * Insert block content at the top level: in place of the caret's paragraph
  * when that paragraph is empty (the line the author just made for it),
- * otherwise after the caret's top-level block — never inside a list item,
- * whose serializer would drop a nested block.
+ * otherwise where any block insert goes after the caret's block
+ * (`tiptapBlockInsertion`) — past a chart heading's data table, so a picture
+ * never splits a chart from its data, and never inside a list item, whose
+ * serializer would drop a nested block.
  */
 function insertTopLevel(editor: Editor, content: JSONContent[]): void {
   const { $from } = editor.state.selection;
@@ -81,7 +85,7 @@ function insertTopLevel(editor: Editor, content: JSONContent[]): void {
   const range =
     block.type.name === 'paragraph' && block.content.size === 0
       ? { from: $from.before(1), to: $from.after(1) }
-      : $from.after(1);
+      : tiptapBlockInsertion(editor.state, 'afterBlock').pos;
   editor.chain().focus().insertContentAt(range, content).run();
 }
 
@@ -122,11 +126,11 @@ export function insertMediaReference(
   const node = squisqMediaNode(reference);
 
   if (activeView === 'wysiwyg' && tiptapEditor) {
-    if (node?.type === 'image') {
-      tiptapEditor.chain().focus().setImage(node.attrs).run();
-    } else if (node) {
-      // Players are block atoms.
+    if (node) {
+      // Pictures (`inline: false`) and players are block atoms: on the line
+      // the author made for them, never nested in a list item.
       insertTopLevel(tiptapEditor, [node]);
+      caretAfterInsertedBlock(tiptapEditor.view);
     } else {
       tiptapEditor
         .chain()
@@ -208,6 +212,7 @@ export function insertVideoEmbedReference(
   const { activeView, tiptapEditor, monacoEditor } = target;
   if (activeView === 'wysiwyg' && tiptapEditor) {
     insertTopLevel(tiptapEditor, [videoEmbedParagraphJson(watchUrl, title)]);
+    caretAfterInsertedBlock(tiptapEditor.view);
     return;
   }
   const markdown = videoEmbedMarkdown(watchUrl, title);

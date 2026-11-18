@@ -9,6 +9,11 @@ export * from './utils/diagramText.js';
 export * from './templateInputs.js';
 export * from './coverSlideSettings.js';
 export { coverRepeatsLeadingBlock } from './coverLeadingBlock.js';
+export {
+  isUntouchedScenePlaceholder,
+  DRAWING_PLACEHOLDER_TITLE,
+  LAYOUT_PLACEHOLDER_TITLE,
+} from './scenePlaceholders.js';
 export * from './utils/shapeGeometry.js';
 export {
   markdownToDoc,

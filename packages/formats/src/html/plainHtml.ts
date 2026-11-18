@@ -1136,9 +1136,14 @@ function videoEmbedToHtml(
       .join('');
     frame = `<span class="squisq-video-embed-frame" style="${ratio}"><iframe${attrs}></iframe></span>`;
   }
+  // A player always links to the video's page, titled or not: a page opened
+  // from disk sends no referrer, and YouTube refuses to play there (its
+  // "Error 153"). A poster is itself that link.
+  const captionText =
+    title ?? (ctx?.videoEmbeds === 'poster' ? null : `Watch on ${embed.providerName}`);
   const caption =
-    title && !inline
-      ? `<figcaption class="squisq-video-embed-caption"><a href="${watchUrl}">${escapeHtml(title)}</a></figcaption>`
+    captionText && !inline
+      ? `<figcaption class="squisq-video-embed-caption"><a href="${watchUrl}">${escapeHtml(captionText)}</a></figcaption>`
       : '';
   return (
     `<${root} class="squisq-video-embed" data-provider="${embed.provider}"` +

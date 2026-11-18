@@ -26,6 +26,7 @@ import type {
 } from '@bendyline/squisq/markdown';
 
 import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { contrastRatio } from '@bendyline/squisq/schemas';
 
 import { markdownDocToDocx, docToDocx } from '../docx/export';
 
@@ -368,7 +369,7 @@ describe('markdownDocToDocx', () => {
     expect(xmlText).toContain('<w:tblGrid><w:gridCol/><w:gridCol/></w:tblGrid>');
   });
 
-  it('shades a table header from the theme, light page or dark', async () => {
+  it('shades a table header from the theme, on paper even for a dark theme', async () => {
     const doc = parseMarkdown('| A | B |\n| --- | --- |\n| 1 | 2 |\n');
     const fill = async (themeId: string) => {
       const zip = await JSZip.loadAsync(await markdownDocToDocx(doc, { themeId }));
@@ -376,10 +377,25 @@ describe('markdownDocToDocx', () => {
       return xml.match(/<w:shd w:val="clear" w:color="auto" w:fill="([0-9A-F]{6})"\/>/)?.[1] ?? '';
     };
     const brightness = (hex: string) => parseInt(hex.slice(0, 2), 16);
-    // A tenth of the text colour mixed into the page: pale on white, and a
-    // shade lighter than the page on a dark theme, never a white bar.
+    // A tenth of the ink mixed into the page. A dark theme is turned over onto
+    // white paper (Word prints no page colour), so its header is pale too.
     expect(brightness(await fill('standard'))).toBeGreaterThan(220);
-    expect(brightness(await fill('cinematic'))).toBeLessThan(90);
+    expect(brightness(await fill('cinematic'))).toBeGreaterThan(200);
+  });
+
+  it('turns a dark theme over onto paper: dark ink, no page colour, legible code', async () => {
+    // The review's case: Gezellig in Word was cream text on a dark page that
+    // printed as cream on white, with code near-white on light grey.
+    const doc = parseMarkdown('# Plan\n\nBody text.\n\n```js\nconst answer = 42;\n```\n');
+    const zip = await JSZip.loadAsync(await markdownDocToDocx(doc, { themeId: 'gezellig' }));
+    const documentXml = await zip.file('word/document.xml')!.async('text');
+    const stylesXml = await zip.file('word/styles.xml')!.async('text');
+    expect(documentXml).not.toContain('<w:background');
+    const inks = [...stylesXml.matchAll(/<w:color w:val="([0-9A-F]{6})"\/>/g)].map((m) => m[1]!);
+    expect(inks.length).toBeGreaterThan(0);
+    for (const ink of inks) {
+      expect(contrastRatio(`#${ink}`, '#FFFFFF'), ink).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   // ============================================
@@ -743,6 +759,23 @@ describe('DOCX export — images resized in the editor', () => {
   });
 });
 
+describe('task lists', () => {
+  it('lead each task with its box instead of a bullet', async () => {
+    const zip = await exportAndParse(
+      parseMarkdown('- [ ] Book the venue\n- [x] Pay the deposit\n\n- A plain point\n'),
+    );
+    const xml = await zip.file('word/document.xml')!.async('text');
+    const paragraph = (text: string) =>
+      xml.split('<w:p>').find((part) => part.includes(text)) ?? '';
+    expect(paragraph('Book the venue')).toContain('☐ </w:t>');
+    expect(paragraph('Book the venue')).toContain('<w:numId w:val="0"/>');
+    expect(paragraph('Pay the deposit')).toContain('☑ </w:t>');
+    // An ordinary item keeps its list numbering (its bullet).
+    expect(paragraph('A plain point')).not.toContain('<w:numId w:val="0"/>');
+    expect(paragraph('A plain point')).not.toMatch(/[☐☑]/);
+  });
+});
+
 describe('<br> in a table cell', () => {
   it('writes a line break, not run-together text', async () => {
     const zip = await exportAndParse(
@@ -750,6 +783,22 @@ describe('<br> in a table cell', () => {
     );
     const xml = await zip.file('word/document.xml')!.async('text');
     expect(xml).toMatch(/second row<\/w:t><\/w:r><w:r><w:br\/><\/w:r><w:r><w:t[^>]*>continued/);
+  });
+
+  it('draws a checklist the Write view put in a cell, not its HTML', async () => {
+    // Insert → Table leaves the caret in the first cell, so Insert → Task
+    // List lands there; the editor stores that cell as an HTML envelope.
+    const cell =
+      '<div data-squisq-table-cell=""><ul data-type="taskList">' +
+      '<li data-checked="false" data-type="taskItem"><div><p>Book venue</p></div></li>' +
+      '<li data-checked="true" data-type="taskItem"><div><p>Pay deposit</p></div></li>' +
+      '</ul></div>';
+    const zip = await exportAndParse(parseMarkdown(`| ${cell} | B |\n| --- | --- |\n| c | d |\n`));
+    const xml = await zip.file('word/document.xml')!.async('text');
+    expect(xml).not.toContain('data-squisq-table-cell');
+    expect(xml).not.toContain('taskItem');
+    expect(xml).toMatch(/☐ <\/w:t>.*Book venue/);
+    expect(xml).toMatch(/<w:br\/>.*☑ <\/w:t>.*Pay deposit/);
   });
 });
 

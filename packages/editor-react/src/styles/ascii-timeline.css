@@ -9,6 +9,8 @@
 
 .squisq-ascii-timeline-widget-host {
   margin: 0.75rem 0 1.25rem;
+  /* The widget's own width, not the viewport's, decides its compact layout. */
+  container: squisq-timeline / inline-size;
 }
 
 .squisq-ascii-timeline-editor {
@@ -71,19 +73,38 @@
   outline: 2px solid color-mix(in srgb, var(--squisq-ascii-timeline-accent) 22%, transparent);
 }
 
+/* No minimum width here: a 600px canvas inside the editor's hidden overflow
+   was clipped on a phone, its last milestone unreachable. The track's line
+   column carries the minimum instead, so a timeline too wide for its widget
+   scrolls rather than being cut off. */
 .squisq-ascii-timeline-canvas {
+  --squisq-ascii-timeline-line-min: 420px;
   position: relative;
-  min-width: 600px;
   padding: 8px 18px 8px 10px;
   overflow-x: auto;
 }
 
 .squisq-ascii-timeline-track {
   display: grid;
-  grid-template-columns: var(--squisq-ascii-timeline-label-width) minmax(420px, 1fr);
+  grid-template-columns:
+    var(--squisq-ascii-timeline-label-width)
+    minmax(var(--squisq-ascii-timeline-line-min), 1fr);
   gap: 12px;
   height: 96px;
   align-items: center;
+}
+
+/* A narrow widget (a phone, a narrow pane): a slimmer label column and a
+   shorter line, so a few milestones fit without scrolling. */
+@container squisq-timeline (max-width: 560px) {
+  .squisq-ascii-timeline-editor {
+    --squisq-ascii-timeline-label-width: 84px;
+  }
+
+  .squisq-ascii-timeline-canvas {
+    --squisq-ascii-timeline-line-min: 200px;
+    padding-right: 12px;
+  }
 }
 
 .squisq-ascii-timeline-track-label {
@@ -189,10 +210,13 @@ button.squisq-ascii-timeline-track-name:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--squisq-ascii-timeline-accent) 22%, transparent);
 }
 
+/* The track's line column sets the rail's width (and its minimum): a fixed
+   420px here overran that column on a phone and pushed the last milestone
+   past the widget's edge. */
 .squisq-ascii-timeline-rail {
   position: relative;
   height: 96px;
-  min-width: 420px;
+  min-width: var(--squisq-ascii-timeline-line-min, 420px);
   outline: none;
   cursor: default;
 }
@@ -552,10 +576,7 @@ button.squisq-ascii-timeline-track-name:focus-visible {
 }
 
 @media (max-width: 760px) {
-  .squisq-ascii-timeline-editor {
-    --squisq-ascii-timeline-label-width: 132px;
-  }
-
+  /* The label column narrows with the widget (the container query above). */
   .squisq-ascii-timeline-inspector {
     grid-template-columns: 1fr 1fr;
   }

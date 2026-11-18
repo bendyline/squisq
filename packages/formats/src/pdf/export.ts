@@ -23,7 +23,7 @@
 import { PDFDocument, StandardFonts, rgb, PDFFont, PDFImage, PDFPage, PDFString } from 'pdf-lib';
 
 import type { Doc, ThemeRegistry } from '@bendyline/squisq/schemas';
-import { contrastRatio } from '@bendyline/squisq/schemas';
+import { paperPalette } from '../shared/paperPalette.js';
 import { docToMarkdown, resolveThemeForDoc } from '@bendyline/squisq/doc';
 import type {
   MarkdownDocument,
@@ -395,9 +395,14 @@ async function createExportContext(
   if (themeId) {
     const theme = resolveThemeForDoc(doc, themeId, options.themeRegistry);
     if (theme.colors) {
-      colorText = paperInk(theme.colors.text, COLOR_TEXT);
-      colorHeading = paperInk(theme.colors.primary, COLOR_HEADING);
-      colorLink = paperInk(theme.colors.highlight || theme.colors.secondary, COLOR_LINK);
+      // The same paper palette Word uses: on white paper a dark theme's own
+      // background becomes the ink, so a dark theme still reads as itself
+      // instead of falling back to plain black. Every ink is also legible on
+      // the table header shade.
+      const palette = paperPalette(theme.colors, { alsoLegibleOn: [TABLE_HEADER_HEX] });
+      colorText = (palette.text && hexToRgb(palette.text)) || COLOR_TEXT;
+      colorHeading = (palette.heading && hexToRgb(palette.heading)) || COLOR_HEADING;
+      colorLink = (palette.link && hexToRgb(palette.link)) || COLOR_LINK;
     }
   }
 
@@ -1143,19 +1148,51 @@ function renderListItem(
   const indent = extraIndent + depth * LIST_INDENT;
   const bullet = ordered ? `${counter}.` : BULLET_CHAR;
   const bulletFont = ctx.fonts.regular;
-  const bulletWidth = drawnWidth(bulletFont, bullet + ' ', ctx.fontSize);
+  // A task item (`- [ ]` / `- [x]`) draws its box instead of a bullet, as
+  // vector lines: the standard fonts have no ballot-box glyph.
+  const task = typeof item.checked === 'boolean';
+  const boxSize = ctx.fontSize * 0.72;
+  const bulletWidth = task
+    ? boxSize + drawnWidth(bulletFont, ' ', ctx.fontSize)
+    : drawnWidth(bulletFont, bullet + ' ', ctx.fontSize);
 
   // Draw bullet
   const lineHeight = ctx.fontSize * LINE_HEIGHT_FACTOR;
   ensureSpace(ctx, lineHeight);
 
-  ctx.page.drawText(bullet, {
-    x: ctx.margin + indent,
-    y: ctx.y - ctx.fontSize,
-    size: ctx.fontSize,
-    font: bulletFont,
-    color: rgb(ctx.colors.text.r, ctx.colors.text.g, ctx.colors.text.b),
-  });
+  const ink = rgb(ctx.colors.text.r, ctx.colors.text.g, ctx.colors.text.b);
+  if (task) {
+    const x = ctx.margin + indent;
+    const y = ctx.y - ctx.fontSize - ctx.fontSize * 0.02;
+    ctx.page.drawRectangle({
+      x,
+      y,
+      width: boxSize,
+      height: boxSize,
+      borderColor: ink,
+      borderWidth: Math.max(0.6, ctx.fontSize * 0.06),
+    });
+    if (item.checked) {
+      const thickness = Math.max(0.8, ctx.fontSize * 0.09);
+      const tick = (from: [number, number], to: [number, number]) =>
+        ctx.page.drawLine({
+          start: { x: x + boxSize * from[0], y: y + boxSize * from[1] },
+          end: { x: x + boxSize * to[0], y: y + boxSize * to[1] },
+          thickness,
+          color: ink,
+        });
+      tick([0.2, 0.5], [0.42, 0.24]);
+      tick([0.42, 0.24], [0.82, 0.8]);
+    }
+  } else {
+    ctx.page.drawText(bullet, {
+      x: ctx.margin + indent,
+      y: ctx.y - ctx.fontSize,
+      size: ctx.fontSize,
+      font: bulletFont,
+      color: ink,
+    });
+  }
 
   const textIndent = indent + bulletWidth + 4;
   const textWidth = ctx.contentWidth - textIndent;
@@ -1541,26 +1578,18 @@ function renderFallbackBlock(
 // ============================================
 
 /**
- * PDF pages are white, independent of the theme's screen background. Never
- * copy pale screen text onto paper. The same ink also appears in shaded
- * table headers, so require readable contrast on both exported surfaces.
+ * PDF pages are white, independent of the theme's screen background, and the
+ * same ink appears in shaded table headers: theme inks must read on both.
  */
-function paperInk(hex: string, fallback: RgbColor): RgbColor {
-  const color = hexToRgb(hex);
-  if (!color) return fallback;
-  const tableHeader =
-    '#' +
-    [COLOR_TABLE_HEADER_BG.r, COLOR_TABLE_HEADER_BG.g, COLOR_TABLE_HEADER_BG.b]
-      .map((channel) =>
-        Math.round(channel * 255)
-          .toString(16)
-          .padStart(2, '0'),
-      )
-      .join('');
-  return contrastRatio(hex, '#ffffff') >= 4.5 && contrastRatio(hex, tableHeader) >= 4.5
-    ? color
-    : fallback;
-}
+const TABLE_HEADER_HEX =
+  '#' +
+  [COLOR_TABLE_HEADER_BG.r, COLOR_TABLE_HEADER_BG.g, COLOR_TABLE_HEADER_BG.b]
+    .map((channel) =>
+      Math.round(channel * 255)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('');
 
 function hexToRgb(hex: string): RgbColor | undefined {
   const h = hex.startsWith('#') ? hex.slice(1) : hex;

@@ -15,6 +15,7 @@
  */
 
 import Heading from '@tiptap/extension-heading';
+import { DOMSerializer } from '@tiptap/pm/model';
 import { templateLabel } from './TemplatePicker';
 import { summarizeBlockProps } from './blockProperties';
 
@@ -32,6 +33,42 @@ export const HeadingWithTemplate = Heading.extend({
           () => this.editor.isEditable && this.editor.commands.toggleHeading({ level }),
         ]),
       ),
+    };
+  },
+
+  /**
+   * The same DOM as `renderHTML`, as a node view only so the heading can say
+   * which DOM changes are not edits. ProseMirror treats any change to a
+   * heading's DOM outside a widget as an edit to re-read and redraws the
+   * heading's range: a browser extension or test tool writing a `style` or
+   * `data-*` onto the template badge (Playwright's screenshots hide the caret
+   * that way) redrew the section, and the widgets in it remounted, flashed
+   * empty and shifted the page. The badges hold no content, and the heading
+   * element's own attributes come from the node, so changes to either are
+   * ignored; the text inside `contentDOM` is read as before.
+   */
+  addNodeView() {
+    return ({ node }) => {
+      const spec = node.type.spec.toDOM?.(node) ?? [`h${String(node.attrs.level)}`, 0];
+      const { dom, contentDOM } = DOMSerializer.renderSpec(document, spec);
+      let current = node;
+      return {
+        dom,
+        contentDOM,
+        update: (next) => {
+          // A different heading (level, template, params) re-renders whole,
+          // as it did without a node view.
+          if (!next.sameMarkup(current)) return false;
+          current = next;
+          return true;
+        },
+        ignoreMutation: (mutation) => {
+          if (mutation.type === 'selection') return false;
+          const target = mutation.target;
+          if (contentDOM && (target === contentDOM || contentDOM.contains(target))) return false;
+          return target === dom ? mutation.type === 'attributes' : true;
+        },
+      };
     };
   },
 

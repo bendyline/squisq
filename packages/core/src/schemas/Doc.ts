@@ -142,6 +142,15 @@ export interface Doc {
   startBlock?: StartBlockConfig;
 
   /**
+   * Set by the slideshow projection (`buildPreviewDoc`): the id of the first
+   * slide when the cover only repeats that slide's words, so players and
+   * exporters draw that slide as the cover instead of showing both. Computed
+   * from the source blocks, whose headings the projected slides no longer
+   * carry; read it through `coverRepeatsLeadingBlock`.
+   */
+  coverRepeatsSlideId?: string;
+
+  /**
    * Persistent layers rendered on every block (behind and/or on top of content).
    * Used for consistent branding overlays, background gradients, etc.
    */
@@ -583,6 +592,20 @@ export interface TextParagraph {
   list?: TextParagraphList;
   /** Extra space above the paragraph, in canvas px. */
   spaceBefore?: number;
+  /**
+   * Present when the paragraph stands for a table in the body. Its `text` is
+   * still the table's plain projection (one row per line, cells spaced), and
+   * consumers that write native tables (PPTX) draw this structure instead.
+   */
+  table?: TextParagraphTable;
+}
+
+/** A table's cells for a {@link TextParagraph}, as plain text per cell. */
+export interface TextParagraphTable {
+  header: string[];
+  rows: string[][];
+  /** Column alignment, as authored (`:--`, `:-:`, `--:`); null for none. */
+  align?: Array<'left' | 'center' | 'right' | null>;
 }
 
 /** List-item facts for a {@link TextParagraph}. */

@@ -10,7 +10,7 @@ import { planContentBuilds } from '../builds.js';
 
 import { taskMarker, type Layer, type TextParagraph } from '../../schemas/Doc.js';
 import type { ContentBlockInput, TemplateContext } from '../../schemas/BlockTemplates.js';
-import type { MarkdownBlockNode, MarkdownList } from '../../markdown/types.js';
+import type { MarkdownBlockNode, MarkdownList, MarkdownTable } from '../../markdown/types.js';
 import { extractPlainText } from '../../markdown/utils.js';
 import {
   isMaterializedMediaNode,
@@ -70,6 +70,25 @@ function listParagraphs(list: MarkdownList, level = 0): TextParagraph[] {
   });
 }
 
+/**
+ * A table as one paragraph: its plain rows as `text` (unchanged for every
+ * plain consumer) and its cells as `table`, so a PPTX deck can write the
+ * native table the slideshow draws instead of lines of spaced words.
+ */
+function tableParagraph(table: MarkdownTable): TextParagraph {
+  const cells = (row: MarkdownTable['children'][number] | undefined) =>
+    (row?.children ?? []).map((cell) => extractPlainText(cell).trim());
+  const [head, ...body] = table.children;
+  return {
+    text: extractPlainText(table),
+    table: {
+      header: cells(head),
+      rows: body.map((row) => cells(row)),
+      ...(table.align?.some(Boolean) ? { align: table.align.map((value) => value ?? null) } : {}),
+    },
+  };
+}
+
 /** A paragraph as plain text: list items carry their indent and marker. */
 function plainParagraphText({ text, list }: TextParagraph): string {
   if (!list) return text;
@@ -89,7 +108,12 @@ function plainParagraphText({ text, list }: TextParagraph): string {
  */
 function completeBodyParagraphs(nodes: readonly MarkdownBlockNode[]): TextParagraph[] {
   const paragraphs = nodes.flatMap((node, index): TextParagraph[] => {
-    const own = node.type === 'list' ? listParagraphs(node) : [{ text: extractPlainText(node) }];
+    const own =
+      node.type === 'list'
+        ? listParagraphs(node)
+        : node.type === 'table'
+          ? [tableParagraph(node)]
+          : [{ text: extractPlainText(node) }];
     if (index === 0) return own;
     const blankLines = markdownBlockSeparatorLines(nodes[index - 1], node) - 1;
     return [...Array.from({ length: blankLines }, () => ({ text: '' })), ...own];
@@ -105,10 +129,38 @@ function completeBodyParagraphs(nodes: readonly MarkdownBlockNode[]): TextParagr
   return paragraphs;
 }
 
+/**
+ * The body's base size. Short bodies start larger: the slideshow grows a
+ * slide's text by at most 2× (and only while every box still holds it), so a
+ * sentence or two set at 28px stayed small in the top third of the frame.
+ */
 function bodyFontSize(body: string, context: TemplateContext): number {
-  const base = body.length > 1800 ? 18 : body.length > 1100 ? 21 : body.length > 650 ? 24 : 28;
+  const base =
+    body.length > 1800
+      ? 18
+      : body.length > 1100
+        ? 21
+        : body.length > 650
+          ? 24
+          : body.length > 300
+            ? 28
+            : body.length > 120
+              ? 34
+              : 40;
   return themedFontSize(base, context, false);
 }
+
+/**
+ * The headline: the concept slides' lockup size (60px at 1080p), so a content
+ * slide's heading reads as clearly larger than its body (a 40px body at most),
+ * with an accent rule above it as theirs have. Its box keeps room for the
+ * slideshow's 2× grow — a tight box would hold the whole slide at its base
+ * size, since every box must fit at the shared scale.
+ */
+const HEADLINE_PX = 60;
+const HEADLINE_TOP_PCT = 9;
+const HEADLINE_BOX_PCT = 14;
+const BODY_TOP_PCT = 24;
 
 export function contentBlock(input: ContentBlockInput, context: TemplateContext): Layer[] {
   const { theme } = context;
@@ -121,13 +173,33 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
   const layers: Layer[] = [createBackgroundLayer('bg', theme.colors.background)];
 
   if (title) {
+    const titleFontSize = themedFontSize(HEADLINE_PX, context, true);
+    const { height: H } = context.viewport;
+    const ruleHeight = Math.max(4, Math.round(H * 0.006));
+    const ruleTopPct = HEADLINE_TOP_PCT - ((ruleHeight + titleFontSize * 0.3) / H) * 100;
+    layers.push({
+      type: 'shape',
+      id: 'accent-rule',
+      content: {
+        shape: 'rect',
+        fill: theme.colors.highlight || theme.colors.primary,
+        borderRadius: ruleHeight / 2,
+      },
+      position: {
+        x: '8%',
+        y: `${Math.max(1, ruleTopPct)}%`,
+        width: '4.5%',
+        height: `${(ruleHeight / H) * 100}%`,
+        anchor: 'top-left',
+      },
+    });
     layers.push({
       type: 'text',
       id: 'title',
       content: {
         text: title,
         style: {
-          fontSize: themedFontSize(46, context, true),
+          fontSize: titleFontSize,
           fontFamily: getThemeFont(context, 'title'),
           fontWeight: 'bold',
           color: theme.colors.text,
@@ -136,7 +208,13 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
           shadow: shouldUseShadow(context),
         },
       },
-      position: { x: '8%', y: '9%', width: '84%', height: '10%', anchor: 'top-left' },
+      position: {
+        x: '8%',
+        y: `${HEADLINE_TOP_PCT}%`,
+        width: '84%',
+        height: `${HEADLINE_BOX_PCT}%`,
+        anchor: 'top-left',
+      },
     });
   }
 
@@ -148,8 +226,10 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
         text: body,
         ...(builds.steps.length ? { buildSteps: builds.steps } : {}),
         ...(bodyHtml ? { html: bodyHtml } : {}),
-        // Only a body with list items has structure `text` cannot carry.
-        ...(paragraphs.some((paragraph) => paragraph.list) ? { paragraphs } : {}),
+        // Only a body with list items or tables has structure `text` cannot carry.
+        ...(paragraphs.some((paragraph) => paragraph.list || paragraph.table)
+          ? { paragraphs }
+          : {}),
         style: {
           fontSize: bodyFontSize(body, context),
           fontFamily: getThemeFont(context, 'body'),
@@ -161,9 +241,9 @@ export function contentBlock(input: ContentBlockInput, context: TemplateContext)
       },
       position: {
         x: '8%',
-        y: title ? '20%' : '10%',
+        y: title ? `${BODY_TOP_PCT}%` : '10%',
         width: '84%',
-        height: title ? '72%' : '82%',
+        height: title ? `${92 - BODY_TOP_PCT}%` : '82%',
         anchor: 'top-left',
       },
     });

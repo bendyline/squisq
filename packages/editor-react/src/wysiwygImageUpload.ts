@@ -3,6 +3,7 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView as ProseMirrorView } from '@tiptap/pm/view';
 import { fileReference, mediaMimeType, squisqMediaKind, squisqMediaNode } from './mediaDragMime';
 import { processMediaFiles } from './utils/dropUtils';
+import { caretAfterSelectedMedia } from './caretAfterInsert';
 
 type ImageMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
 
@@ -57,6 +58,7 @@ export function insertTopLevelNodes(view: ImageMutationView, nodes: ProseMirrorN
       ? state.tr.replaceWith($from.before(1), $from.after(1), nodes)
       : state.tr.insert($from.after(1), nodes);
   view.dispatch(tr.scrollIntoView());
+  caretAfterSelectedMedia(view);
 }
 
 /** A blank GIF that stands in for an image until its file is stored. */
@@ -136,6 +138,7 @@ export async function insertImageWhileStoring(
       )
       .scrollIntoView(),
   );
+  caretAfterSelectedMedia(view);
   let stored: string | null = null;
   try {
     stored = await store();

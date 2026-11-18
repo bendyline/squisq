@@ -128,9 +128,8 @@ describe('VideoExportModal', () => {
         onClose={() => {}}
       />,
     );
-    expect((container.querySelector('[aria-label="Format"]') as HTMLSelectElement).value).toBe(
-      'mp4',
-    );
+    // No ffmpeg.wasm core configured: MP4 is the only format, so no picker.
+    expect(container.querySelector('[aria-label="Format"]')).toBeNull();
     expect((container.querySelector('[aria-label="Quality"]') as HTMLSelectElement).value).toBe(
       'high',
     );
@@ -195,8 +194,32 @@ describe('VideoExportModal', () => {
     expect(getByRole('button', { name: 'Export GIF' })).toBeTruthy();
   });
 
+  it('offers Animated GIF only when the host configured an ffmpeg.wasm core', () => {
+    const bare = render(<VideoExportModal doc={minimalDoc()} onClose={() => {}} />);
+    expect(bare.container.querySelector('[aria-label="Format"]')).toBeNull();
+    expect(bare.container.textContent).not.toContain('Animated GIF');
+    bare.unmount();
+
+    const withCore = render(
+      <VideoExportModal
+        doc={minimalDoc()}
+        defaultConfig={{ ffmpegWasm: { coreURL: '/ffmpeg/ffmpeg-core.js' } }}
+        onClose={() => {}}
+      />,
+    );
+    const format = withCore.container.querySelector('[aria-label="Format"]') as HTMLSelectElement;
+    expect(format.value).toBe('mp4');
+    expect(Array.from(format.options, (option) => option.value)).toEqual(['mp4', 'gif']);
+  });
+
   it('applies format recommendations when the format selection changes', () => {
-    const { container } = render(<VideoExportModal doc={minimalDoc()} onClose={() => {}} />);
+    const { container } = render(
+      <VideoExportModal
+        doc={minimalDoc()}
+        defaultConfig={{ ffmpegWasm: { coreURL: '/ffmpeg/ffmpeg-core.js' } }}
+        onClose={() => {}}
+      />,
+    );
     const format = container.querySelector('[aria-label="Format"]')!;
     fireEvent.change(format, {
       target: { value: 'gif' },

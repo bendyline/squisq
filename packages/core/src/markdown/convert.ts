@@ -27,6 +27,7 @@ import type {
 } from './types.js';
 import { parseWikiLink } from './wikiLinks.js';
 import { parseHtmlToNodes } from './htmlParse.js';
+import { readRichTableCell } from './richTableCell.js';
 import { resolveIcon } from '../icons/resolve.js';
 import { isReservedAnnotationToken } from '../doc/templates/templateNames.js';
 import { coerceAnnotationValues } from './annotationCoercion.js';
@@ -1162,10 +1163,15 @@ function convertTableCell(
   parseHtml: boolean,
 ): MarkdownTableCell {
   const pos = convertPosition(node.position);
+  const children = convertInlineChildren(node.children ?? [], parseHtml);
+  // A Write-view rich cell (a checklist or list in a cell) parses as a run of
+  // HTML tags; renderers get its readable form, serializing gets the HTML.
+  const rich = readRichTableCell(children);
   return {
     type: 'tableCell',
     ...(isHeader ? { isHeader: true } : {}),
-    children: convertInlineChildren(node.children ?? [], parseHtml),
+    children: rich ? rich.inlines : children,
+    ...(rich ? { richHtml: rich.html } : {}),
     ...posField(pos),
   };
 }
@@ -1522,7 +1528,9 @@ function tableRowToMdast(row: MarkdownTableRow): MdastNode {
 function tableCellToMdast(cell: MarkdownTableCell): MdastNode {
   return {
     type: 'tableCell',
-    children: inlineChildrenToMdast(cell.children),
+    children: cell.richHtml
+      ? [{ type: 'html', value: cell.richHtml }]
+      : inlineChildrenToMdast(cell.children),
     ...mdastPosField(cell.position),
   };
 }
