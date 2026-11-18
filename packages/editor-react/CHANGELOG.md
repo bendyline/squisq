@@ -1,3 +1,18 @@
+## @bendyline/squisq-editor-react [2.13.30](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.29...@bendyline/squisq-editor-react@2.13.30) (2026-11-18)
+
+### Bug Fixes
+
+* Improve footnotes and document pagination ([#132](https://github.com/bendyline/squisq/issues/132)) ([292a19a](https://github.com/bendyline/squisq/commit/292a19a2c0c23bde4e95c690fc57cf6b9d1c8627))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.20
+* **@bendyline/squisq-formats:** upgraded to 2.8.22
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.49
+* **@bendyline/squisq-react:** upgraded to 2.12.32
+* **@bendyline/squisq-video-react:** upgraded to 2.5.35
+
 ## @bendyline/squisq-editor-react [2.13.29](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.28...@bendyline/squisq-editor-react@2.13.29) (2026-11-18)
 
 ### Bug Fixes

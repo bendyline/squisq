@@ -1,3 +1,14 @@
+## @bendyline/squisq-formats [2.8.22](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.21...@bendyline/squisq-formats@2.8.22) (2026-11-18)
+
+### Bug Fixes
+
+* Improve footnotes and document pagination ([#132](https://github.com/bendyline/squisq/issues/132)) ([292a19a](https://github.com/bendyline/squisq/commit/292a19a2c0c23bde4e95c690fc57cf6b9d1c8627))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.13.20
+
 ## @bendyline/squisq-formats [2.8.21](https://github.com/bendyline/squisq/compare/@bendyline/squisq-formats@2.8.20...@bendyline/squisq-formats@2.8.21) (2026-11-18)
 
 ### Bug Fixes

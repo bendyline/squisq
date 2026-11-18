@@ -1,3 +1,10 @@
+## @bendyline/squisq [2.13.20](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.19...@bendyline/squisq@2.13.20) (2026-11-18)
+
+### Bug Fixes
+
+* Improve footnotes and document pagination ([#132](https://github.com/bendyline/squisq/issues/132)) ([292a19a](https://github.com/bendyline/squisq/commit/292a19a2c0c23bde4e95c690fc57cf6b9d1c8627))
+* Test updates ([#133](https://github.com/bendyline/squisq/issues/133)) ([a9bb486](https://github.com/bendyline/squisq/commit/a9bb486e0053c53d74fe3175f23035a0e2609030))
+
 ## @bendyline/squisq [2.13.19](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.18...@bendyline/squisq@2.13.19) (2026-11-18)
 
 ### Bug Fixes
