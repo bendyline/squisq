@@ -1484,7 +1484,10 @@ function buildHeadingStyles(headingFont: string, headingColor?: string): string 
       `<w:basedOn w:val="Normal"/>` +
       `<w:next w:val="Normal"/>` +
       `<w:qFormat/>` +
-      `<w:pPr><w:spacing w:before="240" w:after="60"/><w:outlineLvl w:val="${depth - 1}"/></w:pPr>` +
+      // Kept with the paragraph after it, as Word's own heading styles are,
+      // so a heading never ends a page alone.
+      `<w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="240" w:after="60"/>` +
+      `<w:outlineLvl w:val="${depth - 1}"/></w:pPr>` +
       `<w:rPr>` +
       `<w:rFonts w:ascii="${escapeXml(headingFont)}" w:hAnsi="${escapeXml(headingFont)}"/>` +
       `<w:b/>` +

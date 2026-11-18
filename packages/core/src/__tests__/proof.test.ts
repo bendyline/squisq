@@ -93,6 +93,30 @@ describe('blankProtectedSpans', () => {
     expect(blanked.length).toBe(text.length);
     expect(blanked.slice(text.length - 3)).toBe('teh');
   });
+
+  // The Write view draws `[^src]` as a raised marker, and proofing underlined
+  // its label as a misspelling.
+  it('blanks footnote references and a definition label, not the footnote text', () => {
+    const text = 'Riders rose 14%.[^src] Teh end.\n[^src]: Port Authority report.';
+    const { text: blanked, blanked: ranges } = blankProtectedSpans(text);
+    expect(blanked.length).toBe(text.length);
+    expect(blanked).not.toContain('src');
+    expect(ranges).toEqual([
+      { start: 16, end: 22 },
+      { start: 32, end: 39 },
+    ]);
+    expect(blanked).toContain('Teh end.');
+    expect(blanked.slice(39)).toBe(' Port Authority report.');
+  });
+
+  it('leaves brackets that are not footnote syntax alone', () => {
+    const text = 'See [the guide](g.md), [^ spaced], and a mid-line [^x]: colon.';
+    const { text: blanked } = blankProtectedSpans(text);
+    expect(blanked).toContain('[the guide](g.md)');
+    expect(blanked).toContain('[^ spaced]');
+    // A reference mid-line keeps the colon after it: only a definition owns one.
+    expect(blanked).toContain('    : colon.');
+  });
 });
 
 describe('blankProtectedSpans — markdownCode', () => {

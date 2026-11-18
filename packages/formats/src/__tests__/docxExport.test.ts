@@ -398,6 +398,17 @@ describe('markdownDocToDocx', () => {
     }
   });
 
+  it('keeps every heading style with the paragraph after it', async () => {
+    // A heading alone at the foot of a page, its text or picture on the next.
+    const zip = await JSZip.loadAsync(await markdownDocToDocx(parseMarkdown('# Plan\n\nBody.')));
+    const stylesXml = await zip.file('word/styles.xml')!.async('text');
+    const headings = [
+      ...stylesXml.matchAll(/<w:style [^>]*w:styleId="Heading\d"[\s\S]*?<\/w:style>/g),
+    ];
+    expect(headings).toHaveLength(6);
+    for (const [style] of headings) expect(style).toContain('<w:pPr><w:keepNext/><w:keepLines/>');
+  });
+
   // ============================================
   // Code Blocks
   // ============================================
