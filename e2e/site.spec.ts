@@ -240,10 +240,14 @@ test.describe('DocPlayer controls', () => {
 // ── Cover Block (startBlock) ────────────────────────────────────────
 
 test.describe('Cover block display', () => {
+  // all-templates opens on a `{[title]}` slide, so its cover stays a slide of
+  // its own. A document whose first section only restates the cover (title
+  // and opening sentence, like hello-world) shows no separate cover; see the
+  // suite below.
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await waitForAppReady(page);
-    await selectSample(page, 'hello-world');
+    await selectSample(page, 'all-templates');
     await switchView(page, 'Play');
     await waitForDocPlayer(page);
   });
@@ -255,7 +259,7 @@ test.describe('Cover block display', () => {
 
   test('cover block shows the document title', async ({ page }) => {
     const cover = page.locator('.doc-player__block--cover');
-    await expect(cover).toContainText('Hello World', { timeout: 5_000 });
+    await expect(cover).toContainText('All Squisq Templates', { timeout: 5_000 });
   });
 
   test('cover block is dismissed after playback starts', async ({ page }) => {
@@ -265,6 +269,23 @@ test.describe('Cover block display', () => {
     // Start playback and wait for active block to replace the cover
     await startPlaybackAndWaitForActiveBlock(page);
     await expect(cover).not.toBeVisible({ timeout: 8_000 });
+  });
+});
+
+test.describe('Cover that repeats the first section', () => {
+  test('is drawn as the first slide instead of shown twice', async ({ page }) => {
+    await page.goto('/');
+    await waitForAppReady(page);
+    // hello-world's first section is its title and one opening paragraph:
+    // exactly the cover's title and subtitle.
+    await selectSample(page, 'hello-world');
+    await switchView(page, 'Play');
+    await waitForDocPlayer(page);
+
+    await expect(activeBlock(page)).toContainText('Hello World', { timeout: 5_000 });
+    await expect(page.locator('.doc-player__block--cover')).toHaveCount(0);
+    const counter = page.getByTestId('slide-counter');
+    if (await counter.isVisible()) await expect(counter).not.toHaveText('Cover');
   });
 });
 
