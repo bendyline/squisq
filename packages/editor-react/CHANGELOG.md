@@ -1,3 +1,15 @@
+## @bendyline/squisq-editor-react [2.13.31](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.30...@bendyline/squisq-editor-react@2.13.31) (2026-11-19)
+
+### Bug Fixes
+
+* Support keep alive better for DocPlayer ([#134](https://github.com/bendyline/squisq/issues/134)) ([0b0fa21](https://github.com/bendyline/squisq/commit/0b0fa2100d6f953c769c5caf445c3e322f6ecf4e))
+
+
+### Dependencies
+
+* **@bendyline/squisq-react:** upgraded to 2.12.33
+* **@bendyline/squisq-video-react:** upgraded to 2.5.36
+
 ## @bendyline/squisq-editor-react [2.13.30](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.13.29...@bendyline/squisq-editor-react@2.13.30) (2026-11-18)
 
 ### Bug Fixes

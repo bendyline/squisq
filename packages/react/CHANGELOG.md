@@ -1,3 +1,9 @@
+## @bendyline/squisq-react [2.12.33](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.32...@bendyline/squisq-react@2.12.33) (2026-11-19)
+
+### Bug Fixes
+
+* Support keep alive better for DocPlayer ([#134](https://github.com/bendyline/squisq/issues/134)) ([0b0fa21](https://github.com/bendyline/squisq/commit/0b0fa2100d6f953c769c5caf445c3e322f6ecf4e))
+
 ## @bendyline/squisq-react [2.12.32](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.31...@bendyline/squisq-react@2.12.32) (2026-11-18)
 
 
