@@ -459,6 +459,50 @@ describe('TeleprompterView', () => {
     expect(screen.getByTestId('teleprompter-surface').className).toContain('--mirrored');
   });
 
+  it('offers a microphone picker only when there is more than one microphone', async () => {
+    const audioInput = (deviceId: string, label: string) =>
+      ({
+        deviceId,
+        groupId: deviceId,
+        kind: 'audioinput',
+        label,
+        toJSON: () => ({}),
+      }) as MediaDeviceInfo;
+    let listed = [
+      // Chromium's alias for the real microphone below, which is not a choice.
+      audioInput('default', 'Default - Built-in microphone'),
+      audioInput('built-in', 'Built-in microphone'),
+    ];
+    const mediaDevices = Object.assign(new EventTarget(), {
+      enumerateDevices: vi.fn(async () => listed),
+    });
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: mediaDevices });
+    try {
+      renderView(MD);
+      const picker = () =>
+        screen.queryByRole('combobox', { name: 'Microphone input', hidden: true });
+      await act(async () => {
+        mediaDevices.dispatchEvent(new Event('devicechange'));
+      });
+      expect(mediaDevices.enumerateDevices).toHaveBeenCalled();
+      expect(picker()).toBeNull();
+      expect(screen.getByRole('meter', { name: 'Mic level', hidden: true })).toBeTruthy();
+
+      // A headset arrives: now there is a choice.
+      listed = [...listed, audioInput('headset', 'Headset microphone')];
+      await act(async () => {
+        mediaDevices.dispatchEvent(new Event('devicechange'));
+      });
+      expect(
+        Array.from((picker() as HTMLSelectElement).options).map((option) => option.textContent),
+      ).toEqual(['Default mic', 'Built-in microphone', 'Headset microphone']);
+    } finally {
+      // Unmount first: the microphone hook stops listening for device changes.
+      cleanup();
+      Reflect.deleteProperty(navigator, 'mediaDevices');
+    }
+  });
+
   it('groups the rail into playback, countdown, and Pacing / Microphone / Display areas', () => {
     renderView(MD);
     const controls = screen.getByTestId('teleprompter-controls');
@@ -475,7 +519,8 @@ describe('TeleprompterView', () => {
     expect(within(pacing).getByLabelText('Speed')).toBeTruthy();
     expect(within(pacing).getByRole('button', { name: 'Voice pace' })).toBeTruthy();
     const mic = within(controls).getByRole('group', { name: 'Microphone' });
-    expect(within(mic).getByRole('combobox', { name: 'Microphone input' })).toBeTruthy();
+    // No microphones listed here, so nothing to pick between: the level stays.
+    expect(within(mic).queryByRole('combobox', { name: 'Microphone input' })).toBeNull();
     expect(within(mic).getByLabelText('Sensitivity')).toBeTruthy();
     expect(within(mic).getByRole('meter', { name: 'Mic level' })).toBeTruthy();
     const display = within(controls).getByRole('group', { name: 'Display' });

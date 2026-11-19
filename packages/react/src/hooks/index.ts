@@ -18,3 +18,4 @@ export {
 } from './MediaContext';
 export { useDocPlayback } from './useDocPlayback';
 export { useViewportOrientation } from './useViewportOrientation';
+export { holdScreenWakeLock, useScreenWakeLock } from './useScreenWakeLock';

@@ -12,13 +12,13 @@ block starts.
 
 ## Two ways to record
 
-|                             | Narrate view                                  | Insert → Document narration                                              |
-| --------------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
-| Where you find it           | **Use** tab → **Narrate**                     | **Insert** menu → **Document narration**                                 |
-| What you read from          | A voice-paced teleprompter                    | The teleprompter, your slides, both, or nothing                          |
-| What it captures            | Your microphone, plus your camera if you like | Microphone, camera, screen, and system audio (desktop Chromium browsers) |
-| How blocks get their timing | Your voice is aligned to the script           | Your slide advances, in slides mode                                      |
-| Captions                    | Follow your recorded words                    | Keep their reading-time estimates                                        |
+|                             | Narrate view                                  | Insert → Document narration                                                 |
+| --------------------------- | --------------------------------------------- | --------------------------------------------------------------------------- |
+| Where you find it           | **Use** tab → **Narrate**                     | **Insert** menu → **Document narration**                                    |
+| What you read from          | A voice-paced teleprompter                    | The teleprompter, your slides, both, or nothing                             |
+| What it captures            | Your microphone, plus your camera if you like | Microphone and camera; screen on desktops, system audio in desktop Chromium |
+| How blocks get their timing | Your voice is aligned to the script           | Your slide advances, in slides mode                                         |
+| Captions                    | Follow your recorded words                    | Keep their reading-time estimates                                           |
 
 Use the **Narrate** view for a voice-over you read word for word. Use **Document narration** for a
 talking-head or screen recording, especially when you want to click through the slides as you
@@ -44,16 +44,16 @@ take a breath or think without losing your place. The **Speed** setting still co
 rate blends the speed you set with the rate it hears. With Voice pace off, or when no microphone is
 available, the script scrolls at the set speed.
 
-| Control                            | What it does                                                                                                      |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| **Start** / **Pause**, **Restart** | Roll the prompter, pause it, or go back to the top                                                                |
-| **Countdown**                      | Off, 3, 5, or 10 seconds before it starts rolling (default 3)                                                     |
-| **Speed**                          | Your base reading rate, 80–260 words per minute (default 150)                                                     |
-| **Voice pace**                     | Follow your voice. **Sens.** sets how readily it hears speech; you can also pick a microphone and watch its level |
-| **Aa**                             | Text size                                                                                                         |
-| **Mirror**                         | Flip the text for a beam-splitter teleprompter rig                                                                |
-| **Guide**                          | Show the eye-line marker                                                                                          |
-| **Pop out**                        | Move the prompter into its own window so it can sit next to your camera                                           |
+| Control                            | What it does                                                                                                                              |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Start** / **Pause**, **Restart** | Roll the prompter, pause it, or go back to the top                                                                                        |
+| **Countdown**                      | Off, 3, 5, or 10 seconds before it starts rolling (default 3)                                                                             |
+| **Speed**                          | Your base reading rate, 80–260 words per minute (default 150)                                                                             |
+| **Voice pace**                     | Follow your voice. **Sens.** sets how readily it hears speech; you can watch its level, and pick a microphone when you have more than one |
+| **Aa**                             | Text size                                                                                                                                 |
+| **Mirror**                         | Flip the text for a beam-splitter teleprompter rig                                                                                        |
+| **Guide**                          | Show the eye-line marker                                                                                                                  |
+| **Pop out**                        | Move the prompter into its own window so it can sit next to your camera                                                                   |
 
 **Pop out** offers what your browser supports: a floating window that stays on top (Chrome, Edge,
 and recent Firefox), a read-only picture-in-picture window (Safari), or an ordinary popup window.

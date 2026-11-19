@@ -14,6 +14,7 @@ import { markdownToDoc } from '@bendyline/squisq/doc';
 import { buildNarrationScript } from '@bendyline/squisq/narration';
 import { DEFAULT_THEME, type MediaProvider } from '@bendyline/squisq/schemas';
 import { NarrationStage } from '../teleprompter/NarrationStage';
+import { EditorProvider } from '../EditorContext';
 import type {
   NarrationStageHandle,
   TeleprompterRecordingDeps,
@@ -201,6 +202,35 @@ describe('NarrationStage', () => {
 
     rerender(<NarrationStage stage={withStream} theme={DEFAULT_THEME} />);
     expect(screen.getByTestId('teleprompter-selfview')).toBeTruthy();
+  });
+
+  it('honors the host allowNarratePopOut flag and keeps Bring back for an open float', () => {
+    const twoTiers = stubHandle({
+      float: { ...stubFloat(), supportedTiers: ['video-pip', 'popup'] },
+    });
+    const { rerender } = render(
+      <EditorProvider initialMarkdown="# Section">
+        <NarrationStage stage={twoTiers} theme={DEFAULT_THEME} />
+      </EditorProvider>,
+    );
+    expect(screen.getByText('Pop out')).toBeTruthy();
+    expect(screen.getByTestId('teleprompter-float-tier')).toBeTruthy();
+
+    rerender(
+      <EditorProvider initialMarkdown="# Section" allowNarratePopOut={false}>
+        <NarrationStage stage={twoTiers} theme={DEFAULT_THEME} />
+      </EditorProvider>,
+    );
+    expect(screen.queryByText('Pop out')).toBeNull();
+    expect(screen.queryByTestId('teleprompter-float-tier')).toBeNull();
+
+    const open = stubHandle({ float: { ...stubFloat(), isOpen: true, tier: 'popup' } });
+    rerender(
+      <EditorProvider initialMarkdown="# Section" allowNarratePopOut={false}>
+        <NarrationStage stage={open} theme={DEFAULT_THEME} />
+      </EditorProvider>,
+    );
+    expect(screen.getByText('Bring back')).toBeTruthy();
   });
 
   it('renders the review bar with save/retake/discard from the handle', () => {

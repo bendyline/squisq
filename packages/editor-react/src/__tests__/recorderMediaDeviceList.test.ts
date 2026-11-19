@@ -11,6 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   hasRecorderDeviceChoice,
+  offersDeviceChoice,
   recorderDeviceGroups,
   recorderDeviceOptions,
 } from '../recorder/mediaDeviceList';
@@ -114,5 +115,23 @@ describe('recorderDeviceGroups', () => {
       'Camera',
     );
     expect(recorderDeviceGroups(options)).toEqual([{ id: 'g', label: 'Grouped' }]);
+  });
+});
+
+describe('offersDeviceChoice', () => {
+  it('hides the picker for a lone device, chosen or not', () => {
+    expect(offersDeviceChoice([], '')).toBe(false);
+    expect(offersDeviceChoice(['built-in'], '')).toBe(false);
+    expect(offersDeviceChoice(['built-in'], null)).toBe(false);
+    expect(offersDeviceChoice(['built-in'], 'built-in')).toBe(false);
+  });
+
+  it('offers the picker when there is more than one device', () => {
+    expect(offersDeviceChoice(['built-in', 'headset'], '')).toBe(true);
+  });
+
+  it('keeps the picker while the saved device is missing, so it can be reset', () => {
+    expect(offersDeviceChoice(['built-in'], 'unplugged-usb')).toBe(true);
+    expect(offersDeviceChoice([], 'unplugged-usb')).toBe(true);
   });
 });

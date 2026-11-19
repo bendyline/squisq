@@ -2474,9 +2474,8 @@
 }
 
 .squisq-media-bin-actions {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
+  display: flex;
+  align-items: stretch;
   gap: 5px;
 }
 
@@ -2505,6 +2504,23 @@
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
+}
+
+/* Icon-only "+" (Add files): a square the height of the two-line Record button. */
+.squisq-media-bin-upload {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 2px;
+}
+
+.squisq-media-bin-add-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
 }
 
 .squisq-media-bin-record-dot {

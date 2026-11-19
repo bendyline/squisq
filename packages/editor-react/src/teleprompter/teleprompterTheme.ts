@@ -560,6 +560,11 @@ export const TELEPROMPTER_CSS = `
   background: #9ca3af;
   transition: width 0.08s linear;
 }
+/* With no microphone picker, the meter spans the row like the sliders below. */
+.squisq-teleprompter-meter--wide {
+  flex: 1 1 auto;
+  width: auto;
+}
 .squisq-teleprompter-meter--voice .squisq-teleprompter-meter-fill {
   background: #30a46c;
 }

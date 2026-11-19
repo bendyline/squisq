@@ -222,10 +222,11 @@ and no capture code loads. It's ignored when `readOnly` is set. See the
 
 ## Recording and narration
 
-| Prop             | Default | What it does                                                                                               |
-| ---------------- | ------- | ---------------------------------------------------------------------------------------------------------- |
-| `allowRecording` | `true`  | The toolbar's recorder (microphone, camera, screen). Shown only when there's a media provider.             |
-| `allowNarrate`   | `true`  | The Narrate teleprompter under the Use view. Recording from it also needs `allowRecording` and a provider. |
+| Prop                 | Default | What it does                                                                                                                                   |
+| -------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `allowRecording`     | `true`  | The toolbar's recorder (microphone, camera, screen). Shown only when there's a media provider.                                                 |
+| `allowNarrate`       | `true`  | The Narrate teleprompter under the Use view. Recording from it also needs `allowRecording` and a provider.                                     |
+| `allowNarratePopOut` | `true`  | Narrate's Pop out (picture-in-picture or a popup window). Turn it off where nothing can float beyond your app, such as native mobile WebViews. |
 
 Recordings are stored through the media provider, with timing sidecars beside them. The
 [narration guide](../../guide/narration.md) describes what authors do; the
@@ -354,9 +355,42 @@ measures that (for example from `visualViewport`), publish it on the root as
 
 ## Extend the chrome
 
-Three toolbar slots (`toolbarSlotLeft`, `toolbarSlotAfterActions`, `toolbarSlotRight`),
-`statusBarSlotRight`, and `sidePanelSlot` (a panel docked beside the editor that reflows it) all
-render inside the editor's context, so your components there can call `useEditorContext()`.
+Five toolbar slots (`toolbarSlotLeft`, `toolbarSlotAfterActions`, `toolbarSlotQuickTools`,
+`toolbarSlotDocumentActions`, `toolbarSlotRight`), `statusBarSlotRight`, and `sidePanelSlot` (a
+panel docked beside the editor that reflows it) all render inside the editor's context, so your
+components there can call `useEditorContext()`.
+
+The toolbar row ends in two clusters. Quick tools — dictation, view options, then
+`toolbarSlotQuickTools` (a Find button, say) — stay on the row however narrow it gets. Document
+actions — Document settings, Custom layouts, Version history, then `toolbarSlotDocumentActions`
+(AI, read aloud, export…) — sit behind one divider and, when the row runs short, fold into a single
+Document actions menu. A control in that slot calls `useToolbarDocumentAction` to register its row
+in the folded menu. It gets back `folded` (hide your own button, but keep dialogs and progress
+mounted) and, for an action registered with `submenu: true`, a `submenuContainer` to portal its
+`role="menuitem"` buttons into while the user has drilled into it. Mark content that should stay
+on the row while folded, such as a playback transport, with `data-toolbar-transient`.
+
+```tsx
+function ExportAction() {
+  const ref = useRef<HTMLDivElement>(null);
+  const { folded, submenuContainer, closeMenu } = useToolbarDocumentAction(
+    { id: 'export', label: 'Export', icon: <ShareIcon />, submenu: true },
+    ref,
+  );
+  const items = (
+    <button role="menuitem" tabIndex={-1} onClick={() => { closeMenu(); exportPdf(); }}>
+      PDF
+    </button>
+  );
+  return (
+    <div ref={ref}>
+      {!folded && <ExportMenuButton>{items}</ExportMenuButton>}
+      {submenuContainer && createPortal(items, submenuContainer)}
+    </div>
+  );
+}
+```
+
 `toolbarPosition="bottom"` moves the toolbar under the content, where a chat composer keeps its
 send key; it follows the content in tab order too. Other host props: `findMode`, `onFindModeChange`, `findRequest`, and `findShortcut` for search;
 `fenceRenderers` for your own code-fence widgets; `reviewProviders` for review engines (see the

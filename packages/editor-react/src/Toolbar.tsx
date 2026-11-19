@@ -113,6 +113,19 @@ export interface ToolbarProps {
   slotAfterTabs?: ReactNode;
   /** Content rendered after the formatting controls (in the middle area). */
   slotAfterActions?: ReactNode;
+  /**
+   * Host quick tools — controls that stay on the row however narrow it gets
+   * (Find, say). They follow the built-in dictation and view-options buttons.
+   */
+  slotQuickTools?: ReactNode;
+  /**
+   * Host document actions (AI, read aloud, export…). They join Document
+   * settings, Custom layouts and Version history behind a divider at the
+   * row's end, and fold with them into one Document actions menu when the
+   * row runs short. Each control takes part through
+   * `useToolbarDocumentAction`.
+   */
+  slotDocumentActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
   slotRight?: ReactNode;
   /**
@@ -163,6 +176,7 @@ import {
   buttonIcon,
 } from './toolbar/toolbarButtons';
 import { useToolbarCollapse } from './toolbar/useToolbarCollapse';
+import { DocumentActionButton, DocumentActionsGroup } from './toolbar/DocumentActions';
 
 import {
   blockConversionRange,
@@ -224,6 +238,8 @@ export function Toolbar({
   slotLeft,
   slotAfterTabs,
   slotAfterActions,
+  slotQuickTools,
+  slotDocumentActions,
   slotRight,
   showPlayTab = true,
   showViewTabs = true,
@@ -529,7 +545,7 @@ export function Toolbar({
     !summarizing &&
     !isCodeMode &&
     (showFormattingControls || showInsertControls);
-  const { actionsRef, collapsed, clippedContextual } = useToolbarCollapse(
+  const { actionsRef, collapsed, clippedContextual, documentActionsFolded } = useToolbarCollapse(
     activeView,
     actionsLaneShown,
   );
@@ -1643,9 +1659,11 @@ export function Toolbar({
   const collapsedFormatButtons = showFormattingControls
     ? BUTTONS.filter((b) => b.group !== 'media' && isButtonVisible(b.id) && collapsed.has(b.id))
     : [];
-  const collapsedChrome = (['layouts', 'docSettings', 'files'] as const).filter((id) =>
-    collapsed.has(id),
-  );
+  // The Attachments toggle is the one piece of chrome that moves into ···;
+  // the document actions fold into a menu of their own.
+  const attachmentsCollapsed = Boolean(onToggleFiles) && collapsed.has('files');
+  const hasDocumentActions =
+    showDocumentChrome || (Boolean(versioning) && !isCodeMode) || Boolean(slotDocumentActions);
   // Formatting groups with at least one inline button; each one after the
   // first opens with a separator.
   const shownFormatGroups: readonly string[] = showFormattingControls
@@ -1949,7 +1967,7 @@ export function Toolbar({
     (collapsedFormatButtons.length > 0 ||
       (showFormattingControls && clippedContextual.size > 0) ||
       showInsertInOverflow ||
-      collapsedChrome.length > 0);
+      attachmentsCollapsed);
 
   // Dialogs portal to <body>: VS Code 1.85–1.97's Chromium made this size container the
   // containing block for their fixed overlays, which then opened above the window.
@@ -2377,44 +2395,16 @@ export function Toolbar({
                   );
                 })}
 
-                {/* Document chrome collapses here when the row is too narrow to
-                  keep it alongside the formatting controls. */}
-                {collapsedChrome.length > 0 &&
+                {/* The Attachments toggle collapses here when the row is too
+                  narrow to keep it alongside the formatting controls. */}
+                {attachmentsCollapsed &&
                   (collapsedFormatButtons.length > 0 || showInsertInOverflow) && (
                     <div
                       className="squisq-toolbar-separator"
                       style={{ margin: '4px 0', width: '100%', height: 1 }}
                     />
                   )}
-                {collapsedChrome.includes('layouts') && (
-                  <button
-                    className="squisq-toolbar-overflow-item"
-                    onClick={() => {
-                      setShowLayoutManager(true);
-                      setShowOverflow(false);
-                    }}
-                  >
-                    <span className="squisq-toolbar-overflow-icon">
-                      <Icon icon="layout-template" />
-                    </span>
-                    <span>Custom layouts</span>
-                  </button>
-                )}
-                {collapsedChrome.includes('docSettings') && (
-                  <button
-                    className="squisq-toolbar-overflow-item"
-                    onClick={() => {
-                      setShowDocSettings(true);
-                      setShowOverflow(false);
-                    }}
-                  >
-                    <span className="squisq-toolbar-overflow-icon">
-                      <Icon icon="file-cog" />
-                    </span>
-                    <span>Document settings</span>
-                  </button>
-                )}
-                {collapsedChrome.includes('files') && onToggleFiles && (
+                {attachmentsCollapsed && onToggleFiles && (
                   <button
                     className={`squisq-toolbar-overflow-item${showFiles ? ' squisq-toolbar-overflow-item--active' : ''}`}
                     aria-pressed={showFiles}
@@ -2555,10 +2545,6 @@ export function Toolbar({
           decide whether to collapse), so a second spacer here would split the
           slack and make the controls collapse too early. */}
       {isCodeMode && !findMode && <div style={{ flex: 1 }} />}
-      {/* Version history — renders only when the host enabled versioning
-          and a container is wired up. The component owns its own button
-          and popover; we just give it a slot in the toolbar. */}
-      {versioning && !isCodeMode && <VersionHistoryPanel />}
       {/* Keep the recorder controller mounted while its Insert menu closes so
           the portaled modal retains its open state. */}
       {allowRecording && !isCodeMode && mediaProvider && (
@@ -2572,34 +2558,13 @@ export function Toolbar({
           />
         </>
       )}
+      {/* Quick tools — dictation, view options and the host's (Find) stay on
+          the row however narrow it gets. */}
       {/* Dictation renders only with a `speechInput` capability, in Write/Source. */}
       {!isCodeMode && <DictationButton />}
-      {showDocumentChrome && (
-        <button
-          type="button"
-          className={`squisq-toolbar-button${showLayoutManager ? ' squisq-toolbar-button--active' : ''}${collapsed.has('layouts') ? ' squisq-toolbar-button--overflowed' : ''}`}
-          data-toolbar-item="layouts"
-          onClick={() => setShowLayoutManager(true)}
-          data-tooltip="Custom layouts"
-          aria-label="Custom layouts"
-        >
-          <Icon icon="layout-template" />
-        </button>
-      )}
       {showDocumentChrome && activeView === 'raw' && <TransformMenu />}
       {showDocumentChrome && <ViewMenuPanel />}
-      {showDocumentChrome && (
-        <button
-          type="button"
-          className={`squisq-toolbar-button${collapsed.has('docSettings') ? ' squisq-toolbar-button--overflowed' : ''}`}
-          data-toolbar-item="docSettings"
-          onClick={() => setShowDocSettings(true)}
-          data-tooltip="Document settings"
-          aria-label="Document settings"
-        >
-          <Icon icon="file-cog" />
-        </button>
-      )}
+      {slotQuickTools}
       {/* Attachments toggle — visible when callback is provided. Named
           "Attachments", not "Files", because a host shell usually has a Files
           pane of its own (the workspace), and these are the files attached to
@@ -2620,6 +2585,36 @@ export function Toolbar({
             </span>
           )}
         </button>
+      )}
+      {/* Document actions — Document settings, Custom layouts, Version history
+          and the host's (AI, read aloud, export…) behind one divider. When the
+          row runs short they fold into one Document actions menu
+          (toolbar/DocumentActions.tsx). */}
+      {hasDocumentActions && (
+        <DocumentActionsGroup folded={documentActionsFolded} colorScheme={colorScheme}>
+          {showDocumentChrome && (
+            <DocumentActionButton
+              id="docSettings"
+              label="Document settings"
+              icon="file-cog"
+              onSelect={() => setShowDocSettings(true)}
+            />
+          )}
+          {showDocumentChrome && (
+            <DocumentActionButton
+              id="layouts"
+              label="Custom layouts"
+              icon="layout-template"
+              active={showLayoutManager}
+              onSelect={() => setShowLayoutManager(true)}
+            />
+          )}
+          {/* Version history — renders only when the host enabled versioning
+              and a container is wired up. The component owns its own button
+              and popover. */}
+          {versioning && !isCodeMode && <VersionHistoryPanel />}
+          {slotDocumentActions}
+        </DocumentActionsGroup>
       )}
       {/* Right slot — rightmost end of toolbar */}
       {slotRight}

@@ -24,6 +24,7 @@ import {
   type MediaEditSaveOutput,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
+import { DocumentActionsGroup } from './toolbar/DocumentActions';
 import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
@@ -34,13 +35,8 @@ import { NavigationSheet } from './NavigationSheet';
 import type { NavigationSheetPanel } from './useNavigationSheetSwipe';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
 import { ProofingRoot } from './proofing/ProofingContext';
-import { proofingTapTarget } from './proofing/proofingTap';
 import { useLinkSafety, type LinkDelegate, type LinkSafety } from './linkSafety/useLinkSafety';
-import {
-  clearLinkHoverTitle,
-  clearStaleLinkHoverTitle,
-  showLinkHoverTitle,
-} from './linkHoverTitle';
+import { useShellLinkDelegation } from './useShellLinkDelegation';
 import { ReviewRoot } from './review/ReviewContext';
 import { ReviewPanel } from './review/ReviewPanel';
 import type { ReviewCapability } from './review/types';
@@ -120,7 +116,6 @@ import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions'
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
-  MouseEvent as ReactMouseEvent,
   ReactNode,
   RefObject,
 } from 'react';
@@ -296,6 +291,21 @@ export interface EditorShellProps {
   toolbarSlotLeft?: ReactNode;
   /** Content rendered after the formatting controls (in the middle area of the toolbar). */
   toolbarSlotAfterActions?: ReactNode;
+  /**
+   * Host quick tools: controls that stay on the toolbar row however narrow
+   * it gets (Find, say). They follow the built-in dictation and
+   * view-options buttons.
+   */
+  toolbarSlotQuickTools?: ReactNode;
+  /**
+   * Host document actions (AI, read aloud, export…). They join Document
+   * settings, Custom layouts and Version history behind a divider at the
+   * toolbar's end, and fold with them into one Document actions menu when
+   * the row runs short. Each control takes part through
+   * `useToolbarDocumentAction`, which tells it when to hide its own button
+   * and where to render its menu items inside the folded menu.
+   */
+  toolbarSlotDocumentActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
   toolbarSlotRight?: ReactNode;
   /**
@@ -595,6 +605,14 @@ export interface EditorShellProps {
    */
   allowNarrate?: boolean;
   /**
+   * Whether Narrate offers Pop out, which floats the prompter in a
+   * picture-in-picture or popup window so it can sit beside a camera or
+   * other app. Defaults to true. Disable it in hosts where no float can
+   * outlive the app's own screen, such as native mobile WebViews: they open
+   * no popups, and the prompter stops drawing once the app is backgrounded.
+   */
+  allowNarratePopOut?: boolean;
+  /**
    * Whether the Write view transparently unwraps hard-wrapped paragraph
    * prose for editing and re-applies the document's detected wrap
    * convention when serializing. Defaults to true — without it, a
@@ -803,6 +821,8 @@ export function EditorShell({
   allowBinaryDownloads = true,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
+  toolbarSlotQuickTools,
+  toolbarSlotDocumentActions,
   toolbarSlotRight,
   toolbarPosition = 'top',
   summarizationDesigner,
@@ -845,6 +865,7 @@ export function EditorShell({
   linkSchemes,
   allowRecording = true,
   allowNarrate = true,
+  allowNarratePopOut = true,
   preserveSourceWrapping = true,
   placeholder,
   readOnly = false,
@@ -938,6 +959,7 @@ export function EditorShell({
         linkSchemes={linkSchemes}
         allowRecording={allowRecording}
         allowNarrate={allowNarrate}
+        allowNarratePopOut={allowNarratePopOut}
         preserveSourceWrapping={preserveSourceWrapping}
         fileName={fileName}
         saveCoverImageOutput={saveCoverImageOutput}
@@ -988,6 +1010,8 @@ export function EditorShell({
                 allowBinaryDownloads={allowBinaryDownloads}
                 toolbarSlotLeft={toolbarSlotLeft}
                 toolbarSlotAfterActions={toolbarSlotAfterActions}
+                toolbarSlotQuickTools={toolbarSlotQuickTools}
+                toolbarSlotDocumentActions={toolbarSlotDocumentActions}
                 toolbarSlotRight={toolbarSlotRight}
                 toolbarPosition={toolbarPosition}
                 summarizationDesigner={summarizationDesigner}
@@ -1054,6 +1078,8 @@ interface EditorShellInnerProps {
   allowBinaryDownloads: boolean;
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
+  toolbarSlotQuickTools?: ReactNode;
+  toolbarSlotDocumentActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
   toolbarPosition: EditorToolbarPosition;
   summarizationDesigner?: ReactNode;
@@ -1152,6 +1178,8 @@ function EditorShellInner({
   allowBinaryDownloads,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
+  toolbarSlotQuickTools,
+  toolbarSlotDocumentActions,
   toolbarSlotRight,
   toolbarPosition,
   summarizationDesigner,
@@ -1571,43 +1599,7 @@ function EditorShellInner({
     [showPlayTab],
   );
 
-  const handleShellLinkClick = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!onLinkClick || event.button !== 0) return;
-      const anchor = (event.target as HTMLElement).closest?.('a[href]');
-      if (!anchor || !event.currentTarget.contains(anchor)) return;
-      // A finger on a squiggled link is asking about the squiggle first. The
-      // proofing card it raises carries "Open link"; following the link here
-      // would take the reader away before the card could be seen.
-      if (proofingTapTarget(event.nativeEvent)) return;
-      const href = anchor.getAttribute('href');
-      if (!href || onLinkClick(href, anchor.textContent ?? undefined) === false) return;
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    [onLinkClick],
-  );
-
-  const handleShellLinkMouseOver = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!onLinkClick) return;
-      const target = event.target as HTMLElement;
-      const anchor = target.closest?.('a[href]');
-      if (!anchor || !event.currentTarget.contains(anchor)) {
-        clearStaleLinkHoverTitle(target);
-        return;
-      }
-      showLinkHoverTitle(anchor);
-    },
-    [onLinkClick],
-  );
-
-  const handleShellLinkMouseOut = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    const anchor = (event.target as HTMLElement).closest?.('a[href]');
-    if (!anchor || !event.currentTarget.contains(anchor)) return;
-    if (event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget)) return;
-    clearLinkHoverTitle(anchor);
-  }, []);
+  const shellLinkHandlers = useShellLinkDelegation(onLinkClick);
 
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;
 
@@ -1615,10 +1607,20 @@ function EditorShellInner({
   // slot bar: view tabs, formatting, and preview controls don't apply to a
   // binary asset.
   const header = isImageMode ? (
-    (toolbarSlotLeft || toolbarSlotRight) && (
+    (toolbarSlotLeft ||
+      toolbarSlotQuickTools ||
+      toolbarSlotDocumentActions ||
+      toolbarSlotRight) && (
       <div className="squisq-editor-header squisq-editor-header--image">
         {toolbarSlotLeft}
         <div style={{ flex: 1 }} />
+        {toolbarSlotQuickTools}
+        {/* Nothing here measures the row, so the actions never fold. */}
+        {toolbarSlotDocumentActions && (
+          <DocumentActionsGroup folded={false} colorScheme={colorScheme}>
+            {toolbarSlotDocumentActions}
+          </DocumentActionsGroup>
+        )}
         {toolbarSlotRight}
       </div>
     )
@@ -1633,6 +1635,8 @@ function EditorShellInner({
           !isCodeMode && isPreview && <UseModeToolbarControls allowPrint={allowPrint} />
         }
         slotAfterActions={toolbarSlotAfterActions}
+        slotQuickTools={toolbarSlotQuickTools}
+        slotDocumentActions={toolbarSlotDocumentActions}
         slotRight={toolbarSlotRight}
         showPlayTab={showPlayTab}
         showViewTabs={showViewTabs}
@@ -1650,9 +1654,7 @@ function EditorShellInner({
       ref={shellRef}
       onKeyDownCapture={handleShellViewKeyDown}
       onKeyDown={handleShellKeyDown}
-      onClickCapture={handleShellLinkClick}
-      onMouseOverCapture={handleShellLinkMouseOver}
-      onMouseOutCapture={handleShellLinkMouseOut}
+      {...shellLinkHandlers}
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={colorScheme}
       data-host-mode={hostMode}

@@ -731,6 +731,7 @@ export { RecorderDeviceQuickPicks } from './recorder/RecorderDeviceQuickPicks.js
 export type { RecorderDeviceQuickPicksProps } from './recorder/RecorderDeviceQuickPicks.js';
 export {
   hasRecorderDeviceChoice,
+  offersDeviceChoice,
   recorderDeviceGroups,
   recorderDeviceOptions,
 } from './recorder/mediaDeviceList.js';
@@ -777,6 +778,7 @@ export {
   supportsMediaRecorder,
   supportsUserMedia,
   supportsDisplayMedia,
+  supportsScreenCapture,
   buildFilename,
 } from './recorder/formats.js';
 export type { CaptureKind, ResolvedFormat } from './recorder/formats.js';
@@ -905,3 +907,5 @@ export type {
 
 export { useEditorInsertMenuItems } from './InsertMenuItems';
 export type { EditorInsertMenuItem } from './InsertMenuItems';
+export { useToolbarDocumentAction } from './toolbar/DocumentActions';
+export type { ToolbarDocumentAction, ToolbarDocumentActionState } from './toolbar/DocumentActions';

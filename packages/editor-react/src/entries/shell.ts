@@ -35,3 +35,6 @@ export type { PreviewPanelProps } from '../PreviewPanel.js';
 
 export { useEditorInsertMenuItems } from '../InsertMenuItems';
 export type { EditorInsertMenuItem } from '../InsertMenuItems';
+
+export { useToolbarDocumentAction } from '../toolbar/DocumentActions';
+export type { ToolbarDocumentAction, ToolbarDocumentActionState } from '../toolbar/DocumentActions';

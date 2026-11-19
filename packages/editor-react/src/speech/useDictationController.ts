@@ -167,6 +167,8 @@ interface ActiveSession {
   abort: AbortController;
   handle: DictationSessionHandle | null;
   stopping: boolean;
+  /** Some take transcribed to words. */
+  heardWords: boolean;
 }
 
 function isTextView(view: EditorView): boolean {
@@ -256,25 +258,36 @@ export function useDictationController({
     endSession(session, { restoreFocus: true });
   }, [endSession]);
 
-  const stop = useCallback(async () => {
-    const session = sessionRef.current;
-    if (!session) return;
-    if (!session.handle) {
-      // Still starting: there is nothing captured to finish.
-      cancel();
-      return;
-    }
-    if (session.stopping) return;
-    session.stopping = true;
-    setStatus('transcribing');
-    try {
-      await session.handle.stop();
-    } finally {
-      // Every captured phrase has been inserted by now; the caret sits after
-      // the last one.
-      endSession(session, { restoreFocus: true });
-    }
-  }, [cancel, endSession]);
+  /** Finish the session; `reportNoSpeech` flags one that ends without any words. */
+  const finish = useCallback(
+    async (reportNoSpeech: boolean) => {
+      const session = sessionRef.current;
+      if (!session) return;
+      if (!session.handle) {
+        // Still starting: there is nothing captured to finish.
+        cancel();
+        return;
+      }
+      if (session.stopping) return;
+      session.stopping = true;
+      setStatus('transcribing');
+      try {
+        await session.handle.stop();
+      } finally {
+        // Every captured phrase has been inserted by now; the caret sits after
+        // the last one. Judged only now: the pause can be measured while
+        // earlier speech is still being transcribed.
+        const finished = sessionRef.current === session;
+        endSession(session, { restoreFocus: true });
+        if (finished && reportNoSpeech && !session.heardWords) {
+          setError(NO_SPEECH_DETECTED_MESSAGE);
+        }
+      }
+    },
+    [cancel, endSession],
+  );
+
+  const stop = useCallback(() => finish(false), [finish]);
 
   /** Insert into whichever text view is showing; false when none is. */
   const insertPhrase = useCallback((text: string): boolean => {
@@ -295,7 +308,12 @@ export function useDictationController({
   const start = useCallback(async () => {
     const active = providerRef.current;
     if (!active || sessionRef.current) return;
-    const session: ActiveSession = { abort: new AbortController(), handle: null, stopping: false };
+    const session: ActiveSession = {
+      abort: new AbortController(),
+      handle: null,
+      stopping: false,
+      heardWords: false,
+    };
     sessionRef.current = session;
     const isCurrent = () => sessionRef.current === session;
     setError(null);
@@ -321,6 +339,7 @@ export function useDictationController({
         signal: session.abort.signal,
         onTranscript: (text) => {
           if (!isCurrent()) return;
+          session.heardWords = true;
           if (!insertPhrase(text)) heldPhrasesRef.current.push(text);
         },
         onAudioLevel: (level) => {
@@ -329,10 +348,8 @@ export function useDictationController({
         onPendingChange: (pending) => {
           if (isCurrent()) setPendingTakes(pending);
         },
-        onLongPause: (hadTranscript) => {
-          if (!isCurrent()) return;
-          if (!hadTranscript) setError(NO_SPEECH_DETECTED_MESSAGE);
-          void stop();
+        onLongPause: () => {
+          if (isCurrent()) void finish(true);
         },
         onError: (caught) => {
           if (!isCurrent()) return;
@@ -352,7 +369,7 @@ export function useDictationController({
       endSession(session, { restoreFocus: true });
       setError(humanizeDictationError(caught));
     }
-  }, [endSession, insertPhrase, levels, stop]);
+  }, [endSession, finish, insertPhrase, levels]);
 
   const toggle = useCallback(() => {
     const session = sessionRef.current;

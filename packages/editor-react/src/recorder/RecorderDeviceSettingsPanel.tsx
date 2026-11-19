@@ -15,7 +15,11 @@ import type {
   RecorderScreenDeviceSettings,
   RecorderScreenAudioSettings,
 } from './deviceSettings.js';
-import { recorderDeviceGroups, recorderDeviceOptions } from './mediaDeviceList.js';
+import {
+  offersDeviceChoice,
+  recorderDeviceGroups,
+  recorderDeviceOptions,
+} from './mediaDeviceList.js';
 import { useMediaDevices } from './hooks/useMediaDevices.js';
 
 export interface RecorderDeviceSettingsPanelProps {
@@ -245,6 +249,23 @@ export function RecorderDeviceSettingsPanel({
   );
   const audioGroups = recorderDeviceGroups(audioOptions);
   const videoGroups = recorderDeviceGroups(videoOptions);
+  // A lone microphone or camera (or group) has nothing to pick between.
+  const pickAudioDevice = offersDeviceChoice(
+    audioOptions.map((option) => option.deviceId),
+    value.audio.deviceId,
+  );
+  const pickVideoDevice = offersDeviceChoice(
+    videoOptions.map((option) => option.deviceId),
+    value.camera.deviceId,
+  );
+  const pickAudioGroup = offersDeviceChoice(
+    audioGroups.map((group) => group.id),
+    value.audio.groupId,
+  );
+  const pickVideoGroup = offersDeviceChoice(
+    videoGroups.map((group) => group.id),
+    value.camera.groupId,
+  );
 
   const patchAudio = (patch: Partial<RecorderAudioDeviceSettings>) =>
     onChange({ ...value, audio: { ...value.audio, ...patch } });
@@ -294,23 +315,25 @@ export function RecorderDeviceSettingsPanel({
           <fieldset style={fieldsetStyle} disabled={disabled}>
             <legend style={legendStyle}>Microphone</legend>
             <div style={gridStyle}>
-              <label style={{ ...fieldStyle, gridColumn: '1 / -1' }}>
-                Input device
-                <select
-                  aria-label="Recording microphone"
-                  value={value.audio.deviceId}
-                  style={inputStyle}
-                  onChange={(event) => patchAudio({ deviceId: event.target.value })}
-                >
-                  <option value="">System default</option>
-                  {audioOptions.map((option) => (
-                    <option key={option.deviceId} value={option.deviceId}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {supports('groupId') && audioGroups.length > 0 && (
+              {pickAudioDevice && (
+                <label style={{ ...fieldStyle, gridColumn: '1 / -1' }}>
+                  Input device
+                  <select
+                    aria-label="Recording microphone"
+                    value={value.audio.deviceId}
+                    style={inputStyle}
+                    onChange={(event) => patchAudio({ deviceId: event.target.value })}
+                  >
+                    <option value="">System default</option>
+                    {audioOptions.map((option) => (
+                      <option key={option.deviceId} value={option.deviceId}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {supports('groupId') && pickAudioGroup && (
                 <label style={{ ...fieldStyle, gridColumn: '1 / -1' }}>
                   Device group
                   <select
@@ -392,23 +415,25 @@ export function RecorderDeviceSettingsPanel({
           <fieldset style={fieldsetStyle} disabled={disabled}>
             <legend style={legendStyle}>Camera</legend>
             <div style={gridStyle}>
-              <label style={{ ...fieldStyle, gridColumn: '1 / -1' }}>
-                Video input
-                <select
-                  aria-label="Recording camera"
-                  value={value.camera.deviceId}
-                  style={inputStyle}
-                  onChange={(event) => patchCamera({ deviceId: event.target.value })}
-                >
-                  <option value="">System default</option>
-                  {videoOptions.map((option) => (
-                    <option key={option.deviceId} value={option.deviceId}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {supports('groupId') && videoGroups.length > 0 && (
+              {pickVideoDevice && (
+                <label style={{ ...fieldStyle, gridColumn: '1 / -1' }}>
+                  Video input
+                  <select
+                    aria-label="Recording camera"
+                    value={value.camera.deviceId}
+                    style={inputStyle}
+                    onChange={(event) => patchCamera({ deviceId: event.target.value })}
+                  >
+                    <option value="">System default</option>
+                    {videoOptions.map((option) => (
+                      <option key={option.deviceId} value={option.deviceId}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              {supports('groupId') && pickVideoGroup && (
                 <label style={{ ...fieldStyle, gridColumn: '1 / -1' }}>
                   Device group
                   <select

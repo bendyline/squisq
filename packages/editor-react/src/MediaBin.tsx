@@ -34,7 +34,7 @@ export interface MediaBinProps {
   /** Relative media paths currently referenced by the document. */
   usedMediaPaths?: ReadonlySet<string>;
   /**
-   * Fired after a successful upload via the MediaBin's "+ Upload"
+   * Fired after a successful upload via the MediaBin's "+" (Add files)
    * button or media drop target. `relativePath` is what the provider returned (the same
    * value embedded in markdown refs, e.g. `attachments/xyz.png`);
    * `name` is the uploader-chosen filename before storage renamed
@@ -53,7 +53,7 @@ export interface MediaBinProps {
   onCountChange?: (count: number) => void;
   /**
    * Opens the host's media recorder. When provided, the Attachments header shows a
-   * compact Record button beside Upload.
+   * compact Record button beside the "+" (Add files) button.
    */
   onRecord?: () => void;
   /** Whether the recorder dialog opened by `onRecord` is currently visible. */
@@ -541,11 +541,18 @@ export function MediaBin({
               onClick={handleUploadClick}
               disabled={!mediaProvider || loading}
               title={
-                mediaProvider ? 'Upload files' : 'Load a content zip or select a storage slot first'
+                mediaProvider ? 'Add files' : 'Load a content zip or select a storage slot first'
               }
+              aria-label="Add files"
             >
-              <span className="squisq-media-bin-action-icon">+</span>
-              <span>Upload</span>
+              <svg
+                className="squisq-media-bin-add-icon"
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M8 3v10M3 8h10" />
+              </svg>
             </button>
           </div>
         </div>
