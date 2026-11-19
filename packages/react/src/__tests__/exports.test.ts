@@ -47,6 +47,8 @@ describe('@bendyline/squisq-react exports', () => {
     expect(typeof squisqReact.useAudioSync).toBe('function');
     expect(typeof squisqReact.useDocPlayback).toBe('function');
     expect(typeof squisqReact.useViewportOrientation).toBe('function');
+    expect(typeof squisqReact.useScreenWakeLock).toBe('function');
+    expect(typeof squisqReact.holdScreenWakeLock).toBe('function');
   });
 
   it('exports utility functions', () => {

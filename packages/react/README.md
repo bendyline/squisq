@@ -94,14 +94,15 @@ Blocks are composed of typed layers rendered as SVG:
 
 ## Hooks
 
-| Hook                               | Description                                                        |
-| ---------------------------------- | ------------------------------------------------------------------ |
-| `useDocPlayback`                   | Core playback state machine — timing, block transitions, scripting |
-| `useAudioSync`                     | Synchronizes audio playback with doc timeline                      |
-| `useMediaSchedule`                 | Resolves which timed media clips are active at the current time    |
-| `useViewportOrientation`           | Tracks viewport orientation for responsive layouts                 |
-| `useAutoSurface`                   | Live light/dark surface detection via `prefers-color-scheme`       |
-| `useMediaProvider` / `useMediaUrl` | Media URL resolution via `MediaContext`                            |
+| Hook                               | Description                                                         |
+| ---------------------------------- | ------------------------------------------------------------------- |
+| `useDocPlayback`                   | Core playback state machine — timing, block transitions, scripting  |
+| `useAudioSync`                     | Synchronizes audio playback with doc timeline                       |
+| `useMediaSchedule`                 | Resolves which timed media clips are active at the current time     |
+| `useViewportOrientation`           | Tracks viewport orientation for responsive layouts                  |
+| `useScreenWakeLock`                | Keeps the screen on while active (DocPlayer holds it while playing) |
+| `useAutoSurface`                   | Live light/dark surface detection via `prefers-color-scheme`        |
+| `useMediaProvider` / `useMediaUrl` | Media URL resolution via `MediaContext`                             |
 
 `useDocPlayback` takes configuration as an options object:
 
