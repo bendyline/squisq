@@ -1,0 +1,155 @@
+/* Name/value rows for a document's own frontmatter properties
+   (FrontmatterPropertiesGrid), in the Write view's document tray and in
+   Document settings. Chrome tokens only — see chrome.css. */
+
+.squisq-fm-props {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+  font: 13px/1.4 var(--squisq-ux-font, system-ui, sans-serif);
+  color: var(--squisq-text);
+}
+
+.squisq-fm-props-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Header and rows share one column template so the columns line up. */
+.squisq-fm-props-head,
+.squisq-fm-props-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 28px;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.squisq-fm-props-head {
+  color: var(--squisq-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.squisq-fm-props-input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--squisq-border);
+  border-radius: 4px;
+  background: var(--squisq-input-bg);
+  color: var(--squisq-text);
+  font: inherit;
+}
+
+.squisq-fm-props-input::placeholder {
+  color: var(--squisq-text-faint);
+}
+
+.squisq-fm-props-input:focus {
+  outline: 2px solid var(--squisq-accent);
+  outline-offset: -1px;
+  border-color: var(--squisq-accent);
+}
+
+.squisq-fm-props-row[data-invalid] .squisq-fm-props-name {
+  border-color: var(--squisq-danger);
+}
+
+.squisq-fm-props-nested {
+  overflow: hidden;
+  padding: 5px 8px;
+  border: 1px dashed var(--squisq-border);
+  border-radius: 4px;
+  color: var(--squisq-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-fm-props-delete {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--squisq-text-muted);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.squisq-fm-props-delete:hover {
+  border-color: var(--squisq-danger-border);
+  background: var(--squisq-danger-soft);
+  color: var(--squisq-danger-strong);
+}
+
+.squisq-fm-props-hint,
+.squisq-fm-props-error {
+  grid-column: 1 / -1;
+  font-size: 11px;
+}
+
+/* The hint is about the value, so it sits under the value box. */
+.squisq-fm-props-hint {
+  grid-column: 2 / 3;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-fm-props-error {
+  color: var(--squisq-danger-strong);
+}
+
+.squisq-fm-props-add {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: 1px dashed var(--squisq-border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--squisq-text-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+.squisq-fm-props-add:hover {
+  background: var(--squisq-surface-hover);
+}
+
+.squisq-fm-props-delete:focus-visible,
+.squisq-fm-props-add:focus-visible {
+  outline: 2px solid var(--squisq-accent);
+  outline-offset: 2px;
+}
+
+/* Read-only rendition. */
+.squisq-fm-props-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.squisq-fm-props-row--static {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+}
+
+.squisq-fm-props-static {
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+dt.squisq-fm-props-static {
+  color: var(--squisq-text-muted);
+}
+
+.squisq-fm-props-empty {
+  margin: 0;
+  color: var(--squisq-text-muted);
+}

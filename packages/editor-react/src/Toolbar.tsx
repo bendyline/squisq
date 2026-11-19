@@ -518,12 +518,15 @@ export function Toolbar({
     return () => window.removeEventListener('keydown', onKeyDown, true);
   }, [editorMode, findShortcut, readOnly, setFindMode]);
 
-  // The lane only exists outside preview / code / find mode. Without it
-  // nothing is measured, so nothing may stay collapsed: the ··· menu that
-  // would hold the collapsed chrome isn't rendered either.
+  // The lane only exists outside preview / code / find mode, and not over the
+  // Summarize view, whose Write editor is hidden. Without it nothing is
+  // measured, so nothing may stay collapsed: the ··· menu that would hold the
+  // collapsed chrome isn't rendered either.
+  const summarizing = activeView === 'wysiwyg' && layoutMode === 'summary';
   const actionsLaneShown =
     !findMode &&
     activeView !== 'preview' &&
+    !summarizing &&
     !isCodeMode &&
     (showFormattingControls || showInsertControls);
   const { actionsRef, collapsed, clippedContextual } = useToolbarCollapse(
@@ -2294,9 +2297,12 @@ export function Toolbar({
       )}
       {/* Keep the flexible middle lane when built-in actions are hidden so
           host-provided right slots stay pinned to the toolbar's far edge. */}
-      {!findMode && !isPreview && !isCodeMode && !showFormattingControls && !showInsertControls && (
-        <div className="squisq-toolbar-actions" />
-      )}
+      {!findMode &&
+        !isPreview &&
+        !isCodeMode &&
+        (summarizing || (!showFormattingControls && !showInsertControls)) && (
+          <div className="squisq-toolbar-actions" />
+        )}
 
       {/* Overflow menu — outside the overflow:hidden actions container.
           Also appears when a contextual group (template/transition picker,

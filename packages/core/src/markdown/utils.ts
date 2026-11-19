@@ -294,8 +294,11 @@ function readQuotedScalar(text: string): { value: string; rest: string } | null 
  * Flow-looking content is never treated as a mapping: `{"a":1}` is one of
  * Squisq's opaque JSON payloads, and splitting it on the inner colon would
  * invent the key `{"a"`.
+ *
+ * `colon` is the index of the separating colon in `content`, which is what
+ * lets a key be renamed without touching the text after it.
  */
-function splitMappingKey(content: string): { key: string; rest: string } | null {
+function splitMappingKey(content: string): { key: string; rest: string; colon: number } | null {
   if (content.startsWith('{') || content.startsWith('[')) return null;
 
   if (content.startsWith('"') || content.startsWith("'")) {
@@ -303,7 +306,11 @@ function splitMappingKey(content: string): { key: string; rest: string } | null 
     if (!quoted) return null;
     const after = quoted.rest;
     if (after === ':' || after.startsWith(': ') || after.startsWith(':\t')) {
-      return { key: quoted.value, rest: after.slice(1).trim() };
+      return {
+        key: quoted.value,
+        rest: after.slice(1).trim(),
+        colon: content.length - after.length,
+      };
     }
     return null;
   }
@@ -315,7 +322,7 @@ function splitMappingKey(content: string): { key: string; rest: string } | null 
     if (next !== undefined && next !== ' ' && next !== '\t') continue;
     const key = content.slice(0, i).trim();
     if (!key) return null;
-    return { key, rest: content.slice(i + 1).trim() };
+    return { key, rest: content.slice(i + 1).trim(), colon: i };
   }
 
   // Lenient fallback for hand-authored `key:value` (no space), which older
@@ -324,7 +331,7 @@ function splitMappingKey(content: string): { key: string; rest: string } | null 
   const colon = content.indexOf(':');
   if (colon > 0 && content[colon + 1] !== '/') {
     const key = content.slice(0, colon).trim();
-    if (key && !key.includes(' ')) return { key, rest: content.slice(colon + 1).trim() };
+    if (key && !key.includes(' ')) return { key, rest: content.slice(colon + 1).trim(), colon };
   }
   return null;
 }
@@ -397,12 +404,25 @@ function parseBlockScalar(
   return folded ? foldBlockLines(dedented) : dedented.join('\n');
 }
 
-function scalarFromText(text: string): unknown {
+function scalarFromText(text: string): string | number | boolean | null {
   if (text === '' || YAML_NULL.has(text)) return null;
   if (YAML_TRUE.has(text)) return true;
   if (YAML_FALSE.has(text)) return false;
   if (isCanonicalNumber(text)) return Number(text);
   return text;
+}
+
+/**
+ * Read one plain (unquoted) frontmatter value the way {@link parseFrontmatter}
+ * reads it: `true`/`false` are booleans, `null`/`~`/empty is null, canonical
+ * numbers are numbers, and anything else is the text itself. Surrounding
+ * whitespace is ignored.
+ *
+ * Editors use it to type a value someone entered in a text box exactly as the
+ * same text typed into the frontmatter by hand would be typed.
+ */
+export function readFrontmatterScalar(text: string): string | number | boolean | null {
+  return scalarFromText(text.trim());
 }
 
 /**
@@ -749,37 +769,40 @@ function emitSequence(items: readonly unknown[], indent: number, out: string[]):
   }
 }
 
-function emitMapping(map: Record<string, unknown>, indent: number, out: string[]): void {
+/** Emit one `key: value` node — a scalar line, or a key with its nested body. */
+function emitEntry(rawKey: string, value: unknown, indent: number, out: string[]): void {
+  if (isOmittedValue(value)) return;
   const pad = ' '.repeat(indent);
-  for (const [rawKey, value] of Object.entries(map)) {
-    if (isOmittedValue(value)) continue;
-    const key = formatFrontmatterKey(rawKey);
-    if (value === null) {
-      out.push(`${pad}${key}: null`);
-      continue;
-    }
-    if (Array.isArray(value)) {
-      if (value.length === 0) {
-        out.push(`${pad}${key}: []`);
-        continue;
-      }
-      out.push(`${pad}${key}:`);
-      emitSequence(value, indent + 2, out);
-      continue;
-    }
-    if (isPlainRecord(value)) {
-      const sub: string[] = [];
-      emitMapping(value, indent + 2, sub);
-      if (sub.length === 0) {
-        out.push(`${pad}${key}: {}`);
-        continue;
-      }
-      out.push(`${pad}${key}:`);
-      out.push(...sub);
-      continue;
-    }
-    pushScalar(out, pad, `${key}: `, value);
+  const key = formatFrontmatterKey(rawKey);
+  if (value === null) {
+    out.push(`${pad}${key}: null`);
+    return;
   }
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      out.push(`${pad}${key}: []`);
+      return;
+    }
+    out.push(`${pad}${key}:`);
+    emitSequence(value, indent + 2, out);
+    return;
+  }
+  if (isPlainRecord(value)) {
+    const sub: string[] = [];
+    emitMapping(value, indent + 2, sub);
+    if (sub.length === 0) {
+      out.push(`${pad}${key}: {}`);
+      return;
+    }
+    out.push(`${pad}${key}:`);
+    out.push(...sub);
+    return;
+  }
+  pushScalar(out, pad, `${key}: `, value);
+}
+
+function emitMapping(map: Record<string, unknown>, indent: number, out: string[]): void {
+  for (const [rawKey, value] of Object.entries(map)) emitEntry(rawKey, value, indent, out);
 }
 
 /**
@@ -810,13 +833,16 @@ export function formatFrontmatterYaml(frontmatter: Record<string, unknown>): str
  * never mistaken for top-level keys (an indented `name: X` inside another
  * key's block scalar stays put even when `name` is being updated).
  *
+ * A list value is written as a block sequence (`tags:` followed by `- a`
+ * lines), or `[]` when empty, and reads back as the same list.
+ *
  * @param source - The markdown source string.
  * @param updates - Map of key → new value (or null/undefined to remove).
  * @returns The updated markdown source string.
  */
 export function setFrontmatterValues(
   source: string,
-  updates: Record<string, string | number | boolean | null | undefined>,
+  updates: Record<string, FrontmatterUpdateValue>,
 ): string {
   const updateKeys = Object.keys(updates);
   if (updateKeys.length === 0) return source;
@@ -826,65 +852,32 @@ export function setFrontmatterValues(
 
   // Existing frontmatter block — rewrite node-by-node, preserving order.
   if (match) {
-    const inner = match[1];
-    const lines = inner.split(/\r?\n/);
+    const lines = match[1].split(/\r?\n/);
+    const { rootIndent, entries } = scanRootEntries(lines);
     const newLines: string[] = [];
 
-    // The root indent is whatever the first real entry uses (virtually
-    // always 0); anything deeper belongs to a value, not to a key.
-    const firstSignificant = lines.find((line) => !isSkippableLine(line));
-    const rootIndent = firstSignificant === undefined ? 0 : indentOf(firstSignificant);
-
     let i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-      const ind = indentOf(line);
-      const entry =
-        isSkippableLine(line) || ind !== rootIndent ? null : splitMappingKey(line.slice(ind));
-      if (!entry) {
-        newLines.push(line);
-        i++;
-        continue;
-      }
-
-      // Span of this key's node: the key line plus every following line that
-      // is indented deeper (its block scalar body / nested collection),
-      // including blank lines that sit inside that body.
-      let end = i + 1;
-      while (end < lines.length) {
-        if (lines[end].trim() === '') {
-          let probe = end;
-          while (probe < lines.length && lines[probe].trim() === '') probe++;
-          if (probe < lines.length && indentOf(lines[probe]) > rootIndent) {
-            end = probe;
-            continue;
-          }
-          break;
-        }
-        if (indentOf(lines[end]) <= rootIndent) break;
-        end++;
-      }
-
+    for (const entry of entries) {
+      // Comments, blank lines and anything unparseable before the entry.
+      for (; i < entry.start; i++) newLines.push(lines[i]);
       if (!Object.prototype.hasOwnProperty.call(updates, entry.key)) {
-        for (let k = i; k < end; k++) newLines.push(lines[k]);
-        i = end;
+        for (; i < entry.end; i++) newLines.push(lines[i]);
         continue;
       }
       handled.add(entry.key);
       const next = updates[entry.key];
       // Removal and replacement both drop the whole node, body included.
-      if (next !== null && next !== undefined) {
-        pushScalar(newLines, ' '.repeat(rootIndent), `${formatFrontmatterKey(entry.key)}: `, next);
-      }
-      i = end;
+      if (next !== null && next !== undefined) emitEntry(entry.key, next, rootIndent, newLines);
+      i = entry.end;
     }
+    for (; i < lines.length; i++) newLines.push(lines[i]);
 
     // Append any keys that weren't already present.
     for (const key of updateKeys) {
       if (handled.has(key)) continue;
       const next = updates[key];
       if (next === null || next === undefined) continue;
-      pushScalar(newLines, '', `${formatFrontmatterKey(key)}: `, next);
+      emitEntry(key, next, 0, newLines);
     }
 
     // If every line got removed, drop the block entirely.
@@ -900,10 +893,125 @@ export function setFrontmatterValues(
   for (const key of updateKeys) {
     const next = updates[key];
     if (next === null || next === undefined) continue;
-    pushScalar(fresh, '', `${formatFrontmatterKey(key)}: `, next);
+    emitEntry(key, next, 0, fresh);
   }
   if (fresh.length === 0) return source;
   return `---\n${fresh.join('\n')}\n---\n${source}`;
+}
+
+/**
+ * Rename top-level frontmatter keys in place: `{ from: to }`.
+ *
+ * Only the key itself is rewritten. The entry keeps its position, and
+ * everything after the key's colon — the value, a trailing comment, a block
+ * scalar or nested body — stays byte-for-byte, as do the rest of the block
+ * and its line endings.
+ *
+ * A rename is skipped when `from` isn't a key, or when `to` is already taken
+ * by a key that stays (or that another rename in the same call also targets).
+ * Keys that trade names in one call (`{ a: 'b', b: 'a' }`) are allowed. When
+ * nothing can be renamed the source is returned unchanged.
+ */
+export function renameFrontmatterKeys(source: string, renames: Record<string, string>): string {
+  const pairs = Object.entries(renames).filter(([from, to]) => to !== '' && from !== to);
+  if (pairs.length === 0) return source;
+  const match = FRONTMATTER_BLOCK_RE.exec(source);
+  if (!match) return source;
+
+  const inner = match[1];
+  const eol = inner.includes('\r\n') ? '\r\n' : '\n';
+  const lines = inner.split(/\r?\n/);
+  const { rootIndent, entries } = scanRootEntries(lines);
+  const present = new Set(entries.map((entry) => entry.key));
+
+  // Drop renames whose target stays occupied until the set is stable: a
+  // rejected rename keeps its source key, which can occupy another's target.
+  let accepted = pairs.filter(([from]) => present.has(from));
+  for (;;) {
+    const leaving = new Set(accepted.map(([from]) => from));
+    const targetCounts = new Map<string, number>();
+    for (const [, to] of accepted) targetCounts.set(to, (targetCounts.get(to) ?? 0) + 1);
+    const next = accepted.filter(
+      ([, to]) => (!present.has(to) || leaving.has(to)) && targetCounts.get(to) === 1,
+    );
+    if (next.length === accepted.length) break;
+    accepted = next;
+  }
+  if (accepted.length === 0) return source;
+
+  const targets = new Map(accepted);
+  for (const entry of entries) {
+    const to = targets.get(entry.key);
+    if (to === undefined) continue;
+    const line = lines[entry.start];
+    lines[entry.start] =
+      line.slice(0, rootIndent) + formatFrontmatterKey(to) + line.slice(entry.colon);
+  }
+
+  // The inner text starts right after the opening `---` line.
+  const innerStart = source.startsWith('---\r\n') ? 5 : 4;
+  return source.slice(0, innerStart) + lines.join(eol) + source.slice(innerStart + inner.length);
+}
+
+/** A value {@link setFrontmatterValues} can write; null/undefined removes the key. */
+export type FrontmatterUpdateValue =
+  string | number | boolean | null | undefined | readonly (string | number | boolean)[];
+
+/** One top-level key of a frontmatter block, located by line. */
+interface RootEntry {
+  key: string;
+  /** Line of the key. */
+  start: number;
+  /** One past the node's last line (its block scalar / nested body included). */
+  end: number;
+  /** Column of the colon that separates the key from its value. */
+  colon: number;
+}
+
+/**
+ * Find the top-level entries of a frontmatter block's lines. The root indent
+ * is whatever the first real entry uses (virtually always 0); anything deeper
+ * belongs to a value, not to a key. Lines that are not entries — comments,
+ * blank lines, unparseable text — lie between the returned spans.
+ */
+function scanRootEntries(lines: readonly string[]): { rootIndent: number; entries: RootEntry[] } {
+  const firstSignificant = lines.find((line) => !isSkippableLine(line));
+  const rootIndent = firstSignificant === undefined ? 0 : indentOf(firstSignificant);
+  const entries: RootEntry[] = [];
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const ind = indentOf(line);
+    const entry =
+      isSkippableLine(line) || ind !== rootIndent ? null : splitMappingKey(line.slice(ind));
+    if (!entry) {
+      i++;
+      continue;
+    }
+
+    // Span of this key's node: the key line plus every following line that
+    // is indented deeper (its block scalar body / nested collection),
+    // including blank lines that sit inside that body.
+    let end = i + 1;
+    while (end < lines.length) {
+      if (lines[end].trim() === '') {
+        let probe = end;
+        while (probe < lines.length && lines[probe].trim() === '') probe++;
+        if (probe < lines.length && indentOf(lines[probe]) > rootIndent) {
+          end = probe;
+          continue;
+        }
+        break;
+      }
+      if (indentOf(lines[end]) <= rootIndent) break;
+      end++;
+    }
+
+    entries.push({ key: entry.key, start: i, end, colon: ind + entry.colon });
+    i = end;
+  }
+  return { rootIndent, entries };
 }
 
 /**

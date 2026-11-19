@@ -60,7 +60,7 @@ function resolveSlideBlockType(doc: Doc | null, slide: ActiveSlide | null): Slid
       editable: false,
       template: shown,
       reason:
-        'Summarize builds these slides from your document, so their layout is chosen for you. Set Summarize to None to choose block types yourself.',
+        'Summarize builds these slides from your document, so their layout is chosen for you. To choose block types yourself, choose None in Write › Summarize.',
     };
   }
   const blockId = slide.blockId;

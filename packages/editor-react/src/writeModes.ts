@@ -21,6 +21,12 @@ export const WRITE_MODE_OPTIONS: ViewModeOption<LayoutMode>[] = [
     icon: 'fa-solid fa-timeline',
     summary: 'Edit timing for blocks and media clips.',
   },
+  {
+    key: 'summary',
+    label: 'Summarize',
+    icon: 'fa-solid fa-wand-magic-sparkles',
+    summary: 'Choose how slides summarize your text.',
+  },
 ];
 
 export function writeModeLabel(mode: LayoutMode): string {

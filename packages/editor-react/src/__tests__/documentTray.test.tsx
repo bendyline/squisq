@@ -469,3 +469,172 @@ describe('document tray', () => {
     },
   );
 });
+
+describe('document tray properties', () => {
+  const SOURCE =
+    '---\nauthor: Ines\nsquisq-theme: bold\n---\n\n# One\n\nFirst.\n\n# Two\n\nSecond.\n';
+
+  async function mountWrite(source: string, readOnly = false) {
+    const live: { ctx: EditorContextValue | null } = { ctx: null };
+    function Probe() {
+      live.ctx = useEditorContext();
+      return null;
+    }
+    render(
+      <EditorProvider initialMarkdown={source} initialView="wysiwyg">
+        <WysiwygEditor readOnly={readOnly} />
+        <Probe />
+      </EditorProvider>,
+    );
+    await screen.findByTestId('wysiwyg-editor');
+    await waitFor(() => expect(live.ctx?.tiptapEditor).toBeTruthy());
+    return { ctx: () => live.ctx!, editor: () => live.ctx!.tiptapEditor as Editor };
+  }
+
+  const pill = () => screen.getByRole('button', { name: /^Properties \(/ });
+  const openPanel = async () =>
+    fireEvent.click(await screen.findByRole('button', { name: /^Properties \(/ }));
+  const panel = () => screen.getByRole('group', { name: 'Document properties' });
+  /** Focus leaves a row for somewhere outside the tray. */
+  const leave = (input: HTMLElement) => fireEvent.focusOut(input, { relatedTarget: document.body });
+
+  it('appears only when the document has keys of its own', async () => {
+    await mountWrite('---\nsquisq-theme: bold\ntitle: T\n---\n\n# Doc\n\nBody.\n');
+    expect(screen.queryByRole('region', { name: 'Document tray' })).toBeNull();
+    cleanup();
+
+    await mountWrite(SOURCE);
+    const tray = await screen.findByRole('region', { name: 'Document tray' });
+    // Just the pill: no heading row when the tray holds only properties.
+    expect(tray.querySelector('.squisq-document-tray-heading')).toBeNull();
+    expect(pill().getAttribute('aria-label')).toBe('Properties (1)');
+  });
+
+  it('heads the tray "Document" when it holds media too', async () => {
+    await mountWrite(
+      '---\nauthor: Ines\n---\n\n{[audio src=take.webm anchor=document]}\n\nBody.\n',
+    );
+    const tray = await screen.findByRole('region', { name: 'Document tray' });
+    expect(tray.querySelector('.squisq-document-tray-heading span')?.textContent).toBe('Document');
+    screen.getByRole('button', { name: 'Audio: take.webm' });
+  });
+
+  it('opens without writing, and writes an edited row once as focus leaves it', async () => {
+    const live = await mountWrite(SOURCE);
+    await openPanel();
+    expect(live.ctx().markdownSource).toBe(SOURCE);
+
+    const value = within(panel()).getByRole('textbox', { name: 'Value of author' });
+    fireEvent.change(value, { target: { value: 'Ines Duarte' } });
+    expect(live.ctx().markdownSource).toBe(SOURCE);
+    leave(value);
+    await waitFor(() =>
+      expect(live.ctx().markdownSource).toBe(SOURCE.replace('author: Ines', 'author: Ines Duarte')),
+    );
+
+    // One undo step puts it back, and the row follows.
+    act(() => {
+      live.editor().commands.undo();
+    });
+    await waitFor(() => expect(live.ctx().markdownSource).toBe(SOURCE));
+    await waitFor(() =>
+      expect(
+        (within(panel()).getByRole('textbox', { name: 'Value of author' }) as HTMLInputElement)
+          .value,
+      ).toBe('Ines'),
+    );
+  });
+
+  it('renames in place on Enter, keeping the same input focused', async () => {
+    const live = await mountWrite(SOURCE);
+    await openPanel();
+    const name = within(panel()).getByRole('textbox', { name: 'Property name' });
+    name.focus();
+    fireEvent.change(name, { target: { value: 'writer' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    await waitFor(() =>
+      expect(live.ctx().markdownSource).toBe(SOURCE.replace('author: Ines', 'writer: Ines')),
+    );
+    expect(within(panel()).getByRole('textbox', { name: 'Property name' })).toBe(name);
+    expect(document.activeElement).toBe(name);
+  });
+
+  it('puts a row back on Escape without writing', async () => {
+    const live = await mountWrite(SOURCE);
+    await openPanel();
+    const value = within(panel()).getByRole('textbox', { name: 'Value of author' });
+    fireEvent.change(value, { target: { value: 'Someone else' } });
+    fireEvent.keyDown(value, { key: 'Escape' });
+    expect((value as HTMLInputElement).value).toBe('Ines');
+    leave(value);
+    expect(live.ctx().markdownSource).toBe(SOURCE);
+  });
+
+  it('adds and deletes properties, keeping the panel open when the last one goes', async () => {
+    const live = await mountWrite(SOURCE);
+    await openPanel();
+    fireEvent.click(within(panel()).getByRole('button', { name: '+ Add property' }));
+    const names = within(panel()).getAllByRole('textbox', { name: 'Property name' });
+    const added = names[names.length - 1];
+    expect(document.activeElement).toBe(added);
+    fireEvent.change(added, { target: { value: 'draft' } });
+    const value = within(panel()).getByRole('textbox', { name: 'Value of draft' });
+    fireEvent.change(value, { target: { value: 'true' } });
+    leave(value);
+    await waitFor(() =>
+      expect(live.ctx().markdownSource).toBe(
+        SOURCE.replace('squisq-theme: bold\n', 'squisq-theme: bold\ndraft: true\n'),
+      ),
+    );
+
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Delete property author' }));
+    await waitFor(() => expect(live.ctx().markdownSource).not.toContain('author'));
+    fireEvent.click(within(panel()).getByRole('button', { name: 'Delete property draft' }));
+    await waitFor(() =>
+      expect(live.ctx().markdownSource).toBe(
+        '---\nsquisq-theme: bold\n---\n\n# One\n\nFirst.\n\n# Two\n\nSecond.\n',
+      ),
+    );
+    expect(pill().getAttribute('aria-label')).toBe('Properties (0)');
+    expect(document.activeElement).toBe(
+      within(panel()).getByRole('button', { name: '+ Add property' }),
+    );
+  });
+
+  it('refuses a managed name and says why', async () => {
+    const live = await mountWrite(SOURCE);
+    await openPanel();
+    fireEvent.click(within(panel()).getByRole('button', { name: '+ Add property' }));
+    const names = within(panel()).getAllByRole('textbox', { name: 'Property name' });
+    const added = names[names.length - 1];
+    fireEvent.change(added, { target: { value: 'squisq-theme' } });
+    leave(added);
+    expect(panel().textContent).toContain('reserved for Squisq settings');
+    expect(added.getAttribute('aria-invalid')).toBe('true');
+    expect(live.ctx().markdownSource).toBe(SOURCE);
+  });
+
+  it('shows values without inputs when the editor is read-only', async () => {
+    await mountWrite(SOURCE, true);
+    await openPanel();
+    expect(within(panel()).queryAllByRole('textbox')).toEqual([]);
+    expect(within(panel()).queryByRole('button', { name: '+ Add property' })).toBeNull();
+    expect(panel().textContent).toContain('Ines');
+  });
+
+  it('shows on the first block of a block layout only', async () => {
+    const live = await mountWrite(SOURCE);
+    await screen.findByRole('button', { name: /^Properties \(/ });
+    act(() => {
+      live.ctx().setLayoutMode('block');
+    });
+    await screen.findByRole('button', { name: /^Properties \(/ });
+    act(() => {
+      live.ctx().goToBlock(1);
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /^Properties \(/ })).toBeNull(),
+    );
+    expect(live.ctx().markdownSource).toBe(SOURCE);
+  });
+});

@@ -114,6 +114,7 @@ import {
   Subscript,
   Superscript,
   Table,
+  Tags,
   TextAlignCenter,
   TextAlignEnd,
   TextAlignStart,
@@ -174,6 +175,7 @@ export const CHROME_ICONS: Readonly<Record<string, LucideIcon>> = {
   'comment-dots': MessageSquareMore,
   'volume-high': Volume2,
   film: Film,
+  tags: Tags,
 
   // Transport and narration (the Narrate rail and its review bar)
   play: Play,

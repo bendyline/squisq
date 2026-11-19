@@ -150,13 +150,15 @@ Settings in the toolbar:
   headings — the cover, a slide added for a spare picture, a Summarize deck — show their type
   greyed out.
 - **Theme** — see [Themes](themes.md).
-- **Summarize** — re-cut the document into a presentation in a style such as Documentary,
-  Magazine, Data-Driven, or Minimal, without changing your source (saved as
-  `squisq-transform`).
 - **Cover** — the title slide generated from the document's opening: whether it appears
   (`squisq-cover-slide`), its design (`squisq-cover-template`), and, for video, how long it stays
   up (`squisq-cover-duration`) and whether the story waits for it (`squisq-cover-playback`).
 - **Video** — appears when the document contains video clips; see [Video](#video).
+
+To re-cut the document into a presentation in a style such as Documentary, Magazine,
+Data-Driven, or Minimal — or **Custom**, whose slides you adjust one by one — open
+[Write › Summarize](editor.md#write-modes-write-blocks-timeline-summarize). Your source does not
+change; the style is saved as `squisq-transform`.
 
 The slideshow is also what a PowerPoint export and an HTML slideshow export contain, one slide per
 block.
@@ -304,7 +306,7 @@ How headings become cards:
   keys pick one, and the heading's body is shown as the explanation after you answer.
 
 When a heading's shape is ambiguous, mark it with `{study=…}` and it becomes exactly what you
-asked for. Flashcards have only the **Theme** and **Summarize** settings.
+asked for. Flashcards have only the **Theme** setting.
 
 ## Document
 

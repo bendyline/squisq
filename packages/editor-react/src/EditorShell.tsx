@@ -57,6 +57,7 @@ import { useTimelineClock } from './useTimelineClock';
 import { usePreviewProjection } from './usePreviewProjection';
 import { collectEmbeddedVideoSchedule } from './embeddedMedia';
 import { PreviewPanel } from './PreviewPanel';
+import { SummarizeView } from './summarize/SummarizeView';
 import { ImageViewer } from './ImageViewer';
 import { ImageEditor } from './ImageEditor';
 import { ImageEditModal } from './imageEditor/ImageEditModal';
@@ -305,8 +306,14 @@ export interface EditorShellProps {
    * from the draft to the keys in the order they are seen.
    */
   toolbarPosition?: EditorToolbarPosition;
-  /** Optional designer opened beside Summarize in the preview toolbar. */
-  summarizationDesigner?: (onClose: () => void) => ReactNode;
+  /**
+   * The designer for the Custom summary style, shown inline in Write ›
+   * Summarize while Custom is chosen, where an author adjusts each generated
+   * slide. Summarize is a mode the author can leave at any time, so the
+   * designer should save as it goes. Without one, Custom shows its slides like
+   * every other style.
+   */
+  summarizationDesigner?: ReactNode;
   /** Host-supplied content rendered at the right edge of the bottom status bar. */
   statusBarSlotRight?: ReactNode;
   /**
@@ -1049,8 +1056,7 @@ interface EditorShellInnerProps {
   toolbarSlotAfterActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
   toolbarPosition: EditorToolbarPosition;
-  /** Optional designer opened beside Summarize in the preview toolbar. */
-  summarizationDesigner?: (onClose: () => void) => ReactNode;
+  summarizationDesigner?: ReactNode;
   statusBarSlotRight?: ReactNode;
   sidePanelSlot?: ReactNode;
   showPlayTab: boolean;
@@ -1090,18 +1096,12 @@ interface EditorShellInnerProps {
   defaultThemeLabel?: string;
 }
 
-function UseModeToolbarControls({
-  allowPrint,
-  summarizationDesigner,
-}: {
-  allowPrint: boolean;
-  summarizationDesigner?: (onClose: () => void) => ReactNode;
-}) {
+function UseModeToolbarControls({ allowPrint }: { allowPrint: boolean }) {
   const printMode = usePrintMode();
   if (printMode.active) return <PrintPreviewToolbar />;
   return (
     <>
-      <PreviewToolbarControls summarizationDesigner={summarizationDesigner} />
+      <PreviewToolbarControls />
       <PresentationModeControl />
       {allowPrint && <PrintModeControl />}
     </>
@@ -1248,6 +1248,9 @@ function EditorShellInner({
   const isCardMode = blockScoped && !isPreview;
   // Timeline mode additionally shows the horizontal timeline track below.
   const isTimelineMode = isCardMode && layoutMode === 'timeline';
+  // Summarize replaces the Write surface, which stays mounted behind it.
+  const isSummarizing = isMarkdownMode && editingView === 'wysiwyg' && layoutMode === 'summary';
+  const wysiwygHidden = isPreview || isSummarizing;
   // The timeline mirrors the *played* document, not the raw parse: block bars,
   // the playhead, and the clock use the same narration-timed projection the
   // Video composition renders, so an unpinned slide occupies its recorded-voice
@@ -1627,13 +1630,7 @@ function EditorShellInner({
         onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
         slotLeft={toolbarSlotLeft}
         slotAfterTabs={
-          !isCodeMode &&
-          isPreview && (
-            <UseModeToolbarControls
-              allowPrint={allowPrint}
-              summarizationDesigner={summarizationDesigner}
-            />
-          )
+          !isCodeMode && isPreview && <UseModeToolbarControls allowPrint={allowPrint} />
         }
         slotAfterActions={toolbarSlotAfterActions}
         slotRight={toolbarSlotRight}
@@ -1810,8 +1807,8 @@ function EditorShellInner({
                   <div
                     className="squisq-editor-with-gutter"
                     key="wysiwyg-shell"
-                    hidden={isPreview}
-                    style={isPreview ? { display: 'none' } : undefined}
+                    hidden={wysiwygHidden}
+                    style={wysiwygHidden ? { display: 'none' } : undefined}
                   >
                     {outlineVisible && (
                       <OutlinePanel key="outline" width={outlineWidth} readOnly={readOnly} />
@@ -1862,6 +1859,15 @@ function EditorShellInner({
                       mediaProvider={mediaProvider}
                     />
                   </div>
+                )}
+                {isSummarizing && (
+                  <SummarizeView
+                    designer={summarizationDesigner}
+                    basePath={basePath}
+                    workspaceContainer={workspaceContainer}
+                    readOnly={readOnly}
+                    hidden={isPreview}
+                  />
                 )}
                 {isMarkdownMode && isPreview && (
                   <PreviewPanel

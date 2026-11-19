@@ -1,0 +1,222 @@
+/*
+ * Write › Summarize — the style choice, then either the host's Custom designer
+ * or the slides the chosen style makes. The view fills the editing area and
+ * scrolls as a whole; its body keeps a usable height so a designer laid out as
+ * panes (a slide list beside a detail pane) can scroll inside them.
+ */
+
+.squisq-summarize {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--squisq-bg);
+  color: var(--squisq-text);
+  font-family: var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+}
+
+.squisq-summarize-inner {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 24px 24px;
+}
+
+.squisq-summarize-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.squisq-summarize-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--squisq-text-strong);
+}
+
+.squisq-summarize-intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--squisq-text-soft);
+}
+
+.squisq-summarize-styles {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.squisq-summarize-legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-summarize-style-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+
+.squisq-summarize-style {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--squisq-border);
+  border-radius: 8px;
+  background: var(--squisq-surface);
+  cursor: pointer;
+}
+
+.squisq-summarize-style:hover {
+  background: var(--squisq-surface-hover);
+}
+
+.squisq-summarize-style--selected {
+  border-color: var(--squisq-accent);
+  background: var(--squisq-accent-subtle);
+  box-shadow: inset 0 0 0 1px var(--squisq-accent);
+}
+
+.squisq-summarize-style--selected:hover {
+  background: var(--squisq-accent-soft);
+}
+
+.squisq-summarize-style:has(input:focus-visible) {
+  outline: 2px solid var(--squisq-focus-ring);
+  outline-offset: 2px;
+}
+
+.squisq-summarize-styles:disabled .squisq-summarize-style {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.squisq-summarize-style input {
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  accent-color: var(--squisq-accent);
+}
+
+.squisq-summarize-style-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.squisq-summarize-style-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--squisq-text-strong);
+}
+
+.squisq-summarize-style-description {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--squisq-text-soft);
+}
+
+.squisq-summarize-body {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 420px;
+}
+
+.squisq-summarize-count,
+.squisq-summarize-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-summarize-problem {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--squisq-danger-border);
+  border-radius: 6px;
+  background: var(--squisq-danger-soft);
+  color: var(--squisq-danger-strong);
+  font-size: 12px;
+}
+
+.squisq-summarize-slides {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.squisq-summarize-slide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  /* Long decks: cards offscreen skip layout and paint until scrolled to. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
+}
+
+.squisq-summarize-slide-frame {
+  overflow: hidden;
+  border: 1px solid var(--squisq-border-subtle);
+  border-radius: 6px;
+  background: var(--squisq-surface-sunken);
+}
+
+.squisq-summarize-slide-frame > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.squisq-summarize-slide-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--squisq-text-soft);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.squisq-summarize-slide-number {
+  font-weight: 600;
+  color: var(--squisq-text-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 600px) {
+  .squisq-summarize-inner {
+    padding: 16px;
+  }
+
+  .squisq-summarize-style-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .squisq-summarize-slides {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+}

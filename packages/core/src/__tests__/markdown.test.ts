@@ -13,6 +13,8 @@ import {
   createDocument,
   parseFrontmatter,
   setFrontmatterValues,
+  renameFrontmatterKeys,
+  readFrontmatterScalar,
   formatFrontmatterYaml,
   plainTextFromInlineHtml,
 } from '../markdown/index';
@@ -1302,6 +1304,117 @@ describe('setFrontmatterValues — block-scalar and nested awareness', () => {
     const source = '---\nsquisq-custom-themes: {"a":1}\ntitle: T\n---\n\n# Body\n';
     const out = setFrontmatterValues(source, { 'squisq-custom-themes': '{"b":2}' });
     expect(out).toBe('---\nsquisq-custom-themes: {"b":2}\ntitle: T\n---\n\n# Body\n');
+  });
+
+  it('keeps comments and unparseable lines where they were', () => {
+    const source = '---\n# people\nauthor: A\nnot a key\ntitle: T\n# end\n---\n\n# Body\n';
+    const out = setFrontmatterValues(source, { author: 'B', title: null });
+    expect(out).toBe('---\n# people\nauthor: B\nnot a key\n# end\n---\n\n# Body\n');
+  });
+});
+
+describe('setFrontmatterValues — list values', () => {
+  it('writes a list as a block sequence that reads back as the same list', () => {
+    const out = setFrontmatterValues('# Body\n', { tags: ['travel', 'harbor', 2026, true] });
+    expect(out).toBe('---\ntags:\n  - travel\n  - harbor\n  - 2026\n  - true\n---\n# Body\n');
+    expect(parseMarkdown(out).frontmatter).toEqual({ tags: ['travel', 'harbor', 2026, true] });
+  });
+
+  it('quotes list items that would otherwise read back as another type', () => {
+    const out = setFrontmatterValues('# Body\n', { tags: ['2026', 'true', 'a: b'] });
+    expect(parseMarkdown(out).frontmatter).toEqual({ tags: ['2026', 'true', 'a: b'] });
+  });
+
+  it('replaces a list in place, and turns a list into a scalar and back', () => {
+    const source = '---\ntags:\n  - a\n  - b\ntitle: T\n---\n\n# Body\n';
+    const replaced = setFrontmatterValues(source, { tags: ['c'] });
+    expect(replaced).toBe('---\ntags:\n  - c\ntitle: T\n---\n\n# Body\n');
+    const scalar = setFrontmatterValues(replaced, { tags: 'plain' });
+    expect(scalar).toBe('---\ntags: plain\ntitle: T\n---\n\n# Body\n');
+    const list = setFrontmatterValues(scalar, { tags: ['x', 'y'] });
+    expect(list).toBe('---\ntags:\n  - x\n  - y\ntitle: T\n---\n\n# Body\n');
+  });
+
+  it('writes an empty list as []', () => {
+    const out = setFrontmatterValues('---\ntags:\n  - a\n---\n\n# Body\n', { tags: [] });
+    expect(out).toBe('---\ntags: []\n---\n\n# Body\n');
+    expect(parseMarkdown(out).frontmatter).toEqual({ tags: [] });
+  });
+});
+
+describe('renameFrontmatterKeys', () => {
+  it('renames a key in place, keeping its value and position', () => {
+    const source = '---\ntitle: T\nauthor: Ines\ndate: 2026-01-02\n---\n\n# Body\n';
+    const out = renameFrontmatterKeys(source, { author: 'writer' });
+    expect(out).toBe('---\ntitle: T\nwriter: Ines\ndate: 2026-01-02\n---\n\n# Body\n');
+  });
+
+  it('keeps everything after the colon byte-for-byte, nested bodies included', () => {
+    const source =
+      '---\n# who\nauthor:   "Ines"   \ntags:\n  - a\n\n  - b\nnotes: |-\n  one\n  two\n---\n\n# Body\n';
+    const out = renameFrontmatterKeys(source, { author: 'by', tags: 'labels', notes: 'memo' });
+    expect(out).toBe(
+      '---\n# who\nby:   "Ines"   \nlabels:\n  - a\n\n  - b\nmemo: |-\n  one\n  two\n---\n\n# Body\n',
+    );
+    expect(parseMarkdown(out).frontmatter).toEqual({
+      by: 'Ines',
+      labels: ['a', 'b'],
+      memo: 'one\ntwo',
+    });
+  });
+
+  it('renames a quoted key and quotes a new key that needs it', () => {
+    const source = '---\n"my key": 1\nplain: 2\n---\n';
+    const out = renameFrontmatterKeys(source, { 'my key': 'renamed', plain: ' padded ' });
+    expect(out).toBe('---\nrenamed: 1\n" padded ": 2\n---\n');
+    expect(parseFrontmatter('renamed: 1\n" padded ": 2')).toEqual({ renamed: 1, ' padded ': 2 });
+  });
+
+  it('keeps CRLF line endings', () => {
+    const source = '---\r\nauthor: A\r\ntitle: T\r\n---\r\n\r\n# Body\r\n';
+    expect(renameFrontmatterKeys(source, { author: 'by' })).toBe(
+      '---\r\nby: A\r\ntitle: T\r\n---\r\n\r\n# Body\r\n',
+    );
+  });
+
+  it('skips a rename whose key is missing or whose target is taken', () => {
+    const source = '---\na: 1\nb: 2\n---\n';
+    expect(renameFrontmatterKeys(source, { missing: 'x' })).toBe(source);
+    expect(renameFrontmatterKeys(source, { a: 'b' })).toBe(source);
+    expect(renameFrontmatterKeys(source, { a: 'c', b: 'c' })).toBe(source);
+    expect(renameFrontmatterKeys('# No frontmatter\n', { a: 'b' })).toBe('# No frontmatter\n');
+  });
+
+  it('lets two keys trade names in one call', () => {
+    const source = '---\na: 1\nb: 2\n---\n';
+    expect(renameFrontmatterKeys(source, { a: 'b', b: 'a' })).toBe('---\nb: 1\na: 2\n---\n');
+  });
+
+  it('drops a rename whose target a rejected rename keeps occupied', () => {
+    // b → c is rejected (c stays), so b stays too and a → b must not land.
+    const source = '---\na: 1\nb: 2\nc: 3\n---\n';
+    expect(renameFrontmatterKeys(source, { a: 'b', b: 'c' })).toBe(source);
+  });
+
+  it('never renames an indented line inside another key’s body', () => {
+    const source = '---\ndata: |-\n  name: inner\nname: outer\n---\n';
+    expect(renameFrontmatterKeys(source, { name: 'label' })).toBe(
+      '---\ndata: |-\n  name: inner\nlabel: outer\n---\n',
+    );
+  });
+});
+
+describe('readFrontmatterScalar', () => {
+  it('types plain text the way the parser types a value', () => {
+    expect(readFrontmatterScalar('true')).toBe(true);
+    expect(readFrontmatterScalar(' False ')).toBe(false);
+    expect(readFrontmatterScalar('42')).toBe(42);
+    expect(readFrontmatterScalar('-3.5')).toBe(-3.5);
+    expect(readFrontmatterScalar('1.10')).toBe('1.10');
+    expect(readFrontmatterScalar('007')).toBe('007');
+    expect(readFrontmatterScalar('~')).toBeNull();
+    expect(readFrontmatterScalar('')).toBeNull();
+    expect(readFrontmatterScalar('Ines Duarte')).toBe('Ines Duarte');
   });
 });
 

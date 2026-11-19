@@ -327,3 +327,148 @@ describe('DocumentSettingsDialog page template', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('offline');
   });
 });
+
+describe('DocumentSettingsDialog properties', () => {
+  const SOURCE = [
+    '---',
+    'author: Ines',
+    'squisq-theme: gezellig',
+    'tags:',
+    '  - harbor',
+    '  - silt',
+    'description: Notes',
+    '---',
+    '',
+    '# Survey',
+    '',
+  ].join('\n');
+
+  function propertiesGroup() {
+    return screen.getByRole('group', { name: 'Properties' });
+  }
+
+  it('lists only the document’s own keys', () => {
+    open(SOURCE, vi.fn());
+    const names = within(propertiesGroup())
+      .getAllByRole('textbox', { name: 'Property name' })
+      .map((input) => (input as HTMLInputElement).value);
+    expect(names).toEqual(['author', 'tags', 'description']);
+    expect(
+      (
+        within(propertiesGroup()).getByRole('textbox', {
+          name: 'Value of tags',
+        }) as HTMLInputElement
+      ).value,
+    ).toBe('harbor, silt');
+  });
+
+  it('shows only the Add button for a document without properties', () => {
+    open('# Doc\n', vi.fn());
+    expect(within(propertiesGroup()).queryAllByRole('textbox')).toEqual([]);
+    expect(within(propertiesGroup()).getByRole('button', { name: '+ Add property' })).toBeTruthy();
+  });
+
+  it('leaves untouched properties byte-identical', () => {
+    const onSave = vi.fn();
+    open(SOURCE, onSave);
+    clickSave();
+    expect(onSave.mock.calls[0][0]).toBe(SOURCE);
+  });
+
+  it('adds, renames in place, edits a list and deletes in one Save', () => {
+    const onSave = vi.fn();
+    open(SOURCE, onSave);
+    const group = propertiesGroup();
+    fireEvent.change(within(group).getByRole('textbox', { name: 'Value of tags' }), {
+      target: { value: 'harbor, silt, storms' },
+    });
+    const [author] = within(group).getAllByRole('textbox', { name: 'Property name' });
+    fireEvent.change(author, { target: { value: 'writer' } });
+    fireEvent.click(within(group).getByRole('button', { name: 'Delete property description' }));
+    fireEvent.click(within(group).getByRole('button', { name: '+ Add property' }));
+    const names = within(group).getAllByRole('textbox', { name: 'Property name' });
+    const added = names[names.length - 1];
+    expect(document.activeElement).toBe(added);
+    fireEvent.change(added, { target: { value: 'draft' } });
+    fireEvent.change(within(group).getByRole('textbox', { name: 'Value of draft' }), {
+      target: { value: 'true' },
+    });
+    clickSave();
+    expect(onSave.mock.calls[0][0]).toBe(
+      [
+        '---',
+        'writer: Ines',
+        'squisq-theme: gezellig',
+        'tags:',
+        '  - harbor',
+        '  - silt',
+        '  - storms',
+        'draft: true',
+        '---',
+        '',
+        '# Survey',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('writes settings and properties together', () => {
+    const onSave = vi.fn();
+    open('# Doc\n', onSave);
+    fireEvent.change(screen.getByLabelText('Captions'), { target: { value: 'social' } });
+    fireEvent.click(within(propertiesGroup()).getByRole('button', { name: '+ Add property' }));
+    fireEvent.change(within(propertiesGroup()).getByRole('textbox', { name: 'Property name' }), {
+      target: { value: 'author' },
+    });
+    fireEvent.change(within(propertiesGroup()).getByRole('textbox', { name: 'Value of author' }), {
+      target: { value: 'Ines' },
+    });
+    clickSave();
+    expect(onSave.mock.calls[0][0]).toBe(
+      '---\nsquisq-captions: social\nauthor: Ines\n---\n# Doc\n',
+    );
+  });
+
+  it('refuses to save a duplicate or managed name, and says why', () => {
+    const onSave = vi.fn();
+    open(SOURCE, onSave);
+    const group = propertiesGroup();
+    fireEvent.click(within(group).getByRole('button', { name: '+ Add property' }));
+    const names = within(group).getAllByRole('textbox', { name: 'Property name' });
+    fireEvent.change(names[names.length - 1], { target: { value: 'author' } });
+    expect(names[names.length - 1].getAttribute('aria-invalid')).toBe('true');
+    expect(group.textContent).toContain('already a property named “author”');
+    clickSave();
+    expect(onSave).not.toHaveBeenCalled();
+
+    fireEvent.change(names[names.length - 1], { target: { value: 'title' } });
+    expect(group.textContent).toContain('“title” is a document setting');
+    clickSave();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('asks for a name only once Save is tried', () => {
+    const onSave = vi.fn();
+    open('# Doc\n', onSave);
+    const group = propertiesGroup();
+    fireEvent.click(within(group).getByRole('button', { name: '+ Add property' }));
+    fireEvent.change(within(group).getByRole('textbox', { name: 'Value of new property' }), {
+      target: { value: 'orphan' },
+    });
+    expect(group.textContent).not.toContain('Give this property a name');
+    clickSave();
+    expect(onSave).not.toHaveBeenCalled();
+    expect(group.textContent).toContain('Give this property a name');
+    expect(document.activeElement).toBe(
+      within(group).getByRole('textbox', { name: 'Property name' }),
+    );
+  });
+
+  it('drops a row that was added but never filled in', () => {
+    const onSave = vi.fn();
+    open('# Doc\n', onSave);
+    fireEvent.click(within(propertiesGroup()).getByRole('button', { name: '+ Add property' }));
+    clickSave();
+    expect(onSave.mock.calls[0][0]).toBe('# Doc\n');
+  });
+});

@@ -15,6 +15,10 @@
  * When the user-entered title is empty or equal to the inferred title,
  * the `title:` key is removed from frontmatter — there's no point
  * storing a redundant value.
+ *
+ * Properties: the document's own frontmatter keys (`author`, `tags`,
+ * `description`, …) are edited as name/value rows beneath the settings and
+ * written in the same Save. Rows left untouched keep their exact text.
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -35,6 +39,15 @@ import {
   themeFrontmatterValue,
 } from './frontmatterSettings';
 import { useModalDialog } from './modal/useModalDialog';
+import { FrontmatterPropertiesGrid } from './FrontmatterPropertiesGrid';
+import {
+  applyPropertyEdits,
+  planPropertyEdits,
+  readCustomProperties,
+  rowsFromProperties,
+  validatePropertyRows,
+  type PropertyRow,
+} from './frontmatterProperties';
 import { PROOF_DIALECTS, PROOF_FRONTMATTER_KEYS } from '@bendyline/squisq/proof';
 import { useProofingState } from './proofing/ProofingContext';
 import { OUTSIDE_IN_OUTPUT_TEMPLATE_KEY } from '@bendyline/squisq-formats/outside-in-layout';
@@ -196,10 +209,30 @@ export function DocumentSettingsDialog({
     };
   }, [pageTemplates]);
 
+  const [propertyRows, setPropertyRows] = useState<PropertyRow[]>(() =>
+    rowsFromProperties(readCustomProperties(markdownSource)),
+  );
+  // Until Save is tried, only names actually typed are checked: a row just
+  // added shouldn't open with "Give this property a name".
+  const [propertiesSubmitted, setPropertiesSubmitted] = useState(false);
+  const propertyErrors = useMemo(() => validatePropertyRows(propertyRows), [propertyRows]);
+  const shownPropertyErrors = useMemo(
+    () =>
+      propertiesSubmitted
+        ? propertyErrors
+        : new Map(
+            [...propertyErrors].filter(([id]) =>
+              propertyRows.some((row) => row.id === id && row.key.trim() !== ''),
+            ),
+          ),
+    [propertiesSubmitted, propertyErrors, propertyRows],
+  );
+
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLFormElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const headingId = useId();
+  const propertiesHeadingId = useId();
   useModalDialog({ rootRef: overlayRef, dialogRef, initialFocusRef: titleRef, onClose });
 
   const handleBackdrop = useCallback(
@@ -221,6 +254,17 @@ export function DocumentSettingsDialog({
   const handleSave = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
+
+      const firstInvalid = propertyRows.find((row) => propertyErrors.has(row.id));
+      if (firstInvalid) {
+        setPropertiesSubmitted(true);
+        dialogRef.current
+          ?.querySelector<HTMLInputElement>(
+            `[data-row-id="${firstInvalid.id}"] .squisq-fm-props-name`,
+          )
+          ?.focus();
+        return;
+      }
 
       const trimmedTitle = title.trim();
       const titleMatchesInferred = !!inferredTitle && trimmedTitle === inferredTitle;
@@ -272,14 +316,22 @@ export function DocumentSettingsDialog({
           ? { [OUTSIDE_IN_OUTPUT_TEMPLATE_KEY]: pageTemplate || null }
           : {};
 
-      const nextSource = setFrontmatterValues(markdownSource, {
+      const withSettings = setFrontmatterValues(markdownSource, {
         ...updates,
         ...proofingUpdates,
         ...pageTemplateUpdates,
       });
+      // Settings and properties never share a key, so the property edits
+      // planned against the source still apply to the rewritten one.
+      const nextSource = applyPropertyEdits(
+        withSettings,
+        planPropertyEdits(readCustomProperties(markdownSource), propertyRows),
+      );
       onSave(nextSource);
     },
     [
+      propertyRows,
+      propertyErrors,
       title,
       subtitle,
       theme,
@@ -509,6 +561,23 @@ export function DocumentSettingsDialog({
               </div>
             </>
           )}
+
+          <div className="squisq-doc-settings-section">
+            <h3 id={propertiesHeadingId} className="squisq-doc-settings-section-title">
+              Properties
+            </h3>
+            <span className="squisq-doc-settings-hint">
+              Your own keys, such as author or tags. They stay in the document for other tools to
+              read.
+            </span>
+            <FrontmatterPropertiesGrid
+              rows={propertyRows}
+              onRowsChange={setPropertyRows}
+              errors={shownPropertyErrors}
+              idPrefix={`${propertiesHeadingId}-properties`}
+              ariaLabel="Properties"
+            />
+          </div>
         </div>
 
         <div className="squisq-doc-settings-footer">

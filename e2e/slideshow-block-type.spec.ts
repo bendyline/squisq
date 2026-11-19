@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { selectUseMode, switchView } from './view-tabs';
+import { chooseSummaryStyle, selectUseMode, switchView } from './view-tabs';
 
 /**
  * E2E tests for the Slideshow toolbar's block-type picker: changing the type
@@ -88,17 +88,15 @@ test.describe('Slideshow block-type picker', () => {
     await page.getByTestId('slide-next').click();
     await expect(blockType(page)).toBeEnabled();
 
-    await page
-      .locator('.squisq-preview-controls-inline')
-      .getByRole('combobox', { name: 'Summarize' })
-      .selectOption({ index: 1 });
+    await chooseSummaryStyle(page, 'Minimal');
+    await switchView(page, 'Play');
 
     // A new summary is a new deck, which opens on its cover again.
     await expect(counter(page)).toHaveText('Cover');
     await page.getByTestId('slide-next').click();
     await expect(counter(page)).toHaveText(/^1 \/ \d+$/);
     await expect(blockType(page)).toBeDisabled();
-    await expect(blockType(page)).toHaveAttribute('title', /Set Summarize to None/);
+    await expect(blockType(page)).toHaveAttribute('title', /choose None in Write › Summarize/);
   });
 
   test('is not offered outside Slideshow', async ({ page }) => {

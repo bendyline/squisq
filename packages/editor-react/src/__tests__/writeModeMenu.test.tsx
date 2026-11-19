@@ -53,7 +53,7 @@ describe('Write tab mode menu', () => {
       within(menu)
         .getAllByRole('menuitemradio')
         .map((item) => item.querySelector('.squisq-view-mode-menu-label')?.textContent),
-    ).toEqual(['Write', 'Blocks', 'Timeline']);
+    ).toEqual(['Write', 'Blocks', 'Timeline', 'Summarize']);
     expect(
       within(menu).getByRole('menuitemradio', { name: 'Write' }).getAttribute('aria-checked'),
     ).toBe('true');

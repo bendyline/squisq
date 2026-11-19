@@ -2,7 +2,7 @@ import type { Page } from '@playwright/test';
 
 export type ViewTab = 'Markdown' | 'Editor' | 'Play' | 'Preview';
 export type UseMode = 'Slideshow' | 'Video' | 'Page' | 'Document' | 'Narrate';
-export type WriteMode = 'Write' | 'Blocks' | 'Timeline';
+export type WriteMode = 'Write' | 'Blocks' | 'Timeline' | 'Summarize';
 
 const VIEW_TAB_IDS: Record<ViewTab, string> = {
   // Tests use the historical view-mode concepts while the visible product
@@ -43,4 +43,13 @@ export async function selectWriteMode(page: Page, mode: WriteMode): Promise<void
     .getByRole('menu', { name: 'Write mode', exact: true })
     .getByRole('menuitemradio', { name: mode, exact: true })
     .click();
+}
+
+/** Chooses how slides and video summarize the document, in Write › Summarize. */
+export async function chooseSummaryStyle(page: Page, style: string): Promise<void> {
+  await selectWriteMode(page, 'Summarize');
+  await page
+    .getByRole('region', { name: 'Summarize', exact: true })
+    .getByRole('radio', { name: style, exact: true })
+    .check();
 }

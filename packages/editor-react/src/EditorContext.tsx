@@ -201,10 +201,13 @@ export type EditorColorScheme = 'light' | 'dark';
  * historical behavior). `'block'` is the block-at-a-time view — one
  * heading-defined block on a card at a time, with Write scoped to just that
  * block. `'timeline'` is block mode plus a horizontal timeline track for
- * editing block durations and media slices. These are Write modes: Source
- * always shows and edits the whole file. See {@link useBlockNavigator}.
+ * editing block durations and media slices. `'summary'` replaces the editing
+ * surface with the Summarize view — how slides and video summarize the
+ * document — while the whole-document editor stays mounted behind it, as it
+ * does behind Use, so its changes stay undoable. These are Write modes:
+ * Source always shows and edits the whole file. See {@link useBlockNavigator}.
  */
-export type LayoutMode = 'document' | 'block' | 'timeline';
+export type LayoutMode = 'document' | 'block' | 'timeline' | 'summary';
 /**
  * How much of the active Squisq theme the WYSIWYG editing surface
  * mirrors. `'fonts'` is the historical default — body and heading
@@ -327,7 +330,8 @@ export interface EditorState {
   preserveSourceWrapping: boolean;
   /**
    * Write layout mode. `'document'` (default) edits the whole document;
-   * `'block'` activates the block-at-a-time card view. Initialized from the
+   * `'block'` activates the block-at-a-time card view; `'summary'` shows the
+   * Summarize view in place of the editor. Initialized from the
    * EditorShell `layoutMode` prop; the Write mode menu can toggle it at
    * runtime. Source ignores it — see {@link blockScoped}.
    */
@@ -1556,8 +1560,12 @@ export function EditorProvider({
     };
   }, [tiptapEditor, monacoEditor]);
 
+  // Summarize hides the Write editor, as Use does: it has no caret or
+  // selection to act on. Whole-document writes still reach it (see
+  // `applySourceEdits`), which is what makes them undoable there.
+  const writeEditorShown = activeView === 'wysiwyg' && layoutModeState !== 'summary';
   const getSelection = useCallback((): EditorSelectionInfo | null => {
-    if (activeView === 'wysiwyg' && tiptapEditor) {
+    if (writeEditorShown && tiptapEditor) {
       const { from, to, empty } = tiptapEditor.state.selection;
       return {
         view: 'wysiwyg',
@@ -1574,11 +1582,11 @@ export function EditorProvider({
       return { view: 'raw', text, empty: text.length === 0 };
     }
     return null;
-  }, [activeView, tiptapEditor, monacoEditor]);
+  }, [activeView, writeEditorShown, tiptapEditor, monacoEditor]);
 
   const replaceSelection = useCallback(
     (markdown: string): boolean => {
-      if (activeView === 'wysiwyg' && tiptapEditor) {
+      if (writeEditorShown && tiptapEditor) {
         const html = markdownToTiptap(markdown);
         // A selection is replaced as an edit to its text, so a one-paragraph
         // rewrite stays inside its paragraph. At an empty caret, insertContent
@@ -1602,7 +1610,7 @@ export function EditorProvider({
       }
       return false;
     },
-    [activeView, tiptapEditor, monacoEditor],
+    [activeView, writeEditorShown, tiptapEditor, monacoEditor],
   );
 
   const getBlockAtCursor = useCallback((): BlockSlice | null => {
@@ -1618,7 +1626,7 @@ export function EditorProvider({
 
   const insertAtCursor = useCallback(
     (text: string) => {
-      if (activeView === 'wysiwyg' && tiptapEditor) {
+      if (writeEditorShown && tiptapEditor) {
         // Insert as HTML so formatting is preserved
         const html = markdownToTiptap(text);
         tiptapEditor.chain().focus().insertContent(html).run();
@@ -1640,11 +1648,11 @@ export function EditorProvider({
           setMarkdownSourceRaw((prev) => prev + '\n\n' + text);
         }
       } else {
-        // Preview or no editor — append to end
+        // Preview, Summarize, or no editor — append to end
         setMarkdownSourceRaw((prev) => prev + '\n\n' + text);
       }
     },
-    [activeView, tiptapEditor, monacoEditor],
+    [activeView, writeEditorShown, tiptapEditor, monacoEditor],
   );
 
   const applySourceEdits = useCallback(
@@ -1733,7 +1741,7 @@ export function EditorProvider({
         const markdown = typeof block === 'function' ? block(context) : block;
         return markdown && markdown.trim() ? markdown : null;
       };
-      if (activeView === 'wysiwyg' && tiptapEditor) {
+      if (writeEditorShown && tiptapEditor) {
         const { pos, ...context } = tiptapBlockInsertion(tiptapEditor.state, placement);
         const markdown = build(context);
         if (markdown === null) return false;
@@ -1796,7 +1804,7 @@ export function EditorProvider({
       }
       return false;
     },
-    [activeView, editorMode, monacoEditor, tiptapEditor],
+    [activeView, writeEditorShown, editorMode, monacoEditor, tiptapEditor],
   );
 
   // ── Versioning ─────────────────────────────────────────

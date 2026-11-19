@@ -30,6 +30,18 @@ export const FRONTMATTER_SETTING_KEYS = {
   proofDialect: PROOF_FRONTMATTER_KEYS.dialect,
 } as const;
 
+/**
+ * Settings the editor reads from frontmatter but never writes: choosing a
+ * display mode or stage shape in the Use view lasts for the session only.
+ * They have no `squisq-` spelling.
+ */
+export const FRONTMATTER_EDITOR_KEYS = {
+  /** Which display mode the Use view opens in. */
+  displayMode: 'display-mode',
+  /** The stage shape for slides, video and dashboards. */
+  renderAs: 'document-render-as',
+} as const;
+
 /** Runtime defaults whose equivalent frontmatter entries can be omitted. */
 export const FRONTMATTER_SETTING_DEFAULTS = {
   theme: 'standard',
