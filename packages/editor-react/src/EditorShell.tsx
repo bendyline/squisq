@@ -35,13 +35,8 @@ import { NavigationSheet } from './NavigationSheet';
 import type { NavigationSheetPanel } from './useNavigationSheetSwipe';
 import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
 import { ProofingRoot } from './proofing/ProofingContext';
-import { proofingTapTarget } from './proofing/proofingTap';
 import { useLinkSafety, type LinkDelegate, type LinkSafety } from './linkSafety/useLinkSafety';
-import {
-  clearLinkHoverTitle,
-  clearStaleLinkHoverTitle,
-  showLinkHoverTitle,
-} from './linkHoverTitle';
+import { useShellLinkDelegation } from './useShellLinkDelegation';
 import { ReviewRoot } from './review/ReviewContext';
 import { ReviewPanel } from './review/ReviewPanel';
 import type { ReviewCapability } from './review/types';
@@ -120,7 +115,6 @@ import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions'
 import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
-  MouseEvent as ReactMouseEvent,
   ReactNode,
   RefObject,
 } from 'react';
@@ -1602,43 +1596,7 @@ function EditorShellInner({
     [showPlayTab],
   );
 
-  const handleShellLinkClick = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!onLinkClick || event.button !== 0) return;
-      const anchor = (event.target as HTMLElement).closest?.('a[href]');
-      if (!anchor || !event.currentTarget.contains(anchor)) return;
-      // A finger on a squiggled link is asking about the squiggle first. The
-      // proofing card it raises carries "Open link"; following the link here
-      // would take the reader away before the card could be seen.
-      if (proofingTapTarget(event.nativeEvent)) return;
-      const href = anchor.getAttribute('href');
-      if (!href || onLinkClick(href, anchor.textContent ?? undefined) === false) return;
-      event.preventDefault();
-      event.stopPropagation();
-    },
-    [onLinkClick],
-  );
-
-  const handleShellLinkMouseOver = useCallback(
-    (event: ReactMouseEvent<HTMLDivElement>) => {
-      if (!onLinkClick) return;
-      const target = event.target as HTMLElement;
-      const anchor = target.closest?.('a[href]');
-      if (!anchor || !event.currentTarget.contains(anchor)) {
-        clearStaleLinkHoverTitle(target);
-        return;
-      }
-      showLinkHoverTitle(anchor);
-    },
-    [onLinkClick],
-  );
-
-  const handleShellLinkMouseOut = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
-    const anchor = (event.target as HTMLElement).closest?.('a[href]');
-    if (!anchor || !event.currentTarget.contains(anchor)) return;
-    if (event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget)) return;
-    clearLinkHoverTitle(anchor);
-  }, []);
+  const shellLinkHandlers = useShellLinkDelegation(onLinkClick);
 
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;
 
@@ -1699,9 +1657,7 @@ function EditorShellInner({
       ref={shellRef}
       onKeyDownCapture={handleShellViewKeyDown}
       onKeyDown={handleShellKeyDown}
-      onClickCapture={handleShellLinkClick}
-      onMouseOverCapture={handleShellLinkMouseOver}
-      onMouseOutCapture={handleShellLinkMouseOut}
+      {...shellLinkHandlers}
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={colorScheme}
       data-host-mode={hostMode}
