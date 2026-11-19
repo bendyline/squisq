@@ -67,6 +67,7 @@ import {
   buildFilename,
   dualFilenameSeeds,
   recordingFilenameSeed,
+  supportsScreenCapture,
   supportsSystemAudioCapture,
 } from './formats.js';
 import { recordedMediaKind, type RecordedMediaKind } from './recordedMediaKind.js';
@@ -88,7 +89,7 @@ import {
 import { buildRecorderSlideDeck } from './slides/slideDeck.js';
 import { RecorderSlidesPanel } from './slides/RecorderSlidesPanel.js';
 import { useModalDialog } from '../modal/useModalDialog.js';
-import { safeAreaPadding } from '../dialogLayout.js';
+import { safeAreaPadding, useDialogFillsWindow } from '../dialogLayout.js';
 import {
   useNarrationStage,
   type TeleprompterRecordingDeps,
@@ -551,6 +552,47 @@ const rightColStyle: CSSProperties = {
   border: '1px solid var(--squisq-recorder-border)',
 };
 
+/**
+ * The expanded dialog on a phone-sized window: the side-by-side columns cannot
+ * share 390 pixels, so they stack and the whole dialog scrolls. The reading
+ * pane (prompter or slides) comes first and the controls follow, with the
+ * action row pinned to the bottom so Record and Stop stay in reach.
+ */
+const modalStackedStyle: CSSProperties = {
+  ...modalStyle,
+  width: '100%',
+  height: '100%',
+  // No bottom padding: the pinned action row meets the dialog's bottom edge.
+  padding: '16px 16px 0',
+};
+
+const stackedBodyStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 16,
+};
+
+const stackedLeftColStyle: CSSProperties = { order: 1 };
+
+function stackedPaneStyle(both: boolean): CSSProperties {
+  return {
+    ...rightColStyle,
+    flex: 'none',
+    order: 0,
+    height: both ? 'max(220px, 34vh)' : 'max(280px, 50vh)',
+  };
+}
+
+const stickyButtonRowStyle: CSSProperties = {
+  position: 'sticky',
+  bottom: 0,
+  zIndex: 1,
+  margin: '8px -16px 0',
+  padding: '12px 16px',
+  background: 'var(--squisq-recorder-surface)',
+  borderTop: '1px solid var(--squisq-recorder-border)',
+};
+
 const checkboxRowStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -628,9 +670,21 @@ function toggleStateFromMode(mode: RecorderSource): CaptureToggles {
 }
 
 /**
+ * The starting toggles on a platform without screen capture: a screen mode
+ * keeps its microphone and camera, and falls back to the microphone when
+ * the screen was its only source.
+ */
+function withoutScreen(toggles: CaptureToggles): CaptureToggles {
+  if (!toggles.screenOn) return toggles;
+  const micOn = toggles.micOn || !toggles.cameraOn;
+  return { micOn, cameraOn: toggles.cameraOn, screenOn: false };
+}
+
+/**
  * Capture-source pills, grouped so the presenter inputs (mic + camera) read
- * as a pair distinct from the screen inputs (system audio + screen). System
- * audio is only offered when the platform can honor it.
+ * as a pair distinct from the screen inputs (system audio + screen). Screen
+ * and system audio are only offered when the platform can honor them, and a
+ * group with nothing to offer is left out.
  */
 const TOGGLE_GROUPS: Array<{ label: string; toggles: Array<{ key: ToggleKey; label: string }> }> = [
   {
@@ -700,7 +754,12 @@ export function RecorderModal({
   title = 'Record media',
   maxRecordingBytes,
 }: RecorderModalProps) {
-  const initialToggles = toggleStateFromMode(initialMode);
+  // Phones and tablets have no screen picker; desktop browsers do.
+  const canCaptureScreen = supportsScreenCapture();
+  const canIncludeSystemAudio = canCaptureScreen && supportsSystemAudioCapture();
+  const initialToggles = canCaptureScreen
+    ? toggleStateFromMode(initialMode)
+    : withoutScreen(toggleStateFromMode(initialMode));
   const [micOn, setMicOn] = useState(initialToggles.micOn);
   const [cameraOn, setCameraOn] = useState(initialToggles.cameraOn);
   const [screenOn, setScreenOn] = useState(initialToggles.screenOn);
@@ -717,6 +776,7 @@ export function RecorderModal({
   const slidesOn = panelMode === 'slides' || panelMode === 'both';
   const narrationRecording = narrationOn && Boolean(narration?.recording);
   const expanded = isExpandedPanel(panelMode);
+  const stacked = useDialogFillsWindow() && expanded;
   const [narrationRequesting, setNarrationRequesting] = useState(false);
   // Reading-aid takes wait for the prompter's countdown before capturing.
   const [countingIn, setCountingIn] = useState(false);
@@ -743,7 +803,6 @@ export function RecorderModal({
   const canCapture = derivedSource !== null;
   const source: RecorderSource = derivedSource ?? 'mic';
   const isDual = source === 'screen+camera';
-  const canIncludeSystemAudio = supportsSystemAudioCapture();
   const audioConstraints = useMemo(
     () => buildRecorderAudioConstraints(deviceSettings),
     [deviceSettings],
@@ -1661,13 +1720,28 @@ export function RecorderModal({
         };
     }
   };
+  // System audio has no meaning without a display capture, and no platform
+  // outside desktop Chromium offers it; phones and tablets have no screen
+  // picker at all, which empties the screen group.
+  const offeredToggleGroups = TOGGLE_GROUPS.map((group) => ({
+    ...group,
+    toggles: group.toggles.filter(
+      (t) =>
+        (t.key !== 'screen' || canCaptureScreen) &&
+        (t.key !== 'systemAudio' || canIncludeSystemAudio),
+    ),
+  })).filter((group) => group.toggles.length > 0);
 
   return (
     <div
       ref={overlayRef}
       className="squisq-editor-shell squisq-recorder-overlay"
       data-theme={colorScheme}
-      style={{ ...overlayStyle, ...recorderThemeStyle(colorScheme) }}
+      style={{
+        ...overlayStyle,
+        ...(stacked ? { padding: safeAreaPadding(0) } : {}),
+        ...recorderThemeStyle(colorScheme),
+      }}
     >
       <div
         ref={dialogRef}
@@ -1675,9 +1749,10 @@ export function RecorderModal({
         data-theme={colorScheme}
         data-narration={narrationOn ? 'true' : undefined}
         data-slides={slidesOn ? 'true' : undefined}
+        data-stacked={stacked ? 'true' : undefined}
         data-panel-mode={panelMode}
         style={{
-          ...(expanded ? modalExpandedStyle : modalStyle),
+          ...(stacked ? modalStackedStyle : expanded ? modalExpandedStyle : modalStyle),
           ...recorderThemeStyle(colorScheme),
         }}
         onClick={(e) => e.stopPropagation()}
@@ -1690,26 +1765,25 @@ export function RecorderModal({
           {title}
         </h2>
 
-        <div style={expanded ? bodyRowStyle : undefined}>
+        <div style={stacked ? stackedBodyStyle : expanded ? bodyRowStyle : undefined}>
           <div
             style={
-              expanded
-                ? {
-                    ...leftColStyle,
-                    ...(panelMode === 'both' ? { flex: '0 0 min(280px, 24vw)' } : {}),
-                  }
-                : undefined
+              stacked
+                ? stackedLeftColStyle
+                : expanded
+                  ? {
+                      ...leftColStyle,
+                      ...(panelMode === 'both' ? { flex: '0 0 min(280px, 24vw)' } : {}),
+                    }
+                  : undefined
             }
           >
             <div style={toggleRowStyle} role="group" aria-label="Capture sources">
-              {TOGGLE_GROUPS.map((group, groupIndex) => (
+              {offeredToggleGroups.map((group, groupIndex) => (
                 <Fragment key={group.label}>
                   {groupIndex > 0 && <div aria-hidden="true" style={groupDividerStyle} />}
                   <div style={toggleGroupStyle}>
                     {group.toggles.map((t) => {
-                      // System audio has no meaning without a display capture,
-                      // and no platform outside desktop Chromium offers it.
-                      if (t.key === 'systemAudio' && !canIncludeSystemAudio) return null;
                       const props = narrationRecording
                         ? narrationToggleFor(t.key)
                         : simpleToggleProps(t.key);
@@ -2140,7 +2214,7 @@ export function RecorderModal({
             the classic Start preview → Record flow here as the source of
             truth (recording start = prompter start); review save/retake/
             discard live in the stage's review bar on the right. */}
-            <div style={buttonRowStyle}>
+            <div style={stacked ? { ...buttonRowStyle, ...stickyButtonRowStyle } : buttonRowStyle}>
               <button
                 type="button"
                 style={btnSecondary}
@@ -2278,7 +2352,13 @@ export function RecorderModal({
           </div>
 
           {narrationOn && narration && (
-            <div style={{ ...rightColStyle, flex: '1 1 0' }}>
+            <div
+              style={
+                stacked
+                  ? stackedPaneStyle(panelMode === 'both')
+                  : { ...rightColStyle, flex: '1 1 0' }
+              }
+            >
               <NarrationStage
                 stage={stage}
                 theme={narration.theme}
@@ -2292,7 +2372,13 @@ export function RecorderModal({
           )}
 
           {slidesOn && (
-            <div style={{ ...rightColStyle, flex: '1 1 0' }}>
+            <div
+              style={
+                stacked
+                  ? stackedPaneStyle(panelMode === 'both')
+                  : { ...rightColStyle, flex: '1 1 0' }
+              }
+            >
               <RecorderSlidesPanel
                 slides={slideDeck}
                 index={slideIndex}

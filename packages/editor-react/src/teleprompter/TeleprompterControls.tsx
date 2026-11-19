@@ -19,9 +19,11 @@
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { Icon } from '../Icon';
+import { useEditorContextOptional } from '../EditorContext';
 import type { TeleprompterController } from './useTeleprompter';
 import type { FloatingWindowHandle } from './useFloatingWindow';
 import { TELEPROMPTER_PREF_LIMITS, type FloatTier } from './types';
+import { offersDeviceChoice, recorderDeviceOptions } from '../recorder/mediaDeviceList';
 
 const TIER_LABELS: Record<FloatTier, string> = {
   'document-pip': 'Floating window (always on top)',
@@ -72,10 +74,25 @@ export function TeleprompterControls({
   const voiceLive = prefs.voiceTracking && mic.status === 'live';
   const [activeSection, setActiveSection] = useState<SettingsSection>('pacing');
   const [chosenTier, setChosenTier] = useState<FloatTier | null>(null);
-  const floatTier =
-    chosenTier && float.supportedTiers.includes(chosenTier) ? chosenTier : float.supportedTiers[0];
+  // Outside an EditorProvider (the exported control used on its own) Pop out
+  // stays available; a host that turned it off offers no tiers at all.
+  const allowPopOut = useEditorContextOptional()?.allowNarratePopOut ?? true;
+  const popOutTiers = allowPopOut ? float.supportedTiers : [];
+  const floatTier = chosenTier && popOutTiers.includes(chosenTier) ? chosenTier : popOutTiers[0];
 
   const playLabel = rolling ? 'Pause' : transport === 'paused' ? 'Resume' : 'Start';
+  // Real microphones only (not Chromium's "default" and "communications"
+  // aliases). A lone microphone gets no picker: there is nothing to choose.
+  const micOptions = recorderDeviceOptions(
+    mic.devices,
+    'audioinput',
+    'Microphone',
+    prefs.micDeviceId ?? '',
+  );
+  const showMicPicker = offersDeviceChoice(
+    micOptions.map((option) => option.deviceId),
+    prefs.micDeviceId,
+  );
 
   const toggleVoicePace = () => {
     const next = !prefs.voiceTracking;
@@ -142,7 +159,7 @@ export function TeleprompterControls({
 
         {recordSlot}
 
-        {float.supportedTiers.length > 0 ? (
+        {float.isOpen || popOutTiers.length > 0 ? (
           <div className="squisq-teleprompter-float">
             {float.isOpen ? (
               <button type="button" className="squisq-teleprompter-tool" onClick={float.close}>
@@ -162,7 +179,7 @@ export function TeleprompterControls({
                   <Icon icon="picture-in-picture" />
                   <span className="squisq-teleprompter-tool-label">Pop out</span>
                 </button>
-                {float.supportedTiers.length > 1 ? (
+                {popOutTiers.length > 1 ? (
                   <span className="squisq-teleprompter-split-menu">
                     <Icon icon="fa-solid fa-chevron-down" />
                     <select
@@ -171,7 +188,7 @@ export function TeleprompterControls({
                       value={floatTier}
                       onChange={(e) => setChosenTier(e.target.value as FloatTier)}
                     >
-                      {float.supportedTiers.map((tier) => (
+                      {popOutTiers.map((tier) => (
                         <option key={tier} value={tier}>
                           {TIER_LABELS[tier]}
                         </option>
@@ -264,23 +281,29 @@ export function TeleprompterControls({
             {SECTIONS[1].title}
           </div>
           <div className="squisq-teleprompter-row">
-            <select
-              className="squisq-teleprompter-mic-select"
-              aria-label="Microphone input"
-              value={prefs.micDeviceId ?? ''}
-              disabled={mic.sourceManaged}
-              title={mic.sourceManaged ? 'Microphone selected in recording settings' : undefined}
-              onChange={(e) => setPrefs({ micDeviceId: e.target.value || null })}
-            >
-              <option value="">Default mic</option>
-              {mic.devices.map((device) => (
-                <option key={device.deviceId} value={device.deviceId}>
-                  {device.label || `Mic ${device.deviceId.slice(0, 6)}`}
-                </option>
-              ))}
-            </select>
+            {showMicPicker ? (
+              <select
+                className="squisq-teleprompter-mic-select"
+                aria-label="Microphone input"
+                value={prefs.micDeviceId ?? ''}
+                disabled={mic.sourceManaged}
+                title={mic.sourceManaged ? 'Microphone selected in recording settings' : undefined}
+                onChange={(e) => setPrefs({ micDeviceId: e.target.value || null })}
+              >
+                <option value="">Default mic</option>
+                {micOptions.map((option) => (
+                  <option key={option.deviceId} value={option.deviceId}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="squisq-teleprompter-row-label" aria-hidden="true">
+                Level
+              </span>
+            )}
             <span
-              className={`squisq-teleprompter-meter${controller.voiceActive ? ' squisq-teleprompter-meter--voice' : ''}`}
+              className={`squisq-teleprompter-meter${showMicPicker ? '' : ' squisq-teleprompter-meter--wide'}${controller.voiceActive ? ' squisq-teleprompter-meter--voice' : ''}`}
               role="meter"
               aria-label="Mic level"
               aria-valuemin={0}

@@ -5,21 +5,35 @@
  * button that didn't fit went into the menu. Insert is the last button in
  * the row, so it was always the FIRST thing to disappear, followed by the
  * lists and headings, while Superscript, Subscript, Inline code and the
- * host's document chrome (Custom layouts, Document settings, Files) all
- * stayed put. That is backwards for most writers: Insert is the only way to
- * reach tables, images and links, and it has no keyboard shortcut.
+ * host's document chrome all stayed put. That is backwards for most writers:
+ * Insert is the only way to reach tables, images and links, and it has no
+ * keyboard shortcut.
  *
  * Items now collapse by priority instead, in TOOLBAR_COLLAPSE_ORDER, while
  * the visible ones keep their usual left-to-right order — which now opens
  * with Insert, ahead of Bold and Italic.
+ *
+ * The document actions (Document settings, Custom layouts, Version history
+ * and the host's own — AI, read aloud, export…) take part as ONE item. They
+ * do not move into ···: the whole group folds in place into a single
+ * "Document actions" menu trigger (toolbar/DocumentActions.tsx), so folding
+ * it hands back its width less the trigger's.
  */
+
+/** The toolbar item id of the document-actions group, which folds in place. */
+export const DOCUMENT_ACTIONS_ITEM = 'documentActions';
 
 /**
  * Collapse order, first to go → last to go. Ids are toolbar BUTTONS ids, the
- * synthetic `insert` dropdown, the document-chrome ids below, and
- * `contextual:<data-contextual>` for the template / transition / table / list
- * groups (which only ever borrow whatever width is left over, as before).
- * An id missing from this list collapses before every listed one.
+ * synthetic `insert` dropdown, the Attachments toggle (`files`), the
+ * document-actions group, and `contextual:<data-contextual>` for the
+ * template / transition / table / list groups (which only ever borrow
+ * whatever width is left over, as before). An id missing from this list
+ * collapses before every listed one.
+ *
+ * The document actions fold after the rarely used formatting but before the
+ * headings, lists, Bold and Italic: on a phone, one menu for settings, AI,
+ * read aloud and export buys back room for the everyday formatting.
  */
 export const TOOLBAR_COLLAPSE_ORDER: readonly string[] = [
   'contextual:table',
@@ -28,16 +42,15 @@ export const TOOLBAR_COLLAPSE_ORDER: readonly string[] = [
   'contextual:list',
   'subscript',
   'superscript',
-  'layouts',
   'h6',
   'h5',
   'h4',
   'code',
   'hr',
-  'docSettings',
   'files',
   'strikethrough',
   'quote',
+  DOCUMENT_ACTIONS_ITEM,
   'h3',
   'ol',
   'h2',
@@ -83,6 +96,13 @@ export interface CollapseLayout {
   readonly rowGap: number;
   readonly triggerWidth: number;
   /**
+   * The width a chrome item keeps once collapsed, for chrome that folds in
+   * place into a menu trigger of its own (the document-actions group) rather
+   * than moving into ···. `undefined` — the default — for chrome that moves
+   * into ···, which keeps no width and needs the ··· trigger.
+   */
+  readonly foldedWidthOf?: (id: string) => number | undefined;
+  /**
    * Width the lane, the collapsible chrome and the ··· trigger share: the
    * lane's own width plus whatever the displayed chrome and trigger occupy.
    * Collapsing a chrome button hands its width to the lane, so this total
@@ -105,9 +125,16 @@ export function requiredRowWidth(layout: CollapseLayout, collapsed: ReadonlySet<
   }
   width += Math.max(0, shownGroups - 1) * layout.laneGap;
   for (const id of layout.chrome) {
-    if (!collapsed.has(id)) width += layout.widthOf(id) + layout.rowGap;
+    if (!collapsed.has(id)) {
+      width += layout.widthOf(id) + layout.rowGap;
+      continue;
+    }
+    const folded = layout.foldedWidthOf?.(id);
+    if (folded !== undefined) width += folded + layout.rowGap;
   }
-  if (collapsed.size > 0) width += layout.triggerWidth + layout.rowGap;
+  if ([...collapsed].some((id) => layout.foldedWidthOf?.(id) === undefined)) {
+    width += layout.triggerWidth + layout.rowGap;
+  }
   return width;
 }
 

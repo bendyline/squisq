@@ -6,6 +6,7 @@ import {
   resolveFormat,
   supportsDisplayMedia,
   supportsMediaRecorder,
+  supportsScreenCapture,
   supportsSystemAudioCapture,
   supportsUserMedia,
 } from '../recorder/formats.js';
@@ -133,6 +134,74 @@ describe('supportsSystemAudioCapture', () => {
       configurable: true,
     });
     expect(supportsSystemAudioCapture()).toBe(false);
+  });
+});
+
+describe('supportsScreenCapture', () => {
+  function installNavigator(
+    userAgent: string,
+    extra: { userAgentData?: unknown; maxTouchPoints?: number; getDisplayMedia?: boolean } = {},
+  ) {
+    const { getDisplayMedia = true, ...rest } = extra;
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        mediaDevices: getDisplayMedia ? { getDisplayMedia: vi.fn() } : {},
+        userAgent,
+        ...rest,
+      },
+      configurable: true,
+    });
+  }
+
+  it('offers the screen on desktop browsers that implement getDisplayMedia', () => {
+    for (const userAgent of [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.6 Safari/605.1.15',
+    ]) {
+      installNavigator(userAgent, { maxTouchPoints: 0 });
+      expect(supportsScreenCapture()).toBe(true);
+    }
+  });
+
+  it('requires getDisplayMedia', () => {
+    installNavigator('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/138.0.0.0', {
+      getDisplayMedia: false,
+    });
+    expect(supportsScreenCapture()).toBe(false);
+  });
+
+  it('hides the screen on phone and tablet WebViews even when the method exists', () => {
+    for (const userAgent of [
+      // iOS WKWebView (native apps) and iPhone Safari.
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+      // Android System WebView on a phone, and Chrome on an Android tablet.
+      'Mozilla/5.0 (Linux; Android 13; SM-G781U; wv) AppleWebKit/537.36 Version/4.0 Chrome/155.0.0.0 Mobile Safari/537.36',
+      'Mozilla/5.0 (Linux; Android 15; SM-X710) AppleWebKit/537.36 Chrome/138.0.0.0 Safari/537.36',
+    ]) {
+      installNavigator(userAgent);
+      expect(supportsScreenCapture()).toBe(false);
+    }
+  });
+
+  it('treats a multi-touch "Macintosh" as an iPad', () => {
+    installNavigator(
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko)',
+      { maxTouchPoints: 5 },
+    );
+    expect(supportsScreenCapture()).toBe(false);
+  });
+
+  it('reads UA Client Hints for the platform', () => {
+    installNavigator('reduced-user-agent', {
+      userAgentData: { brands: [{ brand: 'Chromium' }], mobile: false, platform: 'Android' },
+    });
+    expect(supportsScreenCapture()).toBe(false);
+
+    installNavigator('reduced-user-agent', {
+      userAgentData: { brands: [{ brand: 'Chromium' }], mobile: false, platform: 'Windows' },
+    });
+    expect(supportsScreenCapture()).toBe(true);
   });
 });
 

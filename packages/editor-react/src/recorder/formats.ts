@@ -137,6 +137,32 @@ export function supportsDisplayMedia(): boolean {
 interface UserAgentDataLike {
   brands?: readonly { brand: string }[];
   mobile?: boolean;
+  platform?: string;
+}
+
+/**
+ * Whether this is a phone or tablet: UA Client Hints when available, then the
+ * UA string. iPadOS browsers and WebViews present a Mac user agent by default,
+ * so a "Macintosh" with a multi-touch screen counts as a tablet.
+ */
+function isMobilePlatform(): boolean {
+  const nav = navigator as Navigator & { userAgentData?: UserAgentDataLike };
+  const uaData = nav.userAgentData;
+  if (uaData?.mobile === true) return true;
+  if (uaData?.platform && /^(?:Android|iOS)$/i.test(uaData.platform)) return true;
+  const userAgent = nav.userAgent ?? '';
+  if (/Android|Mobile|iPhone|iPad|iPod/i.test(userAgent)) return true;
+  return /Macintosh/.test(userAgent) && (nav.maxTouchPoints ?? 0) > 1;
+}
+
+/**
+ * Whether the recorder should offer screen capture. Screen sharing is a
+ * desktop capability: phone and tablet browsers, and the Android and iOS
+ * WebViews that native apps embed, offer no screen picker, so mobile platforms
+ * are excluded even where `getDisplayMedia` is defined.
+ */
+export function supportsScreenCapture(): boolean {
+  return supportsDisplayMedia() && !isMobilePlatform();
 }
 
 /**

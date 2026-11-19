@@ -15,6 +15,7 @@ export { RecorderDeviceQuickPicks } from '../recorder/RecorderDeviceQuickPicks.j
 export type { RecorderDeviceQuickPicksProps } from '../recorder/RecorderDeviceQuickPicks.js';
 export {
   hasRecorderDeviceChoice,
+  offersDeviceChoice,
   recorderDeviceGroups,
   recorderDeviceOptions,
 } from '../recorder/mediaDeviceList.js';
@@ -61,6 +62,7 @@ export {
   supportsMediaRecorder,
   supportsUserMedia,
   supportsDisplayMedia,
+  supportsScreenCapture,
   buildFilename,
 } from '../recorder/formats.js';
 export type { CaptureKind, ResolvedFormat } from '../recorder/formats.js';

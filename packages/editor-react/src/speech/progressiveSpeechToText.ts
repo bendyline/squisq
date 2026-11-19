@@ -28,7 +28,14 @@ export interface ProgressiveSpeechToTextOptions {
   speechPauseMs?: number;
   /** Minimum phrase length before a micropause may flush it. */
   minSegmentMs?: number;
-  /** Confirmed silence (takes that transcribed to nothing) that ends the session. */
+  /**
+   * Silence that ends the session. Once the activity gate has heard speech,
+   * this is wall-clock time since the gate last heard speech or since the end
+   * of the last take that transcribed to words. A recognizer running behind
+   * real time, like Whisper on a phone's CPU, therefore cannot hold the
+   * microphone open. Before the gate opens, or with no gate at all, it is
+   * confirmed silence: takes that transcribed to nothing.
+   */
   longPauseMs?: number;
   /** `undefined` builds the Web Audio gate; `null` disables it (fixed-length takes). */
   activityMonitor?: SpeechActivityMonitor | null;
@@ -40,6 +47,10 @@ export interface ProgressiveSpeechToTextOptions {
   ) => Promise<string>;
   onTranscript: (text: string) => void;
   onError: (error: Error) => void;
+  /**
+   * The long pause elapsed. `hadTranscript` reports whether any take has
+   * transcribed to words so far; takes still queued may add more.
+   */
   onLongPause?: (hadTranscript: boolean) => void;
   onAudioLevel?: (level: number) => void;
   /** Number of captured takes awaiting transcription changed. */
@@ -82,6 +93,8 @@ export class ProgressiveSpeechToText {
   private segmentHasSpeech = false;
   private currentlySpeaking = false;
   private lastSpeechAt: number | null = null;
+  /** Capture end of the latest take that transcribed to words. */
+  private lastWordsAt = 0;
   private confirmedSilenceMs = 0;
   private recognitionPrompt = '';
   private hasTranscript = false;
@@ -181,7 +194,8 @@ export class ProgressiveSpeechToText {
       this.recorder = null;
       const type = recorder.mimeType || this.mimeType || 'audio/webm';
       const blob = new Blob(this.chunks, { type });
-      const capturedMs = Math.max(0, Date.now() - this.segmentStartedAt);
+      const endedAt = Date.now();
+      const capturedMs = Math.max(0, endedAt - this.segmentStartedAt);
       const heardSpeech = this.segmentHasSpeech;
       this.chunks = [];
 
@@ -191,7 +205,7 @@ export class ProgressiveSpeechToText {
       // The energy meter suggests clean phrase boundaries; it never decides
       // that audio is disposable. Quiet speech can fall below a local RMS
       // threshold while Whisper still understands it perfectly.
-      if (blob.size > 0) this.enqueueTranscription(blob, type, capturedMs, heardSpeech);
+      if (blob.size > 0) this.enqueueTranscription(blob, type, capturedMs, endedAt, heardSpeech);
       if (this.finalSegmentRequested) void this.finish();
     };
     recorder.start();
@@ -243,6 +257,21 @@ export class ProgressiveSpeechToText {
     ) {
       this.flushCurrentSegment();
     }
+    // The gate has heard this microphone carry speech, so its silence is
+    // trusted on the wall clock. Waiting for the recognizer to confirm each
+    // silent take instead would hold the microphone open for as long as
+    // transcription runs behind. Words from quiet speech the gate missed
+    // still count once they arrive, and stopping discards nothing: every
+    // captured take is still transcribed.
+    if (now - Math.max(this.lastSpeechAt, this.lastWordsAt) >= this.longPauseMs) {
+      this.notifyLongPause();
+    }
+  }
+
+  private notifyLongPause(): void {
+    if (this.longPauseNotified || !this.onLongPause) return;
+    this.longPauseNotified = true;
+    this.onLongPause(this.hasTranscript);
   }
 
   private flushCurrentSegment(): void {
@@ -261,6 +290,7 @@ export class ProgressiveSpeechToText {
     blob: Blob,
     mimeType: string,
     capturedMs: number,
+    endedAt: number,
     heardSpeech: boolean,
   ): void {
     this.setPending(this.pending + 1);
@@ -278,6 +308,7 @@ export class ProgressiveSpeechToText {
         if (this.disposed) return;
         if (text) {
           this.confirmedSilenceMs = 0;
+          this.lastWordsAt = Math.max(this.lastWordsAt, endedAt);
           this.hasTranscript = true;
           this.longPauseNotified = false;
           this.recognitionPrompt = extendRecognitionPrompt(this.recognitionPrompt, text);
@@ -285,14 +316,7 @@ export class ProgressiveSpeechToText {
           return;
         }
         this.confirmedSilenceMs += capturedMs;
-        if (
-          !this.longPauseNotified &&
-          this.onLongPause &&
-          this.confirmedSilenceMs >= this.longPauseMs
-        ) {
-          this.longPauseNotified = true;
-          this.onLongPause(this.hasTranscript);
-        }
+        if (this.confirmedSilenceMs >= this.longPauseMs) this.notifyLongPause();
       } catch (caught) {
         if (this.disposed || this.abortController.signal.aborted) return;
         this.onError(caught instanceof Error ? caught : new Error(String(caught)));

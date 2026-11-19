@@ -189,6 +189,31 @@ describe('useMediaRecorder lifecycle', () => {
     expect(result.current.blob).toBeInstanceOf(Blob);
   });
 
+  it('keeps the screen awake from the preview until the take stops', async () => {
+    const release = vi.fn(async () => undefined);
+    const request = vi.fn(async () => ({ release, addEventListener: vi.fn() }));
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { ...globalThis.navigator, wakeLock: { request } },
+      configurable: true,
+    });
+    const { result } = renderHook(() => useMediaRecorder({ source: 'camera' }));
+    expect(request).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await result.current.request();
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith('screen');
+
+    act(() => result.current.start());
+    await act(async () => {
+      await result.current.stop();
+    });
+    expect(result.current.state).toBe('stopped');
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
   it('stop() releases capture tracks and reset() requires a fresh preview request', async () => {
     const { result } = renderHook(() => useMediaRecorder({ source: 'mic' }));
 

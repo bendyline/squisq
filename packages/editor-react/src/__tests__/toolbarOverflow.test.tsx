@@ -173,28 +173,33 @@ describe('<Toolbar> overflow', () => {
     );
   });
 
-  it('collapses document chrome on the same row before lists and headings', () => {
-    // The two chrome buttons hand their 60px to the lane when they collapse.
-    layOut(DEFAULT_LANE_WIDTH, ['layouts', 'docSettings']);
-    renderToolbar();
+  it('moves the Attachments toggle on the same row into the menu before lists and headings', () => {
+    // The toggle hands its 30px to the lane when it collapses: a sixth
+    // button, Heading 2, fits beside the usual five.
+    layOut(DEFAULT_LANE_WIDTH, ['files']);
+    render(
+      <EditorProvider initialMarkdown="Intro" initialView="raw" allowRecording={false}>
+        <Toolbar onToggleFiles={() => {}} />
+      </EditorProvider>,
+    );
 
-    expect(overflowed('Custom layouts')).toBe(true);
-    expect(overflowed('Document settings')).toBe(true);
-    expect(overflowed('Numbered list')).toBe(false);
+    expect(overflowed('Attachments')).toBe(true);
     expect(overflowed('Heading 2')).toBe(false);
     expect(overflowed('Insert')).toBe(false);
-
     const menu = openOverflowMenu();
-    fireEvent.click(within(menu).getByText('Document settings'));
-    expect(screen.getByRole('dialog', { name: /document settings/i })).toBeTruthy();
+    expect(within(menu).getByText('Show attachments')).toBeTruthy();
   });
 
   it('leaves chrome that sits on another row alone', () => {
-    // No chrome on the lane's row: collapsing it would not widen the lane.
+    // No chrome on the lane's row: collapsing or folding it would not widen
+    // the lane.
     renderToolbar();
 
     expect(overflowed('Custom layouts')).toBe(false);
     expect(overflowed('Document settings')).toBe(false);
+    expect(
+      screen.getByRole('group', { name: 'Document actions' }).getAttribute('data-toolbar-folded'),
+    ).toBe('false');
   });
 
   it('moves Insert into the menu only when nothing else is left to collapse', () => {

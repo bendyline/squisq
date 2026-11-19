@@ -341,4 +341,30 @@ describe('useNarrationRecorder — startup media lifecycle', () => {
     expect(result.current.state).toBe('recording');
     expect(liveCameraTracks().length).toBeGreaterThan(0);
   });
+
+  it('keeps the screen awake through the take and lets it sleep when the take ends', async () => {
+    const release = vi.fn(async () => undefined);
+    const request = vi.fn(async () => ({ release, addEventListener: vi.fn() }));
+    Object.defineProperty(globalThis.navigator, 'wakeLock', {
+      configurable: true,
+      value: { request },
+    });
+    try {
+      const { result } = renderRecorder();
+      expect(request).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await result.current.start();
+      });
+      expect(result.current.state).toBe('recording');
+      expect(request).toHaveBeenCalledWith('screen');
+
+      // This suite's fake recorder never flushes, so end the take by discarding.
+      act(() => result.current.discard());
+      expect(result.current.state).toBe('idle');
+      expect(release).toHaveBeenCalledTimes(1);
+    } finally {
+      Reflect.deleteProperty(globalThis.navigator, 'wakeLock');
+    }
+  });
 });

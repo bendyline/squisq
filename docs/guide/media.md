@@ -307,6 +307,9 @@ editor. Choose the sources:
 | Camera and Screen together        | Two files: the screen as an overlay and the camera as a picture-in-picture window on top, timed to play together |
 | System audio, with another source | The sound your computer is playing, mixed into the recording (desktop Chrome and Edge)                           |
 
+Screen and System audio appear only on a desktop browser; a phone or tablet records the microphone and
+camera.
+
 The recording is saved with the document — audio under `audio/`, video under `video/` — in the
 format your browser records: WebM in Chrome, Edge, and Firefox, MP4 in Safari. The dialog's
 microphone and camera menus appear when you have more than one device to choose from.

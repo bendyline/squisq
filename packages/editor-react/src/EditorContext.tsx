@@ -317,6 +317,12 @@ export interface EditorState {
    */
   allowNarrate: boolean;
   /**
+   * Whether Narrate's control rail offers Pop out (picture-in-picture or a
+   * popup window). Hosts whose WebView can float nothing beyond the app
+   * itself, such as native mobile apps, turn it off.
+   */
+  allowNarratePopOut: boolean;
+  /**
    * Whether the Write view transparently unwraps hard-wrapped paragraph
    * prose for editing and re-applies the document's detected wrap
    * convention when serializing (see `detectMarkdownWrapState`). Without
@@ -812,6 +818,11 @@ export interface EditorProviderProps {
    */
   allowNarrate?: boolean;
   /**
+   * Whether Narrate offers Pop out (picture-in-picture or a popup window).
+   * Defaults to true. When false the button is hidden.
+   */
+  allowNarratePopOut?: boolean;
+  /**
    * Whether the Write view transparently unwraps hard-wrapped prose and
    * re-applies the detected wrap convention on save. Defaults to true;
    * pass false for literal behavior (Tiptap sees the wrapped source).
@@ -964,6 +975,7 @@ export function EditorProvider({
   linkSchemes,
   allowRecording = true,
   allowNarrate = true,
+  allowNarratePopOut = true,
   preserveSourceWrapping = true,
   fileName,
   saveCoverImageOutput,
@@ -1975,6 +1987,7 @@ export function EditorProvider({
       mediaRevision,
       allowRecording,
       allowNarrate,
+      allowNarratePopOut,
       preserveSourceWrapping,
       tiptapEditor,
       monacoEditor,
@@ -2125,6 +2138,7 @@ export function EditorProvider({
       mediaRevision,
       allowRecording,
       allowNarrate,
+      allowNarratePopOut,
       preserveSourceWrapping,
       openImageEdit,
       closeImageEdit,

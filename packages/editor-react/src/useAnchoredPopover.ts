@@ -1,10 +1,18 @@
 import { useLayoutEffect, useState, type CSSProperties, type RefObject } from 'react';
 
-/** Viewport placement for portaled toolbar popovers, including short screens. */
+/**
+ * Viewport placement for portaled toolbar popovers, including short screens.
+ *
+ * Placement runs when the popover opens and on resize/scroll. Pass
+ * `trackContent` for a popover whose content changes while it is open (a
+ * drill-down menu, content portaled in by another component): it then also
+ * re-places whenever the popover's own size changes.
+ */
 export function useAnchoredPopover(
   open: boolean,
   triggerRef: RefObject<HTMLElement>,
   popoverRef: RefObject<HTMLElement>,
+  trackContent = false,
 ): CSSProperties {
   const [style, setStyle] = useState<CSSProperties>({ position: 'fixed', visibility: 'hidden' });
   useLayoutEffect(() => {
@@ -42,10 +50,18 @@ export function useAnchoredPopover(
     position();
     window.addEventListener('resize', position);
     window.addEventListener('scroll', scroll, true);
+    // Content changes resize the popover; placing it again settles at once,
+    // since the placement reads the content's height, not the box's.
+    const observer =
+      trackContent && popoverRef.current && typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => position())
+        : null;
+    if (observer && popoverRef.current) observer.observe(popoverRef.current);
     return () => {
       window.removeEventListener('resize', position);
       window.removeEventListener('scroll', scroll, true);
+      observer?.disconnect();
     };
-  }, [open, triggerRef, popoverRef]);
+  }, [open, triggerRef, popoverRef, trackContent]);
   return style;
 }

@@ -283,7 +283,9 @@ features are detected at runtime and fall back where they can:
   `supportedAudioFileFormats()` from `@bendyline/squisq-video-react/encoder`. M4A needs WebCodecs'
   AAC encoder, which Linux Chromium lacks.
 - **Recording** uses `MediaRecorder` with the browser's native format: WebM in Chromium and
-  Firefox, MP4 in Safari. Recording system audio is offered only on desktop Chromium.
+  Firefox, MP4 in Safari. Recording system audio is offered only on desktop Chromium, and screen
+  capture only on desktops (`supportsScreenCapture()`): phones, tablets and their WebViews have no
+  screen picker.
 - **The teleprompter's floating window** uses Document Picture-in-Picture where it exists, then a
   video picture-in-picture rendition, then a popup window.
 - **Video crop** in media edits uses CSS `object-view-box`, which only Chromium supports; other

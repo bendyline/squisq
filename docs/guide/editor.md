@@ -91,9 +91,14 @@ More controls appear when the caret is somewhere that needs them:
   a table (Write view).
 - **Decrease indent** and **Increase indent** in a list (Write view).
 
-On the right are **Custom layouts** (your own block designs), **Transform** (Source view only),
-**View options**, **Document settings**, and the paperclip that shows and hides **Attachments**.
-When the toolbar runs out of room, buttons fold into a **···** menu, least-used first.
+On the right are the quick tools — the microphone for dictation, **Transform** (Source view only),
+and **View options** — then the paperclip that shows and hides **Attachments**. After a divider
+come the document actions: **Document settings**, **Custom layouts** (your own block designs), and
+**Version history** when the app keeps versions, followed by any the app adds, such as export.
+
+When the toolbar runs out of room, formatting buttons fold into a **···** menu, least-used first.
+The document actions fold together into a single **Document actions** menu; choosing an action
+that has its own menu opens it in place, with a back row to return.
 
 ## The Insert menu
 
@@ -292,7 +297,8 @@ document.
   narration, the moments you advance the slides become the blocks' timings, unless you clear
   **Update block timings when I save this narration**.
 
-System audio needs a desktop Chromium browser. See [Media](media.md) and
+System audio needs a desktop Chromium browser, and Screen needs a desktop browser: phones and
+tablets offer only the microphone and camera. See [Media](media.md) and
 [Narration](narration.md). Dictation is not part of the demo; it appears only in apps that supply
 a speech recognizer.
 
@@ -342,7 +348,8 @@ minute, **Voice pace** (the prompter follows your voice), text size, mirroring, 
 
 ## Document settings
 
-The file icon on the toolbar opens **Document settings**:
+The file icon on the toolbar opens **Document settings** (on a narrow toolbar, it's in the
+**Document actions** menu):
 
 | Field                | Sets                                                          |
 | -------------------- | ------------------------------------------------------------- |

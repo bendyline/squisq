@@ -49,6 +49,11 @@ const dialog = () => screen.getByRole('dialog');
 
 describe('RecorderModal — Show narration mode', () => {
   beforeEach(() => {
+    // A desktop browser: the recorder offers Screen only where it can capture one.
+    Object.defineProperty(globalThis.navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn(), getDisplayMedia: vi.fn() },
+    });
     vi.stubGlobal('URL', {
       ...URL,
       createObjectURL: vi.fn(() => 'blob:take'),
@@ -185,6 +190,39 @@ describe('RecorderModal — Show narration mode', () => {
     expect(screen.getByRole('button', { name: 'Screen' }).getAttribute('aria-pressed')).toBe(
       'true',
     );
+  });
+
+  it('stacks the prompter above the controls on a phone-sized window', async () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: true,
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    render(
+      <RecorderModal
+        mediaProvider={mediaProvider}
+        onClose={vi.fn()}
+        narration={narrationOptions()}
+      />,
+    );
+    // The compact dialog already fits a phone; only the expanded one stacks.
+    expect(dialog().getAttribute('data-stacked')).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(narrationCheckbox()!);
+    });
+
+    expect(dialog().getAttribute('data-stacked')).toBe('true');
+    const stage = screen.getByTestId('teleprompter-view').closest<HTMLElement>('[style*="order"]');
+    expect(stage?.style.order).toBe('0');
+    // Start preview, then Record and Stop, stay pinned in reach while reading.
+    const actions = screen.getByRole('button', { name: 'Start preview' }).parentElement!;
+    expect(actions.style.position).toBe('sticky');
+    expect(actions.style.bottom).toBe('0px');
   });
 });
 

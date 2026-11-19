@@ -6,6 +6,8 @@
  * match the one it uses.
  */
 
+import { useSyncExternalStore } from 'react';
+
 /**
  * A window this narrow or this short is a phone (either way up) or a sliver of
  * a desktop. There, the dialogs that browse or edit at length fill the window
@@ -18,6 +20,18 @@ export const FULL_WINDOW_DIALOG_QUERY = '(max-width: 720px), (max-height: 520px)
 export function dialogFillsWindow(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
   return window.matchMedia(FULL_WINDOW_DIALOG_QUERY).matches;
+}
+
+function subscribeToDialogFillsWindow(onChange: () => void): () => void {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return () => {};
+  const query = window.matchMedia(FULL_WINDOW_DIALOG_QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
+/** {@link dialogFillsWindow}, kept current as the window turns or resizes. */
+export function useDialogFillsWindow(): boolean {
+  return useSyncExternalStore(subscribeToDialogFillsWindow, dialogFillsWindow, () => false);
 }
 
 /**

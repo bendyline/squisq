@@ -24,6 +24,7 @@ import {
   type MediaEditSaveOutput,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
+import { DocumentActionsGroup } from './toolbar/DocumentActions';
 import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
@@ -295,6 +296,21 @@ export interface EditorShellProps {
   toolbarSlotLeft?: ReactNode;
   /** Content rendered after the formatting controls (in the middle area of the toolbar). */
   toolbarSlotAfterActions?: ReactNode;
+  /**
+   * Host quick tools: controls that stay on the toolbar row however narrow
+   * it gets (Find, say). They follow the built-in dictation and
+   * view-options buttons.
+   */
+  toolbarSlotQuickTools?: ReactNode;
+  /**
+   * Host document actions (AI, read aloud, export…). They join Document
+   * settings, Custom layouts and Version history behind a divider at the
+   * toolbar's end, and fold with them into one Document actions menu when
+   * the row runs short. Each control takes part through
+   * `useToolbarDocumentAction`, which tells it when to hide its own button
+   * and where to render its menu items inside the folded menu.
+   */
+  toolbarSlotDocumentActions?: ReactNode;
   /** Content rendered at the rightmost end of the toolbar, after all other elements. */
   toolbarSlotRight?: ReactNode;
   /**
@@ -588,6 +604,14 @@ export interface EditorShellProps {
    */
   allowNarrate?: boolean;
   /**
+   * Whether Narrate offers Pop out, which floats the prompter in a
+   * picture-in-picture or popup window so it can sit beside a camera or
+   * other app. Defaults to true. Disable it in hosts where no float can
+   * outlive the app's own screen, such as native mobile WebViews: they open
+   * no popups, and the prompter stops drawing once the app is backgrounded.
+   */
+  allowNarratePopOut?: boolean;
+  /**
    * Whether the Write view transparently unwraps hard-wrapped paragraph
    * prose for editing and re-applies the document's detected wrap
    * convention when serializing. Defaults to true — without it, a
@@ -796,6 +820,8 @@ export function EditorShell({
   allowBinaryDownloads = true,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
+  toolbarSlotQuickTools,
+  toolbarSlotDocumentActions,
   toolbarSlotRight,
   toolbarPosition = 'top',
   summarizationDesigner,
@@ -838,6 +864,7 @@ export function EditorShell({
   linkSchemes,
   allowRecording = true,
   allowNarrate = true,
+  allowNarratePopOut = true,
   preserveSourceWrapping = true,
   placeholder,
   readOnly = false,
@@ -931,6 +958,7 @@ export function EditorShell({
         linkSchemes={linkSchemes}
         allowRecording={allowRecording}
         allowNarrate={allowNarrate}
+        allowNarratePopOut={allowNarratePopOut}
         preserveSourceWrapping={preserveSourceWrapping}
         fileName={fileName}
         saveCoverImageOutput={saveCoverImageOutput}
@@ -981,6 +1009,8 @@ export function EditorShell({
                 allowBinaryDownloads={allowBinaryDownloads}
                 toolbarSlotLeft={toolbarSlotLeft}
                 toolbarSlotAfterActions={toolbarSlotAfterActions}
+                toolbarSlotQuickTools={toolbarSlotQuickTools}
+                toolbarSlotDocumentActions={toolbarSlotDocumentActions}
                 toolbarSlotRight={toolbarSlotRight}
                 toolbarPosition={toolbarPosition}
                 summarizationDesigner={summarizationDesigner}
@@ -1047,6 +1077,8 @@ interface EditorShellInnerProps {
   allowBinaryDownloads: boolean;
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
+  toolbarSlotQuickTools?: ReactNode;
+  toolbarSlotDocumentActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
   toolbarPosition: EditorToolbarPosition;
   /** Optional designer opened beside Summarize in the preview toolbar. */
@@ -1152,6 +1184,8 @@ function EditorShellInner({
   allowBinaryDownloads,
   toolbarSlotLeft,
   toolbarSlotAfterActions,
+  toolbarSlotQuickTools,
+  toolbarSlotDocumentActions,
   toolbarSlotRight,
   toolbarPosition,
   summarizationDesigner,
@@ -1612,10 +1646,20 @@ function EditorShellInner({
   // slot bar: view tabs, formatting, and preview controls don't apply to a
   // binary asset.
   const header = isImageMode ? (
-    (toolbarSlotLeft || toolbarSlotRight) && (
+    (toolbarSlotLeft ||
+      toolbarSlotQuickTools ||
+      toolbarSlotDocumentActions ||
+      toolbarSlotRight) && (
       <div className="squisq-editor-header squisq-editor-header--image">
         {toolbarSlotLeft}
         <div style={{ flex: 1 }} />
+        {toolbarSlotQuickTools}
+        {/* Nothing here measures the row, so the actions never fold. */}
+        {toolbarSlotDocumentActions && (
+          <DocumentActionsGroup folded={false} colorScheme={colorScheme}>
+            {toolbarSlotDocumentActions}
+          </DocumentActionsGroup>
+        )}
         {toolbarSlotRight}
       </div>
     )
@@ -1636,6 +1680,8 @@ function EditorShellInner({
           )
         }
         slotAfterActions={toolbarSlotAfterActions}
+        slotQuickTools={toolbarSlotQuickTools}
+        slotDocumentActions={toolbarSlotDocumentActions}
         slotRight={toolbarSlotRight}
         showPlayTab={showPlayTab}
         showViewTabs={showViewTabs}

@@ -15,6 +15,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useScreenWakeLock } from '@bendyline/squisq-react';
 import {
   alignNarration,
   type NarrationAlignment,
@@ -155,6 +156,9 @@ export function useNarrationRecorder(
   options: UseNarrationRecorderOptions,
 ): NarrationRecorderController {
   const [state, setState] = useState<NarrationRecorderState>('idle');
+  // Keep the screen on through the take: the narrator reads rather than
+  // touches, and on a phone auto-lock backgrounds the app and ends it.
+  useScreenWakeLock(state === 'starting' || state === 'recording');
   const [error, setError] = useState<Error | null>(null);
   const [recordedBytes, setRecordedBytes] = useState(0);
   const [limitReached, setLimitReached] = useState(false);
