@@ -220,7 +220,7 @@ export function DocumentActionsGroup({ folded, colorScheme, children }: Document
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const pendingFocus = useRef<FocusTarget | null>(null);
-  const menuStyle = useAnchoredPopover(open, triggerRef, menuRef, true);
+  const menuStyle = useAnchoredPopover(open, triggerRef, menuRef, { trackContent: true });
 
   const setTriggerElement = useCallback((element: HTMLButtonElement | null) => {
     triggerRef.current = element;

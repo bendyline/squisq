@@ -140,17 +140,38 @@ export function requiredRowWidth(layout: CollapseLayout, collapsed: ReadonlySet<
 
 /**
  * Collapse items in TOOLBAR_COLLAPSE_ORDER until the rest fit. The result is
- * always a prefix of that order (restricted to the items present), so a
- * narrower row collapses a superset of what a wider one does.
+ * a prefix of that order (restricted to the items present), so a narrower
+ * row collapses a superset of what a wider one does — with one exception.
+ * Folding the document actions frees several buttons' width in one step,
+ * which can leave a wide empty stretch in the row. When the fold is what
+ * made the row fit, buttons that collapsed before it come back into that
+ * room, the most important first, for as long as they fit.
  */
 export function chooseCollapsedItems(layout: CollapseLayout): Set<string> {
   const present = [...layout.groups.flatMap((group) => group.items), ...layout.chrome];
   // Array.prototype.sort is stable, so unlisted ids keep their layout order.
   const order = [...present].sort((a, b) => collapseRank(a) - collapseRank(b));
+  const fits = (collapsed: ReadonlySet<string>) =>
+    requiredRowWidth(layout, collapsed) <= layout.budget + FIT_TOLERANCE;
+  const foldsInPlace = (id: string) => layout.foldedWidthOf?.(id) !== undefined;
+
   const collapsed = new Set<string>();
-  for (const id of order) {
-    if (requiredRowWidth(layout, collapsed) <= layout.budget + FIT_TOLERANCE) break;
+  let last = -1;
+  for (const [index, id] of order.entries()) {
+    if (fits(collapsed)) break;
     collapsed.add(id);
+    last = index;
+  }
+
+  // Only when the fold was the last step: anything collapsed after it outranks
+  // the buttons before it, and must come back first.
+  if (last >= 0 && foldsInPlace(order[last]!)) {
+    for (let index = last - 1; index >= 0; index--) {
+      const id = order[index]!;
+      if (foldsInPlace(id)) continue;
+      collapsed.delete(id);
+      if (!fits(collapsed)) collapsed.add(id);
+    }
   }
   return collapsed;
 }

@@ -253,6 +253,20 @@ describe('<Toolbar> document actions', () => {
     expect(document.querySelector('.squisq-toolbar-document-menu')).toBeNull();
   });
 
+  it('pins the menu by its trigger-side edges, so a submenu grows away from the trigger', () => {
+    layOut();
+    renderToolbar(<HostExport onPdf={() => {}} />);
+
+    const menu = openDocumentMenu();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Export' }));
+    // Right edge pinned and no height cap taken from the shorter top level:
+    // content a host portals in later grows the box leftwards and down.
+    expect(menu.style.left).toBe('auto');
+    expect(menu.style.right).not.toBe('');
+    expect(menu.style.bottom).toBe('auto');
+    expect(Number.parseFloat(menu.style.maxHeight)).toBe(window.innerHeight - 12);
+  });
+
   it('focuses the first submenu item once the host has rendered it', async () => {
     layOut();
     renderToolbar(<HostExport onPdf={() => {}} />);

@@ -1082,6 +1082,13 @@
   flex-shrink: 0;
 }
 
+/* Folded, the actions' own controls are hidden but stay mounted (their
+   dialogs belong to them), and their empty wrappers would each still take a
+   gap after the trigger. */
+.squisq-toolbar-document-actions--folded {
+  gap: 0;
+}
+
 .squisq-toolbar-button.squisq-toolbar-document-actions-trigger {
   width: auto;
   gap: 1px;
