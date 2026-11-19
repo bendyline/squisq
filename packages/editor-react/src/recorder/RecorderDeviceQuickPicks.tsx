@@ -6,8 +6,9 @@
  * other twenty fields are constraint plumbing puts it in the wrong place. Each
  * picker therefore appears inline when — and only when — two conditions hold:
  * its source is enabled, and the browser reports more than one real device of
- * that kind (see `recorderDeviceOptions` for what "real" excludes). A machine
- * with a single webcam gets no camera picker, because there is nothing to pick.
+ * that kind (see `recorderDeviceOptions` for what "real" excludes), or the
+ * saved device is missing (see `offersDeviceChoice`). A machine with a single
+ * webcam gets no camera picker, because there is nothing to pick.
  *
  * These are the SAME selects as the ones in the advanced panel, bound to the
  * same `RecorderDeviceSettings` and rendering the same option list — a
@@ -16,7 +17,7 @@
 
 import type { CSSProperties } from 'react';
 import {
-  hasRecorderDeviceChoice,
+  offersDeviceChoice,
   recorderDeviceOptions,
   type RecorderDeviceOption,
 } from './mediaDeviceList.js';
@@ -111,8 +112,18 @@ export function RecorderDeviceQuickPicks({
 }: RecorderDeviceQuickPicksProps) {
   const audioOptions = recorderDeviceOptions(devices, 'audioinput', 'Microphone', audioDeviceId);
   const videoOptions = recorderDeviceOptions(devices, 'videoinput', 'Camera', cameraDeviceId);
-  const showMicrophone = microphoneEnabled && hasRecorderDeviceChoice(audioOptions);
-  const showCamera = cameraEnabled && hasRecorderDeviceChoice(videoOptions);
+  const showMicrophone =
+    microphoneEnabled &&
+    offersDeviceChoice(
+      audioOptions.map((option) => option.deviceId),
+      audioDeviceId,
+    );
+  const showCamera =
+    cameraEnabled &&
+    offersDeviceChoice(
+      videoOptions.map((option) => option.deviceId),
+      cameraDeviceId,
+    );
   if (!showMicrophone && !showCamera) return null;
 
   return (

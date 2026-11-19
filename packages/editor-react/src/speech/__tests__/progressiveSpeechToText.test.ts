@@ -272,6 +272,68 @@ describe('ProgressiveSpeechToText transcription queue', () => {
     engine.cancel();
   });
 
+  it('ends on the wall clock once the gate has heard speech, even while transcription runs behind', async () => {
+    const onLongPause = vi.fn();
+    const { engine, monitor, calls } = make({ onLongPause });
+    engine.start();
+    monitor.emit(true); // the gate last hears speech at t = 0
+    await vi.advanceTimersByTimeAsync(1_000);
+    monitor.emit(false); // the phrase flushes; its transcription never returns
+
+    // The gate ticks silence while takes pile up behind the stalled recognizer.
+    for (let now = 1_500; now < DEFAULT_LONG_PAUSE_MS; now += 500) {
+      await vi.advanceTimersByTimeAsync(500);
+      monitor.emit(false);
+    }
+    await flush();
+    expect(calls).toHaveLength(1);
+    expect(onLongPause).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(500);
+    monitor.emit(false); // t = 10 s
+    expect(onLongPause).toHaveBeenCalledTimes(1);
+    expect(onLongPause).toHaveBeenCalledWith(false);
+    monitor.emit(false);
+    expect(onLongPause).toHaveBeenCalledTimes(1);
+    engine.cancel();
+  });
+
+  it('keeps listening while takes transcribe to words the gate missed', async () => {
+    const onLongPause = vi.fn();
+    const { engine, monitor, replies } = make({ onLongPause });
+    engine.start();
+    monitor.emit(true);
+    await vi.advanceTimersByTimeAsync(1_000);
+    monitor.emit(false);
+    await flush();
+    replies[0].resolve('Loud enough.');
+    await flush();
+
+    // Quiet speech: the gate hears nothing, but every take comes back as words.
+    for (let take = 1; take <= 5; take += 1) {
+      await vi.advanceTimersByTimeAsync(DEFAULT_SEGMENT_MS);
+      monitor.emit(false);
+      await flush();
+      replies[take].resolve('Still talking.');
+      await flush();
+    }
+    monitor.emit(false); // 13.5 s since the gate last heard speech
+    expect(onLongPause).not.toHaveBeenCalled();
+
+    // The words stop and the recognizer stalls: 10 s after the last take with
+    // words ended, the wall clock alone ends the session.
+    for (let step = 1; step <= 3; step += 1) {
+      await vi.advanceTimersByTimeAsync(DEFAULT_SEGMENT_MS);
+      monitor.emit(false);
+    }
+    expect(onLongPause).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(DEFAULT_SEGMENT_MS);
+    monitor.emit(false);
+    expect(onLongPause).toHaveBeenCalledTimes(1);
+    expect(onLongPause).toHaveBeenCalledWith(true);
+    engine.cancel();
+  });
+
   it('stop() delivers the in-flight takes, then releases the microphone', async () => {
     const { engine, stream, monitor, replies, transcripts } = make();
     engine.start();

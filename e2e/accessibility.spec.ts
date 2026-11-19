@@ -247,8 +247,12 @@ test.describe('automated accessibility audit', () => {
     expect(bounds!.y).toBeGreaterThanOrEqual(0);
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(568);
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'More actions', exact: true }).click();
-    await page.getByRole('button', { name: 'Document settings', exact: true }).click();
+    // At this width the document actions fold into one Document actions menu.
+    await page.getByRole('button', { name: 'Document actions', exact: true }).click();
+    await page
+      .getByRole('menu', { name: 'Document actions', exact: true })
+      .getByRole('menuitem', { name: 'Document settings', exact: true })
+      .click();
     const dialog = page.getByRole('dialog', { name: 'Document settings', exact: true });
     await expect(dialog.getByRole('button', { name: 'Save', exact: true })).toBeInViewport();
     await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();

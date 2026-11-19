@@ -92,6 +92,33 @@ describe('chooseCollapsedItems', () => {
     expect(collapsed.has('bold')).toBe(false);
   });
 
+  it('fills the room a fold frees with the buttons that collapsed before it', () => {
+    // The document actions are 180px open and 45px folded. Folding them frees
+    // room for Strikethrough and Blockquote to come back, though both
+    // collapse earlier in the priority order.
+    const withGroup = layout(0, {
+      chrome: ['documentActions'],
+      widthOf: (id) => (id === 'documentActions' ? 180 : 32),
+      foldedWidthOf: (id) => (id === 'documentActions' ? 45 : undefined),
+    });
+    const target = new Set(['subscript', 'superscript', 'code', 'hr', 'documentActions']);
+    const budget = requiredRowWidth(withGroup, target);
+
+    expect(chooseCollapsedItems({ ...withGroup, budget })).toEqual(target);
+  });
+
+  it('brings nothing back when buttons had to collapse after the fold', () => {
+    const withGroup = layout(0, {
+      chrome: ['documentActions'],
+      widthOf: (id) => (id === 'documentActions' ? 180 : 32),
+      foldedWidthOf: (id) => (id === 'documentActions' ? 45 : undefined),
+    });
+    // So narrow that Heading 3 goes too: Blockquote must not outrank it.
+    const collapsed = chooseCollapsedItems({ ...withGroup, budget: 260 });
+    expect(collapsed.has('h3')).toBe(true);
+    expect(collapsed.has('quote')).toBe(true);
+  });
+
   it('collapses ids without a priority before every ranked one', () => {
     const lane = layout(0, { groups: [...LANE, { items: ['future-button'], separated: true }] });
     const budget = requiredRowWidth(lane, new Set(['future-button']));

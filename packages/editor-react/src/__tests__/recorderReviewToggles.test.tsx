@@ -105,6 +105,21 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
             label: 'Wide camera',
             toJSON: () => ({}),
           },
+          // A second of each, so there is a device to pick between.
+          {
+            deviceId: 'mic-laptop',
+            groupId: 'laptop',
+            kind: 'audioinput',
+            label: 'Laptop microphone',
+            toJSON: () => ({}),
+          },
+          {
+            deviceId: 'camera-laptop',
+            groupId: 'laptop',
+            kind: 'videoinput',
+            label: 'Laptop camera',
+            toJSON: () => ({}),
+          },
         ]),
       },
     });
@@ -112,7 +127,8 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     render(<RecorderModal initialMode="camera" mediaProvider={mediaProvider} onClose={vi.fn()} />);
     fireEvent.click(screen.getByText('Advanced device settings'));
 
-    await screen.findByRole('option', { name: 'Studio microphone' });
+    // The inline picker and the advanced one both list it once devices load.
+    await screen.findAllByRole('option', { name: 'Studio microphone' });
     fireEvent.change(screen.getByLabelText('Recording microphone'), {
       target: { value: 'mic-studio' },
     });
@@ -462,5 +478,42 @@ describe('RecorderModal — unsaved take is not silently destroyed', () => {
     // jsdom's UA carries no Chromium token, so supportsSystemAudioCapture() is false.
     render(<RecorderModal initialMode="mic" mediaProvider={mediaProvider} onClose={vi.fn()} />);
     expect(screen.queryByRole('button', { name: 'System audio' })).toBeNull();
+  });
+
+  it('offers only the microphone and camera on a phone WebView', async () => {
+    // A native app's WKWebView: no screen picker, even if getDisplayMedia exists.
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+    );
+    render(<RecorderModal initialMode="camera" mediaProvider={mediaProvider} onClose={vi.fn()} />);
+
+    const sources = screen.getByRole('group', { name: 'Capture sources' });
+    expect(
+      Array.from(sources.querySelectorAll('button')).map((button) => button.textContent),
+    ).toEqual(['Microphone', 'Camera']);
+    // The emptied screen group leaves no divider behind.
+    expect(sources.querySelectorAll('[aria-hidden="true"]')).toHaveLength(0);
+    expect(toggle('Microphone').getAttribute('aria-pressed')).toBe('true');
+    expect(toggle('Camera').getAttribute('aria-pressed')).toBe('true');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Start preview' }));
+    });
+    expect(navigator.mediaDevices.getDisplayMedia).not.toHaveBeenCalled();
+    expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalled();
+  });
+
+  it('starts a screen-only mode on the microphone where the screen is unavailable', () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(
+      'Mozilla/5.0 (Linux; Android 13; SM-G781U; wv) AppleWebKit/537.36 Version/4.0 Chrome/155.0.0.0 Mobile Safari/537.36',
+    );
+    render(<RecorderModal initialMode="screen" mediaProvider={mediaProvider} onClose={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: 'Screen' })).toBeNull();
+    expect(toggle('Microphone').getAttribute('aria-pressed')).toBe('true');
+    expect(toggle('Camera').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Start preview' }).hasAttribute('disabled')).toBe(
+      false,
+    );
   });
 });

@@ -3542,6 +3542,8 @@ interface EditorShellProps {
   // Toolbar slots & chat-composer mode
   toolbarSlotLeft?: ReactNode;
   toolbarSlotAfterActions?: ReactNode;
+  toolbarSlotQuickTools?: ReactNode; // stays on the row: after dictation + view options
+  toolbarSlotDocumentActions?: ReactNode; // folds with Document settings etc. (useToolbarDocumentAction)
   toolbarSlotRight?: ReactNode;
   toolbarPosition?: 'top' | 'bottom'; // default 'top'; 'bottom' puts the toolbar under the content
   placeholder?: string;
@@ -3993,6 +3995,7 @@ function resolveFormat(kind: CaptureKind): ResolvedFormat;
 function supportsMediaRecorder(): boolean;
 function supportsUserMedia(): boolean;
 function supportsDisplayMedia(): boolean;
+function supportsScreenCapture(): boolean; // getDisplayMedia on a desktop; false on phones, tablets and their WebViews
 function buildFilename(kind: CaptureKind, format: ResolvedFormat): string;
 
 // narration timing sidecar (so resolveAudioMapping auto-links the recording)

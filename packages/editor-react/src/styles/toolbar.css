@@ -1065,6 +1065,95 @@
   user-select: none;
 }
 
+/* ─── Document actions ─────────────────────────────── */
+
+/* Document settings, Custom layouts, Version history and the host's document
+   actions, behind one divider at the row's end (toolbar/DocumentActions.tsx).
+   Folded, a single trigger stands in for them; anything a host marks
+   `data-toolbar-transient` (a read-aloud transport) stays beside it. */
+.squisq-toolbar-document-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 1px;
+}
+
+.squisq-toolbar-document-actions > .squisq-toolbar-separator {
+  flex-shrink: 0;
+}
+
+/* Folded, the actions' own controls are hidden but stay mounted (their
+   dialogs belong to them), and their empty wrappers would each still take a
+   gap after the trigger. */
+.squisq-toolbar-document-actions--folded {
+  gap: 0;
+}
+
+.squisq-toolbar-button.squisq-toolbar-document-actions-trigger {
+  width: auto;
+  gap: 1px;
+  padding-inline: 6px 4px;
+}
+
+.squisq-toolbar-document-actions-trigger > .squisq-toolbar-document-actions-chevron {
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+/* Folded, Version history's trigger is hidden and its wrapper is empty. Let
+   the wrapper span the row's height so the popover still opens below the
+   row, beside the menu trigger it was chosen from. */
+.squisq-toolbar-document-actions--folded > .squisq-version-history {
+  align-self: stretch;
+}
+
+/* The folded menu. Placement is inline (useAnchoredPopover); the face
+   matches the ··· menu's. */
+.squisq-toolbar-document-menu {
+  z-index: 100;
+  min-width: 220px;
+  max-width: 320px;
+  padding: 4px 0;
+  background: var(--squisq-surface-overlay);
+  border: 1px solid var(--squisq-border-subtle);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  font-family: var(--squisq-ux-font, system-ui, sans-serif);
+}
+
+.squisq-toolbar-document-menu[data-theme='dark'] {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.squisq-toolbar-document-menu-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.squisq-toolbar-document-menu-chevron {
+  flex-shrink: 0;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.squisq-toolbar-document-menu-back {
+  font-weight: 600;
+}
+
+.squisq-toolbar-document-menu-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--squisq-border-subtle);
+}
+
+/* A host's submenu items, portaled in: stack them as the menu's own rows. */
+.squisq-toolbar-document-submenu {
+  display: flex;
+  flex-direction: column;
+}
+
 /* ─── Insert Menu Dropdown ──────────────────────────── */
 
 .squisq-insert-menu {

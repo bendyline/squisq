@@ -889,16 +889,18 @@ describe('<EditorShell> Files badge', () => {
 });
 
 describe('<Toolbar> Files badge', () => {
-  it('places Document settings immediately before the Files button', () => {
+  it('places the Files button just before the document actions, which open with Document settings', () => {
     render(
       <EditorProvider initialMarkdown="# hi" initialView="raw" allowRecording={false}>
         <Toolbar onToggleFiles={() => {}} />
       </EditorProvider>,
     );
 
-    const documentSettings = screen.getByRole('button', { name: 'Document settings' });
     const files = screen.getByRole('button', { name: 'Attachments' });
-    expect(documentSettings.nextElementSibling).toBe(files);
+    const group = screen.getByRole('group', { name: 'Document actions' });
+    expect(files.nextElementSibling).toBe(group);
+    const documentSettings = screen.getByRole('button', { name: 'Document settings' });
+    expect(group.querySelector('.squisq-toolbar-button')).toBe(documentSettings);
   });
 
   it('self-scans mediaProvider when fileCount is not controlled by a parent', async () => {

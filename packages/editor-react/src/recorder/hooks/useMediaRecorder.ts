@@ -19,6 +19,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useScreenWakeLock } from '@bendyline/squisq-react';
 import { resolveMaxRecordingBytes } from '../recordingLimits.js';
 import {
   resolveFormat,
@@ -359,6 +360,11 @@ export function getCaptureKind(source: RecorderSource): CaptureKind {
 
 export function useMediaRecorder(options: UseMediaRecorderOptions = {}): UseMediaRecorderResult {
   const [state, setState] = useState<RecorderState>('idle');
+  // Keep the screen on while a capture is live. Nobody touches the screen
+  // during a take, and on a phone auto-lock backgrounds the app and ends it.
+  useScreenWakeLock(
+    state === 'requesting' || state === 'ready' || state === 'recording' || state === 'stopping',
+  );
   const [recordedBytes, setRecordedBytes] = useState(0);
   const [limitReached, setLimitReached] = useState(false);
   const recordedBytesRef = useRef(0);

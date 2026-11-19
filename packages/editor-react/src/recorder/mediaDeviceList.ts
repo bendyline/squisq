@@ -66,6 +66,20 @@ export function hasRecorderDeviceChoice(options: readonly RecorderDeviceOption[]
   return options.length > 1;
 }
 
+/**
+ * Whether a device (or device group) picker earns its place. One microphone or
+ * one camera gets no picker, since it could only restate the system default.
+ * A saved choice that is no longer listed keeps the picker, so the person can
+ * return to the default instead of being held to a device that has gone.
+ */
+export function offersDeviceChoice(
+  ids: readonly string[],
+  selectedId: string | null | undefined,
+): boolean {
+  if (ids.length > 1) return true;
+  return Boolean(selectedId) && !ids.includes(selectedId as string);
+}
+
 /** Distinct hardware groups represented by an option list, in first-seen order. */
 export function recorderDeviceGroups(
   options: readonly RecorderDeviceOption[],

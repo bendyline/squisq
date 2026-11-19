@@ -6,6 +6,7 @@ export type { MediaScheduleController } from '../hooks/useMediaSchedule.js';
 export { useDocPlayback } from '../hooks/useDocPlayback.js';
 export type { UseDocPlaybackOptions } from '../hooks/useDocPlayback.js';
 export { useViewportOrientation } from '../hooks/useViewportOrientation.js';
+export { holdScreenWakeLock, useScreenWakeLock } from '../hooks/useScreenWakeLock.js';
 export {
   MediaContext,
   ResourcePolicyContext,

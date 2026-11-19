@@ -8,7 +8,9 @@
  *
  * Wraps the toolbar trigger button + popover surface. Versioning state
  * is read from the EditorContext — render this component anywhere inside
- * a provider that has `allowVersioning` and a `container`.
+ * a provider that has `allowVersioning` and a `container`. In the toolbar it
+ * is one of the document actions: when that group folds, its button hides
+ * and the folded menu's "Version history" row opens the popover instead.
  */
 
 import {
@@ -28,6 +30,7 @@ import { monacoLanguagesForDocument } from './monacoLanguageDetection';
 import { Icon } from './Icon';
 import { fitPopoverWithinClip } from './popoverFit';
 import { useEscapeDismissal } from './useEscapeDismissal';
+import { useToolbarDocumentAction } from './toolbar/DocumentActions';
 
 interface LazyDiffEditorProps {
   original: string;
@@ -136,8 +139,22 @@ export function VersionHistoryPanel() {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
+  const { folded, menuTrigger } = useToolbarDocumentAction(
+    versioning
+      ? {
+          id: 'history',
+          label: 'Version history',
+          icon: <Icon icon="fa-solid fa-clock-rotate-left" />,
+          onSelect: () => setOpen(true),
+        }
+      : null,
+    containerRef,
+  );
+  // Folded, the trigger is hidden: Escape returns focus to the menu's.
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  returnFocusRef.current = folded ? menuTrigger : triggerRef.current;
 
-  useEscapeDismissal(open, close, triggerRef);
+  useEscapeDismissal(open, close, returnFocusRef);
 
   const refresh = useCallback(async () => {
     if (!versioning) return;
@@ -286,7 +303,7 @@ export function VersionHistoryPanel() {
         type="button"
         className={`squisq-toolbar-button squisq-version-history-trigger${
           open ? ' squisq-toolbar-button--active' : ''
-        }`}
+        }${folded ? ' squisq-toolbar-button--overflowed' : ''}`}
         data-tooltip="Version history"
         aria-label="Version history"
         aria-expanded={open}

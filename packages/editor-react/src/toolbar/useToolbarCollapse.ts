@@ -1,13 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EditorView } from '../EditorContext';
-import { chooseCollapsedItems, type CollapseGroup } from './toolbarCollapse';
+import { chooseCollapsedItems, DOCUMENT_ACTIONS_ITEM, type CollapseGroup } from './toolbarCollapse';
+
+/**
+ * The width of an item's `[data-toolbar-transient]` descendants — content
+ * that stays on the row whether or not the item is folded — margins and the
+ * gap before each included.
+ */
+function transientWidth(item: HTMLElement): number {
+  let width = 0;
+  item.querySelectorAll<HTMLElement>('[data-toolbar-transient]').forEach((element) => {
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const style = getComputedStyle(element);
+    const parentGap = element.parentElement
+      ? Number.parseFloat(getComputedStyle(element.parentElement).columnGap) || 0
+      : 0;
+    width +=
+      rect.width +
+      (Number.parseFloat(style.marginLeft) || 0) +
+      (Number.parseFloat(style.marginRight) || 0) +
+      parentGap;
+  });
+  return width;
+}
 
 /** Measure the toolbar row and track which controls move into its overflow menu. */
 export function useToolbarCollapse(activeView: EditorView, actionsLaneShown: boolean) {
   const actionsRef = useRef<HTMLDivElement>(null);
   // '|'-joined ids (see toolbar/toolbarCollapse.ts) of the buttons and
-  // document chrome currently collapsed into the ··· menu. Stored as a string
-  // so identical measurements bail out of re-rendering.
+  // chrome currently collapsed into the ··· menu, plus the document-actions
+  // group when it is folded into its own menu. Stored as a string so
+  // identical measurements bail out of re-rendering.
   const [collapsedKey, setCollapsedKey] = useState('');
   // '|'-joined data-contextual ids of the contextual groups (template /
   // transition pickers, table / list controls) that don't fit in the actions row.
@@ -79,9 +103,25 @@ export function useToolbarCollapse(activeView: EditorView, actionsLaneShown: boo
       const rowGap = gapOf(toolbar);
       let budget = laneRect.width;
       const chrome: string[] = [];
+      const foldsInPlace = new Set<string>();
       toolbar?.querySelectorAll<HTMLElement>(':scope > [data-toolbar-item]').forEach((item) => {
         const id = item.dataset.toolbarItem!;
-        if (isDisplayed(item)) {
+        const folded = item.dataset.toolbarFolded;
+        if (folded !== undefined) {
+          // Chrome that folds in place (the document-actions group) is always
+          // displayed, either open or as its menu trigger; remember each
+          // state's width separately. Transient content (a read-aloud
+          // transport) stays on the row in both states, so it is left out of
+          // both: it is a fixed cost the lane's own width already reflects.
+          foldsInPlace.add(id);
+          const rect = item.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            onLaneRow.set(id, rect.top < laneRect.bottom && rect.bottom > laneRect.top);
+            const base = Math.max(0, rect.width - transientWidth(item));
+            widths.set(folded === 'true' ? `${id}:folded` : id, base);
+            if (onLaneRow.get(id)) budget += base + rowGap;
+          }
+        } else if (isDisplayed(item)) {
           const rect = remember(id, item);
           if (rect.width > 0 && rect.height > 0) {
             onLaneRow.set(id, rect.top < laneRect.bottom && rect.bottom > laneRect.top);
@@ -108,6 +148,13 @@ export function useToolbarCollapse(activeView: EditorView, actionsLaneShown: boo
         laneGap: gapOf(container),
         rowGap,
         triggerWidth: widths.get('trigger') ?? fallbackWidth,
+        // Until a group has been seen folded, assume its trigger is about a
+        // button and a half wide (the glyph plus a chevron) behind its divider.
+        foldedWidthOf: (id: string) =>
+          foldsInPlace.has(id)
+            ? (widths.get(`${id}:folded`) ??
+              (widths.get('separator') ?? 0) + Math.round(fallbackWidth * 1.5))
+            : undefined,
         budget,
       };
       let next = chooseCollapsedItems(layout);
@@ -160,6 +207,11 @@ export function useToolbarCollapse(activeView: EditorView, actionsLaneShown: boo
   const clippedContextual = new Set(
     actionsLaneShown && clippedContextualKey ? clippedContextualKey.split('|') : [],
   );
+  // The document actions fold into a menu of their own, not into ···, so
+  // they may stay folded while the lane is away (Use, Find, Source): those
+  // modes measure nothing, and the row that was too narrow for the group in
+  // Write is still too narrow for it now.
+  const documentActionsFolded = collapsedKey.split('|').includes(DOCUMENT_ACTIONS_ITEM);
 
-  return { actionsRef, collapsed, clippedContextual };
+  return { actionsRef, collapsed, clippedContextual, documentActionsFolded };
 }

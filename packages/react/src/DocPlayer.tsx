@@ -58,6 +58,7 @@ import { BlockRenderer } from './BlockRenderer';
 import { CaptionOverlay } from './CaptionOverlay';
 import { useAutoSurface } from './hooks/useAutoSurface';
 import { useAudioSync } from './hooks/useAudioSync';
+import { useScreenWakeLock } from './hooks/useScreenWakeLock';
 import { useDocPlayback } from './hooks/useDocPlayback';
 import { useViewportOrientation } from './hooks/useViewportOrientation';
 import { useSlideSwipe } from './hooks/useSlideSwipe';
@@ -329,6 +330,10 @@ function DocPlayerContent({
   // controller clock exactly as before.
   const [renderClock, setRenderClock] = useState<{ doc: Doc; time: number } | null>(null);
   const renderTimeOverride = renderClock?.doc === doc ? renderClock.time : null;
+
+  // Keep the screen on while someone watches. Offline rendering has no viewer;
+  // video export holds its own lock.
+  useScreenWakeLock(isPlaying && !renderMode);
   const currentTime = renderMode ? (renderTimeOverride ?? audioCurrentTime) : audioCurrentTime;
 
   // Timed media clips (block.media + doc.documentMedia) resolved to absolute
