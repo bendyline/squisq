@@ -62,5 +62,11 @@ test.describe('Custom summary designer', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(0);
+    // The designer is its own scroller here, so a row too wide for it would
+    // scroll it sideways without widening the page.
+    const designerOverflow = await designer
+      .locator('.squisq-summary-designer-inner')
+      .evaluate((inner) => inner.scrollWidth - inner.clientWidth);
+    expect(designerOverflow).toBeLessThanOrEqual(0);
   });
 });

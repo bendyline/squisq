@@ -270,6 +270,10 @@
   flex-shrink: 0;
   flex-wrap: wrap;
   gap: 12px;
+  /* A select is as wide as its longest option, so on one line the density
+     field and its toggle outgrow a phone; capped, they wrap instead of
+     scrolling the designer sideways. */
+  max-width: 100%;
 }
 
 .squisq-summary-designer-preferences {
