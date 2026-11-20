@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.14.0](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.20...@bendyline/squisq@2.14.0) (2026-11-20)
+
+### Features
+
+* Frontmatter authoring ([#135](https://github.com/bendyline/squisq/issues/135)) ([e1e7f7e](https://github.com/bendyline/squisq/commit/e1e7f7e0b6e4433ba13482fe8f8ad7eb43b11c95))
+
 ## @bendyline/squisq [2.13.20](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.13.19...@bendyline/squisq@2.13.20) (2026-11-18)
 
 ### Bug Fixes
