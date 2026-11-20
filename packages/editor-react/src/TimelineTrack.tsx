@@ -129,7 +129,7 @@ function TimelineVideoFilmstrip({
         return (
           <video
             key={`${index}:${sampleTime}`}
-            src={resolvedSrc}
+            src={resolvedSrc || undefined}
             muted
             playsInline
             preload="metadata"
