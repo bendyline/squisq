@@ -22,7 +22,12 @@ export {
 export type { DetectDiagramOptions } from './detect.js';
 export { repairAsciiDiagram, isRepairableDiagram } from './repair.js';
 export type { RepairResult } from './repair.js';
-export { arrangeAsciiDiagram } from './arrange.js';
+export {
+  arrangeAsciiDiagram,
+  asciiDiagramMeaning,
+  ASCII_DIAGRAM_SPREAD_FACTORS,
+  spreadAsciiDiagram,
+} from './arrange.js';
 export type { ArrangeAsciiDiagramOptions } from './arrange.js';
 export {
   asciiCellToCanvas,

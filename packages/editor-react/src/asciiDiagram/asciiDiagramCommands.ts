@@ -4,9 +4,10 @@
  * Every semantic edit is one functional transformation of the fence text
  * (`renderAscii(applyOp(parseAscii(text)))`) committed as a single
  * ProseMirror transaction (= a single undo step). Before committing, the
- * rendered art is re-parsed and verified — if the renderer ever produced
- * something the parser disagrees with, the command aborts instead of
- * corrupting the fence.
+ * rendered art is re-parsed and verified. When the boxes as placed can't be
+ * drawn so the parser agrees, other layouts are tried (`redrawAsciiDiagram`)
+ * so the edit still lands; only when none can be drawn does the command
+ * abort instead of corrupting the fence.
  */
 
 import type { Editor } from '@tiptap/react';
@@ -15,13 +16,12 @@ import {
   canvasToAsciiCell,
   ASCII_CHAR_H,
   ASCII_CHAR_W,
-  parseAsciiDiagram,
-  renderAsciiDiagram,
   repairAsciiDiagram,
   type AsciiDiagram,
 } from '@bendyline/squisq/doc';
 import type { DiagramCommand } from '../diagram/DiagramCanvas';
 import { findAsciiDiagramBlockPos, parseAsciiDiagramForNode } from './AsciiDiagramExtension';
+import { redrawAsciiDiagram } from './asciiDiagramRedraw';
 import { findRepairableBlockPos } from './RepairableDiagramExtension';
 import {
   addEdgeOp,
@@ -41,9 +41,9 @@ export interface ApplyAsciiDiagramCommandOptions {
    */
   diagramOffset?: { col: number; row: number };
   /**
-   * Called when the edit is refused because its redrawn art would not read
-   * back as the same diagram (a box or connection would be lost), as opposed
-   * to a no-op. Lets the canvas say why the edit didn't stick.
+   * Called when the edit is refused because no layout's art reads back as
+   * the same diagram (a box or connection would be lost), as opposed to a
+   * no-op. Lets the canvas say why the edit didn't stick.
    */
   onRejected?: () => void;
 }
@@ -130,15 +130,13 @@ function applyOp(
 
   const next = op(diagram);
   if (next === diagram && diagram === sourceDiagram) return false;
-  const rendered = renderAsciiDiagram(next);
 
-  // Verify before committing: the rendered art must re-parse to the same
-  // node and edge counts, or we'd write art the canvas can't read back.
-  const verification = parseAsciiDiagram(rendered);
-  if (
-    verification.nodes.length !== next.nodes.length ||
-    verification.edges.length !== next.edges.length
-  ) {
+  // Verify before committing: the art must re-parse to the same diagram, or
+  // we'd write art the canvas can't read back. When the boxes as placed
+  // can't be drawn faithfully, the edit is kept and the layout gives way
+  // (spread apart, then arranged) — refusing would discard what the user did.
+  const rendered = redrawAsciiDiagram(next);
+  if (rendered === null) {
     onRejected?.();
     return false;
   }

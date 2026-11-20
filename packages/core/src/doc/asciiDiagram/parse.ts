@@ -1167,11 +1167,26 @@ function extractEdges(
     // Junction cells touching a perimeter are attachments too — the
     // `┌──┴──┐` bus-split shape connects to the box it branched from even
     // though the junction cell has 2+ neighbors and no arrowhead.
+    //
+    // An ASCII `+` is also every corner a line turns at, and one turning
+    // beside a box (`|` above, `-` to its right, a border below) is not a
+    // junction: it has exactly one vertical and one horizontal neighbor,
+    // where a bus split's `+--+--+` runs straight through or branches. Read
+    // as one, the turn hooks the route into whatever box it passes, and a
+    // fan-out whose jog hugs a sibling's top border gains a phantom edge.
+    // Unicode draws the same turn as `└`, which was never a junction.
+    const isTurnPlus = (r: number, c: number): boolean => {
+      const has = (nr: number, nc: number) => inComponent.has(nr * W + nc);
+      const vertical = Number(has(r - 1, c)) + Number(has(r + 1, c));
+      const horizontal = Number(has(r, c - 1)) + Number(has(r, c + 1));
+      return vertical === 1 && horizontal === 1;
+    };
     for (const idx of component) {
       const r = Math.floor(idx / W);
       const c = idx % W;
       const ch = grid[r][c];
       if (!isJunction(ch) && !isPlus(ch)) continue;
+      if (isPlus(ch) && isTurnPlus(r, c)) continue;
       for (const [dr, dc] of [
         [-1, 0],
         [1, 0],
@@ -1536,20 +1551,67 @@ function asciiArrowGate(
         : dir === 'right'
           ? [r, c - 1]
           : [r, c + 1];
+  const vertical = dir === 'down' || dir === 'up';
   const behind = grid[br]?.[bc];
-  if (behind === undefined) return false;
-  if (dir === 'down' || dir === 'up' ? isVert(behind) : isHoriz(behind)) return true;
-  if (!isBoxCell || !isPlus(behind) || isBoxCell(br, bc)) return false;
+  if (behind !== undefined && (vertical ? isVert(behind) : isHoriz(behind))) return true;
+  if (!isBoxCell) return false;
   const line = (lr: number, lc: number, test: (ch: string) => boolean): boolean => {
     const ch = grid[lr]?.[lc];
     return ch !== undefined && test(ch) && !isBoxCell(lr, lc);
   };
+  if (isCornerArrow(grid, r, c, dir, isBoxCell, line)) return true;
+  if (behind === undefined || !isPlus(behind) || isBoxCell(br, bc)) return false;
   return (
     line(br, bc - 1, isHoriz) ||
     line(br, bc + 1, isHoriz) ||
     line(br - 1, bc, isVert) ||
     line(br + 1, bc, isVert)
   );
+}
+
+/**
+ * A corner arrowhead: the line arrives from the side and the head turns into
+ * the box it points at, `+------v` over a top border (`└──────▼` in Unicode,
+ * where the glyph alone says arrow). The renderer ends a fan-out's innermost
+ * jog this way. The letter counts only with a line on exactly one side, a
+ * blank on the other, and a box border straight ahead, so `--via--` and a
+ * caption's `v` stay text.
+ */
+function isCornerArrow(
+  grid: string[][],
+  r: number,
+  c: number,
+  dir: ArrowDirection,
+  isBoxCell: (r: number, c: number) => boolean,
+  line: (lr: number, lc: number, test: (ch: string) => boolean) => boolean,
+): boolean {
+  const [ar, ac] =
+    dir === 'down'
+      ? [r + 1, c]
+      : dir === 'up'
+        ? [r - 1, c]
+        : dir === 'right'
+          ? [r, c + 1]
+          : [r, c - 1];
+  if (!isBoxCell(ar, ac)) return false;
+  const vertical = dir === 'down' || dir === 'up';
+  const arm = vertical
+    ? (ch: string) => isHoriz(ch) || isPlus(ch)
+    : (ch: string) => isVert(ch) || isPlus(ch);
+  const [a, b]: Array<[number, number]> = vertical
+    ? [
+        [r, c - 1],
+        [r, c + 1],
+      ]
+    : [
+        [r - 1, c],
+        [r + 1, c],
+      ];
+  const blank = ([lr, lc]: [number, number]): boolean => {
+    const ch = grid[lr]?.[lc];
+    return ch === undefined || ch === ' ';
+  };
+  return (line(a[0], a[1], arm) && blank(b)) || (line(b[0], b[1], arm) && blank(a));
 }
 
 /** Cell predicate over a box mask, for `asciiArrowGate`. */

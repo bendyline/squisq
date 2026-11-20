@@ -233,8 +233,10 @@ export {
   ASCII_CHAR_H,
   ASCII_CHAR_W,
   ASCII_DIAGRAM_FENCE_LANGS,
+  ASCII_DIAGRAM_SPREAD_FACTORS,
   arrangeAsciiDiagram,
   asciiCellToCanvas,
+  asciiDiagramMeaning,
   asciiDiagramFromBlocks,
   asciiDiagramFromTemplateData,
   asciiDiagramToTemplateData,
@@ -247,6 +249,7 @@ export {
   parseAsciiDiagram,
   renderAsciiDiagram,
   repairAsciiDiagram,
+  spreadAsciiDiagram,
 } from './asciiDiagram/index.js';
 export type {
   ArrangeAsciiDiagramOptions,

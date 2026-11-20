@@ -39,9 +39,11 @@ const DEFAULT_DIAGRAM_HEIGHT = 420;
 /** How long the "edit not applied" notice stays up (ms). */
 const REJECTED_NOTICE_MS = 6000;
 
+// Only reached once every layout has been tried (see `redrawAsciiDiagram`),
+// so moving boxes is not advice worth giving; the source always works.
 const REJECTED_EDIT_MESSAGE =
-  "That change wasn't applied: the diagram couldn't be redrawn without losing a box or " +
-  'connection. Try giving the boxes more room, or edit the ASCII source.';
+  "That change can't be drawn in this diagram, so it wasn't applied. Choose Source to " +
+  'make it in the ASCII text instead.';
 
 interface AsciiDiagramWidgetProps {
   editor: Editor;

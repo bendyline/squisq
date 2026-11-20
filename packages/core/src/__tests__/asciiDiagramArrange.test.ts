@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   arrangeAsciiDiagram,
+  asciiDiagramMeaning,
   parseAsciiDiagram,
   renderAsciiDiagram,
+  spreadAsciiDiagram,
   type AsciiDiagram,
 } from '../doc/asciiDiagram/index.js';
 import { POSITIVE_FIXTURES } from './fixtures/asciiDiagrams.js';
@@ -106,5 +108,78 @@ describe('arrangeAsciiDiagram', () => {
   it('leaves an empty diagram alone', () => {
     const empty: AsciiDiagram = { nodes: [], edges: [], style: 'unicode', warnings: [] };
     expect(arrangeAsciiDiagram(empty)).toBe(empty);
+  });
+
+  it('spreads a packed arrangement apart rather than give up', () => {
+    // A fan whose last child also points at the first: in a tight layered
+    // layout the long Video → PDF route grazes a box in the middle layer.
+    const fan = parseAsciiDiagram(FAN_OUT_FOUR);
+    const withBackLink: AsciiDiagram = {
+      ...fan,
+      edges: [...fan.edges, { source: 'video', target: 'pdf', directed: true }],
+    };
+    const arranged = arrangeAsciiDiagram(withBackLink);
+    expect(arranged).not.toBe(withBackLink);
+    expect(meaning(parseAsciiDiagram(renderAsciiDiagram(arranged)))).toEqual(meaning(withBackLink));
+  });
+});
+
+const FAN_OUT_FOUR = [
+  '              +-----------------+',
+  '              |  Your document  |',
+  '              +--------+--------+',
+  '                       |',
+  '    +-----------+------+-----+------------+',
+  '    |           |            |            |',
+  '    v           v            v            v',
+  '+-------+  +--------+  +----------+  +---------+',
+  '|  PDF  |  |  Word  |  |  Slides  |  |  Video  |',
+  '+-------+  +--------+  +----------+  +---------+',
+].join('\n');
+
+describe('spreadAsciiDiagram', () => {
+  const diagram = parseAsciiDiagram(FAN_OUT_FOUR);
+  const at = (d: AsciiDiagram, id: string) => d.nodes.find((n) => n.id === id)!;
+
+  it('pushes boxes apart from a fixed top-left, keeping sizes and order', () => {
+    const spread = spreadAsciiDiagram(diagram, 2);
+    const left = (d: AsciiDiagram) => Math.min(...d.nodes.map((n) => n.col));
+    const top = (d: AsciiDiagram) => Math.min(...d.nodes.map((n) => n.row));
+    expect(left(spread)).toBe(left(diagram));
+    expect(top(spread)).toBe(top(diagram));
+    for (const n of diagram.nodes) {
+      expect(at(spread, n.id).wCols).toBe(n.wCols);
+      expect(at(spread, n.id).hRows).toBe(n.hRows);
+    }
+    const gap = (d: AsciiDiagram) => at(d, 'word').col - (at(d, 'pdf').col + at(d, 'pdf').wCols);
+    expect(gap(spread)).toBeGreaterThan(gap(diagram));
+  });
+
+  it('returns the same diagram for a factor of 1', () => {
+    expect(spreadAsciiDiagram(diagram, 1)).toBe(diagram);
+  });
+});
+
+describe('asciiDiagramMeaning', () => {
+  const diagram = parseAsciiDiagram(FAN_OUT_FOUR);
+
+  it('ignores where the boxes sit', () => {
+    expect(asciiDiagramMeaning(spreadAsciiDiagram(diagram, 3))).toBe(asciiDiagramMeaning(diagram));
+  });
+
+  it('tells a lost arrowhead apart, and can set edge labels aside', () => {
+    const undirected: AsciiDiagram = {
+      ...diagram,
+      edges: diagram.edges.map((e, i) => (i === 0 ? { ...e, directed: false } : e)),
+    };
+    expect(asciiDiagramMeaning(undirected)).not.toBe(asciiDiagramMeaning(diagram));
+    const labelled: AsciiDiagram = {
+      ...diagram,
+      edges: diagram.edges.map((e, i) => (i === 0 ? { ...e, label: 'export' } : e)),
+    };
+    expect(asciiDiagramMeaning(labelled)).not.toBe(asciiDiagramMeaning(diagram));
+    expect(asciiDiagramMeaning(labelled, { edgeLabels: false })).toBe(
+      asciiDiagramMeaning(diagram, { edgeLabels: false }),
+    );
   });
 });

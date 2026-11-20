@@ -281,6 +281,80 @@ describe('parseAsciiDiagram — edges', () => {
   });
 });
 
+describe('parseAsciiDiagram — ASCII turns and corner arrowheads', () => {
+  it('does not hook a route into a box its turn rests on', () => {
+    // The `+` where the route turns right sits on B's top border. It is a
+    // turn (one vertical, one horizontal neighbor), not a bus junction.
+    const art = [
+      '+-------+',
+      '|   A   |',
+      '+---+---+',
+      '    |',
+      '    +--------+',
+      '+-------+    |',
+      '|   B   |    v',
+      '+-------+ +--+----+',
+      '          |   C   |',
+      '          +-------+',
+    ].join('\n');
+    expect(parseAsciiDiagram(art).edges).toEqual([{ source: 'a', target: 'c', directed: true }]);
+  });
+
+  it('still joins a bus split drawn right under its box', () => {
+    const art = [
+      '+---------+',
+      '| Source  |',
+      '+---------+',
+      '  +--+--+',
+      '  v     v',
+      '+---+ +---+',
+      '| L | | R |',
+      '+---+ +---+',
+    ].join('\n');
+    expect(parseAsciiDiagram(art).edges).toEqual([
+      { source: 'source', target: 'l', directed: true },
+      { source: 'source', target: 'r', directed: true },
+    ]);
+  });
+
+  it('reads a `v` that ends a horizontal run over a box as an arrowhead', () => {
+    const art = [
+      '+-------+',
+      '|   A   |',
+      '+---+---+',
+      '    |',
+      '    +---------v',
+      '          +---+---+',
+      '          |   C   |',
+      '          +-------+',
+    ].join('\n');
+    expect(parseAsciiDiagram(art).edges).toEqual([{ source: 'a', target: 'c', directed: true }]);
+  });
+
+  it('reads the redrawn welcome fan-out as the four connections it draws', () => {
+    // What the renderer draws for a four-way fan: the jog to Video turns on
+    // Slides' top border and ends in a corner arrowhead.
+    const art = [
+      '              +-----------------+',
+      '              |  Your document  |',
+      '              +-----+-+-+-+-----+',
+      '                    | | | |',
+      '    +---------------+ | | |',
+      '    |          +------+ | |',
+      '    v          v        v +---------------v',
+      '+---+---+  +---+----+  ++---------+  +----+----+',
+      '|  PDF  |  |  Word  |  |  Slides  |  |  Video  |',
+      '+-------+  +--------+  +----------+  +---------+',
+    ].join('\n');
+    expect(parseAsciiDiagram(art).edges).toEqual([
+      { source: 'your-document', target: 'pdf', directed: true },
+      { source: 'your-document', target: 'slides', directed: true },
+      { source: 'your-document', target: 'video', directed: true },
+      { source: 'your-document', target: 'word', directed: true },
+    ]);
+  });
+});
+
 describe('parseAsciiDiagram — containers', () => {
   it('parses the nested AI-style container fixture', () => {
     const d = parseAsciiDiagram(NESTED_CONTAINER);
