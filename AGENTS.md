@@ -472,8 +472,13 @@ squisq/
         summarize/          # Write › Summarize (LayoutMode 'summary'): SummarizeView chooses the
                             #   `squisq-transform` style — None, the built-ins, or Custom (core's
                             #   `dynamic-slides`, renamed for authors) — then shows the slides it
-                            #   makes, or for Custom the host's designer (EditorShell
-                            #   `summarizationDesigner`, an inline ReactNode that saves as it goes).
+                            #   makes, or for Custom the built-in SummaryDesigner (lazy chunk):
+                            #   slide list/picker, density, per-section layout, hide, wording, all
+                            #   saved as made to `squisq-presentation-hints`. AI is optional: the
+                            #   host lends `summarizationAssistant` (summarizationAssistant.ts —
+                            #   readiness, suggestSlides, renderReport; suggestSlides is usually
+                            #   core's `wordPresentationPlan` over the host's model transport);
+                            #   `summarizationDesigner` still replaces the designer outright.
                             #   The Write editor stays mounted, hidden, behind it, so the view's
                             #   frontmatter writes are Write undo steps; caret actions
                             #   (getSelection/replaceSelection/insert*) treat it like Use
@@ -891,7 +896,10 @@ prompt, a check and the drawing cannot disagree. Give a new concept template a `
 (`conceptSpecs.test.ts` fails without one), a worked example in `templates/markdownShapeGuide.ts`
 when a plain list can draw it, and, when it asserts a relationship, a case in `shapeIsStated`
 (`recommend/listShape.ts`). The exchange with a model that words a deck (prompts, reply shapes, the
-gates on a reply) is `transform/presentationAuthor.ts`; hosts make the calls and nothing else.
+gates on a reply) is `transform/presentationAuthor.ts`, and the loop that runs it (storyboard, one
+request per slide, one corrected retry) is `wordPresentationPlan` in
+`transform/presentationWording.ts`. Hosts pass it a transport — one function that sends a request
+to their model — and nothing else.
 
 If the template replaces an older name, add it to the internal `TEMPLATE_ALIASES` in `templates/templateNames.ts` so legacy documents still resolve. After adding, update the template count in this file's "Subpath Exports" → `@bendyline/squisq/doc` line.
 

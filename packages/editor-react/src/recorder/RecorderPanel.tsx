@@ -8,19 +8,26 @@
  * instead.
  */
 
-import { useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
-import {
-  RecorderModal,
-  type RecorderColorScheme,
-  type RecorderNarrationOptions,
-  type RecorderSaveResult,
-  type RecorderSlidesOptions,
+import type {
+  RecorderColorScheme,
+  RecorderNarrationOptions,
+  RecorderSaveResult,
+  RecorderSlidesOptions,
 } from './RecorderModal.js';
 import { Icon } from '../Icon';
 import type { RecorderSource } from './hooks/useMediaRecorder.js';
+
+// The dialog (capture hooks, device pickers, slides deck, narration stage) is
+// loaded the first time it opens: the editor toolbar shows this panel on every
+// visit, and most visits never record. e2e/startup-performance.spec.ts holds
+// the startup script budget this keeps it out of.
+const RecorderModal = lazy(() =>
+  import('./RecorderModal.js').then((module) => ({ default: module.RecorderModal })),
+);
 
 export interface RecorderPanelProps {
   mediaProvider: MediaProvider;
@@ -90,19 +97,21 @@ export function RecorderPanel({
       {open &&
         typeof document !== 'undefined' &&
         createPortal(
-          <RecorderModal
-            mediaProvider={mediaProvider}
-            container={container}
-            initialMode={initialMode}
-            colorScheme={colorScheme}
-            narration={narration}
-            slides={slides}
-            {...(title !== undefined ? { title } : {})}
-            onClose={handleClose}
-            onSave={(result) => {
-              onSave?.(result);
-            }}
-          />,
+          <Suspense fallback={null}>
+            <RecorderModal
+              mediaProvider={mediaProvider}
+              container={container}
+              initialMode={initialMode}
+              colorScheme={colorScheme}
+              narration={narration}
+              slides={slides}
+              {...(title !== undefined ? { title } : {})}
+              onClose={handleClose}
+              onSave={(result) => {
+                onSave?.(result);
+              }}
+            />
+          </Suspense>,
           document.body,
         )}
     </>

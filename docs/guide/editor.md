@@ -38,29 +38,33 @@ unsaved changes — save to a **Storage** slot or download a copy first.
 
 ## Views
 
-The tabs at the top left of the editor switch between three views of the same document:
+The editor has three views of the same document:
 
-| Tab                                      | What it's for                                                                                 |
-| ---------------------------------------- | --------------------------------------------------------------------------------------------- |
-| **Write** (named after the current mode) | Visual editing, like a word processor. Headings, lists, tables, and pictures appear formatted |
-| **Source**                               | The Markdown itself, with syntax colors and suggestions as you type tags                      |
-| **Use** (named after the current mode)   | The finished document — as a slideshow, page, video, dashboard, and more                      |
+| View                                   | What it's for                                                                                 |
+| -------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Write**                              | Visual editing, like a word processor. Headings, lists, tables, and pictures appear formatted |
+| **Source**                             | The Markdown itself, with syntax colors and suggestions as you type tags                      |
+| **Use** (named after the current mode) | The finished document — as a slideshow, page, video, dashboard, and more                      |
 
-The first and third tabs show the name of the mode you're in — **Write** and **Slideshow** until
-you choose others. Click the **▾** beside either one, or click the tab again while you're in it,
-to pick a mode; choosing one also switches to that tab. Switch views with Ctrl+Shift+1, 2, and 3
-(⌘⇧1, 2, and 3 on a Mac).
+Two tabs at the top left reach them. The first is for editing: it reads **Write** (or the Write
+mode you're in, such as **Blocks**) or, while you're in Source, **Source**. The second is Use,
+named after its mode — **Slideshow** until you choose another. Click the **▾** beside either tab,
+or click the tab again while you're in it, to pick a mode; choosing one also switches to that tab.
+Source is in the first tab's menu, right under **Write**. Switch views with Ctrl+Shift+1, 2, and 3
+(⌘⇧1, 2, and 3 on a Mac): Write, Source, and Use.
 
 Changes in one view appear in the others immediately. Write and Source edit the same Markdown,
 and Write leaves the parts of your file you didn't touch exactly as they were.
 
-### Write modes: Write, Blocks, Timeline, Summarize
+### The Write menu: Write, Source, Blocks, Timeline, Summarize
 
-The **▾** beside the first tab changes how Write lays out the document, and the tab is named after
-the mode. Source always shows the whole file: switching to it from Blocks or Timeline opens it at
-the block you were on, and switching back opens Write on the block holding the Source cursor.
+The **▾** beside the first tab chooses how you edit, and the tab is named after your choice.
+Source always shows the whole file: switching to it from Blocks or Timeline opens it at the block
+you were on, and switching back opens Write on the block holding the Source cursor.
 
 - **Write** — the whole document in one scrolling column. The default.
+- **Source** — the Markdown text of the whole file. Write keeps the mode it was in, so Ctrl+Shift+1
+  (⌘⇧1) returns to it.
 - **Blocks** — one block on a card, with **Previous**, **Next**, a "Block N of M"
   counter, and **Add block**.
 - **Timeline** — a card for the selected block above a timeline of every block and media clip.
@@ -73,9 +77,17 @@ the block you were on, and switching back opens Write on the block holding the S
   - **Documentary**, **Magazine**, **Data-Driven**, **Narrative**, **Minimal**, or **Headings and
     features** — the document re-cut into a presentation in that style. Below the choice are the
     slides it makes.
-  - **Custom** — concise slides and diagrams generated from your text, which you can adjust slide
-    by slide. In apps that provide a designer, it appears here: change a slide's layout or wording,
-    hide a slide, or ask AI for suggestions. Each change is saved as you make it.
+  - **Custom** — concise slides and diagrams generated from your text, which you adjust slide by
+    slide in the designer below the choice. Set the **Summary density** and whether to **Add
+    supporting visual slides**, then pick a slide from the list (in a narrow window, from the
+    **Slide** menu with **Previous** and **Next**, or with ← and →). For the slide you picked, you
+    can hide it, choose its section's **Layout preference** — including **As authored**, which
+    shows the section as you wrote it — and, under **Customize slide wording**, rewrite the
+    headline and highlights of a section's first slide. **Reset design** returns every slide to its
+    automatic summary. Apps that connect an AI add **Suggest with AI**, which proposes a layout and
+    shorter wording for each slide. Each change is saved as you make it, and Ctrl+Z in Write
+    undoes it. Wording you write applies only while the section's text is unchanged; edit the
+    text and that slide returns to an automatic summary.
 
   Your Markdown and narration are not changed; the choice is saved in the document's
   frontmatter. Formatting buttons are hidden while Summarize is open.
@@ -333,7 +345,7 @@ The toolbar above the preview changes with the mode. Depending on the mode, it o
 - **Block:** (Slideshow) — the block type of the slide on screen. Pick another from the gallery
   to restyle that slide without going back to Write; the choice is saved as the heading's
   `{[…]}` tag. It is greyed out on the cover and while a
-  [Summarize](#write-modes-write-blocks-timeline-summarize) style is choosing the layouts.
+  [Summarize](#the-write-menu-write-source-blocks-timeline-summarize) style is choosing the layouts.
 - **Theme:** — the theme picker and its pencil (see [Themes](#themes)).
 - **Cover slide** — show or hide the cover, choose its **Appearance** and **Duration**, choose
   whether an exported video waits for it, and **Export cover as image…**.

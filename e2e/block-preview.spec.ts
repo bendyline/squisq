@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { selectWriteMode, type WriteMode } from './view-tabs';
+import { selectWriteMode, switchView, type WriteMode } from './view-tabs';
 
 /**
  * E2E for the large block preview shown beside the editing card in
@@ -82,7 +82,7 @@ for (const view of ['Write', 'Source'] as const) {
     await page.setViewportSize({ width: 1600, height: 1000 });
     await load(page);
     await configureView(page, { layout: 'Write', previews: true });
-    if (view === 'Source') await page.getByRole('tab', { name: 'Source', exact: true }).click();
+    if (view === 'Source') await switchView(page, 'Markdown');
     const gutter = page.getByTestId('inline-preview-gutter');
     await expect(gutter).toBeVisible();
     const cards = gutter.locator('.squisq-inline-preview-card');
@@ -100,7 +100,7 @@ test('document mode previews prose without any headings in Source and Write', as
   await page.setViewportSize({ width: 1600, height: 1000 });
   await load(page);
   await configureView(page, { layout: 'Write', previews: true });
-  await page.getByRole('tab', { name: 'Source', exact: true }).click();
+  await switchView(page, 'Markdown');
   const source = page.locator('[data-testid="raw-editor"] textarea.inputarea');
   await expect(source).toBeVisible();
   const modifier = await page.evaluate(() =>
@@ -115,7 +115,7 @@ test('document mode previews prose without any headings in Source and Write', as
     'An introduction without any headings or template tags.',
   );
 
-  await page.getByRole('tab', { name: 'Write', exact: true }).click();
+  await switchView(page, 'Editor');
   await expect(page.locator('.tiptap.ProseMirror')).toHaveText(
     'An introduction without any headings or template tags.',
   );

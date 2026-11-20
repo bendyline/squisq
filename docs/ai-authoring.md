@@ -92,35 +92,35 @@ there is a hierarchy, that the two share something. When it does not,
 
 `createPresentationPlan` makes a deck from prose on its own. A host with a model can improve it:
 the model plans every slide's layout together, then words each slide. Everything about that
-exchange except the transport is in `@bendyline/squisq/transform`
-(`core/src/transform/presentationAuthor.ts`), so every host asks the same questions:
+exchange except the transport is in `@bendyline/squisq/transform`, so every host asks the same
+questions and holds the answers to the same standard. `wordPresentationPlan`
+(`core/src/transform/presentationWording.ts`) runs it; the host passes one function that sends a
+request to its model:
 
 ```ts
-const asked = presentationSlidesToWord(plan);
-const planned = presentationUsesStoryboard(asked)
-  ? readPresentationStoryboardReply(
-      await chat(presentationStoryboardPrompt(), presentationStoryboardRequest(plan, asked)),
-      plan,
-      asked,
-    )
-  : new Map();
-for (const index of asked) {
-  let context = { planned: planned.get(index) };
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const request = presentationSlideRequest(plan, index, context);
-    const read = readPresentationSlideReply(
-      await chat(presentationSlidePrompt(), request),
-      plan,
-      index,
-    );
-    if (read.beat) {
-      beats[index] = read.beat;
-      break;
-    }
-    context = presentationRetryContext(context, read);
-  }
-}
+const { plan: worded, refined, retained } = await wordPresentationPlan(
+  plan,
+  async (request, signal) => {
+    // request: kind ('storyboard' | 'slide'), system, user, responseFormat, maxTokens, temperature
+    const reply = await myModel.chat(request, { signal });
+    return { text: reply.text, truncated: reply.stoppedAtLimit };
+  },
+  { signal, onProgress, onBeat },
+);
 ```
+
+- Requests go one at a time. A deck long enough to benefit, and short enough for a small model to
+  see at once, gets one `storyboard` request that plans every layout; then each slide gets a
+  `slide` request, retried once with a correction that quotes what was wrong. A reply refused
+  twice keeps the automatic slide.
+- `onBeat` reports each slide as soon as it resolves — the accepted slide, or null when the
+  automatic one is kept — so a caller can show and save suggestions while the rest run.
+  `onAttempt` reports every reply and why it was refused, for evaluations.
+- The transport throws to report a failure. A failed storyboard only costs the deck its plan; a
+  failed slide ends the run with that error. Aborting the signal stops the run with an
+  `AbortError` before the next request, even if the transport ignores it.
+
+The pieces it runs are exported too, for a host that needs a different loop:
 
 - The prompts are rendered from the layout guide and the tricks above, so a layout added to
   Squisq reaches them. `PRESENTATION_SLIDE_FORMAT` and `PRESENTATION_STORYBOARD_FORMAT` are JSON
@@ -139,6 +139,26 @@ for (const index of asked) {
 
 A plan's beat can carry what a layout draws beyond its points: `center` on a hub, `xAxis` and
 `yAxis` on a matrix (`presentationBeatExtras`). They are saved only on the layout that draws them.
+
+In the editor, that loop is what **Suggest with AI** runs in the Custom summary designer (Write ›
+Summarize, Custom). The designer is built in; a host lends it the calls through `EditorShell`'s
+`summarizationAssistant`:
+
+```ts
+const summarizationAssistant: SummarizationAssistant = {
+  // null when suggestions can run; otherwise why not, shown on the button.
+  readiness: async () => ((await ai.ready()) ? null : 'Turn on AI features in Settings.'),
+  onReadinessChange: (listener) => ai.onChange(listener),
+  // The designer saves each slide as onBeat reports it.
+  suggestSlides: async (plan, options) => {
+    await wordPresentationPlan(plan, sendToMyModel, options);
+  },
+  // Optional: shown after a run, e.g. a way to report what the model wrote.
+  renderReport: (output) => <ReportButton output={output} />,
+};
+```
+
+Without one, the designer works the same, with no AI.
 
 The automatic plan keeps a short tail with its slide. A section a little longer than one slide
 is not cut into a slide and a one-sentence remainder, so a cycle keeps the sentence that closes

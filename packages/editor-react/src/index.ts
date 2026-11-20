@@ -203,6 +203,11 @@ export { VersionHistoryPanel } from './VersionHistoryPanel.js';
 export { ViewMenuPanel } from './ViewMenuPanel.js';
 export { WriteModeMenu } from './WriteModeMenu.js';
 export type { WriteModeMenuProps } from './WriteModeMenu.js';
+// Write › Summarize: the AI a host lends the Custom summary designer.
+export type {
+  SummarizationAssistant,
+  SuggestSlidesOptions,
+} from './summarize/summarizationAssistant.js';
 export { TransformMenu } from './TransformMenu.js';
 export { ingestForWrite, persistFromWrite } from './wrapPolicy.js';
 export type { WrapPolicyIngest } from './wrapPolicy.js';

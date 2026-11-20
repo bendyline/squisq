@@ -85,10 +85,18 @@ test.describe('Site navigation', () => {
     expect(values).toContain('all-templates');
   });
 
-  test('view switcher has Markdown, Editor, Play tabs', async ({ page }) => {
-    for (const label of ['Markdown', 'Editor', 'Play'] as const satisfies readonly ViewTab[]) {
+  test('view switcher has Editor and Play tabs, with Source in the Write menu', async ({
+    page,
+  }) => {
+    for (const label of ['Editor', 'Play'] as const satisfies readonly ViewTab[]) {
       await expect(viewTab(page, label)).toBeVisible();
     }
+    await page.getByRole('button', { name: 'Choose Write mode', exact: true }).click();
+    await expect(
+      page
+        .getByRole('menu', { name: 'Write mode', exact: true })
+        .getByRole('menuitemradio', { name: 'Source', exact: true }),
+    ).toBeVisible();
   });
 
   test('switching to Markdown view shows the Monaco editor', async ({ page }) => {

@@ -438,6 +438,20 @@ describe('<EditorShell> instance boundaries', () => {
     expect(onSurfaceKeyDown).not.toHaveBeenCalled();
   });
 
+  it('opens Source from Write by its shortcut, though Source has no tab of its own', async () => {
+    render(<EditorShell initialMarkdown="# Story" initialView="wysiwyg" />);
+    expect(screen.queryByRole('tab', { name: 'Source' })).toBeNull();
+    fireEvent.keyDown(screen.getByTestId('wysiwyg-editor-stub'), {
+      key: '@',
+      code: 'Digit2',
+      ctrlKey: true,
+      shiftKey: true,
+    });
+    await waitFor(() => expect(screen.getByTestId('raw-editor-stub')).toBeTruthy());
+    expect(screen.getByRole('tab', { name: 'Source' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('menu', { name: 'Write mode' })).toBeNull();
+  });
+
   it('leaves unshifted heading shortcuts and Alt chords to the editing surface', () => {
     render(<EditorShell initialMarkdown="# original" initialView="raw" />);
     const source = screen.getByTestId('raw-editor-stub');
@@ -673,7 +687,7 @@ describe('<EditorShell> Files badge', () => {
     fireEvent.click(await screen.findByLabelText('Attachments'));
     fireEvent.click(await screen.findByRole('button', { name: 'Record media' }));
 
-    expect(screen.getByRole('dialog', { name: 'Record media' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Record media' })).toBeTruthy();
   });
 
   it('hides the Attachments panel Record button when the host disables recording', async () => {
@@ -1067,7 +1081,7 @@ describe('<Toolbar> Insert menu', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Record media' }));
 
     expect(screen.queryByRole('menu')).toBeNull();
-    expect(screen.getByRole('dialog', { name: 'Record media' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Record media' })).toBeTruthy();
   });
 
   it('opens document narration from the Insert menu as its own dialog', async () => {
@@ -1087,7 +1101,7 @@ describe('<Toolbar> Insert menu', () => {
     expect(screen.queryByRole('menu')).toBeNull();
     // A separate controller from "Record media", so the two dialogs never
     // share open state — and it names what it captures.
-    expect(screen.getByRole('dialog', { name: 'Record document narration' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Record document narration' })).toBeTruthy();
     expect(screen.queryByRole('dialog', { name: 'Record media' })).toBeNull();
     expect(screen.getByRole('checkbox', { name: 'Show narration mode' })).toBeTruthy();
     expect(screen.getByRole('checkbox', { name: 'Show slides mode' })).toBeTruthy();

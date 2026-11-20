@@ -6,15 +6,17 @@
  * choice is the document's `squisq-transform`, written through the preview
  * settings exactly as the Use toolbar's old Summarize dropdown wrote it.
  *
- * Below the choice sits what that choice makes. For Custom, that is the host's
- * designer when it supplies one (`EditorShell`'s `summarizationDesigner`), where
- * the author adjusts each slide; otherwise it is the deck the style produces,
- * drawn through the same projection the slideshow plays.
+ * Below the choice sits what that choice makes. For a built-in style, that is
+ * the deck the style produces, drawn through the same projection the slideshow
+ * plays. For Custom, it is the designer, where the author picks a slide and
+ * changes its layout and wording, hides it, or — when the host lends an AI
+ * `SummarizationAssistant` — asks for suggestions. A host may replace the
+ * designer outright (`EditorShell`'s `summarizationDesigner`).
  *
  * The shell keeps this view mounted, hidden, while Use is open — as it keeps
  * the editors — so a designer's work in progress survives a look at the deck.
  */
-import { useId, useMemo, type CSSProperties, type ReactNode } from 'react';
+import { lazy, Suspense, useId, useMemo, type CSSProperties, type ReactNode } from 'react';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { expandDocBlocks } from '@bendyline/squisq/doc';
 import { BlockRenderer } from '@bendyline/squisq-react';
@@ -24,10 +26,18 @@ import { usePreviewProjection } from '../usePreviewProjection';
 import { documentTitleFromFileName } from '../buildPreviewDoc';
 import { templateLabel } from '../TemplatePicker';
 import { CUSTOM_SUMMARY_STYLE, SUMMARY_STYLE_OPTIONS } from './summaryStyles';
+import type { SummarizationAssistant } from './summarizationAssistant';
+
+// Loaded the first time Custom is open: most visits to Summarize never design.
+const SummaryDesigner = lazy(() =>
+  import('./SummaryDesigner').then((module) => ({ default: module.SummaryDesigner })),
+);
 
 export interface SummarizeViewProps {
-  /** The host's designer for the Custom style. Without one, Custom shows its slides. */
+  /** Replaces the built-in Custom designer. */
   designer?: ReactNode;
+  /** The host's AI for the built-in designer's "Suggest with AI". */
+  assistant?: SummarizationAssistant;
   /** Base path for resolving media URLs in the slide previews. */
   basePath: string;
   workspaceContainer?: ContentContainer | null;
@@ -38,6 +48,7 @@ export interface SummarizeViewProps {
 
 export function SummarizeView({
   designer,
+  assistant,
   basePath,
   workspaceContainer,
   readOnly,
@@ -45,7 +56,7 @@ export function SummarizeView({
 }: SummarizeViewProps) {
   const { activeTransformStyle, setSelectedTransformStyle } = usePreviewSettings();
   const groupId = useId();
-  const designing = activeTransformStyle === CUSTOM_SUMMARY_STYLE && !!designer;
+  const designing = activeTransformStyle === CUSTOM_SUMMARY_STYLE;
   return (
     <section
       className="squisq-summarize"
@@ -99,7 +110,17 @@ export function SummarizeView({
         </fieldset>
         <div className="squisq-summarize-body">
           {designing ? (
-            designer
+            (designer ?? (
+              <Suspense
+                fallback={
+                  <p className="squisq-summarize-empty" role="status">
+                    Preparing slides…
+                  </p>
+                }
+              >
+                <SummaryDesigner assistant={assistant} readOnly={readOnly} basePath={basePath} />
+              </Suspense>
+            ))
           ) : (
             <SummarySlides
               transformStyle={activeTransformStyle}

@@ -157,8 +157,8 @@ Settings in the toolbar:
 
 To re-cut the document into a presentation in a style such as Documentary, Magazine,
 Data-Driven, or Minimal — or **Custom**, whose slides you adjust one by one — open
-[Write › Summarize](editor.md#write-modes-write-blocks-timeline-summarize). Your source does not
-change; the style is saved as `squisq-transform`.
+[Write › Summarize](editor.md#the-write-menu-write-source-blocks-timeline-summarize). Your source
+does not change; the style is saved as `squisq-transform`.
 
 The slideshow is also what a PowerPoint export and an HTML slideshow export contain, one slide per
 block.

@@ -152,13 +152,29 @@ describe('Write › Summarize', () => {
     expect(await within(view).findByRole('list', { name: 'Slides' })).toBeTruthy();
   });
 
-  it('previews Custom’s slides when the host has no designer', async () => {
+  it('designs Custom with the built-in designer when the host supplies none', async () => {
     renderShell({
       initialMarkdown: `---\nsquisq-transform: dynamic-slides\n---\n\n${TWO_SECTIONS}`,
     });
     const view = openSummarize();
-    const slides = await within(view).findByRole('list', { name: 'Slides' });
-    await waitFor(() => expect(within(slides).getAllByRole('listitem').length).toBeGreaterThan(0));
+    const designer = await within(view).findByRole('region', { name: 'Summarization designer' });
+    const list = await within(designer).findByRole('navigation', { name: 'Presentation slides' });
+    await waitFor(() => expect(within(list).getAllByRole('button').length).toBeGreaterThan(0));
+    expect(within(view).queryByRole('list', { name: 'Slides' })).toBeNull();
+    // With no assistant there is no AI to offer.
+    expect(within(designer).queryByRole('button', { name: 'Suggest with AI' })).toBeNull();
+  });
+
+  it('lends the host’s assistant to the built-in designer', async () => {
+    renderShell({
+      initialMarkdown: `---\nsquisq-transform: dynamic-slides\n---\n\n${TWO_SECTIONS}`,
+      summarizationAssistant: { readiness: () => null, suggestSlides: async () => undefined },
+    });
+    const view = openSummarize();
+    const suggest = await within(view).findByRole<HTMLButtonElement>('button', {
+      name: 'Suggest with AI',
+    });
+    await waitFor(() => expect(suggest.disabled).toBe(false));
   });
 
   it('keeps the designer mounted while Use is open', () => {
