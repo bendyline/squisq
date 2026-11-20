@@ -214,7 +214,7 @@ describe('Slideshow block-type control', () => {
 
   it('explains that Summarize chooses the layout of generated slides', async () => {
     renderControl(DECK, { blockIndex: 1, generated: true });
-    await waitFor(() => expect(trigger().title).toMatch(/Set Summarize to None/));
+    await waitFor(() => expect(trigger().title).toMatch(/choose None in Write › Summarize/));
     expect(disabled()).toBe(true);
   });
 
@@ -226,7 +226,7 @@ describe('Slideshow block-type control', () => {
 
     fireEvent.click(trigger());
     expect(screen.queryByRole('dialog')).toBeNull();
-    expect(screen.getByRole('tooltip').textContent).toMatch(/Set Summarize to None/);
+    expect(screen.getByRole('tooltip').textContent).toMatch(/choose None in Write › Summarize/);
     expect(trigger().getAttribute('aria-describedby')).toBe(reason()!.id);
 
     // Pressing again puts it away…

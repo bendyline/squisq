@@ -1,6 +1,6 @@
 /** View selection and the Write/Use mode menus stay together across hosts. */
 import { useEffect, useReducer, useRef, useState } from 'react';
-import { useEditorContext, type EditorView } from '../EditorContext';
+import { useEditorContext, type EditingView, type EditorView } from '../EditorContext';
 import { PreviewModeMenu } from '../PreviewModeMenu';
 import { WriteModeMenu } from '../WriteModeMenu';
 import { writeModeLabel } from '../writeModes';
@@ -17,17 +17,22 @@ import { navigateViewTabs } from '../viewTabKeyboard';
  * In a narrow toolbar a tab shows its `icon`, or its short label, instead of
  * its label (see toolbar.css). Its accessible name stays the full label.
  */
-const VIEWS: {
+interface ViewTab {
   id: EditorView;
   label: string;
   shortLabel?: string;
   icon?: string;
   shortcutKey: string;
-}[] = [
-  { id: 'wysiwyg', label: 'Write', shortcutKey: '1' },
-  { id: 'raw', label: 'Source', icon: 'fa-solid fa-code', shortcutKey: '2' },
-  { id: 'preview', label: 'Use', shortcutKey: '3' },
-];
+}
+
+const WRITE_TAB: ViewTab = { id: 'wysiwyg', label: 'Write', shortcutKey: '1' };
+const SOURCE_TAB: ViewTab = {
+  id: 'raw',
+  label: 'Source',
+  icon: 'fa-solid fa-code',
+  shortcutKey: '2',
+};
+const USE_TAB: ViewTab = { id: 'preview', label: 'Use', shortcutKey: '3' };
 
 export function EditorViewTabs({
   showPlayTab,
@@ -36,26 +41,28 @@ export function EditorViewTabs({
   showPlayTab: boolean;
   hostMode: EditorHostMode;
 }) {
-  const { editorMode, activeView, setActiveView, layoutMode } = useEditorContext();
+  const { editorMode, activeView, editingView, setActiveView, layoutMode } = useEditorContext();
   const [focusedView, setFocusedView] = useState(activeView);
   useEffect(() => setFocusedView(activeView), [activeView]);
   const previewSettings = usePreviewSettingsOptional();
   const [useModeMenuRequest, requestUseModeMenu] = useReducer((count: number) => count + 1, 0);
   const [writeModeMenuRequest, requestWriteModeMenu] = useReducer((count: number) => count + 1, 0);
   const writeTabRef = useRef<HTMLDivElement>(null);
-  // In code mode only the raw view is meaningful; the WYSIWYG and Preview
-  // surfaces aren't mounted, so hide their tabs.
-  const visibleViews = VIEWS.filter((v) => {
-    if (hostMode === 'chat') return v.id === 'wysiwyg';
-    if (editorMode === 'code') return v.id === 'raw';
-    if (v.id === 'preview' && !showPlayTab) return false;
-    return true;
+  // The first tab is the editing surface: Write in its chosen layout, or
+  // Source, both picked from the menu beside it. It carries the name and the
+  // `data-view` of the surface it shows, and from Use it returns to that one.
+  // Code mode edits only source; a chat composer only writes.
+  const editView: EditingView =
+    editorMode === 'code' ? 'raw' : hostMode === 'chat' ? 'wysiwyg' : editingView;
+  const visibleViews = [editView === 'raw' ? SOURCE_TAB : WRITE_TAB, USE_TAB].filter((v) => {
+    if (v.id !== 'preview') return true;
+    return hostMode !== 'chat' && editorMode !== 'code' && showPlayTab;
   });
   const showViewTabs = visibleViews.length > 1;
-  // Only markdown documents have block and timeline layouts to choose from.
+  // Only markdown documents have Source, block, and timeline modes to choose from.
   const hasWriteModes = editorMode === 'markdown';
   const modeMenuOf = (id: EditorView): 'write' | 'use' | null => {
-    if (id === 'wysiwyg' && hasWriteModes) return 'write';
+    if (id !== 'preview' && hasWriteModes) return 'write';
     if (id === 'preview' && previewSettings) return 'use';
     return null;
   };
@@ -71,7 +78,7 @@ export function EditorViewTabs({
               const viewLabel =
                 modeMenu === 'use' && previewSettings
                   ? displayModeLabel(previewSettings.activeDisplayMode)
-                  : modeMenu === 'write'
+                  : modeMenu === 'write' && view.id === 'wysiwyg'
                     ? writeModeLabel(layoutMode)
                     : view.label;
               const shortLabel =
@@ -127,7 +134,7 @@ export function EditorViewTabs({
                 </button>
               );
 
-              const wrapClass = `squisq-toolbar-view-tab-wrap squisq-toolbar-view-tab-wrap--${view.id}`;
+              const wrapClass = `squisq-toolbar-view-tab-wrap squisq-toolbar-view-tab-wrap--${view.id === 'preview' ? 'preview' : 'edit'}`;
               if (!modeMenu) {
                 return (
                   <div key={view.id} className={wrapClass} role="presentation">
@@ -150,9 +157,9 @@ export function EditorViewTabs({
           </div>
           {/* The ▾ buttons sit outside the tablist, which may own only tabs; the
               stylesheet places each one beside its tab. */}
-          {hasWriteModes && isVisible('wysiwyg') && (
+          {hasWriteModes && (
             <div
-              className={`squisq-toolbar-mode-menu squisq-toolbar-write-menu${activeView === 'wysiwyg' ? ' squisq-toolbar-mode-tab--active' : ''}`}
+              className={`squisq-toolbar-mode-menu squisq-toolbar-write-menu${activeView !== 'preview' ? ' squisq-toolbar-mode-tab--active' : ''}`}
             >
               <WriteModeMenu openRequest={writeModeMenuRequest} alignWith={writeTabRef} />
             </div>

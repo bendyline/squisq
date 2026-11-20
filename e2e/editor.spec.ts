@@ -124,16 +124,26 @@ test.describe('Editor view switching', () => {
     await expect(page.locator('[data-testid="preview-panel"]')).toBeVisible();
   });
 
-  test('all three tabs are visible in the toolbar', async ({ page }) => {
-    for (const label of ['Editor', 'Markdown', 'Play'] as const satisfies readonly ViewTab[]) {
+  test('Write and Use are tabs, and Source is in the Write menu under Write', async ({ page }) => {
+    for (const label of ['Editor', 'Play'] as const satisfies readonly ViewTab[]) {
       await expect(viewTab(page, label)).toBeVisible();
     }
+    await expect(viewTab(page, 'Markdown')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Choose Write mode', exact: true }).click();
+    const items = page
+      .getByRole('menu', { name: 'Write mode', exact: true })
+      .getByRole('menuitemradio');
+    await expect(items.nth(0)).toHaveAccessibleName('Write');
+    await expect(items.nth(1)).toHaveAccessibleName('Source');
+    await items.nth(1).click();
+    await expect(viewTab(page, 'Markdown')).toHaveAccessibleName('Source');
+    await expect(viewTab(page, 'Markdown')).toHaveAttribute('aria-selected', 'true');
   });
 
   test('tabs are not too narrow to read', async ({ page }) => {
     const tabs = page.locator('.squisq-toolbar-view-tab');
     const count = await tabs.count();
-    expect(count).toBe(3);
+    expect(count).toBe(2);
 
     for (let i = 0; i < count; i++) {
       const box = await tabs.nth(i).boundingBox();
@@ -190,15 +200,15 @@ test.describe('Editor toolbar', () => {
     expect(tabsBg).not.toBe(toolbarBg);
   });
 
-  test('the Write menu button sits between the Write and Source tabs', async ({ page }) => {
+  test('the Write menu button sits between the Write and Use tabs', async ({ page }) => {
     const write = await viewTab(page, 'Editor').boundingBox();
-    const source = await viewTab(page, 'Markdown').boundingBox();
+    const use = await viewTab(page, 'Play').boundingBox();
     const trigger = await page
       .getByRole('button', { name: 'Choose Write mode', exact: true })
       .boundingBox();
-    expect(write && source && trigger).toBeTruthy();
+    expect(write && use && trigger).toBeTruthy();
     expect(trigger!.x).toBeGreaterThanOrEqual(write!.x + write!.width - 1);
-    expect(trigger!.x + trigger!.width).toBeLessThanOrEqual(source!.x + 1);
+    expect(trigger!.x + trigger!.width).toBeLessThanOrEqual(use!.x + 1);
   });
 
   test('the mode-menu buttons are drawn as buttons with full-height targets', async ({ page }) => {
@@ -206,7 +216,7 @@ test.describe('Editor toolbar', () => {
       const trigger = page.getByRole('button', { name, exact: true });
       const target = await trigger.boundingBox();
       const face = await trigger.locator('.squisq-view-mode-trigger-face').boundingBox();
-      const tab = await viewTab(page, 'Markdown').boundingBox();
+      const tab = await viewTab(page, 'Editor').boundingBox();
       // The whole column beside the tab responds, not just the visible face.
       expect(target!.width).toBeGreaterThanOrEqual(32);
       expect(target!.height).toBeGreaterThanOrEqual(tab!.height - 2);

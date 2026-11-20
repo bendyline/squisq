@@ -1,7 +1,8 @@
 /**
- * `onRejected` separates "the redraw would lose part of the diagram" from a
- * plain no-op, so the canvas can explain an edit that didn't stick. The
- * renderer is wrapped so one test can make it drop a box.
+ * `onRejected` separates "no redraw keeps the whole diagram" from a plain
+ * no-op, so the canvas can explain an edit that didn't stick. The renderer is
+ * wrapped so a test can make it drop a box — once (the layout as placed; the
+ * edit should land in another layout) or every time (nothing can be drawn).
  */
 
 import { Editor } from '@tiptap/core';
@@ -54,16 +55,17 @@ function makeEditor(): { editor: Editor; blockId: string } {
 afterEach(() => {
   for (const e of editors) e.destroy();
   editors = [];
-  vi.mocked(doc.renderAsciiDiagram).mockClear();
+  // Back to the real renderer (`vi.fn(impl)` resets to `impl`).
+  vi.mocked(doc.renderAsciiDiagram).mockReset();
 });
 
+const LOSES_A_BOX = ['┌────────┐', '│ Alpha  │', '└────────┘'].join('\n');
+
 describe('applyAsciiDiagramCommand onRejected', () => {
-  it('fires when the redrawn art would lose a box, and leaves the fence alone', () => {
+  it('fires when every redraw would lose a box, and leaves the fence alone', () => {
     const { editor, blockId } = makeEditor();
     const before = editor.getText();
-    vi.mocked(doc.renderAsciiDiagram).mockImplementationOnce(() =>
-      ['┌────────┐', '│ Alpha  │', '└────────┘'].join('\n'),
-    );
+    vi.mocked(doc.renderAsciiDiagram).mockImplementation(() => LOSES_A_BOX);
     const onRejected = vi.fn();
     const applied = applyAsciiDiagramCommand(
       editor,
@@ -76,9 +78,25 @@ describe('applyAsciiDiagramCommand onRejected', () => {
     expect(editor.getText()).toBe(before);
   });
 
-  it('fires when the redrawn art would lose a connection', () => {
+  it('keeps the edit when only the boxes as placed would lose a box', () => {
     const { editor, blockId } = makeEditor();
-    vi.mocked(doc.renderAsciiDiagram).mockImplementationOnce(() =>
+    vi.mocked(doc.renderAsciiDiagram).mockImplementationOnce(() => LOSES_A_BOX);
+    const onRejected = vi.fn();
+    const applied = applyAsciiDiagramCommand(
+      editor,
+      blockId,
+      { kind: 'renameNode', nodeId: 'beta', newLabel: 'Gamma' },
+      { onRejected },
+    );
+    expect(applied).toBe(true);
+    expect(onRejected).not.toHaveBeenCalled();
+    expect(editor.getText()).toContain('Gamma');
+    expect(editor.getText()).toContain('Alpha');
+  });
+
+  it('fires when every redraw would lose a connection', () => {
+    const { editor, blockId } = makeEditor();
+    vi.mocked(doc.renderAsciiDiagram).mockImplementation(() =>
       ['┌────────┐', '│ Alpha  │', '└────────┘', '', '┌────────┐', '│ Gamma  │', '└────────┘'].join(
         '\n',
       ),

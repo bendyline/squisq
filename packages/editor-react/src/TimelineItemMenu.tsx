@@ -213,7 +213,7 @@ function BlockMenu({
       {target.timingLocked ? (
         <>
           <p className="squisq-timeline-item-menu-hint">
-            Dynamic slides time each slide from the narration or reading pace, so this section's
+            Custom summaries time each slide from the narration or reading pace, so this section's
             length and start can't be pinned.
             {pinned && ' A pinned time here stops a narrated deck from playing.'}
           </p>

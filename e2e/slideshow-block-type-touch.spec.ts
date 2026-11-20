@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { selectUseMode, switchView } from './view-tabs';
+import { chooseSummaryStyle, selectUseMode, switchView } from './view-tabs';
 
 /**
  * The Slideshow's block-type picker under a finger, on a phone-sized window
@@ -70,7 +70,8 @@ test.describe('Slideshow block-type picker under a finger', () => {
   });
 
   test('says why at a tap while Summarize chooses the layouts', async ({ page }) => {
-    await controls(page).getByRole('combobox', { name: 'Summarize' }).selectOption({ index: 1 });
+    await chooseSummaryStyle(page, 'Minimal');
+    await switchView(page, 'Play');
     // A new summary is a new deck, which opens on its cover again.
     await expect(counter(page)).toHaveText('Cover');
     await page.getByTestId('slide-next').tap();
@@ -82,7 +83,7 @@ test.describe('Slideshow block-type picker under a finger', () => {
     await blockType(page).tap({ force: true });
     const note = page.getByRole('tooltip');
     await expect(note).toBeVisible();
-    await expect(note).toContainText('Set Summarize to None');
+    await expect(note).toContainText('choose None in Write › Summarize');
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // Below the picker, and wholly inside the window.

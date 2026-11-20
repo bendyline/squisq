@@ -12,9 +12,11 @@
  *
  * The renderer joins two boxes side to side only when their rows overlap,
  * so top-to-bottom is the flow it always draws faithfully. Every
- * arrangement is rendered and re-parsed before it is returned; one that
- * would lose an edge or a label falls back to the other direction, and
- * failing both, the diagram comes back unchanged.
+ * arrangement is rendered and re-parsed before it is returned. One that
+ * would lose an edge or a label is retried with its boxes spread further
+ * apart (a layered layout packs boxes tight, and a route skipping a layer
+ * can graze a box in the middle one), then in the other direction; failing
+ * all of those, the diagram comes back unchanged.
  */
 
 import { layoutGraph, type LayoutGraph } from '@bendyline/squisq-graph';
@@ -36,26 +38,40 @@ export interface ArrangeAsciiDiagramOptions {
 const CELL_ASPECT = 2;
 const TARGET_ASPECT = 1.6;
 
+/** How far apart boxes move, relative to the diagram's top-left, per retry. */
+export const ASCII_DIAGRAM_SPREAD_FACTORS = [1.5, 2, 3] as const;
+
 export function arrangeAsciiDiagram(
   diagram: AsciiDiagram,
   options: ArrangeAsciiDiagramOptions = {},
 ): AsciiDiagram {
   if (diagram.nodes.length === 0) return diagram;
   const first = options.direction ?? 'down';
-  const meaning = diagramMeaning(diagram);
-  const asRendered = diagramMeaning(parseAsciiDiagram(renderAsciiDiagram(diagram)));
+  const meaning = asciiDiagramMeaning(diagram);
+  const asRendered = asciiDiagramMeaning(parseAsciiDiagram(renderAsciiDiagram(diagram)));
   for (const direction of [first, first === 'down' ? 'right' : 'down'] as const) {
     const arranged = arrangeOnce(diagram, direction);
-    const back = diagramMeaning(parseAsciiDiagram(renderAsciiDiagram(arranged)));
-    // The renderer may drop what it cannot draw (an over-long edge label);
-    // an arrangement may lose exactly that, never more.
-    if (back === meaning || back === asRendered) return arranged;
+    for (const factor of [1, ...ASCII_DIAGRAM_SPREAD_FACTORS]) {
+      const candidate = spreadAsciiDiagram(arranged, factor);
+      const back = asciiDiagramMeaning(parseAsciiDiagram(renderAsciiDiagram(candidate)));
+      // The renderer may drop what it cannot draw (an over-long edge label);
+      // an arrangement may lose exactly that, never more.
+      if (back === meaning || back === asRendered) return candidate;
+    }
   }
   return diagram;
 }
 
-/** What a diagram says, independent of where its boxes sit. */
-function diagramMeaning(d: AsciiDiagram): string {
+/**
+ * What a diagram says, independent of where its boxes sit: each box's label
+ * and container, and each connection's ends (by label), label and direction.
+ * Ids are left out because they derive from labels. Pass
+ * `edgeLabels: false` to compare connections without their labels.
+ */
+export function asciiDiagramMeaning(
+  d: AsciiDiagram,
+  { edgeLabels = true }: { edgeLabels?: boolean } = {},
+): string {
   const labelOf = new Map(d.nodes.map((n) => [n.id, n.label]));
   const nodes = d.nodes
     .map((n) => JSON.stringify([n.label, n.containerId ? labelOf.get(n.containerId) : null]))
@@ -64,10 +80,29 @@ function diagramMeaning(d: AsciiDiagram): string {
     .map((e) => {
       const ends = [labelOf.get(e.source) ?? '', labelOf.get(e.target) ?? ''];
       if (!e.directed) ends.sort();
-      return JSON.stringify([...ends, e.label ?? null, e.directed]);
+      return JSON.stringify([...ends, edgeLabels ? (e.label ?? null) : null, e.directed]);
     })
     .sort();
   return JSON.stringify([nodes, edges]);
+}
+
+/**
+ * Scale every box's distance from the diagram's top-left by `factor`. Sizes
+ * stay, so every gap grows and no two boxes change order. Container rects are
+ * derived from their children at render time, so they grow along.
+ */
+export function spreadAsciiDiagram(diagram: AsciiDiagram, factor: number): AsciiDiagram {
+  if (diagram.nodes.length === 0 || factor === 1) return diagram;
+  const col0 = Math.min(...diagram.nodes.map((n) => n.col));
+  const row0 = Math.min(...diagram.nodes.map((n) => n.row));
+  return {
+    ...diagram,
+    nodes: diagram.nodes.map((n) => ({
+      ...n,
+      col: col0 + Math.round((n.col - col0) * factor),
+      row: row0 + Math.round((n.row - row0) * factor),
+    })),
+  };
 }
 
 function arrangeOnce(diagram: AsciiDiagram, direction: 'down' | 'right'): AsciiDiagram {

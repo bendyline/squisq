@@ -70,6 +70,33 @@ squisq-proof-dictionary: breakwater, Duarte, Lind
 Most documents need two or three of these. Your own keys can sit alongside them — anything
 Squiggly Square doesn't recognize is kept untouched for other tools to read.
 
+## Your own keys
+
+Keys that Squiggly Square doesn't set itself — `author`, `description`, `tags`, `slug`, `draft`,
+and whatever else your site generator or other tools read — are the document's **properties**.
+You can edit them without opening the Source view:
+
+- **Document settings** → **Properties** lists them as rows, each a name and a value. **+ Add
+  property** adds a row, **×** deletes one, and **Save** writes them along with the other
+  settings. This is where a document's first property goes.
+- In the Write view, a document that has properties shows a **Properties** pill in the tray
+  above the page. Open it to edit the same rows. A change is saved when you leave its row or
+  press Enter, and Undo takes it back. Escape puts a row back the way it was.
+
+The list leaves out the keys described on this page: anything starting with `squisq-`, `title`
+and `subtitle` (Document settings has fields for those), `display-mode` and `document-render-as`,
+and the older names without the `squisq-` prefix. Edit those in the Source view.
+
+Values are written the way you would type them into the frontmatter yourself. `true`, `false`
+and plain numbers become true, false and numbers; anything else is text. A value that was
+already text stays text, so `version: "1.0"` keeps its quotes when you change it to `2.0`. A list
+such as `tags` shows its items separated by commas, and you edit it the same way. A value with
+more structure — nested keys, or text over several lines — shows a short summary instead; edit
+it in the Source view, though you can still rename or delete it from the list.
+
+Renaming a property keeps it in its place, and properties you don't change keep their exact
+text, along with any comments around them.
+
 ## Where a key takes effect
 
 Some keys travel with the document everywhere it goes — the player, exports, and the
@@ -157,15 +184,15 @@ These apply in the editor, the player, and video exports. PowerPoint export also
 
 ## Video and presentation
 
-| Key                         | What it does                                                                        | Values                                                                                                      | Default        | Applies                                             |
-| --------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------- | --------------------------------------------------- |
-| `squisq-transform`          | A **Summarize** style that turns the document's highlights into slides              | `documentary`, `magazine`, `data-driven`, `narrative`, `minimal`, `headings-and-features`, `dynamic-slides` | None           | Editor (`dynamic-slides` travels with the document) |
-| `squisq-captions`           | Captions in Video mode                                                              | `standard`, `social` (short, two-line captions), or `off`                                                   | `standard`     | Editor                                              |
-| `squisq-video-loop`         | Whether Video mode starts over when it reaches the end                              | `true` or `false`                                                                                           | `false`        | Editor                                              |
-| `squisq-video-presentation` | Where timed video clips appear: behind the slide, filling the frame, or in a corner | `background`, `full-frame`, `picture-in-picture`                                                            | `background`   | Everywhere                                          |
-| `squisq-pip-size`           | Picture-in-picture size                                                             | `small`, `large`                                                                                            | `small`        | Everywhere                                          |
-| `squisq-pip-shape`          | Picture-in-picture shape                                                            | `square`, `wide`                                                                                            | `square`       | Everywhere                                          |
-| `squisq-pip-position`       | Picture-in-picture corner                                                           | `top-left`, `top-right`, `bottom-left`, `bottom-right`                                                      | `bottom-right` | Everywhere                                          |
+| Key                         | What it does                                                                        | Values                                                                                                                   | Default        | Applies                                             |
+| --------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------- | --------------------------------------------------- |
+| `squisq-transform`          | The style chosen in Write › **Summarize**, which turns the document into slides     | `documentary`, `magazine`, `data-driven`, `narrative`, `minimal`, `headings-and-features`, `dynamic-slides` (**Custom**) | None           | Editor (`dynamic-slides` travels with the document) |
+| `squisq-captions`           | Captions in Video mode                                                              | `standard`, `social` (short, two-line captions), or `off`                                                                | `standard`     | Editor                                              |
+| `squisq-video-loop`         | Whether Video mode starts over when it reaches the end                              | `true` or `false`                                                                                                        | `false`        | Editor                                              |
+| `squisq-video-presentation` | Where timed video clips appear: behind the slide, filling the frame, or in a corner | `background`, `full-frame`, `picture-in-picture`                                                                         | `background`   | Everywhere                                          |
+| `squisq-pip-size`           | Picture-in-picture size                                                             | `small`, `large`                                                                                                         | `small`        | Everywhere                                          |
+| `squisq-pip-shape`          | Picture-in-picture shape                                                            | `square`, `wide`                                                                                                         | `square`       | Everywhere                                          |
+| `squisq-pip-position`       | Picture-in-picture corner                                                           | `top-left`, `top-right`, `bottom-left`, `bottom-right`                                                                   | `bottom-right` | Everywhere                                          |
 
 `squisq-captions` takes text, so write `off` rather than `false`. Summarize styles never change
 your Markdown; they change only what the Use view presents. See [Display modes](display-modes.md)
@@ -216,10 +243,10 @@ editor or the command line. See [HTML page templates](page-templates.md).
 You may see a few more keys in documents produced by importers and apps. They're managed for you;
 leave them as they are.
 
-| Key                                                                                       | Written by                                                                                                                                      |
-| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `squisq-outside-in`, `squisq-output`, `squisq-output-format`, `squisq-updatefrommarkdown` | Apps that keep a Markdown source beside a Word, PowerPoint, PDF, Excel, CSV, or HTML file, to link the two                                      |
-| `squisq-presentation`, `squisq-presentation-hints`                                        | Apps that save a **Dynamic slides** presentation with the document. The editor clears `squisq-presentation` when you change the Summarize style |
+| Key                                                                                       | Written by                                                                                                                                  |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `squisq-outside-in`, `squisq-output`, `squisq-output-format`, `squisq-updatefrommarkdown` | Apps that keep a Markdown source beside a Word, PowerPoint, PDF, Excel, CSV, or HTML file, to link the two                                  |
+| `squisq-presentation`, `squisq-presentation-hints`                                        | Apps that save a **Custom** summary's design with the document. The editor clears `squisq-presentation` when you change the Summarize style |
 
 Importing a PowerPoint deck also writes `squisq-theme`, `squisq-custom-themes`, and
 `squisq-custom-templates` from the deck's own design; see [Import and export](import-export.md).

@@ -149,6 +149,33 @@ describe('EditorContext selection actions', () => {
   });
 });
 
+// Write › Summarize keeps the Write editor mounted behind its view, hidden as it
+// is behind Use. Its selection is out of sight, so it is not there to act on.
+it('reports nothing to act on, and refuses to replace, in Write › Summarize', () => {
+  const editor = new Editor({
+    extensions: [StarterKit.configure({ heading: false }), HeadingWithTemplate],
+    content: markdownToTiptap('First paragraph.'),
+  });
+  try {
+    editor.commands.selectAll();
+    const ctx = captureContext();
+    act(() => {
+      ctx.current?.setActiveView('wysiwyg');
+      ctx.current?.setTiptapEditor(editor);
+      ctx.current?.setLayoutMode('summary');
+    });
+    expect(ctx.current?.getSelection()).toBeNull();
+    expect(ctx.current?.replaceSelection('new text')).toBe(false);
+    expect(ctx.current?.insertBlockAfterCursor('## New\n\nBlock.')).toBe(false);
+    expect(editor.getText()).toBe('First paragraph.');
+
+    act(() => ctx.current?.setLayoutMode('document'));
+    expect(ctx.current?.getSelection()?.text).toBe('First paragraph.');
+  } finally {
+    editor.destroy();
+  }
+});
+
 // Exercise the host-facing API with the real rich-text schema, not a mock.
 it('exposes selected Markdown alongside the readable text', () => {
   const source = '## Advice {[factCard]}\n\nKeep **formatting**.';

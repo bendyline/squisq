@@ -258,12 +258,16 @@ export function WysiwygEditor({
     workspaceContainer,
     sceneTextChannel,
     preserveSourceWrapping,
-    layoutMode,
+    layoutMode: selectedLayout,
     activeBlockKey,
     activeBlockStartLine,
     markdownSource,
     linkSchemes,
   } = useEditorContext();
+  // The Summarize view hides this editor rather than unmounting it, so the
+  // frontmatter it writes lands here as undoable steps. Behind it the editor
+  // still holds the whole document, exactly as in the Write layout.
+  const layoutMode = selectedLayout === 'summary' ? 'document' : selectedLayout;
   // Read by the Link extension's href check, which is created once at mount.
   const wikiLinksRef = useRef(wikiLinks);
   wikiLinksRef.current = wikiLinks;

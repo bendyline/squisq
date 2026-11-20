@@ -53,6 +53,8 @@ import { useTimelineClock } from './useTimelineClock';
 import { usePreviewProjection } from './usePreviewProjection';
 import { collectEmbeddedVideoSchedule } from './embeddedMedia';
 import { PreviewPanel } from './PreviewPanel';
+import { SummarizeView } from './summarize/SummarizeView';
+import type { SummarizationAssistant } from './summarize/summarizationAssistant';
 import { ImageViewer } from './ImageViewer';
 import { ImageEditor } from './ImageEditor';
 import { ImageEditModal } from './imageEditor/ImageEditModal';
@@ -315,8 +317,19 @@ export interface EditorShellProps {
    * from the draft to the keys in the order they are seen.
    */
   toolbarPosition?: EditorToolbarPosition;
-  /** Optional designer opened beside Summarize in the preview toolbar. */
-  summarizationDesigner?: (onClose: () => void) => ReactNode;
+  /**
+   * AI for the Custom summary designer in Write › Summarize: its "Suggest with
+   * AI" words and lays out the slides one at a time. The host makes the model
+   * calls; Squisq owns the prompts, the checks on each reply, and the designer.
+   * Without one the designer works fully, without AI.
+   */
+  summarizationAssistant?: SummarizationAssistant;
+  /**
+   * Replaces the built-in Custom summary designer in Write › Summarize. It is
+   * shown inline, in a mode the author can leave at any time, so it should
+   * save as it goes. Most hosts want `summarizationAssistant` instead.
+   */
+  summarizationDesigner?: ReactNode;
   /** Host-supplied content rendered at the right edge of the bottom status bar. */
   statusBarSlotRight?: ReactNode;
   /**
@@ -350,7 +363,8 @@ export interface EditorShellProps {
    */
   showPlayTab?: boolean;
   /**
-   * Whether to show the view tabs (Write, Source, Use) and their mode menus.
+   * Whether to show the view tabs (Write, Use) and their mode menus, where
+   * Source is chosen from Write's.
    * Defaults to true. When false the editor stays in `initialView` — the
    * Ctrl/Cmd+Shift+1/2/3 view shortcuts act through the tabs, so they do
    * nothing either — while the formatting and Insert controls remain. Use it
@@ -818,6 +832,7 @@ export function EditorShell({
   toolbarSlotDocumentActions,
   toolbarSlotRight,
   toolbarPosition = 'top',
+  summarizationAssistant,
   summarizationDesigner,
   statusBarSlotRight,
   sidePanelSlot,
@@ -1007,6 +1022,7 @@ export function EditorShell({
                 toolbarSlotDocumentActions={toolbarSlotDocumentActions}
                 toolbarSlotRight={toolbarSlotRight}
                 toolbarPosition={toolbarPosition}
+                summarizationAssistant={summarizationAssistant}
                 summarizationDesigner={summarizationDesigner}
                 statusBarSlotRight={statusBarSlotRight}
                 sidePanelSlot={sidePanelSlot}
@@ -1075,8 +1091,8 @@ interface EditorShellInnerProps {
   toolbarSlotDocumentActions?: ReactNode;
   toolbarSlotRight?: ReactNode;
   toolbarPosition: EditorToolbarPosition;
-  /** Optional designer opened beside Summarize in the preview toolbar. */
-  summarizationDesigner?: (onClose: () => void) => ReactNode;
+  summarizationAssistant?: SummarizationAssistant;
+  summarizationDesigner?: ReactNode;
   statusBarSlotRight?: ReactNode;
   sidePanelSlot?: ReactNode;
   showPlayTab: boolean;
@@ -1116,18 +1132,12 @@ interface EditorShellInnerProps {
   defaultThemeLabel?: string;
 }
 
-function UseModeToolbarControls({
-  allowPrint,
-  summarizationDesigner,
-}: {
-  allowPrint: boolean;
-  summarizationDesigner?: (onClose: () => void) => ReactNode;
-}) {
+function UseModeToolbarControls({ allowPrint }: { allowPrint: boolean }) {
   const printMode = usePrintMode();
   if (printMode.active) return <PrintPreviewToolbar />;
   return (
     <>
-      <PreviewToolbarControls summarizationDesigner={summarizationDesigner} />
+      <PreviewToolbarControls />
       <PresentationModeControl />
       {allowPrint && <PrintModeControl />}
     </>
@@ -1182,6 +1192,7 @@ function EditorShellInner({
   toolbarSlotDocumentActions,
   toolbarSlotRight,
   toolbarPosition,
+  summarizationAssistant,
   summarizationDesigner,
   statusBarSlotRight,
   sidePanelSlot,
@@ -1229,6 +1240,7 @@ function EditorShellInner({
   );
   const {
     activeView,
+    setActiveView,
     markdownSource,
     doc,
     colorScheme,
@@ -1276,6 +1288,9 @@ function EditorShellInner({
   const isCardMode = blockScoped && !isPreview;
   // Timeline mode additionally shows the horizontal timeline track below.
   const isTimelineMode = isCardMode && layoutMode === 'timeline';
+  // Summarize replaces the Write surface, which stays mounted behind it.
+  const isSummarizing = isMarkdownMode && editingView === 'wysiwyg' && layoutMode === 'summary';
+  const wysiwygHidden = isPreview || isSummarizing;
   // The timeline mirrors the *played* document, not the raw parse: block bars,
   // the playhead, and the clock use the same narration-timed projection the
   // Video composition renders, so an unpinned slide occupies its recorded-voice
@@ -1587,13 +1602,21 @@ function EditorShellInner({
       const key = /^Digit[1-3]$/.test(e.code) ? e.code.slice(-1) : e.key;
       const view = key === '1' ? 'wysiwyg' : key === '2' ? 'raw' : key === '3' ? 'preview' : null;
       if (!view || (view === 'preview' && !showPlayTab)) return;
-      const button = shellRef.current?.querySelector<HTMLButtonElement>(`[data-view="${view}"]`);
+      // Shortcuts act through the tabs, so do nothing where none are shown.
+      // Write and Source share the first tab: when it shows the other one,
+      // switch directly, since pressing a tab you are on opens its menu.
+      const button = shellRef.current?.querySelector<HTMLButtonElement>(
+        view === 'preview'
+          ? '[role="tab"][data-view="preview"]'
+          : '[role="tab"][data-view="wysiwyg"], [role="tab"][data-view="raw"]',
+      );
       if (!button) return;
       e.preventDefault();
       e.stopPropagation();
-      button.click();
+      if (button.dataset.view === view) button.click();
+      else setActiveView(view);
     },
-    [showPlayTab],
+    [setActiveView, showPlayTab],
   );
 
   const shellLinkHandlers = useShellLinkDelegation(onLinkClick);
@@ -1629,13 +1652,7 @@ function EditorShellInner({
         onToggleFiles={!isCodeMode && filesToggleEnabled ? handleToggleFiles : undefined}
         slotLeft={toolbarSlotLeft}
         slotAfterTabs={
-          !isCodeMode &&
-          isPreview && (
-            <UseModeToolbarControls
-              allowPrint={allowPrint}
-              summarizationDesigner={summarizationDesigner}
-            />
-          )
+          !isCodeMode && isPreview && <UseModeToolbarControls allowPrint={allowPrint} />
         }
         slotAfterActions={toolbarSlotAfterActions}
         slotQuickTools={toolbarSlotQuickTools}
@@ -1812,8 +1829,8 @@ function EditorShellInner({
                   <div
                     className="squisq-editor-with-gutter"
                     key="wysiwyg-shell"
-                    hidden={isPreview}
-                    style={isPreview ? { display: 'none' } : undefined}
+                    hidden={wysiwygHidden}
+                    style={wysiwygHidden ? { display: 'none' } : undefined}
                   >
                     {outlineVisible && (
                       <OutlinePanel key="outline" width={outlineWidth} readOnly={readOnly} />
@@ -1864,6 +1881,16 @@ function EditorShellInner({
                       mediaProvider={mediaProvider}
                     />
                   </div>
+                )}
+                {isSummarizing && (
+                  <SummarizeView
+                    designer={summarizationDesigner}
+                    assistant={summarizationAssistant}
+                    basePath={basePath}
+                    workspaceContainer={workspaceContainer}
+                    readOnly={readOnly}
+                    hidden={isPreview}
+                  />
                 )}
                 {isMarkdownMode && isPreview && (
                   <PreviewPanel

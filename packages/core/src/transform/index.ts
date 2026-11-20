@@ -40,4 +40,6 @@ export * from './presentationHints.js';
 export * from './grounding.js';
 // The protocol a model follows to word a deck: prompts, reply shapes, and the gates on a reply.
 export * from './presentationAuthor.js';
+// The loop that runs that protocol; a host supplies only the transport.
+export * from './presentationWording.js';
 export * from './conceptReveal.js';

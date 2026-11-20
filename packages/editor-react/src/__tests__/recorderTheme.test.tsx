@@ -27,12 +27,12 @@ describe('recorder theme propagation', () => {
     expect(dialog.style.getPropertyValue('--squisq-recorder-text')).toBe('var(--squisq-text)');
   });
 
-  it('passes the requested scheme through the portaled panel wrapper', () => {
+  it('passes the requested scheme through the portaled panel wrapper', async () => {
     render(<RecorderPanel mediaProvider={mediaProvider} colorScheme="dark" />);
     fireEvent.click(screen.getByRole('button', { name: 'Record media' }));
 
-    expect(screen.getByRole('dialog', { name: 'Record media' }).getAttribute('data-theme')).toBe(
-      'dark',
-    );
+    // The panel loads the dialog on first open.
+    const dialog = await screen.findByRole('dialog', { name: 'Record media' });
+    expect(dialog.getAttribute('data-theme')).toBe('dark');
   });
 });

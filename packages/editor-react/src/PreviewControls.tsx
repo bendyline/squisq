@@ -39,7 +39,6 @@ import {
 } from '@bendyline/squisq/schemas';
 import type { Block, CustomTemplateDefinition, Theme } from '@bendyline/squisq/schemas';
 import { ThemePicker } from './ThemePicker';
-import { getTransformStyleSummaries } from '@bendyline/squisq/transform';
 import type { Doc } from '@bendyline/squisq/schemas';
 import {
   parseMarkdown,
@@ -84,6 +83,7 @@ import { ActiveSlideProvider } from './slideshow/ActiveSlide';
 import { SlideBlockTypeControl } from './slideshow/SlideBlockTypeControl';
 import { resolvePersistedTransformStyleId } from './transformStyleId';
 import {
+  FRONTMATTER_EDITOR_KEYS,
   FRONTMATTER_SETTING_DEFAULTS,
   FRONTMATTER_SETTING_KEYS,
   omitFrontmatterDefault,
@@ -482,7 +482,10 @@ export function PreviewSettingsProvider({
 
   // Display mode. A frontmatter-forced `narrate` clamps back to video when
   // the host disabled the mode, so hostile frontmatter can't turn it on.
-  const fmMode = useMemo(() => resolveDisplayMode(frontmatter?.['display-mode']), [frontmatter]);
+  const fmMode = useMemo(
+    () => resolveDisplayMode(frontmatter?.[FRONTMATTER_EDITOR_KEYS.displayMode]),
+    [frontmatter],
+  );
   const [selectedDisplayMode, setSelectedDisplayMode] = useState<DisplayMode | null>(null);
   useEffect(() => setSelectedDisplayMode(null), [fmMode]);
   const requestedDisplayMode = selectedDisplayMode ?? fmMode ?? 'slideshow';
@@ -493,7 +496,7 @@ export function PreviewSettingsProvider({
   // slideshow/video modes; Page and Document keep their historical landscape
   // fallback unless the document or user explicitly chooses another format.
   const fmPreset = useMemo(
-    () => resolveRenderAs(frontmatter?.['document-render-as']),
+    () => resolveRenderAs(frontmatter?.[FRONTMATTER_EDITOR_KEYS.renderAs]),
     [frontmatter],
   );
   const [selectedPreset, setSelectedPreset] = useState<ViewportPreset | null>(null);
@@ -1333,14 +1336,6 @@ export function displayModeShortLabel(mode: DisplayMode): string {
   return option?.shortLabel ?? option?.label ?? 'Slides';
 }
 
-const TRANSFORM_STYLE_OPTIONS = [
-  { key: '', label: 'None' },
-  ...getTransformStyleSummaries().map((s) => ({ key: s.id, label: s.name })),
-];
-
-const SUMMARIZE_TOOLTIP =
-  'Extract and summarize content for presentation with these Use modes. Your underlying content is not changed.';
-
 /**
  * Left-to-right priority order for the preview controls. As the toolbar
  * narrows, controls drop into the overflow menu from the END of this list
@@ -1349,6 +1344,7 @@ const SUMMARIZE_TOOLTIP =
  * still collapses into the same menu when the toolbar is very constrained.
  * The block type sits right after it: it is the one control about the slide
  * on screen rather than the whole deck, so it leads the deck-wide settings.
+ * How the document is summarized is chosen in Write › Summarize, not here.
  */
 type ControlKey =
   | 'format'
@@ -1356,7 +1352,6 @@ type ControlKey =
   | 'layout'
   | 'video'
   | 'theme'
-  | 'transform'
   | 'captions'
   | 'loop'
   | 'cover'
@@ -1367,7 +1362,6 @@ const CONTROL_KEYS: ControlKey[] = [
   'layout',
   'video',
   'theme',
-  'transform',
   'captions',
   'loop',
   'cover',
@@ -1382,16 +1376,16 @@ const CONTROL_KEYS: ControlKey[] = [
  * too: slides are stepped by hand with no running clock, so the player shows
  * no timed captions there (they apply in Video). Dashboard is a static canvas
  * with no clock, captions, or managed cover — it shows the format switch,
- * its own layout picker, theme, and summarize. Cover, Theme, and Summarize
- * remain live in every other mode. The block type is Slideshow's alone: it is
- * the one mode where a single slide stays on screen until the author moves on.
+ * its own layout picker, and theme. Cover and Theme remain live in every
+ * other mode. The block type is Slideshow's alone: it is the one mode where a
+ * single slide stays on screen until the author moves on.
  */
 function controlKeysForMode(displayMode: string, hasVideoMedia: boolean): ControlKey[] {
   if (displayMode === 'flashcards') {
-    return ['theme', 'transform'];
+    return ['theme'];
   }
   if (displayMode === 'dashboard') {
-    return ['format', 'layout', 'theme', 'transform', 'dashboardImage'];
+    return ['format', 'layout', 'theme', 'dashboardImage'];
   }
   let keys = CONTROL_KEYS.filter((key) => key !== 'layout' && key !== 'dashboardImage');
   if (displayMode !== 'slideshow') {
@@ -1807,17 +1801,9 @@ export interface PreviewToolbarControlsProps {
    * setting still writes through the shared preview-settings context.
    */
   displayMode?: DisplayMode;
-  /** Optional designer for the current document's slide summarization. */
-  summarizationDesigner?: (onClose: () => void) => ReactNode;
 }
 
-export function PreviewToolbarControls({
-  displayMode,
-  summarizationDesigner,
-}: PreviewToolbarControlsProps = {}) {
-  const { layoutMode } = useEditorContext();
-  const [designing, setDesigning] = useState(false);
-  const designerTriggerRef = useRef<HTMLButtonElement | null>(null);
+export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsProps = {}) {
   const s = usePreviewSettings();
   const controlKeys = controlKeysForMode(displayMode ?? s.activeDisplayMode, s.hasVideoMedia);
   const [visibleCount, setVisibleCount] = useState(CONTROL_KEYS.length);
@@ -2124,41 +2110,6 @@ export function PreviewToolbarControls({
             )}
           </div>
         );
-      case 'transform':
-        return (
-          <PreviewSelect
-            key="transform"
-            label="Summarize"
-            labelTooltip={SUMMARIZE_TOOLTIP}
-            style={{ ...selectStyle, padding: '3px 6px' }}
-            value={s.activeTransformStyle}
-            options={TRANSFORM_STYLE_OPTIONS}
-            onChange={(v) => s.setSelectedTransformStyle(v)}
-            compact={compact}
-          >
-            {summarizationDesigner &&
-              ['slideshow', 'video'].includes(displayMode ?? s.activeDisplayMode) && (
-                <button
-                  type="button"
-                  className="squisq-toolbar-button squisq-preview-design-button"
-                  aria-label="Summarization designer"
-                  title={
-                    layoutMode === 'document'
-                      ? 'Design dynamic slide summaries'
-                      : 'Switch to Document layout to design summarization'
-                  }
-                  disabled={layoutMode !== 'document'}
-                  onClick={(event) => {
-                    designerTriggerRef.current = event.currentTarget;
-                    closePopover();
-                    setDesigning(true);
-                  }}
-                >
-                  Design…
-                </button>
-              )}
-          </PreviewSelect>
-        );
       case 'captions': {
         // Two independent toggles (either can be off): CC = standard captions,
         // share icon = social captions. Clicking the active one turns captions
@@ -2294,12 +2245,6 @@ export function PreviewToolbarControls({
           )}
         </div>
       )}
-      {designing &&
-        summarizationDesigner?.(() => {
-          setDesigning(false);
-          const trigger = designerTriggerRef.current;
-          (trigger?.isConnected ? trigger : popoverTriggerRef.current)?.focus();
-        })}
     </div>
   );
 }
@@ -2376,47 +2321,6 @@ export function PreviewFormatSwitch() {
           </button>
         );
       })}
-    </div>
-  );
-}
-
-function PreviewSelect({
-  label,
-  labelTooltip,
-  value,
-  options,
-  onChange,
-  compact,
-  children,
-  style = selectStyle,
-}: {
-  label: string;
-  labelTooltip?: string;
-  value: string;
-  options: { key: string; label: string }[];
-  onChange: (value: string) => void;
-  compact?: boolean;
-  children?: ReactNode;
-  style?: React.CSSProperties;
-}) {
-  return (
-    <div className={`squisq-preview-control${compact ? ' squisq-preview-control--compact' : ''}`}>
-      <label style={labelStyle} title={labelTooltip}>
-        {label}:
-      </label>
-      <select
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={style}
-      >
-        {options.map((o) => (
-          <option key={o.key} value={o.key}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      {children}
     </div>
   );
 }

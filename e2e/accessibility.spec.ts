@@ -217,21 +217,22 @@ test.describe('automated accessibility audit', () => {
     const tabs = page.getByRole('tablist', { name: 'Editor view' });
     await assertNoSeriousAxeViolations(page, '.squisq-toolbar-view-tabs');
     await expect(tabs.getByRole('button')).toHaveCount(0);
+    // Source is chosen from Write's menu, so two tabs remain: Write and Use.
+    await expect(tabs.getByRole('tab')).toHaveCount(2);
     const write = tabs.getByRole('tab', { name: 'Write', exact: true });
+    const use = tabs.locator('[data-view="preview"]');
     await write.focus();
     await expect(tabs.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
     await page.keyboard.press('ArrowRight');
-    await expect(tabs.getByRole('tab', { name: 'Source', exact: true })).toBeFocused();
-    // Manual activation keeps lazy editor loading from stealing arrow focus.
+    await expect(use).toBeFocused();
+    // Manual activation keeps lazy loading from stealing arrow focus.
     await expect(write).toHaveAttribute('aria-selected', 'true');
-    await page.keyboard.press('End');
-    await expect(tabs.locator('[data-view="preview"]')).toBeFocused();
     await page.keyboard.press('Home');
     await expect(write).toBeFocused();
-    await expect(write).toHaveAttribute('aria-selected', 'true');
-    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('End');
+    await expect(use).toBeFocused();
     await page.keyboard.press('Enter');
-    await expect(page.locator('[data-testid="raw-editor"]')).toBeVisible();
+    await expect(page.locator('[data-testid="preview-panel"]')).toBeVisible();
   });
 
   test('settings and view options remain usable on short narrow screens', async ({

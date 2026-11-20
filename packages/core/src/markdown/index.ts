@@ -219,10 +219,13 @@ export {
   formatFrontmatterValue,
   formatFrontmatterYaml,
   setFrontmatterValues,
+  renameFrontmatterKeys,
+  readFrontmatterScalar,
   inferDocumentTitle,
   readFrontmatterThemeId,
   plainTextFromInlineHtml,
 } from './utils.js';
+export type { FrontmatterUpdateValue } from './utils.js';
 
 // Source transforms (unwrap / wrap / cleanup) + wrap-state detection.
 // Distinct from `@bendyline/squisq/transform` (slideshow style pipeline):

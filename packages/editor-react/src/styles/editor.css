@@ -5717,6 +5717,27 @@ button.squisq-view-menu-radio-row:focus-visible {
   font-weight: 600;
 }
 
+/* A group of fields under a heading of its own: Properties. */
+.squisq-doc-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--squisq-border);
+}
+
+.squisq-doc-settings-section-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--squisq-text);
+}
+
+/* Match the dialog's own fields, which sit on the dialog face. */
+.squisq-doc-settings-section .squisq-fm-props-input {
+  background: var(--squisq-bg);
+}
+
 .squisq-doc-settings-footer {
   flex-shrink: 0;
   display: flex;

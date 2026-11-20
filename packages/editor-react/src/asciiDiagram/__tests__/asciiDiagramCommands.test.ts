@@ -262,6 +262,75 @@ describe('applyAsciiDiagramCommand', () => {
     ]);
   });
 
+  describe('on the four-way ASCII fan-out the welcome document starts with', () => {
+    const WELCOME_FAN = [
+      '              +-----------------+',
+      '              |  Your document  |',
+      '              +--------+--------+',
+      '                       |',
+      '    +-----------+------+-----+------------+',
+      '    |           |            |            |',
+      '    v           v            v            v',
+      '+-------+  +--------+  +----------+  +---------+',
+      '|  PDF  |  |  Word  |  |  Slides  |  |  Video  |',
+      '+-------+  +--------+  +----------+  +---------+',
+    ].join('\n');
+    // The widget's first edit also folds in its editing gutter.
+    const FIRST_EDIT = { diagramOffset: { col: 8, row: 2 } };
+    const edgesOf = (text: string) => {
+      const d = parseAsciiDiagram(text);
+      const labelOf = new Map(d.nodes.map((n) => [n.id, n.label]));
+      return d.edges
+        .map((e) => `${labelOf.get(e.source)}>${labelOf.get(e.target)}:${e.directed}`)
+        .sort();
+    };
+
+    // Every edit here used to be refused: the redraw's jog to Video turns on
+    // Slides' top border and ends in a corner `v`, which read back as an
+    // extra, undirected connection. A label that no longer fits beside its
+    // neighbors needs the boxes spread apart as well.
+    for (const child of ['pdf', 'word', 'slides', 'video']) {
+      it(`keeps a typed label on ${child}`, () => {
+        const editor = makeEditor('```diagram\n' + WELCOME_FAN + '\n```\n');
+        const id = firstBlockId(editor);
+        const onRejected = vi.fn();
+        expect(
+          applyAsciiDiagramCommand(
+            editor,
+            id,
+            { kind: 'renameNode', nodeId: child, newLabel: 'Videosnhun' },
+            { ...FIRST_EDIT, onRejected },
+          ),
+        ).toBe(true);
+        expect(onRejected).not.toHaveBeenCalled();
+        const labels = parseAsciiDiagram(fenceOf(editor).text).nodes.map((n) => n.label);
+        expect(labels).toContain('Videosnhun');
+        expect(edgesOf(fenceOf(editor).text)).toHaveLength(4);
+        expect(edgesOf(fenceOf(editor).text).every((e) => e.endsWith(':true'))).toBe(true);
+      });
+    }
+
+    it('lands a connection between siblings that no line can reach as placed', () => {
+      const editor = makeEditor('```diagram\n' + WELCOME_FAN + '\n```\n');
+      const id = firstBlockId(editor);
+      expect(
+        applyAsciiDiagramCommand(
+          editor,
+          id,
+          { kind: 'addConnection', source: 'video', target: 'pdf' },
+          FIRST_EDIT,
+        ),
+      ).toBe(true);
+      expect(edgesOf(fenceOf(editor).text)).toEqual([
+        'Video>PDF:true',
+        'Your document>PDF:true',
+        'Your document>Slides:true',
+        'Your document>Video:true',
+        'Your document>Word:true',
+      ]);
+    });
+  });
+
   it('addNode / removeNode change the box count', () => {
     const editor = makeEditor('```\n' + ART + '\n```\n');
     const id = firstBlockId(editor);

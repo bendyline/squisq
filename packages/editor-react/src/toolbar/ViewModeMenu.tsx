@@ -20,6 +20,12 @@ export interface ViewModeOption<K extends string> {
   icon: string;
   /** One line under the label saying what the mode is for. */
   summary: string;
+  /**
+   * The editor view choosing this entry opens, written as `data-view` on the
+   * item as it is on the view tabs, so a host that follows view changes by
+   * their clicks sees the ones made from the menu too.
+   */
+  view?: string;
 }
 
 export interface ViewModeMenuProps<K extends string> {
@@ -191,6 +197,7 @@ export function ViewModeMenu<K extends string>({
                   type="button"
                   className={`squisq-view-mode-menu-item${isSelected ? ' squisq-view-mode-menu-item--selected' : ''}`}
                   role="menuitemradio"
+                  data-view={option.view}
                   tabIndex={-1}
                   aria-checked={isSelected}
                   aria-labelledby={labelId}

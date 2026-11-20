@@ -21,9 +21,10 @@
  *   reply says why, in words a correction request can quote.
  *
  * The model chooses display wording and a layout, nothing else: source spans,
- * order, media and timing stay the plan's. The host makes the calls (one for
- * the storyboard, one per slide, a retry with {@link presentationCorrection})
- * and keeps the automatic slide whenever a reply is refused.
+ * order, media and timing stay the plan's. `presentationWording.ts` runs the
+ * exchange (one request for the storyboard, one per slide, a retry with
+ * {@link presentationCorrection}) and keeps the automatic slide whenever a
+ * reply is refused; the host supplies only the transport.
  *
  * Related: `presentationPlanner.ts` (the automatic deck), `grounding.ts` (the
  * fact checks), `recommend/listShape.ts` (whether a shape is stated),

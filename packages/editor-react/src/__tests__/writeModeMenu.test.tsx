@@ -53,7 +53,7 @@ describe('Write tab mode menu', () => {
       within(menu)
         .getAllByRole('menuitemradio')
         .map((item) => item.querySelector('.squisq-view-mode-menu-label')?.textContent),
-    ).toEqual(['Write', 'Blocks', 'Timeline']);
+    ).toEqual(['Write', 'Source', 'Blocks', 'Timeline', 'Summarize']);
     expect(
       within(menu).getByRole('menuitemradio', { name: 'Write' }).getAttribute('aria-checked'),
     ).toBe('true');
@@ -66,6 +66,38 @@ describe('Write tab mode menu', () => {
     expect(onViewPreferencesChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ layoutMode: 'block' }),
     );
+  });
+
+  it('offers Source under Write, and names the editing tab after it', () => {
+    renderTabs('wysiwyg');
+    expect(screen.queryByRole('tab', { name: 'Source' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Write mode' }));
+    let menu = screen.getByRole('menu', { name: 'Write mode' });
+    const source = within(menu).getByRole('menuitemradio', { name: 'Source' });
+    expect(source.getAttribute('data-view')).toBe('raw');
+    fireEvent.click(source);
+
+    expect(screen.getByTestId('active-view').textContent).toBe('raw');
+    // Source shows the whole file in every layout, so the layout stays put.
+    expect(screen.getByTestId('layout-mode').textContent).toBe('document');
+    const tab = screen.getByRole('tab', { name: 'Source' });
+    expect(tab.getAttribute('data-view')).toBe('raw');
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('tab', { name: 'Write' })).toBeNull();
+
+    // Pressing the tab you are on opens the menu, with Source checked.
+    fireEvent.click(tab);
+    menu = screen.getByRole('menu', { name: 'Write mode' });
+    expect(
+      within(menu).getByRole('menuitemradio', { name: 'Source' }).getAttribute('aria-checked'),
+    ).toBe('true');
+    expect(
+      within(menu).getByRole('menuitemradio', { name: 'Write' }).getAttribute('aria-checked'),
+    ).toBe('false');
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Write' }));
+    expect(screen.getByTestId('active-view').textContent).toBe('wysiwyg');
+    expect(screen.getByRole('tab', { name: 'Write' }).getAttribute('data-view')).toBe('wysiwyg');
   });
 
   it('enters Write when a mode is chosen from another view', () => {
@@ -84,10 +116,19 @@ describe('Write tab mode menu', () => {
     );
   });
 
-  it('a click on the inactive Write tab enters Write without opening the menu', () => {
-    renderTabs('raw');
+  it('a click on the inactive editing tab returns to it without opening the menu', () => {
+    renderTabs('preview');
     fireEvent.click(screen.getByRole('tab', { name: 'Write' }));
     expect(screen.getByTestId('active-view').textContent).toBe('wysiwyg');
+    expect(screen.queryByRole('menu', { name: 'Write mode' })).toBeNull();
+
+    // Use returns to Source when Source was the surface left behind.
+    fireEvent.click(screen.getByRole('button', { name: 'Choose Write mode' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Source' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Slideshow' }));
+    expect(screen.getByTestId('active-view').textContent).toBe('preview');
+    fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
+    expect(screen.getByTestId('active-view').textContent).toBe('raw');
     expect(screen.queryByRole('menu', { name: 'Write mode' })).toBeNull();
   });
 

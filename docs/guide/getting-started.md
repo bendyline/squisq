@@ -14,11 +14,11 @@ in the [editor](/) at the root of this site — it runs in your browser, with no
 Open the [editor](/). It loads a sample called **About SquigglySquare (squisq)** in the **Write**
 view, which looks and works like a word processor.
 
-Along the top of the editor are three tabs:
+Along the top of the editor are two tabs:
 
-- **Write** — edit the document visually.
-- **Source** — the same document as Markdown text.
-- **Slideshow** — the finished document. This third tab is the **Use** view, and it's named after
+- **Write** — edit the document visually. The **▾** beside it also offers **Source**, the same
+  document as Markdown text.
+- **Slideshow** — the finished document. This second tab is the **Use** view, and it's named after
   the display mode you're in.
 
 Click **Slideshow**, then press → to step through the sample's slides. Each slide is one heading

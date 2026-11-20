@@ -1,6 +1,6 @@
 import { useCallback, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { Editor } from '@tiptap/core';
-import { videoEmbedIframeAttributes } from '@bendyline/squisq/markdown';
+import { splitFrontmatterBlock, videoEmbedIframeAttributes } from '@bendyline/squisq/markdown';
 import type { MediaProvider } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useEditorContextOptional } from '../EditorContext';
@@ -8,7 +8,13 @@ import { Icon } from '../Icon';
 import type { SpeechRecognizerAccess } from '../speech/types';
 import { AudioMedia } from '../tiptap/TiptapAudio';
 import { VideoMedia } from '../tiptap/TiptapVideo';
+import {
+  applyPropertyEdits,
+  readCustomProperties,
+  type PropertyEditPlan,
+} from '../frontmatterProperties';
 import { DOCUMENT_TRAY_KEY, type DocumentTrayItem } from './DocumentTrayExtension';
+import { PropertiesTrayItem } from './PropertiesTrayItem';
 import {
   cancelNarrationTimingJob,
   narrationTimingJob,
@@ -189,7 +195,14 @@ function TrayItem({
   );
 }
 
-/** View-only tray: opening/collapsing a pill never dispatches a transaction. */
+/**
+ * View-only tray: opening/collapsing a pill never dispatches a transaction.
+ *
+ * It holds the document's opening media and, when the document has keys of
+ * its own in its frontmatter, a Properties pill to edit them. Both show only
+ * where the tray is enabled — the whole document, or the first block of a
+ * block layout.
+ */
 export function DocumentTray({ editor }: { editor: Editor }) {
   const subscribe = useCallback(
     (onChange: () => void) => {
@@ -232,15 +245,55 @@ export function DocumentTray({ editor }: { editor: Editor }) {
       ),
     [documentMedia],
   );
-  if (!state?.items.length) return null;
+  // Re-read only when the frontmatter itself changes, not on every keystroke.
+  const frontmatterBlock = splitFrontmatterBlock(markdownRef.current).frontmatter ?? '';
+  const properties = useMemo(() => readCustomProperties(frontmatterBlock), [frontmatterBlock]);
+  const [propertiesOpen, setPropertiesOpen] = useState(false);
+  const replaceAll = context?.replaceAll;
+  const writeProperties = useCallback(
+    (plan: PropertyEditPlan): boolean => {
+      if (!replaceAll) return false;
+      const source = markdownRef.current;
+      const next = applyPropertyEdits(source, plan);
+      if (next === source) return false;
+      // One minimal edit: a single undo step that keeps the caret.
+      replaceAll(next);
+      return true;
+    },
+    [replaceAll],
+  );
+
+  const hasMedia = !!state?.items.length;
+  // An open panel stays while it is open, so deleting the last property
+  // doesn't pull it out from under the pointer.
+  const showProperties =
+    !!state?.enabled && !!replaceAll && (properties.length > 0 || propertiesOpen);
+  if (!state || (!hasMedia && !showProperties)) return null;
   const timing = recognizer?.readiness?.state === 'unavailable' ? null : timingAccess;
+  // The Properties pill names itself; a heading is only for the media.
+  const heading = !hasMedia
+    ? null
+    : showProperties
+      ? { title: 'Document', hint: 'Properties, and audio & video before the body' }
+      : { title: 'Document media', hint: 'Audio & video before the body' };
   return (
     <section className="squisq-document-tray" aria-label="Document tray">
-      <div className="squisq-document-tray-heading">
-        <span>Document media</span>
-        <span className="squisq-document-tray-hint">Audio & video before the body</span>
-      </div>
+      {heading && (
+        <div className="squisq-document-tray-heading">
+          <span>{heading.title}</span>
+          <span className="squisq-document-tray-hint">{heading.hint}</span>
+        </div>
+      )}
       <div className="squisq-document-tray-items">
+        {showProperties && (
+          <PropertiesTrayItem
+            properties={properties}
+            expanded={propertiesOpen}
+            onExpandedChange={setPropertiesOpen}
+            readOnly={!editor.isEditable}
+            write={writeProperties}
+          />
+        )}
         {state.items.map((item) => (
           <TrayItem
             key={item.id}

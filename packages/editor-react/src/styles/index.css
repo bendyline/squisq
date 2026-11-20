@@ -19,6 +19,8 @@
 @import './wiki-links.css';
 @import './footnotes.css';
 @import './document-tray.css';
+@import './frontmatter-properties.css';
+@import './summarize.css';
 @import './code-context.css';
 @import './folder-view.css';
 @import '../jsonEditor/json-editor.css';

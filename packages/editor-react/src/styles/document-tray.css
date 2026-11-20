@@ -102,6 +102,19 @@
   flex-shrink: 0;
 }
 
+/* How many properties the Properties pill holds. */
+.squisq-document-tray-count {
+  flex-shrink: 0;
+  min-width: 18px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--squisq-surface-sunken);
+  color: var(--squisq-text-muted);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
 .squisq-document-tray-panel {
   margin-top: 8px;
   padding: 12px;

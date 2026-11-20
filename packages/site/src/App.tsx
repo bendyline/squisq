@@ -569,6 +569,7 @@ export function App() {
             display: 'flex',
             alignItems: 'center',
             gap: 6,
+            maxWidth: '100%',
           }}
         >
           Sample:
@@ -577,6 +578,7 @@ export function App() {
             onChange={handleSampleChange}
             disabled={loadingContent}
             style={{
+              minWidth: 0,
               fontSize: 13,
               fontFamily: 'system-ui, -apple-system, sans-serif',
               padding: '4px 8px',
@@ -750,8 +752,11 @@ export function App() {
           aria-label="Write canvas settings"
           style={{
             display: 'flex',
+            flexWrap: 'wrap',
             alignItems: 'center',
             gap: 8,
+            boxSizing: 'border-box',
+            maxWidth: '100%',
             padding: '3px 7px',
             border: '1px solid #c9b98a',
             background: '#FFFDF7',
