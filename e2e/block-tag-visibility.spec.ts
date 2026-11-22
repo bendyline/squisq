@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { switchView } from './view-tabs';
+import { switchView, viewButton } from './view-tabs';
 
 test('selected/hovered mode shows tags for both active blocks', async ({ page }) => {
   await page.goto('/');
@@ -19,8 +19,9 @@ test('selected/hovered mode shows tags for both active blocks', async ({ page })
     hasText: 'You almost never type the content',
   });
 
-  await page.getByRole('button', { name: 'View options' }).click();
+  await viewButton(page).click();
   await page.getByRole('menuitemradio', { name: 'Selected/hovered block' }).click();
+  await page.keyboard.press('Escape');
 
   await selectedBody.click({ position: { x: 20, y: 10 } });
   await expect(selectedHeading.locator('.squisq-template-badge')).toBeVisible();

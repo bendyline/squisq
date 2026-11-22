@@ -1,5 +1,5 @@
 /**
- * The choices offered in Write › Summarize. Each is a `squisq-transform` value:
+ * The choices offered in Edit › Summaries. Each is a `squisq-transform` value:
  * `''` (None) shows every section as written, a built-in style re-cuts the
  * document in its own way, and Custom is core's `dynamic-slides` style — the
  * one whose slides an author can adjust one by one.

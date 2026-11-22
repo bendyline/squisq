@@ -186,7 +186,7 @@ These apply in the editor, the player, and video exports. PowerPoint export also
 
 | Key                         | What it does                                                                        | Values                                                                                                                   | Default        | Applies                                             |
 | --------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------- | --------------------------------------------------- |
-| `squisq-transform`          | The style chosen in Write › **Summarize**, which turns the document into slides     | `documentary`, `magazine`, `data-driven`, `narrative`, `minimal`, `headings-and-features`, `dynamic-slides` (**Custom**) | None           | Editor (`dynamic-slides` travels with the document) |
+| `squisq-transform`          | The style chosen in Edit › **Summaries**, which turns the document into slides      | `documentary`, `magazine`, `data-driven`, `narrative`, `minimal`, `headings-and-features`, `dynamic-slides` (**Custom**) | None           | Editor (`dynamic-slides` travels with the document) |
 | `squisq-captions`           | Captions in Video mode                                                              | `standard`, `social` (short, two-line captions), or `off`                                                                | `standard`     | Editor                                              |
 | `squisq-video-loop`         | Whether Video mode starts over when it reaches the end                              | `true` or `false`                                                                                                        | `false`        | Editor                                              |
 | `squisq-video-presentation` | Where timed video clips appear: behind the slide, filling the frame, or in a corner | `background`, `full-frame`, `picture-in-picture`                                                                         | `background`   | Everywhere                                          |
@@ -194,7 +194,7 @@ These apply in the editor, the player, and video exports. PowerPoint export also
 | `squisq-pip-shape`          | Picture-in-picture shape                                                            | `square`, `wide`                                                                                                         | `square`       | Everywhere                                          |
 | `squisq-pip-position`       | Picture-in-picture corner                                                           | `top-left`, `top-right`, `bottom-left`, `bottom-right`                                                                   | `bottom-right` | Everywhere                                          |
 
-`squisq-captions` takes text, so write `off` rather than `false`. Summarize styles never change
+`squisq-captions` takes text, so write `off` rather than `false`. Summary styles never change
 your Markdown; they change only what the Use view presents. See [Display modes](display-modes.md)
 and [Narration](narration.md).
 
@@ -243,10 +243,10 @@ editor or the command line. See [HTML page templates](page-templates.md).
 You may see a few more keys in documents produced by importers and apps. They're managed for you;
 leave them as they are.
 
-| Key                                                                                       | Written by                                                                                                                                  |
-| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `squisq-outside-in`, `squisq-output`, `squisq-output-format`, `squisq-updatefrommarkdown` | Apps that keep a Markdown source beside a Word, PowerPoint, PDF, Excel, CSV, or HTML file, to link the two                                  |
-| `squisq-presentation`, `squisq-presentation-hints`                                        | Apps that save a **Custom** summary's design with the document. The editor clears `squisq-presentation` when you change the Summarize style |
+| Key                                                                                       | Written by                                                                                                                                |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `squisq-outside-in`, `squisq-output`, `squisq-output-format`, `squisq-updatefrommarkdown` | Apps that keep a Markdown source beside a Word, PowerPoint, PDF, Excel, CSV, or HTML file, to link the two                                |
+| `squisq-presentation`, `squisq-presentation-hints`                                        | Apps that save a **Custom** summary's design with the document. The editor clears `squisq-presentation` when you change the summary style |
 
 Importing a PowerPoint deck also writes `squisq-theme`, `squisq-custom-themes`, and
 `squisq-custom-templates` from the deck's own design; see [Import and export](import-export.md).

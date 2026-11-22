@@ -192,7 +192,7 @@ proofing's "apply suggestion": a Tiptap `tr.insertText`, or Monaco
   line, or right after whitespace (or the phrase starts with closing
   punctuation); a space is appended when the caret sits right before a word,
   with the caret left before it. Blank transcripts insert nothing.
-- Leaving the text views (the Use tab) finishes the session; a phrase that
+- Leaving the text views (for a Use view) finishes the session; a phrase that
   arrives while no text view is mounted is held and inserted when one is.
 
 ## UI

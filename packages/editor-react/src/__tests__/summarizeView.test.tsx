@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  *
- * Write › Summarize: the Write tab's mode for choosing how slides and video
+ * Edit › Summaries: the Write tab's mode for choosing how slides and video
  * summarize the document. It takes the Write surface's place (which stays
  * mounted behind it, so its changes stay undoable), offers None, the built-in
  * styles and Custom, writes the choice to `squisq-transform`, and shows either
@@ -69,10 +69,15 @@ function renderShell(props: Partial<EditorShellProps> = {}) {
 }
 
 function openSummarize() {
-  fireEvent.click(screen.getByRole('button', { name: 'Choose Write mode' }));
-  const menu = screen.getByRole('menu', { name: 'Write mode' });
-  fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Summarize' }));
-  return screen.getByRole('region', { name: 'Summarize' });
+  chooseView('Summaries');
+  return screen.getByRole('region', { name: 'Summaries' });
+}
+
+/** Chooses a view from the View menu, whatever view is on screen. */
+function chooseView(name: string) {
+  fireEvent.click(screen.getByRole('button', { name: /^View: / }));
+  const menu = screen.getByRole('menu', { name: 'View' });
+  fireEvent.click(within(menu).getByRole('menuitemradio', { name }));
 }
 
 function styleNames(view: HTMLElement): string[] {
@@ -82,14 +87,14 @@ function styleNames(view: HTMLElement): string[] {
     .map((id) => document.getElementById(id!)?.textContent ?? '');
 }
 
-describe('Write › Summarize', () => {
+describe('Edit › Summaries', () => {
   it('takes the Write surface’s place, keeping the editor mounted behind it', () => {
     renderShell();
     const view = openSummarize();
 
-    expect(screen.getByRole('tab', { name: 'Summarize' }).getAttribute('data-view')).toBe(
-      'wysiwyg',
-    );
+    expect(
+      screen.getByRole('button', { name: 'View: Summaries' }).getAttribute('data-active-view'),
+    ).toBe('wysiwyg');
     // The editor stays mounted, hidden, so the view's edits stay undoable there.
     const editor = screen.getByTestId('wysiwyg-editor-stub');
     expect(editor.closest('[hidden]')).not.toBeNull();
@@ -193,11 +198,11 @@ describe('Write › Summarize', () => {
     const view = openSummarize();
     fireEvent.click(within(view).getByRole('button', { name: 'Pressed 0' }));
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Slideshow' }));
+    chooseView('Slideshow');
     expect(view.hidden).toBe(true);
     expect(view.isConnected).toBe(true);
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Summarize' }));
+    chooseView('Summaries');
     expect(view.hidden).toBe(false);
     expect(within(view).getByRole('button', { name: 'Pressed 1' })).toBeTruthy();
   });

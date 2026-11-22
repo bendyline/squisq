@@ -27,7 +27,7 @@ import { useEditorContext } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
 import { DictationButton } from './speech/DictationButton';
-import { ViewMenuPanel } from './ViewMenuPanel';
+import { ViewMenu, type ViewMenuToggleItem } from './ViewMenu';
 import { useAnchoredPopover } from './useAnchoredPopover';
 import { TransformMenu } from './TransformMenu';
 import {
@@ -69,7 +69,7 @@ import { Icon } from './Icon';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
 import { usePreviewSettingsOptional } from './PreviewControls';
-import { EditorViewTabs } from './toolbar/EditorViewTabs';
+import { viewChoices } from './toolbar/viewChoices';
 import { filterVisibleMediaEntries } from './mediaEntries';
 import { MEDIA_FILE_ACCEPT } from './mediaDragMime';
 import { addFileToDocument } from './mediaInsertion';
@@ -105,9 +105,9 @@ export interface ToolbarProps {
   fileCount?: number;
   /** Toggle the Attachments panel. When provided, an "Attachments" button appears in the toolbar. */
   onToggleFiles?: () => void;
-  /** Content rendered at the left edge of the toolbar, before the view tabs. */
+  /** Content rendered at the left edge of the toolbar, before the view button. */
   slotLeft?: ReactNode;
-  /** Content rendered immediately after the view tabs, on the left side of the
+  /** Content rendered immediately after the view button, on the left side of the
    *  toolbar (before the formatting controls). Used for the preview mode
    *  switch in Use view. */
   slotAfterTabs?: ReactNode;
@@ -115,7 +115,7 @@ export interface ToolbarProps {
   slotAfterActions?: ReactNode;
   /**
    * Host quick tools — controls that stay on the row however narrow it gets
-   * (Find, say). They follow the built-in dictation and view-options buttons.
+   * (Find, say). They follow the built-in dictation button.
    */
   slotQuickTools?: ReactNode;
   /**
@@ -135,10 +135,16 @@ export interface ToolbarProps {
    */
   showPlayTab?: boolean;
   /**
-   * Whether to render the view tabs and their mode menus at all. Defaults to
-   * true. See `EditorShellProps.showViewTabs`.
+   * Whether to render the view button and list the views in the View menu.
+   * Defaults to true. See `EditorShellProps.showViewTabs`.
    */
   showViewTabs?: boolean;
+  /**
+   * The host's own navigation panes (a file sidebar, a workspace tree),
+   * listed in the View menu's left column. See
+   * `EditorShellProps.viewMenuNavigation`.
+   */
+  viewMenuNavigation?: readonly ViewMenuToggleItem[];
   /**
    * Whether to render Squisq's built-in text, block, and contextual
    * formatting controls. The toolbar, Insert menu, view tabs, and host slots
@@ -243,6 +249,7 @@ export function Toolbar({
   slotRight,
   showPlayTab = true,
   showViewTabs = true,
+  viewMenuNavigation,
   showFormattingControls = true,
   showInsertControls = true,
   hostMode = 'document',
@@ -273,6 +280,8 @@ export function Toolbar({
     bumpMediaRevision,
     workspaceContainer,
     insertAtCursor,
+    themeInheritance,
+    setThemeInheritance,
   } = useEditorContext();
   const previewSettings = usePreviewSettingsOptional();
   const [recorderOpen, setRecorderOpen] = useState(false);
@@ -284,6 +293,7 @@ export function Toolbar({
   const sceneTextLevel = activeSceneText?.level ?? null;
   const isCodeMode = editorMode === 'code';
   const showDocumentChrome = !isCodeMode && hostMode !== 'chat';
+  const views = viewChoices({ editorMode, hostMode, showPlayTab, showViewTabs });
   const [scannedFileCount, setScannedFileCount] = useState(0);
   const resolvedFileCount = fileCount ?? scannedFileCount;
 
@@ -2011,9 +2021,20 @@ export function Toolbar({
           e.target.value = '';
         }}
       />
-      {/* Left slot — before view tabs */}
+      {/* Left slot — before the view button */}
       {!findMode && slotLeft}
-      {showViewTabs && <EditorViewTabs showPlayTab={showPlayTab} hostMode={hostMode} />}
+      {/* The view button: the active view's name, opening the View menu. Its
+          section keeps the historical view-tabs class, which hosts style and
+          the outline pane's width lines up with. */}
+      {views.button && (
+        <div className="squisq-toolbar-view-tabs">
+          <ViewMenu
+            showEditViews={views.editViews}
+            showUseViews={views.useViews}
+            navigation={viewMenuNavigation}
+          />
+        </div>
+      )}
       {/* After-tabs slot — left side, before formatting or preview controls. */}
       {findMode ? (
         <FindToolbar
@@ -2558,12 +2579,15 @@ export function Toolbar({
           />
         </>
       )}
-      {/* Quick tools — dictation, view options and the host's (Find) stay on
-          the row however narrow it gets. */}
+      {/* Quick tools — dictation and the host's (Find) stay on the row however
+          narrow it gets. */}
       {/* Dictation renders only with a `speechInput` capability, in Write/Source. */}
       {!isCodeMode && <DictationButton />}
       {showDocumentChrome && activeView === 'raw' && <TransformMenu />}
-      {showDocumentChrome && <ViewMenuPanel />}
+      {/* With no views to switch to, the View menu (panes only) is an icon button. */}
+      {showDocumentChrome && !views.button && (
+        <ViewMenu variant="button" navigation={viewMenuNavigation} />
+      )}
       {slotQuickTools}
       {/* Attachments toggle — visible when callback is provided. Named
           "Attachments", not "Files", because a host shell usually has a Files
@@ -2632,6 +2656,8 @@ export function Toolbar({
             onClose={() => setShowDocSettings(false)}
             defaultThemeId={previewSettings?.inheritedThemeId}
             defaultThemeLabel={previewSettings?.inheritedThemeLabel}
+            editorStyling={themeInheritance}
+            onEditorStylingChange={setThemeInheritance}
           />,
         )}
 

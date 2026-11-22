@@ -147,7 +147,7 @@ Settings in the toolbar:
 - **Block** — the block type of the slide you are looking at. Choose another from the gallery and
   the slide is redrawn in place; the choice is written to that heading as its
   [tag](tags.md), exactly as if you had picked it in Write. Slides that are not one of your
-  headings — the cover, a slide added for a spare picture, a Summarize deck — show their type
+  headings — the cover, a slide added for a spare picture, a summary deck — show their type
   greyed out.
 - **Theme** — see [Themes](themes.md).
 - **Cover** — the title slide generated from the document's opening: whether it appears
@@ -157,7 +157,7 @@ Settings in the toolbar:
 
 To re-cut the document into a presentation in a style such as Documentary, Magazine,
 Data-Driven, or Minimal — or **Custom**, whose slides you adjust one by one — open
-[Write › Summarize](editor.md#the-write-menu-write-source-blocks-timeline-summarize). Your source
+[Edit › Summaries](editor.md#edit-views-write-source-blocks-timeline-summaries). Your source
 does not change; the style is saved as `squisq-transform`.
 
 The slideshow is also what a PowerPoint export and an HTML slideshow export contain, one slide per

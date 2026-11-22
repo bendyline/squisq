@@ -207,7 +207,7 @@ export function summarizeBlock(block: Block, mode: 'brief' | 'headings-and-featu
       ? briefText(
           (block.contents ?? [])
             .filter((node) => ['paragraph', 'list', 'blockquote'].includes(node.type))
-            .map(extractPlainText)
+            .map((node) => extractPlainText(node))
             .join(' '),
         )
       : '';

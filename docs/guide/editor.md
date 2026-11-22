@@ -46,20 +46,39 @@ The editor has three views of the same document:
 | **Source**                             | The Markdown itself, with syntax colors and suggestions as you type tags                      |
 | **Use** (named after the current mode) | The finished document — as a slideshow, page, video, dashboard, and more                      |
 
-Two tabs at the top left reach them. The first is for editing: it reads **Write** (or the Write
-mode you're in, such as **Blocks**) or, while you're in Source, **Source**. The second is Use,
-named after its mode — **Slideshow** until you choose another. Click the **▾** beside either tab,
-or click the tab again while you're in it, to pick a mode; choosing one also switches to that tab.
-Source is in the first tab's menu, right under **Write**. Switch views with Ctrl+Shift+1, 2, and 3
-(⌘⇧1, 2, and 3 on a Mac): Write, Source, and Use.
+The button at the top left shows the view you're in — **Write** (or the edit view you're in,
+such as **Blocks**), **Source**, or the Use mode, such as **Slideshow** — and opens the
+[View menu](#the-view-menu), where you choose another. Switch views with Ctrl+Shift+1, 2, and 3
+(⌘⇧1, 2, and 3 on a Mac): Write, Source, and Use. Each returns to the view as you left it — Write
+in its edit view, Use in its mode.
+
+### The View menu
+
+The view button opens the **View** menu. It has three columns:
+
+- **Navigation**, on the left — **Outline**, then the app's own navigation panes, such as its
+  file list, when the app offers them.
+- **Views**, in the middle — every view, under **Edit** (Write, Source, Blocks, Timeline,
+  Summaries) and **Use** (Slideshow, Flashcards, Video, Page, Dashboard, Document, Narrate). Each
+  group checks the mode its shortcut returns to, and the view on screen is highlighted. Choosing a
+  view switches to it.
+- **Panes**, on the right — **Block previews** and **Status bar**; **Show block tags** (No inline
+  block tags, Selected/hovered block, or Always show); and **Check spelling & grammar** when the
+  app offers proofing.
+
+The checkboxes leave the menu open as you click, so you can change several at once.
+
+Use the arrow keys to move in the menu: up and down within a column, left and right between
+columns. On a narrow screen the columns stack, views first. How much the Write view takes on the
+theme's look is in [Document settings](#document-settings), under **Editor**.
 
 Changes in one view appear in the others immediately. Write and Source edit the same Markdown,
 and Write leaves the parts of your file you didn't touch exactly as they were.
 
-### The Write menu: Write, Source, Blocks, Timeline, Summarize
+### Edit views: Write, Source, Blocks, Timeline, Summaries
 
-The **▾** beside the first tab chooses how you edit, and the tab is named after your choice.
-Source always shows the whole file: switching to it from Blocks or Timeline opens it at the block
+The **Edit** views in the View menu choose how you edit, and the view button is named after
+your choice. Source always shows the whole file: switching to it from Blocks or Timeline opens it at the block
 you were on, and switching back opens Write on the block holding the Source cursor.
 
 - **Write** — the whole document in one scrolling column. The default.
@@ -72,7 +91,7 @@ you were on, and switching back opens Write on the block holding the Source curs
   scrub, and use **Play**, **Zoom in**, and **Zoom out**. Each block's **⋯** menu sets its
   duration, start time, and transition, or turns on **Autotime block**. The toolbar above the
   track shows or hides the **Video monitor** and **Video composition** panes.
-- **Summarize** — how the slideshow and video summarize your text. Choose a style:
+- **Summaries** — how the slideshow and video summarize your text. Choose a style:
   - **None** — each section is one slide, as you wrote it. The default.
   - **Documentary**, **Magazine**, **Data-Driven**, **Narrative**, **Minimal**, or **Headings and
     features** — the document re-cut into a presentation in that style. Below the choice are the
@@ -90,7 +109,7 @@ you were on, and switching back opens Write on the block holding the Source curs
     text and that slide returns to an automatic summary.
 
   Your Markdown and narration are not changed; the choice is saved in the document's
-  frontmatter. Formatting buttons are hidden while Summarize is open.
+  frontmatter. Formatting buttons are hidden while Summaries is open.
 
 ## The toolbar
 
@@ -114,8 +133,8 @@ More controls appear when the caret is somewhere that needs them:
   a table (Write view).
 - **Decrease indent** and **Increase indent** in a list (Write view).
 
-On the right are the quick tools — the microphone for dictation, **Transform** (Source view only),
-and **View options** — then the paperclip that shows and hides **Attachments**. After a divider
+On the right are the quick tools — the microphone for dictation and **Transform** (Source view
+only) — then the paperclip that shows and hides **Attachments**. After a divider
 come the document actions: **Document settings**, **Custom layouts** (your own block designs), and
 **Version history** when the app keeps versions, followed by any the app adds, such as export.
 
@@ -155,7 +174,7 @@ to choose one:
 
 - **The heading badge (Write view).** A small badge at the end of the heading shows its template
   — or **Block** when it has none. Click it. By default the badge appears on the heading you're
-  in or hovering over; **View options** → **Show block tags** can show it always, or never.
+  in or hovering over; **View** → **Show block tags** can show it always, or never.
 - **The toolbar.** With the caret in a heading, click **Block: …** (Write or Source).
 - **Typing the tag.** In Source, type `{[` at the end of a heading and the editor suggests
   template names, then each template's parameters and values.
@@ -216,11 +235,12 @@ document's theme choice.
 
 ## Outline and block previews
 
-**View options** has two side panes:
+The [View menu](#the-view-menu) shows two side panes: **Outline** under **Navigation**, and
+**Block previews** under **Panes**.
 
-- **Show outline** — the document's headings as a tree on the left. Click a heading to jump to
+- **Outline** — the document's headings as a tree on the left. Click a heading to jump to
   it, drag one to move its whole section, and use the arrows to promote or demote it.
-- **Show block previews** — a small preview of each block beside the text; click one to scroll
+- **Block previews** — a small preview of each block beside the text; click one to scroll
   to it. In the Blocks and Timeline modes, it shows a large preview of the current block
   instead.
 
@@ -282,7 +302,7 @@ The demo checks spelling and grammar as you type, in Write and Source:
   (saved in this document's `squisq-proof-dictionary`).
 - The **status bar** shows the number of issues; click it to open the **Proofing** panel, which
   lists every finding with **Previous finding** and **Next finding** buttons.
-- **View options** → **Check spelling & grammar** turns checking on or off for this session.
+- **View** → **Check spelling & grammar** turns checking on or off for this session.
   **Document settings** → **Proofing** and **Proofing dialect** save the choice in the document.
 
 Code blocks and tags are never checked. Ignored findings are remembered in your browser, not in
@@ -327,7 +347,8 @@ a speech recognizer.
 
 ## The Use view
 
-The Use view presents the finished document. Pick a display mode from the **▾** menu:
+The Use view presents the finished document. Pick a display mode under **Use** in the
+[View menu](#the-view-menu):
 
 | Mode           | What you see                                      |
 | -------------- | ------------------------------------------------- |
@@ -345,7 +366,7 @@ The toolbar above the preview changes with the mode. Depending on the mode, it o
 - **Block:** (Slideshow) — the block type of the slide on screen. Pick another from the gallery
   to restyle that slide without going back to Write; the choice is saved as the heading's
   `{[…]}` tag. It is greyed out on the cover and while a
-  [Summarize](#the-write-menu-write-source-blocks-timeline-summarize) style is choosing the layouts.
+  [Summaries](#edit-views-write-source-blocks-timeline-summaries) style is choosing the layouts.
 - **Theme:** — the theme picker and its pencil (see [Themes](#themes)).
 - **Cover slide** — show or hide the cover, choose its **Appearance** and **Duration**, choose
   whether an exported video waits for it, and **Export cover as image…**.
@@ -377,7 +398,7 @@ The file icon on the toolbar opens **Document settings** (on a narrow toolbar, i
 | **Title**            | The document's title. Leave it blank to use the first heading |
 | **Subtitle**         | Text shown on the cover                                       |
 | **Theme**            | The document's theme, or **Default** for none                 |
-| **Transform**        | The Summarize style (see Write › Summarize)                   |
+| **Transform**        | The summary style (see Edit › Summaries)                      |
 | **Captions**         | Default, Standard, or Social                                  |
 | **Proofing**         | Default, On, or Off for this document                         |
 | **Proofing dialect** | American, British, Australian, Canadian, or Indian English    |
@@ -388,17 +409,11 @@ properties, the Write view also shows them in a **Properties** pill in the tray 
 where each change is saved as you leave its row. See
 [your own keys](frontmatter.md#your-own-keys).
 
-## View options
+Below them, **Editor** holds your own preference for this editor, which is not saved in the
+document:
 
-The eye icon on the toolbar:
-
-| Option                        | Choices                                                                                       |
+| Field                         | Sets                                                                                          |
 | ----------------------------- | --------------------------------------------------------------------------------------------- |
-| **Show outline**              | The outline pane                                                                              |
-| **Show block previews**       | The block preview pane                                                                        |
-| **Show block tags**           | Heading badges: No inline block tags, Selected/hovered block, or Always show                  |
-| **Show status bar**           | The word-count bar at the bottom                                                              |
-| **Check spelling & grammar**  | Proofing on or off                                                                            |
 | **Editor styling from theme** | How much the Write view looks like the document: Don't inherit, Fonts only, or Fonts & colors |
 
 ## Status bar
@@ -427,12 +442,12 @@ resize it (double-click the handle to reset).
 
 **Anywhere in the editor**
 
-| Keys                        | Does                                           |
-| --------------------------- | ---------------------------------------------- |
-| Mod+Shift+1, 2, 3           | Switch to Write, Source, or Use                |
-| ← → Home End                | Move between the view tabs, when one has focus |
-| Shift+F10, context-menu key | Open the right-click menu                      |
-| Esc                         | Close a menu, dialog, or presentation          |
+| Keys                        | Does                                      |
+| --------------------------- | ----------------------------------------- |
+| Mod+Shift+1, 2, 3           | Switch to Write, Source, or Use           |
+| ↓ on the view button        | Open the View menu; arrows move within it |
+| Shift+F10, context-menu key | Open the right-click menu                 |
+| Esc                         | Close a menu, dialog, or presentation     |
 
 **Write view**
 

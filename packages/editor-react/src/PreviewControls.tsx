@@ -1344,7 +1344,7 @@ export function displayModeShortLabel(mode: DisplayMode): string {
  * still collapses into the same menu when the toolbar is very constrained.
  * The block type sits right after it: it is the one control about the slide
  * on screen rather than the whole deck, so it leads the deck-wide settings.
- * How the document is summarized is chosen in Write › Summarize, not here.
+ * How the document is summarized is chosen in Edit › Summaries, not here.
  */
 type ControlKey =
   | 'format'
@@ -2251,7 +2251,7 @@ export function PreviewToolbarControls({ displayMode }: PreviewToolbarControlsPr
 
 /**
  * Segmented display-mode switch retained as a public, embeddable control.
- * The editor shell uses {@link PreviewModeMenu} beside its Use tab instead.
+ * The editor shell lists the modes in its View menu instead.
  * Narrate is hidden when the host disables `allowNarrate`.
  */
 export function PreviewModeSwitch() {
@@ -2324,5 +2324,3 @@ export function PreviewFormatSwitch() {
     </div>
   );
 }
-
-export { PreviewModeMenu } from './PreviewModeMenu';

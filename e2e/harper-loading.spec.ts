@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { waitForAppReady } from './appReady';
+import { viewButton } from './view-tabs';
 
 /**
  * The proofing capability on the demo site (the reference host):
@@ -40,8 +41,8 @@ test('proofing squiggles appear in Write view and the session toggle clears them
   await expect(squiggle).toBeVisible({ timeout: 30_000 });
 
   // Session toggle off via the View menu clears every squiggle.
-  await page.getByRole('button', { name: 'View options' }).click();
-  await page.getByText('Check spelling & grammar').click();
+  await viewButton(page).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Check spelling & grammar' }).click();
   await page.keyboard.press('Escape');
   await expect(page.locator('.squisq-proof-underline--spelling')).toHaveCount(0, {
     timeout: 10_000,

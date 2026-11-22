@@ -184,7 +184,6 @@ export type { PickerEntry, PickerCategory } from './emojiData.js';
 export {
   PreviewSettingsProvider,
   PreviewToolbarControls,
-  PreviewModeMenu,
   PreviewModeSwitch,
   PreviewFormatSwitch,
   usePreviewSettings,
@@ -200,10 +199,9 @@ export { Toolbar } from './Toolbar.js';
 export type { ToolbarProps } from './Toolbar.js';
 
 export { VersionHistoryPanel } from './VersionHistoryPanel.js';
-export { ViewMenuPanel } from './ViewMenuPanel.js';
-export { WriteModeMenu } from './WriteModeMenu.js';
-export type { WriteModeMenuProps } from './WriteModeMenu.js';
-// Write › Summarize: the AI a host lends the Custom summary designer.
+export { ViewMenu } from './ViewMenu.js';
+export type { ViewMenuProps, ViewMenuToggleItem } from './ViewMenu.js';
+// Edit › Summaries: the AI a host lends the Custom summary designer.
 export type {
   SummarizationAssistant,
   SuggestSlidesOptions,

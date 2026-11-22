@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { getAvailableThemes, resolveTheme } from '@bendyline/squisq/schemas';
 import { waitForAppReady } from './appReady';
-import { selectUseMode, switchView } from './view-tabs';
+import { selectUseMode, switchView, toggleViewPane, viewButton } from './view-tabs';
 
 const AXE_PATH = resolve(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js');
 
@@ -141,8 +141,8 @@ test.describe('automated accessibility audit', () => {
       'data-theme',
       'dark',
     );
-    await page.getByRole('button', { name: 'View options', exact: true }).click();
-    await assertNoSeriousAxeViolations(page, '.squisq-view-menu-popover');
+    await viewButton(page).click();
+    await assertNoSeriousAxeViolations(page, '.squisq-view-menu-columns');
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Document settings', exact: true }).click();
     await assertNoSeriousAxeViolations(page, '.squisq-doc-settings-dialog');
@@ -154,9 +154,7 @@ test.describe('automated accessibility audit', () => {
   test('outline highlights stay readable under every theme accent', async ({ page }) => {
     // The default sample tags its headings, so the outline shows template chips.
     await page.locator('.tiptap.ProseMirror').waitFor({ state: 'visible' });
-    await page.getByRole('button', { name: 'View options', exact: true }).click();
-    await page.getByRole('menuitemcheckbox', { name: 'Show outline' }).click();
-    await page.keyboard.press('Escape');
+    await toggleViewPane(page, 'Outline');
     // The caret's section is the outline's current row.
     await page.locator('.tiptap.ProseMirror :is(h1, h2)').first().click();
     await expect(page.locator('.squisq-outline-row--current')).toHaveCount(1);
@@ -213,36 +211,34 @@ test.describe('automated accessibility audit', () => {
     await expect(page.getByRole('button', { name: 'Export…', exact: true })).toBeFocused();
   });
 
-  test('view tabs use one tab stop and arrow/Home/End navigation', async ({ page }) => {
-    const tabs = page.getByRole('tablist', { name: 'Editor view' });
+  test('the view button names the active view and opens the View menu', async ({ page }) => {
     await assertNoSeriousAxeViolations(page, '.squisq-toolbar-view-tabs');
-    await expect(tabs.getByRole('button')).toHaveCount(0);
-    // Source is chosen from Write's menu, so two tabs remain: Write and Use.
-    await expect(tabs.getByRole('tab')).toHaveCount(2);
-    const write = tabs.getByRole('tab', { name: 'Write', exact: true });
-    const use = tabs.locator('[data-view="preview"]');
-    await write.focus();
-    await expect(tabs.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
-    await page.keyboard.press('ArrowRight');
-    await expect(use).toBeFocused();
-    // Manual activation keeps lazy loading from stealing arrow focus.
-    await expect(write).toHaveAttribute('aria-selected', 'true');
-    await page.keyboard.press('Home');
-    await expect(write).toBeFocused();
-    await page.keyboard.press('End');
-    await expect(use).toBeFocused();
+    await expect(page.getByRole('tablist', { name: 'Editor view' })).toHaveCount(0);
+    const button = viewButton(page);
+    await expect(button).toHaveAccessibleName('View: Write');
+    await button.focus();
     await page.keyboard.press('Enter');
+    const menu = page.getByRole('menu', { name: 'View', exact: true });
+    await menu
+      .getByRole('group', { name: 'Use', exact: true })
+      .getByRole('menuitemradio', { name: 'Slideshow', exact: true })
+      .click();
     await expect(page.locator('[data-testid="preview-panel"]')).toBeVisible();
+    await expect(button).toHaveAccessibleName('View: Slideshow');
+    await expect(button).toBeFocused();
   });
 
-  test('settings and view options remain usable on short narrow screens', async ({
+  test('settings and the View menu remain usable on short narrow screens', async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width: 390, height: 568 });
-    await page.getByRole('button', { name: 'View options', exact: true }).click();
-    const menu = page.getByRole('menu', { name: 'View options', exact: true });
+    await viewButton(page).click();
+    const menu = page.getByRole('menu', { name: 'View', exact: true });
+    // The columns stack; the panes' last row scrolls into reach.
+    await page.keyboard.press('ArrowRight');
     await page.keyboard.press('End');
-    const last = menu.getByRole('menuitemradio', { name: 'Fonts & colors', exact: true });
+    const last = menu.locator('[data-view-menu-column="panes"] [role^="menuitem"]').last();
+    await expect(last).toBeFocused();
     await expect(last).toBeInViewport();
     const bounds = await menu.boundingBox();
     expect(bounds!.y).toBeGreaterThanOrEqual(0);
@@ -265,29 +261,33 @@ test.describe('automated accessibility audit', () => {
     await testInfo.attach('narrow-screen-settings', { path: screenshot, contentType: 'image/png' });
   });
 
-  test('view options support keyboard navigation with coherent menu roles', async ({ page }) => {
-    const trigger = page.getByRole('button', { name: 'View options', exact: true });
+  test('the View menu supports keyboard navigation with coherent menu roles', async ({ page }) => {
+    const trigger = viewButton(page);
     await trigger.press('ArrowDown');
-    const menu = page.getByRole('menu', { name: 'View options', exact: true });
-    await expect(
-      menu.getByRole('menuitemcheckbox', { name: 'Show outline', exact: true }),
-    ).toBeFocused();
+    const menu = page.getByRole('menu', { name: 'View', exact: true });
+    // It opens on the view on screen.
+    await expect(menu.getByRole('menuitemradio', { name: 'Write', exact: true })).toBeFocused();
     await page.keyboard.press('ArrowDown');
+    await expect(menu.getByRole('menuitemradio', { name: 'Source', exact: true })).toBeFocused();
+    // Left and Right move between the columns: Navigation, Views, Panes.
+    await page.keyboard.press('ArrowRight');
     await expect(
-      menu.getByRole('menuitemcheckbox', { name: 'Show block previews', exact: true }),
+      menu.getByRole('menuitemcheckbox', { name: 'Status bar', exact: true }),
     ).toBeFocused();
-    await assertNoSeriousAxeViolations(page, '.squisq-view-menu-popover');
-    await page.keyboard.press('End');
+    await assertNoSeriousAxeViolations(page, '.squisq-view-menu-columns');
+    await page.keyboard.press('Home');
     await expect(
-      menu.getByRole('menuitemradio', { name: 'Fonts & colors', exact: true }),
+      menu.getByRole('menuitemcheckbox', { name: 'Block previews', exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(
+      menu.getByRole('menuitemcheckbox', { name: 'Outline', exact: true }),
     ).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(trigger).toBeFocused();
     await expect(menu).toHaveCount(0);
-    await trigger.press('ArrowUp');
-    await expect(
-      menu.getByRole('menuitemradio', { name: 'Fonts & colors', exact: true }),
-    ).toBeFocused();
+    await trigger.press('ArrowDown');
+    await expect(menu.getByRole('menuitemradio', { name: 'Write', exact: true })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(menu).toHaveCount(0);
     await expect(trigger).not.toBeFocused();

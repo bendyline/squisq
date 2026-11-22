@@ -1,10 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { selectWriteMode, switchView, type WriteMode } from './view-tabs';
+import { selectWriteMode, switchView, viewButton, type WriteMode } from './view-tabs';
 
 /**
  * E2E for the large block preview shown beside the editing card in
- * block-at-a-time / timeline mode when "Show block previews" is on. In
+ * block-at-a-time / timeline mode when the "Block previews" pane is on. In
  * document mode the same toggle drives the inline-preview gutter instead.
  */
 
@@ -19,18 +19,16 @@ async function load(page: Page, sample = 'hello-world') {
 }
 
 /**
- * Set the layout (the Write tab's mode menu, which also enters Write) and the
- * "Show block previews" toggle. The View menu stays open after clicking its
- * items, so we close it by re-clicking the trigger.
+ * Set the layout (an Edit view in the View menu, which also enters Write) and
+ * the "Block previews" pane. The View menu stays open after a pane toggle, so
+ * we close it by re-clicking the trigger.
  */
 async function configureView(page: Page, opts: { layout?: WriteMode; previews?: boolean }) {
   if (opts.layout) await selectWriteMode(page, opts.layout);
   if (opts.previews === undefined) return;
-  const trigger = page.getByRole('button', { name: 'View options' });
+  const trigger = viewButton(page);
   await trigger.click();
-  const toggle = page
-    .locator('[role="menuitemcheckbox"]')
-    .filter({ hasText: 'Show block previews' });
+  const toggle = page.getByRole('menuitemcheckbox', { name: 'Block previews', exact: true });
   const checked = (await toggle.getAttribute('aria-checked')) === 'true';
   if (checked !== opts.previews) await toggle.click();
   await trigger.click(); // close the menu

@@ -19,6 +19,10 @@
  * Properties: the document's own frontmatter keys (`author`, `tags`,
  * `description`, …) are edited as name/value rows beneath the settings and
  * written in the same Save. Rows left untouched keep their exact text.
+ *
+ * Editor: when the host passes `onEditorStylingChange`, a last section sets
+ * how much of the theme the Write view takes on. That is the person's own
+ * editor preference, applied on Save and never written into the document.
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -39,6 +43,7 @@ import {
   themeFrontmatterValue,
 } from './frontmatterSettings';
 import { useModalDialog } from './modal/useModalDialog';
+import type { ThemeInheritance } from './EditorContext';
 import { FrontmatterPropertiesGrid } from './FrontmatterPropertiesGrid';
 import {
   applyPropertyEdits,
@@ -68,6 +73,12 @@ function readFm(
   const v = Object.prototype.hasOwnProperty.call(fm, canonical) ? fm[canonical] : fm[legacy];
   return typeof v === 'string' ? v : '';
 }
+
+const EDITOR_STYLING_OPTIONS: readonly { value: ThemeInheritance; label: string }[] = [
+  { value: 'none', label: "Don't inherit" },
+  { value: 'fonts', label: 'Fonts only' },
+  { value: 'fonts-colors', label: 'Fonts & colors' },
+];
 
 const CAPTION_OPTIONS: readonly { key: string; label: string }[] = [
   { key: '', label: 'Default (Standard)' },
@@ -99,6 +110,13 @@ export interface DocumentSettingsDialogProps {
    * `pageTemplates`; the Page template field appears only when one is set.
    */
   pageTemplates?: PageTemplateSettings | null;
+  /** How much of the theme the Write view takes on now (`EditorShell`'s `themeInheritance`). */
+  editorStyling?: ThemeInheritance;
+  /**
+   * Applies a new Write-view styling on Save. The Editor section — a personal
+   * preference, not part of the document — appears only when this is set.
+   */
+  onEditorStylingChange?: (styling: ThemeInheritance) => void;
 }
 
 /** The authored template choice: a path, `'none'`, or `''` for the default. */
@@ -118,6 +136,8 @@ export function DocumentSettingsDialog({
   defaultThemeId,
   defaultThemeLabel,
   pageTemplates: pageTemplatesProp,
+  editorStyling: currentEditorStyling = 'fonts',
+  onEditorStylingChange,
 }: DocumentSettingsDialogProps) {
   const hostDefaultThemeId = defaultThemeId?.trim() || undefined;
   const contextPageTemplates = usePageTemplateSettings();
@@ -161,6 +181,7 @@ export function DocumentSettingsDialog({
   const [theme, setTheme] = useState(currentTheme);
   const [transform, setTransform] = useState(currentTransform);
   const [captions, setCaptions] = useState(currentCaptions);
+  const [editorStyling, setEditorStyling] = useState<ThemeInheritance>(currentEditorStyling);
   const proofingState = useProofingState();
   const currentProofing = readFm(
     frontmatter,
@@ -233,6 +254,7 @@ export function DocumentSettingsDialog({
   const titleRef = useRef<HTMLInputElement>(null);
   const headingId = useId();
   const propertiesHeadingId = useId();
+  const editorHeadingId = useId();
   useModalDialog({ rootRef: overlayRef, dialogRef, initialFocusRef: titleRef, onClose });
 
   const handleBackdrop = useCallback(
@@ -327,6 +349,9 @@ export function DocumentSettingsDialog({
         withSettings,
         planPropertyEdits(readCustomProperties(markdownSource), propertyRows),
       );
+      if (onEditorStylingChange && editorStyling !== currentEditorStyling) {
+        onEditorStylingChange(editorStyling);
+      }
       onSave(nextSource);
     },
     [
@@ -348,6 +373,9 @@ export function DocumentSettingsDialog({
       inferredSubtitle,
       hostDefaultThemeId,
       markdownSource,
+      onEditorStylingChange,
+      editorStyling,
+      currentEditorStyling,
       onSave,
     ],
   );
@@ -578,6 +606,48 @@ export function DocumentSettingsDialog({
               ariaLabel="Properties"
             />
           </div>
+
+          {onEditorStylingChange && (
+            <div
+              className="squisq-doc-settings-section"
+              role="group"
+              aria-labelledby={editorHeadingId}
+            >
+              <h3 id={editorHeadingId} className="squisq-doc-settings-section-title">
+                Editor
+              </h3>
+              <span className="squisq-doc-settings-hint">
+                Your own preference for this editor. It isn’t saved in the document.
+              </span>
+              <div className="squisq-doc-settings-field">
+                <label
+                  className="squisq-doc-settings-label"
+                  htmlFor="squisq-doc-settings-editor-styling"
+                >
+                  Editor styling from theme
+                </label>
+                <select
+                  id="squisq-doc-settings-editor-styling"
+                  className="squisq-doc-settings-input"
+                  value={editorStyling}
+                  onChange={(e) => setEditorStyling(e.target.value as ThemeInheritance)}
+                  aria-describedby="squisq-doc-settings-editor-styling-hint"
+                >
+                  {EDITOR_STYLING_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <span
+                  id="squisq-doc-settings-editor-styling-hint"
+                  className="squisq-doc-settings-hint"
+                >
+                  How much the Write view looks like the document’s theme.
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="squisq-doc-settings-footer">

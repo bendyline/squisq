@@ -19,7 +19,6 @@ const PORTALED_MENUS = [
   'squisq-block-props-popover',
   'squisq-theme-picker-popover',
   'squisq-transition-flyout',
-  'squisq-view-menu-popover',
   'squisq-timeline-item-menu',
   'squisq-view-mode-menu',
   'squisq-cover-slide-menu',

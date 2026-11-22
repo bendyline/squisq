@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
 import { TELEPROMPTER_FAKE_MIC_PATH } from './fakeMicFixture';
-import { switchView, viewTab } from './view-tabs';
+import { activeView, switchView } from './view-tabs';
 
 /**
  * E2E for the Narrate (teleprompter) display mode — Phase A surface:
@@ -50,7 +50,7 @@ test('narrate mode renders the script with block markers and controls', async ({
   await openTeleprompter(page);
 
   // The frontmatter `display-mode: narrate` preselects the Use mode.
-  await expect(viewTab(page, 'Play')).toHaveAccessibleName('Narrate');
+  await expect(activeView(page, 'Play')).toHaveAccessibleName('View: Narrate');
 
   await expect(page.getByTestId('teleprompter-surface')).toBeVisible();
   await expect(page.getByTestId('teleprompter-controls')).toBeVisible();

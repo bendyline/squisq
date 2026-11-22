@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { selectUseMode, switchView, viewTab, type ViewTab } from './view-tabs';
+import { activeView, openViewMenu, selectUseMode, switchView } from './view-tabs';
 
 /**
  * E2E tests for the Squisq dev site.
@@ -85,17 +85,10 @@ test.describe('Site navigation', () => {
     expect(values).toContain('all-templates');
   });
 
-  test('view switcher has Editor and Play tabs, with Source in the Write menu', async ({
-    page,
-  }) => {
-    for (const label of ['Editor', 'Play'] as const satisfies readonly ViewTab[]) {
-      await expect(viewTab(page, label)).toBeVisible();
-    }
-    await page.getByRole('button', { name: 'Choose Write mode', exact: true }).click();
+  test('the view button shows the active view, with Source in the View menu', async ({ page }) => {
+    await expect(activeView(page, 'Editor')).toBeVisible();
     await expect(
-      page
-        .getByRole('menu', { name: 'Write mode', exact: true })
-        .getByRole('menuitemradio', { name: 'Source', exact: true }),
+      (await openViewMenu(page)).getByRole('menuitemradio', { name: 'Source', exact: true }),
     ).toBeVisible();
   });
 

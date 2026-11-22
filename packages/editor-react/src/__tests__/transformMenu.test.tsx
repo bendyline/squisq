@@ -79,13 +79,14 @@ describe('TransformMenu', () => {
 
     expect(screen.queryByRole('button', { name: 'Transform document' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Choose Write mode' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View: Write' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Source' }));
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Transform document' })).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('tab', { name: /Use/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'View: Source' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Use' }));
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: 'Transform document' })).toBeNull();
     });

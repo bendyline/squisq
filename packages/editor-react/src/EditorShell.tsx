@@ -128,6 +128,8 @@ import {
 } from '@bendyline/squisq-video-react/media-edit';
 import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
+import type { ViewMenuToggleItem } from './ViewMenu';
+import { viewChoices } from './toolbar/viewChoices';
 import type { EditorHostMode, EditorToolbarPosition } from './editorHostMode';
 import type { FindRequest } from './find/findModel';
 
@@ -294,8 +296,7 @@ export interface EditorShellProps {
   toolbarSlotAfterActions?: ReactNode;
   /**
    * Host quick tools: controls that stay on the toolbar row however narrow
-   * it gets (Find, say). They follow the built-in dictation and
-   * view-options buttons.
+   * it gets (Find, say). They follow the built-in dictation button.
    */
   toolbarSlotQuickTools?: ReactNode;
   /**
@@ -318,14 +319,14 @@ export interface EditorShellProps {
    */
   toolbarPosition?: EditorToolbarPosition;
   /**
-   * AI for the Custom summary designer in Write › Summarize: its "Suggest with
+   * AI for the Custom summary designer in Edit › Summaries: its "Suggest with
    * AI" words and lays out the slides one at a time. The host makes the model
    * calls; Squisq owns the prompts, the checks on each reply, and the designer.
    * Without one the designer works fully, without AI.
    */
   summarizationAssistant?: SummarizationAssistant;
   /**
-   * Replaces the built-in Custom summary designer in Write › Summarize. It is
+   * Replaces the built-in Custom summary designer in Edit › Summaries. It is
    * shown inline, in a mode the author can leave at any time, so it should
    * save as it goes. Most hosts want `summarizationAssistant` instead.
    */
@@ -363,15 +364,25 @@ export interface EditorShellProps {
    */
   showPlayTab?: boolean;
   /**
-   * Whether to show the view tabs (Write, Use) and their mode menus, where
-   * Source is chosen from Write's.
-   * Defaults to true. When false the editor stays in `initialView` — the
-   * Ctrl/Cmd+Shift+1/2/3 view shortcuts act through the tabs, so they do
-   * nothing either — while the formatting and Insert controls remain. Use it
+   * Whether to show the view button (named after the active view) and list
+   * the views in the View menu it opens, where Write, Source, Blocks and the
+   * Use modes are chosen. Defaults to true. When false the editor stays in
+   * `initialView` — the Ctrl/Cmd+Shift+1/2/3 view shortcuts reach only the
+   * views the menu offers, so they do nothing either — while the formatting
+   * and Insert controls remain. Use it
    * for a small field inside a form, where switching views is not a choice
-   * the person should face. `hostMode="chat"` already hides the tabs.
+   * the person should face. `hostMode="chat"` already hides the button.
    */
   showViewTabs?: boolean;
+  /**
+   * The host's own navigation panes — a file sidebar, a workspace tree —
+   * listed under **Navigation** in the View menu's left column, after the
+   * editor's Outline, so the person shows and hides them where they show and
+   * hide the editor's panes.
+   * Each item is a checkbox row: pass the pane's current state as `checked`
+   * and flip it in `onToggle`. Omit it and the column holds only the Outline.
+   */
+  viewMenuNavigation?: readonly ViewMenuToggleItem[];
   /**
    * Whether Use mode may open its audience view in a separate browser window.
    * Defaults to true. Disable this in embedded hosts that block popups.
@@ -839,6 +850,7 @@ export function EditorShell({
   reviewProviders,
   showPlayTab = true,
   showViewTabs = true,
+  viewMenuNavigation,
   allowPresentationWindow = true,
   allowPresentationFullscreen = true,
   allowPrint = true,
@@ -1028,6 +1040,7 @@ export function EditorShell({
                 sidePanelSlot={sidePanelSlot}
                 showPlayTab={showPlayTab}
                 showViewTabs={showViewTabs}
+                viewMenuNavigation={viewMenuNavigation}
                 hostMode={hostMode}
                 allowPresentationWindow={allowPresentationWindow}
                 allowPresentationFullscreen={allowPresentationFullscreen}
@@ -1097,6 +1110,7 @@ interface EditorShellInnerProps {
   sidePanelSlot?: ReactNode;
   showPlayTab: boolean;
   showViewTabs: boolean;
+  viewMenuNavigation?: readonly ViewMenuToggleItem[];
   hostMode: EditorHostMode;
   allowPresentationWindow: boolean;
   allowPresentationFullscreen: boolean;
@@ -1198,6 +1212,7 @@ function EditorShellInner({
   sidePanelSlot,
   showPlayTab,
   showViewTabs,
+  viewMenuNavigation,
   hostMode,
   allowPresentationWindow,
   allowPresentationFullscreen,
@@ -1601,22 +1616,16 @@ function EditorShellInner({
       // physical code keeps Ctrl/Cmd+Shift+1/2/3 usable across layouts.
       const key = /^Digit[1-3]$/.test(e.code) ? e.code.slice(-1) : e.key;
       const view = key === '1' ? 'wysiwyg' : key === '2' ? 'raw' : key === '3' ? 'preview' : null;
-      if (!view || (view === 'preview' && !showPlayTab)) return;
-      // Shortcuts act through the tabs, so do nothing where none are shown.
-      // Write and Source share the first tab: when it shows the other one,
-      // switch directly, since pressing a tab you are on opens its menu.
-      const button = shellRef.current?.querySelector<HTMLButtonElement>(
-        view === 'preview'
-          ? '[role="tab"][data-view="preview"]'
-          : '[role="tab"][data-view="wysiwyg"], [role="tab"][data-view="raw"]',
-      );
-      if (!button) return;
+      if (!view) return;
+      // The shortcuts reach the views the View menu offers, and nothing where
+      // it offers none (hidden view button, a chat composer, code mode).
+      const views = viewChoices({ editorMode, hostMode, showPlayTab, showViewTabs });
+      if (view === 'preview' ? !views.useViews : !views.editViews) return;
       e.preventDefault();
       e.stopPropagation();
-      if (button.dataset.view === view) button.click();
-      else setActiveView(view);
+      setActiveView(view);
     },
-    [setActiveView, showPlayTab],
+    [editorMode, hostMode, setActiveView, showPlayTab, showViewTabs],
   );
 
   const shellLinkHandlers = useShellLinkDelegation(onLinkClick);
@@ -1660,6 +1669,7 @@ function EditorShellInner({
         slotRight={toolbarSlotRight}
         showPlayTab={showPlayTab}
         showViewTabs={showViewTabs}
+        viewMenuNavigation={viewMenuNavigation}
         showFormattingControls={showFormattingControls}
         showInsertControls={showInsertControls}
         hostMode={hostMode}

@@ -94,7 +94,7 @@ const WRITE_TEXT_SIZE_OPTIONS = [12, 14, 15, 16, 17, 18, 20, 22, 24, 28, 32] as 
 const WRITE_LINE_SPACING_OPTIONS = [1.2, 1.4, 1.5, 1.6, 1.7, 1.8, 2, 2.2, 2.4] as const;
 
 // How much the WYSIWYG "Write" canvas adopts the active Squisq theme. Matches
-// the labels used by the editor's own View menu ("Editor styling from theme").
+// the labels the editor's Document settings use ("Editor styling from theme").
 // `'fonts'` is the EditorShell default.
 const DEFAULT_WRITE_THEME_INHERITANCE: ThemeInheritance = 'fonts';
 const WRITE_THEME_OPTIONS: ReadonlyArray<{ label: string; value: ThemeInheritance }> = [

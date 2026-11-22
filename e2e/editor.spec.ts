@@ -1,6 +1,6 @@
 import { test, expect, type Locator, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { switchView, viewTab, type ViewTab } from './view-tabs';
+import { activeView, openViewMenu, switchView, viewButton } from './view-tabs';
 
 /**
  * E2E tests for the Squisq editor UI.
@@ -102,8 +102,7 @@ test.describe('Editor view switching', () => {
   });
 
   test('starts in Editor (WYSIWYG) view by default', async ({ page }) => {
-    const activeTab = page.locator('.squisq-toolbar-view-tab--active');
-    await expect(activeTab).toHaveAttribute('data-view', 'wysiwyg');
+    await expect(viewButton(page)).toHaveAttribute('data-active-view', 'wysiwyg');
   });
 
   test('switching to Markdown view shows Monaco editor', async ({ page }) => {
@@ -124,33 +123,25 @@ test.describe('Editor view switching', () => {
     await expect(page.locator('[data-testid="preview-panel"]')).toBeVisible();
   });
 
-  test('Write and Use are tabs, and Source is in the Write menu under Write', async ({ page }) => {
-    for (const label of ['Editor', 'Play'] as const satisfies readonly ViewTab[]) {
-      await expect(viewTab(page, label)).toBeVisible();
-    }
-    await expect(viewTab(page, 'Markdown')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Choose Write mode', exact: true }).click();
-    const items = page
-      .getByRole('menu', { name: 'Write mode', exact: true })
+  test('the toolbar shows only the active view, and Source is under Edit in the View menu', async ({
+    page,
+  }) => {
+    await expect(page.getByRole('tab')).toHaveCount(0);
+    await expect(viewButton(page)).toHaveCount(1);
+    await expect(activeView(page, 'Editor')).toHaveAccessibleName('View: Write');
+    const items = (await openViewMenu(page))
+      .getByRole('group', { name: 'Edit', exact: true })
       .getByRole('menuitemradio');
     await expect(items.nth(0)).toHaveAccessibleName('Write');
     await expect(items.nth(1)).toHaveAccessibleName('Source');
     await items.nth(1).click();
-    await expect(viewTab(page, 'Markdown')).toHaveAccessibleName('Source');
-    await expect(viewTab(page, 'Markdown')).toHaveAttribute('aria-selected', 'true');
+    await expect(activeView(page, 'Markdown')).toHaveAccessibleName('View: Source');
   });
 
-  test('tabs are not too narrow to read', async ({ page }) => {
-    const tabs = page.locator('.squisq-toolbar-view-tab');
-    const count = await tabs.count();
-    expect(count).toBe(2);
-
-    for (let i = 0; i < count; i++) {
-      const box = await tabs.nth(i).boundingBox();
-      expect(box).toBeTruthy();
-      // Each tab should be wide enough to read (at least 50px)
-      expect(box!.width).toBeGreaterThanOrEqual(50);
-    }
+  test('the view button is wide enough to read its view', async ({ page }) => {
+    const box = await viewButton(page).boundingBox();
+    expect(box).toBeTruthy();
+    expect(box!.width).toBeGreaterThanOrEqual(60);
   });
 });
 
@@ -189,7 +180,7 @@ test.describe('Editor toolbar', () => {
     await expect(actions).not.toBeVisible();
   });
 
-  test('toolbar background is darker than tabs area', async ({ page }) => {
+  test('toolbar background is darker than the view button area', async ({ page }) => {
     const tabs = page.locator('.squisq-toolbar-view-tabs');
     const toolbar = page.locator('.squisq-toolbar');
 
@@ -200,82 +191,28 @@ test.describe('Editor toolbar', () => {
     expect(tabsBg).not.toBe(toolbarBg);
   });
 
-  test('the Write menu button sits between the Write and Use tabs', async ({ page }) => {
-    const write = await viewTab(page, 'Editor').boundingBox();
-    const use = await viewTab(page, 'Play').boundingBox();
-    const trigger = await page
-      .getByRole('button', { name: 'Choose Write mode', exact: true })
-      .boundingBox();
-    expect(write && use && trigger).toBeTruthy();
-    expect(trigger!.x).toBeGreaterThanOrEqual(write!.x + write!.width - 1);
-    expect(trigger!.x + trigger!.width).toBeLessThanOrEqual(use!.x + 1);
+  test('the view button names the view with its icon and opens the View menu', async ({ page }) => {
+    const button = viewButton(page);
+    await expect(button).toContainText('Write');
+    await expect(button.locator('.squisq-toolbar-view-button-icon')).toBeVisible();
+    await expect(button).toHaveAttribute('aria-haspopup', 'menu');
+    await button.click();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('menu', { name: 'View', exact: true })).toBeVisible();
   });
 
-  test('the mode-menu buttons are drawn as buttons with full-height targets', async ({ page }) => {
-    for (const name of ['Choose Write mode', 'Choose Use mode']) {
-      const trigger = page.getByRole('button', { name, exact: true });
-      const target = await trigger.boundingBox();
-      const face = await trigger.locator('.squisq-view-mode-trigger-face').boundingBox();
-      const tab = await viewTab(page, 'Editor').boundingBox();
-      // The whole column beside the tab responds, not just the visible face.
-      expect(target!.width).toBeGreaterThanOrEqual(32);
-      expect(target!.height).toBeGreaterThanOrEqual(tab!.height - 2);
-      expect(face).toMatchObject({ width: 24, height: 24 });
-      expect(
-        await trigger
-          .locator('.squisq-view-mode-trigger-face')
-          .evaluate((el) => getComputedStyle(el).borderTopWidth),
-      ).toBe('1px');
-    }
-  });
-
-  test('mode tabs and their adjacent menus have distinct visible keyboard focus', async ({
-    page,
-  }) => {
-    const useTab = viewTab(page, 'Play');
-    const writeTrigger = page.getByRole('button', { name: 'Choose Write mode', exact: true });
-    const modeTrigger = page.getByRole('button', { name: 'Choose Use mode', exact: true });
-    await useTab.focus();
-    await useTab.press('Home');
-    await page.keyboard.press('End');
-    await expect(useTab).toBeFocused();
-    const ring = (selector: string) =>
-      page.locator(selector).evaluate((group) => {
-        const style = getComputedStyle(group, '::after');
-        return {
-          content: style.content,
-          borderStyle: style.borderStyle,
-          borderWidth: style.borderWidth,
-        };
-      });
-    expect(await ring('.squisq-toolbar-use-tab')).toEqual({
-      content: '""',
-      borderStyle: 'solid',
-      borderWidth: '2px',
-    });
-    // A ▾ button's ring is drawn around its face, the part that looks like a button.
-    const faceRing = (selector: string) =>
-      page.locator(`${selector} .squisq-view-mode-trigger-face`).evaluate((face) => {
-        const style = getComputedStyle(face);
+  test('the view button has a visible keyboard focus ring', async ({ page }) => {
+    const button = viewButton(page);
+    await button.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    await expect(button).toBeFocused();
+    expect(
+      await button.evaluate((el) => {
+        const style = getComputedStyle(el);
         return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth };
-      });
-    // The tablist is one tab stop; the ▾ buttons follow it, Write's first.
-    await page.keyboard.press('Tab');
-    await expect(writeTrigger).toBeFocused();
-    expect(await faceRing('.squisq-toolbar-write-menu')).toEqual({
-      outlineStyle: 'solid',
-      outlineWidth: '2px',
-    });
-    await page.keyboard.press('Tab');
-    await expect(modeTrigger).toBeFocused();
-    expect(await faceRing('.squisq-toolbar-use-menu')).toEqual({
-      outlineStyle: 'solid',
-      outlineWidth: '2px',
-    });
-    expect((await faceRing('.squisq-toolbar-write-menu')).outlineStyle).toBe('none');
-    for (const trigger of [writeTrigger, modeTrigger]) {
-      expect(await trigger.evaluate((button) => button.closest('[role="tablist"]'))).toBeNull();
-    }
+      }),
+    ).toEqual({ outlineStyle: 'solid', outlineWidth: '2px' });
   });
 });
 

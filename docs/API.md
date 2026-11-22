@@ -3590,7 +3590,7 @@ the same prop. The equivalent CSS variables are `--squisq-write-text-size` and
 `--squisq-write-line-spacing`.
 
 `findMode` is an opt-in toolbar state controlled by the host. While active, a
-search box appears immediately after the Write/Source/Use tabs; formatting and
+search box appears immediately after the view button; formatting and
 middle-slot controls are cleared while the normal right-side toolbar items stay
 available. Matches update as the query changes, the active match receives a
 stronger highlight, and Enter / Shift+Enter or the arrow buttons navigate the
@@ -3929,7 +3929,7 @@ case. Bare high-confidence timeline art is handled by
 
 ### Teleprompter (`src/teleprompter`)
 
-The **Narrate** display mode under the Use tab: a voice-paced teleprompter
+The **Narrate** display mode among the Use views: a voice-paced teleprompter
 (silence halts the scroll; speech rate drives it via the core
 `@bendyline/squisq/narration` engine on AudioWorklet PCM hops), a 3-tier
 always-on-top float ladder, and an in-place narration recorder whose takes

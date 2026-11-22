@@ -83,7 +83,7 @@ test.describe('Slideshow block-type picker under a finger', () => {
     await blockType(page).tap({ force: true });
     const note = page.getByRole('tooltip');
     await expect(note).toBeVisible();
-    await expect(note).toContainText('choose None in Write › Summarize');
+    await expect(note).toContainText('choose None in Edit › Summaries');
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // Below the picker, and wholly inside the window.

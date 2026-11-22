@@ -438,9 +438,9 @@ describe('<EditorShell> instance boundaries', () => {
     expect(onSurfaceKeyDown).not.toHaveBeenCalled();
   });
 
-  it('opens Source from Write by its shortcut, though Source has no tab of its own', async () => {
+  it('opens Source from Write by its shortcut', async () => {
     render(<EditorShell initialMarkdown="# Story" initialView="wysiwyg" />);
-    expect(screen.queryByRole('tab', { name: 'Source' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View: Source' })).toBeNull();
     fireEvent.keyDown(screen.getByTestId('wysiwyg-editor-stub'), {
       key: '@',
       code: 'Digit2',
@@ -448,8 +448,8 @@ describe('<EditorShell> instance boundaries', () => {
       shiftKey: true,
     });
     await waitFor(() => expect(screen.getByTestId('raw-editor-stub')).toBeTruthy());
-    expect(screen.getByRole('tab', { name: 'Source' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.queryByRole('menu', { name: 'Write mode' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'View: Source' })).toBeTruthy();
+    expect(screen.queryByRole('menu', { name: 'View' })).toBeNull();
   });
 
   it('leaves unshifted heading shortcuts and Alt chords to the editing surface', () => {
@@ -561,7 +561,7 @@ describe('<EditorShell> hostMode', () => {
     expect(within(shell).queryByRole('tab', { name: /Source/ })).toBeNull();
     expect(within(shell).queryByRole('button', { name: 'Custom layouts' })).toBeNull();
     expect(within(shell).queryByRole('button', { name: 'Transform document' })).toBeNull();
-    expect(within(shell).queryByRole('button', { name: 'View options' })).toBeNull();
+    expect(within(shell).queryByRole('button', { name: /^View/ })).toBeNull();
     expect(within(shell).queryByRole('button', { name: 'Document settings' })).toBeNull();
     expect(within(shell).queryByRole('button', { name: /^Bold/ })).toBeNull();
     const insert = within(shell).getByRole('button', { name: 'Insert' });
@@ -1196,11 +1196,15 @@ describe('preview keeps the active editing surface', () => {
       const editing = screen.getByTestId(
         view === 'raw' ? 'raw-editor-stub' : 'wysiwyg-editor-stub',
       );
-      fireEvent.click(screen.getByRole('tab', { name: 'Slideshow' }));
+      const chooseView = (name: string) => {
+        fireEvent.click(screen.getByRole('button', { name: /^View: / }));
+        fireEvent.click(screen.getByRole('menuitemradio', { name }));
+      };
+      chooseView('Slideshow');
       expect(editing.isConnected).toBe(true);
       expect(editing.closest('[hidden]')).not.toBeNull();
       expect(screen.getByTestId('preview-stub')).toBeTruthy();
-      fireEvent.click(screen.getByRole('tab', { name: view === 'raw' ? 'Source' : 'Write' }));
+      chooseView(view === 'raw' ? 'Source' : 'Write');
       expect(screen.getByTestId(view === 'raw' ? 'raw-editor-stub' : 'wysiwyg-editor-stub')).toBe(
         editing,
       );
