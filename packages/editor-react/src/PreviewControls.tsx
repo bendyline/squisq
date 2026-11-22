@@ -1286,13 +1286,6 @@ export const DISPLAY_MODE_OPTIONS: {
     summary: 'Present designed slides one at a time.',
   },
   {
-    key: 'flashcards',
-    label: 'Flashcards',
-    shortLabel: 'Cards',
-    icon: 'fa-solid fa-clone',
-    summary: 'Study with progressive reveals and quizzes.',
-  },
-  {
     key: 'video',
     label: 'Video',
     icon: 'fa-solid fa-circle-play',
@@ -1305,13 +1298,6 @@ export const DISPLAY_MODE_OPTIONS: {
     summary: 'Scroll through the fully designed page.',
   },
   {
-    key: 'dashboard',
-    label: 'Dashboard',
-    shortLabel: 'Board',
-    icon: 'fa-solid fa-table-cells-large',
-    summary: 'See every block arranged on one canvas.',
-  },
-  {
     key: 'page',
     label: 'Document',
     shortLabel: 'Doc',
@@ -1319,10 +1305,24 @@ export const DISPLAY_MODE_OPTIONS: {
     summary: 'Read a clean, text-first document.',
   },
   {
+    key: 'dashboard',
+    label: 'Dashboard',
+    shortLabel: 'Board',
+    icon: 'fa-solid fa-table-cells-large',
+    summary: 'See every block arranged on one canvas.',
+  },
+  {
     key: 'narrate',
     label: 'Narrate',
     icon: 'fa-solid fa-microphone-lines',
     summary: 'Speak with a voice-paced teleprompter.',
+  },
+  {
+    key: 'flashcards',
+    label: 'Flashcards',
+    shortLabel: 'Cards',
+    icon: 'fa-solid fa-clone',
+    summary: 'Study with progressive reveals and quizzes.',
   },
 ];
 

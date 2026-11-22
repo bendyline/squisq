@@ -181,12 +181,12 @@ describe('View menu', () => {
     ]);
     expect(viewLabels(within(views).getByRole('group', { name: 'Use' }))).toEqual([
       'Slideshow',
-      'Flashcards',
       'Video',
       'Page',
-      'Dashboard',
       'Document',
+      'Dashboard',
       'Narrate',
+      'Flashcards',
     ]);
 
     const panes = columnOf(menu, 'panes')!;

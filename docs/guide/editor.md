@@ -59,7 +59,7 @@ The view button opens the **View** menu. It has three columns:
 - **Navigation**, on the left — **Outline**, then the app's own navigation panes, such as its
   file list, when the app offers them.
 - **Views**, in the middle — every view, under **Edit** (Write, Source, Blocks, Timeline,
-  Summaries) and **Use** (Slideshow, Flashcards, Video, Page, Dashboard, Document, Narrate). Each
+  Summaries) and **Use** (Slideshow, Video, Page, Document, Dashboard, Narrate, Flashcards). Each
   group checks the mode its shortcut returns to, and the view on screen is highlighted. Choosing a
   view switches to it.
 - **Panes**, on the right — **Block previews** and **Status bar**; **Show block tags** (No inline
@@ -353,12 +353,12 @@ The Use view presents the finished document. Pick a display mode under **Use** i
 | Mode           | What you see                                      |
 | -------------- | ------------------------------------------------- |
 | **Slideshow**  | Designed slides, one at a time                    |
-| **Flashcards** | Study cards with step-by-step reveals and quizzes |
 | **Video**      | An automatically timed presentation, with audio   |
 | **Page**       | The fully designed, scrolling page                |
-| **Dashboard**  | Every block arranged on one canvas                |
 | **Document**   | A clean, text-first document                      |
+| **Dashboard**  | Every block arranged on one canvas                |
 | **Narrate**    | A voice-paced teleprompter                        |
+| **Flashcards** | Study cards with step-by-step reveals and quizzes |
 
 The toolbar above the preview changes with the mode. Depending on the mode, it offers:
 

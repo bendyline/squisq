@@ -98,14 +98,14 @@ title: Harbor Survey 2026
 | [Slideshow](#slideshow)   | Presenting designed slides one at a time                        | `slideshow`, `slides`, `presentation`, `deck`   |
 | [Video](#video)           | A presentation that plays itself, timed to narration or reading | `video`                                         |
 | [Page](#page)             | A designed, scrolling web page                                  | `page`, `paged`, `linear`                       |
-| [Dashboard](#dashboard)   | Every block arranged on one canvas                              | `dashboard`, `dash`                             |
-| [Flashcards](#flashcards) | Studying with reveal cards and quizzes                          | `flashcards`, `flashcard`, `study`, `quiz`      |
 | [Document](#document)     | Reading a clean, text-first version                             | `document`, `scroll`, `html`, `plain`, `reader` |
+| [Dashboard](#dashboard)   | Every block arranged on one canvas                              | `dashboard`, `dash`                             |
 | [Narrate](#narrate)       | Reading the document aloud from a voice-paced teleprompter      | `narrate`, `teleprompter`, `prompter`           |
+| [Flashcards](#flashcards) | Studying with reveal cards and quizzes                          | `flashcards`, `flashcard`, `study`, `quiz`      |
 
-**In the editor**, open the **Use** view and pick a mode from the menu beside its tab. The tab
-takes the name of the mode you are in (**Slideshow**, **Page**, …), and choosing a mode from the
-menu also switches to the Use view, so it works from Write and Source too. The mode you pick
+**In the editor**, pick a mode under **Use** in the View menu — the button at the top left,
+named after the view you are in (**Slideshow**, **Page**, …). Choosing a mode also switches to
+the Use view, so it works from Write and Source too. The mode you pick
 lasts for the session; it does not change the document.
 
 **In the document**, set the mode it opens in with the `display-mode` frontmatter key:

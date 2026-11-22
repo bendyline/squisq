@@ -373,12 +373,12 @@ describe('PreviewModeSwitch', () => {
 
     expect(labels).toEqual([
       'Slideshow',
-      'Flashcards',
       'Video',
       'Page',
-      'Dashboard',
       'Document',
+      'Dashboard',
       'Narrate',
+      'Flashcards',
     ]);
     expect(screen.getByTestId('active-mode').textContent).toBe('slideshow');
 
@@ -1075,7 +1075,7 @@ describe('Use modes in the View menu', () => {
       within(menu)
         .getAllByRole('menuitemradio')
         .map((item) => item.querySelector('.squisq-view-mode-menu-label')?.textContent),
-    ).toEqual(['Slideshow', 'Flashcards', 'Video', 'Page', 'Dashboard', 'Document', 'Narrate']);
+    ).toEqual(['Slideshow', 'Video', 'Page', 'Document', 'Dashboard', 'Narrate', 'Flashcards']);
     const slideshowItem = within(menu).getByRole('menuitemradio', { name: 'Slideshow' });
     expect(slideshowItem.getAttribute('aria-checked')).toBe('true');
     expect(within(slideshowItem).getByText('Present designed slides one at a time.')).toBeTruthy();
