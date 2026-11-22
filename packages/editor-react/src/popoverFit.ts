@@ -26,22 +26,40 @@ function clippingBounds(element: HTMLElement): { left: number; right: number } {
   return viewport;
 }
 
+/**
+ * Hold the popover at exactly `width` CSS px, border included. Set as a plain
+ * `width` it would size the content box, and the border would push the
+ * popover past the room it was given.
+ */
+function pinWidth(popover: HTMLElement, width: number): void {
+  popover.style.boxSizing = 'border-box';
+  popover.style.minWidth = '0';
+  popover.style.maxWidth = 'none';
+  popover.style.width = `${width}px`;
+}
+
 export function fitPopoverWithinClip(popover: HTMLElement): void {
   popover.style.left = '';
   popover.style.right = '';
   popover.style.width = '';
   popover.style.minWidth = '';
+  popover.style.maxWidth = '';
+  popover.style.boxSizing = '';
   const bounds = clippingBounds(popover);
   const min = bounds.left + EDGE_MARGIN;
   const max = bounds.right - EDGE_MARGIN;
   if (popover.getBoundingClientRect().width > max - min) {
-    popover.style.minWidth = '0';
-    popover.style.width = `${Math.max(0, max - min)}px`;
+    pinWidth(popover, Math.max(0, max - min));
   }
   const rect = popover.getBoundingClientRect();
   let shift = rect.right > max ? max - rect.right : 0;
   if (rect.left + shift < min) shift = min - rect.left;
   if (shift !== 0) {
+    // A popover sized to its content takes its width from the room its
+    // offsets leave it, and moving it trades `right` for `left`, which
+    // changes that room. Unpinned, one moved 8px in from the screen's edge
+    // grew 8px back out to it as soon as its content arrived.
+    pinWidth(popover, rect.width);
     popover.style.left = `${popover.offsetLeft + shift}px`;
     popover.style.right = 'auto';
   }
