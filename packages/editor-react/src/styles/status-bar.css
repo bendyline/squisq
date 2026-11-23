@@ -5,16 +5,34 @@
    host status at the end. Chrome tokens only — see chrome.css. */
 
 .squisq-status-bar {
+  /* One height in every view: a row as tall as the tallest view's controls
+     (Video's playback row, Narrate's tools) plus room above and below, so the
+     bar holds still as views change. Every control in the bar is at least
+     the control height; a finger gets larger ones (below). */
+  --squisq-status-control-height: 24px;
+  --squisq-status-row-height: 32px;
   display: flex;
   align-items: center;
+  align-content: center;
   gap: 12px;
-  padding: 4px 12px;
+  box-sizing: content-box;
+  min-height: var(--squisq-status-row-height);
+  padding: 0 12px;
   border-top: 1px solid var(--squisq-border-subtle);
   background: var(--squisq-surface-subtle);
   font-size: 12px;
   color: var(--squisq-text-muted);
   flex-shrink: 0;
   container: squisq-status-bar / inline-size;
+}
+
+/* A finger needs a target about 40px tall, not the 24px a mouse does: a
+   taller bar on a touch screen, still the same in every view. */
+@media (pointer: coarse) {
+  .squisq-status-bar {
+    --squisq-status-control-height: 40px;
+    --squisq-status-row-height: 44px;
+  }
 }
 
 .squisq-status-group {
@@ -98,6 +116,13 @@
   color: var(--squisq-danger);
 }
 
+/* The proofing count is a button too, though it reads as text. */
+.squisq-status-bar .squisq-proof-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--squisq-status-control-height);
+}
+
 /* ── A view's controls ──
    Shared by the slideshow's (SlideshowStatusControls), the flashcard deck's
    (FlashcardStatusControls) and the block card's navigation (BlockCardView,
@@ -125,7 +150,7 @@
   justify-content: center;
   gap: 4px;
   min-width: 0;
-  min-height: 22px;
+  min-height: var(--squisq-status-control-height);
   padding: 2px 6px;
   border: 1px solid transparent;
   border-radius: 4px;
@@ -133,6 +158,15 @@
   color: var(--squisq-text-soft);
   font: inherit;
   cursor: pointer;
+}
+
+/* For a finger, the icon-only buttons are as wide as they are tall. */
+@media (pointer: coarse) {
+  .squisq-status-nav-button,
+  .squisq-status-tool-button,
+  .squisq-status-bar .squisq-status-view .squisq-block-card-button {
+    min-width: var(--squisq-status-control-height);
+  }
 }
 
 .squisq-status-nav-button svg,
@@ -389,12 +423,15 @@
 }
 
 /* Video's playback row (react's DocControlsCompact): wide enough for a useful
-   timeline, centered like every view's controls, in the chrome's colors. Its
+   timeline, centered like every view's controls, in the chrome's colors and
+   the bar's control size (the timeline's clickable strip included). Its
    inline styles read the --squisq-player-* properties set here. */
 .squisq-status-view .doc-controls-compact {
   --squisq-player-accent: var(--squisq-accent);
   --squisq-player-on-accent: var(--squisq-text-on-accent);
   --squisq-player-surface: var(--squisq-surface-raised);
+  --squisq-player-control-size: var(--squisq-status-control-height);
+  --squisq-player-scrub-height: var(--squisq-status-control-height);
   width: clamp(260px, 60cqw, 760px);
   color: var(--squisq-text-soft);
 }
@@ -438,7 +475,21 @@
 
 .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-tool,
 .squisq-status-view .squisq-teleprompter-statusbar select {
-  min-height: 24px;
+  min-height: var(--squisq-status-control-height);
+}
+
+/* A segment draws the border around its buttons: they are that much shorter,
+   so the segment is as tall as a lone button and never the bar's tallest. */
+.squisq-status-view
+  .squisq-teleprompter-statusbar
+  :is(.squisq-teleprompter-seg, .squisq-teleprompter-split)
+  > .squisq-teleprompter-tool {
+  min-height: calc(var(--squisq-status-control-height) - 2px);
+}
+
+/* The Camera checkbox is a small box; its whole label is the target. */
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-check {
+  min-height: var(--squisq-status-control-height);
 }
 
 .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-tool {
@@ -481,11 +532,10 @@
   white-space: nowrap;
 }
 
-/* A finger still gets a target it can hit. */
+/* The window-type chevron beside Pop out, wide enough for a finger. */
 @media (pointer: coarse) {
-  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-tool,
-  .squisq-status-view .squisq-teleprompter-statusbar select {
-    min-height: 32px;
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-split-menu {
+    width: 32px;
   }
 }
 
@@ -507,23 +557,48 @@
     display: none;
   }
 
-  /* Narrate's labels that have an icon collapse to it (visually hidden, so
-     they still name their control), and the size note before recording goes;
-     the row wraps onto a second line if it still doesn't fit. */
+  /* Narrate keeps to one row, so the bar stays as tall as in every other
+     view. Its tools collapse to their icons and Countdown to its stopwatch
+     (visually hidden, so the labels still name their controls); the size
+     note before recording goes, and the one while recording shortens to fit
+     rather than wrapping onto a second line. */
   .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-bar-label,
-  .squisq-status-view
-    .squisq-teleprompter-statusbar
-    .squisq-teleprompter-float
-    .squisq-teleprompter-tool-label,
-  .squisq-status-view
-    .squisq-teleprompter-statusbar
-    .squisq-teleprompter-tool--restart
-    .squisq-teleprompter-tool-label {
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-tool-label {
     position: absolute;
     width: 1px;
     height: 1px;
     overflow: hidden;
     clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-tool--play {
+    min-width: var(--squisq-status-control-height);
+  }
+
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-bar {
+    flex-wrap: nowrap;
+    min-width: 0;
+    column-gap: 8px;
+  }
+
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-bar > * {
+    flex-shrink: 0;
+  }
+
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-record {
+    flex-shrink: 1;
+    min-width: 0;
+    column-gap: 8px;
+  }
+
+  .squisq-status-view
+    .squisq-teleprompter-statusbar
+    .squisq-teleprompter-record
+    > :is(.squisq-teleprompter-hint, .squisq-teleprompter-warning) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
@@ -556,5 +631,17 @@
   .squisq-status-view-title,
   .squisq-status-view .squisq-block-card-title {
     display: none;
+  }
+
+  /* The narrowest phones: the flashcard deck's divider goes and the icon
+     buttons give back some width (never height), so Reveal stays on screen. */
+  .squisq-status-divider {
+    display: none;
+  }
+
+  .squisq-status-nav-button,
+  .squisq-status-tool-button,
+  .squisq-status-bar .squisq-status-view .squisq-block-card-button {
+    min-width: 32px;
   }
 }

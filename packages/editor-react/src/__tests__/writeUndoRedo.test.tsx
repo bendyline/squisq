@@ -35,6 +35,15 @@ beforeAll(() => {
     unobserve() {}
     disconnect() {}
   } as unknown as typeof ResizeObserver;
+  // The buttons run `chain().focus()`, and Tiptap focuses on the next
+  // animation frame. Once that frame has run, the DOM selection is inside the
+  // editor, so the next Undo/Redo scrolls it into view — measuring a Range,
+  // which jsdom does not implement. Whether the frame runs between two clicks
+  // depends on how fast the machine is, so without this the test fails only
+  // on slow CI runners.
+  const range = Range.prototype as unknown as Record<string, unknown>;
+  range.getClientRects ??= () => [];
+  range.getBoundingClientRect ??= () => new DOMRect();
 });
 
 const DOC = '# One\n\nAlpha.\n\n## Two\n\nBeta.\n\n## Three\n\nGamma.\n';

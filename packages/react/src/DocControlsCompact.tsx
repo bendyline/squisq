@@ -1,7 +1,7 @@
 /**
  * DocControlsCompact Component
  *
- * The playback controls in one short row, about 24px tall: play/pause,
+ * The playback controls in one short row, about 24px tall by default: play/pause,
  * restart, the time, the timeline (DocProgressBar's `inline` variant), the
  * slide counter, captions, and fullscreen when the host wires it.
  *
@@ -13,8 +13,12 @@
  * `__play`, `__time`, `__counter`. Its inline styles read custom properties
  * where a host is likely to differ — a hover rule sets
  * `--squisq-player-button-bg` on `__button`, which a selector could not do
- * against an inline `background`. The editor shows it in its status bar
- * through DocPlayer's `renderPlaybackControls`.
+ * against an inline `background`. Sizes too: `--squisq-player-control-size`
+ * (each button's height, and the play button's diameter; 22px) and
+ * `--squisq-player-scrub-height` (the timeline's clickable strip; 16px), so a
+ * host can give a finger bigger targets. The row grows to fit them. The
+ * editor shows it in its status bar through DocPlayer's
+ * `renderPlaybackControls`.
  *
  * The time and the counter are as wide as their longest values, so the
  * timeline neither shifts nor resizes as the clock runs.
@@ -30,13 +34,16 @@ import { PlayPauseIcon } from './PlayPauseIcon';
 import type { PlaybackControlsProps } from './DocControlsOverlay';
 import { formatTime } from './types';
 
+/** A button's height and the play button's diameter; hosts may enlarge it. */
+const CONTROL_SIZE = 'var(--squisq-player-control-size, 22px)';
+
 const BUTTON: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
   flex: 'none',
-  minWidth: 22,
-  height: 22,
+  minWidth: CONTROL_SIZE,
+  height: CONTROL_SIZE,
   padding: '0 3px',
   border: 'none',
   borderRadius: 4,
@@ -48,7 +55,7 @@ const BUTTON: CSSProperties = {
 
 const PLAY: CSSProperties = {
   ...BUTTON,
-  width: 22,
+  width: CONTROL_SIZE,
   padding: 0,
   borderRadius: '50%',
   background: 'var(--squisq-player-accent, #5b9bd5)',
@@ -103,7 +110,7 @@ export function DocControlsCompact({
         alignItems: 'center',
         gap: 6,
         minWidth: 0,
-        height: 24,
+        minHeight: 24,
         fontSize: 12,
       }}
     >

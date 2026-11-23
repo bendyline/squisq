@@ -173,7 +173,12 @@ export function DocProgressBar({
       data-variant={variant}
       style={{
         flex: 1,
-        height: `${look.height}px`,
+        // The clickable strip; the track stays centered in it. The inline
+        // variant lets its host make it taller for a finger.
+        height:
+          variant === 'inline'
+            ? `var(--squisq-player-scrub-height, ${look.height}px)`
+            : `${look.height}px`,
         cursor: 'pointer',
         position: 'relative',
         display: 'flex',

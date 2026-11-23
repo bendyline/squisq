@@ -1,7 +1,8 @@
 import type { Page } from '@playwright/test';
 
 export type ViewTab = 'Markdown' | 'Editor' | 'Play' | 'Preview';
-export type UseMode = 'Slideshow' | 'Video' | 'Page' | 'Document' | 'Narrate';
+export type UseMode =
+  'Slideshow' | 'Video' | 'Page' | 'Document' | 'Dashboard' | 'Narrate' | 'Flashcards';
 export type WriteMode = 'Write' | 'Source' | 'Blocks' | 'Timeline' | 'Summaries';
 
 const VIEW_IDS: Record<ViewTab, string> = {

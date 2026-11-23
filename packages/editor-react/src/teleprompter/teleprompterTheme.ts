@@ -420,15 +420,31 @@ export const TELEPROMPTER_CSS = `
   outline-offset: -2px;
 }
 
+/* WebKit draws a native select at its own fixed height (about 20px on an
+   iPhone) whatever its min-height says, so the finger-sized height below
+   never applied there. Like the sliders, they draw without the native
+   appearance: one height and look everywhere, the arrow drawn here. Tapping
+   still opens the platform's picker. */
 .squisq-teleprompter-controls select,
 .squisq-teleprompter-statusbar select {
+  -webkit-appearance: none;
+  appearance: none;
   min-height: 30px;
   max-width: 100%;
-  padding: 0 6px;
+  padding: 0 22px 0 6px;
   box-sizing: border-box;
   font: inherit;
   color: inherit;
+  text-overflow: ellipsis;
   background: var(--squisq-input-bg, #fff);
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 13px) 50%,
+    calc(100% - 9px) 50%;
+  background-size: 4px 4px;
+  background-repeat: no-repeat;
   border: 1px solid var(--squisq-border, #d1d5db);
   border-radius: 7px;
 }

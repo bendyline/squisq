@@ -279,7 +279,7 @@ export function NarrationStage(props: NarrationStageProps) {
               title="Record narration while you read"
             >
               <Icon icon="fa-solid fa-circle" />
-              Record
+              <span className="squisq-teleprompter-tool-label">Record</span>
             </button>
             {showCameraToggleInRecordSlot ? (
               <label
@@ -311,7 +311,7 @@ export function NarrationStage(props: NarrationStageProps) {
               onClick={() => void recorder.stop()}
             >
               <Icon icon="fa-solid fa-stop" />
-              Stop
+              <span className="squisq-teleprompter-tool-label">Stop</span>
             </button>
             <span className="squisq-teleprompter-hint">
               {formatRecordingBytes(recorder.recordedBytes)} recorded · auto-stops at{' '}
