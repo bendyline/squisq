@@ -316,14 +316,49 @@
   gap: 1px;
 }
 
+/* A rule under every heading, and one above each section after a column's
+   first (Use under Edit, Show block tags under Panes), so a heading reads as
+   the title of the rows beneath it. */
+.squisq-view-menu-section + .squisq-view-menu-section {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--squisq-border-subtle);
+}
+
 .squisq-view-menu-heading {
-  padding: 6px 8px 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--squisq-border-subtle);
   color: var(--squisq-text-muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   line-height: 1.2;
   text-transform: uppercase;
+}
+
+/* A page in three columns with the part this menu column governs outlined:
+   Navigation the left pane, the views the middle, Panes the right. */
+.squisq-view-menu-glyph {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.squisq-view-menu-glyph-page {
+  fill: none;
+  stroke: var(--squisq-text-muted);
+  stroke-width: 1;
+}
+
+.squisq-view-menu-glyph-region {
+  fill: var(--squisq-accent);
+  fill-opacity: 0.3;
+  stroke: var(--squisq-accent);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
 }
 
 /* Views are one compact row each; what a view is for is its tooltip and its
@@ -951,6 +986,27 @@
 .squisq-toolbar-button:hover > .squisq-toolbar-text-glyph,
 .squisq-toolbar-button--active > .squisq-toolbar-text-glyph {
   color: inherit;
+}
+
+/* ─── Undo / Redo ────────────────────────────────────── */
+
+/* They sit outside the collapsing lane, so they never fold into ···: a touch
+   screen has no ⌘Z. */
+.squisq-toolbar-history {
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+/* An empty stack is their usual state, so a disabled button must read as one
+   and must not light up under the pointer. */
+.squisq-toolbar-history .squisq-toolbar-button:disabled,
+.squisq-toolbar-history .squisq-toolbar-button:disabled:hover {
+  background: transparent;
+  cursor: default;
+}
+
+.squisq-toolbar-history .squisq-toolbar-button:disabled > :is(i, .squisq-icon) {
+  color: var(--squisq-text-faint);
 }
 
 /* ─── Toolbar: narrow screen adjustments ───────────────── */

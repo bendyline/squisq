@@ -62,6 +62,12 @@ export interface NarrationStageProps {
    * the prompter-scrubbing audio playback stay.
    */
   showReviewActions?: boolean;
+  /**
+   * Where the control rail's toolbar row renders instead of atop the rail:
+   * the editor's status bar, which the Narrate display mode passes. Hosts
+   * with their own chrome (the recorder dialog) leave it unset.
+   */
+  toolbarTarget?: HTMLElement | null;
 }
 
 /** Download the retained take independently of workspace writes. */
@@ -123,6 +129,7 @@ export function NarrationStage(props: NarrationStageProps) {
     showRecordSlot = true,
     showTransportPlay = true,
     showReviewActions = true,
+    toolbarTarget = null,
   } = props;
   const { controller, float, recorder, recording } = stage;
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -435,6 +442,7 @@ export function NarrationStage(props: NarrationStageProps) {
         float={float}
         recordSlot={recordSlot}
         showPlayPause={showTransportPlay}
+        barTarget={toolbarTarget}
       />
     </div>
   );

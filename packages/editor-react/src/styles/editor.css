@@ -475,48 +475,7 @@
     0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
-/* ─── Status Bar ─────────────────────────────────────── */
-
-.squisq-status-bar {
-  display: flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-top: 1px solid var(--squisq-border-subtle);
-  background: var(--squisq-surface-subtle);
-  font-size: 12px;
-  color: var(--squisq-text-muted);
-  flex-shrink: 0;
-  gap: 12px;
-  container: squisq-status-bar / inline-size;
-}
-
-/* On a phone the six readouts ran past the edge and clipped the parse status
-   to "✓ O". The secondary counts go first, so the word count, proofing, and
-   parse status (plus anything a host docks on the right) stay readable. */
-@container squisq-status-bar (max-width: 520px) {
-  .squisq-status-chars,
-  .squisq-status-lines {
-    display: none;
-  }
-}
-
-@container squisq-status-bar (max-width: 300px) {
-  .squisq-status-blocks {
-    display: none;
-  }
-}
-
-.squisq-status-item {
-  white-space: nowrap;
-}
-
-.squisq-status-spacer {
-  flex: 1;
-}
-
-.squisq-status-error {
-  color: var(--squisq-danger);
-}
+/* ─── Status Bar ─── lives in status-bar.css. */
 
 /* ─── WYSIWYG Editor ─────────────────────────────────── */
 
@@ -1446,9 +1405,10 @@
 
 /* ─── Preview Panel (DocPlayer container) ──────────── */
 
+/* Every Use view runs to the pane's edges. A 16px padding here used to frame
+   them, and read as a dark border around Narrate, Page and the rest. */
 .squisq-preview-player {
   background: var(--squisq-bg);
-  padding: 16px;
 }
 
 /* Contain-fit the Dashboard canvas inside the preview surface: the wrapper
@@ -1479,7 +1439,6 @@
 }
 
 .squisq-editor-shell[data-print-preview='true'] .squisq-preview-player {
-  padding: 0;
   background: var(--squisq-desk-bg);
 }
 
@@ -1756,7 +1715,6 @@
 
 .squisq-editor-shell[data-presentation-mode='control'] .squisq-preview-player,
 .squisq-editor-shell[data-presentation-mode='fullscreen'] .squisq-preview-player {
-  padding: 0;
   background: var(--squisq-bg);
 }
 
@@ -4242,10 +4200,19 @@ button.squisq-view-menu-radio-row:focus-visible {
 }
 
 .squisq-block-card-position {
+  min-width: 0;
+  overflow: hidden;
   font-size: 12px;
   color: var(--squisq-text-muted);
+  text-overflow: ellipsis;
   white-space: nowrap;
   margin: 0 auto;
+}
+
+/* The block's heading, after "Block N of M". */
+.squisq-block-card-title {
+  margin-left: 4px;
+  color: var(--squisq-text-faint);
 }
 
 .squisq-block-card-button {
@@ -5504,10 +5471,14 @@ button.squisq-view-menu-radio-row:focus-visible {
   padding: 16px;
 }
 
+/* Its width is set with min(), not max-width: dialogs.css caps max-width at
+   100% (inside the safe areas) and loads later, so a max-width here is lost
+   and the dialog stretches across the window. Wide windows get room for two
+   columns of fields (below). */
 .squisq-doc-settings-dialog {
-  width: 100%;
-  max-width: 440px;
+  width: min(100%, 440px);
   max-height: calc(100dvh - 32px);
+  container: squisq-doc-settings / inline-size;
   background: var(--squisq-bg);
   color: var(--squisq-text);
   border: 1px solid var(--squisq-border);
@@ -5654,6 +5625,46 @@ button.squisq-view-menu-radio-row:focus-visible {
 .squisq-doc-settings-btn--primary:hover {
   background: var(--squisq-accent);
   border-color: var(--squisq-accent);
+}
+
+/* Two columns once the window is wide enough. Title, Subtitle and the
+   sections keep the full width; the short pickers pair up; the proofing
+   pair starts a row of its own. Scoped to the dialog: the custom-theme pane
+   reuses the body class at 380px. */
+@media (min-width: 800px) {
+  .squisq-doc-settings-dialog {
+    width: min(100%, 720px);
+  }
+}
+
+@container squisq-doc-settings (min-width: 600px) {
+  .squisq-doc-settings-dialog .squisq-doc-settings-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    align-content: start;
+    gap: 14px 20px;
+  }
+
+  .squisq-doc-settings-dialog .squisq-doc-settings-field--wide,
+  .squisq-doc-settings-dialog .squisq-doc-settings-body > .squisq-doc-settings-section {
+    grid-column: 1 / -1;
+  }
+
+  .squisq-doc-settings-dialog .squisq-doc-settings-field--row-start {
+    grid-column-start: 1;
+  }
+
+  /* A section's own fields pair up too, under its full-width heading. */
+  .squisq-doc-settings-dialog .squisq-doc-settings-section {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px 20px;
+  }
+
+  .squisq-doc-settings-dialog .squisq-doc-settings-section > :not(.squisq-doc-settings-field) {
+    grid-column: 1 / -1;
+  }
 }
 
 /* ── Transition picker ──────────────────────────────────────────────

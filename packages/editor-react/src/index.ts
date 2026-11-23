@@ -252,6 +252,9 @@ export type { MediaBinProps } from './MediaBin.js';
 
 export { StatusBar } from './StatusBar.js';
 export type { StatusBarProps } from './StatusBar.js';
+// The status bar's view region: a view portals its own status and controls in.
+export { StatusBarViewContent } from './statusBar/StatusBarViewSlot.js';
+export { useStatusBarViewTarget } from './statusBar/statusBarViewTarget.js';
 
 export { TooltipLayer } from './Tooltip.js';
 

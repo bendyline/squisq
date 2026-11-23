@@ -23,6 +23,11 @@
  * Editor: when the host passes `onEditorStylingChange`, a last section sets
  * how much of the theme the Write view takes on. That is the person's own
  * editor preference, applied on Save and never written into the document.
+ *
+ * Layout: one column, until the dialog is wide enough for two (desktop
+ * windows). Then Title, Subtitle and the sections keep the full width
+ * (`--wide`, sections always), the short pickers pair up, and the two
+ * proofing fields start a row together (`--row-start`).
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
@@ -406,7 +411,7 @@ export function DocumentSettingsDialog({
         </div>
 
         <div className="squisq-doc-settings-body">
-          <div className="squisq-doc-settings-field">
+          <div className="squisq-doc-settings-field squisq-doc-settings-field--wide">
             <label className="squisq-doc-settings-label" htmlFor="squisq-doc-settings-title">
               Title
             </label>
@@ -431,7 +436,7 @@ export function DocumentSettingsDialog({
             )}
           </div>
 
-          <div className="squisq-doc-settings-field">
+          <div className="squisq-doc-settings-field squisq-doc-settings-field--wide">
             <label className="squisq-doc-settings-label" htmlFor="squisq-doc-settings-subtitle">
               Subtitle
             </label>
@@ -550,7 +555,7 @@ export function DocumentSettingsDialog({
 
           {proofingState && (
             <>
-              <div className="squisq-doc-settings-field">
+              <div className="squisq-doc-settings-field squisq-doc-settings-field--row-start">
                 <label className="squisq-doc-settings-label" htmlFor="squisq-doc-settings-proofing">
                   Proofing
                 </label>

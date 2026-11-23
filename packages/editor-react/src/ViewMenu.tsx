@@ -5,15 +5,19 @@
  * (Write, Source, Blocks, Slideshow, …) and a ▾. The button opens the View
  * menu, which has three columns:
  *
- * - **Navigation** (left) — the Outline pane, then the host's own navigation
- *   panes, such as a file sidebar, from `navigation` (`EditorShell`'s
- *   `viewMenuNavigation`).
+ * - **Navigation** (left) — the host's own navigation panes, such as a file
+ *   sidebar, from `navigation` (`EditorShell`'s `viewMenuNavigation`), then
+ *   the Outline pane. Top to bottom follows the screen left to right: the
+ *   host's panes sit outside the editor, beside its Outline.
  * - **Views** (middle) — every view, under **Edit** (Write, Source, Blocks,
  *   Timeline, Summaries) and **Use** (Slideshow, Flashcards, …). Each group
  *   checks its own mode, the one Ctrl/Cmd+Shift+1/2/3 returns to; the view on
  *   screen is highlighted. Choosing one enters it and closes the menu.
  * - **Panes** (right) — Block previews and the status bar, when block tags
  *   show, and the spelling & grammar check.
+ *
+ * Each column's first heading carries a small page-in-three-columns glyph with
+ * the part of the screen that column governs outlined.
  *
  * Toggles leave the menu open, so several can be changed in one visit. Up and
  * Down move within a column, Left and Right between columns.
@@ -28,6 +32,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -57,7 +62,7 @@ export interface ViewMenuProps {
   showEditViews?: boolean;
   /** List the Use views (Slideshow, Flashcards, …). Needs a preview-settings provider. */
   showUseViews?: boolean;
-  /** The host's navigation panes, listed in the left column after the Outline. */
+  /** The host's navigation panes, listed in the left column before the Outline. */
   navigation?: readonly ViewMenuToggleItem[];
   /**
    * `'view'` is the button named after the active view; `'button'` is an icon
@@ -124,6 +129,13 @@ export function ViewMenu({
   const proofingState = useProofingState();
   const idPrefix = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  // A view chosen in a keyboard flow — the menu opened from the keyboard, or
+  // the view picked with it — returns focus to the view button, as a menu
+  // button does. Opened and picked with the pointer, it leaves the button
+  // alone: focus left there drew the keyboard focus ring at the first key
+  // press (the arrows that drive Narrate, say), and Space reopened this menu
+  // instead of reaching the view. A keyboard-activated click has detail 0.
+  const openedByKeyboardRef = useRef(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<CSSProperties>(HIDDEN_STYLE);
@@ -155,14 +167,22 @@ export function ViewMenu({
   const close = useCallback((restoreFocus = false) => {
     setOpen(false);
     setMenuStyle(HIDDEN_STYLE);
-    if (restoreFocus) triggerRef.current?.focus({ preventScroll: true });
+    if (restoreFocus) {
+      triggerRef.current?.focus({ preventScroll: true });
+    } else if (menuRef.current?.contains(document.activeElement)) {
+      // Nothing inside a closed menu should keep focus.
+      (document.activeElement as HTMLElement).blur();
+    }
   }, []);
 
   const dismiss = useCallback(() => close(), [close]);
   useEscapeDismissal(open, dismiss, triggerRef);
 
   useEffect(() => {
-    if (openRequest > 0) setOpen(true);
+    if (openRequest > 0) {
+      openedByKeyboardRef.current = false;
+      setOpen(true);
+    }
   }, [openRequest]);
 
   // Hang the menu below the button — above it when the toolbar sits at the
@@ -202,9 +222,18 @@ export function ViewMenu({
     place();
     window.addEventListener('resize', place);
     window.addEventListener('scroll', onScroll, true);
+    // A host pane docking or undocking — a file sidebar toggled from this very
+    // menu, which stays open — moves the button without resizing the window.
+    // The toolbar around it resizes, so follow that.
+    const trigger = triggerRef.current;
+    const toolbar = trigger?.closest<HTMLElement>('.squisq-toolbar') ?? trigger?.parentElement;
+    const observer =
+      toolbar && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(place) : null;
+    if (toolbar) observer?.observe(toolbar);
     return () => {
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', onScroll, true);
+      observer?.disconnect();
     };
   }, [open, alignWith, variant]);
 
@@ -234,20 +263,22 @@ export function ViewMenu({
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [close, open]);
 
-  const chooseEditView = (key: WriteMenuKey) => {
+  // A view chosen in a keyboard flow (see openedByKeyboardRef) returns focus
+  // to the view button; one chosen with the pointer leaves it alone.
+  const chooseEditView = (key: WriteMenuKey, pickedByKeyboard: boolean) => {
     if (key === 'source') {
       setActiveView('raw');
     } else {
       setLayoutMode(key);
       setActiveView('wysiwyg');
     }
-    close(true);
+    close(pickedByKeyboard || openedByKeyboardRef.current);
   };
 
-  const chooseUseView = (key: UseMenuKey) => {
+  const chooseUseView = (key: UseMenuKey, pickedByKeyboard: boolean) => {
     if (key !== 'use') previewSettings?.setSelectedDisplayMode(key);
     setActiveView('preview');
-    close(true);
+    close(pickedByKeyboard || openedByKeyboardRef.current);
   };
 
   const onMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -298,10 +329,15 @@ export function ViewMenu({
     next?.focus();
   };
 
-  const toggleOpen = () => (open ? close() : setOpen(true));
+  const toggleOpen = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (open) return close();
+    openedByKeyboardRef.current = event.detail === 0;
+    setOpen(true);
+  };
   const openFromKeyboard = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();
+    openedByKeyboardRef.current = true;
     setOpen(true);
   };
 
@@ -380,12 +416,7 @@ export function ViewMenu({
             onKeyDown={onMenuKeyDown}
           >
             <MenuColumn kind="navigation">
-              <MenuSection id={`${idPrefix}-navigation`} heading="Navigation">
-                <MenuToggle
-                  label="Outline"
-                  checked={outlineVisible}
-                  onChange={() => setOutlineVisible(!outlineVisible)}
-                />
+              <MenuSection id={`${idPrefix}-navigation`} heading="Navigation" region="navigation">
                 {navigationItems.map((item) => (
                   <MenuToggle
                     key={item.id}
@@ -395,12 +426,17 @@ export function ViewMenu({
                     onChange={item.onToggle}
                   />
                 ))}
+                <MenuToggle
+                  label="Outline"
+                  checked={outlineVisible}
+                  onChange={() => setOutlineVisible(!outlineVisible)}
+                />
               </MenuSection>
             </MenuColumn>
             {hasViews && (
               <MenuColumn kind="views">
                 {editOptions.length > 0 && (
-                  <MenuSection id={`${idPrefix}-edit`} heading="Edit">
+                  <MenuSection id={`${idPrefix}-edit`} heading="Edit" region="views">
                     {editOptions.map((option) => (
                       <ViewItem
                         key={option.key}
@@ -408,13 +444,17 @@ export function ViewMenu({
                         option={option}
                         checked={option.key === editSelected}
                         current={activeGroup === 'edit' && option.key === editSelected}
-                        onSelect={() => chooseEditView(option.key)}
+                        onSelect={(event) => chooseEditView(option.key, event.detail === 0)}
                       />
                     ))}
                   </MenuSection>
                 )}
                 {useOptions.length > 0 && (
-                  <MenuSection id={`${idPrefix}-use`} heading="Use">
+                  <MenuSection
+                    id={`${idPrefix}-use`}
+                    heading="Use"
+                    region={editOptions.length > 0 ? undefined : 'views'}
+                  >
                     {useOptions.map((option) => (
                       <ViewItem
                         key={option.key}
@@ -422,7 +462,7 @@ export function ViewMenu({
                         option={{ ...option, view: 'preview' }}
                         checked={option.key === useSelected}
                         current={activeGroup === 'use' && option.key === useSelected}
-                        onSelect={() => chooseUseView(option.key)}
+                        onSelect={(event) => chooseUseView(option.key, event.detail === 0)}
                       />
                     ))}
                   </MenuSection>
@@ -430,7 +470,7 @@ export function ViewMenu({
               </MenuColumn>
             )}
             <MenuColumn kind="panes">
-              <MenuSection id={`${idPrefix}-panes`} heading="Panes">
+              <MenuSection id={`${idPrefix}-panes`} heading="Panes" region="panes">
                 <MenuToggle
                   label="Block previews"
                   checked={inlinePreviewVisible}
@@ -469,13 +509,7 @@ export function ViewMenu({
   );
 }
 
-function MenuColumn({
-  kind,
-  children,
-}: {
-  kind: 'navigation' | 'views' | 'panes';
-  children: ReactNode;
-}) {
+function MenuColumn({ kind, children }: { kind: MenuColumnKind; children: ReactNode }) {
   return (
     <div
       className={`squisq-view-menu-column squisq-view-menu-column--${kind}`}
@@ -490,19 +524,54 @@ function MenuColumn({
 function MenuSection({
   id,
   heading,
+  region,
   children,
 }: {
   id: string;
   heading: string;
+  /** Marks the column's first section with the part of the screen it governs. */
+  region?: MenuColumnKind;
   children: ReactNode;
 }) {
   return (
     <div className="squisq-view-menu-section" role="group" aria-labelledby={id}>
       <div id={id} className="squisq-view-menu-heading" role="presentation">
+        {region && <ColumnGlyph region={region} />}
         {heading}
       </div>
       {children}
     </div>
+  );
+}
+
+type MenuColumnKind = 'navigation' | 'views' | 'panes';
+
+/**
+ * The editor as a page in three columns — narrow, wide, narrow — with the part
+ * a menu column governs outlined: Navigation the left pane, the views the
+ * middle, Panes the right. Drawn on a 1px grid so its strokes stay crisp.
+ */
+const COLUMN_GLYPH_REGIONS: Record<MenuColumnKind, string> = {
+  navigation: 'M5.5 0.5H2.5A2 2 0 0 0 0.5 2.5V11.5A2 2 0 0 0 2.5 13.5H5.5Z',
+  views: 'M5.5 0.5H14.5V13.5H5.5Z',
+  panes: 'M14.5 0.5H17.5A2 2 0 0 1 19.5 2.5V11.5A2 2 0 0 1 17.5 13.5H14.5Z',
+};
+
+function ColumnGlyph({ region }: { region: MenuColumnKind }) {
+  return (
+    <svg
+      className="squisq-view-menu-glyph"
+      data-region={region}
+      width="20"
+      height="14"
+      viewBox="0 0 20 14"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect className="squisq-view-menu-glyph-page" x="0.5" y="0.5" width="19" height="13" rx="2" />
+      <path className="squisq-view-menu-glyph-page" d="M5.5 0.5V13.5M14.5 0.5V13.5" />
+      <path className="squisq-view-menu-glyph-region" d={COLUMN_GLYPH_REGIONS[region]} />
+    </svg>
   );
 }
 
@@ -518,7 +587,7 @@ function ViewItem<K extends string>({
   checked: boolean;
   /** The view on screen, as opposed to the mode the other tab returns to. */
   current: boolean;
-  onSelect: () => void;
+  onSelect: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 }) {
   const labelId = `${idPrefix}-${option.key}-label`;
   const summaryId = `${idPrefix}-${option.key}-summary`;

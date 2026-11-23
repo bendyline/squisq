@@ -33,10 +33,23 @@ export interface TeleprompterViewProps {
   presentationTarget?: HTMLElement | null;
   /** Recording deps; null/omitted disables the Record affordance. */
   recording?: TeleprompterRecordingDeps | null;
+  /**
+   * The editor's status bar, where the toolbar row (Start/Pause, Restart,
+   * Countdown, Record, Pop out) goes while one is showing. Null keeps the row
+   * atop the control rail.
+   */
+  toolbarTarget?: HTMLElement | null;
 }
 
 export function TeleprompterView(props: TeleprompterViewProps) {
-  const { doc, theme, presentationTarget = null, recording = null } = props;
+  const { doc, theme, presentationTarget = null, recording = null, toolbarTarget = null } = props;
   const stage = useNarrationStage({ doc, recording });
-  return <NarrationStage stage={stage} theme={theme} presentationTarget={presentationTarget} />;
+  return (
+    <NarrationStage
+      stage={stage}
+      theme={theme}
+      presentationTarget={presentationTarget}
+      toolbarTarget={toolbarTarget}
+    />
+  );
 }

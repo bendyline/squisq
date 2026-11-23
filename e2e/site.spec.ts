@@ -232,9 +232,12 @@ test.describe('DocPlayer controls', () => {
   test('progress bar is visible during playback', async ({ page }) => {
     await startPlaybackAndWaitForActiveBlock(page);
 
-    // DocPlayer renders controls (containing the progress bar) via DocControlsOverlay
-    const controls = page.locator('.doc-player__controls');
+    // The editor shows Video's controls (and the progress bar) as one compact
+    // row in the status bar; the overlay over the video is for other hosts.
+    const controls = page.locator('.squisq-status-bar').getByTestId('playback-controls-compact');
     await expect(controls).toBeVisible({ timeout: 5_000 });
+    await expect(controls.getByRole('slider', { name: 'Playback position' })).toBeVisible();
+    await expect(page.locator('.doc-player__controls')).toHaveCount(0);
   });
 });
 

@@ -15,6 +15,12 @@
  * property (`--squisq-player-accent`, default a mid blue) so a host can match
  * the controls to its own palette without overriding inline styles.
  *
+ * Two variants. `overlay` (the default) is drawn in white over the video, for
+ * the overlay controls. `inline` is shorter and takes its colors from the
+ * surrounding text (`currentColor`) and the accent, for a control row on the
+ * host's own surface, such as DocControlsCompact in an editor's status bar;
+ * its chapter dots fill with `--squisq-player-surface` (default `Canvas`).
+ *
  * Extracted from DocPlayer to enable reuse across different control layouts
  * (overlay, sidebar, bottom). When used in sidebar/bottom layouts, this
  * component renders at the bottom of the video while other controls are
@@ -34,6 +40,38 @@ import type { Block } from '@bendyline/squisq/schemas';
 /** The progress fill and chapter-ring color; hosts set `--squisq-player-accent`. */
 const PLAYER_ACCENT = 'var(--squisq-player-accent, #5b9bd5)';
 
+/** Sizes and colors per variant: white over the video, or the host's own. */
+const VARIANTS = {
+  overlay: {
+    height: 24,
+    track: 6,
+    trackColor: 'rgba(255,255,255,0.2)',
+    chapter: 14,
+    chapterFill: 'rgba(255,255,255,0.75)',
+    chapterActive: '#ffffff',
+    chapterShadow: '0 1px 3px rgba(0,0,0,0.5)',
+    bead: 12,
+    beadFill: 'rgba(255,255,255,0.55)',
+    beadActive: '#ffffff',
+    hoverLine: 16,
+    hoverLineColor: 'rgba(255,255,255,0.6)',
+  },
+  inline: {
+    height: 16,
+    track: 4,
+    trackColor: 'color-mix(in srgb, currentColor 22%, transparent)',
+    chapter: 10,
+    chapterFill: 'var(--squisq-player-surface, Canvas)',
+    chapterActive: PLAYER_ACCENT,
+    chapterShadow: 'none',
+    bead: 10,
+    beadFill: 'color-mix(in srgb, currentColor 45%, transparent)',
+    beadActive: 'currentColor',
+    hoverLine: 12,
+    hoverLineColor: 'color-mix(in srgb, currentColor 60%, transparent)',
+  },
+} as const;
+
 interface DocProgressBarProps {
   state: PlaybackState;
   actions: PlaybackActions;
@@ -42,6 +80,8 @@ interface DocProgressBarProps {
   expandedBlocks: Block[];
   /** Optional: get block title for hover tooltip */
   getBlockTitle?: (block: Block) => string;
+  /** `overlay` (default): white, over the video. `inline`: compact, in the host's colors. */
+  variant?: 'overlay' | 'inline';
 }
 
 export function DocProgressBar({
@@ -50,7 +90,9 @@ export function DocProgressBar({
   blockMarkers,
   expandedBlocks,
   getBlockTitle,
+  variant = 'overlay',
 }: DocProgressBarProps) {
+  const look = VARIANTS[variant];
   const progressBarRef = useRef<HTMLDivElement>(null);
   const [hoverPosition, setHoverPosition] = useState<number | null>(null);
 
@@ -128,9 +170,10 @@ export function DocProgressBar({
       ref={progressBarRef}
       role="group"
       aria-label="Playback timeline"
+      data-variant={variant}
       style={{
         flex: 1,
-        height: '24px',
+        height: `${look.height}px`,
         cursor: 'pointer',
         position: 'relative',
         display: 'flex',
@@ -159,9 +202,9 @@ export function DocProgressBar({
           position: 'absolute',
           left: 0,
           right: 0,
-          height: '6px',
-          background: 'rgba(255,255,255,0.2)',
-          borderRadius: '3px',
+          height: `${look.track}px`,
+          background: look.trackColor,
+          borderRadius: `${look.track / 2}px`,
         }}
       />
 
@@ -181,9 +224,9 @@ export function DocProgressBar({
           position: 'absolute',
           left: 0,
           width: `${playProgress * 100}%`,
-          height: '6px',
+          height: `${look.track}px`,
           background: PLAYER_ACCENT,
-          borderRadius: '3px',
+          borderRadius: `${look.track / 2}px`,
         }}
       />
 
@@ -212,20 +255,20 @@ export function DocProgressBar({
               transition: 'transform 0.15s, background-color 0.15s',
               ...(chapter
                 ? {
-                    width: '14px',
-                    height: '14px',
+                    width: `${look.chapter}px`,
+                    height: `${look.chapter}px`,
                     padding: 0,
-                    backgroundColor: active ? '#ffffff' : 'rgba(255,255,255,0.75)',
+                    backgroundColor: active ? look.chapterActive : look.chapterFill,
                     border: `2px solid ${PLAYER_ACCENT}`,
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                    boxShadow: look.chapterShadow,
                     zIndex: 3,
                   }
                 : {
-                    width: '12px',
-                    height: '12px',
+                    width: `${look.bead}px`,
+                    height: `${look.bead}px`,
                     padding: '3px',
                     backgroundClip: 'content-box',
-                    backgroundColor: active ? '#ffffff' : 'rgba(255,255,255,0.55)',
+                    backgroundColor: active ? look.beadActive : look.beadFill,
                     border: 'none',
                     zIndex: 2,
                   }),
@@ -290,8 +333,8 @@ export function DocProgressBar({
             top: '50%',
             transform: 'translate(-50%, -50%)',
             width: '2px',
-            height: '16px',
-            background: 'rgba(255,255,255,0.6)',
+            height: `${look.hoverLine}px`,
+            background: look.hoverLineColor,
             pointerEvents: 'none',
             zIndex: 1,
           }}

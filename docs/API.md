@@ -883,7 +883,9 @@ the card's left and the card actions into one on its right, so the card keeps
 the height. `density="compact"` is for a deck embedded in a dialog or panel: the title
 shrinks to one line, the position and every control share a single toolbar
 above the card, the shortcut hint becomes button tooltips, and the card's type
-and padding tighten so a revealed answer fits below its question. Visual
+and padding tighten so a revealed answer fits below its question. With
+`renderControls`, the host draws the controls instead (the editor puts them in
+its status bar) and the card takes their room. Visual
 templates—including automatically detected ASCII diagrams, trees, timelines,
 charts, drawings, layouts, maps, and document custom templates—are resolved
 through the same `resolvePageBlock` + `materializeBlockLayers` pipeline used by
@@ -2089,6 +2091,8 @@ interface DocPlayerProps {
   audioController?: AudioController;
   showControls?: boolean; // default true
   showScrubber?: boolean; // default false (only when showControls=false)
+  renderSlideshowControls?: (controls: SlideshowControlsProps) => ReactNode; // slideshow: host-drawn controls in place of the overlay pill
+  renderPlaybackControls?: (controls: PlaybackControlsProps) => ReactNode; // video: host-drawn controls (e.g. DocControlsCompact) in place of the overlay
   muted?: boolean; // default false
   captionsEnabled?: boolean; // default true
   onCaptionsToggle?: (enabled: boolean) => void;
@@ -2148,8 +2152,9 @@ interface BlockRendererProps {
 | `MarkdownRenderer`      | Renders `MarkdownBlockNode[]` as React (`MarkdownRendererProps`).                                                                                                                                      |
 | `CaptionOverlay`        | Standard caption overlay bound to `CaptionTrack` + `currentTime`.                                                                                                                                      |
 | `SocialCaptionOverlay`  | Large centered TikTok/Reels-style word-by-word captions, at most two rows.                                                                                                                             |
-| `DocProgressBar`        | Block progress indicator with seek.                                                                                                                                                                    |
+| `DocProgressBar`        | Block progress indicator with seek. `variant="inline"` is the compact, host-colored timeline.                                                                                                          |
 | `DocControlsOverlay`    | Floating play/pause + prev/next over the player.                                                                                                                                                       |
+| `DocControlsCompact`    | One short row of playback controls with an inline timeline, in the host's own colors (`--squisq-player-*`); for a host's chrome, such as the editor's status bar.                                      |
 | `DocControlsBottom`     | Bottom bar with progress + counter.                                                                                                                                                                    |
 | `DocControlsSidebar`    | Side panel with block thumbnails.                                                                                                                                                                      |
 | `DocControlsSlideshow`  | Minimal slideshow controls (arrows + counter).                                                                                                                                                         |
@@ -2222,7 +2227,13 @@ interface FlashcardViewProps {
   viewport?: ViewportConfig; // rich visual materialization; default landscape
   density?: 'comfortable' | 'compact'; // default comfortable
   className?: string;
+  renderControls?: (controls: FlashcardControls) => ReactNode; // host-drawn controls in place of the deck's toolbar and footer
 }
+// FlashcardControls: cardIndex, cardCount, revealed, finished, cardKind,
+// lastCard, progress (0–1), shuffled, missedCount, canGoBack, and the actions
+// previous(), next() (reveal, or go on unrated), rate('again' | 'got-it'),
+// toggleShuffle(), restart(), retryMissed(). The end-of-session summary keeps
+// its own Retry missed / Study again buttons.
 // The canvas is width-driven by default. Its width is
 // `var(--squisq-dashboard-fit-width, 100%)` and the root exposes
 // `--squisq-dashboard-aspect` (width/height as a number), so a host with a

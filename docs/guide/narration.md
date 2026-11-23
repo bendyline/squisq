@@ -59,6 +59,10 @@ available, the script scrolls at the set speed.
 and recent Firefox), a read-only picture-in-picture window (Safari), or an ordinary popup window.
 **Bring back** docks it again.
 
+In the editor, **Start**, **Restart**, **Countdown**, **Record**, and **Pop out** sit in the middle
+of the [status bar](editor.md#status-bar), and the rest of the settings sit under the prompter. With
+the status bar hidden, or while presenting, all of them sit under the prompter.
+
 ### Keyboard and mouse
 
 | Key       | Action                                 |

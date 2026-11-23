@@ -183,7 +183,7 @@ import {
 } from './toolbar/toolbarButtons';
 import { useToolbarCollapse } from './toolbar/useToolbarCollapse';
 import { DocumentActionButton, DocumentActionsGroup } from './toolbar/DocumentActions';
-
+import { UndoRedoButtons } from './toolbar/UndoRedoButtons';
 import {
   blockConversionRange,
   insertTaskList,
@@ -2047,6 +2047,7 @@ export function Toolbar({
       ) : (
         slotAfterTabs
       )}
+      {showFormattingControls && <UndoRedoButtons />}
       {/* Built-in actions — formatting and Insert can be controlled independently. */}
       {actionsLaneShown && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>

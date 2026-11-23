@@ -16,18 +16,34 @@
  * - types.ts -- Shared type definitions
  */
 
+import type { ReactNode } from 'react';
 import { DocProgressBar } from './DocProgressBar';
 import { PlayPauseIcon } from './PlayPauseIcon';
 import type { PlaybackState, PlaybackActions, BlockMarker } from './types';
 import { formatTime } from './types';
 import type { Block } from '@bendyline/squisq/schemas';
 
-interface DocControlsOverlayProps {
+/**
+ * What playback controls draw from: the overlay here, DocControlsCompact, or
+ * a host's own through DocPlayer's `renderPlaybackControls`.
+ */
+export interface PlaybackControlsProps {
   state: PlaybackState;
   actions: PlaybackActions;
   blockMarkers: BlockMarker[];
   expandedBlocks: Block[];
   getBlockTitle?: (block: Block) => string;
+}
+
+/**
+ * DocPlayer's playback controls: the host's `render` when it supplies one,
+ * otherwise the overlay.
+ */
+export function PlaybackControls({
+  render,
+  ...controls
+}: PlaybackControlsProps & { render?: (controls: PlaybackControlsProps) => ReactNode }) {
+  return <>{render ? render(controls) : <DocControlsOverlay {...controls} />}</>;
 }
 
 export function DocControlsOverlay({
@@ -36,7 +52,7 @@ export function DocControlsOverlay({
   blockMarkers,
   expandedBlocks,
   getBlockTitle,
-}: DocControlsOverlayProps) {
+}: PlaybackControlsProps) {
   return (
     <div
       className="doc-player__controls"

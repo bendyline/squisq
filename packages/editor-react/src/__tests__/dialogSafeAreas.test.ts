@@ -82,6 +82,20 @@ describe('modal dialogs and the safe areas', () => {
     expect(importAt('./touch-dialogs.css')).toBeGreaterThan(own);
   });
 
+  it('leave the document settings dialog a width cap of its own', () => {
+    // dialogs.css sets max-width: 100% on it and loads after editor.css, so a
+    // max-width in editor.css is lost and the dialog spans the whole window.
+    expect(dialogs).toMatch(/\.squisq-doc-settings-dialog,[^{]*\{[^}]*max-width: 100%;/s);
+    const editor = readFileSync(join(styles, 'editor.css'), 'utf8');
+    const base = /\n\.squisq-doc-settings-dialog \{([^}]*)\}/.exec(editor);
+    expect(base).not.toBeNull();
+    expect(base![1]).toContain('width: min(100%, 440px);');
+    expect(base![1]).not.toContain('max-width');
+    expect(editor).toMatch(
+      /@media \(min-width: 800px\) \{\s*\.squisq-doc-settings-dialog \{\s*width: min\(100%, 720px\);/,
+    );
+  });
+
   it('anchor the touch text-entry dialogs below the same insets', () => {
     expect(touch).not.toContain('env(safe-area-inset');
     expect(touch).toContain('var(--squisq-dialog-safe-top)');

@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import {
   EditorProvider,
   useEditorContext,
@@ -201,7 +201,19 @@ describe('View menu', () => {
     expect(within(menu).queryByText('Editor styling from theme')).toBeNull();
   });
 
-  it('lists the host’s navigation panes after the Outline', () => {
+  it('marks each column with the part of the screen it governs, once', () => {
+    renderToolbar();
+    const menu = openViewMenu();
+    for (const kind of ['navigation', 'views', 'panes'] as const) {
+      const glyphs = columnOf(menu, kind)!.querySelectorAll('.squisq-view-menu-glyph');
+      expect(Array.from(glyphs).map((glyph) => glyph.getAttribute('data-region'))).toEqual([kind]);
+      expect(glyphs[0]!.getAttribute('aria-hidden')).toBe('true');
+    }
+    // The glyph adds nothing to the group names.
+    expect(within(menu).getByRole('group', { name: 'Navigation' })).toBeTruthy();
+  });
+
+  it('lists the host’s navigation panes before the Outline, in screen order', () => {
     const onToggle = vi.fn();
     const navigation: ViewMenuToggleItem[] = [
       { id: 'files', label: 'Files', checked: true, onToggle },
@@ -210,12 +222,54 @@ describe('View menu', () => {
     const menu = openViewMenu();
 
     const column = columnOf(menu, 'navigation')!;
-    expect(rowLabels(column, 'menuitemcheckbox')).toEqual(['Outline', 'Files']);
+    expect(rowLabels(column, 'menuitemcheckbox')).toEqual(['Files', 'Outline']);
     const files = within(column).getByRole('menuitemcheckbox', { name: 'Files' });
     expect(files.getAttribute('aria-checked')).toBe('true');
     fireEvent.click(files);
     expect(onToggle).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('menu', { name: 'View' })).toBe(menu);
+  });
+
+  it('follows the button when a host pane moves it', () => {
+    // Undocking a file sidebar from the menu moves the button but not the
+    // window; only the toolbar around it resizes.
+    const observers: { callback: ResizeObserverCallback; targets: Element[] }[] = [];
+    class FakeResizeObserver {
+      private readonly entry: { callback: ResizeObserverCallback; targets: Element[] };
+      constructor(callback: ResizeObserverCallback) {
+        this.entry = { callback, targets: [] };
+        observers.push(this.entry);
+      }
+      observe(target: Element) {
+        this.entry.targets.push(target);
+      }
+      unobserve() {}
+      disconnect() {
+        this.entry.targets = [];
+      }
+    }
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    try {
+      renderToolbar({
+        viewMenuNavigation: [{ id: 'files', label: 'Files', checked: true, onToggle: vi.fn() }],
+      });
+      const button = viewButton();
+      let left = 320;
+      vi.spyOn(button, 'getBoundingClientRect').mockImplementation(
+        () => ({ left, right: left + 80, top: 0, bottom: 32, width: 80, height: 32 }) as DOMRect,
+      );
+      const menu = openViewMenu();
+      expect(menu.style.left).toBe('320px');
+
+      left = 48;
+      const toolbar = button.closest('.squisq-toolbar')!;
+      const watching = observers.find((observer) => observer.targets.includes(toolbar));
+      expect(watching).toBeTruthy();
+      act(() => watching!.callback([], watching as unknown as ResizeObserver));
+      expect(menu.style.left).toBe('48px');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('checks each group’s mode and highlights the view on screen', () => {
@@ -281,9 +335,10 @@ describe('View menu', () => {
     expect(document.activeElement).toBe(
       within(menu).getByRole('menuitemradio', { name: 'Source' }),
     );
+    // Same row: Source is second, and Files comes before Outline.
     press('ArrowLeft');
     expect(document.activeElement).toBe(
-      within(menu).getByRole('menuitemcheckbox', { name: 'Files' }),
+      within(menu).getByRole('menuitemcheckbox', { name: 'Outline' }),
     );
     press('ArrowRight');
     press('ArrowRight');

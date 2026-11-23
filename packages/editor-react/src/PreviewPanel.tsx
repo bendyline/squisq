@@ -13,12 +13,20 @@ import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   DashboardView,
+  DocControlsCompact,
   DocPlayer,
   FlashcardView,
   LinearDocView,
   useMediaProvider,
 } from '@bendyline/squisq-react';
-import type { AudioController, CodeBlockCopyHandler, PlaybackState } from '@bendyline/squisq-react';
+import type {
+  AudioController,
+  CodeBlockCopyHandler,
+  FlashcardControls,
+  PlaybackControlsProps,
+  PlaybackState,
+  SlideshowControlsProps,
+} from '@bendyline/squisq-react';
 import { resolveTransformStyle } from '@bendyline/squisq/transform';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useEditorContext } from './EditorContext';
@@ -36,6 +44,10 @@ import {
   SlideshowDataGridRenderer,
 } from './slideshow/SlideshowDataGrid';
 import { useReportActiveSlide } from './slideshow/ActiveSlide';
+import { StatusBarViewContent } from './statusBar/StatusBarViewSlot';
+import { useStatusBarViewTarget } from './statusBar/statusBarViewTarget';
+import { SlideshowStatusControls } from './statusBar/SlideshowStatusControls';
+import { FlashcardStatusControls } from './statusBar/FlashcardStatusControls';
 import { useProcessedAudio } from '@bendyline/squisq-video-react/media-edit';
 
 export interface PreviewPanelProps {
@@ -58,6 +70,33 @@ export interface PreviewPanelProps {
 }
 
 // ── Component ──────────────────────────────────────────────────────
+
+/** DocPlayer's slideshow controls, drawn in the status bar's view region. */
+function renderStatusBarSlideControls(controls: SlideshowControlsProps) {
+  return (
+    <StatusBarViewContent>
+      <SlideshowStatusControls {...controls} />
+    </StatusBarViewContent>
+  );
+}
+
+/** Video's playback controls, one compact row in the status bar's view region. */
+function renderStatusBarPlaybackControls(controls: PlaybackControlsProps) {
+  return (
+    <StatusBarViewContent>
+      <DocControlsCompact {...controls} />
+    </StatusBarViewContent>
+  );
+}
+
+/** The flashcard deck's controls, drawn in the status bar's view region. */
+function renderStatusBarFlashcardControls(controls: FlashcardControls) {
+  return (
+    <StatusBarViewContent>
+      <FlashcardStatusControls {...controls} />
+    </StatusBarViewContent>
+  );
+}
 
 /**
  * Live preview panel that renders the current document as a slideshow
@@ -115,6 +154,14 @@ export function PreviewPanel({
   const popupSurfaceRef = useRef<HTMLDivElement>(null);
   const [playbackState, setPlaybackState] = useState<PlaybackState | null>(null);
   const reportActiveSlide = useReportActiveSlide();
+  // Slideshow's, Video's and Flashcards' controls, and Narrate's toolbar, live
+  // in the status bar while one is showing. A canvas or fullscreen
+  // presentation hides the bar with the rest of the chrome, so each view
+  // keeps its own controls there.
+  const statusBarViewTarget = useStatusBarViewTarget();
+  const viewControlsInStatusBar =
+    !!statusBarViewTarget &&
+    (!presentation?.activeTarget || presentation.activeTarget === 'window');
 
   // Build the player-ready Doc whenever the parsed doc changes.
   // Transform runs on the ORIGINAL doc (which has block.contents with
@@ -381,6 +428,7 @@ export function PreviewPanel({
           presentationTarget={
             presentation?.activeTarget === 'window' ? presentation.popupRoot : null
           }
+          toolbarTarget={viewControlsInStatusBar ? statusBarViewTarget : null}
           recording={
             allowRecording && mediaProvider
               ? {
@@ -426,6 +474,9 @@ export function PreviewPanel({
           onCopyCode={onCopyCode}
           fenceRenderers={fenceRenderers ?? undefined}
           viewport={activeViewport}
+          renderControls={
+            !audience && viewControlsInStatusBar ? renderStatusBarFlashcardControls : undefined
+          }
         />
       );
     }
@@ -498,6 +549,12 @@ export function PreviewPanel({
         }
         tableContentRenderer={
           !audience && activeDisplayMode === 'slideshow' ? SlideshowDataGridRenderer : undefined
+        }
+        renderSlideshowControls={
+          !audience && viewControlsInStatusBar ? renderStatusBarSlideControls : undefined
+        }
+        renderPlaybackControls={
+          !audience && viewControlsInStatusBar ? renderStatusBarPlaybackControls : undefined
         }
       />
     );

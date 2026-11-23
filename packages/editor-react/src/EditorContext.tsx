@@ -8,6 +8,7 @@
  */
 
 import { EditorInsertMenuProvider } from './InsertMenuItems';
+import { StatusBarViewSlotProvider } from './statusBar/StatusBarViewSlot';
 import { BackgroundMarkdownParser } from './backgroundMarkdownParser';
 import {
   createContext,
@@ -361,6 +362,8 @@ export interface EditorState {
   activeBlockKey: number;
   /** 1-based source line where the active block begins, or null. */
   activeBlockStartLine: number | null;
+  /** The active block's heading text (annotation dropped), or null for a heading-less block. */
+  activeBlockTitle: string | null;
   /**
    * Bumped on every selection change in either surface.
    *
@@ -1541,6 +1544,7 @@ export function EditorProvider({
     blockCount,
     activeBlockKey,
     activeBlockStartLine,
+    activeBlockTitle,
     goToBlock,
     goToBlockByLine,
     prevBlock,
@@ -1989,6 +1993,7 @@ export function EditorProvider({
       blockCount,
       activeBlockKey,
       activeBlockStartLine,
+      activeBlockTitle,
       selectionVersion,
       imageEditTarget,
       mediaEditTarget,
@@ -2084,6 +2089,7 @@ export function EditorProvider({
       blockCount,
       activeBlockKey,
       activeBlockStartLine,
+      activeBlockTitle,
       selectionVersion,
       tiptapEditor,
       monacoEditor,
@@ -2159,7 +2165,9 @@ export function EditorProvider({
   return (
     <EditorContext.Provider value={value}>
       <DictationStateContext.Provider value={dictationController.state}>
-        <EditorInsertMenuProvider>{children}</EditorInsertMenuProvider>
+        <EditorInsertMenuProvider>
+          <StatusBarViewSlotProvider>{children}</StatusBarViewSlotProvider>
+        </EditorInsertMenuProvider>
       </DictationStateContext.Provider>
     </EditorContext.Provider>
   );

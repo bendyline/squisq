@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useState } from 'react';
-import { useBlockNavigator } from '../useBlockNavigator';
+import { blockHeadingTitle, useBlockNavigator } from '../useBlockNavigator';
 
 /** Drive the hook against a piece of React-managed source state. */
 function useHarness(initial: string, enabled: boolean) {
@@ -75,5 +75,33 @@ describe('useBlockNavigator', () => {
     rerender({ enabled: true });
     expect(result.current.nav.activeBlockKey).toBe(1);
     expect(result.current.nav.editorSource).toBe('# Two\n\nbeta\n');
+  });
+
+  it('names the active block by its heading', () => {
+    const { result } = renderHook(() => useHarness(DOC, true));
+    expect(result.current.nav.activeBlockTitle).toBe('One');
+    act(() => result.current.nav.nextBlock());
+    expect(result.current.nav.activeBlockTitle).toBe('Two');
+  });
+
+  it('names no block while disabled', () => {
+    const { result } = renderHook(() => useHarness(DOC, false));
+    expect(result.current.nav.activeBlockTitle).toBeNull();
+  });
+});
+
+describe('blockHeadingTitle', () => {
+  it('reads the heading a reader sees', () => {
+    expect(blockHeadingTitle('## The Philosophy {[sectionHeader]}\n\nBody')).toBe('The Philosophy');
+    expect(blockHeadingTitle('\n### **Bold** and `code` ###\n')).toBe('Bold and code');
+    expect(blockHeadingTitle('# See [the guide](guide.md)\n')).toBe('See the guide');
+    expect(blockHeadingTitle('# 2024 Plan {[stats]} {[fa-solid:chart-line]}')).toBe('2024 Plan');
+  });
+
+  it('names no heading-less block', () => {
+    expect(blockHeadingTitle('---\ntitle: Doc\n---\n\nIntro')).toBeNull();
+    expect(blockHeadingTitle('Just prose\n')).toBeNull();
+    expect(blockHeadingTitle('## {[quote]}\n')).toBeNull();
+    expect(blockHeadingTitle('#hashtag\n')).toBeNull();
   });
 });

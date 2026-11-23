@@ -103,9 +103,10 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   previews; choosing a section closes it. Control it with `navigationSheet` /
   `onNavigationSheetChange` to close it from host input such as a Back button.
 - **View menu** — the toolbar shows only the active view, on one button (its
-  icon, its name, ▾), which opens a three-column menu: Navigation (the
-  Outline, then the host's own panes — pass `viewMenuNavigation`, an array of
-  `{ id, label, checked, onToggle }` rows), every Edit and Use view, and the
+  icon, its name, ▾), which opens a three-column menu: Navigation (the host's
+  own panes — pass `viewMenuNavigation`, an array of
+  `{ id, label, checked, onToggle }` rows — then the Outline, in screen order
+  left to right), every Edit and Use view, and the
   editor's other panes, block-tag visibility, and spelling check. With
   `showViewTabs={false}` it is an icon button listing only the panes.
 - **Code & image modes** — pass `fileName` / `language` to get a Monaco-only

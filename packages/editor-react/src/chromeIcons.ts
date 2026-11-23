@@ -102,6 +102,7 @@ import {
   Plus,
   Printer,
   Quote,
+  Redo2,
   RotateCcw,
   RotateCcwClock,
   Search,
@@ -122,6 +123,7 @@ import {
   Trash,
   TriangleAlert,
   Type,
+  Undo2,
   Unlink,
   Volume2,
   WandSparkles,
@@ -213,6 +215,8 @@ export const CHROME_ICONS: Readonly<Record<string, LucideIcon>> = {
   clock: Clock,
 
   // Editing actions
+  'arrow-rotate-left': Undo2,
+  'arrow-rotate-right': Redo2,
   pen: Pencil,
   copy: Copy,
   clone: CopyPlus,

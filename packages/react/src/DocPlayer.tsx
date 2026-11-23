@@ -16,7 +16,7 @@ import { useBuildNavigation } from './hooks/useBuildNavigation';
  * - Multiple control layouts: overlay (default), sidebar, bottom
  *
  * Related Files:
- * - DocControlsOverlay.tsx -- Default overlay controls
+ * - DocControlsOverlay.tsx -- Default overlay controls (or the host's, renderPlaybackControls)
  * - DocProgressBar.tsx -- Extracted progress bar
  * - DocControlsSidebar.tsx -- Vertical sidebar controls
  * - DocPlayerWithSidebar.tsx -- Wrapper for sidebar layout
@@ -70,8 +70,8 @@ import {
   VIEWPORT_PRESETS,
 } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
-import { DocControlsOverlay } from './DocControlsOverlay';
-import { DocControlsSlideshow } from './DocControlsSlideshow';
+import { PlaybackControls } from './DocControlsOverlay';
+import { SlideshowControls } from './DocControlsSlideshow';
 import { DocProgressBar } from './DocProgressBar';
 import { LinearDocView } from './LinearDocView';
 import { DashboardView } from './DashboardView';
@@ -242,6 +242,8 @@ function DocPlayerContent({
   onCopyCode,
   fenceRenderers,
   tableContentRenderer,
+  renderSlideshowControls,
+  renderPlaybackControls,
 }: DocPlayerContentProps) {
   const isSlideshowMode = displayMode === 'slideshow';
   const isLinearMode = displayMode === 'linear';
@@ -1924,7 +1926,8 @@ function DocPlayerContent({
 
         {/* Full overlay controls (default video layout) */}
         {!renderMode && !isSlideshowMode && showControls && (
-          <DocControlsOverlay
+          <PlaybackControls
+            render={renderPlaybackControls}
             state={playbackState}
             actions={playbackActions}
             blockMarkers={blockMarkers}
@@ -1959,14 +1962,17 @@ function DocPlayerContent({
           </div>
         )}
 
-        {/* Slideshow controls (prev / counter / next) */}
+        {/* Slideshow controls (prev / counter / next): the overlay pill, or the host's own */}
         {!renderMode && isSlideshowMode && showControls && (
-          <DocControlsSlideshow
-            state={playbackState}
-            slideNav={stepNavActions}
-            slides={slideshowPickerItems}
-            pickerOpen={isSlideshowPickerOpen}
-            onPickerOpenChange={setIsSlideshowPickerOpen}
+          <SlideshowControls
+            controls={{
+              state: playbackState,
+              slideNav: stepNavActions,
+              slides: slideshowPickerItems,
+              pickerOpen: isSlideshowPickerOpen,
+              onPickerOpenChange: setIsSlideshowPickerOpen,
+            }}
+            render={renderSlideshowControls}
           />
         )}
 

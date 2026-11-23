@@ -421,6 +421,33 @@ describe('TeleprompterView', () => {
     expect(screen.getAllByTestId('teleprompter-controls')).toHaveLength(1);
   });
 
+  it('moves its toolbar row into a toolbar target, leaving the settings in the rail', () => {
+    const doc = markdownToDoc(parseMarkdown(MD));
+    const statusBar = document.createElement('div');
+    document.body.appendChild(statusBar);
+    try {
+      render(<TeleprompterView doc={doc} theme={DEFAULT_THEME} toolbarTarget={statusBar} />);
+
+      const moved = statusBar.querySelector<HTMLElement>('.squisq-teleprompter-statusbar');
+      expect(moved?.querySelector('.squisq-teleprompter-bar')).toBeTruthy();
+      expect(moved?.dataset.transport).toBe('stopped');
+      expect(within(moved!).getByRole('button', { name: 'Start prompter' })).toBeTruthy();
+      const rail = screen.getByTestId('teleprompter-controls');
+      expect(rail.querySelector('.squisq-teleprompter-bar')).toBeNull();
+      expect(within(rail).getByRole('button', { name: 'Voice pace' })).toBeTruthy();
+    } finally {
+      statusBar.remove();
+    }
+  });
+
+  it('keeps its toolbar row atop the rail without a toolbar target', () => {
+    renderView(MD);
+    expect(
+      screen.getByTestId('teleprompter-controls').querySelector('.squisq-teleprompter-bar'),
+    ).toBeTruthy();
+    expect(document.querySelector('.squisq-teleprompter-statusbar')).toBeNull();
+  });
+
   it('shows an empty state for an empty doc', () => {
     renderView(null);
     expect(screen.getByText(/Nothing to narrate yet/)).toBeTruthy();

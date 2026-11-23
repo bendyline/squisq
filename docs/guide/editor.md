@@ -56,8 +56,8 @@ in its edit view, Use in its mode.
 
 The view button opens the **View** menu. It has three columns:
 
-- **Navigation**, on the left — **Outline**, then the app's own navigation panes, such as its
-  file list, when the app offers them.
+- **Navigation**, on the left — the app's own navigation panes, such as its file list, when the
+  app offers them, then **Outline**. They're listed in the order they sit on screen, left to right.
 - **Views**, in the middle — every view, under **Edit** (Write, Source, Blocks, Timeline,
   Summaries) and **Use** (Slideshow, Video, Page, Document, Dashboard, Narrate, Flashcards). Each
   group checks the mode its shortcut returns to, and the view on screen is highlighted. Choosing a
@@ -85,7 +85,8 @@ you were on, and switching back opens Write on the block holding the Source curs
 - **Source** — the Markdown text of the whole file. Write keeps the mode it was in, so Ctrl+Shift+1
   (⌘⇧1) returns to it.
 - **Blocks** — one block on a card, with **Previous**, **Next**, a "Block N of M"
-  counter, and **Add block**.
+  counter with the block's heading, and **Add block**. They sit in the middle of the
+  [status bar](#status-bar), or under the card when the status bar is hidden.
 - **Timeline** — a card for the selected block above a timeline of every block and media clip.
   Drag a block's right edge to change its duration, drag clips to move them, drag the playhead to
   scrub, and use **Play**, **Zoom in**, and **Zoom out**. Each block's **⋯** menu sets its
@@ -124,6 +125,11 @@ In Write and Source, the toolbar shows formatting buttons from left to right:
 | Insert    | **+** opens the [Insert menu](#the-insert-menu)                                                      |
 
 In Source, these buttons type the Markdown for you, with placeholder text to replace.
+
+In Write, including its Blocks and Timeline layouts, **Undo** and **Redo** come first, just after
+the view button. They are dimmed when there is nothing to undo or redo, and they stay on the toolbar
+however narrow it gets. Undo covers the text on screen: in Blocks and Timeline, moving to another
+block, or switching between Write and Blocks, starts the history afresh.
 
 More controls appear when the caret is somewhere that needs them:
 
@@ -418,9 +424,27 @@ document:
 
 ## Status bar
 
-The bar along the bottom counts words, characters, lines, and blocks, shows the proofing count,
-and shows **⚠ Error** if the document can't be read (hover it for the reason). On narrow screens
-some counts are hidden.
+The bar along the bottom shows what belongs to the view on screen:
+
+- On the left, it counts words, characters, lines, and blocks, and shows the proofing count.
+- In the middle, the view's own position and controls. **Slideshow** puts the previous and next
+  arrows and the slide number with its title there (click the number for a list of every slide),
+  plus the build steps when a slide has them. **Video** puts its playback controls there in one
+  row: play/pause, restart, the time, the timeline (click to jump, or use the arrow keys; hover for the
+  slide at that point), the slide number, and captions. **Narrate** puts its toolbar there:
+  **Start**, **Restart**, **Countdown**, **Record**, and **Pop out**. **Flashcards** puts
+  **Shuffle**, **Restart**,
+  **Previous**, the card number with a progress bar, and the card's actions there: **Reveal**,
+  then **Again** and **Next**. **Blocks** and **Timeline** put the block navigation there. They
+  sit in the middle so a phone's rounded corners can't cut into them, and hold still as you go:
+  **Reveal** and **Next** land on the same spot.
+- On the right, **⚠ Error** if the document can't be read (hover it for the reason).
+
+In Slideshow, Video, Narrate, and Flashcards the counts give way to the view's controls, since they describe
+the Markdown rather than what's on screen. On narrow screens some counts are hidden, and all of them
+give way when a view has controls in the middle. Hide the bar from the View menu's **Panes**, and
+Slideshow, Video, Narrate, Flashcards, and Blocks show their controls on the slide, the video, under
+the prompter, on the deck, and on the card instead, as they do while presenting.
 
 ## The right-click menu
 

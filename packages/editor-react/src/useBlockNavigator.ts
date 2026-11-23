@@ -44,6 +44,12 @@ export interface BlockNavigator {
   goToBlockByLine: (line: number) => void;
   /** 1-based source line where the active block begins (for outline highlight). */
   activeBlockStartLine: number | null;
+  /**
+   * The active block's heading text, its `{[…]}` tags and closing `#`s
+   * dropped — what the navigation shows beside "Block N of M". Null for a
+   * block with no heading (the preamble) and while disabled.
+   */
+  activeBlockTitle: string | null;
   /** Move to the previous block (no-op at the start). */
   prevBlock: () => void;
   /** Move to the next block (no-op at the end). */
@@ -116,6 +122,7 @@ export function useBlockNavigator(
   );
 
   const activeBlockStartLine = active ? offsetToLine(source, active.range.startOffset) : null;
+  const activeBlockTitle = active ? blockHeadingTitle(active.text) : null;
 
   const editorSource = enabled && active ? active.text : source;
 
@@ -161,8 +168,28 @@ export function useBlockNavigator(
     goToBlock,
     goToBlockByLine,
     activeBlockStartLine,
+    activeBlockTitle,
     prevBlock,
     nextBlock,
     addBlock,
   };
+}
+
+/**
+ * The text of a block's leading ATX heading, as a reader would name it:
+ * block tags (`{[template …]}`), closing `#`s, link targets and the common
+ * inline markers dropped. Null when the block does not open with a heading.
+ */
+export function blockHeadingTitle(text: string): string | null {
+  const firstLine = /^(?:[ \t]*\r?\n)*([^\r\n]*)/.exec(text)?.[1] ?? '';
+  const match = /^ {0,3}#{1,6}(?:[ \t]+(.*))?$/.exec(firstLine);
+  if (!match) return null;
+  const title = (match[1] ?? '')
+    .replace(/\{\[[^\]]*\]\}/g, '')
+    .replace(/[ \t]+#+[ \t]*$/, '')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*|__|`/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return title || null;
 }

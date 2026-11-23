@@ -230,7 +230,8 @@ export const TELEPROMPTER_CSS = `
 }
 .squisq-teleprompter-tool .squisq-icon,
 .squisq-teleprompter-toggle .squisq-icon,
-.squisq-teleprompter-controls .squisq-icon {
+.squisq-teleprompter-controls .squisq-icon,
+.squisq-teleprompter-statusbar .squisq-icon {
   width: 15px;
   height: 15px;
   flex-shrink: 0;
@@ -265,7 +266,8 @@ export const TELEPROMPTER_CSS = `
 .squisq-teleprompter-toggle:focus-visible,
 .squisq-teleprompter-tab:focus-visible,
 .squisq-teleprompter-controls select:focus-visible,
-.squisq-teleprompter-controls input:focus-visible {
+.squisq-teleprompter-controls input:focus-visible,
+.squisq-teleprompter-statusbar select:focus-visible {
   outline: 2px solid var(--squisq-accent, #2563eb);
   outline-offset: 1px;
 }
@@ -283,7 +285,10 @@ export const TELEPROMPTER_CSS = `
 
 /* ── Control rail ─────────────────────────────────────────────────────
    Toolbar row (playback, countdown, record, pop out) over three settings
-   areas (Pacing, Microphone, Display). The rail is a size container: a
+   areas (Pacing, Microphone, Display). The Narrate display mode moves the
+   row into the editor's status bar, inside .squisq-teleprompter-statusbar —
+   the rail's scoped rules name that wrapper too, and the editor's
+   status-bar.css makes the row as short as the bar. The rail is a size container: a
    wide rail lays the areas out as columns; a narrow one (phone, recorder
    dialog column) swaps them for a tab strip and shows one at a time. */
 .squisq-teleprompter-controls {
@@ -392,12 +397,14 @@ export const TELEPROMPTER_CSS = `
   background: var(--squisq-surface-hover, #f3f4f6);
   color: var(--squisq-text-strong, #111827);
 }
-.squisq-teleprompter-controls .squisq-teleprompter-split-menu .squisq-icon {
+.squisq-teleprompter-controls .squisq-teleprompter-split-menu .squisq-icon,
+.squisq-teleprompter-statusbar .squisq-teleprompter-split-menu .squisq-icon {
   width: 13px;
   height: 13px;
   pointer-events: none;
 }
-.squisq-teleprompter-controls .squisq-teleprompter-split-menu select {
+.squisq-teleprompter-controls .squisq-teleprompter-split-menu select,
+.squisq-teleprompter-statusbar .squisq-teleprompter-split-menu select {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -413,7 +420,8 @@ export const TELEPROMPTER_CSS = `
   outline-offset: -2px;
 }
 
-.squisq-teleprompter-controls select {
+.squisq-teleprompter-controls select,
+.squisq-teleprompter-statusbar select {
   min-height: 30px;
   max-width: 100%;
   padding: 0 6px;
@@ -424,7 +432,8 @@ export const TELEPROMPTER_CSS = `
   border: 1px solid var(--squisq-border, #d1d5db);
   border-radius: 7px;
 }
-.squisq-teleprompter-controls select:disabled {
+.squisq-teleprompter-controls select:disabled,
+.squisq-teleprompter-statusbar select:disabled {
   opacity: 0.6;
 }
 
