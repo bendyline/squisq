@@ -416,7 +416,10 @@ function tiers(
       const firstLine = item.label
         ? sizes.label * LABEL_LINE_HEIGHT
         : sizes.plain * DETAIL_LINE_HEIGHT;
-      const swatch = Math.round(sizes.label * 0.55);
+      // The words start gap × 1.5 in; a swatch sized from the label alone
+      // ran into the first letter once portrait labels took the title scale
+      // (titleCapPx), so it ends half a gap short of them.
+      const swatch = Math.min(Math.round(sizes.label * 0.55), gap);
       parts.push([
         {
           type: 'shape',
@@ -735,7 +738,8 @@ export function vennBlock(input: VennBlockInput, context: TemplateContext): Laye
     const firstLine = item.label
       ? sizes.label * LABEL_LINE_HEIGHT
       : sizes.plain * DETAIL_LINE_HEIGHT;
-    const swatch = Math.round(sizes.label * 0.5);
+    // Ends half a gap short of the words, which start gap × 1.5 in.
+    const swatch = Math.min(Math.round(sizes.label * 0.5), gap);
     const parts: Part[] = [
       [
         disc(`${id}-swatch`, area.left + swatch / 2, rowTop + firstLine / 2, swatch / 2, fill),
