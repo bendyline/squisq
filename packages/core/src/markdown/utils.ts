@@ -78,10 +78,24 @@ export function isHtmlLineBreak(rawHtml: string): boolean {
 }
 
 /**
+ * A soft line break, a newline inside a paragraph's text, read as a space:
+ * the author wrapped the source, not the sentence, and only a hard break (a
+ * `break` node) is a line break. `extractPlainText` keeps soft breaks as
+ * newlines on purpose; slide text uses this, because a slide's text layer
+ * turns every newline into a line break and a wrapped bullet broke
+ * mid-sentence on a PPTX slide.
+ */
+export function softBreaksAsSpaces(value: string): string {
+  return value.includes('\n') ? value.replace(/[ \t]*\r?\n[ \t]*/g, ' ') : value;
+}
+
+/**
  * Extract all plain text content from a node and its descendants.
  * Concatenates text values, ignoring formatting, links, etc.
  *
  * @param node - The node to extract text from
+ * @param opts - `softBreaks: 'space'` reads a wrapped source line as one line
+ *   (slide text); the default keeps soft breaks as newlines
  * @returns Plain text content
  *
  * @example
@@ -90,7 +104,11 @@ export function isHtmlLineBreak(rawHtml: string): boolean {
  * extractPlainText(heading); // 'Hello'
  * ```
  */
-export function extractPlainText(node: MarkdownNode): string {
+export function extractPlainText(
+  node: MarkdownNode,
+  opts: { softBreaks?: 'newline' | 'space' } = {},
+): string {
+  if (node.type === 'text' && opts.softBreaks === 'space') return softBreaksAsSpaces(node.value);
   if ('value' in node && typeof node.value === 'string') {
     return node.value;
   }
@@ -114,7 +132,7 @@ export function extractPlainText(node: MarkdownNode): string {
       : node.type === 'tableRow'
         ? ' '
         : '';
-  return children.map(extractPlainText).join(separator);
+  return children.map((child) => extractPlainText(child, opts)).join(separator);
 }
 
 /**

@@ -1,0 +1,647 @@
+/* ─── Status Bar ───────────────────────────────────────
+   Three groups (StatusBar.tsx): the document's counts and proofing at the
+   start, the active view's own status and controls in the middle (portaled in
+   by the view — statusBar/StatusBarViewSlot.tsx), and the parse error plus
+   host status at the end. Chrome tokens only — see chrome.css. */
+
+.squisq-status-bar {
+  /* One height in every view: a row as tall as the tallest view's controls
+     (Video's playback row, Narrate's tools) plus room above and below, so the
+     bar holds still as views change. Every control in the bar is at least
+     the control height; a finger gets larger ones (below). */
+  --squisq-status-control-height: 24px;
+  --squisq-status-row-height: 32px;
+  display: flex;
+  align-items: center;
+  align-content: center;
+  gap: 12px;
+  box-sizing: content-box;
+  min-height: var(--squisq-status-row-height);
+  padding: 0 12px;
+  border-top: 1px solid var(--squisq-border-subtle);
+  background: var(--squisq-surface-subtle);
+  font-size: 12px;
+  color: var(--squisq-text-muted);
+  flex-shrink: 0;
+  container: squisq-status-bar / inline-size;
+}
+
+/* A finger needs a target about 40px tall, not the 24px a mouse does: a
+   taller bar on a touch screen, still the same in every view. */
+@media (pointer: coarse) {
+  .squisq-status-bar {
+    --squisq-status-control-height: 40px;
+    --squisq-status-row-height: 44px;
+  }
+}
+
+.squisq-status-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.squisq-status-end {
+  margin-left: auto;
+}
+
+.squisq-status-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.squisq-status-view:empty {
+  display: none;
+}
+
+/* A view's controls sit in the CENTER of the bar, not at an end: a phone's
+   rounded screen corners cut into both ends of a bar along the bottom edge.
+   Equal side columns keep the middle centered whatever the sides hold. */
+.squisq-status-bar:has(> .squisq-status-view:not(:empty)) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+}
+
+.squisq-status-bar:has(> .squisq-status-view:not(:empty)) > .squisq-status-doc {
+  grid-column: 1;
+  overflow: hidden;
+}
+
+.squisq-status-bar:has(> .squisq-status-view:not(:empty)) > .squisq-status-view {
+  grid-column: 2;
+}
+
+.squisq-status-bar:has(> .squisq-status-view:not(:empty)) > .squisq-status-end {
+  grid-column: 3;
+  justify-content: flex-end;
+  margin-left: 0;
+}
+
+/* In a Use view that has its own status, the counts give way: they describe
+   the source text, which is not what is on screen. */
+.squisq-status-bar[data-view-kind='use']:has(> .squisq-status-view:not(:empty))
+  > .squisq-status-doc {
+  display: none;
+}
+
+/* On a phone the six readouts ran past the edge and clipped the parse status
+   to "✓ O". The secondary counts go first, so the word count, proofing, and
+   parse status (plus anything a host docks on the right) stay readable. With
+   a view's controls in the middle, the counts give way to them entirely. */
+@container squisq-status-bar (max-width: 520px) {
+  .squisq-status-chars,
+  .squisq-status-lines {
+    display: none;
+  }
+
+  .squisq-status-bar:has(> .squisq-status-view:not(:empty)) > .squisq-status-doc {
+    display: none;
+  }
+}
+
+@container squisq-status-bar (max-width: 300px) {
+  .squisq-status-blocks {
+    display: none;
+  }
+}
+
+.squisq-status-item {
+  white-space: nowrap;
+}
+
+.squisq-status-error {
+  color: var(--squisq-danger);
+}
+
+/* The proofing count is a button too, though it reads as text. */
+.squisq-status-bar .squisq-proof-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--squisq-status-control-height);
+}
+
+/* ── A view's controls ──
+   Shared by the slideshow's (SlideshowStatusControls), the flashcard deck's
+   (FlashcardStatusControls) and the block card's navigation (BlockCardView,
+   restyled here to sit flat in the bar). */
+
+.squisq-status-slides,
+.squisq-status-flashcards,
+.squisq-status-bar .squisq-status-view .squisq-block-card-nav {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.squisq-status-nav-button,
+.squisq-status-tool-button,
+.squisq-status-bar .squisq-status-view .squisq-block-card-button,
+.squisq-status-view-trigger,
+.squisq-status-text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: var(--squisq-status-control-height);
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--squisq-text-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* For a finger, the icon-only buttons are as wide as they are tall. */
+@media (pointer: coarse) {
+  .squisq-status-nav-button,
+  .squisq-status-tool-button,
+  .squisq-status-bar .squisq-status-view .squisq-block-card-button {
+    min-width: var(--squisq-status-control-height);
+  }
+}
+
+.squisq-status-nav-button svg,
+.squisq-status-tool-button svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.squisq-status-nav-button:hover:not(:disabled),
+.squisq-status-tool-button:hover:not(:disabled),
+.squisq-status-bar .squisq-status-view .squisq-block-card-button:hover:not(:disabled),
+.squisq-status-view-trigger:hover:not(:disabled),
+.squisq-status-text-button:hover:not(:disabled),
+.squisq-status-view-trigger[aria-expanded='true'] {
+  background: var(--squisq-surface-hover);
+  color: var(--squisq-text);
+}
+
+.squisq-status-nav-button:disabled,
+.squisq-status-bar .squisq-status-view .squisq-block-card-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.squisq-status-view-trigger:disabled {
+  cursor: default;
+}
+
+.squisq-status-nav-button:focus-visible,
+.squisq-status-tool-button:focus-visible,
+.squisq-status-bar .squisq-status-view .squisq-block-card-button:focus-visible,
+.squisq-status-view-trigger:focus-visible,
+.squisq-status-text-button:focus-visible {
+  outline: 2px solid var(--squisq-focus-ring);
+  outline-offset: -1px;
+}
+
+.squisq-status-text-button {
+  border-color: var(--squisq-border);
+}
+
+/* The view's main action: Reveal, Next. */
+.squisq-status-text-button--primary,
+.squisq-status-text-button.squisq-status-text-button--primary:hover:not(:disabled) {
+  border-color: var(--squisq-accent);
+  background: var(--squisq-accent);
+  color: var(--squisq-text-on-accent);
+}
+
+.squisq-status-text-button.squisq-status-text-button--primary:hover:not(:disabled) {
+  border-color: var(--squisq-accent-hover);
+  background: var(--squisq-accent-hover);
+}
+
+/* A setting that stays on, such as Shuffle. */
+.squisq-status-tool-button[aria-pressed='true'] {
+  background: var(--squisq-accent-soft);
+  color: var(--squisq-accent-strong);
+}
+
+.squisq-status-divider {
+  flex: none;
+  width: 1px;
+  height: 14px;
+  margin: 0 6px;
+  background: var(--squisq-border);
+}
+
+.squisq-status-progress {
+  flex: none;
+  width: 48px;
+  height: 4px;
+  margin: 0 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--squisq-border);
+}
+
+.squisq-status-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--squisq-accent);
+}
+
+/* The card's actions, right-aligned in a box as wide as the widest set
+   (invisible copies share its one grid cell), so the controls before it hold
+   still and Reveal and Next land on the same spot. */
+.squisq-status-card-actions {
+  display: inline-grid;
+  justify-items: end;
+  margin-left: 4px;
+}
+
+.squisq-status-card-actions > * {
+  display: flex;
+  gap: 4px;
+  grid-area: 1 / 1;
+}
+
+.squisq-status-card-actions > [aria-hidden='true'] {
+  visibility: hidden;
+}
+
+/* Previous / Next read as arrows in the bar; their names stay on aria-label. */
+.squisq-status-view .squisq-block-card-prev > span,
+.squisq-status-view .squisq-block-card-next > span {
+  display: none;
+}
+
+.squisq-status-view .squisq-block-card-add {
+  margin-left: 6px;
+}
+
+/* "3 / 12  The Philosophy", "Block 3 of 12  The Philosophy".
+   Every part holds a constant width, so the arrows stay put as you step
+   through: the group is centered, and any change in its width would move
+   both of them. */
+.squisq-status-view-trigger {
+  gap: 6px;
+}
+
+.squisq-status-view .squisq-block-card-position {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 4px;
+  color: var(--squisq-text);
+  white-space: nowrap;
+}
+
+/* The counter is as wide as its widest label: an invisible copy of it
+   (data-sizer — the last number, data-sizer-alt — a named entry such as
+   "Cover") shares one grid cell with the visible one. Generated content is
+   never part of the element's text or accessible name. */
+.squisq-status-view-position,
+.squisq-status-view .squisq-block-card-count {
+  display: inline-grid;
+  justify-items: center;
+  color: var(--squisq-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.squisq-status-view-position > *,
+.squisq-status-view-position::before,
+.squisq-status-view-position::after,
+.squisq-status-view .squisq-block-card-count > *,
+.squisq-status-view .squisq-block-card-count::before {
+  grid-area: 1 / 1;
+}
+
+.squisq-status-view-position::before,
+.squisq-status-view .squisq-block-card-count::before {
+  content: attr(data-sizer);
+  visibility: hidden;
+}
+
+.squisq-status-view-position::after {
+  content: attr(data-sizer-alt);
+  visibility: hidden;
+}
+
+/* A fixed width, empty or not; a long title ends in an ellipsis. */
+.squisq-status-view-title,
+.squisq-status-view .squisq-block-card-title {
+  display: inline-block;
+  flex: none;
+  width: 26ch;
+  overflow: hidden;
+  color: var(--squisq-text-muted);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.squisq-status-view-note {
+  margin: 0 4px;
+  white-space: nowrap;
+}
+
+/* Build steps, on the slides that have them, beside the arrows but out of
+   the layout, so they don't push the arrows over. */
+.squisq-status-slides-builds {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 8px);
+  z-index: 140;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+/* The list of slides opens upward over the editor, centered on the counter. */
+.squisq-status-slides-picker {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 150;
+  width: min(320px, calc(100vw - 32px));
+  overflow-y: auto;
+  padding: 6px;
+  transform: translateX(-50%);
+  background: var(--squisq-surface-raised);
+  border: 1px solid var(--squisq-border);
+  border-radius: 8px;
+  box-shadow: var(--squisq-shadow-md);
+}
+
+.squisq-status-slides-item {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--squisq-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.squisq-status-slides-item:hover,
+.squisq-status-slides-item:focus-visible {
+  background: var(--squisq-row-hover);
+  outline: none;
+}
+
+.squisq-status-slides-item[aria-current='true'] {
+  background: var(--squisq-accent-soft);
+}
+
+.squisq-status-slides-item-label {
+  color: var(--squisq-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.squisq-status-slides-item-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Video's playback row (react's DocControlsCompact): wide enough for a useful
+   timeline, centered like every view's controls, in the chrome's colors and
+   the bar's control size (the timeline's clickable strip included). Its
+   inline styles read the --squisq-player-* properties set here. */
+.squisq-status-view .doc-controls-compact {
+  --squisq-player-accent: var(--squisq-accent);
+  --squisq-player-on-accent: var(--squisq-text-on-accent);
+  --squisq-player-surface: var(--squisq-surface-raised);
+  --squisq-player-control-size: var(--squisq-status-control-height);
+  --squisq-player-scrub-height: var(--squisq-status-control-height);
+  width: clamp(260px, 60cqw, 760px);
+  color: var(--squisq-text-soft);
+}
+
+.squisq-status-view .doc-controls-compact__button:hover {
+  --squisq-player-button-bg: var(--squisq-surface-hover);
+  color: var(--squisq-text);
+}
+
+.squisq-status-view .doc-controls-compact__play:hover {
+  --squisq-player-accent: var(--squisq-accent-hover);
+  color: var(--squisq-text-on-accent);
+}
+
+.squisq-status-view .doc-controls-compact__button:focus-visible {
+  outline: 2px solid var(--squisq-focus-ring);
+  outline-offset: 1px;
+}
+
+.squisq-status-view .doc-controls-compact__time {
+  color: var(--squisq-text);
+}
+
+/* Narrate's toolbar row (TeleprompterControls) in the bar: the prompter's own
+   buttons, made as short as the bar. The prompter's stylesheet is injected
+   after this one (teleprompterTheme.ts), so each rule here is one class more
+   specific than the one it overrides. */
+.squisq-status-view .squisq-teleprompter-statusbar {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  color: var(--squisq-text);
+  font-size: 12px;
+}
+
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-bar {
+  justify-content: center;
+  gap: 4px 10px;
+  padding: 0;
+}
+
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-tool,
+.squisq-status-view .squisq-teleprompter-statusbar select {
+  min-height: var(--squisq-status-control-height);
+}
+
+/* A segment draws the border around its buttons: they are that much shorter,
+   so the segment is as tall as a lone button and never the bar's tallest. */
+.squisq-status-view
+  .squisq-teleprompter-statusbar
+  :is(.squisq-teleprompter-seg, .squisq-teleprompter-split)
+  > .squisq-teleprompter-tool {
+  min-height: calc(var(--squisq-status-control-height) - 2px);
+}
+
+/* The Camera checkbox is a small box; its whole label is the target. */
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-check {
+  min-height: var(--squisq-status-control-height);
+}
+
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-tool {
+  gap: 5px;
+  padding: 0 9px;
+}
+
+/* As wide as its widest label (Resume), so Restart and everything after it
+   hold still as Start turns to Pause. */
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-tool--play {
+  min-width: 7.25em;
+}
+
+/* Smaller corners to match; buttons inside a segment keep square ones. */
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-seg,
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-split,
+.squisq-status-view
+  .squisq-teleprompter-statusbar
+  .squisq-teleprompter-record
+  > .squisq-teleprompter-tool,
+.squisq-status-view
+  .squisq-teleprompter-statusbar
+  .squisq-teleprompter-float
+  > .squisq-teleprompter-tool,
+.squisq-status-view .squisq-teleprompter-statusbar select {
+  border-radius: 5px;
+}
+
+/* In the rail, Pop out sits at the far right; in the bar the row is centered. */
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-float {
+  margin-left: 0;
+}
+
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-record {
+  flex-wrap: nowrap;
+}
+
+.squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-hint {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* The window-type chevron beside Pop out, wide enough for a finger. */
+@media (pointer: coarse) {
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-split-menu {
+    width: 32px;
+  }
+}
+
+/* A phone: the arrows and counter stay; the titles shorten, Add block
+   becomes its plus, and build steps float just above the arrows, where the
+   bar has no room beside them. */
+@container squisq-status-bar (max-width: 520px) {
+  .squisq-status-view-title,
+  .squisq-status-view .squisq-block-card-title {
+    width: 14ch;
+  }
+
+  .squisq-status-view .squisq-block-card-add > span,
+  .squisq-status-tool-button > span {
+    display: none;
+  }
+
+  .squisq-status-progress {
+    display: none;
+  }
+
+  /* Narrate keeps to one row, so the bar stays as tall as in every other
+     view. Its tools collapse to their icons and Countdown to its stopwatch
+     (visually hidden, so the labels still name their controls); the size
+     note before recording goes, and the one while recording shortens to fit
+     rather than wrapping onto a second line. */
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-bar-label,
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-tool-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-tool--play {
+    min-width: var(--squisq-status-control-height);
+  }
+
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-bar {
+    flex-wrap: nowrap;
+    min-width: 0;
+    column-gap: 8px;
+  }
+
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-bar > * {
+    flex-shrink: 0;
+  }
+
+  .squisq-status-view .squisq-teleprompter-statusbar .squisq-teleprompter-record {
+    flex-shrink: 1;
+    min-width: 0;
+    column-gap: 8px;
+  }
+
+  .squisq-status-view
+    .squisq-teleprompter-statusbar
+    .squisq-teleprompter-record
+    > :is(.squisq-teleprompter-hint, .squisq-teleprompter-warning) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .squisq-status-view
+    .squisq-teleprompter-statusbar
+    .squisq-teleprompter-tool--record
+    ~ .squisq-teleprompter-hint {
+    display: none;
+  }
+
+  /* The whole bar: the timeline needs every pixel. */
+  .squisq-status-view .doc-controls-compact {
+    width: calc(100cqw - 24px);
+  }
+
+  .squisq-status-slides-builds {
+    top: auto;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    padding: 3px 6px;
+    transform: translateX(-50%);
+    background: var(--squisq-surface-raised);
+    border: 1px solid var(--squisq-border);
+    border-radius: 6px;
+    box-shadow: var(--squisq-shadow-sm);
+  }
+}
+
+@container squisq-status-bar (max-width: 340px) {
+  .squisq-status-view-title,
+  .squisq-status-view .squisq-block-card-title {
+    display: none;
+  }
+
+  /* The narrowest phones: the flashcard deck's divider goes and the icon
+     buttons give back some width (never height), so Reveal stays on screen. */
+  .squisq-status-divider {
+    display: none;
+  }
+
+  .squisq-status-nav-button,
+  .squisq-status-tool-button,
+  .squisq-status-bar .squisq-status-view .squisq-block-card-button {
+    min-width: 32px;
+  }
+}

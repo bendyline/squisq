@@ -226,6 +226,49 @@ author: Keep
     expect(next).toContain('squisq-captions: social');
   });
 
+  it('sets the Write view’s styling from the theme on Save, outside the document', () => {
+    const onSave = vi.fn();
+    const onEditorStylingChange = vi.fn();
+    render(
+      <DocumentSettingsDialog
+        markdownSource="# Doc"
+        onSave={onSave}
+        onClose={() => {}}
+        editorStyling="fonts"
+        onEditorStylingChange={onEditorStylingChange}
+      />,
+    );
+    const editor = screen.getByRole('group', { name: 'Editor' });
+    const styling = within(editor).getByLabelText<HTMLSelectElement>('Editor styling from theme');
+    expect(styling.value).toBe('fonts');
+    fireEvent.change(styling, { target: { value: 'fonts-colors' } });
+    expect(onEditorStylingChange).not.toHaveBeenCalled();
+
+    clickSave();
+    expect(onEditorStylingChange).toHaveBeenCalledWith('fonts-colors');
+    // A personal preference: the document itself is untouched.
+    expect(onSave).toHaveBeenCalledWith('# Doc');
+  });
+
+  it('leaves the editor styling alone when unchanged, and hides it without a handler', () => {
+    const onEditorStylingChange = vi.fn();
+    render(
+      <DocumentSettingsDialog
+        markdownSource="# Doc"
+        onSave={() => {}}
+        onClose={() => {}}
+        editorStyling="none"
+        onEditorStylingChange={onEditorStylingChange}
+      />,
+    );
+    clickSave();
+    expect(onEditorStylingChange).not.toHaveBeenCalled();
+    cleanup();
+
+    open('# Doc\n', () => {});
+    expect(screen.queryByLabelText('Editor styling from theme')).toBeNull();
+  });
+
   it('closes when the Cancel button is clicked', () => {
     const onClose = vi.fn();
     render(<DocumentSettingsDialog markdownSource="# Doc" onSave={() => {}} onClose={onClose} />);

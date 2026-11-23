@@ -27,7 +27,7 @@ import { useEditorContext } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
 import { DictationButton } from './speech/DictationButton';
-import { ViewMenuPanel } from './ViewMenuPanel';
+import { ViewMenu, type ViewMenuToggleItem } from './ViewMenu';
 import { useAnchoredPopover } from './useAnchoredPopover';
 import { TransformMenu } from './TransformMenu';
 import {
@@ -55,7 +55,6 @@ import { findBlockSliceAtLineInDoc, findBlockSliceByHeadingIndexInDoc } from './
 import { LinkDialog } from './LinkDialog';
 import {
   selectedWikiLink,
-  sourceWikiLink,
   wikiLinkAtElement,
   wikiEditSource,
   type WikiLinkEdit,
@@ -69,7 +68,7 @@ import { Icon } from './Icon';
 import type { PickerEntry } from './emojiData';
 import { createPortal } from 'react-dom';
 import { usePreviewSettingsOptional } from './PreviewControls';
-import { EditorViewTabs } from './toolbar/EditorViewTabs';
+import { viewChoices } from './toolbar/viewChoices';
 import { filterVisibleMediaEntries } from './mediaEntries';
 import { MEDIA_FILE_ACCEPT } from './mediaDragMime';
 import { addFileToDocument } from './mediaInsertion';
@@ -105,9 +104,9 @@ export interface ToolbarProps {
   fileCount?: number;
   /** Toggle the Attachments panel. When provided, an "Attachments" button appears in the toolbar. */
   onToggleFiles?: () => void;
-  /** Content rendered at the left edge of the toolbar, before the view tabs. */
+  /** Content rendered at the left edge of the toolbar, before the view button. */
   slotLeft?: ReactNode;
-  /** Content rendered immediately after the view tabs, on the left side of the
+  /** Content rendered immediately after the view button, on the left side of the
    *  toolbar (before the formatting controls). Used for the preview mode
    *  switch in Use view. */
   slotAfterTabs?: ReactNode;
@@ -115,7 +114,7 @@ export interface ToolbarProps {
   slotAfterActions?: ReactNode;
   /**
    * Host quick tools — controls that stay on the row however narrow it gets
-   * (Find, say). They follow the built-in dictation and view-options buttons.
+   * (Find, say). They follow the built-in dictation button.
    */
   slotQuickTools?: ReactNode;
   /**
@@ -135,10 +134,16 @@ export interface ToolbarProps {
    */
   showPlayTab?: boolean;
   /**
-   * Whether to render the view tabs and their mode menus at all. Defaults to
-   * true. See `EditorShellProps.showViewTabs`.
+   * Whether to render the view button and list the views in the View menu.
+   * Defaults to true. See `EditorShellProps.showViewTabs`.
    */
   showViewTabs?: boolean;
+  /**
+   * The host's own navigation panes (a file sidebar, a workspace tree),
+   * listed in the View menu's left column. See
+   * `EditorShellProps.viewMenuNavigation`.
+   */
+  viewMenuNavigation?: readonly ViewMenuToggleItem[];
   /**
    * Whether to render Squisq's built-in text, block, and contextual
    * formatting controls. The toolbar, Insert menu, view tabs, and host slots
@@ -172,11 +177,12 @@ import {
   FILE_STORING_BUTTONS,
   MEDIA_BUTTONS,
   MERMAID_TYPE_MENU_WIDTH,
-  TASK_LIST_MARKDOWN,
   buttonIcon,
 } from './toolbar/toolbarButtons';
 import { useToolbarCollapse } from './toolbar/useToolbarCollapse';
 import { DocumentActionButton, DocumentActionsGroup } from './toolbar/DocumentActions';
+import { UndoRedoButtons } from './toolbar/UndoRedoButtons';
+import { appendedSourceMarkdown, applySourceAction } from './toolbar/sourceActions';
 
 import {
   blockConversionRange,
@@ -189,7 +195,6 @@ import {
 import { ListLevelButtons, ListLevelOverflowItems } from './toolbar/ListLevelControls';
 
 import {
-  DIAGRAM_STARTER_MARKDOWN,
   insertAsciiDiagramBlock,
   insertChartBlock,
   insertFenceBlock,
@@ -198,10 +203,6 @@ import {
   insertTemplateHeading,
   insertTimelineBlock,
   insertTreeBlock,
-  LAYOUT_STARTER_MARKDOWN,
-  MERMAID_STARTER_MARKDOWN,
-  TIMELINE_STARTER_MARKDOWN,
-  TREE_STARTER_MARKDOWN,
 } from './toolbar/sceneBlockInserts';
 import {
   CHART_TYPES,
@@ -243,6 +244,7 @@ export function Toolbar({
   slotRight,
   showPlayTab = true,
   showViewTabs = true,
+  viewMenuNavigation,
   showFormattingControls = true,
   showInsertControls = true,
   hostMode = 'document',
@@ -273,6 +275,8 @@ export function Toolbar({
     bumpMediaRevision,
     workspaceContainer,
     insertAtCursor,
+    themeInheritance,
+    setThemeInheritance,
   } = useEditorContext();
   const previewSettings = usePreviewSettingsOptional();
   const [recorderOpen, setRecorderOpen] = useState(false);
@@ -284,6 +288,7 @@ export function Toolbar({
   const sceneTextLevel = activeSceneText?.level ?? null;
   const isCodeMode = editorMode === 'code';
   const showDocumentChrome = !isCodeMode && hostMode !== 'chat';
+  const views = viewChoices({ editorMode, hostMode, showPlayTab, showViewTabs });
   const [scannedFileCount, setScannedFileCount] = useState(0);
   const resolvedFileCount = fileCount ?? scannedFileCount;
 
@@ -809,313 +814,17 @@ export function Toolbar({
     [formattingEditor],
   );
 
-  // ── Raw markdown handler ───────────────────────────────
+  // ── Source view: the action as Markdown (toolbar/sourceActions.ts) ──
   const handleRaw = useCallback(
     (id: string) => {
-      if (monacoEditor) {
-        // Use Monaco's selection API for proper wrap/insert behavior
-        const selection = monacoEditor.getSelection();
-        const model = monacoEditor.getModel();
-        if (!selection || !model) return;
-
-        const selectedText = model.getValueInRange(selection);
-        const hasSelection = selectedText.length > 0;
-
-        let replacement = '';
-        let newCursorOffset = 0; // offset from start of replacement to place cursor
-
-        // Inline wrapping: wrap selection or insert placeholder
-        const wrapInline = (before: string, after: string, placeholder: string) => {
-          if (hasSelection) {
-            replacement = before + selectedText + after;
-          } else {
-            replacement = before + placeholder + after;
-            // Select the placeholder text after insertion
-            newCursorOffset = before.length;
-          }
-        };
-
-        // Block-level: prefix each selected line, or insert a new block
-        const prefixLines = (prefix: string, placeholder: string) => {
-          if (hasSelection) {
-            replacement = selectedText
-              .split('\n')
-              .map((line: string) => prefix + line)
-              .join('\n');
-          } else {
-            replacement = prefix + placeholder;
-            newCursorOffset = prefix.length;
-          }
-        };
-
-        switch (id) {
-          case 'bold':
-            wrapInline('**', '**', 'bold text');
-            break;
-          case 'italic':
-            wrapInline('*', '*', 'italic text');
-            break;
-          case 'strikethrough':
-            wrapInline('~~', '~~', 'strikethrough');
-            break;
-          // Markdown has no delimiter for vertical alignment — the source form
-          // is inline HTML, which core's parser folds back into a real node.
-          case 'superscript':
-            wrapInline('<sup>', '</sup>', '1');
-            break;
-          case 'subscript':
-            wrapInline('<sub>', '</sub>', '2');
-            break;
-          case 'code':
-            wrapInline('`', '`', 'code');
-            break;
-          case 'h1':
-            prefixLines('# ', 'Heading 1');
-            break;
-          case 'h2':
-            prefixLines('## ', 'Heading 2');
-            break;
-          case 'h3':
-            prefixLines('### ', 'Heading 3');
-            break;
-          case 'h4':
-            prefixLines('#### ', 'Heading 4');
-            break;
-          case 'h5':
-            prefixLines('##### ', 'Heading 5');
-            break;
-          case 'h6':
-            prefixLines('###### ', 'Heading 6');
-            break;
-          case 'quote':
-            prefixLines('> ', 'Quote');
-            break;
-          case 'ul':
-            prefixLines('- ', 'Item');
-            break;
-          case 'ol':
-            prefixLines('1. ', 'Item');
-            break;
-          case 'codeblock': {
-            const inner = hasSelection ? selectedText : 'code';
-            replacement = '```\n' + inner + '\n```';
-            if (!hasSelection) newCursorOffset = 4; // after ```\n
-            break;
-          }
-          case 'hr': {
-            replacement = '\n---\n';
-            break;
-          }
-          case 'link': {
-            const source = model.getValue();
-            const startOffset = model.getOffsetAt(selection.getStartPosition());
-            const wiki = sourceWikiLink(source, startOffset + (selection.isEmpty() ? 0 : 1));
-            if (wiki) {
-              const start = model.getPositionAt(wiki.from);
-              const end = model.getPositionAt(wiki.to);
-              setLinkDialog({
-                mode: 'update',
-                target: 'raw',
-                wiki,
-                wikiSource: source,
-                wikiModel: model,
-                initialText: wiki.label ?? '',
-                initialUrl: wiki.target,
-                rawRange: {
-                  startLineNumber: start.lineNumber,
-                  startColumn: start.column,
-                  endLineNumber: end.lineNumber,
-                  endColumn: end.column,
-                },
-              });
-              return;
-            }
-            // Open the LinkDialog instead of inserting literal text. If the
-            // cursor sits inside an existing `[text](url)` on this line,
-            // prefill from it and replace the whole match on confirm.
-            const lineNumber = selection.startLineNumber;
-            const lineText = model.getLineContent(lineNumber);
-            const cursorCol = selection.startColumn;
-            const linkRe = /\[([^\]]*)\]\(([^)]*)\)/g;
-            let match: RegExpExecArray | null;
-            let existing: { text: string; url: string; range: IRange } | null = null;
-            while ((match = linkRe.exec(lineText)) !== null) {
-              const startCol = match.index + 1; // 1-based
-              const endCol = startCol + match[0].length;
-              if (cursorCol >= startCol && cursorCol <= endCol) {
-                existing = {
-                  text: match[1],
-                  url: match[2],
-                  range: {
-                    startLineNumber: lineNumber,
-                    startColumn: startCol,
-                    endLineNumber: lineNumber,
-                    endColumn: endCol,
-                  },
-                };
-                break;
-              }
-            }
-            setLinkDialog({
-              mode: existing ? 'update' : 'insert',
-              target: 'raw',
-              initialText: existing ? existing.text : hasSelection ? selectedText : '',
-              initialUrl: existing ? existing.url : '',
-              rawRange: existing ? existing.range : null,
-            });
-            // Skip the executeEdits/setPosition tail below — the dialog will
-            // apply its own edit on confirm.
-            return;
-          }
-          case 'table': {
-            const tpl =
-              '| Header 1 | Header 2 | Header 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |';
-            replacement = '\n' + tpl + '\n';
-            newCursorOffset = 3; // after \n|
-            break;
-          }
-          case 'tasklist': {
-            replacement = `\n${TASK_LIST_MARKDOWN}\n`;
-            newCursorOffset = replacement.length;
-            break;
-          }
-          case 'chart': {
-            // Default chart starter: annotated heading + sample table.
-            replacement = chartStarterMarkdown(DEFAULT_CHART_TYPE);
-            newCursorOffset = replacement.length;
-            break;
-          }
-          case 'diagram': {
-            // A diagram is an ASCII-art code fence; the WYSIWYG view
-            // renders its editable canvas, preview renders it as a slide.
-            replacement = DIAGRAM_STARTER_MARKDOWN;
-            newCursorOffset = replacement.length;
-            break;
-          }
-          case 'complexdiagram': {
-            replacement = MERMAID_STARTER_MARKDOWN;
-            newCursorOffset = replacement.length;
-            break;
-          }
-          case 'tree': {
-            replacement = TREE_STARTER_MARKDOWN;
-            newCursorOffset = replacement.length;
-            break;
-          }
-          case 'timeline': {
-            replacement = TIMELINE_STARTER_MARKDOWN;
-            newCursorOffset = replacement.length;
-            break;
-          }
-          case 'drawing': {
-            replacement = '\n## Drawing {[drawing]}\n';
-            newCursorOffset = replacement.length;
-            break;
-          }
-          case 'layout': {
-            // Seed a starter text layer (a child sub-block) so it isn't blank.
-            replacement = LAYOUT_STARTER_MARKDOWN;
-            newCursorOffset = replacement.length;
-            break;
-          }
-        }
-
-        // Apply the edit via Monaco's executeEdits for proper undo support
-        const range = selection;
-        monacoEditor.executeEdits('toolbar', [{ range, text: replacement }]);
-
-        // If no selection, move the cursor to the command's preferred edit point.
-        if (!hasSelection && newCursorOffset > 0) {
-          const startPos = model.getPositionAt(
-            model.getOffsetAt(range.getStartPosition()) + newCursorOffset,
-          );
-          monacoEditor.setPosition(startPos);
-          monacoEditor.revealPositionInCenterIfOutsideViewport(startPos);
-        }
-
-        monacoEditor.focus();
-      } else {
-        // Fallback: no Monaco instance, just append
-        let insertion = '';
-        switch (id) {
-          case 'bold':
-            insertion = '**bold text**';
-            break;
-          case 'italic':
-            insertion = '*italic text*';
-            break;
-          case 'strikethrough':
-            insertion = '~~strikethrough~~';
-            break;
-          case 'superscript':
-            insertion = '<sup>1</sup>';
-            break;
-          case 'subscript':
-            insertion = '<sub>2</sub>';
-            break;
-          case 'code':
-            insertion = '`code`';
-            break;
-          case 'h1':
-            insertion = '\n# Heading 1\n';
-            break;
-          case 'h2':
-            insertion = '\n## Heading 2\n';
-            break;
-          case 'h3':
-            insertion = '\n### Heading 3\n';
-            break;
-          case 'quote':
-            insertion = '\n> Quote\n';
-            break;
-          case 'ul':
-            insertion = '\n- Item\n';
-            break;
-          case 'ol':
-            insertion = '\n1. Item\n';
-            break;
-          case 'codeblock':
-            insertion = '\n```\ncode\n```\n';
-            break;
-          case 'hr':
-            insertion = '\n---\n';
-            break;
-          case 'link':
-            insertion = '[link text](url)';
-            break;
-          case 'table':
-            insertion =
-              '\n| Header 1 | Header 2 | Header 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n';
-            break;
-          case 'tasklist':
-            insertion = `\n${TASK_LIST_MARKDOWN}\n`;
-            break;
-          case 'chart':
-            insertion = chartStarterMarkdown(DEFAULT_CHART_TYPE);
-            break;
-          case 'diagram':
-            insertion = DIAGRAM_STARTER_MARKDOWN;
-            break;
-          case 'complexdiagram':
-            insertion = MERMAID_STARTER_MARKDOWN;
-            break;
-          case 'tree':
-            insertion = TREE_STARTER_MARKDOWN;
-            break;
-          case 'timeline':
-            insertion = TIMELINE_STARTER_MARKDOWN;
-            break;
-          case 'drawing':
-            insertion = '\n## Drawing {[drawing]}\n';
-            break;
-          case 'layout':
-            insertion = LAYOUT_STARTER_MARKDOWN;
-            break;
-        }
-        if (insertion) {
-          setMarkdownSource(markdownSource + insertion);
-        }
+      if (!monacoEditor) {
+        // No Monaco instance: append to the document.
+        const insertion = appendedSourceMarkdown(id);
+        if (insertion) setMarkdownSource(markdownSource + insertion);
+        return;
       }
+      const link = applySourceAction(monacoEditor, id);
+      if (link) setLinkDialog({ ...link, target: 'raw' });
     },
     [monacoEditor, markdownSource, setMarkdownSource],
   );
@@ -2011,9 +1720,20 @@ export function Toolbar({
           e.target.value = '';
         }}
       />
-      {/* Left slot — before view tabs */}
+      {/* Left slot — before the view button */}
       {!findMode && slotLeft}
-      {showViewTabs && <EditorViewTabs showPlayTab={showPlayTab} hostMode={hostMode} />}
+      {/* The view button: the active view's name, opening the View menu. Its
+          section keeps the historical view-tabs class, which hosts style and
+          the outline pane's width lines up with. */}
+      {views.button && (
+        <div className="squisq-toolbar-view-tabs">
+          <ViewMenu
+            showEditViews={views.editViews}
+            showUseViews={views.useViews}
+            navigation={viewMenuNavigation}
+          />
+        </div>
+      )}
       {/* After-tabs slot — left side, before formatting or preview controls. */}
       {findMode ? (
         <FindToolbar
@@ -2026,6 +1746,7 @@ export function Toolbar({
       ) : (
         slotAfterTabs
       )}
+      {showFormattingControls && <UndoRedoButtons />}
       {/* Built-in actions — formatting and Insert can be controlled independently. */}
       {actionsLaneShown && (
         <div className="squisq-toolbar-actions" ref={actionsRef}>
@@ -2558,12 +2279,15 @@ export function Toolbar({
           />
         </>
       )}
-      {/* Quick tools — dictation, view options and the host's (Find) stay on
-          the row however narrow it gets. */}
+      {/* Quick tools — dictation and the host's (Find) stay on the row however
+          narrow it gets. */}
       {/* Dictation renders only with a `speechInput` capability, in Write/Source. */}
       {!isCodeMode && <DictationButton />}
       {showDocumentChrome && activeView === 'raw' && <TransformMenu />}
-      {showDocumentChrome && <ViewMenuPanel />}
+      {/* With no views to switch to, the View menu (panes only) is an icon button. */}
+      {showDocumentChrome && !views.button && (
+        <ViewMenu variant="button" navigation={viewMenuNavigation} />
+      )}
       {slotQuickTools}
       {/* Attachments toggle — visible when callback is provided. Named
           "Attachments", not "Files", because a host shell usually has a Files
@@ -2632,6 +2356,8 @@ export function Toolbar({
             onClose={() => setShowDocSettings(false)}
             defaultThemeId={previewSettings?.inheritedThemeId}
             defaultThemeLabel={previewSettings?.inheritedThemeLabel}
+            editorStyling={themeInheritance}
+            onEditorStylingChange={setThemeInheritance}
           />,
         )}
 

@@ -390,7 +390,7 @@ describe('Minimal content summaries', () => {
     for (const slide of slides) {
       const text = (slide.contents ?? [])
         .filter((node) => node.type === 'paragraph')
-        .map(extractPlainText)
+        .map((node) => extractPlainText(node))
         .join(' ')
         .trim();
       expect(text.split(/\s+/)).toHaveLength(24);

@@ -1,5 +1,5 @@
 /**
- * SummarizeView — the Write tab's Summarize mode.
+ * SummarizeView — the Summaries view (View menu › Edit › Summaries).
  *
  * Where an author chooses how the slideshow and video summarize the document:
  * None, one of the built-in styles, or Custom (core's `dynamic-slides`). The
@@ -60,7 +60,7 @@ export function SummarizeView({
   return (
     <section
       className="squisq-summarize"
-      aria-label="Summarize"
+      aria-label="Summaries"
       hidden={hidden}
       style={hidden ? { display: 'none' } : undefined}
       data-designing={designing ? 'true' : undefined}

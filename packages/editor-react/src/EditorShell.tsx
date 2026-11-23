@@ -37,6 +37,7 @@ import type { ProofingCapability, ProofingIgnoreStore } from './proofing/types';
 import { ProofingRoot } from './proofing/ProofingContext';
 import { useLinkSafety, type LinkDelegate, type LinkSafety } from './linkSafety/useLinkSafety';
 import { useShellLinkDelegation } from './useShellLinkDelegation';
+import { useShellKeyboardShortcuts } from './useShellKeyboardShortcuts';
 import { ReviewRoot } from './review/ReviewContext';
 import { ReviewPanel } from './review/ReviewPanel';
 import type { ReviewCapability } from './review/types';
@@ -45,6 +46,7 @@ import { ProofingPanel } from './proofing/ProofingPanel';
 import { CodeContextZones } from './codeContext/CodeContextZones';
 import type { CodeContext } from './codeContext/types';
 import { BlockCardView } from './BlockCardView';
+import { useStatusBarViewTarget } from './statusBar/statusBarViewTarget';
 import { TimelineTrack } from './TimelineTrack';
 import { TimelineVideoPanel } from './TimelineVideoPanel';
 import { TimelineCompositionPanel } from './TimelineCompositionPanel';
@@ -114,12 +116,7 @@ import {
   createMediaProviderFromContainer,
 } from '@bendyline/squisq/storage';
 import type { PrunePolicy, SaveVersionResult } from '@bendyline/squisq/versions';
-import type {
-  CSSProperties,
-  KeyboardEvent as ReactKeyboardEvent,
-  ReactNode,
-  RefObject,
-} from 'react';
+import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { MediaContext, useMediaClipDurations } from '@bendyline/squisq-react';
 import {
   createMediaEditRenderManager,
@@ -128,6 +125,7 @@ import {
 } from '@bendyline/squisq-video-react/media-edit';
 import type { CodeBlockCopyHandler } from '@bendyline/squisq-react';
 import { writeCanvasSettingsStyle, type WriteCanvasSettings } from './writeCanvasSettings';
+import type { ViewMenuToggleItem } from './ViewMenu';
 import type { EditorHostMode, EditorToolbarPosition } from './editorHostMode';
 import type { FindRequest } from './find/findModel';
 
@@ -294,8 +292,7 @@ export interface EditorShellProps {
   toolbarSlotAfterActions?: ReactNode;
   /**
    * Host quick tools: controls that stay on the toolbar row however narrow
-   * it gets (Find, say). They follow the built-in dictation and
-   * view-options buttons.
+   * it gets (Find, say). They follow the built-in dictation button.
    */
   toolbarSlotQuickTools?: ReactNode;
   /**
@@ -318,14 +315,14 @@ export interface EditorShellProps {
    */
   toolbarPosition?: EditorToolbarPosition;
   /**
-   * AI for the Custom summary designer in Write › Summarize: its "Suggest with
+   * AI for the Custom summary designer in Edit › Summaries: its "Suggest with
    * AI" words and lays out the slides one at a time. The host makes the model
    * calls; Squisq owns the prompts, the checks on each reply, and the designer.
    * Without one the designer works fully, without AI.
    */
   summarizationAssistant?: SummarizationAssistant;
   /**
-   * Replaces the built-in Custom summary designer in Write › Summarize. It is
+   * Replaces the built-in Custom summary designer in Edit › Summaries. It is
    * shown inline, in a mode the author can leave at any time, so it should
    * save as it goes. Most hosts want `summarizationAssistant` instead.
    */
@@ -363,15 +360,25 @@ export interface EditorShellProps {
    */
   showPlayTab?: boolean;
   /**
-   * Whether to show the view tabs (Write, Use) and their mode menus, where
-   * Source is chosen from Write's.
-   * Defaults to true. When false the editor stays in `initialView` — the
-   * Ctrl/Cmd+Shift+1/2/3 view shortcuts act through the tabs, so they do
-   * nothing either — while the formatting and Insert controls remain. Use it
+   * Whether to show the view button (named after the active view) and list
+   * the views in the View menu it opens, where Write, Source, Blocks and the
+   * Use modes are chosen. Defaults to true. When false the editor stays in
+   * `initialView` — the Ctrl/Cmd+Shift+1/2/3 view shortcuts reach only the
+   * views the menu offers, so they do nothing either — while the formatting
+   * and Insert controls remain. Use it
    * for a small field inside a form, where switching views is not a choice
-   * the person should face. `hostMode="chat"` already hides the tabs.
+   * the person should face. `hostMode="chat"` already hides the button.
    */
   showViewTabs?: boolean;
+  /**
+   * The host's own navigation panes — a file sidebar, a workspace tree —
+   * listed under **Navigation** in the View menu's left column, before the
+   * editor's Outline (they sit outside the editor, so further left), so the
+   * person shows and hides them where they show and hide the editor's panes.
+   * Each item is a checkbox row: pass the pane's current state as `checked`
+   * and flip it in `onToggle`. Omit it and the column holds only the Outline.
+   */
+  viewMenuNavigation?: readonly ViewMenuToggleItem[];
   /**
    * Whether Use mode may open its audience view in a separate browser window.
    * Defaults to true. Disable this in embedded hosts that block popups.
@@ -839,6 +846,7 @@ export function EditorShell({
   reviewProviders,
   showPlayTab = true,
   showViewTabs = true,
+  viewMenuNavigation,
   allowPresentationWindow = true,
   allowPresentationFullscreen = true,
   allowPrint = true,
@@ -1028,6 +1036,7 @@ export function EditorShell({
                 sidePanelSlot={sidePanelSlot}
                 showPlayTab={showPlayTab}
                 showViewTabs={showViewTabs}
+                viewMenuNavigation={viewMenuNavigation}
                 hostMode={hostMode}
                 allowPresentationWindow={allowPresentationWindow}
                 allowPresentationFullscreen={allowPresentationFullscreen}
@@ -1097,6 +1106,7 @@ interface EditorShellInnerProps {
   sidePanelSlot?: ReactNode;
   showPlayTab: boolean;
   showViewTabs: boolean;
+  viewMenuNavigation?: readonly ViewMenuToggleItem[];
   hostMode: EditorHostMode;
   allowPresentationWindow: boolean;
   allowPresentationFullscreen: boolean;
@@ -1198,6 +1208,7 @@ function EditorShellInner({
   sidePanelSlot,
   showPlayTab,
   showViewTabs,
+  viewMenuNavigation,
   hostMode,
   allowPresentationWindow,
   allowPresentationFullscreen,
@@ -1257,6 +1268,7 @@ function EditorShellInner({
     editingView,
     blockCount,
     activeBlockKey,
+    activeBlockTitle,
     prevBlock,
     nextBlock,
     addBlock,
@@ -1270,6 +1282,8 @@ function EditorShellInner({
     closeMediaEdit,
   } = useEditorContext();
   const processedAudio = useProcessedAudio(mediaEditRenders);
+  // The block navigation moves into the status bar while one is showing.
+  const statusBarViewTarget = useStatusBarViewTarget();
   // Dual-catalog custom themes (doc + browser library), mirroring how
   // CustomTemplateProvider is fed. Wraps the preview subtree so the theme
   // picker + designer can read/write both pools.
@@ -1577,48 +1591,13 @@ function EditorShellInner({
     onChange?.(markdownSource);
   }, [markdownSource, onChange]);
 
-  // Tiptap prevents the default for a handled heading chord. Keep that
-  // event inside the editor so hosts such as VS Code cannot also use it
-  // to switch editor groups after applying the heading.
-  const handleShellKeyDown = useCallback((e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (
-      (e.ctrlKey || e.metaKey) &&
-      !e.shiftKey &&
-      !e.altKey &&
-      /^[1-6]$/.test(e.key) &&
-      e.defaultPrevented
-    ) {
-      e.stopPropagation();
-    }
-  }, []);
-
-  // Capture view shortcuts before the editing surface sees them: Tiptap's
-  // keymap can fall back from a shifted digit to its unshifted heading key.
-  const handleShellViewKeyDown = useCallback(
-    (e: ReactKeyboardEvent<HTMLDivElement>) => {
-      if ((!e.ctrlKey && !e.metaKey) || !e.shiftKey || e.altKey) return;
-      // Shift changes event.key to !/@/# on common layouts; the digit's
-      // physical code keeps Ctrl/Cmd+Shift+1/2/3 usable across layouts.
-      const key = /^Digit[1-3]$/.test(e.code) ? e.code.slice(-1) : e.key;
-      const view = key === '1' ? 'wysiwyg' : key === '2' ? 'raw' : key === '3' ? 'preview' : null;
-      if (!view || (view === 'preview' && !showPlayTab)) return;
-      // Shortcuts act through the tabs, so do nothing where none are shown.
-      // Write and Source share the first tab: when it shows the other one,
-      // switch directly, since pressing a tab you are on opens its menu.
-      const button = shellRef.current?.querySelector<HTMLButtonElement>(
-        view === 'preview'
-          ? '[role="tab"][data-view="preview"]'
-          : '[role="tab"][data-view="wysiwyg"], [role="tab"][data-view="raw"]',
-      );
-      if (!button) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (button.dataset.view === view) button.click();
-      else setActiveView(view);
-    },
-    [setActiveView, showPlayTab],
-  );
-
+  const shellKeyHandlers = useShellKeyboardShortcuts({
+    editorMode,
+    hostMode,
+    showPlayTab,
+    showViewTabs,
+    setActiveView,
+  });
   const shellLinkHandlers = useShellLinkDelegation(onLinkClick);
 
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;
@@ -1660,6 +1639,7 @@ function EditorShellInner({
         slotRight={toolbarSlotRight}
         showPlayTab={showPlayTab}
         showViewTabs={showViewTabs}
+        viewMenuNavigation={viewMenuNavigation}
         showFormattingControls={showFormattingControls}
         showInsertControls={showInsertControls}
         hostMode={hostMode}
@@ -1672,8 +1652,7 @@ function EditorShellInner({
   const shell = (
     <div
       ref={shellRef}
-      onKeyDownCapture={handleShellViewKeyDown}
-      onKeyDown={handleShellKeyDown}
+      {...shellKeyHandlers}
       {...shellLinkHandlers}
       className={`squisq-editor-shell ${className || ''}`}
       data-theme={colorScheme}
@@ -1843,6 +1822,8 @@ function EditorShellInner({
                       onPrev={prevBlock}
                       onNext={nextBlock}
                       onAdd={addBlock}
+                      title={activeBlockTitle}
+                      navTarget={statusBarViewTarget}
                     >
                       <WysiwygEditor
                         ariaLabel={ariaLabel}

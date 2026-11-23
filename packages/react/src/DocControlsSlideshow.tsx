@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 import type { PlaybackState, SlideNavActions } from './types';
 
 export interface SlideshowPickerItem {
@@ -24,7 +24,11 @@ export interface SlideshowPickerItem {
   summary: string;
 }
 
-interface DocControlsSlideshowProps {
+/**
+ * What slideshow controls draw from: the overlay pill here, or a host's own
+ * through DocPlayer's `renderSlideshowControls`.
+ */
+export interface SlideshowControlsProps {
   state: PlaybackState;
   slideNav: SlideNavActions;
   /** Slides available for direct navigation from the counter popover. */
@@ -35,13 +39,27 @@ interface DocControlsSlideshowProps {
   onPickerOpenChange?: (open: boolean) => void;
 }
 
+/**
+ * DocPlayer's slideshow controls: the host's `render` when it supplies one,
+ * otherwise the overlay pill.
+ */
+export function SlideshowControls({
+  controls,
+  render,
+}: {
+  controls: SlideshowControlsProps;
+  render?: (controls: SlideshowControlsProps) => ReactNode;
+}) {
+  return <>{render ? render(controls) : <DocControlsSlideshow {...controls} />}</>;
+}
+
 export function DocControlsSlideshow({
   state,
   slideNav,
   slides = [],
   pickerOpen,
   onPickerOpenChange,
-}: DocControlsSlideshowProps) {
+}: SlideshowControlsProps) {
   const [uncontrolledPickerOpen, setUncontrolledPickerOpen] = useState(false);
   const isPickerOpen = pickerOpen ?? uncontrolledPickerOpen;
   const setPickerOpen = useCallback(

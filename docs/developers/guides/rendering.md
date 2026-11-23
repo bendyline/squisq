@@ -170,6 +170,8 @@ See [Dashboards](../../guide/dashboards.md) for the layouts and styles themselve
 | ------------------------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------- |
 | `showControls`                       | `true`  | The built-in controls.                                                                                                      |
 | `showScrubber`                       | `false` | A scrub bar on its own, when `showControls` is `false` (video mode).                                                        |
+| `renderSlideshowControls`            | —       | Draw the slideshow controls yourself, from the same state and actions as the built-in pill (the editor's status bar does).  |
+| `renderPlaybackControls`             | —       | Video mode: draw the playback controls yourself, such as the one-row `DocControlsCompact`, in place of the overlay.         |
 | `globalKeyboardShortcuts`            | `false` | Listen for arrow keys on the whole page instead of only when the player has focus.                                          |
 | `enableSwipe`                        | `true`  | Swipe between slides on touch screens (slideshow mode).                                                                     |
 | `isFullscreen`, `onFullscreenToggle` | —       | Full screen is yours to implement; the controls show a button, and `F` toggles it, only when you pass `onFullscreenToggle`. |

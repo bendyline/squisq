@@ -6,9 +6,12 @@ export { BlockRenderer } from './BlockRenderer.js';
 export { CaptionOverlay } from './CaptionOverlay.js';
 export { SocialCaptionOverlay } from './SocialCaptionOverlay.js';
 export { DocControlsOverlay } from './DocControlsOverlay.js';
+export type { PlaybackControlsProps } from './DocControlsOverlay.js';
+export { DocControlsCompact } from './DocControlsCompact.js';
 export { DocControlsBottom } from './DocControlsBottom.js';
 export { DocControlsSidebar } from './DocControlsSidebar.js';
 export { DocControlsSlideshow } from './DocControlsSlideshow.js';
+export type { SlideshowControlsProps, SlideshowPickerItem } from './DocControlsSlideshow.js';
 export { DocPlayerWithSidebar } from './DocPlayerWithSidebar.js';
 export { DocProgressBar } from './DocProgressBar.js';
 export { MarkdownRenderer } from './MarkdownRenderer.js';
@@ -27,7 +30,12 @@ export type { PaginatedDocPage, PaginatedDocViewProps } from './PaginatedDocView
 export { DashboardView } from './DashboardView.js';
 export type { DashboardViewProps } from './DashboardView.js';
 export { FlashcardFaceView, FlashcardView } from './FlashcardView.js';
-export type { FlashcardFaceViewProps, FlashcardViewProps } from './FlashcardView.js';
+export type {
+  FlashcardControls,
+  FlashcardFaceViewProps,
+  FlashcardRating,
+  FlashcardViewProps,
+} from './FlashcardView.js';
 export { PageSectionView } from './page/PageSectionView.js';
 export type { PageSectionViewProps } from './page/PageSectionView.js';
 export { CanvasSection } from './page/CanvasSection.js';

@@ -18,6 +18,7 @@ import {
   formatFrontmatterYaml,
   plainTextFromInlineHtml,
 } from '../markdown/index';
+import { softBreaksAsSpaces } from '../markdown/utils';
 import type {
   MarkdownDocument,
   MarkdownHeading,
@@ -723,6 +724,15 @@ describe('Tree utilities', () => {
       ],
     };
     expect(extractPlainText(list)).toBe('Apple\nBanana\nCherry');
+  });
+
+  // A wrapped source line is one sentence: a PPTX slide split it into two
+  // lines at every soft break.
+  it('softBreaksAsSpaces joins a wrapped line and leaves single lines alone', () => {
+    expect(softBreaksAsSpaces('where the oldest\n  known wild trees grow.')).toBe(
+      'where the oldest known wild trees grow.',
+    );
+    expect(softBreaksAsSpaces('one line')).toBe('one line');
   });
 
   it('countNodes counts all nodes', () => {

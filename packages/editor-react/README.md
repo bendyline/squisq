@@ -89,8 +89,8 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   synchronized audience window, or take over the entire screen. Slideshow/video
   playback, Page/Document scrolling, and the Narrate surface remain linked to
   the main view.
-- **Flashcards mode** — the Use menu can project the original nested block tree
-  as progressively revealed study cards and multiple-choice quizzes. Ordinary
+- **Flashcards mode** — the View menu's Use views can project the original nested
+  block tree as progressively revealed study cards and multiple-choice quizzes. Ordinary
   headings are inferred automatically; `{study=flashcard}` disambiguates a card
   boundary and `{study=multiple-choice-flashcard}` makes child one the question,
   child two the default correct answer, and remaining children distractors.
@@ -102,6 +102,13 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   swipe in from the right edge for the outline, or turn the swipe downward for
   previews; choosing a section closes it. Control it with `navigationSheet` /
   `onNavigationSheetChange` to close it from host input such as a Back button.
+- **View menu** — the toolbar shows only the active view, on one button (its
+  icon, its name, ▾), which opens a three-column menu: Navigation (the host's
+  own panes — pass `viewMenuNavigation`, an array of
+  `{ id, label, checked, onToggle }` rows — then the Outline, in screen order
+  left to right), every Edit and Use view, and the
+  editor's other panes, block-tag visibility, and spelling check. With
+  `showViewTabs={false}` it is an icon button listing only the panes.
 - **Code & image modes** — pass `fileName` / `language` to get a Monaco-only
   code editor, or `imageSrc` (+ `imageMode: 'edit'`) for the image surface.
   `.jsonc` files, `language="jsonc"`, and fenced `jsonc` snippets use JSON
@@ -117,7 +124,7 @@ and block-at-a-time / timeline editing primitives (`useBlockNavigator`,
   `thinMargins`, `minHeight`/`maxHeight` auto-grow for chat-composer use, plus
   host-controlled Write typography through `writeCanvasSettings` (`textSize`
   and `lineSpacing`). Set `hostMode="chat"` to keep the shell in Write view,
-  remove its view tabs, and hide Custom layouts, Transform, View options, and
+  remove its view button, and hide Custom layouts, Transform, the View menu, and
   Document settings. `showCodeCopyButton` opts Document/Page previews into a
   subtle fenced-code Copy control; use `onCopyCode` to bridge clipboard writes
   in Electron or native hosts (browser hosts fall back to

@@ -21,6 +21,13 @@ import {
 import { getThemeFont, shouldUseShadow, themedFontSize } from '../utils/themeUtils.js';
 import { createBackgroundLayer } from './captionUtils.js';
 
+/**
+ * Slide text reads a wrapped source line as one line: the text layer turns
+ * every newline into a line break, and a soft-wrapped bullet broke
+ * mid-sentence on a PPTX slide. Hard breaks stay line breaks.
+ */
+const SLIDE_TEXT = { softBreaks: 'space' } as const;
+
 function bodyNodes(context: TemplateContext): MarkdownBlockNode[] {
   if (context.block?.summaryMode === 'headings-and-features') return [];
   // A summary's tables and diagram fences are its features, drawn beside its
@@ -46,7 +53,7 @@ function listParagraphs(list: MarkdownList, level = 0): TextParagraph[] {
   return list.children.flatMap((item, index) => {
     const ownText = item.children
       .filter((node) => node.type !== 'list')
-      .map((node) => extractPlainText(node).trim())
+      .map((node) => extractPlainText(node, SLIDE_TEXT).trim())
       .filter(Boolean)
       .join(' ');
     const checked = typeof item.checked === 'boolean' ? { checked: item.checked } : {};
@@ -113,7 +120,7 @@ function completeBodyParagraphs(nodes: readonly MarkdownBlockNode[]): TextParagr
         ? listParagraphs(node)
         : node.type === 'table'
           ? [tableParagraph(node)]
-          : [{ text: extractPlainText(node) }];
+          : [{ text: extractPlainText(node, SLIDE_TEXT) }];
     if (index === 0) return own;
     const blankLines = markdownBlockSeparatorLines(nodes[index - 1], node) - 1;
     return [...Array.from({ length: blankLines }, () => ({ text: '' })), ...own];

@@ -9,6 +9,7 @@ import {
   useState,
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from 'react';
 import type {
   Block,
@@ -54,9 +55,56 @@ export interface FlashcardViewProps {
    */
   density?: 'comfortable' | 'compact';
   className?: string;
+  /**
+   * Draws the deck's controls — Shuffle, Restart, Previous, the position and
+   * progress, and the card's actions (Reveal, or Again and Next) — in place of
+   * the deck's own, typically portaled into the host's chrome, as the editor's
+   * status bar does. The card then takes the height the controls used. Called
+   * on every change while the deck has cards; the end-of-session summary keeps
+   * its Retry missed and Study again buttons, which are that screen's content.
+   */
+  renderControls?: (controls: FlashcardControls) => ReactNode;
 }
 
-type CardRating = 'again' | 'got-it';
+/** How a person rates a basic card once its answer shows. */
+export type FlashcardRating = 'again' | 'got-it';
+type CardRating = FlashcardRating;
+
+/** What a host's flashcard controls draw from (`FlashcardView`'s `renderControls`). */
+export interface FlashcardControls {
+  /** The card on screen, 0-based in this session; `cardCount` once finished. */
+  cardIndex: number;
+  /** Cards in this session — only the missed ones while retrying. */
+  cardCount: number;
+  /** The card's answer is showing. */
+  revealed: boolean;
+  /** Every card is done and the summary is showing. */
+  finished: boolean;
+  /** The card on screen's kind; undefined once finished. */
+  cardKind?: Flashcard['kind'];
+  /** The card on screen is the session's last. */
+  lastCard: boolean;
+  /** How far through the session, 0–1 (a revealed answer counts its card). */
+  progress: number;
+  /** The cards are shuffled. */
+  shuffled: boolean;
+  /** Cards rated "Again" so far. */
+  missedCount: number;
+  /** Previous has somewhere to go. */
+  canGoBack: boolean;
+  /** Hide the answer, or go back a card (from the summary, to the last card). */
+  previous: () => void;
+  /** Reveal the answer, or — once it shows — go on without rating the card. */
+  next: () => void;
+  /** Rate a basic card whose answer shows, and go on. */
+  rate: (rating: FlashcardRating) => void;
+  /** Shuffle the cards, or put them back in order, and start over. */
+  toggleShuffle: () => void;
+  /** Start the session over. */
+  restart: () => void;
+  /** Study only the cards rated "Again". */
+  retryMissed: () => void;
+}
 
 export interface FlashcardFaceViewProps {
   face: FlashcardFace;
@@ -269,8 +317,12 @@ export function FlashcardView({
   viewport = VIEWPORT_PRESETS.landscape,
   density = 'comfortable',
   className,
+  renderControls,
 }: FlashcardViewProps) {
   const compact = density === 'compact';
+  // The host draws the controls (the editor's status bar): no toolbar, no
+  // footer, no side rails.
+  const hostControls = !!renderControls;
   const rootClassName =
     'squisq-flashcards' +
     (compact ? ' squisq-flashcards--compact' : '') +
@@ -348,7 +400,7 @@ export function FlashcardView({
   // deck's own box, which is often a pane rather than the window. Compact
   // decks keep every control in their toolbar.
   useLayoutEffect(() => {
-    if (compact || !deckElement) return;
+    if (compact || hostControls || !deckElement) return;
     const measure = () => {
       const { width, height } = deckElement.getBoundingClientRect();
       setSideRails((current) => wantsSideRails(width, height, current));
@@ -358,7 +410,7 @@ export function FlashcardView({
     const observer = new ResizeObserver(measure);
     observer.observe(deckElement);
     return () => observer.disconnect();
-  }, [compact, deckElement]);
+  }, [compact, hostControls, deckElement]);
 
   const revealAnswer = useCallback(() => {
     if (!currentCard) return;
@@ -479,6 +531,35 @@ export function FlashcardView({
     .filter((card) => ratings[card.id] === 'again')
     .map((card) => card.id);
   const gotItCount = deck.cards.filter((card) => ratings[card.id] === 'got-it').length;
+  const lastCard = cardIndex === sessionCards.length - 1;
+  const toggleShuffle = () => {
+    setShuffleEnabled((enabled) => !enabled);
+    restart();
+  };
+  const retryMissed = () => {
+    setRetryIds(missedIds);
+    resetPosition();
+  };
+  const controls: FlashcardControls = {
+    cardIndex: Math.min(cardIndex, sessionCards.length),
+    cardCount: sessionCards.length,
+    revealed,
+    finished,
+    cardKind: currentCard?.kind,
+    lastCard,
+    progress: sessionCards.length
+      ? Math.min(1, (cardIndex + (revealed ? 1 : 0)) / sessionCards.length)
+      : 0,
+    shuffled: shuffleEnabled,
+    missedCount: missedIds.length,
+    canGoBack: cardIndex > 0 || revealed,
+    previous: previousCard,
+    next: nextCard,
+    rate,
+    toggleShuffle,
+    restart,
+    retryMissed,
+  };
 
   if (deck.cards.length === 0) {
     return (
@@ -528,10 +609,7 @@ export function FlashcardView({
               <button
                 type="button"
                 className="squisq-flashcards__button squisq-flashcards__button--primary"
-                onClick={() => {
-                  setRetryIds(missedIds);
-                  resetPosition();
-                }}
+                onClick={retryMissed}
               >
                 Retry missed
               </button>
@@ -539,11 +617,15 @@ export function FlashcardView({
             <button type="button" className="squisq-flashcards__button" onClick={restart}>
               Study again
             </button>
-            <button type="button" className="squisq-flashcards__button" onClick={previousCard}>
-              Previous card
-            </button>
+            {/* The host's controls carry Previous. */}
+            {!hostControls && (
+              <button type="button" className="squisq-flashcards__button" onClick={previousCard}>
+                Previous card
+              </button>
+            )}
           </div>
         </div>
+        {renderControls?.(controls)}
       </div>
     );
   }
@@ -553,9 +635,8 @@ export function FlashcardView({
     : [];
   const selectedChoice = choices.find((choice) => choice.id === selectedChoiceId);
   const position = `Card ${cardIndex + 1} of ${sessionCards.length}`;
-  const lastCard = cardIndex === sessionCards.length - 1;
   const nextLabel = revealed ? (lastCard ? 'Finish' : 'Next card') : 'Reveal';
-  const railsActive = sideRails && !compact;
+  const railsActive = sideRails && !compact && !hostControls;
 
   const tools = (
     <div className="squisq-flashcards__tools">
@@ -563,10 +644,7 @@ export function FlashcardView({
         type="button"
         className="squisq-flashcards__tool"
         aria-pressed={shuffleEnabled}
-        onClick={() => {
-          setShuffleEnabled((enabled) => !enabled);
-          restart();
-        }}
+        onClick={toggleShuffle}
       >
         Shuffle
       </button>
@@ -649,9 +727,11 @@ export function FlashcardView({
       <header className="squisq-flashcards__header">
         <div className="squisq-flashcards__deck-copy">
           {deck.title && <h1 title={compact ? deck.title : undefined}>{deck.title}</h1>}
-          {compact && <span className="squisq-flashcards__position">{position}</span>}
+          {compact && !hostControls && (
+            <span className="squisq-flashcards__position">{position}</span>
+          )}
         </div>
-        {compact ? (
+        {hostControls ? null : compact ? (
           <div className="squisq-flashcards__controls">
             {tools}
             <div className="squisq-flashcards__navigation">
@@ -664,7 +744,7 @@ export function FlashcardView({
         )}
       </header>
 
-      {compact && progressBar}
+      {compact && !hostControls && progressBar}
 
       <main
         ref={cardViewportRef}
@@ -752,7 +832,7 @@ export function FlashcardView({
           rather than spending a row above the card on them; a compact one
           shows them under the title. Side rails split these two groups to
           either side of the card. */}
-      {!compact && (
+      {!compact && !hostControls && (
         <footer className="squisq-flashcards__footer">
           <div className="squisq-flashcards__back">
             {previousButton}
@@ -764,6 +844,7 @@ export function FlashcardView({
           {primaryActions}
         </footer>
       )}
+      {renderControls?.(controls)}
     </div>
   );
 }

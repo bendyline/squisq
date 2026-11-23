@@ -1,5 +1,20 @@
 import type { LayoutMode } from './EditorContext';
-import type { ViewModeOption } from './toolbar/ViewModeMenu';
+
+/** One entry in the View menu's list of views. */
+export interface ViewModeOption<K extends string> {
+  key: K;
+  label: string;
+  /** Font Awesome class string or chrome glyph name (see `Icon`). */
+  icon: string;
+  /** One line saying what the mode is for. */
+  summary: string;
+  /**
+   * The editor view choosing this entry opens, written as `data-view` on the
+   * item as it is on the view tabs, so a host that follows view changes by
+   * their clicks sees the ones made from the menu too.
+   */
+  view?: string;
+}
 
 /** The Write tab's modes — the editor layouts — named as the tab shows them. */
 export const WRITE_MODE_OPTIONS: ViewModeOption<LayoutMode>[] = [
@@ -26,20 +41,20 @@ export const WRITE_MODE_OPTIONS: ViewModeOption<LayoutMode>[] = [
   },
   {
     key: 'summary',
-    label: 'Summarize',
+    label: 'Summaries',
     icon: 'fa-solid fa-wand-magic-sparkles',
     summary: 'Choose how slides summarize your text.',
     view: 'wysiwyg',
   },
 ];
 
-/** A Write menu entry: one of the layouts, or Source — the Markdown file itself. */
+/** An Edit entry in the View menu: one of the layouts, or Source — the Markdown file itself. */
 export type WriteMenuKey = LayoutMode | 'source';
 
 /**
  * Source is a view, not a layout: it always shows the whole file, whatever
- * layout Write is in. It sits in the same menu, right under Write, because it
- * is the other way to edit the document.
+ * layout Write is in. It is listed right under Write, because it is the other
+ * way to edit the document.
  */
 export const SOURCE_MENU_OPTION: ViewModeOption<'source'> = {
   key: 'source',
@@ -49,7 +64,7 @@ export const SOURCE_MENU_OPTION: ViewModeOption<'source'> = {
   view: 'raw',
 };
 
-/** The menu beside the editing tab: Write, Source, then the other layouts. */
+/** The View menu's Edit views: Write, Source, then the other layouts. */
 export const WRITE_MENU_OPTIONS: ViewModeOption<WriteMenuKey>[] = [
   WRITE_MODE_OPTIONS[0]!,
   SOURCE_MENU_OPTION,

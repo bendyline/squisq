@@ -373,12 +373,12 @@ describe('PreviewModeSwitch', () => {
 
     expect(labels).toEqual([
       'Slideshow',
-      'Flashcards',
       'Video',
       'Page',
-      'Dashboard',
       'Document',
+      'Dashboard',
       'Narrate',
+      'Flashcards',
     ]);
     expect(screen.getByTestId('active-mode').textContent).toBe('slideshow');
 
@@ -1057,36 +1057,25 @@ describe('PreviewToolbarControls', () => {
   });
 });
 
-describe('Use tab mode menu', () => {
-  it('lists the Use modes beside the tab and selects a mode without a toolbar radio group', () => {
+describe('Use modes in the View menu', () => {
+  it('lists the Use modes in the View menu and selects a mode without a toolbar radio group', () => {
     render(
       <EditorProvider initialMarkdown="# Hello" initialView="wysiwyg" allowRecording={false}>
         <UseTabHarness />
       </EditorProvider>,
     );
 
-    const useTab = screen.getByRole('tab', { name: 'Slideshow' });
-    expect(screen.queryByRole('tab', { name: 'Use' })).toBeNull();
-    const tabCluster = useTab.closest<HTMLElement>('.squisq-toolbar-view-tabs');
-    expect(tabCluster).not.toBeNull();
-    const trigger = within(tabCluster!).getByRole('button', { name: 'Choose Use mode' });
-    expect(trigger.closest('[role="tablist"]')).toBeNull();
-    expect(useTab.closest('[role="tablist"]')).not.toBeNull();
+    expect(screen.queryByRole('tab')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'View: Write' }));
 
-    // The first click enters Use; once active, clicking the tab again opens
-    // the mode menu.
-    fireEvent.click(useTab);
-    expect(screen.getByTestId('active-view').textContent).toBe('preview');
-    expect(screen.queryByRole('menu', { name: 'Use mode' })).toBeNull();
-
-    fireEvent.click(screen.getByRole('tab', { name: 'Slideshow' }));
-
-    const menu = screen.getByRole('menu', { name: 'Use mode' });
+    const menu = within(screen.getByRole('menu', { name: 'View' })).getByRole('group', {
+      name: 'Use',
+    });
     expect(
       within(menu)
         .getAllByRole('menuitemradio')
         .map((item) => item.querySelector('.squisq-view-mode-menu-label')?.textContent),
-    ).toEqual(['Slideshow', 'Flashcards', 'Video', 'Page', 'Dashboard', 'Document', 'Narrate']);
+    ).toEqual(['Slideshow', 'Video', 'Page', 'Document', 'Dashboard', 'Narrate', 'Flashcards']);
     const slideshowItem = within(menu).getByRole('menuitemradio', { name: 'Slideshow' });
     expect(slideshowItem.getAttribute('aria-checked')).toBe('true');
     expect(within(slideshowItem).getByText('Present designed slides one at a time.')).toBeTruthy();
@@ -1094,8 +1083,8 @@ describe('Use tab mode menu', () => {
     fireEvent.click(within(menu).getByRole('menuitemradio', { name: 'Document' }));
     expect(screen.getByTestId('active-mode').textContent).toBe('page');
     expect(screen.getByTestId('active-view').textContent).toBe('preview');
-    expect(screen.getByRole('tab', { name: 'Document' })).toBeTruthy();
-    expect(screen.queryByRole('menu', { name: 'Use mode' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'View: Document' })).toBeTruthy();
+    expect(screen.queryByRole('menu', { name: 'View' })).toBeNull();
   });
 });
 

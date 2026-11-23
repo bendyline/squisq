@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForAppReady } from './appReady';
-import { selectWriteMode, switchView } from './view-tabs';
+import { selectWriteMode, switchView, toggleViewPane } from './view-tabs';
 
 /**
  * E2E tests for the block-at-a-time view.
@@ -54,9 +54,7 @@ test.describe('Block-at-a-time view', () => {
   test('the outline jumps the card to the clicked block', async ({ page }) => {
     await loadFeaturesSample(page);
     // Turn on the outline, then enter block mode.
-    await page.getByRole('button', { name: 'View options' }).click();
-    await page.getByRole('menuitemcheckbox', { name: 'Show outline' }).click();
-    await page.keyboard.press('Escape');
+    await toggleViewPane(page, 'Outline');
     await selectWriteMode(page, 'Blocks');
     await page.locator('[data-testid="block-card-view"]').waitFor({ state: 'visible' });
 

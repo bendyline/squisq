@@ -2,7 +2,7 @@
  * BlockPreviewPanel
  *
  * A large, live preview of the active block, shown to the right of the
- * block-at-a-time / timeline editing card when "Show block previews" is on.
+ * block-at-a-time / timeline editing card when the "Block previews" pane is on.
  * In document mode that toggle drives the {@link InlinePreviewGutter} (a
  * column of small cards aligned to headings); in card mode there's only one
  * block in view, so a single full-size preview reads better than a gutter.

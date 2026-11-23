@@ -15,9 +15,15 @@
  *
  * Glyphs come from the chrome icon set (Icon.tsx), never emoji or Unicode
  * arrows, so the rail matches the editor toolbar on every platform.
+ *
+ * The Narrate display mode moves the toolbar row into the editor's status
+ * bar (`barTarget`); the settings areas stay under the surface. Wherever it
+ * renders, the row is the same markup — `.squisq-teleprompter-statusbar`
+ * wraps it in the bar so the prompter's scoped rules still reach it.
  */
 
 import { useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from '../Icon';
 import { useEditorContextOptional } from '../EditorContext';
 import type { TeleprompterController } from './useTeleprompter';
@@ -61,6 +67,12 @@ export interface TeleprompterControlsProps {
    * through its Record button — pass false; Restart and Countdown stay.
    */
   showPlayPause?: boolean;
+  /**
+   * Renders the toolbar row (Start/Pause, Restart, Countdown, the record slot,
+   * Pop out) into this element — the editor's status bar — instead of atop the
+   * rail. Null or omitted keeps it in the rail.
+   */
+  barTarget?: HTMLElement | null;
 }
 
 export function TeleprompterControls({
@@ -68,6 +80,7 @@ export function TeleprompterControls({
   float,
   recordSlot,
   showPlayPause = true,
+  barTarget = null,
 }: TeleprompterControlsProps) {
   const { transport, prefs, setPrefs, mic } = controller;
   const rolling = transport === 'rolling' || transport === 'countdown';
@@ -101,6 +114,101 @@ export function TeleprompterControls({
     if (!next && mic.status !== 'idle') mic.stop();
   };
 
+  const bar = (
+    <div className="squisq-teleprompter-bar">
+      {/* Not role="toolbar": that promises arrow-key focus movement, and
+          Narrate's arrows nudge the script from anywhere on the page. */}
+      <div className="squisq-teleprompter-seg" role="group" aria-label="Playback">
+        {showPlayPause ? (
+          <button
+            type="button"
+            className="squisq-teleprompter-tool squisq-teleprompter-tool--play"
+            onClick={() => (rolling ? controller.pause() : controller.play())}
+            aria-label={`${playLabel} prompter`}
+            data-rolling={rolling || undefined}
+          >
+            <Icon icon={rolling ? 'fa-solid fa-pause' : 'fa-solid fa-play'} />
+            <span className="squisq-teleprompter-tool-label">{playLabel}</span>
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="squisq-teleprompter-tool squisq-teleprompter-tool--restart"
+          onClick={controller.restart}
+          aria-label="Restart prompter"
+          title="Back to the top"
+        >
+          <Icon icon="fa-solid fa-rotate-left" />
+          <span className="squisq-teleprompter-tool-label">Restart</span>
+        </button>
+      </div>
+
+      <div
+        className="squisq-teleprompter-countdown-field"
+        title="Seconds to count down before the prompter starts rolling"
+      >
+        <Icon icon="fa-solid fa-stopwatch" />
+        <label htmlFor="squisq-prompter-countdown" className="squisq-teleprompter-bar-label">
+          Countdown
+        </label>
+        <select
+          id="squisq-prompter-countdown"
+          value={prefs.countdownSec}
+          onChange={(e) => setPrefs({ countdownSec: Number(e.target.value) as 0 | 3 | 5 | 10 })}
+        >
+          <option value={0}>Off</option>
+          <option value={3}>3s</option>
+          <option value={5}>5s</option>
+          <option value={10}>10s</option>
+        </select>
+      </div>
+
+      {recordSlot}
+
+      {float.isOpen || popOutTiers.length > 0 ? (
+        <div className="squisq-teleprompter-float">
+          {float.isOpen ? (
+            <button type="button" className="squisq-teleprompter-tool" onClick={float.close}>
+              <Icon icon="fa-solid fa-compress" />
+              <span className="squisq-teleprompter-tool-label">Bring back</span>
+            </button>
+          ) : (
+            <div className="squisq-teleprompter-split">
+              <button
+                type="button"
+                className="squisq-teleprompter-tool"
+                onClick={() => void float.open(floatTier)}
+                title={`Pop the prompter out so it can sit next to your camera — ${
+                  floatTier ? TIER_LABELS[floatTier] : ''
+                }`}
+              >
+                <Icon icon="picture-in-picture" />
+                <span className="squisq-teleprompter-tool-label">Pop out</span>
+              </button>
+              {popOutTiers.length > 1 ? (
+                <span className="squisq-teleprompter-split-menu">
+                  <Icon icon="fa-solid fa-chevron-down" />
+                  <select
+                    aria-label="Pop-out window type"
+                    data-testid="teleprompter-float-tier"
+                    value={floatTier}
+                    onChange={(e) => setChosenTier(e.target.value as FloatTier)}
+                  >
+                    {popOutTiers.map((tier) => (
+                      <option key={tier} value={tier}>
+                        {TIER_LABELS[tier]}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     <div
       className="squisq-teleprompter-controls"
@@ -109,98 +217,14 @@ export function TeleprompterControls({
       data-transport={transport}
       data-voice-live={voiceLive || undefined}
     >
-      <div className="squisq-teleprompter-bar">
-        {/* Not role="toolbar": that promises arrow-key focus movement, and
-            Narrate's arrows nudge the script from anywhere on the page. */}
-        <div className="squisq-teleprompter-seg" role="group" aria-label="Playback">
-          {showPlayPause ? (
-            <button
-              type="button"
-              className="squisq-teleprompter-tool squisq-teleprompter-tool--play"
-              onClick={() => (rolling ? controller.pause() : controller.play())}
-              aria-label={`${playLabel} prompter`}
-              data-rolling={rolling || undefined}
-            >
-              <Icon icon={rolling ? 'fa-solid fa-pause' : 'fa-solid fa-play'} />
-              <span className="squisq-teleprompter-tool-label">{playLabel}</span>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="squisq-teleprompter-tool squisq-teleprompter-tool--restart"
-            onClick={controller.restart}
-            aria-label="Restart prompter"
-            title="Back to the top"
-          >
-            <Icon icon="fa-solid fa-rotate-left" />
-            <span className="squisq-teleprompter-tool-label">Restart</span>
-          </button>
-        </div>
-
-        <div
-          className="squisq-teleprompter-countdown-field"
-          title="Seconds to count down before the prompter starts rolling"
-        >
-          <Icon icon="fa-solid fa-stopwatch" />
-          <label htmlFor="squisq-prompter-countdown" className="squisq-teleprompter-bar-label">
-            Countdown
-          </label>
-          <select
-            id="squisq-prompter-countdown"
-            value={prefs.countdownSec}
-            onChange={(e) => setPrefs({ countdownSec: Number(e.target.value) as 0 | 3 | 5 | 10 })}
-          >
-            <option value={0}>Off</option>
-            <option value={3}>3s</option>
-            <option value={5}>5s</option>
-            <option value={10}>10s</option>
-          </select>
-        </div>
-
-        {recordSlot}
-
-        {float.isOpen || popOutTiers.length > 0 ? (
-          <div className="squisq-teleprompter-float">
-            {float.isOpen ? (
-              <button type="button" className="squisq-teleprompter-tool" onClick={float.close}>
-                <Icon icon="fa-solid fa-compress" />
-                <span className="squisq-teleprompter-tool-label">Bring back</span>
-              </button>
-            ) : (
-              <div className="squisq-teleprompter-split">
-                <button
-                  type="button"
-                  className="squisq-teleprompter-tool"
-                  onClick={() => void float.open(floatTier)}
-                  title={`Pop the prompter out so it can sit next to your camera — ${
-                    floatTier ? TIER_LABELS[floatTier] : ''
-                  }`}
-                >
-                  <Icon icon="picture-in-picture" />
-                  <span className="squisq-teleprompter-tool-label">Pop out</span>
-                </button>
-                {popOutTiers.length > 1 ? (
-                  <span className="squisq-teleprompter-split-menu">
-                    <Icon icon="fa-solid fa-chevron-down" />
-                    <select
-                      aria-label="Pop-out window type"
-                      data-testid="teleprompter-float-tier"
-                      value={floatTier}
-                      onChange={(e) => setChosenTier(e.target.value as FloatTier)}
-                    >
-                      {popOutTiers.map((tier) => (
-                        <option key={tier} value={tier}>
-                          {TIER_LABELS[tier]}
-                        </option>
-                      ))}
-                    </select>
-                  </span>
-                ) : null}
-              </div>
-            )}
-          </div>
-        ) : null}
-      </div>
+      {barTarget
+        ? createPortal(
+            <div className="squisq-teleprompter-statusbar" data-transport={transport}>
+              {bar}
+            </div>,
+            barTarget,
+          )
+        : bar}
 
       {/* Narrow rails only (see the container query); wide rails show every area. */}
       <div className="squisq-teleprompter-tabs" role="group" aria-label="Prompter settings">

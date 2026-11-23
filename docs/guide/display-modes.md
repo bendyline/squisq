@@ -98,14 +98,14 @@ title: Harbor Survey 2026
 | [Slideshow](#slideshow)   | Presenting designed slides one at a time                        | `slideshow`, `slides`, `presentation`, `deck`   |
 | [Video](#video)           | A presentation that plays itself, timed to narration or reading | `video`                                         |
 | [Page](#page)             | A designed, scrolling web page                                  | `page`, `paged`, `linear`                       |
-| [Dashboard](#dashboard)   | Every block arranged on one canvas                              | `dashboard`, `dash`                             |
-| [Flashcards](#flashcards) | Studying with reveal cards and quizzes                          | `flashcards`, `flashcard`, `study`, `quiz`      |
 | [Document](#document)     | Reading a clean, text-first version                             | `document`, `scroll`, `html`, `plain`, `reader` |
+| [Dashboard](#dashboard)   | Every block arranged on one canvas                              | `dashboard`, `dash`                             |
 | [Narrate](#narrate)       | Reading the document aloud from a voice-paced teleprompter      | `narrate`, `teleprompter`, `prompter`           |
+| [Flashcards](#flashcards) | Studying with reveal cards and quizzes                          | `flashcards`, `flashcard`, `study`, `quiz`      |
 
-**In the editor**, open the **Use** view and pick a mode from the menu beside its tab. The tab
-takes the name of the mode you are in (**Slideshow**, **Page**, …), and choosing a mode from the
-menu also switches to the Use view, so it works from Write and Source too. The mode you pick
+**In the editor**, pick a mode under **Use** in the View menu — the button at the top left,
+named after the view you are in (**Slideshow**, **Page**, …). Choosing a mode also switches to
+the Use view, so it works from Write and Source too. The mode you pick
 lasts for the session; it does not change the document.
 
 **In the document**, set the mode it opens in with the `display-mode` frontmatter key:
@@ -147,7 +147,7 @@ Settings in the toolbar:
 - **Block** — the block type of the slide you are looking at. Choose another from the gallery and
   the slide is redrawn in place; the choice is written to that heading as its
   [tag](tags.md), exactly as if you had picked it in Write. Slides that are not one of your
-  headings — the cover, a slide added for a spare picture, a Summarize deck — show their type
+  headings — the cover, a slide added for a spare picture, a summary deck — show their type
   greyed out.
 - **Theme** — see [Themes](themes.md).
 - **Cover** — the title slide generated from the document's opening: whether it appears
@@ -157,7 +157,7 @@ Settings in the toolbar:
 
 To re-cut the document into a presentation in a style such as Documentary, Magazine,
 Data-Driven, or Minimal — or **Custom**, whose slides you adjust one by one — open
-[Write › Summarize](editor.md#the-write-menu-write-source-blocks-timeline-summarize). Your source
+[Edit › Summaries](editor.md#edit-views-write-source-blocks-timeline-summaries). Your source
 does not change; the style is saved as `squisq-transform`.
 
 The slideshow is also what a PowerPoint export and an HTML slideshow export contain, one slide per

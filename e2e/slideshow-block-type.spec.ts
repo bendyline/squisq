@@ -96,7 +96,7 @@ test.describe('Slideshow block-type picker', () => {
     await page.getByTestId('slide-next').click();
     await expect(counter(page)).toHaveText(/^1 \/ \d+$/);
     await expect(blockType(page)).toBeDisabled();
-    await expect(blockType(page)).toHaveAttribute('title', /choose None in Write › Summarize/);
+    await expect(blockType(page)).toHaveAttribute('title', /choose None in Edit › Summaries/);
   });
 
   test('is not offered outside Slideshow', async ({ page }) => {

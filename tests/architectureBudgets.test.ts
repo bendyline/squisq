@@ -40,6 +40,7 @@ describe('large-module architecture budgets', () => {
     expect(lineCount('packages/editor-react/src/toolbar/sceneBlockInserts.ts')).toBeGreaterThan(
       100,
     );
+    expect(lineCount('packages/editor-react/src/toolbar/sourceActions.ts')).toBeGreaterThan(200);
     expect(lineCount('packages/react/src/DocPlayerProps.ts')).toBeGreaterThan(40);
     expect(lineCount('packages/editor-react/src/styles/toolbar.css')).toBeGreaterThan(500);
   });

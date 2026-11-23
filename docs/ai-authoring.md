@@ -140,8 +140,8 @@ The pieces it runs are exported too, for a host that needs a different loop:
 A plan's beat can carry what a layout draws beyond its points: `center` on a hub, `xAxis` and
 `yAxis` on a matrix (`presentationBeatExtras`). They are saved only on the layout that draws them.
 
-In the editor, that loop is what **Suggest with AI** runs in the Custom summary designer (Write ›
-Summarize, Custom). The designer is built in; a host lends it the calls through `EditorShell`'s
+In the editor, that loop is what **Suggest with AI** runs in the Custom summary designer (Edit ›
+Summaries, Custom). The designer is built in; a host lends it the calls through `EditorShell`'s
 `summarizationAssistant`:
 
 ```ts

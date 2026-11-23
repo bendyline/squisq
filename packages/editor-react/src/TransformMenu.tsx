@@ -75,7 +75,7 @@ export function TransformMenu() {
 
   useEscapeDismissal(open, close, triggerRef);
 
-  // Click-outside to close, mirroring ViewMenuPanel/VersionHistoryPanel.
+  // Click-outside to close, mirroring VersionHistoryPanel.
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {

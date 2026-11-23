@@ -25,7 +25,12 @@ import { isUntouchedScenePlaceholder } from './scenePlaceholders.js';
 import { hasTemplate } from './templates/index.js';
 import { isContainerTemplate } from './templates/templateNames.js';
 import { KNOWN_BLOCK_META_KEYS } from '../markdown/annotationCoercion.js';
-import { extractPlainText, getChildren, isHtmlLineBreak } from '../markdown/utils.js';
+import {
+  extractPlainText,
+  getChildren,
+  isHtmlLineBreak,
+  softBreaksAsSpaces,
+} from '../markdown/utils.js';
 import { iconMarker } from '../icons/inlineIconMarker.js';
 import type { IconFamily } from '../icons/index.js';
 import type { Block, Doc } from '../schemas/Doc.js';
@@ -44,6 +49,7 @@ function extractRichText(node: MarkdownNode): string {
     const icon = node as unknown as { family: IconFamily; name: string };
     return iconMarker(icon.family, icon.name);
   }
+  if (node.type === 'text') return softBreaksAsSpaces(node.value);
   if ('value' in node && typeof (node as { value?: unknown }).value === 'string') {
     return (node as { value: string }).value;
   }

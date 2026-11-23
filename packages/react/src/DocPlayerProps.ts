@@ -6,6 +6,9 @@ import type { FenceRendererMap } from '@bendyline/squisq/fence';
 import type { AudioController } from './hooks/AudioController';
 import type { CodeBlockCopyHandler } from './MarkdownRenderer';
 import type { TableLayerContentRenderer } from './layers/TableLayer';
+import type { ReactNode } from 'react';
+import type { SlideshowControlsProps } from './DocControlsSlideshow';
+import type { PlaybackControlsProps } from './DocControlsOverlay';
 import type {
   BlockMarker,
   CaptionPosition,
@@ -126,4 +129,22 @@ export interface DocPlayerProps {
   fenceRenderers?: FenceRendererMap;
   /** Optional host renderer for interactive table-layer content. */
   tableContentRenderer?: TableLayerContentRenderer;
+  /**
+   * Slideshow mode: draws the slide navigation (previous / counter / next,
+   * the slide picker, build steps) in place of the player's own overlay
+   * pill — typically portaled into the host's chrome, as the editor's status
+   * bar does. Called on every playback change with the same state and
+   * actions the pill gets; return null to show no controls. Ignored outside
+   * slideshow mode, in render mode, and when `showControls` is false.
+   */
+  renderSlideshowControls?: (controls: SlideshowControlsProps) => ReactNode;
+  /**
+   * Video mode: draws the playback controls (play/pause, restart, time, the
+   * timeline, captions) in place of the overlay over the video — typically
+   * DocControlsCompact portaled into the host's chrome, as the editor's status
+   * bar does. Called on every playback change with the state and actions the
+   * overlay gets; return null to show no controls. Ignored in slideshow mode,
+   * in render mode, and when `showControls` is false.
+   */
+  renderPlaybackControls?: (controls: PlaybackControlsProps) => ReactNode;
 }

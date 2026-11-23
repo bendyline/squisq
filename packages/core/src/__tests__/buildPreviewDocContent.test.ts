@@ -76,6 +76,28 @@ Implication: A massive industry wide change management process is happening`);
     );
   });
 
+  // A model writes deck markdown wrapped at about 80 columns. Each soft break
+  // became a line break on the PPTX slide, so a bullet broke mid-sentence.
+  it('reads a soft-wrapped bullet as one line and keeps a hard break', () => {
+    const slide = firstPreviewSlide(`# Origins in China
+
+- Tea's native region is southwest China, where the oldest
+  known wild trees grow.
+- The Tang dynasty is when tea drinking became established and
+  cultivated.
+
+Line one\\
+after a hard break`);
+
+    const { layers } = materializeBlockLayers(slide as unknown as DocBlock);
+    const body = layers.find(
+      (layer): layer is TextLayer => layer.type === 'text' && layer.id === 'body',
+    );
+    expect(body?.content.text).toContain('where the oldest known wild trees grow.');
+    expect(body?.content.text).toContain('became established and cultivated.');
+    expect(body?.content.text).toContain('Line one\nafter a hard break');
+  });
+
   it('keeps a table in the rich content layer when prose shares its slide', () => {
     const slide = firstPreviewSlide(`## Results
 

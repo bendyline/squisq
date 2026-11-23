@@ -113,6 +113,7 @@ import { TrailingParagraphExtension, withoutTrailingParagraph } from './trailing
 import { FootnoteSyntaxExtension } from './footnotes/FootnoteSyntaxExtension';
 import { syncAccessoryFileLinkPlaceholders } from './accessoryFileLinks';
 import { replaceDocumentMinimal } from './wysiwygMinimalSync';
+import { resetUndoHistory } from './tiptap/undoHistory';
 
 type MediaMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
 
@@ -261,6 +262,7 @@ export function WysiwygEditor({
     layoutMode: selectedLayout,
     activeBlockKey,
     activeBlockStartLine,
+    blockCount,
     markdownSource,
     linkSchemes,
   } = useEditorContext();
@@ -360,6 +362,15 @@ export function WysiwygEditor({
   const lastSourceRef = useRef(editorSource);
   const serializeHtml = useMemo(createDocumentHtmlSerializer, []);
   const sourceLayoutRef = useRef(layoutMode);
+  // What the editor's text is: the whole document, or one block's slice. Undo
+  // history is only meaningful for the text it was recorded on, and undoing a
+  // step recorded on other text writes that text over this one — after moving
+  // from block 1 to block 2, ⌘Z put block 1's text in block 2's place. A merge
+  // or split keeps the index but slides another block under it, so the block
+  // count is part of the binding. An empty document shows as one block.
+  const binding =
+    layoutMode === 'document' ? 'document' : `${activeBlockKey}/${Math.max(blockCount, 1)}`;
+  const boundRef = useRef(binding);
   // React may commit several rapid editor updates one at a time. Remember
   // every locally emitted value so an intermediate commit is not mistaken
   // for an external replacement and fed back through setContent(), which
@@ -948,6 +959,14 @@ export function WysiwygEditor({
     const previousLayout = sourceLayoutRef.current;
     const layoutChanged = previousLayout !== layoutMode;
     sourceLayoutRef.current = layoutMode;
+    // Rebound (see `binding`): start a fresh history once the new text is in
+    // place. The load is a step of its own, so this runs after it, never
+    // before. When the text is unchanged nothing loads, and it runs at once.
+    const startHistoryIfRebound = () => {
+      if (boundRef.current === binding || editor.isDestroyed) return;
+      boundRef.current = binding;
+      resetUndoHistory(editor.view);
+    };
     const pendingIndex = pendingLocalSourcesRef.current.lastIndexOf(editorSource);
     if (pendingIndex >= 0) {
       // This state value came from Tiptap itself. Drop it and every older
@@ -957,9 +976,13 @@ export function WysiwygEditor({
       if (pendingLocalSourcesRef.current.length === 0) {
         lastSourceRef.current = editorSource;
       }
+      startHistoryIfRebound();
       return;
     }
-    if (editorSource === lastSourceRef.current) return;
+    if (editorSource === lastSourceRef.current) {
+      startHistoryIfRebound();
+      return;
+    }
     // In block/timeline mode `setEditorSource` normalizes the slice's trailing
     // whitespace (a `\n\n` before the next block) before splicing, so the
     // re-extracted `editorSource` differs from what we just emitted by trailing
@@ -967,6 +990,7 @@ export function WysiwygEditor({
     // end on every keystroke — so only reload when the body actually changed.
     if (editorSource.replace(/\s+$/, '') === lastSourceRef.current.replace(/\s+$/, '')) {
       lastSourceRef.current = editorSource;
+      startHistoryIfRebound();
       return;
     }
     // Apply outside React's commit. Content that creates a React node view
@@ -1045,6 +1069,7 @@ export function WysiwygEditor({
       } finally {
         isExternalUpdate.current = false;
       }
+      startHistoryIfRebound();
     };
 
     // Apply outside React's commit. Content that creates a React node view
@@ -1068,7 +1093,7 @@ export function WysiwygEditor({
       externalApplyPendingRef.current = false;
       sourceLayoutRef.current = previousLayout;
     };
-  }, [editorSource, editor, wrapPolicyEnabled, layoutMode]);
+  }, [editorSource, editor, wrapPolicyEnabled, layoutMode, binding]);
 
   // Match the WYSIWYG editor's appearance to the active Squisq theme when one
   // is set in frontmatter or picked in the preview dropdown. The block-props
