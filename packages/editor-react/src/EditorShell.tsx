@@ -24,7 +24,6 @@ import {
   type MediaEditSaveOutput,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
-import { DocumentActionsGroup } from './toolbar/DocumentActions';
 import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
@@ -57,10 +56,9 @@ import { collectEmbeddedVideoSchedule } from './embeddedMedia';
 import { PreviewPanel } from './PreviewPanel';
 import { SummarizeView } from './summarize/SummarizeView';
 import type { SummarizationAssistant } from './summarize/summarizationAssistant';
-import { ImageViewer } from './ImageViewer';
-import { ImageEditor } from './ImageEditor';
 import { ImageEditModal } from './imageEditor/ImageEditModal';
-import { ImageFileEditor, type ImageWriteBackContext } from './imageEditor/ImageFileEditor';
+import type { ImageWriteBack } from './imageEditor/ImageFileEditor';
+import { ImageModeHeader, ImageModeSurface } from './imageEditor/ImageModeSurface';
 import {
   PreviewSettingsProvider,
   PreviewToolbarControls,
@@ -105,12 +103,7 @@ import {
   type MediaInsertionTarget,
 } from './mediaInsertion';
 import type { MediaProvider, Theme, ViewportPreset } from '@bendyline/squisq/schemas';
-import {
-  DARK_SURFACE,
-  LIGHT_SURFACE,
-  getDocPlaybackDuration,
-  resolveMediaSchedule,
-} from '@bendyline/squisq/schemas';
+import { getDocPlaybackDuration, resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import {
   MemoryContentContainer,
@@ -711,11 +704,7 @@ export interface EditorShellProps {
    * as a failed save; on `reason: 'leave'` no editor is left to show it, so
    * report that failure from here.
    */
-  onImageWriteBack?: (
-    blob: Blob,
-    format: 'png' | 'jpeg' | 'webp',
-    context: ImageWriteBackContext,
-  ) => Promise<void>;
+  onImageWriteBack?: ImageWriteBack;
   /**
    * Show an inline preview gutter to the right of the WYSIWYG editor.
    * The gutter renders one small SVG card per block, including blocks without
@@ -979,6 +968,22 @@ export function EditorShell({
   const effectiveInitialView: EditorView =
     hostMode === 'chat' || (!showPlayTab && initialView === 'preview') ? 'wysiwyg' : initialView;
 
+  // Built here so the image props need not thread through EditorShellInner.
+  const imageSurface = imageSrc ? (
+    <ImageModeSurface
+      src={imageSrc}
+      alt={imageAlt}
+      mode={imageMode}
+      container={imageEditorContainer}
+      fileName={fileName}
+      onExport={onImageExport}
+      onWriteBack={onImageWriteBack}
+      allowVersioning={allowVersioning}
+      versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+      colorScheme={colorScheme}
+    />
+  ) : null;
+
   return (
     <MediaContext.Provider value={effectiveMediaProvider ?? null}>
       <EditorProvider
@@ -1087,13 +1092,7 @@ export function EditorShell({
                 writeCanvasSettings={writeCanvasSettings}
                 readOnly={readOnly}
                 findShortcut={findShortcut}
-                imageSrc={imageSrc}
-                imageAlt={imageAlt}
-                imageMode={imageMode}
-                imageEditorContainer={imageEditorContainer}
-                onImageExport={onImageExport}
-                onImageWriteBack={onImageWriteBack}
-                imageFileName={fileName}
+                imageSurface={imageSurface}
                 allowVersioning={allowVersioning}
                 versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
                 inlinePreviewWidth={inlinePreviewWidth}
@@ -1166,17 +1165,8 @@ interface EditorShellInnerProps {
   writeCanvasSettings?: WriteCanvasSettings;
   readOnly: boolean;
   findShortcut: boolean;
-  imageSrc?: string;
-  imageAlt?: string;
-  imageMode: 'view' | 'edit';
-  imageEditorContainer?: ContentContainer;
-  onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
-  onImageWriteBack?: (
-    blob: Blob,
-    format: 'png' | 'jpeg' | 'webp',
-    context: ImageWriteBackContext,
-  ) => Promise<void>;
-  imageFileName?: string;
+  /** The image file's viewer or editor, shown in image mode. */
+  imageSurface: ReactNode;
   allowVersioning: boolean;
   versioningAutoSaveIdleMs?: number;
   inlinePreviewWidth: number;
@@ -1269,13 +1259,7 @@ function EditorShellInner({
   writeCanvasSettings,
   readOnly,
   findShortcut,
-  imageSrc,
-  imageAlt,
-  imageMode,
-  imageEditorContainer,
-  onImageExport,
-  onImageWriteBack,
-  imageFileName,
+  imageSurface,
   allowVersioning,
   versioningAutoSaveIdleMs,
   inlinePreviewWidth,
@@ -1651,27 +1635,15 @@ function EditorShellInner({
 
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;
 
-  // In image mode the full markdown/code Toolbar is replaced with a minimal
-  // slot bar: view tabs, formatting, and preview controls don't apply to a
-  // binary asset.
+  // In image mode the full markdown/code Toolbar gives way to the host's slots.
   const header = isImageMode ? (
-    (toolbarSlotLeft ||
-      toolbarSlotQuickTools ||
-      toolbarSlotDocumentActions ||
-      toolbarSlotRight) && (
-      <div className="squisq-editor-header squisq-editor-header--image">
-        {toolbarSlotLeft}
-        <div style={{ flex: 1 }} />
-        {toolbarSlotQuickTools}
-        {/* Nothing here measures the row, so the actions never fold. */}
-        {toolbarSlotDocumentActions && (
-          <DocumentActionsGroup folded={false} colorScheme={colorScheme}>
-            {toolbarSlotDocumentActions}
-          </DocumentActionsGroup>
-        )}
-        {toolbarSlotRight}
-      </div>
-    )
+    <ImageModeHeader
+      left={toolbarSlotLeft}
+      quickTools={toolbarSlotQuickTools}
+      documentActions={toolbarSlotDocumentActions}
+      right={toolbarSlotRight}
+      colorScheme={colorScheme}
+    />
   ) : (
     <div className="squisq-editor-header">
       <Toolbar
@@ -1776,31 +1748,7 @@ function EditorShellInner({
                   position: 'relative',
                 }}
               >
-                {isImageMode &&
-                  imageSrc &&
-                  (imageMode === 'edit' && imageEditorContainer && onImageWriteBack ? (
-                    <ImageFileEditor
-                      container={imageEditorContainer}
-                      src={imageSrc}
-                      fileName={imageFileName ?? ''}
-                      onWriteBack={onImageWriteBack}
-                      allowVersioning={allowVersioning}
-                      versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-                      surface={colorScheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}
-                      fallback={<ImageViewer src={imageSrc} alt={imageAlt} theme={colorScheme} />}
-                    />
-                  ) : imageMode === 'edit' && imageEditorContainer ? (
-                    <ImageEditor
-                      filesContainer={imageEditorContainer}
-                      initialSrc={imageSrc}
-                      allowVersioning={allowVersioning}
-                      versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-                      onExport={onImageExport}
-                      surface={colorScheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}
-                    />
-                  ) : (
-                    <ImageViewer src={imageSrc} alt={imageAlt} theme={colorScheme} />
-                  ))}
+                {isImageMode && imageSurface}
                 {/* Raw (Monaco) view. Always wrapped in `.squisq-editor-with-gutter`
                 so toggling a pane on/off doesn't change the editor's tree
                 position — Monaco stays mounted and `monacoEditor` in

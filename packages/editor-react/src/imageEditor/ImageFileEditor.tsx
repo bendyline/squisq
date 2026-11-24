@@ -59,11 +59,7 @@ export interface ImageFileEditorProps {
    * picture lacks. Nothing is on screen to show a failure then, so report a
    * `'leave'` failure from here.
    */
-  onWriteBack: (
-    blob: Blob,
-    format: ImageEditExportFormat,
-    context: ImageWriteBackContext,
-  ) => Promise<void>;
+  onWriteBack: ImageWriteBack;
   /** Version-history snapshots in the sidecar's `.versions/`. Default: `false`. */
   allowVersioning?: boolean;
   /** Auto-save idle delay (ms) for version snapshots. */
@@ -78,6 +74,13 @@ export interface ImageFileEditorProps {
 export interface ImageWriteBackContext {
   reason: 'save' | 'leave';
 }
+
+/** Writes the flattened picture over the image file, in `format`. */
+export type ImageWriteBack = (
+  blob: Blob,
+  format: ImageEditExportFormat,
+  context: ImageWriteBackContext,
+) => Promise<void>;
 
 export function ImageFileEditor(props: ImageFileEditorProps) {
   return (
