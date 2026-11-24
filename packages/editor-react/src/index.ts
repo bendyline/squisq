@@ -856,6 +856,10 @@ export type {
 // Pairs with `ImageViewer` and the `<basename>_files/` sidecar convention.
 export { ImageEditor } from './ImageEditor.js';
 export type { ImageEditorProps } from './ImageEditor.js';
+// Outside-in editing of an image file: layers in its sidecar, Save and
+// leaving write the flattened picture back over the file.
+export { ImageFileEditor } from './imageEditor/ImageFileEditor.js';
+export type { ImageFileEditorProps, ImageWriteBackContext } from './imageEditor/ImageFileEditor.js';
 export { useImageEditor } from './imageEditor/useImageEditor.js';
 export type { UseImageEditorOptions, UseImageEditorReturn } from './imageEditor/useImageEditor.js';
 export { imageEditorReducer, initialImageEditorState } from './imageEditor/state.js';

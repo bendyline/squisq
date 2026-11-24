@@ -92,15 +92,14 @@ you were on, and switching back opens Write on the block holding the Source curs
   scrub, and use **Play**, **Zoom in**, and **Zoom out**. Each block's **⋯** menu sets its
   duration, start time, and transition, or turns on **Autotime block**. The toolbar above the
   track shows or hides the **Video monitor** and **Video composition** panes.
-- **Summaries** — how the slideshow and video summarize your text. Choose a style:
+- **Summaries** — how the slideshow and video summarize your text. Choose a style from the
+  **Summary style** dropdown, which says what each one does:
   - **None** — each section is one slide, as you wrote it. The default.
-  - **Documentary**, **Magazine**, **Data-Driven**, **Narrative**, **Minimal**, or **Headings and
-    features** — the document re-cut into a presentation in that style. Below the choice are the
-    slides it makes.
   - **Custom** — concise slides and diagrams generated from your text, which you adjust slide by
     slide in the designer below the choice. Set the **Summary density** and whether to **Add
-    supporting visual slides**, then pick a slide from the list (in a narrow window, from the
-    **Slide** menu with **Previous** and **Next**, or with ← and →). For the slide you picked, you
+    supporting visual slides**, then pick a slide from the list, where each section of your
+    document sits beside the slides made from it (in a narrow window, from the **Slide** menu
+    with **Previous** and **Next**, or with ← and →). For the slide you picked, you
     can hide it, choose its section's **Layout preference** — including **As authored**, which
     shows the section as you wrote it — and, under **Customize slide wording**, rewrite the
     headline and highlights of a section's first slide. **Reset design** returns every slide to its
@@ -108,6 +107,10 @@ you were on, and switching back opens Write on the block holding the Source curs
     shorter wording for each slide. Each change is saved as you make it, and Ctrl+Z in Write
     undoes it. Wording you write applies only while the section's text is unchanged; edit the
     text and that slide returns to an automatic summary.
+  - **Documentary**, **Magazine**, **Data-Driven**, **Narrative**, **Minimal**, or **Headings and
+    features** — the document re-cut into a presentation in that style. Below the choice are the
+    slides it makes, each beside the section it came from; slides a style adds around your text,
+    such as a closing title, are set apart.
 
   Your Markdown and narration are not changed; the choice is saved in the document's
   frontmatter. Formatting buttons are hidden while Summaries is open.

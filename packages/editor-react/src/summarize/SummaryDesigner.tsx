@@ -41,6 +41,7 @@ import {
   presentationSections,
   PRESENTATION_HINTS_KEY,
   PRESENTATION_LAYOUTS,
+  PRESENTATION_LIMITS,
   AUTHORED_PRESENTATION_LAYOUT,
   presentationBeatExtras,
   presentationLayoutNeeds,
@@ -113,7 +114,7 @@ function withSuggestion(
         // A hub's centre and a matrix's axes are part of the suggestion.
         ...presentationBeatExtras(item.layout, item),
       },
-    ].slice(-80),
+    ].slice(-PRESENTATION_LIMITS.beats),
   };
   return {
     ...current,
@@ -144,6 +145,36 @@ function suggestionsText(hints: PresentationHints): string {
     .flatMap((block) => block.ai ?? [])
     .map((entry) => [entry.headline, ...entry.points.map((point) => `- ${point}`)].join('\n'))
     .join('\n\n');
+}
+
+/** Text cut at a word to about `characters`, for a label in the slide list. */
+function gist(text: string, characters: number): string {
+  const clean = text.replace(/\s+/gu, ' ').trim();
+  if (clean.length <= characters) return clean;
+  const cut = clean.slice(0, characters);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(' '), characters / 2)).trim()}…`;
+}
+
+/** The document block a group of slides was made from, as the list names it. */
+function sectionName(section: Sections[number] | undefined): string {
+  return section?.heading?.trim() || gist(section?.text ?? '', 60) || 'Untitled section';
+}
+
+/**
+ * What a slide says about itself in the list. Its group names the section, so
+ * a slide titled with the section's heading (as automatic slides are) shows
+ * the opening of the passage it covers instead, and consecutive slides of one
+ * section read as the parts of it they are. A headline of its own (custom or
+ * AI wording) is what the slide shows, so the list shows that.
+ */
+function slideLabel(item: PresentationBeat, sourceText: string, heading?: string): string {
+  const title = heading?.trim() ?? '';
+  const headline = item.headline.trim();
+  const clipped = headline.endsWith('…') && title.startsWith(headline.slice(0, -1).trim());
+  if (!title || (headline.toLowerCase() !== title.toLowerCase() && !clipped)) return headline;
+  const passage = sourceText.slice(item.sourceStart, item.sourceEnd).trim();
+  const rest = passage.startsWith(title) ? passage.slice(title.length) : passage;
+  return gist(rest, 160) || headline;
 }
 
 /** The assistant's readiness: undefined while checking, null when ready, else why not. */
@@ -195,6 +226,7 @@ export function SummaryDesigner({
   const originalTextId = useId();
   const layoutHelpId = useId();
   const slidePickerId = useId();
+  const aiReasonId = useId();
   const readiness = useAssistantReadiness(assistant);
 
   // ── The design, saved as it changes ─────────────────────────────────
@@ -411,6 +443,8 @@ export function SummaryDesigner({
             ?.get(plan.sourceText.slice(item.sourceStart, item.sourceEnd));
         const active = progress?.active;
         return {
+          owner,
+          label: slideLabel(item, plan.sourceText, owner?.heading),
           layout: layoutLabel(item.layout, owner?.blockId),
           suggested:
             item.layout !== AUTHORED_PRESENTATION_LAYOUT &&
@@ -422,6 +456,19 @@ export function SummaryDesigner({
             active.sourceEnd === item.sourceEnd,
         };
       });
+  // Every slide is made from one block of the document, and a block's slides
+  // are consecutive, so the list groups them under the block they came from.
+  const slideGroups: Array<{ key: string; name: string; indexes: number[] }> = [];
+  slideTags.forEach(({ owner }, index) => {
+    const last = slideGroups[slideGroups.length - 1];
+    if (last && owner && last.key === owner.blockId) last.indexes.push(index);
+    else
+      slideGroups.push({
+        key: owner?.blockId ?? `slide-${index}`,
+        name: sectionName(owner),
+        indexes: [index],
+      });
+  });
   /** Select a slide by position; the person chose it, so stop following the AI run. */
   const selectSlide = (index: number) => {
     const next = plan?.beats[Math.max(0, Math.min(plan.beats.length - 1, index))];
@@ -485,7 +532,7 @@ export function SummaryDesigner({
     if (!plan || !beat) return;
     const key = presentationPassageKey(plan.sourceText.slice(beat.sourceStart, beat.sourceEnd));
     const rest = (hint?.hidden ?? []).filter((item) => item !== key);
-    const hidden = hide ? [...rest, key].slice(-80) : rest;
+    const hidden = hide ? [...rest, key].slice(-PRESENTATION_LIMITS.beats) : rest;
     updateHint({ hidden: hidden.length ? hidden : undefined });
   };
   const suggest = async () => {
@@ -613,11 +660,22 @@ export function SummaryDesigner({
             >
               Reset design
             </button>
+            {/* Why AI is off, beside the button it disables: a reason in the
+                tooltip alone made the button read as missing. Not while the
+                first check runs, so opening the designer does not flicker. */}
+            {assistant && !progress && typeof readiness === 'string' && !readOnly && (
+              <span id={aiReasonId} className="squisq-summary-designer-ai-reason">
+                {readiness}
+              </span>
+            )}
             {assistant && !progress && (
               <button
                 ref={suggestButton}
                 type="button"
                 disabled={!plan || !aiReady || readOnly}
+                aria-describedby={
+                  typeof readiness === 'string' && !readOnly ? aiReasonId : undefined
+                }
                 title={
                   readiness === undefined
                     ? 'Checking whether AI is available…'
@@ -662,7 +720,11 @@ export function SummaryDesigner({
             ? `${slideCount} · ${projection.doc.duration.toFixed(1)} seconds · ${doc?.presentationNarration ? 'Follows narration' : 'Estimated pacing — add narration to synchronize'}`
             : plan && projection?.error
               ? `${slideCount} · Not synchronized with the narration`
-              : 'Preparing slides…'}
+              : // A deck that could not be made says why in the alert; it is
+                // not still on its way.
+                error || generated?.error
+                ? ''
+                : 'Preparing slides…'}
         </p>
         {(error || generated?.error || projection?.error) && (
           <p className="squisq-summary-designer-alert" role="alert">
@@ -690,35 +752,67 @@ export function SummaryDesigner({
               className="squisq-summary-designer-slides"
               aria-label="Presentation slides"
             >
-              {plan.beats.map((item, index) => {
-                const { layout, suggested, pending: requested } = slideTags[index]!;
+              {/* Each block of the document beside the slides made from it. The
+                  slide buttons stay the list's only buttons, in deck order, so
+                  ← and → still move through them by position. */}
+              {slideGroups.map((group, groupIndex) => {
+                const groupLabelId = `${slidePickerId}-section-${groupIndex}`;
+                const count = group.indexes.length;
                 return (
-                  <button
-                    type="button"
-                    key={item.id}
-                    className={item.hidden ? 'squisq-summary-designer-slide--hidden' : undefined}
-                    aria-current={index === selectedIndex ? 'step' : undefined}
-                    title={item.headline}
-                    onClick={() => selectSlide(index)}
+                  <div
+                    key={group.key}
+                    role="group"
+                    aria-labelledby={groupLabelId}
+                    className={`squisq-summary-designer-section${
+                      group.indexes.includes(selectedIndex)
+                        ? ' squisq-summary-designer-section--current'
+                        : ''
+                    }`}
                   >
-                    <span className="squisq-summary-designer-slide-title">
-                      {index + 1}. {item.headline}
-                    </span>
-                    <span className="squisq-summary-designer-slide-tags">
-                      <small>{layout}</small>
-                      {item.hidden && <small>Hidden</small>}
-                      {requested ? (
-                        <small className="squisq-summary-designer-slide-ai">
-                          <span className="squisq-summary-designer-spinner" aria-hidden="true" />
-                          Suggesting…
-                        </small>
-                      ) : suggested ? (
-                        <small className="squisq-summary-designer-slide-ai">
-                          <span className="squisq-sr-only">Suggested by </span>AI
-                        </small>
-                      ) : null}
-                    </span>
-                  </button>
+                    <div id={groupLabelId} className="squisq-summary-designer-section-source">
+                      <span className="squisq-summary-designer-section-name">{group.name}</span>{' '}
+                      <small>{count === 1 ? '1 slide' : `${count} slides`}</small>
+                    </div>
+                    <div className="squisq-summary-designer-section-slides">
+                      {group.indexes.map((index) => {
+                        const item = plan.beats[index]!;
+                        const { label, layout, suggested, pending: requested } = slideTags[index]!;
+                        return (
+                          <button
+                            type="button"
+                            key={item.id}
+                            className={
+                              item.hidden ? 'squisq-summary-designer-slide--hidden' : undefined
+                            }
+                            aria-current={index === selectedIndex ? 'step' : undefined}
+                            title={label}
+                            onClick={() => selectSlide(index)}
+                          >
+                            <span className="squisq-summary-designer-slide-title">
+                              {index + 1}. {label}
+                            </span>
+                            <span className="squisq-summary-designer-slide-tags">
+                              <small>{layout}</small>
+                              {item.hidden && <small>Hidden</small>}
+                              {requested ? (
+                                <small className="squisq-summary-designer-slide-ai">
+                                  <span
+                                    className="squisq-summary-designer-spinner"
+                                    aria-hidden="true"
+                                  />
+                                  Suggesting…
+                                </small>
+                              ) : suggested ? (
+                                <small className="squisq-summary-designer-slide-ai">
+                                  <span className="squisq-sr-only">Suggested by </span>AI
+                                </small>
+                              ) : null}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 );
               })}
             </nav>
@@ -741,19 +835,24 @@ export function SummaryDesigner({
                   value={selectedIndex}
                   onChange={(event) => selectSlide(Number(event.target.value))}
                 >
-                  {plan.beats.map((item, index) => {
-                    const { layout, suggested, pending: requested } = slideTags[index]!;
-                    const status = [
-                      layout,
-                      item.hidden && 'Hidden',
-                      requested ? 'Suggesting…' : suggested && 'Suggested by AI',
-                    ].filter(Boolean);
-                    return (
-                      <option key={item.id} value={index}>
-                        {`${index + 1}. ${item.headline} · ${status.join(' · ')}`}
-                      </option>
-                    );
-                  })}
+                  {slideGroups.map((group) => (
+                    <optgroup key={group.key} label={group.name}>
+                      {group.indexes.map((index) => {
+                        const item = plan.beats[index]!;
+                        const { label, layout, suggested, pending: requested } = slideTags[index]!;
+                        const status = [
+                          layout,
+                          item.hidden && 'Hidden',
+                          requested ? 'Suggesting…' : suggested && 'Suggested by AI',
+                        ].filter(Boolean);
+                        return (
+                          <option key={item.id} value={index}>
+                            {`${index + 1}. ${label} · ${status.join(' · ')}`}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  ))}
                 </select>
                 <button
                   type="button"

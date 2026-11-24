@@ -77,7 +77,7 @@ function text(value: unknown, max: number): value is string {
 export function parsePresentationHints(input: unknown): PresentationHints | null {
   let value = input;
   if (typeof value === 'string') {
-    if (value.length > 160000) return null;
+    if (value.length > PRESENTATION_LIMITS.serializedCharacters) return null;
     try {
       value = JSON.parse(value);
     } catch {
@@ -91,7 +91,8 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
     !['concise', 'balanced', 'detailed', 'section'].includes(String(value.density)) ||
     typeof value.inbetweens !== 'boolean' ||
     !Array.isArray(value.blocks) ||
-    value.blocks.length > 80
+    // Every section with a hint has a slide, so a deck's limits bound its design.
+    value.blocks.length > PRESENTATION_LIMITS.beats
   )
     return null;
   const ids = new Set<string>();
@@ -109,7 +110,7 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
       (entry.hidden !== undefined &&
         (!Array.isArray(entry.hidden) ||
           !entry.hidden.length ||
-          entry.hidden.length > 80 ||
+          entry.hidden.length > PRESENTATION_LIMITS.beats ||
           new Set(entry.hidden).size !== entry.hidden.length ||
           !entry.hidden.every(
             (key) => typeof key === 'string' && /^[0-9a-z]{1,7}-[0-9a-z]{1,4}$/u.test(key),
@@ -126,7 +127,7 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
     if (entry.inbetweens !== undefined) hint.inbetweens = entry.inbetweens as boolean;
     if (entry.hidden !== undefined) hint.hidden = [...(entry.hidden as string[])];
     if (entry.ai !== undefined) {
-      if (!Array.isArray(entry.ai) || entry.ai.length > 80) return null;
+      if (!Array.isArray(entry.ai) || entry.ai.length > PRESENTATION_LIMITS.beats) return null;
       hint.ai = [];
       for (const item of entry.ai) {
         if (
@@ -194,7 +195,8 @@ export function serializePresentationHints(hints: PresentationHints): string {
   const parsed = parsePresentationHints(hints);
   if (!parsed) throw new Error('The slide hints are invalid.');
   const json = JSON.stringify(parsed);
-  if (json.length > 160000) throw new Error('The slide hints are too large.');
+  if (json.length > PRESENTATION_LIMITS.serializedCharacters)
+    throw new Error('The slide hints are too large.');
   return json;
 }
 export function presentationSections(doc: Doc) {

@@ -48,69 +48,119 @@
   color: var(--squisq-text-soft);
 }
 
-.squisq-summarize-styles {
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.squisq-summarize-legend {
-  margin-bottom: 8px;
-  padding: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--squisq-text-muted);
-}
-
-.squisq-summarize-style-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 8px;
-}
-
-.squisq-summarize-style {
-  position: relative;
+/* The Summary style field: a dropdown whose trigger names the chosen style and
+   says what it does. The list it opens shows every style the same way; it is
+   portaled to <body>, so it themes from its own data-theme and its tokens. */
+.squisq-summarize-style-field {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  min-height: 44px;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* Set like the designer's field labels (Summary density) just below it. */
+.squisq-summarize-legend {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--squisq-text);
+}
+
+.squisq-summarize-style-trigger {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   box-sizing: border-box;
-  padding: 10px 12px;
-  border: 1px solid var(--squisq-border);
-  border-radius: 8px;
-  background: var(--squisq-surface);
+  width: min(100%, 560px);
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--squisq-border-strong);
+  border-radius: 6px;
+  background: var(--squisq-input-bg);
+  color: var(--squisq-text);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-.squisq-summarize-style:hover {
+.squisq-summarize-style-trigger:hover:not(:disabled) {
   background: var(--squisq-surface-hover);
 }
 
-.squisq-summarize-style--selected {
+.squisq-summarize-style-trigger--open {
   border-color: var(--squisq-accent);
-  background: var(--squisq-accent-subtle);
-  box-shadow: inset 0 0 0 1px var(--squisq-accent);
 }
 
-.squisq-summarize-style--selected:hover {
-  background: var(--squisq-accent-soft);
-}
-
-.squisq-summarize-style:has(input:focus-visible) {
+.squisq-summarize-style-trigger:focus-visible {
   outline: 2px solid var(--squisq-focus-ring);
   outline-offset: 2px;
 }
 
-.squisq-summarize-styles:disabled .squisq-summarize-style {
+.squisq-summarize-style-trigger:disabled {
   cursor: default;
   opacity: 0.6;
 }
 
-.squisq-summarize-style input {
-  flex: 0 0 auto;
-  margin: 2px 0 0;
-  accent-color: var(--squisq-accent);
+.squisq-summarize-style-trigger .squisq-summarize-style-copy {
+  flex: 1 1 auto;
+}
+
+.squisq-summarize-style-caret {
+  flex-shrink: 0;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-summarize-style-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--squisq-border);
+  border-radius: 8px;
+  background: var(--squisq-surface-overlay);
+  color: var(--squisq-text);
+  box-shadow: var(--squisq-shadow-lg);
+  font-family: var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+}
+
+.squisq-summarize-style-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px 8px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.squisq-summarize-style-option:hover {
+  background: var(--squisq-row-hover);
+}
+
+.squisq-summarize-style-option:focus-visible {
+  outline: 2px solid var(--squisq-focus-ring);
+  outline-offset: -2px;
+}
+
+.squisq-summarize-style-option--selected {
+  background: var(--squisq-accent-subtle);
+}
+
+.squisq-summarize-style-option--selected:hover {
+  background: var(--squisq-accent-soft);
+}
+
+.squisq-summarize-style-check {
+  display: flex;
+  flex: 0 0 16px;
+  justify-content: center;
+  padding-top: 2px;
+  color: var(--squisq-accent);
 }
 
 .squisq-summarize-style-copy {
@@ -162,6 +212,66 @@
   background: var(--squisq-danger-soft);
   color: var(--squisq-danger-strong);
   font-size: 12px;
+}
+
+/* The slides grouped by the block of the document each was made from: the
+   block on the left, its slides beside it; stacked when the view is narrow. */
+.squisq-summarize-deck {
+  container: squisq-summarize-deck / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.squisq-summarize-group {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.squisq-summarize-group + .squisq-summarize-group {
+  padding-top: 16px;
+  border-top: 1px solid var(--squisq-border-subtle);
+}
+
+.squisq-summarize-group-source {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 0 4px 10px;
+  border-left: 3px solid var(--squisq-border-strong);
+}
+
+/* Slides a style added around the text, not made from a block. */
+.squisq-summarize-group[data-added] .squisq-summarize-group-source {
+  border-left-style: dashed;
+}
+
+.squisq-summarize-group-name {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--squisq-text-strong);
+}
+
+.squisq-summarize-group[data-added] .squisq-summarize-group-name {
+  font-weight: 400;
+  color: var(--squisq-text-soft);
+}
+
+.squisq-summarize-group-source small {
+  font-size: 11px;
+  color: var(--squisq-text-muted);
+}
+
+@container squisq-summarize-deck (max-width: 560px) {
+  .squisq-summarize-group {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
 }
 
 .squisq-summarize-slides {
@@ -217,10 +327,6 @@
 @media (max-width: 600px) {
   .squisq-summarize-inner {
     padding: 16px;
-  }
-
-  .squisq-summarize-style-list {
-    grid-template-columns: minmax(0, 1fr);
   }
 
   .squisq-summarize-slides {
@@ -351,6 +457,17 @@
   gap: 8px;
 }
 
+/* Why Suggest with AI is unavailable, read just before the button. A host's
+   message can be long, so it wraps in a narrow column rather than widening
+   the row. */
+.squisq-summary-designer-ai-reason {
+  max-width: 32ch;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: end;
+  color: var(--squisq-text-soft);
+}
+
 .squisq-summary-designer button {
   min-height: 34px;
   padding: 6px 10px;
@@ -437,15 +554,17 @@
   display: grid;
   flex: 1;
   min-height: 0;
-  grid-template-columns: minmax(140px, 24%) minmax(0, 1fr);
+  /* Wide enough for each document block beside the slides made from it. */
+  grid-template-columns: minmax(260px, 36%) minmax(0, 1fr);
   gap: 18px;
   align-items: stretch;
 }
 
 .squisq-summary-designer-slides {
+  container: squisq-summary-slides / inline-size;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
   min-height: 0;
   padding: 8px;
@@ -453,6 +572,71 @@
   border-radius: 8px;
   background: var(--squisq-surface-subtle);
   overflow-y: auto;
+}
+
+/* One block of the document (left) and the slides made from it (right). The
+   block's name stays in view while its slides scroll past. */
+.squisq-summary-designer-section {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.squisq-summary-designer-section + .squisq-summary-designer-section {
+  padding-top: 10px;
+  border-top: 1px solid var(--squisq-border-subtle);
+}
+
+.squisq-summary-designer-section-source {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 0 6px 10px;
+  border-left: 3px solid var(--squisq-border-strong);
+}
+
+.squisq-summary-designer-section--current .squisq-summary-designer-section-source {
+  border-left-color: var(--squisq-accent);
+}
+
+.squisq-summary-designer-section-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--squisq-text-strong);
+}
+
+.squisq-summary-designer-section-source small {
+  font-size: 11px;
+  color: var(--squisq-text-muted);
+}
+
+.squisq-summary-designer-section-slides {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Too narrow for two columns: the block's name heads its slides instead. */
+@container squisq-summary-slides (max-width: 360px) {
+  .squisq-summary-designer-section {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .squisq-summary-designer-section-source {
+    position: static;
+  }
 }
 
 .squisq-summary-designer-slides button {

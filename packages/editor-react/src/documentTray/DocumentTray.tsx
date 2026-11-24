@@ -247,7 +247,11 @@ export function DocumentTray({ editor }: { editor: Editor }) {
   );
   // Re-read only when the frontmatter itself changes, not on every keystroke.
   const frontmatterBlock = splitFrontmatterBlock(markdownRef.current).frontmatter ?? '';
-  const properties = useMemo(() => readCustomProperties(frontmatterBlock), [frontmatterBlock]);
+  const hostKeys = context?.hostFrontmatterKeys;
+  const properties = useMemo(
+    () => readCustomProperties(frontmatterBlock).filter((property) => !hostKeys?.has(property.key)),
+    [frontmatterBlock, hostKeys],
+  );
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const replaceAll = context?.replaceAll;
   const writeProperties = useCallback(

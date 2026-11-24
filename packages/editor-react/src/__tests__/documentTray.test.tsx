@@ -474,14 +474,22 @@ describe('document tray properties', () => {
   const SOURCE =
     '---\nauthor: Ines\nsquisq-theme: bold\n---\n\n# One\n\nFirst.\n\n# Two\n\nSecond.\n';
 
-  async function mountWrite(source: string, readOnly = false) {
+  async function mountWrite(
+    source: string,
+    readOnly = false,
+    hostFrontmatterKeys?: readonly string[],
+  ) {
     const live: { ctx: EditorContextValue | null } = { ctx: null };
     function Probe() {
       live.ctx = useEditorContext();
       return null;
     }
     render(
-      <EditorProvider initialMarkdown={source} initialView="wysiwyg">
+      <EditorProvider
+        initialMarkdown={source}
+        initialView="wysiwyg"
+        hostFrontmatterKeys={hostFrontmatterKeys}
+      >
         <WysiwygEditor readOnly={readOnly} />
         <Probe />
       </EditorProvider>,
@@ -508,6 +516,21 @@ describe('document tray properties', () => {
     // Just the pill: no heading row when the tray holds only properties.
     expect(tray.querySelector('.squisq-document-tray-heading')).toBeNull();
     expect(pill().getAttribute('aria-label')).toBe('Properties (1)');
+  });
+
+  it('leaves out the keys the host edits itself, and hides when only those are left', async () => {
+    const source = '---\nauthor: Ines\ndue: 2026-11-25\ntags:\n  - a\n---\n\n# Doc\n\nBody.\n';
+    const { ctx } = await mountWrite(source, false, ['due', 'tags']);
+    expect(pill().getAttribute('aria-label')).toBe('Properties (1)');
+    await openPanel();
+    expect(within(panel()).queryByDisplayValue('due')).toBeNull();
+    expect(within(panel()).getByDisplayValue('author')).toBeTruthy();
+    // The document still holds them.
+    expect(ctx().markdownSource).toContain('due: 2026-11-25');
+    cleanup();
+
+    await mountWrite('---\ndue: 2026-11-25\n---\n\n# Doc\n', false, ['due']);
+    expect(screen.queryByRole('region', { name: 'Document tray' })).toBeNull();
   });
 
   it('heads the tray "Document" when it holds media too', async () => {

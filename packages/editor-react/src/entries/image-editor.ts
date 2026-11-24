@@ -1,5 +1,10 @@
 export { ImageEditor } from '../ImageEditor.js';
 export type { ImageEditorProps } from '../ImageEditor.js';
+export { ImageFileEditor } from '../imageEditor/ImageFileEditor.js';
+export type {
+  ImageFileEditorProps,
+  ImageWriteBackContext,
+} from '../imageEditor/ImageFileEditor.js';
 export { ImageViewer } from '../ImageViewer.js';
 export type { ImageViewerProps } from '../ImageViewer.js';
 export { useImageEditor } from '../imageEditor/useImageEditor.js';

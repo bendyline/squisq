@@ -13,7 +13,11 @@ import { markdownToDoc } from '@bendyline/squisq/doc';
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { buildNarrationScript } from '@bendyline/squisq/narration';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
-import type { PresentationBeat, PresentationPlan } from '@bendyline/squisq/transform';
+import {
+  PRESENTATION_LIMITS,
+  type PresentationBeat,
+  type PresentationPlan,
+} from '@bendyline/squisq/transform';
 import { EditorProvider, useEditorContext } from '../EditorContext';
 import { SummaryDesigner } from '../summarize/SummaryDesigner';
 import type {
@@ -186,7 +190,10 @@ describe('SummaryDesigner', () => {
   it('shows a section as authored, naming its block type, and saves the choice as made', async () => {
     renderDesigner(REPORT);
     await waitFor(() => expect(slides().length).toBeGreaterThan(1));
-    fireEvent.click(slides().find((slide) => slide.textContent?.includes('By region'))!);
+    const list = screen.getByRole('navigation', { name: 'Presentation slides' });
+    fireEvent.click(
+      within(within(list).getByRole('group', { name: /^By region/ })).getAllByRole('button')[0]!,
+    );
     const options = Array.from(layout().options).map((option) => option.textContent);
     expect(options).toContain('As authored (Bar Chart)');
     // Squisq names its own layouts, including the ones that draw a shape.
@@ -221,6 +228,18 @@ describe('SummaryDesigner', () => {
     expect(source.latest).toContain('"density":"section"');
   });
 
+  it('says why it cannot make the slides instead of still preparing them', async () => {
+    const sections = PRESENTATION_LIMITS.beats + 1;
+    renderDesigner(
+      Array.from({ length: sections }, (_, index) => `## Part ${index + 1}\n\nShort line.`).join(
+        '\n\n',
+      ),
+    );
+    const alert = await within(designer()).findByRole('alert');
+    expect(alert.textContent).toContain(`makes ${sections} slides`);
+    expect(statuses()).not.toContain('Preparing slides');
+  });
+
   it('hides a slide by its passage, keeps one slide shown, and saves only a key', async () => {
     renderDesigner(LONG);
     await waitFor(() => expect(slides().length).toBeGreaterThan(2));
@@ -245,6 +264,36 @@ describe('SummaryDesigner', () => {
       expect(source.latest).toMatch(/"hidden":\["[0-9a-z]+-[0-9a-z]+","[0-9a-z]+-[0-9a-z]+"\]/),
     );
     expect(source.latest.match(/Each slide should carry/g)).toHaveLength(8);
+  });
+
+  it('groups the slides under the block of the document each was made from', async () => {
+    renderDesigner(LONG);
+    await waitFor(() => expect(slides().length).toBeGreaterThan(2));
+    const list = screen.getByRole('navigation', { name: 'Presentation slides' });
+    const groups = within(list).getAllByRole('group');
+    expect(groups).toHaveLength(2);
+    const [plan, next] = groups as [HTMLElement, HTMLElement];
+    const planSlides = within(plan).getAllByRole('button');
+    expect(within(list).getByRole('group', { name: `Plan ${planSlides.length} slides` })).toBe(
+      plan,
+    );
+    expect(within(list).getByRole('group', { name: 'Next 1 slide' })).toBe(next);
+    expect(planSlides.length + within(next).getAllByRole('button').length).toBe(slides().length);
+
+    // The group names the block, so its slides say which part of it they cover.
+    expect(planSlides[0]!.textContent).toMatch(/^1\. Each slide should carry one idea/);
+    for (const slide of planSlides) expect(slide.textContent).not.toMatch(/^\d+\. Plan\b/);
+
+    // The block of the chosen slide is marked, and the picker groups the same way.
+    expect(plan.className).toContain('squisq-summary-designer-section--current');
+    fireEvent.click(within(next).getByRole('button'));
+    expect(next.className).toContain('squisq-summary-designer-section--current');
+    expect(plan.className).not.toContain('squisq-summary-designer-section--current');
+    const picker = screen.getByRole<HTMLSelectElement>('combobox', { name: 'Slide' });
+    expect(Array.from(picker.querySelectorAll('optgroup')).map((group) => group.label)).toEqual([
+      'Plan',
+      'Next',
+    ]);
   });
 
   it('offers the same slides in the picker, with Previous and Next', async () => {
@@ -327,10 +376,47 @@ describe('SummaryDesigner with an assistant', () => {
     });
     await waitFor(() => expect(suggest.title).toBe('Turn on AI features in Settings.'));
     expect(suggest.disabled).toBe(true);
+    // Said beside the button, not only in its tooltip, and read as its description.
+    const shown = within(designer()).getByText('Turn on AI features in Settings.');
+    expect(suggest.getAttribute('aria-describedby')).toBe(shown.id);
+
+    reason = 'Built-in AI is restarting…';
+    act(() => notify());
+    await waitFor(() => expect(within(designer()).getByText(reason!)).toBeTruthy());
 
     reason = null;
     act(() => notify());
     await waitFor(() => expect(suggest.disabled).toBe(false));
+    expect(within(designer()).queryByText(/Built-in AI/)).toBeNull();
+    expect(suggest.hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  it('says nothing about AI while it checks, or when the document is read-only', async () => {
+    renderDesigner(DECK, {
+      assistant: {
+        readiness: () => new Promise<string | null>(() => undefined),
+        suggestSlides: async () => undefined,
+      },
+    });
+    const suggest = await screen.findByRole<HTMLButtonElement>('button', {
+      name: 'Suggest with AI',
+    });
+    expect(suggest.title).toBe('Checking whether AI is available…');
+    expect(suggest.hasAttribute('aria-describedby')).toBe(false);
+    cleanup();
+
+    renderDesigner(DECK, {
+      readOnly: true,
+      assistant: {
+        readiness: () => 'Turn on AI features in Settings.',
+        suggestSlides: async () => undefined,
+      },
+    });
+    const locked = await screen.findByRole<HTMLButtonElement>('button', {
+      name: 'Suggest with AI',
+    });
+    await waitFor(() => expect(locked.title).toBe('Turn on AI features in Settings.'));
+    expect(screen.queryByText('Turn on AI features in Settings.')).toBeNull();
   });
 
   it('shows it is working from the click, holds its other buttons, and stops', async () => {

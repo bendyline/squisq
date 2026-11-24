@@ -31,6 +31,7 @@ import {
   parsePresentationPlan,
   serializePresentationPlan,
   PRESENTATION_KEY,
+  PRESENTATION_LIMITS,
   type PresentationBeatLayout,
 } from '../transform/presentationPlan.js';
 import { extractEmbeddedVideos } from '../doc/templateInputs.js';
@@ -1113,5 +1114,70 @@ describe('presentation slides timed by the presenter', () => {
     expect(unmarked).toBeGreaterThan(0);
     expect(unmarked).toBeLessThan(19);
     expect(next).toBe(19);
+  });
+});
+
+describe('long presentations', () => {
+  const sections = (count: number, body: string) =>
+    Array.from({ length: count }, (_, index) => `## Part ${index + 1}\n\n${body}`).join('\n\n');
+  const limit = PRESENTATION_LIMITS.beats;
+
+  it('makes, saves and compiles a document near the length limit at every density', () => {
+    // 2026-11-23: a 3,750-word post made 85 Balanced slides against a limit
+    // of 80, and was told it had too many sections (it had eight).
+    const doc = parse(
+      sections(
+        30,
+        'Each slide should carry one idea that the narration explains in more depth. '.repeat(16),
+      ),
+    );
+    expect(buildNarrationScript(doc).sourceText.length).toBeGreaterThan(36_000);
+    for (const density of ['concise', 'balanced', 'detailed', 'section'] as const) {
+      const plan = createPresentationPlan(doc, { ...defaultPresentationHints(), density });
+      if (density === 'balanced') expect(plan.beats.length).toBeGreaterThan(80);
+      expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+      expect(compilePresentationPlan(doc, plan).blocks).toHaveLength(plan.beats.length);
+    }
+  });
+
+  it('counts the slides and names only the densities that would fit', () => {
+    // Three-letter words: Concise passes the limit, Balanced does not.
+    const doc = parse(sections(12, 'A cat sat on a mat. '.repeat(150)));
+    const hints = { ...defaultPresentationHints(), density: 'concise' as const };
+    expect(() => createPresentationPlan(doc, hints)).toThrow(
+      new RegExp(
+        `^With Concise density this document makes \\d+ slides, and a presentation holds at most ${limit}\\. ` +
+          'Choose Balanced, Detailed, or One slide per section to put more on each slide, or split the document\\.$',
+      ),
+    );
+    expect(
+      createPresentationPlan(doc, { ...hints, density: 'balanced' }).beats.length,
+    ).toBeLessThanOrEqual(limit);
+  });
+
+  it('asks for a split when even one slide per section is too many', () => {
+    const doc = parse(sections(limit + 10, 'Short line.'));
+    expect(() => createPresentationPlan(doc)).toThrow(
+      `With Balanced density this document makes ${limit + 10} slides, and a presentation holds at most ${limit}. Split it into shorter documents.`,
+    );
+    expect(() =>
+      createPresentationPlan(doc, { ...defaultPresentationHints(), density: 'section' }),
+    ).toThrow(
+      `This document makes ${limit + 10} slides, one per section, and a presentation holds at most ${limit}. Split it into shorter documents.`,
+    );
+  });
+
+  it('saves a design for as many sections as a deck has slides', () => {
+    const design = (count: number): PresentationHints => ({
+      ...defaultPresentationHints(),
+      blocks: Array.from({ length: count }, (_, index) => ({
+        blockId: `block-${index}`,
+        layout: 'cards' as const,
+      })),
+    });
+    expect(parsePresentationHints(serializePresentationHints(design(limit)))).toEqual(
+      design(limit),
+    );
+    expect(parsePresentationHints(design(limit + 1))).toBeNull();
   });
 });

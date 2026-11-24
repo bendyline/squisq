@@ -60,6 +60,7 @@ import type { SummarizationAssistant } from './summarize/summarizationAssistant'
 import { ImageViewer } from './ImageViewer';
 import { ImageEditor } from './ImageEditor';
 import { ImageEditModal } from './imageEditor/ImageEditModal';
+import { ImageFileEditor, type ImageWriteBackContext } from './imageEditor/ImageFileEditor';
 import {
   PreviewSettingsProvider,
   PreviewToolbarControls,
@@ -342,6 +343,19 @@ export interface EditorShellProps {
    * Markdown modes only: the image and JSON surfaces have no panel row.
    */
   sidePanelSlot?: ReactNode;
+  /**
+   * Host-supplied row between the toolbar and the document, shown while
+   * writing (the Markdown views, not the preview). For a strip that edits the
+   * document's own details, such as its frontmatter, in place: children get
+   * the editor context, so they can read and change the source through it.
+   */
+  documentHeaderSlot?: ReactNode;
+  /**
+   * Frontmatter keys the host edits with its own controls (in
+   * `documentHeaderSlot`, say). Squisq's Properties list leaves them out, so
+   * no key is offered in two places. The document still holds them.
+   */
+  hostFrontmatterKeys?: readonly string[];
   /**
    * Review providers, each scheduled independently.
    *
@@ -675,15 +689,33 @@ export interface EditorShellProps {
    * scoped to `<basename>_files/` via
    * `scopeContainer(parentContainer, basename + '_files')`. The image
    * editor persists `state.json`, layer assets in `assets/`, and (when
-   * `allowVersioning` is true) snapshots in `.versions/` inside it.
+   * `allowVersioning` is true) snapshots in `.versions/` inside it. Naming
+   * it after the whole file name (`photo.png_files/`) keeps `photo.png`
+   * and `photo.jpg` in one folder from sharing layers.
    */
   imageEditorContainer?: ContentContainer;
   /**
    * Called after the user clicks Export in the image editor and the
    * raster blob is produced. When omitted, the editor triggers a
-   * default browser download.
+   * default browser download. Ignored when {@link onImageWriteBack} is set.
    */
   onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
+  /**
+   * Outside-in image editing: the image file stays the file people see,
+   * its layers live in {@link imageEditorContainer}, and this callback
+   * writes the flattened picture back over the file in its own format
+   * (PNG, JPEG, or WebP, from {@link fileName}). Save calls it, and so does
+   * leaving the image with edits the file lacks. Requires `imageMode:
+   * 'edit'` and `imageEditorContainer`. Animated images and other formats
+   * open in the viewer. On `reason: 'save'` a rejection shows in the editor
+   * as a failed save; on `reason: 'leave'` no editor is left to show it, so
+   * report that failure from here.
+   */
+  onImageWriteBack?: (
+    blob: Blob,
+    format: 'png' | 'jpeg' | 'webp',
+    context: ImageWriteBackContext,
+  ) => Promise<void>;
   /**
    * Show an inline preview gutter to the right of the WYSIWYG editor.
    * The gutter renders one small SVG card per block, including blocks without
@@ -843,6 +875,8 @@ export function EditorShell({
   summarizationDesigner,
   statusBarSlotRight,
   sidePanelSlot,
+  documentHeaderSlot,
+  hostFrontmatterKeys,
   reviewProviders,
   showPlayTab = true,
   showViewTabs = true,
@@ -890,6 +924,7 @@ export function EditorShell({
   imageMode = 'view',
   imageEditorContainer,
   onImageExport,
+  onImageWriteBack,
   inlinePreview = false,
   inlinePreviewWidth = 320,
   outline = false,
@@ -952,6 +987,7 @@ export function EditorShell({
         articleId={articleId}
         colorScheme={colorScheme}
         workspaceContainer={effectiveContainer}
+        hostFrontmatterKeys={hostFrontmatterKeys}
         allowVersioning={allowVersioning}
         versionBasename={versionBasename}
         versioningPrunePolicy={versioningPrunePolicy}
@@ -1034,6 +1070,7 @@ export function EditorShell({
                 summarizationDesigner={summarizationDesigner}
                 statusBarSlotRight={statusBarSlotRight}
                 sidePanelSlot={sidePanelSlot}
+                documentHeaderSlot={documentHeaderSlot}
                 showPlayTab={showPlayTab}
                 showViewTabs={showViewTabs}
                 viewMenuNavigation={viewMenuNavigation}
@@ -1055,6 +1092,8 @@ export function EditorShell({
                 imageMode={imageMode}
                 imageEditorContainer={imageEditorContainer}
                 onImageExport={onImageExport}
+                onImageWriteBack={onImageWriteBack}
+                imageFileName={fileName}
                 allowVersioning={allowVersioning}
                 versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
                 inlinePreviewWidth={inlinePreviewWidth}
@@ -1104,6 +1143,7 @@ interface EditorShellInnerProps {
   summarizationDesigner?: ReactNode;
   statusBarSlotRight?: ReactNode;
   sidePanelSlot?: ReactNode;
+  documentHeaderSlot?: ReactNode;
   showPlayTab: boolean;
   showViewTabs: boolean;
   viewMenuNavigation?: readonly ViewMenuToggleItem[];
@@ -1131,6 +1171,12 @@ interface EditorShellInnerProps {
   imageMode: 'view' | 'edit';
   imageEditorContainer?: ContentContainer;
   onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
+  onImageWriteBack?: (
+    blob: Blob,
+    format: 'png' | 'jpeg' | 'webp',
+    context: ImageWriteBackContext,
+  ) => Promise<void>;
+  imageFileName?: string;
   allowVersioning: boolean;
   versioningAutoSaveIdleMs?: number;
   inlinePreviewWidth: number;
@@ -1206,6 +1252,7 @@ function EditorShellInner({
   summarizationDesigner,
   statusBarSlotRight,
   sidePanelSlot,
+  documentHeaderSlot,
   showPlayTab,
   showViewTabs,
   viewMenuNavigation,
@@ -1227,6 +1274,8 @@ function EditorShellInner({
   imageMode,
   imageEditorContainer,
   onImageExport,
+  onImageWriteBack,
+  imageFileName,
   allowVersioning,
   versioningAutoSaveIdleMs,
   inlinePreviewWidth,
@@ -1701,6 +1750,9 @@ function EditorShellInner({
             allowPresentationFullscreen={allowPresentationFullscreen}
           >
             {toolbarPosition === 'top' && header}
+            {isMarkdownMode && !isPreview && documentHeaderSlot && (
+              <div className="squisq-editor-document-header">{documentHeaderSlot}</div>
+            )}
 
             {/* Main content area */}
             <div
@@ -1726,7 +1778,18 @@ function EditorShellInner({
               >
                 {isImageMode &&
                   imageSrc &&
-                  (imageMode === 'edit' && imageEditorContainer ? (
+                  (imageMode === 'edit' && imageEditorContainer && onImageWriteBack ? (
+                    <ImageFileEditor
+                      container={imageEditorContainer}
+                      src={imageSrc}
+                      fileName={imageFileName ?? ''}
+                      onWriteBack={onImageWriteBack}
+                      allowVersioning={allowVersioning}
+                      versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+                      surface={colorScheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}
+                      fallback={<ImageViewer src={imageSrc} alt={imageAlt} theme={colorScheme} />}
+                    />
+                  ) : imageMode === 'edit' && imageEditorContainer ? (
                     <ImageEditor
                       filesContainer={imageEditorContainer}
                       initialSrc={imageSrc}

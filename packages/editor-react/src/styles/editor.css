@@ -51,6 +51,13 @@
 }
 
 /* A bottom toolbar keeps its seam on the side that faces the content. */
+/* A host's row between the toolbar and the document (documentHeaderSlot).
+   It keeps its height; the document scrolls below it. */
+.squisq-editor-document-header {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
 .squisq-editor-shell[data-toolbar-position='bottom'] > .squisq-editor-header {
   border-bottom: 0;
   border-top: 1px solid var(--squisq-border-subtle);

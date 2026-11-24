@@ -3537,6 +3537,13 @@ interface EditorShellProps {
   imageMode?: 'view' | 'edit';
   imageEditorContainer?: ContentContainer;
   onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
+  // Outside-in image editing: Save, and leaving with unsaved edits, write the
+  // flattened picture back over the file (PNG/JPEG/WebP, from fileName)
+  onImageWriteBack?: (
+    blob: Blob,
+    format: 'png' | 'jpeg' | 'webp',
+    context: { reason: 'save' | 'leave' }, // report 'leave' failures yourself
+  ) => Promise<void>;
   // Theming & view preferences
   themeInheritance?: ThemeInheritance; // default 'fonts'
   themeOverride?: Theme | null;
@@ -4017,10 +4024,22 @@ function timingPathFor(audioRelativePath: string): string; // `${path}.timing.js
 
 ### Image editor
 
-`ImageEditor`, `ImageViewer`, `useImageEditor`, `imageEditorReducer`,
-`initialImageEditorState`, plus state types `ImageEditorState`,
-`ImageEditorAction`, `ImageEditorTool`, `CanvasRect`. Pairs with the
-`<basename>_files/` sidecar convention and `core/imageEdit`.
+`ImageEditor`, `ImageFileEditor`, `ImageViewer`, `useImageEditor`,
+`imageEditorReducer`, `initialImageEditorState`, plus state types
+`ImageEditorState`, `ImageEditorAction`, `ImageEditorTool`, `CanvasRect`.
+Pairs with the `<basename>_files/` sidecar convention and `core/imageEdit`.
+
+`ImageFileEditor` edits an image file outside-in, and is what `EditorShell`
+mounts for `imageMode: 'edit'` with `onImageWriteBack`. The picture stays the
+file. Its layers live in the sidecar container. Save flattens them back over
+the file in its own format, and leaving the editor writes back any edits the
+file still lacks. `writeback.json` records the layer signature and a digest
+of the bytes written. A picture replaced outside the editor no longer matches
+that digest, so its stale layers are dropped and re-seeded from the file
+instead of being flattened over it. Animated images and formats that cannot
+be saved back (GIF, SVG, AVIF, BMP, ICO) render the `fallback`. When Save
+writes back (`saveBehavior: 'export'`), the Export menu downloads a copy
+rather than calling `onExport`.
 
 ---
 

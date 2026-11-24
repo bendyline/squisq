@@ -555,6 +555,12 @@ export interface EditorContextValue extends EditorState, EditorActions {
    */
   workspaceContainer: ContentContainer | null;
   /**
+   * Frontmatter keys the host edits with its own controls. Squisq's
+   * Properties list leaves them out, so a key is never offered in two
+   * places; the document still holds them, and nothing else changes.
+   */
+  hostFrontmatterKeys: ReadonlySet<string>;
+  /**
    * Version manager — non-null only when the host opted into versioning
    * (`allowVersioning` + a `workspaceContainer`). Components can call
    * `saveVersion` directly, or render the version-history panel which
@@ -725,6 +731,8 @@ export interface EditorProviderProps {
    * version snapshots. Required for `allowVersioning` to take effect.
    */
   workspaceContainer?: ContentContainer | null;
+  /** Frontmatter keys the host edits itself; see `EditorContextValue.hostFrontmatterKeys`. */
+  hostFrontmatterKeys?: readonly string[];
   /**
    * Enable version history. Snapshots are stored at
    * `.versions/<basename>.<timestamp>.md` inside `workspaceContainer`.
@@ -959,6 +967,7 @@ export function EditorProvider({
   articleId = 'untitled',
   colorScheme: initialColorScheme = 'light',
   workspaceContainer = null,
+  hostFrontmatterKeys,
   allowVersioning = false,
   versionBasename,
   versioningPrunePolicy = DEFAULT_PRUNE_POLICY,
@@ -1003,6 +1012,12 @@ export function EditorProvider({
   onViewPreferencesChange,
   children,
 }: EditorProviderProps) {
+  // A stable set while the keys stay the same, whatever array the host passes.
+  const hostKeysSignature = (hostFrontmatterKeys ?? []).join('\u0000');
+  const hostKeySet = useMemo(
+    () => new Set(hostKeysSignature ? hostKeysSignature.split('\u0000') : []),
+    [hostKeysSignature],
+  );
   // Resolve effective initial values: bundled `viewPreferences` wins over
   // individual props when both are passed. Individual props remain valid
   // for hosts that haven't migrated to the bundled API.
@@ -1826,21 +1841,24 @@ export function EditorProvider({
   // ── Versioning ─────────────────────────────────────────
   // Build a manager only when versioning is opted in *and* a workspace
   // container exists. A versioning request without one is a misconfiguration
-  // — warn once so it surfaces in dev without breaking the editor.
+  // — warn once so it surfaces in dev without breaking the editor. An image
+  // file has no text to snapshot: in image mode `allowVersioning` belongs to
+  // the image editor, which keeps its own history in the image's sidecar.
+  const textVersioning = allowVersioning && editorMode !== 'image';
   const versioningWarnedRef = useRef(false);
   useEffect(() => {
-    if (allowVersioning && !workspaceContainer && !versioningWarnedRef.current) {
+    if (textVersioning && !workspaceContainer && !versioningWarnedRef.current) {
       console.warn(
         '[squisq-editor] allowVersioning requires a `workspaceContainer` prop; versioning is disabled.',
       );
       versioningWarnedRef.current = true;
     }
-  }, [allowVersioning, workspaceContainer]);
+  }, [textVersioning, workspaceContainer]);
 
   const versioning = useMemo<DocumentVersionManager | null>(() => {
-    if (!allowVersioning || !workspaceContainer) return null;
+    if (!textVersioning || !workspaceContainer) return null;
     return new DocumentVersionManager(workspaceContainer, { basename: versionBasename });
-  }, [allowVersioning, workspaceContainer, versionBasename]);
+  }, [textVersioning, workspaceContainer, versionBasename]);
 
   const onSaveVersionRef = useRef(onSaveVersion);
   onSaveVersionRef.current = onSaveVersion;
@@ -2007,6 +2025,7 @@ export function EditorProvider({
       activeSceneText,
       sceneTextChannel,
       workspaceContainer,
+      hostFrontmatterKeys: hostKeySet,
       versioning,
       versioningAutoSaves: versioningAutoSaveIdleMs > 0,
       saveVersion,
@@ -2096,6 +2115,7 @@ export function EditorProvider({
       activeSceneText,
       sceneTextChannel,
       workspaceContainer,
+      hostKeySet,
       versioning,
       versioningAutoSaveIdleMs,
       saveVersion,

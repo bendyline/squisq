@@ -191,8 +191,16 @@ export interface PresentationPlan {
 }
 export const PRESENTATION_LIMITS = {
   sourceCharacters: 40_000,
-  beats: 80,
-  serializedCharacters: 160_000,
+  /**
+   * The most slides a deck holds. Ordinary prose at the source limit makes
+   * 200–260 Concise slides, so every density fits a document the source limit
+   * allows. (At 80, a 3,500-word document already failed at Balanced.) A deck
+   * of very short sentences or sections can still pass it; the planner then
+   * names a density that fits.
+   */
+  beats: 300,
+  /** The source text plus 1,500 characters for each slide. */
+  serializedCharacters: 490_000,
   mediaPerBeat: 4,
   /** The most points a summary slide holds. */
   points: 4,

@@ -237,6 +237,44 @@ export function createPresentationPlan(
   doc: Doc,
   hints: PresentationHints = defaultPresentationHints(),
 ): PresentationPlan {
+  const plan = planPresentation(doc, hints);
+  if (plan.beats.length > PRESENTATION_LIMITS.beats)
+    throw new Error(tooManySlides(doc, hints, plan.beats.length));
+  return plan;
+}
+/** Each density as the summary designer names it, from the shortest passages
+ * per slide to the longest. */
+const DENSITY_NAMES: ReadonlyArray<[PresentationHints['density'], string]> = [
+  ['concise', 'Concise'],
+  ['balanced', 'Balanced'],
+  ['detailed', 'Detailed'],
+  ['section', 'One slide per section'],
+];
+/**
+ * Why a deck has more slides than a presentation holds, and what to do: a
+ * density with longer passages per slide, named only when it would fit, or
+ * else splitting the document.
+ */
+function tooManySlides(doc: Doc, hints: PresentationHints, slides: number): string {
+  const limit = PRESENTATION_LIMITS.beats;
+  if (hints.density === 'section')
+    return `This document makes ${slides} slides, one per section, and a presentation holds at most ${limit}. Split it into shorter documents.`;
+  const at = DENSITY_NAMES.findIndex(([density]) => density === hints.density);
+  const fits = DENSITY_NAMES.slice(at + 1)
+    .filter(([density]) => planPresentation(doc, { ...hints, density }).beats.length <= limit)
+    .map(([, name]) => name);
+  const choice =
+    fits.length > 2
+      ? `${fits.slice(0, -1).join(', ')}, or ${fits[fits.length - 1]}`
+      : fits.join(' or ');
+  return `With ${DENSITY_NAMES[at]![1]} density this document makes ${slides} slides, and a presentation holds at most ${limit}. ${
+    choice
+      ? `Choose ${choice} to put more on each slide, or split the document.`
+      : 'Split it into shorter documents.'
+  }`;
+}
+/** The deck for these hints, however many slides it makes. */
+function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan {
   if (!parsePresentationHints(hints)) throw new Error('The slide hints are invalid.');
   const script = buildNarrationScript(doc);
   if (!script.sourceText.trim()) throw new Error('Add some text before making a presentation.');
@@ -541,10 +579,6 @@ export function createPresentationPlan(
       });
     }
   }
-  if (beats.length > PRESENTATION_LIMITS.beats)
-    throw new Error(
-      'This document has too many sections for one presentation. Split it into shorter documents.',
-    );
   // A hidden slide stays in the plan so the designer can show it again; the
   // deck leaves it out, so it carries none of the section's visuals.
   for (const block of script.blocks) {
