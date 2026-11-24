@@ -118,12 +118,23 @@ export interface ExtractionResult {
 
 // ── Patterns ───────────────────────────────────────────────────────
 
+/**
+ * A currency amount with its sign and any country prefix ("US$400 million"). `\b` never
+ * holds before a sign, so the magnitude pattern on its own finds "500 million" inside
+ * "$500 million"; a match inside an amount is widened to the whole amount instead.
+ */
+const CURRENCY_AMOUNT =
+  /(?<![\w$€£¥])[A-Z]{0,3}[$€£¥]\s?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:million|billion|trillion|thousand)\b)?/gi;
+
+/** An amount worth a slide of its own: a magnitude, or 1,000 and up ("$5" is not). */
+const LARGE_AMOUNT = /\d,\d{3}|\d{4}|million|billion|trillion|thousand/i;
+
 const STAT_PATTERNS = [
-  /\b(roughly |about |approximately |nearly |over |under |more than |less than )?([\d,]+(?:\.\d+)?)\s*%/gi,
+  /\b(roughly |about |approximately |nearly |over |under |more than |less than |fewer than )?([\d,]+(?:\.\d+)?)\s*%/gi,
   /\b([\d,]+(?:\.\d+)?)\s*(million|billion|trillion|thousand|hundred)\b/gi,
   /\b([\d,]+(?:\.\d+)?)\s*(miles?|feet|ft|meters?|m|kilometers?|km|acres?|square miles?|sq mi|hectares?)\b/gi,
   /\b([\d,]+(?:\.\d+)?)\s*(x|times)\b/gi,
-  /\b([$€£¥])\s*([\d,]+(?:\.\d+)?)\s*(million|billion|thousand)?\b/gi,
+  CURRENCY_AMOUNT,
   /\b(\d+)(st|nd|rd|th)\s+(largest|smallest|oldest|newest|most|least)/gi,
 ];
 
@@ -374,18 +385,27 @@ export function extractContent(text: string, options: ExtractionOptions = {}): E
 
 function extractStats(text: string): ExtractedElement[] {
   const elements: ExtractedElement[] = [];
-  const seen = new Set<number>();
+  const amounts = [...text.matchAll(CURRENCY_AMOUNT)].map((match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+  }));
+  // Text an earlier pattern claimed: a later one must not find part of it again.
+  const claimed: Array<{ start: number; end: number }> = [];
 
   for (const pattern of STAT_PATTERNS) {
     pattern.lastIndex = 0;
     let match;
     while ((match = pattern.exec(text)) !== null) {
-      const position = match.index;
-      if (seen.has(position)) continue;
-      seen.add(position);
+      const found = { start: match.index, end: match.index + match[0].length };
+      const overlaps = (span: { start: number; end: number }): boolean =>
+        found.start < span.end && found.end > span.start;
+      const { start, end } = amounts.find(overlaps) ?? found;
+      if (pattern === CURRENCY_AMOUNT && !LARGE_AMOUNT.test(match[0])) continue;
+      if (claimed.some((span) => start < span.end && end > span.start)) continue;
+      claimed.push({ start, end });
 
-      const context = getSentenceContext(text, position, match[0].length);
-      const value = match[0].trim();
+      const context = getSentenceContext(text, start, end - start);
+      const value = text.slice(start, end).trim();
 
       elements.push({
         type: 'stat',
