@@ -1,3 +1,14 @@
+## @bendyline/squisq-react [2.12.36](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.35...@bendyline/squisq-react@2.12.36) (2026-11-25)
+
+### Bug Fixes
+
+* Fit concept swatches within label gaps ([#137](https://github.com/bendyline/squisq/issues/137)) ([08e9a6d](https://github.com/bendyline/squisq/commit/08e9a6d562c6ddaa8c6c62bc1a3f7f1e36305d0f))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.14.2
+
 ## @bendyline/squisq-react [2.12.35](https://github.com/bendyline/squisq/compare/@bendyline/squisq-react@2.12.34...@bendyline/squisq-react@2.12.35) (2026-11-23)
 
 ### Bug Fixes

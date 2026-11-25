@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.14.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.14.1...@bendyline/squisq@2.14.2) (2026-11-25)
+
+### Bug Fixes
+
+* Fit concept swatches within label gaps ([#137](https://github.com/bendyline/squisq/issues/137)) ([08e9a6d](https://github.com/bendyline/squisq/commit/08e9a6d562c6ddaa8c6c62bc1a3f7f1e36305d0f))
+
 ## @bendyline/squisq [2.14.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.14.0...@bendyline/squisq@2.14.1) (2026-11-23)
 
 ### Bug Fixes

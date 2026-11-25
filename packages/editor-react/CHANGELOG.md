@@ -1,3 +1,18 @@
+## @bendyline/squisq-editor-react [2.14.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.14.1...@bendyline/squisq-editor-react@2.14.2) (2026-11-25)
+
+### Bug Fixes
+
+* Fit concept swatches within label gaps ([#137](https://github.com/bendyline/squisq/issues/137)) ([08e9a6d](https://github.com/bendyline/squisq/commit/08e9a6d562c6ddaa8c6c62bc1a3f7f1e36305d0f))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.14.2
+* **@bendyline/squisq-formats:** upgraded to 2.8.25
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.52
+* **@bendyline/squisq-react:** upgraded to 2.12.36
+* **@bendyline/squisq-video-react:** upgraded to 2.5.39
+
 ## @bendyline/squisq-editor-react [2.14.1](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.14.0...@bendyline/squisq-editor-react@2.14.1) (2026-11-23)
 
 ### Bug Fixes
