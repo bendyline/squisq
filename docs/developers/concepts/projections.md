@@ -212,7 +212,17 @@ whole canvas into a single `Layer[]` for renderers that have no notion of cells.
 
 `materializeFlashcards(doc)` builds a study deck from the **nested** block tree. It needs the
 parent and child boundaries that the slide projection flattens away, so it takes the `Doc`
-directly.
+directly. Its `source` option picks the cards: study cards kept with a section (`{[flashcard]}` /
+`{[quiz]}` accessory blocks, read by `readStudyCards`), cards inferred from headings, or both:
+`cards` (study cards only), `headings` (inferred from headings, study cards left out), `explicit`
+(study cards and `{study=…}` headings) and `auto`, the default — `explicit` when the document has
+any study card, otherwise `headings`. A study card's `id` is its lasting key (`studyCardKey`: its
+kind and normalized question), so a host recording answers against it keeps them when cards are
+reordered, moved or their answers fixed.
+
+Every projection works from the document without its accessory blocks (slide summaries and other
+side information — see [the document model](document-model.md#block)); the slides pass reads them
+first, to apply a Custom summary's design.
 
 ## Pre-passes
 

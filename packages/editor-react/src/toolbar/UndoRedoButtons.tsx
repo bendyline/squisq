@@ -21,6 +21,7 @@ import { redoDepth, undoDepth } from '@tiptap/pm/history';
 import { useEditorContext } from '../EditorContext';
 import { Icon } from '../Icon';
 import { platformShortcut } from '../platformShortcuts';
+import { replacesWriteSurface } from '../writeModes';
 
 const CAN_UNDO = 1;
 const CAN_REDO = 2;
@@ -60,7 +61,7 @@ export function UndoRedoButtons() {
   const shown =
     editor !== null &&
     activeView === 'wysiwyg' &&
-    layoutMode !== 'summary' &&
+    !replacesWriteSurface(layoutMode) &&
     editorMode === 'markdown' &&
     !findMode;
   if (!shown) return null;

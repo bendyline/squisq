@@ -254,7 +254,11 @@ picker, a cell **Style**, a **Title** switch, and a button to export the dashboa
 
 ## Flashcards
 
-Flashcards turn the document into a study deck. Each card shows a question; **Reveal** shows the
+Flashcards turn the document into a study deck. A document with
+[study cards](markup.md#study-cards) — `{[flashcard]}` and `{[quiz]}` headings kept under each
+section — is studied from those cards, each labelled with its section, together with any heading
+marked `{study=…}`; its other headings are not turned into cards. A document with none is
+studied from its headings, as below. Each card shows a question; **Reveal** shows the
 answer, and you mark it **Again** or **Next**. At the end you see how many you remembered and can
 retry the ones you missed. **Shuffle** and **Restart** sit above the deck, and the arrow keys,
 Space, and Enter move through it.
@@ -306,7 +310,9 @@ How headings become cards:
   keys pick one, and the heading's body is shown as the explanation after you answer.
 
 When a heading's shape is ambiguous, mark it with `{study=…}` and it becomes exactly what you
-asked for. Flashcards have only the **Theme** setting.
+asked for. Flashcards have only the **Theme** setting. Apps can be told how each card went —
+against a card identity that lasts when cards are moved or their answers fixed — to keep a
+person's progress; Squisq keeps none itself.
 
 ## Document
 

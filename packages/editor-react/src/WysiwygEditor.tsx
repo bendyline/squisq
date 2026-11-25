@@ -66,6 +66,7 @@ import {
   DOCUMENT_TRAY_KEY,
   syncDocumentTray,
 } from './documentTray/DocumentTrayExtension';
+import { AccessoryBlocksExtension } from './accessoryBlocks/AccessoryBlocksExtension';
 import { blockShowsDocumentTray } from './documentTray/documentTrayScope';
 import { TemplateBadgePopover, TEMPLATE_NAMES } from './TemplatePicker';
 import { BlockPropertiesPopover } from './BlockPropertiesPopover';
@@ -114,6 +115,7 @@ import { FootnoteSyntaxExtension } from './footnotes/FootnoteSyntaxExtension';
 import { syncAccessoryFileLinkPlaceholders } from './accessoryFileLinks';
 import { replaceDocumentMinimal } from './wysiwygMinimalSync';
 import { resetUndoHistory } from './tiptap/undoHistory';
+import { replacesWriteSurface } from './writeModes';
 
 type MediaMutationView = Pick<ProseMirrorView, 'state' | 'dispatch'>;
 
@@ -269,7 +271,7 @@ export function WysiwygEditor({
   // The Summarize view hides this editor rather than unmounting it, so the
   // frontmatter it writes lands here as undoable steps. Behind it the editor
   // still holds the whole document, exactly as in the Write layout.
-  const layoutMode = selectedLayout === 'summary' ? 'document' : selectedLayout;
+  const layoutMode = replacesWriteSurface(selectedLayout) ? 'document' : selectedLayout;
   // Read by the Link extension's href check, which is created once at mount.
   const wikiLinksRef = useRef(wikiLinks);
   wikiLinksRef.current = wikiLinks;
@@ -538,6 +540,8 @@ export function WysiwygEditor({
         enabled: layoutMode === 'document' || activeBlockKey === 0,
         placeholder: resolvedPlaceholder,
       }),
+      // A section's slide summaries fold into one row; see accessoryBlocks/.
+      AccessoryBlocksExtension,
       Placeholder.configure({ placeholder: resolvedPlaceholder }),
       buildMentionExtension(() => mentionProviderRef.current),
       InlineIcon,
@@ -894,6 +898,8 @@ export function WysiwygEditor({
       if (!target) return;
       const propsBadge = target.closest('.squisq-props-badge') as HTMLElement | null;
       const templateBadge = target.closest('.squisq-template-badge') as HTMLElement | null;
+      // A summary's chip only names it; there is nothing to choose.
+      if (templateBadge?.classList.contains('squisq-template-badge--accessory')) return;
       const badge = propsBadge ?? templateBadge;
       if (!badge || !root.contains(badge)) return;
       e.preventDefault();

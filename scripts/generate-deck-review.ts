@@ -9,6 +9,7 @@
  *   npm run screenshots:decks -- --doc reports/deck-review/corpus-local/tonga.md
  *   npm run screenshots:decks -- --out reports/deck-review/after-typography
  *   npm run screenshots:decks -- --film --doc scripts/deck-review/corpus/our-sun.md
+ *   npm run screenshots:decks -- --viewport portrait --doc scripts/deck-review/corpus/rolled-up-blocks.md
  *
  * Documents default to the public-domain corpus in scripts/deck-review/corpus
  * plus any local documents in reports/deck-review/corpus-local (gitignored).
@@ -17,7 +18,8 @@
  * or the defaults apply.
  *
  * Output (gitignored): reports/deck-review/latest/
- *   <doc>/<theme>/slide-NN.png      every slide at 1280×720
+ *   <doc>/<theme>/slide-NN.png      every slide at 1280×720 (two-thirds of the
+ *                                   viewport; <theme>-portrait/ etc. for others)
  *   <doc>/<theme>/contact.png       the deck at a glance
  *   <doc>/<theme>/deck.json         the plan, templates and measurements
  *   summary.md                      per-deck measurements: type sizes, issues
@@ -42,6 +44,12 @@ const CORPUS_DIRS = [
 ];
 const DEFAULT_OUT_DIR = 'reports/deck-review/latest';
 const DEFAULT_THEMES = ['warm-earth', 'documentary'];
+/** Each slide shape's frame, at two-thirds of its viewport (as the page draws it). */
+const VIEWPORTS: Record<string, { width: number; height: number }> = {
+  landscape: { width: 1280, height: 720 },
+  portrait: { width: 720, height: 1280 },
+  square: { width: 720, height: 720 },
+};
 
 interface Options {
   docs: string[];
@@ -52,6 +60,8 @@ interface Options {
   outDir: string;
   /** Also draw each slide's motion as a filmstrip. */
   film: boolean;
+  /** Slide shape: landscape (default), portrait or square. */
+  viewport: string;
   help: boolean;
 }
 
@@ -94,6 +104,7 @@ function usage(): string {
   --hints <dir>          read <doc>.hints.json from this folder (e.g. AI suggestions)
   --out <dir>            output folder (default: ${DEFAULT_OUT_DIR})
   --film                 also write film-NN.png: each slide's motion, frame by frame
+  --viewport <shape>     landscape | portrait | square (default: landscape)
 `;
 }
 
@@ -103,6 +114,7 @@ function parseArgs(argv: string[]): Options {
     themes: DEFAULT_THEMES,
     outDir: DEFAULT_OUT_DIR,
     film: false,
+    viewport: 'landscape',
     help: false,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -118,7 +130,11 @@ function parseArgs(argv: string[]): Options {
     else if (arg === '--density') options.density = value();
     else if (arg === '--out') options.outDir = value();
     else if (arg === '--film') options.film = true;
-    else if (arg === '--hints') options.hintsDir = path.resolve(REPO_ROOT, value());
+    else if (arg === '--viewport') {
+      options.viewport = value();
+      if (!VIEWPORTS[options.viewport])
+        throw new Error(`Unknown viewport ${options.viewport}\n\n${usage()}`);
+    } else if (arg === '--hints') options.hintsDir = path.resolve(REPO_ROOT, value());
     else throw new Error(`Unknown option ${arg}\n\n${usage()}`);
   }
   return options;
@@ -191,7 +207,15 @@ function fontSizes(slide: DeckSlide): number[] {
   return [...new Set(sizes)].sort((a, b) => b - a);
 }
 
-function contactSheetHtml(title: string, slides: DeckSlide[]): string {
+function contactSheetHtml(
+  title: string,
+  slides: DeckSlide[],
+  frame: { width: number; height: number },
+): string {
+  // Three landscape slides to a row; tall slides six to a row, at the same width.
+  const columns = frame.width >= frame.height ? 3 : 6;
+  const width = Math.floor((1648 - 8 * (columns - 1)) / columns);
+  const height = Math.round((width * frame.height) / frame.width);
   const cells = slides
     .map(
       (slide) =>
@@ -203,8 +227,8 @@ function contactSheetHtml(title: string, slides: DeckSlide[]): string {
   return `<!doctype html><meta charset="utf-8"><style>
 body{margin:0;padding:16px;background:#1b1b1f;font:14px system-ui;color:#ddd;width:1648px}
 h1{font-size:18px;margin:0 0 12px}
-main{display:grid;grid-template-columns:repeat(3,544px);gap:8px}
-figure{margin:0}img{width:544px;height:306px;display:block;border:1px solid #333}
+main{display:grid;grid-template-columns:repeat(${columns},${width}px);gap:8px}
+figure{margin:0}img{width:${width}px;height:${height}px;display:block;border:1px solid #333}
 figcaption{padding:2px 0 6px;color:#aaa}
 </style><h1>${escapeHtml(title)}</h1><main>${cells}</main>`;
 }
@@ -277,13 +301,21 @@ async function run(): Promise<void> {
     '| --- | --- | --- | --- | --- | --- |',
   ];
   try {
-    const page = await browser.newPage({ viewport: { width: 1320, height: 900 } });
+    const frame = VIEWPORTS[options.viewport]!;
+    const page = await browser.newPage({
+      viewport: {
+        width: Math.max(1320, frame.width + 40),
+        height: Math.max(900, frame.height + 80),
+      },
+    });
     for (const [name] of docs) {
       for (const theme of options.themes) {
         const params = new URLSearchParams({ doc: name, theme });
         if (options.density) params.set('density', options.density);
+        if (options.viewport !== 'landscape') params.set('viewport', options.viewport);
         const state = await renderDeck(page, `${baseUrl}${HARNESS_PATH}?${params}`);
-        const deckDir = path.join(outDir, name, theme);
+        const shape = options.viewport === 'landscape' ? '' : `-${options.viewport}`;
+        const deckDir = path.join(outDir, name, `${theme}${shape}`);
         await fs.mkdir(deckDir, { recursive: true });
         if (state.error || !state.slides) {
           process.stderr.write(`${name}/${theme}: ${state.error ?? 'no slides'}\n`);
@@ -298,7 +330,7 @@ async function run(): Promise<void> {
         const contact = path.join(deckDir, 'contact.html');
         await fs.writeFile(
           contact,
-          contactSheetHtml(`${name} · ${theme} · ${state.density}`, state.slides),
+          contactSheetHtml(`${name} · ${theme} · ${state.density}`, state.slides, frame),
         );
         const sheet = await browser.newPage({ viewport: { width: 1680, height: 900 } });
         await sheet.goto(
@@ -318,7 +350,7 @@ async function run(): Promise<void> {
         const issues = state.slides.flatMap((s) => s.metrics?.issues ?? []);
         const templates = [...new Set(state.slides.map((s) => s.template))].join(', ');
         summary.push(
-          `| ${name} / ${theme} | ${state.slides.length} | ${templates} | ${[...sizes]
+          `| ${name} / ${theme}${shape} | ${state.slides.length} | ${templates} | ${[...sizes]
             .sort((a, b) => b - a)
             .join(' ')} | ${Number.isFinite(smallest) ? Math.round(smallest) : '–'} | ${
             issues.filter((i) => i.severity === 'high').length

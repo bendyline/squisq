@@ -18,6 +18,7 @@ import { resolveMediaSchedule } from '../schemas/Media.js';
 import type { ContentContainer } from '../storage/ContentContainer.js';
 import { extractPlainText } from '../markdown/utils.js';
 import { applyNarrationTiming } from './applyNarrationTiming.js';
+import { isAccessoryBlock, realChildren } from './accessoryBlocks.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -105,8 +106,12 @@ function blockToPlainText(block: Block): string {
 function flattenForAudio(blocks: Block[]): Block[] {
   const result: Block[] = [];
   for (const block of blocks) {
-    if (block.children && block.children.length > 0) {
-      result.push(...flattenForAudio(block.children));
+    // Accessory blocks are never narrated, and a section whose only children
+    // are accessory blocks is still a leaf.
+    if (isAccessoryBlock(block)) continue;
+    const children = realChildren(block);
+    if (children.length > 0) {
+      result.push(...flattenForAudio(children));
     } else {
       result.push(block);
     }

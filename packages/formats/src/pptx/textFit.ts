@@ -428,7 +428,9 @@ function overlapPairs(rects: readonly Rect[]): Set<string> {
  */
 export function estimateSlideTextScale(layers: readonly Layer[]): number {
   const targets = layers
-    .filter((layer): layer is TextLayer => layer.type === 'text')
+    // Text that keeps its size (a chart's labels drawn inside the slide) is
+    // sized for its own box and never fits the slide's words.
+    .filter((layer): layer is TextLayer => layer.type === 'text' && !layer.content.style.keepSize)
     .map((layer) => (isHtmlText(layer) ? htmlTarget(layer) : svgTarget(layer)))
     .filter((target): target is FitTarget => target !== null);
   if (targets.length === 0) return 1;

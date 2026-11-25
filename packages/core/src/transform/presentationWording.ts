@@ -34,33 +34,30 @@ import {
   type PresentationSlideReply,
 } from './presentationAuthor.js';
 import {
-  AUTHORED_PRESENTATION_LAYOUT,
+  isSummaryPresentationLayout,
+  presentationBeatIsWorded,
   type PresentationBeat,
   type PresentationLayout,
   type PresentationPlan,
 } from './presentationPlan.js';
+import { askAuthorModel, type AuthorModelReply, type AuthorModelRequest } from './authorModel.js';
 
-/** One request to the model, in terms any chat API can carry. */
-export interface PresentationModelRequest {
+/**
+ * One request to the model, in terms any chat API can carry — the shared
+ * authoring transport (`authorModel.ts`), so one host function serves slide
+ * wording and study cards alike.
+ */
+export interface PresentationModelRequest extends AuthorModelRequest {
   /** The deck's layouts planned together, or one slide's wording. */
   kind: 'storyboard' | 'slide';
   /** For a slide request, the beat it words. */
   index?: number;
-  /** The system prompt. */
-  system: string;
-  /** The request itself, as the user message. */
-  user: string;
   /** The reply shape, for a host that can enforce structured output (a JSON schema). */
   responseFormat: PresentationAuthorFormat;
-  maxTokens: number;
-  temperature: number;
 }
 
 /** The model's reply. `truncated` when it stopped at `maxTokens`. */
-export interface PresentationModelReply {
-  text: string;
-  truncated?: boolean;
-}
+export type PresentationModelReply = AuthorModelReply;
 
 /**
  * Sends one request and resolves with the reply. Throw to report a failure:
@@ -105,21 +102,7 @@ export interface WordPresentationResult {
 }
 
 /** One request; an abort while it was out is reported as the abort, not as its failure. */
-async function ask(
-  model: PresentationModel,
-  request: PresentationModelRequest,
-  signal: AbortSignal | undefined,
-): Promise<PresentationModelReply> {
-  signal?.throwIfAborted();
-  try {
-    const reply = await model(request, signal);
-    signal?.throwIfAborted();
-    return reply;
-  } catch (error: unknown) {
-    signal?.throwIfAborted();
-    throw error;
-  }
-}
+const ask = askAuthorModel<PresentationModelRequest>;
 
 /**
  * One request that plans every slide's layout together, so the deck varies
@@ -170,11 +153,12 @@ export async function wordPresentationPlan(
   const beats = [...plan.beats];
   let retained = 0;
   const refined: number[] = [];
-  // An authored section keeps its own block and a hidden slide is not shown,
-  // so neither has an outcome. A passage too long for a small model, or one
-  // that addresses the model, keeps its automatic slide without being sent.
+  // An authored section keeps its own block, a section shown on the slide
+  // before it has no slide, and a hidden slide is not shown, so none has an
+  // outcome. A passage too long for a small model, or one that addresses the
+  // model, keeps its automatic slide without being sent.
   const considered = plan.beats.flatMap((beat, index) =>
-    beat.layout === AUTHORED_PRESENTATION_LAYOUT || beat.hidden ? [] : [index],
+    presentationBeatIsWorded(beat) ? [index] : [],
   );
   const asked = presentationSlidesToWord(plan);
   // A deck of a few slides plans its layouts together first; a short one, or
@@ -196,7 +180,13 @@ export async function wordPresentationPlan(
     // a plan, the deck so far, so the model can vary its layouts.
     let context: PresentationSlideContext = planned.has(index)
       ? { planned: planned.get(index) }
-      : { previous: beats.slice(Math.max(0, index - 3), index).map((beat) => beat.layout) };
+      : {
+          previous: beats
+            .slice(0, index)
+            .filter((beat) => isSummaryPresentationLayout(beat.layout))
+            .slice(-3)
+            .map((beat) => beat.layout),
+        };
     for (let attempt = 0; attempt < 2 && !replacement; attempt++) {
       const reply = await ask(
         model,

@@ -3,12 +3,8 @@
  * without narration), never from generated display wording or model output.
  */
 import { createPresentationPlan } from './presentationPlanner.js';
-import {
-  defaultPresentationHints,
-  parsePresentationHints,
-  PRESENTATION_HINTS_KEY,
-  usesDynamicPresentation,
-} from './presentationHints.js';
+import { usesDynamicPresentation } from './presentationHints.js';
+import { readPresentationHints } from './presentationHintsDoc.js';
 import type { Block, Doc } from '../schemas/Doc.js';
 import type { TemplateBlock } from '../schemas/BlockTemplates.js';
 import { buildNarrationScript } from '../narration/script.js';
@@ -18,6 +14,7 @@ import { collectPresentationMedia, presentationMediaNode } from './presentationM
 import type { MarkdownBlockNode } from '../markdown/types.js';
 import type { MediaClip } from '../schemas/Media.js';
 import { isContainerTemplate } from '../doc/templates/templateNames.js';
+import { pruneAccessoryBlocks } from '../doc/accessoryBlocks.js';
 import { conceptBuildStepTexts } from '../doc/templates/conceptBlocks.js';
 import { extractConceptItems } from '../doc/templateInputs.js';
 import {
@@ -29,6 +26,9 @@ import {
 import { wordTimeAt } from '../timing/wordTiming.js';
 import {
   AUTHORED_PRESENTATION_LAYOUT,
+  FEATURE_PRESENTATION_LAYOUT,
+  isSummaryPresentationLayout,
+  presentationBeatIsSlide,
   PRESENTATION_KEY,
   parsePresentationPlan,
   presentationStat,
@@ -65,21 +65,46 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     throw new Error(
       'Remove manually pinned slide times before fitting a presentation to narration.',
     );
-  const images = new Set(extractDocImages(doc.blocks).map((image) => image.src));
+  // Accessory blocks (summaries) shape the deck but are never in it: their
+  // pictures are not the document's, and a section drawn as authored
+  // carries only its real children.
+  const contentBlocks = pruneAccessoryBlocks(doc.blocks);
+  const images = new Set(extractDocImages(contentBlocks).map((image) => image.src));
   if (checked.beats.some((beat) => beat.imageSrc && !images.has(beat.imageSrc)))
     throw new Error(
       'A presentation image is no longer in the document. Make the presentation again.',
     );
+  // Sections shown on the slide before them, as the plan placed them.
+  const sectionAtOffset = (offset: number) =>
+    script.blocks.find((block) => offset >= block.charStart && offset < block.charEnd);
+  const rollupIds = new Set(
+    checked.beats.flatMap((beat) =>
+      beat.layout === FEATURE_PRESENTATION_LAYOUT
+        ? [sectionAtOffset(beat.sourceStart)?.blockId ?? '']
+        : [],
+    ),
+  );
   const media = new Map(
     [
       ...collectPresentationMedia(
         doc,
         script.blocks.map((block) => block.blockId),
+        rollupIds,
       ).values(),
     ]
       .flat()
       .map((item) => [item.ref, item]),
   );
+  // Each must ride on a slide of the deck.
+  const carried = new Set(
+    checked.beats.flatMap((beat) => (presentationBeatIsSlide(beat) ? (beat.media ?? []) : [])),
+  );
+  for (const item of media.values()) {
+    if (item.kind === 'block' && !carried.has(item.ref))
+      throw new Error(
+        'A block shown on the slide before it has no slide to ride on. Make the presentation again.',
+      );
+  }
   if (checked.beats.some((beat) => beat.media?.some((ref) => !media.has(ref))))
     throw new Error(
       'A presentation table, picture, video or diagram is no longer in the document. Make the presentation again.',
@@ -145,8 +170,11 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     previous = Math.min(duration, Math.max(previous, timeAt(beat.sourceStart)));
     return previous;
   });
-  const authoredBlocks = flattenRenderableBlocks(doc.blocks);
-  const buildHints = parsePresentationHints(doc.frontmatter?.[PRESENTATION_HINTS_KEY]);
+  const authoredBlocks = flattenRenderableBlocks(contentBlocks);
+  // A legacy design could set a section's builds; a section's own `build=`
+  // setting does that now.
+  const read = readPresentationHints(doc);
+  const buildHints = read.format === 'legacy' ? read.hints : undefined;
   const sourceOf = (beat: PresentationBeat) =>
     script.blocks.find(
       (block) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
@@ -158,10 +186,13 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     const section = sourceOf(beat)?.blockId;
     if (section) sectionEnds.set(section, starts[index + 1] ?? duration);
   });
-  // A hidden slide is left out of the deck. The narration still speaks its
-  // passage, so the shown slide before it stays on screen (at the very start,
-  // the first shown slide opens the deck instead).
-  const shown = checked.beats.flatMap((beat, index) => (beat.hidden ? [] : [index]));
+  // A hidden slide is left out of the deck, and so is a section shown on the
+  // slide before it. The narration still speaks its passage, so the shown
+  // slide before it stays on screen (at the very start, the first shown slide
+  // opens the deck instead).
+  const shown = checked.beats.flatMap((beat, index) =>
+    presentationBeatIsSlide(beat) ? [index] : [],
+  );
   if (!shown.length) throw new Error('Every slide is hidden. Show at least one slide.');
   const windows = shown
     .map((index, position) => ({
@@ -212,16 +243,46 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
       buildHints?.blocks.find((hint) => hint.blockId === source?.blockId)?.build ??
       authoredBlocks.find((block) => block.id === source?.blockId)?.build;
     const contents = (beat.media ?? []).flatMap((ref): MarkdownBlockNode[] => {
+      const item = media.get(ref)!;
+      if (item.kind === 'block') return [];
       const first = mediaStarts.get(ref) ?? start;
       mediaStarts.set(ref, first);
-      const node = presentationMediaNode(media.get(ref)!, start - first);
+      const node = presentationMediaNode(item, start - first);
       return node ? [node] : [];
+    });
+    // Whole blocks this slide carries (a chart shown on the slide before it),
+    // as authored, held still: their own builds and media stay behind.
+    const featureBlocks = (beat.media ?? []).flatMap((ref): Block[] => {
+      const item = media.get(ref)!;
+      if (item.kind !== 'block') return [];
+      const authoredBlock =
+        authoredBlocks.find((block) => block.id === item.block.id) ?? item.block;
+      const {
+        children,
+        media: _media,
+        build: _build,
+        buildTiming: _buildTiming,
+        buildSource: _buildSource,
+        slideLayout: _slideLayout,
+        supportingSlides: _supportingSlides,
+        featureBlocks: _nested,
+        ...own
+      } = authoredBlock;
+      return [
+        {
+          ...own,
+          ...(children && isContainerTemplate(authoredBlock.template) ? { children } : {}),
+          startTime: start,
+          duration: end - start,
+        },
+      ];
     });
     const authored = authoredBlocks.find((block) => block.id === source?.blockId);
     const clips = sectionClips.get(index) ?? [];
     const base = {
       ...(build ? { build } : {}),
       ...(contents.length ? { contents } : {}),
+      ...(featureBlocks.length ? { featureBlocks } : {}),
       ...(clips.length ? { media: clips } : {}),
       id: beat.id,
       duration: end - start,
@@ -262,17 +323,25 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
       });
       continue;
     }
+    const layout = beat.layout;
+    if (!isSummaryPresentationLayout(layout))
+      throw new Error('A block shown on another slide has no slide of its own.');
+    // A table, or a whole block, takes the slide's width beneath its words.
     const table =
-      beat.layout !== 'image' && (beat.media ?? []).some((ref) => media.get(ref)!.kind === 'table');
+      layout !== 'image' &&
+      (beat.media ?? []).some((ref) => {
+        const kind = media.get(ref)!.kind;
+        return kind === 'table' || kind === 'block';
+      });
     const block: TemplateBlock = table
-      ? tableFeatureBlock(beat, beat.layout, base, contents)
-      : visualBlock(beat, beat.layout, base, index);
+      ? tableFeatureBlock(beat, layout, base, contents)
+      : visualBlock(beat, layout, base, index);
     const concept = conceptTemplate(block.template);
     // A summary that carries its section's features: the materializer lays
     // its tables and pictures out beside the words, not as decoration.
     blocks.push({
       ...block,
-      ...(contents.length ? { summaryMode: 'brief' } : {}),
+      ...(contents.length || featureBlocks.length ? { summaryMode: 'brief' } : {}),
       // A concept slide reveals its ideas one at a time, each as the narration
       // reaches the sentence it summarizes (`conceptReveal`).
       ...(concept && !build
@@ -462,13 +531,11 @@ export function applySavedPresentation(doc: Doc): Doc {
   if (!dynamic && !Object.prototype.hasOwnProperty.call(doc.frontmatter ?? {}, PRESENTATION_KEY))
     return doc;
   try {
-    const rawHints = doc.frontmatter?.[PRESENTATION_HINTS_KEY];
-    const hints =
-      rawHints === undefined ? defaultPresentationHints() : parsePresentationHints(rawHints);
-    if (dynamic && !hints)
+    const read = dynamic ? readPresentationHints(doc) : undefined;
+    if (read?.legacyInvalid)
       throw new Error('The slide hints are invalid. Review the summarization settings.');
-    const plan = dynamic
-      ? createPresentationPlan(doc, hints!)
+    const plan = read
+      ? createPresentationPlan(doc, read.hints)
       : parsePresentationPlan(doc.frontmatter?.[PRESENTATION_KEY]);
     if (!plan) throw new Error('The saved presentation is invalid. Make the presentation again.');
     return compilePresentationPlan(doc, plan);

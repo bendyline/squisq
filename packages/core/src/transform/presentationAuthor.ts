@@ -44,9 +44,10 @@ import {
   ungroundedNumber,
 } from './grounding.js';
 import {
-  AUTHORED_PRESENTATION_LAYOUT,
   PRESENTATION_LAYOUTS,
   PRESENTATION_LIMITS,
+  isSummaryPresentationLayout,
+  presentationBeatIsWorded,
   parsePresentationPlan,
   presentationBeatExtras,
   presentationLayoutProblem,
@@ -175,7 +176,8 @@ export function addressesAModel(passage: string): boolean {
  */
 export function presentationSlidesToWord(plan: PresentationPlan): number[] {
   return plan.beats.flatMap((beat, index) => {
-    if (beat.layout === AUTHORED_PRESENTATION_LAYOUT || beat.hidden) return [];
+    // Only shown summaries: not authored, not shown on another slide, not hidden.
+    if (!presentationBeatIsWorded(beat)) return [];
     const passage = plan.sourceText.slice(beat.sourceStart, beat.sourceEnd);
     return passage.length > PRESENTATION_AUTHOR_LIMITS.passageCharacters || addressesAModel(passage)
       ? []
@@ -367,7 +369,7 @@ export function groundPresentationBeat(
 ): GroundedPresentationBeat {
   const notes: string[] = [];
   const refuse = (problem: string): GroundedPresentationBeat => ({ beat: null, problem, notes });
-  if (beat.layout === AUTHORED_PRESENTATION_LAYOUT) return { beat, notes };
+  if (!isSummaryPresentationLayout(beat.layout)) return { beat, notes };
   const foreign = beat.points.find((point) => !isGroundedParaphrase(point, passage));
   if (foreign !== undefined)
     return refuse(`the point ${quoted(foreign)} uses words or numbers the passage does not`);
@@ -598,8 +600,9 @@ export function readPresentationSlideReply(
   const missing = ['layout', 'headline', 'points'].find((key) => !(key in proposal));
   if (missing !== undefined) return refuse(`the reply has no "${missing}"`);
   const original = plan.beats[index];
-  // An authored slide is the author's own block; there is nothing to word.
-  if (!original || original.layout === AUTHORED_PRESENTATION_LAYOUT)
+  // An authored slide is the author's own block, and a block shown on the
+  // slide before it has no slide; there is nothing to word.
+  if (!original || !isSummaryPresentationLayout(original.layout))
     return refuse('this slide is shown as authored');
   const passage = plan.sourceText.slice(original.sourceStart, original.sourceEnd);
   // An image slide keeps its picture; the model only words its caption.

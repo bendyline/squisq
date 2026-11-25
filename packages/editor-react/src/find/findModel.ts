@@ -1,4 +1,5 @@
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
+import { computeAccessoryRuns } from '../accessoryBlocks/accessoryBlockRuns';
 
 export interface FindTextMatch {
   from: number;
@@ -87,8 +88,13 @@ export function findProseMirrorMatches(
   options: FindOptions = {},
 ): FindTextMatch[] {
   const matches: FindTextMatch[] = [];
+  // Side information kept in the document (slide summaries, study cards) is
+  // folded away in Write and is not its text: Find and Replace leave it be.
+  // Source finds it.
+  const hidden = computeAccessoryRuns(doc);
 
   doc.descendants((node, blockPos) => {
+    if (hidden.some((run) => blockPos >= run.from && blockPos < run.to)) return false;
     if (!node.isTextblock) return true;
 
     const spans: Array<FindTextMatch & { docFrom: number }> = [];

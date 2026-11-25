@@ -260,6 +260,24 @@ export { condenseMarkdownSource } from './condenseMarkdown.js';
 export { mediaKindForUrl } from './mediaReference.js';
 export type { MediaReferenceKind } from './mediaReference.js';
 
+// Accessory sections (`### Headline {[summary]}`): side information that
+// exporters and renderers leave out — see doc/accessoryBlocks.ts.
+export { setHeadingLineParams } from './headingTags.js';
+export {
+  applySourceTextEdits,
+  minimalSourceTextEdit,
+  sortSourceTextEdits,
+  coalesceSourceTextEdits,
+  type SourceTextEdit,
+} from './sourceTextEdits.js';
+
+// The registry of accessory types is exported from `@bendyline/squisq/doc`.
+export {
+  isAccessoryHeading,
+  withoutAccessorySections,
+  withoutAccessorySectionNodes,
+} from './accessorySections.js';
+
 export {
   wikiLinkPath,
   parseWikiLink,

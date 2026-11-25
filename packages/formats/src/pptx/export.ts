@@ -50,6 +50,7 @@ import {
   expandCoverBlock,
   expandDocBlocks,
   flattenRenderableBlocks,
+  isAccessoryBlock,
   isGeometryBoundTemplate,
   isTemplateBlock,
   resolvePersistentLayers,
@@ -79,6 +80,7 @@ import {
   isSvgImageSource,
   parseVideoEmbedUrl,
   readFrontmatterThemeId,
+  withoutAccessorySections,
 } from '@bendyline/squisq/markdown';
 
 import { createPackage } from '../ooxml/writer.js';
@@ -259,10 +261,12 @@ export interface PptxExportOptions {
  * Convert a MarkdownDocument to a .pptx ArrayBuffer.
  */
 export async function markdownDocToPptx(
-  doc: MarkdownDocument,
+  source: MarkdownDocument,
   options: PptxExportOptions = {},
 ): Promise<ArrayBuffer> {
   options.signal?.throwIfAborted();
+  // Accessory sections (slide summaries) are side information, never slides.
+  const doc = withoutAccessorySections(source);
   // Resolve theme from options or frontmatter. The frontmatter lookup
   // accepts the editor's canonical `squisq-theme` key as well as the
   // shorter legacy `themeId` / `theme` aliases — see
@@ -488,6 +492,8 @@ function authoredBlocksById(blocks: readonly Block[] | undefined): Map<string, B
   const byId = new Map<string, Block>();
   const visit = (list: readonly Block[] | undefined) => {
     for (const block of list ?? []) {
+      // A summary's footnotes are not the slide's notes.
+      if (isAccessoryBlock(block)) continue;
       if (!byId.has(block.id)) byId.set(block.id, block);
       visit(block.children);
     }
@@ -938,16 +944,18 @@ function buildLayerSlideXml(block: Block, ctx: SlideContext, plan: SlidePlan): s
       nextTextY === undefined || currentY === undefined
         ? undefined
         : Math.max(currentY + 1, nextTextY - 8);
+    // Text that keeps its size (inside an embedded block) is not scaled.
+    const layerScale = layer.type === 'text' && layer.content.style.keepSize ? 1 : textScale;
     shapes.push(
       ...(layer.type === 'text'
         ? hasTableParagraphs(layer)
           ? textLayerWithTablesXml(layer, {
               textBottom,
               listIndentPx,
-              textScale,
+              textScale: layerScale,
               allocShapeId: () => ctx.allocShapeId(),
             })
-          : [buildLayerTextShape(layer, ctx.allocShapeId(), textBottom, listIndentPx, textScale)]
+          : [buildLayerTextShape(layer, ctx.allocShapeId(), textBottom, listIndentPx, layerScale)]
         : convertLayerToShapes(layer, ctx, textBottom)),
     );
   }

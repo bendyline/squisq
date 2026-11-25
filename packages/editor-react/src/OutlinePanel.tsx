@@ -18,7 +18,7 @@ import {
   useState,
 } from 'react';
 import type { Block, Doc } from '@bendyline/squisq/schemas';
-import { flattenBlocks, hasTemplate } from '@bendyline/squisq/doc';
+import { flattenBlocks, hasTemplate, pruneAccessoryBlocks } from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import { useEditorContext } from './EditorContext';
 import { templateLabel } from './TemplatePicker';
@@ -109,7 +109,9 @@ export function OutlinePanel({
   // H1-H6 nodes changed. Keep the previous tree in that common case so the
   // memoized renderer receives the same block-array identity and React can
   // leave every outline row (including its drag handle) untouched.
-  const nextOutlineBlocks = doc?.blocks ?? EMPTY_BLOCKS;
+  // Accessory blocks (slide summaries) are side information about a section,
+  // not sections, so the outline leaves them out.
+  const nextOutlineBlocks = doc ? pruneAccessoryBlocks(doc.blocks) : EMPTY_BLOCKS;
   const outlineBlocksRef = useRef(nextOutlineBlocks);
   if (!sameOutlineStructure(outlineBlocksRef.current, nextOutlineBlocks)) {
     outlineBlocksRef.current = nextOutlineBlocks;
@@ -217,7 +219,19 @@ export function OutlinePanel({
       const block = findLiveBlock(current.doc, outlineBlock.id) ?? outlineBlock;
       const line = block.sourceHeading?.position?.start.line;
       if (typeof line !== 'number') return;
-      const next = bumpHeadingLevelInSource(current.markdownSource, line, delta);
+      // The section's summaries change level with it, so they stay its own.
+      // (Headings nested in a summary name the same section.)
+      const summaries = current.doc
+        ? flattenBlocks(current.doc.blocks).filter((item) => item.accessoryBlock?.of === block.id)
+        : [];
+      const lines = [
+        line,
+        ...summaries.flatMap((item) => {
+          const at = item.sourceHeading?.position?.start.line;
+          return typeof at === 'number' ? [at] : [];
+        }),
+      ];
+      const next = bumpHeadingLevelsInSource(current.markdownSource, lines, delta);
       if (next != null) current.setMarkdownSource(next);
     },
     [readOnly],
@@ -606,7 +620,7 @@ function useActiveOutlineBlockId(): string | null {
         if (offset <= from) lastIndex = seen;
       });
       const block = lastIndex >= 0 ? flatBlocksRef.current[lastIndex] : null;
-      setActiveId(block?.id ?? null);
+      setActiveId(outlineIdOf(block));
     };
 
     update();
@@ -633,7 +647,7 @@ function useActiveOutlineBlockId(): string | null {
         if (typeof headingLine === 'number' && headingLine <= line) lastIndex = i;
       });
       const block = lastIndex >= 0 ? flatBlocksRef.current[lastIndex] : null;
-      setActiveId(block?.id ?? null);
+      setActiveId(outlineIdOf(block));
     };
 
     update();
@@ -708,6 +722,29 @@ function canDropOnSection(dragged: OutlineSectionRef, target: OutlineSectionRef)
 function placementForPointer(event: ReactDragEvent<HTMLElement>): OutlineDropPlacement {
   const bounds = event.currentTarget.getBoundingClientRect();
   return event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after';
+}
+
+/** The outline row a block shows under: a summary's section, or the block itself. */
+function outlineIdOf(block: Block | null | undefined): string | null {
+  if (!block) return null;
+  return block.accessoryBlock ? (block.accessoryBlock.of ?? null) : block.id;
+}
+
+/**
+ * {@link bumpHeadingLevelInSource} for several lines at once — all or none:
+ * null when any would leave H1–H6.
+ */
+function bumpHeadingLevelsInSource(
+  source: string,
+  lines: readonly number[],
+  delta: number,
+): string | null {
+  let next: string | null = source;
+  for (const line of lines) {
+    next = bumpHeadingLevelInSource(next, line, delta);
+    if (next == null) return null;
+  }
+  return next;
 }
 
 function hasAnyHeading(blocks: Block[]): boolean {

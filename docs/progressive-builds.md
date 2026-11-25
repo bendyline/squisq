@@ -60,8 +60,8 @@ HTML options to show completed content throughout.
 Timing uses recorded build advances when available, then exact narration-word
 matches, then reading-length estimates. Narration alignment requires the
 canonical source script to match the take. Summarized display wording without
-an exact source match uses estimated timing. Dynamic presentation hints accept
-the same `BuildSpec` per source block and inherit heading settings otherwise.
+an exact source match uses estimated timing. A Custom summary's slides use
+their section heading's build settings.
 
 In the recorder's slides panel, stepping through builds records their first
 showing alongside the slide advances. The optional `builds` array in the existing

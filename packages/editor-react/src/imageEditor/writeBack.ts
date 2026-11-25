@@ -1,14 +1,18 @@
 /**
- * Write-back bookkeeping for the image-edit modal.
+ * Write-back bookkeeping for the image editors that save over a picture
+ * (the image-edit modal and `ImageFileEditor`).
  *
  * The editor persists its layers to the sidecar's `state.json` as the user
- * works, but the document's picture only changes when the flattened raster
- * is written back over it. This module records which layer state was last
- * written back (`writeback.json` beside `state.json`), so closing the modal
+ * works, but the picture only changes when the flattened raster is written
+ * back over it. This module records which layer state was last written back
+ * (`writeback.json` beside `state.json`), so closing or leaving the editor
  * can tell whether the picture is behind the layers, including edits left
- * behind by an earlier session.
+ * behind by an earlier session. `ImageFileEditor` also records a digest of
+ * the bytes it wrote, so a picture replaced outside the editor is noticed
+ * instead of being overwritten from stale layers.
  */
 
+import type { ImageEditExportFormat } from '@bendyline/squisq/imageEdit';
 import type { ImageEditDoc } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 
@@ -19,7 +23,31 @@ interface WriteBackRecord {
   version: 1;
   /** {@link imageEditSignature} of the layer state last written back. */
   signature: string;
+  /** {@link digestBytes} of the picture bytes that write produced, when known. */
+  pictureDigest?: string;
   writtenAt: string;
+}
+
+/** What `writeback.json` says about the last write-back. */
+export interface WriteBackState {
+  signature: string;
+  /** Null for records written without one (the modal does not keep one). */
+  pictureDigest: string | null;
+}
+
+/**
+ * The format an edited picture is saved back in, chosen so the file keeps
+ * its type: PNG, JPEG, and WebP only. Null for anything else (GIF, SVG,
+ * AVIF, BMP, ICO), which the raster editor cannot save back losslessly.
+ */
+export function imageSaveFormatForPath(path: string): ImageEditExportFormat | null {
+  const name = (path.split(/[?#]/, 1)[0] ?? '').split(/[\\/]/).pop() ?? '';
+  const dot = name.lastIndexOf('.');
+  const extension = dot < 0 ? null : name.slice(dot + 1).toLowerCase();
+  if (extension === 'png') return 'png';
+  if (extension === 'jpg' || extension === 'jpeg') return 'jpeg';
+  if (extension === 'webp') return 'webp';
+  return null;
 }
 
 /**
@@ -61,33 +89,44 @@ export function needsWriteBack(doc: ImageEditDoc, written: string | null): boole
   return written === null ? !isPristineImageEditDoc(doc) : imageEditSignature(doc) !== written;
 }
 
-/** Read the recorded signature. Absent or unreadable records read as null. */
-export async function readWriteBackSignature(container: ContentContainer): Promise<string | null> {
+/** Read the write-back record. Absent or unreadable records read as null. */
+export async function readWriteBackState(
+  container: ContentContainer,
+): Promise<WriteBackState | null> {
   try {
     const data = await container.readFile(IMAGE_EDIT_WRITE_BACK_FILENAME);
     if (!data) return null;
     const parsed: unknown = JSON.parse(new TextDecoder().decode(data));
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      typeof (parsed as Partial<WriteBackRecord>).signature === 'string'
-    ) {
-      return (parsed as WriteBackRecord).signature;
-    }
-    return null;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const record = parsed as Partial<WriteBackRecord>;
+    if (typeof record.signature !== 'string') return null;
+    return {
+      signature: record.signature,
+      pictureDigest: typeof record.pictureDigest === 'string' ? record.pictureDigest : null,
+    };
   } catch {
     return null;
   }
 }
 
-/** Record that the picture now matches the layer state with `signature`. */
+/** Read the recorded signature. Absent or unreadable records read as null. */
+export async function readWriteBackSignature(container: ContentContainer): Promise<string | null> {
+  return (await readWriteBackState(container))?.signature ?? null;
+}
+
+/**
+ * Record that the picture now matches the layer state with `signature`,
+ * and, when given, that its bytes have digest `pictureDigest`.
+ */
 export async function writeWriteBackSignature(
   container: ContentContainer,
   signature: string,
+  pictureDigest?: string,
 ): Promise<void> {
   const record: WriteBackRecord = {
     version: 1,
     signature,
+    ...(pictureDigest !== undefined ? { pictureDigest } : {}),
     writtenAt: new Date().toISOString(),
   };
   const bytes = new TextEncoder().encode(JSON.stringify(record, null, 2));
@@ -101,6 +140,27 @@ function canonicalJson(value: unknown): string {
     .filter(([, v]) => v !== undefined)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalJson(v)}`).join(',')}}`;
+}
+
+/**
+ * Fingerprint of a picture's bytes (cyrb53 over the bytes, plus length).
+ * Tells whether a picture is still the one the editor last wrote; a
+ * collision would only keep layers for a picture replaced outside.
+ */
+export function digestBytes(input: Uint8Array | ArrayBuffer): string {
+  const bytes = ArrayBuffer.isView(input)
+    ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+    : new Uint8Array(input);
+  let h1 = 0xdeadbeef ^ bytes.length;
+  let h2 = 0x41c6ce57 ^ bytes.length;
+  for (let i = 0; i < bytes.length; i++) {
+    const b = bytes[i]!;
+    h1 = Math.imul(h1 ^ b, 2654435761);
+    h2 = Math.imul(h2 ^ b, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `${bytes.length.toString(36)}-${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
 }
 
 /** cyrb53: a fast 53-bit string hash. A collision would only skip one save on close. */

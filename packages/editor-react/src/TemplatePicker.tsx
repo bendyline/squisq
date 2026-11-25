@@ -11,7 +11,12 @@ import { createPortal } from 'react-dom';
 import { useEscapeDismissal } from './useEscapeDismissal';
 import { clampTooltipLeft } from './tooltipPlacement';
 import type { CustomTemplateDefinition } from '@bendyline/squisq/schemas';
-import { TEMPLATE_METADATA, resolveTemplateName } from '@bendyline/squisq/doc';
+import {
+  ACCESSORY_BLOCK_TYPES,
+  TEMPLATE_METADATA,
+  isAccessoryBlockType,
+  resolveTemplateName,
+} from '@bendyline/squisq/doc';
 import { extractPlainText } from '@bendyline/squisq/markdown';
 import { useCustomTemplates } from './customTemplates/CustomTemplateContext';
 import { TemplateThumbnail } from './customTemplates/thumbnail';
@@ -927,6 +932,8 @@ export function templateLabel(
   const resolved = resolveTemplateName(name);
   const meta = TEMPLATE_METADATA[resolved];
   if (meta) return meta.label;
+  // An accessory block (a slide summary) is named by its registry, never offered.
+  if (isAccessoryBlockType(resolved)) return ACCESSORY_BLOCK_TYPES[resolved].label;
   const custom = customTemplates?.find((t) => t.name === resolved);
   if (custom) return custom.label;
   // Fallback: split camelCase

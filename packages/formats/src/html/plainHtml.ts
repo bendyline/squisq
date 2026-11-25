@@ -35,6 +35,7 @@ import {
   type VideoEmbed,
   readFrontmatterThemeId,
 } from '@bendyline/squisq/markdown';
+import { withoutAccessorySections } from '@bendyline/squisq/markdown';
 import type { Theme, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { resolveFontFamily, buildGoogleFontsUrl } from '@bendyline/squisq/schemas';
 import {
@@ -259,9 +260,12 @@ interface RenderedPlainHtml {
 }
 
 function renderPlainHtml(
-  doc: MarkdownDocument,
+  source: MarkdownDocument,
   options: PlainHtmlExportOptions,
 ): RenderedPlainHtml {
+  // Accessory sections (slide summaries) are side information, not the page;
+  // left in, their footnote references would number notes too.
+  const doc = withoutAccessorySections(source);
   const {
     title = 'Document',
     images,

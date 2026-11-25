@@ -845,7 +845,10 @@ that merely restates the resolved document title dedupes into the title band.
 #### Flashcard Resolution
 
 ```ts
-function materializeFlashcards(doc: Doc, options?: { source?: 'auto' | 'explicit' }): FlashcardDeck;
+function materializeFlashcards(
+  doc: Doc,
+  options?: { source?: 'auto' | 'explicit' | 'headings' | 'cards' },
+): FlashcardDeck;
 
 interface FlashcardDeck {
   title?: string;
@@ -853,9 +856,11 @@ interface FlashcardDeck {
   diagnostics: FlashcardDiagnostic[];
 }
 interface Flashcard {
-  id: string;
+  id: string; // a study card's lasting key; otherwise its block's id
   sourceBlockId: string;
   kind: 'basic' | 'multiple-choice';
+  ownerBlockId?: string; // a study card's section
+  origin?: 'ai';
   label?: string;
   front: { blocks: Block[] };
   back: { blocks: Block[] };
@@ -873,6 +878,17 @@ card boundary, `{study=group}` forces grouping, and
 `{study=multiple-choice-flashcard}` maps child one to the question and the
 remaining children to choices. The first choice is correct unless a choice
 uses `{correct=true}`.
+
+Study cards kept with a section — `{[flashcard]}` and `{[quiz]}` accessory
+blocks — are read by `readStudyCards(doc)` (also in `@bendyline/squisq/doc`;
+everything else here is `@bendyline/squisq/study`, an entry of its own so an
+app loads it only with its card manager) (cards with their lasting `key`,
+section, `origin`, `passage`, `stale` and `usable`, plus plain-language
+`issues`) and written by `writeStudyCards(source, changes)` (add, update, keep
+and remove, addressed by key, verified by reading the result back).
+`studyCardGuide()` and `STUDY_CARD_EXAMPLE` teach the format to a model or an
+agent. With study cards, `auto` builds the deck from them and any `{study=…}`
+headings, labelling each card with its section.
 
 `FlashcardView` keeps the active card body in its own scroll viewport so the
 Previous/Reveal/Again/Next controls remain fixed. The deck spends no rows on
@@ -2228,7 +2244,15 @@ interface FlashcardViewProps {
   density?: 'comfortable' | 'compact'; // default comfortable
   className?: string;
   renderControls?: (controls: FlashcardControls) => ReactNode; // host-drawn controls in place of the deck's toolbar and footer
+  kinds?: ('basic' | 'multiple-choice')[]; // study only these kinds
+  onRate?: (event: FlashcardRateEvent) => void; // a basic card rated
+  onAnswer?: (event: FlashcardAnswerEvent) => void; // a multiple-choice card answered (choiceId null: shown unchosen)
+  onComplete?: (event: FlashcardCompleteEvent) => void; // a session finished, with each card's rating
 }
+// Every event names its card as { id, kind, sourceBlockId, ownerBlockId? }; `id`
+// lasts, so a host can keep progress against it. DocPlayer takes the same options
+// as `flashcards`, the standalone player as `MountOptions.flashcards`, and
+// EditorShell takes the callbacks as `flashcardStudy`.
 // FlashcardControls: cardIndex, cardCount, revealed, finished, cardKind,
 // lastCard, progress (0–1), shuffled, missedCount, canGoBack, and the actions
 // previous(), next() (reveal, or go on unrated), rate('again' | 'got-it'),
@@ -3537,6 +3561,13 @@ interface EditorShellProps {
   imageMode?: 'view' | 'edit';
   imageEditorContainer?: ContentContainer;
   onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
+  // Outside-in image editing: Save, and leaving with unsaved edits, write the
+  // flattened picture back over the file (PNG/JPEG/WebP, from fileName)
+  onImageWriteBack?: (
+    blob: Blob,
+    format: 'png' | 'jpeg' | 'webp',
+    context: { reason: 'save' | 'leave' }, // report 'leave' failures yourself
+  ) => Promise<void>;
   // Theming & view preferences
   themeInheritance?: ThemeInheritance; // default 'fonts'
   themeOverride?: Theme | null;
@@ -4017,10 +4048,22 @@ function timingPathFor(audioRelativePath: string): string; // `${path}.timing.js
 
 ### Image editor
 
-`ImageEditor`, `ImageViewer`, `useImageEditor`, `imageEditorReducer`,
-`initialImageEditorState`, plus state types `ImageEditorState`,
-`ImageEditorAction`, `ImageEditorTool`, `CanvasRect`. Pairs with the
-`<basename>_files/` sidecar convention and `core/imageEdit`.
+`ImageEditor`, `ImageFileEditor`, `ImageViewer`, `useImageEditor`,
+`imageEditorReducer`, `initialImageEditorState`, plus state types
+`ImageEditorState`, `ImageEditorAction`, `ImageEditorTool`, `CanvasRect`.
+Pairs with the `<basename>_files/` sidecar convention and `core/imageEdit`.
+
+`ImageFileEditor` edits an image file outside-in, and is what `EditorShell`
+mounts for `imageMode: 'edit'` with `onImageWriteBack`. The picture stays the
+file. Its layers live in the sidecar container. Save flattens them back over
+the file in its own format, and leaving the editor writes back any edits the
+file still lacks. `writeback.json` records the layer signature and a digest
+of the bytes written. A picture replaced outside the editor no longer matches
+that digest, so its stale layers are dropped and re-seeded from the file
+instead of being flattened over it. Animated images and formats that cannot
+be saved back (GIF, SVG, AVIF, BMP, ICO) render the `fallback`. When Save
+writes back (`saveBehavior: 'export'`), the Export menu downloads a copy
+rather than calling `onExport`.
 
 ---
 

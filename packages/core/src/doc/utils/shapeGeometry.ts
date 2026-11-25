@@ -527,7 +527,10 @@ export function snapEndpoints(
   for (const start of snapPoints(a)) {
     for (const end of snapPoints(b)) {
       const score = distanceSq(start, end) + portTieBreak(start.port) + portTieBreak(end.port);
-      if (score < bestScore) {
+      // Mirror-image choices tie exactly; rounding must not pick between them
+      // (one connector of a symmetric pair would leave from a corner), so the
+      // first in port order wins a tie.
+      if (bestScore - score > Math.max(1e-6, score * 1e-9)) {
         bestStart = start;
         bestEnd = end;
         bestScore = score;

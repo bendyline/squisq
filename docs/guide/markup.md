@@ -110,6 +110,87 @@ The exception is the container blocks `{[diagram]}`, `{[drawing]}`, and `{[layou
 child headings are the nodes, shapes, or layers inside them, not slides of their own. See
 [Drawing](../blocks/drawing.md) and [Layout](../blocks/layout.md).
 
+### Accessory blocks
+
+A heading tagged `{[summary]}`, `{[flashcard]}` or `{[quiz]}` starts an **accessory block**: side
+information about the section it sits under, kept in the document where you can read it but never
+shown as a slide, narrated, captioned, or exported. A summary holds the wording of one of that section's slides in a
+**Custom** summary — its heading is the slide's headline, its first list the slide's points:
+
+```markdown
+## What we found
+
+Depths at the east quay fell by a meter since the last survey.
+
+### The east quay is a meter shallower {[summary]}
+
+- Dredging is due before next winter
+- Larger vessels should use the west berth
+```
+
+An accessory block runs to the next heading at its level or shallower, so everything under its
+heading — including deeper headings — is part of it. Put it after the section's own text and
+before the section's first sub-section; text written after it belongs to it. At the top of a
+document it is about the text before the first heading.
+
+The summary designer writes these for you (see the Summaries view in the
+[editor guide](editor.md)), and the editor folds them out of the way: one collapsed row per
+section in Write, a folded block in Source. Their tag settings are:
+
+| Setting         | Meaning                                                                                            |
+| --------------- | -------------------------------------------------------------------------------------------------- |
+| (none)          | The section's opening slide. Your wording stays when you change the section's text                 |
+| `passage=<key>` | The slide made from exactly that passage. When no slide is, the summary is kept but not in use     |
+| `origin=ai`     | Suggested by AI. A summary without it is your own wording, which wins over AI                      |
+| `layout=<name>` | The slide's layout, when it fits; `center`, `xAxis` and `yAxis` set what a hub or a matrix draws   |
+| `points=none`   | No points. Without it, and without a list, the slide's points are automatic                        |
+| `hidden=true`   | Leaves the slide out of the presentation. With nothing else set, the heading only names the slide  |
+| `of=<id>`       | The section it is about, where it cannot sit under it (a level-6 heading, a section made by a tag) |
+
+A section's own summary settings go on its heading: `slideLayout=` and `supportingSlides=` (see
+[Summary settings](tags.md#summary-settings)). `slideLayout=feature` on a chart, table, diagram
+or other picture block draws it on the last slide of the section before it instead of a slide of
+its own.
+
+#### Study cards
+
+`{[flashcard]}` and `{[quiz]}` hold study cards about their section, studied in the
+[Flashcards](display-modes.md#flashcards) view and made in the Study cards view (see the
+[editor guide](editor.md)):
+
+```markdown
+## Photosynthesis
+
+Plants turn light into sugar in their leaves.
+
+### What do plants make from light? {[flashcard]}
+
+Sugar, which stores the energy.
+
+### Where does photosynthesis happen? {[quiz]}
+
+- [ ] In the roots
+- [x] In the leaves
+- [ ] In the flowers
+
+The leaves hold the chlorophyll that catches light.
+```
+
+- **Flashcard:** the heading is the question; everything under it is the answer.
+- **Quiz question:** the heading is the question; the first list is the choices, as a checklist
+  with exactly one ticked; a paragraph after the list explains the right answer. A question with
+  no tick, two ticks or fewer than two choices is shown "to fix" and left out of the deck.
+- Cards are flat: a heading inside a card is part of it and never shown, and a question cannot
+  end in `{…}`.
+
+A card made by AI in the Study cards view carries `origin=ai` and `passage=<key>`, the key of its
+section's text when it was made. When the section's text changes, the card stays in the deck and
+the Study cards view marks it **Section changed**, to keep or make again. Renaming the heading or
+re-wrapping lines changes nothing. A card you edit in the Study cards view becomes yours; one
+edited in Write or Source keeps its AI mark until you keep it (or delete the two settings). The
+optional `key=<name>` setting pins a card's identity; without it a card is known by its kind and
+question.
+
 ### Content before the first heading
 
 Anything above your first heading becomes a block of its own with no heading. It shows as a

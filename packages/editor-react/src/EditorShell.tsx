@@ -24,7 +24,6 @@ import {
   type MediaEditSaveOutput,
 } from './EditorContext';
 import { Toolbar } from './Toolbar';
-import { DocumentActionsGroup } from './toolbar/DocumentActions';
 import { StatusBar } from './StatusBar';
 import { RawEditor } from './RawEditor';
 import { WysiwygEditor } from './WysiwygEditor';
@@ -54,12 +53,13 @@ import { TimelineToolbar } from './TimelineToolbar';
 import { useTimelineClock } from './useTimelineClock';
 import { usePreviewProjection } from './usePreviewProjection';
 import { collectEmbeddedVideoSchedule } from './embeddedMedia';
-import { PreviewPanel } from './PreviewPanel';
+import { PreviewPanel, type FlashcardStudyCallbacks } from './PreviewPanel';
 import { SummarizeView } from './summarize/SummarizeView';
+import { StudyView, type StudyAssistant } from './study/StudyView';
 import type { SummarizationAssistant } from './summarize/summarizationAssistant';
-import { ImageViewer } from './ImageViewer';
-import { ImageEditor } from './ImageEditor';
 import { ImageEditModal } from './imageEditor/ImageEditModal';
+import type { ImageWriteBack } from './imageEditor/ImageFileEditor';
+import { ImageModeHeader, ImageModeSurface } from './imageEditor/ImageModeSurface';
 import {
   PreviewSettingsProvider,
   PreviewToolbarControls,
@@ -104,12 +104,7 @@ import {
   type MediaInsertionTarget,
 } from './mediaInsertion';
 import type { MediaProvider, Theme, ViewportPreset } from '@bendyline/squisq/schemas';
-import {
-  DARK_SURFACE,
-  LIGHT_SURFACE,
-  getDocPlaybackDuration,
-  resolveMediaSchedule,
-} from '@bendyline/squisq/schemas';
+import { getDocPlaybackDuration, resolveMediaSchedule } from '@bendyline/squisq/schemas';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import {
   MemoryContentContainer,
@@ -327,6 +322,10 @@ export interface EditorShellProps {
    * save as it goes. Most hosts want `summarizationAssistant` instead.
    */
   summarizationDesigner?: ReactNode;
+  /** Told how each card went in Use › Flashcards, so a host can keep progress (`FlashcardView`). */
+  flashcardStudy?: FlashcardStudyCallbacks;
+  /** AI for Edit › Study cards' Generate (the host makes the calls); the view works without it. */
+  studyAssistant?: StudyAssistant;
   /** Host-supplied content rendered at the right edge of the bottom status bar. */
   statusBarSlotRight?: ReactNode;
   /**
@@ -342,6 +341,19 @@ export interface EditorShellProps {
    * Markdown modes only: the image and JSON surfaces have no panel row.
    */
   sidePanelSlot?: ReactNode;
+  /**
+   * Host-supplied row between the toolbar and the document, shown while
+   * writing (the Markdown views, not the preview). For a strip that edits the
+   * document's own details, such as its frontmatter, in place: children get
+   * the editor context, so they can read and change the source through it.
+   */
+  documentHeaderSlot?: ReactNode;
+  /**
+   * Frontmatter keys the host edits with its own controls (in
+   * `documentHeaderSlot`, say). Squisq's Properties list leaves them out, so
+   * no key is offered in two places. The document still holds them.
+   */
+  hostFrontmatterKeys?: readonly string[];
   /**
    * Review providers, each scheduled independently.
    *
@@ -675,15 +687,29 @@ export interface EditorShellProps {
    * scoped to `<basename>_files/` via
    * `scopeContainer(parentContainer, basename + '_files')`. The image
    * editor persists `state.json`, layer assets in `assets/`, and (when
-   * `allowVersioning` is true) snapshots in `.versions/` inside it.
+   * `allowVersioning` is true) snapshots in `.versions/` inside it. Naming
+   * it after the whole file name (`photo.png_files/`) keeps `photo.png`
+   * and `photo.jpg` in one folder from sharing layers.
    */
   imageEditorContainer?: ContentContainer;
   /**
    * Called after the user clicks Export in the image editor and the
    * raster blob is produced. When omitted, the editor triggers a
-   * default browser download.
+   * default browser download. Ignored when {@link onImageWriteBack} is set.
    */
   onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
+  /**
+   * Outside-in image editing: the image file stays the file people see,
+   * its layers live in {@link imageEditorContainer}, and this callback
+   * writes the flattened picture back over the file in its own format
+   * (PNG, JPEG, or WebP, from {@link fileName}). Save calls it, and so does
+   * leaving the image with edits the file lacks. Requires `imageMode:
+   * 'edit'` and `imageEditorContainer`. Animated images and other formats
+   * open in the viewer. On `reason: 'save'` a rejection shows in the editor
+   * as a failed save; on `reason: 'leave'` no editor is left to show it, so
+   * report that failure from here.
+   */
+  onImageWriteBack?: ImageWriteBack;
   /**
    * Show an inline preview gutter to the right of the WYSIWYG editor.
    * The gutter renders one small SVG card per block, including blocks without
@@ -841,8 +867,12 @@ export function EditorShell({
   toolbarPosition = 'top',
   summarizationAssistant,
   summarizationDesigner,
+  flashcardStudy,
+  studyAssistant,
   statusBarSlotRight,
   sidePanelSlot,
+  documentHeaderSlot,
+  hostFrontmatterKeys,
   reviewProviders,
   showPlayTab = true,
   showViewTabs = true,
@@ -890,6 +920,7 @@ export function EditorShell({
   imageMode = 'view',
   imageEditorContainer,
   onImageExport,
+  onImageWriteBack,
   inlinePreview = false,
   inlinePreviewWidth = 320,
   outline = false,
@@ -944,6 +975,22 @@ export function EditorShell({
   const effectiveInitialView: EditorView =
     hostMode === 'chat' || (!showPlayTab && initialView === 'preview') ? 'wysiwyg' : initialView;
 
+  // Built here so the image props need not thread through EditorShellInner.
+  const imageSurface = imageSrc ? (
+    <ImageModeSurface
+      src={imageSrc}
+      alt={imageAlt}
+      mode={imageMode}
+      container={imageEditorContainer}
+      fileName={fileName}
+      onExport={onImageExport}
+      onWriteBack={onImageWriteBack}
+      allowVersioning={allowVersioning}
+      versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
+      colorScheme={colorScheme}
+    />
+  ) : null;
+
   return (
     <MediaContext.Provider value={effectiveMediaProvider ?? null}>
       <EditorProvider
@@ -952,6 +999,7 @@ export function EditorShell({
         articleId={articleId}
         colorScheme={colorScheme}
         workspaceContainer={effectiveContainer}
+        hostFrontmatterKeys={hostFrontmatterKeys}
         allowVersioning={allowVersioning}
         versionBasename={versionBasename}
         versioningPrunePolicy={versioningPrunePolicy}
@@ -1032,8 +1080,11 @@ export function EditorShell({
                 toolbarPosition={toolbarPosition}
                 summarizationAssistant={summarizationAssistant}
                 summarizationDesigner={summarizationDesigner}
+                flashcardStudy={flashcardStudy}
+                studyAssistant={studyAssistant}
                 statusBarSlotRight={statusBarSlotRight}
                 sidePanelSlot={sidePanelSlot}
+                documentHeaderSlot={documentHeaderSlot}
                 showPlayTab={showPlayTab}
                 showViewTabs={showViewTabs}
                 viewMenuNavigation={viewMenuNavigation}
@@ -1050,11 +1101,7 @@ export function EditorShell({
                 writeCanvasSettings={writeCanvasSettings}
                 readOnly={readOnly}
                 findShortcut={findShortcut}
-                imageSrc={imageSrc}
-                imageAlt={imageAlt}
-                imageMode={imageMode}
-                imageEditorContainer={imageEditorContainer}
-                onImageExport={onImageExport}
+                imageSurface={imageSurface}
                 allowVersioning={allowVersioning}
                 versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
                 inlinePreviewWidth={inlinePreviewWidth}
@@ -1102,8 +1149,11 @@ interface EditorShellInnerProps {
   toolbarPosition: EditorToolbarPosition;
   summarizationAssistant?: SummarizationAssistant;
   summarizationDesigner?: ReactNode;
+  flashcardStudy?: FlashcardStudyCallbacks;
+  studyAssistant?: StudyAssistant;
   statusBarSlotRight?: ReactNode;
   sidePanelSlot?: ReactNode;
+  documentHeaderSlot?: ReactNode;
   showPlayTab: boolean;
   showViewTabs: boolean;
   viewMenuNavigation?: readonly ViewMenuToggleItem[];
@@ -1126,11 +1176,8 @@ interface EditorShellInnerProps {
   writeCanvasSettings?: WriteCanvasSettings;
   readOnly: boolean;
   findShortcut: boolean;
-  imageSrc?: string;
-  imageAlt?: string;
-  imageMode: 'view' | 'edit';
-  imageEditorContainer?: ContentContainer;
-  onImageExport?: (blob: Blob, format: 'png' | 'jpeg' | 'webp') => void;
+  /** The image file's viewer or editor, shown in image mode. */
+  imageSurface: ReactNode;
   allowVersioning: boolean;
   versioningAutoSaveIdleMs?: number;
   inlinePreviewWidth: number;
@@ -1204,8 +1251,11 @@ function EditorShellInner({
   toolbarPosition,
   summarizationAssistant,
   summarizationDesigner,
+  flashcardStudy,
+  studyAssistant,
   statusBarSlotRight,
   sidePanelSlot,
+  documentHeaderSlot,
   showPlayTab,
   showViewTabs,
   viewMenuNavigation,
@@ -1222,11 +1272,7 @@ function EditorShellInner({
   writeCanvasSettings,
   readOnly,
   findShortcut,
-  imageSrc,
-  imageAlt,
-  imageMode,
-  imageEditorContainer,
-  onImageExport,
+  imageSurface,
   allowVersioning,
   versioningAutoSaveIdleMs,
   inlinePreviewWidth,
@@ -1304,7 +1350,8 @@ function EditorShellInner({
   const isTimelineMode = isCardMode && layoutMode === 'timeline';
   // Summarize replaces the Write surface, which stays mounted behind it.
   const isSummarizing = isMarkdownMode && editingView === 'wysiwyg' && layoutMode === 'summary';
-  const wysiwygHidden = isPreview || isSummarizing;
+  const isStudying = isMarkdownMode && editingView === 'wysiwyg' && layoutMode === 'study';
+  const wysiwygHidden = isPreview || isSummarizing || isStudying;
   // The timeline mirrors the *played* document, not the raw parse: block bars,
   // the playhead, and the clock use the same narration-timed projection the
   // Video composition renders, so an unpinned slide occupies its recorded-voice
@@ -1602,27 +1649,15 @@ function EditorShellInner({
 
   const autoGrow = minHeight !== undefined || maxHeight !== undefined;
 
-  // In image mode the full markdown/code Toolbar is replaced with a minimal
-  // slot bar: view tabs, formatting, and preview controls don't apply to a
-  // binary asset.
+  // In image mode the full markdown/code Toolbar gives way to the host's slots.
   const header = isImageMode ? (
-    (toolbarSlotLeft ||
-      toolbarSlotQuickTools ||
-      toolbarSlotDocumentActions ||
-      toolbarSlotRight) && (
-      <div className="squisq-editor-header squisq-editor-header--image">
-        {toolbarSlotLeft}
-        <div style={{ flex: 1 }} />
-        {toolbarSlotQuickTools}
-        {/* Nothing here measures the row, so the actions never fold. */}
-        {toolbarSlotDocumentActions && (
-          <DocumentActionsGroup folded={false} colorScheme={colorScheme}>
-            {toolbarSlotDocumentActions}
-          </DocumentActionsGroup>
-        )}
-        {toolbarSlotRight}
-      </div>
-    )
+    <ImageModeHeader
+      left={toolbarSlotLeft}
+      quickTools={toolbarSlotQuickTools}
+      documentActions={toolbarSlotDocumentActions}
+      right={toolbarSlotRight}
+      colorScheme={colorScheme}
+    />
   ) : (
     <div className="squisq-editor-header">
       <Toolbar
@@ -1701,6 +1736,9 @@ function EditorShellInner({
             allowPresentationFullscreen={allowPresentationFullscreen}
           >
             {toolbarPosition === 'top' && header}
+            {isMarkdownMode && !isPreview && documentHeaderSlot && (
+              <div className="squisq-editor-document-header">{documentHeaderSlot}</div>
+            )}
 
             {/* Main content area */}
             <div
@@ -1724,20 +1762,7 @@ function EditorShellInner({
                   position: 'relative',
                 }}
               >
-                {isImageMode &&
-                  imageSrc &&
-                  (imageMode === 'edit' && imageEditorContainer ? (
-                    <ImageEditor
-                      filesContainer={imageEditorContainer}
-                      initialSrc={imageSrc}
-                      allowVersioning={allowVersioning}
-                      versioningAutoSaveIdleMs={versioningAutoSaveIdleMs}
-                      onExport={onImageExport}
-                      surface={colorScheme === 'dark' ? DARK_SURFACE : LIGHT_SURFACE}
-                    />
-                  ) : (
-                    <ImageViewer src={imageSrc} alt={imageAlt} theme={colorScheme} />
-                  ))}
+                {isImageMode && imageSurface}
                 {/* Raw (Monaco) view. Always wrapped in `.squisq-editor-with-gutter`
                 so toggling a pane on/off doesn't change the editor's tree
                 position — Monaco stays mounted and `monacoEditor` in
@@ -1873,6 +1898,9 @@ function EditorShellInner({
                     hidden={isPreview}
                   />
                 )}
+                {isStudying && (
+                  <StudyView assistant={studyAssistant} readOnly={readOnly} hidden={isPreview} />
+                )}
                 {isMarkdownMode && isPreview && (
                   <PreviewPanel
                     basePath={basePath}
@@ -1880,6 +1908,7 @@ function EditorShellInner({
                     onLinkClick={onLinkClick}
                     showCodeCopyButton={showCodeCopyButton}
                     onCopyCode={onCopyCode}
+                    flashcardStudy={flashcardStudy}
                   />
                 )}
               </div>

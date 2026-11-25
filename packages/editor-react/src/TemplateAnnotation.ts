@@ -16,8 +16,15 @@
 
 import Heading from '@tiptap/extension-heading';
 import { DOMSerializer } from '@tiptap/pm/model';
+import { accessoryBlockTypeInfo, isAccessoryBlockType } from '@bendyline/squisq/doc';
 import { templateLabel } from './TemplatePicker';
 import { summarizeBlockProps } from './blockProperties';
+
+/** What an accessory block's badge says when pointed at: kept with its section, never shown. */
+function accessoryBadgeTitle(templateName: string): string {
+  if (!isAccessoryBlockType(templateName)) return '';
+  return `${accessoryBlockTypeInfo(templateName).label}. Kept with this section; never shown as a slide or in an export.`;
+}
 
 /**
  * HeadingWithTemplate — drop-in replacement for Tiptap's Heading that
@@ -131,6 +138,35 @@ export const HeadingWithTemplate = Heading.extend({
     // straight from the heading (matches the clicky chip shown for
     // templated headings). The empty variant has no `data-template`
     // attribute, so the bridge treats the heading as plain on save.
+    // An accessory block (`{[summary]}`) is side information about the section
+    // above it. Its chip names what it is and changes nothing: it has no
+    // block type to choose and no slide properties. The class stays
+    // `squisq-template-badge`, which the bridge cuts heading HTML at.
+    if (isAccessoryBlockType(templateName)) {
+      return [
+        tag,
+        { ...HTMLAttributes, 'data-accessory-block': templateName },
+        ['span', { class: 'squisq-heading-content' }, 0],
+        [
+          'span',
+          {
+            class: 'squisq-template-badge squisq-template-badge--accessory',
+            contenteditable: 'false',
+            title: accessoryBadgeTitle(templateName),
+            'data-template': templateName,
+          },
+          [
+            'span',
+            {
+              class: 'squisq-template-badge-core',
+              'data-template-label': templateLabel(templateName),
+              'aria-hidden': 'true',
+            },
+          ],
+        ],
+      ];
+    }
+
     if (templateName) {
       return [
         tag,

@@ -271,6 +271,20 @@ export interface PromotedBodyAnnotation {
     | { kind: 'trailing'; index: number; suffix: string };
 }
 
+/** What makes a block an accessory block (see `Block.accessoryBlock`). */
+export interface AccessoryBlockInfo {
+  /** The registered accessory type its tag names, e.g. `summary`. */
+  type: string;
+  /**
+   * Id of the block it is about: the section it sits under, the text before
+   * the first heading when it sits at the top level, or the block an
+   * `of=<id>` tag parameter names. Absent when there is none.
+   */
+  of?: string;
+  /** For a heading nested inside an accessory block: that block's id. */
+  within?: string;
+}
+
 export interface Block {
   /** Optional progressive content reveal. */
   build?: BuildSpec;
@@ -396,6 +410,40 @@ export interface Block {
    * Absent for the preamble block (content before the first heading).
    */
   sourceHeading?: import('../markdown/types.js').MarkdownHeading;
+
+  /**
+   * Set when this block is an accessory block: side information about
+   * another block, never a slide, scene, narration, caption, chapter, or
+   * exported content. See `doc/accessoryBlocks.ts`.
+   *
+   * An accessory block is a heading tagged with a registered accessory type
+   * (`### Headline {[summary]}`) plus everything under it, so headings
+   * nested inside one carry this too, with `within` naming it. Accessory
+   * blocks keep their place in the tree so the markdown round-trips; every
+   * output prunes them (`pruneAccessoryBlocks`).
+   */
+  accessoryBlock?: AccessoryBlockInfo;
+
+  /**
+   * The layout this section's summary slides prefer, from the heading's
+   * `slideLayout=` setting (`authored` shows the section's own block). Read
+   * by the Custom summary (dynamic slides) planner.
+   */
+  slideLayout?: import('./PresentationLayouts.js').PresentationBeatLayout;
+
+  /**
+   * Whether this section's summary may add supporting slides, from the
+   * heading's `supportingSlides=` setting; the document's choice when unset.
+   */
+  supportingSlides?: boolean;
+
+  /**
+   * Other blocks this slide draws as features beside its words, each as its
+   * own template draws it, scaled into the slide's feature area. A Custom
+   * summary sets this on the slide that carries a block shown on the slide
+   * before it (`slideLayout=feature`): a chart, a table, a diagram.
+   */
+  featureBlocks?: Block[];
 
   /**
    * Template overrides extracted from a heading's `{[templateName key=value]}`
@@ -1113,6 +1161,12 @@ export interface TextStyle {
   baselineShift?: number;
   /** Line height multiplier */
   lineHeight?: number;
+  /**
+   * Keep this size: the text is never grown or shrunk to fit the slide's
+   * text. Set on text drawn inside a block embedded in a slide (a chart's
+   * labels), which is sized for its own box.
+   */
+  keepSize?: boolean;
   /** Add drop shadow for readability over images */
   shadow?: boolean;
   /** Background color for text box */

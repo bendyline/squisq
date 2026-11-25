@@ -12,6 +12,7 @@
  */
 
 import type { MarkdownBlockNode, MarkdownDocument } from '@bendyline/squisq/markdown';
+import { withoutAccessorySections } from '@bendyline/squisq/markdown';
 import {
   detectPromotableBodyAnnotation,
   hasTemplate,
@@ -27,11 +28,17 @@ export interface BlockTagOptions {
   keepMedia?: boolean;
 }
 
-/** The document without its block tags; the same object when it has none. */
+/**
+ * The document without its block tags — and without its accessory sections
+ * (`### Headline {[summary]}` and what is under it), which are side
+ * information for the player, never content. The same object when it has
+ * neither.
+ */
 export function withoutBlockTags(
-  doc: MarkdownDocument,
+  source: MarkdownDocument,
   options: BlockTagOptions = {},
 ): MarkdownDocument {
+  const doc = withoutAccessorySections(source);
   const children = withoutPromotedTags(doc.children);
   const kept = children.filter((node) => !isRemovedTag(node, options));
   return kept.length === doc.children.length && children === doc.children

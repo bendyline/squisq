@@ -3,6 +3,13 @@ import type { MotionSpec } from '@bendyline/squisq/schemas';
 import type { DashboardStyleId, ViewportConfig } from '@bendyline/squisq/doc';
 import type { CoverSlidePlayback, CoverSlideTemplate } from '@bendyline/squisq/doc';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
+import type { FlashcardViewProps } from './FlashcardView';
+
+/** `DocPlayer`'s flashcards-mode options (see `FlashcardView`). */
+export type DocPlayerFlashcardOptions = Pick<
+  FlashcardViewProps,
+  'source' | 'kinds' | 'shuffle' | 'onAnswer' | 'onRate' | 'onComplete'
+>;
 import type { AudioController } from './hooks/AudioController';
 import type { CodeBlockCopyHandler } from './MarkdownRenderer';
 import type { TableLayerContentRenderer } from './layers/TableLayer';
@@ -81,6 +88,11 @@ export interface DocPlayerProps {
   surface?: SurfaceScheme | 'auto';
   /** Video, slideshow, page, dashboard, or flashcards rendition. */
   displayMode?: DisplayMode;
+  /**
+   * Flashcards mode: where the cards come from, which kinds, shuffled or not,
+   * and what to tell the host as each card is studied.
+   */
+  flashcards?: DocPlayerFlashcardOptions;
   /** Dashboard mode: layout id or `'auto'`. Overrides doc frontmatter. */
   dashboardLayout?: string;
   /** Dashboard mode: title-band override. Overrides doc frontmatter. */

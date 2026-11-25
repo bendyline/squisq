@@ -1,6 +1,6 @@
 // Main components
 export { DocPlayer } from './DocPlayer.js';
-export type { DocPlayerProps } from './DocPlayer.js';
+export type { DocPlayerProps, DocPlayerFlashcardOptions } from './DocPlayer.js';
 export type { MountOptions, SquisqPlayerHandle } from './standalone-entry.js';
 export { BlockRenderer } from './BlockRenderer.js';
 export { CaptionOverlay } from './CaptionOverlay.js';
@@ -31,8 +31,12 @@ export { DashboardView } from './DashboardView.js';
 export type { DashboardViewProps } from './DashboardView.js';
 export { FlashcardFaceView, FlashcardView } from './FlashcardView.js';
 export type {
+  FlashcardAnswerEvent,
+  FlashcardCardRef,
+  FlashcardCompleteEvent,
   FlashcardControls,
   FlashcardFaceViewProps,
+  FlashcardRateEvent,
   FlashcardRating,
   FlashcardViewProps,
 } from './FlashcardView.js';

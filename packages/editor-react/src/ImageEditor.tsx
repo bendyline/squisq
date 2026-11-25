@@ -51,20 +51,28 @@ export interface ImageEditorProps {
   /** Auto-save idle delay (ms) for version snapshots. Default: `5000`. */
   versioningAutoSaveIdleMs?: number;
   /**
-   * Called after the user clicks Export and the blob is produced. `doc` is
-   * the layer state the blob was rendered from. A returned promise is
-   * awaited: the Save button stays busy until it settles, and a rejection
-   * is shown to the user as a failed save.
+   * Called after the blob is produced. `doc` is the layer state the blob was
+   * rendered from. A returned promise is awaited: the Save button stays busy
+   * until it settles, and a rejection is shown to the user as a failed save.
+   *
+   * With `saveBehavior: 'flush'` the Export menu fires this. With
+   * `saveBehavior: 'export'` only Save does, always in `saveFormat`: this
+   * callback then writes the picture back, and the Export menu downloads a
+   * copy instead, so exporting as JPEG never puts JPEG bytes into a `.png`.
    */
   onExport?: (blob: Blob, format: ImageEditExportFormat, doc: ImageEditDoc) => void | Promise<void>;
   /**
    * What the toolbar's Save button does:
    *  - `'flush'` (default): write `state.json` to the sidecar.
    *  - `'export'`: rasterize the canvas in `saveFormat` and fire
-   *    {@link onExport} — the same code path the Export menu uses.
-   *    Hosts that want one-click "save and close" semantics use this.
+   *    {@link onExport}. Hosts that write the picture back over its source
+   *    (one-click "save", or "save and close") use this.
    */
   saveBehavior?: 'flush' | 'export';
+  /**
+   * File name, without extension, of a downloaded export. Default: `'image'`.
+   */
+  exportBasename?: string;
   /** Format used when `saveBehavior === 'export'`. Default: `'png'`. */
   saveFormat?: ImageEditExportFormat;
   /** Override the Save button label. Default: `'Save'`. */
@@ -110,6 +118,7 @@ export const ImageEditor = forwardRef<ImageEditorHandle, ImageEditorProps>(
       versioningAutoSaveIdleMs,
       onExport,
       saveBehavior = 'flush',
+      exportBasename = 'image',
       saveFormat = 'png',
       saveLabel,
       saveTitle,
@@ -167,22 +176,29 @@ export const ImageEditor = forwardRef<ImageEditorHandle, ImageEditorProps>(
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
 
+    /**
+     * Rasterize the layers and hand the blob to the host (`onExport`) or,
+     * when there is none or the Export menu asked for a copy, download it.
+     */
     const handleExport = useCallback(
-      async (format: ImageEditExportFormat): Promise<boolean> => {
+      async (
+        format: ImageEditExportFormat,
+        destination: 'host' | 'download' = 'host',
+      ): Promise<boolean> => {
         if (!state) return false;
         const doc = state.doc;
         setSaveError(null);
         setSaving(true);
         try {
           const blob = await exportImageEditDoc(doc, filesContainer, { format });
-          if (onExport) {
+          if (onExport && destination === 'host') {
             await onExport(blob, format, doc);
           } else {
             // Default behavior: trigger a browser download.
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `image.${format === 'jpeg' ? 'jpg' : format}`;
+            a.download = `${exportBasename}.${format === 'jpeg' ? 'jpg' : format}`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -198,7 +214,15 @@ export const ImageEditor = forwardRef<ImageEditorHandle, ImageEditorProps>(
           setSaving(false);
         }
       },
-      [state, filesContainer, onExport],
+      [state, filesContainer, onExport, exportBasename],
+    );
+    // The Export menu. When Save writes the picture back through `onExport`,
+    // the menu must not: its format can differ from the picture's own.
+    const handleExportMenu = useCallback(
+      (format: ImageEditExportFormat) => {
+        void handleExport(format, saveBehavior === 'export' ? 'download' : 'host');
+      },
+      [handleExport, saveBehavior],
     );
 
     /**
@@ -397,7 +421,7 @@ export const ImageEditor = forwardRef<ImageEditorHandle, ImageEditorProps>(
           dispatch={dispatch}
           uploadAsset={uploadAsset}
           imageInputRef={imageInputRef}
-          onExport={handleExport}
+          onExport={handleExportMenu}
           onSave={saveBehavior === 'export' ? () => void runSave() : flush}
           saving={saving}
           saveLabel={saveLabel ?? (saveBehavior === 'export' ? 'Save and close' : 'Save')}

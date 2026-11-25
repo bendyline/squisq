@@ -483,12 +483,23 @@ squisq/
                             #   RecorderPanel, hooks, sources, formats, timingJson,
                             #   documentNarrationInsertion, slidesModePolicy, slides/
                             #   — the deck panel shown opposite the capture controls)
+        study/              # Write › Study cards (LayoutMode 'study'): StudyView → StudyCardManager
+                            #   lists sections with their {[flashcard]}/{[quiz]} cards, edits, keeps
+                            #   and removes them via core's writeStudyCards (by card key); AI is
+                            #   optional — the host lends studyAssistant (studyAssistant.ts), usually
+                            #   core's generateStudyCards over its transport. Shares designer/
+                            #   (readiness hook, batched save, run controls) with SummaryDesigner.
         summarize/          # Write › Summarize (LayoutMode 'summary'): SummarizeView chooses the
                             #   `squisq-transform` style — None, the built-ins, or Custom (core's
                             #   `dynamic-slides`, renamed for authors) — then shows the slides it
                             #   makes, or for Custom the built-in SummaryDesigner (lazy chunk):
                             #   slide list/picker, density, per-section layout, hide, wording, all
-                            #   saved as made to `squisq-presentation-hints`. AI is optional: the
+                            #   saved as made into the document (core's presentationHintsSource:
+                            #   `{[summary]}` accessory blocks, `slideLayout=` heading settings
+                            #   incl. `feature` — a chart drawn on the slide before it, listed
+                            #   unnumbered with its carrier and any fallback reason,
+                            #   `squisq-summary-*` keys; legacy `squisq-presentation-hints` read,
+                            #   converted on first change). AI is optional: the
                             #   host lends `summarizationAssistant` (summarizationAssistant.ts —
                             #   readiness, suggestSlides, renderReport; suggestSlides is usually
                             #   core's `wordPresentationPlan` over the host's model transport);

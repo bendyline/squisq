@@ -9,36 +9,48 @@ import {
   conceptTemplate,
 } from '../doc/templates/conceptSpecs.js';
 
+import {
+  PRESENTATION_LAYOUTS,
+  AUTHORED_PRESENTATION_LAYOUT,
+  FEATURE_PRESENTATION_LAYOUT,
+  isSummaryPresentationLayout,
+  type PresentationLayout,
+  type PresentationBeatLayout,
+} from '../schemas/PresentationLayouts.js';
+
+export {
+  PRESENTATION_LAYOUTS,
+  PRESENTATION_BEAT_LAYOUTS,
+  AUTHORED_PRESENTATION_LAYOUT,
+  FEATURE_PRESENTATION_LAYOUT,
+  isPresentationBeatLayout,
+  isSummaryPresentationLayout,
+  type PresentationLayout,
+  type PresentationBeatLayout,
+} from '../schemas/PresentationLayouts.js';
+
+/**
+ * Whether a beat is a slide of the deck: not hidden, and not a block shown on
+ * the slide of the section before it (`feature`).
+ */
+export function presentationBeatIsSlide(
+  beat: Pick<PresentationBeat, 'layout' | 'hidden'>,
+): boolean {
+  return !beat.hidden && beat.layout !== FEATURE_PRESENTATION_LAYOUT;
+}
+
+/**
+ * Whether a beat is a shown summary — what the designer words and an AI is
+ * asked about: a slide whose layout summarizes its passage (not a section
+ * shown as authored, and not one shown on another slide).
+ */
+export function presentationBeatIsWorded(
+  beat: Pick<PresentationBeat, 'layout' | 'hidden'>,
+): boolean {
+  return !beat.hidden && isSummaryPresentationLayout(beat.layout);
+}
+
 export const PRESENTATION_KEY = 'squisq-presentation';
-/** The layouts a summary (a headline and up to four points) can fill. */
-export const PRESENTATION_LAYOUTS = [
-  'title',
-  'divider',
-  'statement',
-  'emphasis',
-  'quote',
-  'stat',
-  'definition',
-  'list',
-  'comparison',
-  'steps',
-  'image',
-  'cards',
-  'process',
-  'cycle',
-  'layers',
-  'stats',
-  'pyramid',
-  'funnel',
-  'hub',
-  'venn',
-  'matrix',
-] as const;
-export type PresentationLayout = (typeof PRESENTATION_LAYOUTS)[number];
-/** Shows a section's own block, with the template its author chose, instead of
- * a summary. A section shown this way is one slide for its whole narration. */
-export const AUTHORED_PRESENTATION_LAYOUT = 'authored';
-export type PresentationBeatLayout = PresentationLayout | typeof AUTHORED_PRESENTATION_LAYOUT;
 /** The longest headline a big statement shows; longer ones need a smaller layout. */
 const EMPHASIS_CHARACTERS = 60;
 const spaced = (text: string) => text.replace(/\s+/gu, ' ').trim();
@@ -191,11 +203,23 @@ export interface PresentationPlan {
 }
 export const PRESENTATION_LIMITS = {
   sourceCharacters: 40_000,
-  beats: 80,
-  serializedCharacters: 160_000,
+  /**
+   * The most slides a deck holds. Ordinary prose at the source limit makes
+   * 200–260 Concise slides, so every density fits a document the source limit
+   * allows. (At 80, a 3,500-word document already failed at Balanced.) A deck
+   * of very short sentences or sections can still pass it; the planner then
+   * names a density that fits.
+   */
+  beats: 300,
+  /** The source text plus 1,500 characters for each slide. */
+  serializedCharacters: 490_000,
   mediaPerBeat: 4,
   /** The most points a summary slide holds. */
   points: 4,
+  /** The longest a slide's headline may be. */
+  headline: 110,
+  /** The longest one of a slide's points may be. */
+  point: 180,
   /** The longest a hub's centre or a matrix's axis name may be. */
   extraCharacters: 40,
 } as const;
@@ -279,6 +303,10 @@ export function parsePresentationPlan(input: unknown): PresentationPlan | null {
     if (beat.layout === AUTHORED_PRESENTATION_LAYOUT) {
       // The section's block carries its own words, pictures and media.
       if (beat.points.length || 'media' in beat) return null;
+    } else if (beat.layout === FEATURE_PRESENTATION_LAYOUT) {
+      // Shown on the slide before it: no slide of its own to word, hide or
+      // carry anything, and there must be a slide before it.
+      if (beat.points.length || 'media' in beat || 'hidden' in beat || !beats.length) return null;
     } else if (
       !PRESENTATION_LAYOUTS.includes(beat.layout as PresentationLayout) ||
       !presentationLayoutFits(

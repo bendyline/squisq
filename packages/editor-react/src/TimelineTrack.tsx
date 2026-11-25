@@ -290,7 +290,11 @@ export function TimelineTrack({
   const scaleRef = useRef(pxPerSecond);
   scaleRef.current = pxPerSecond;
 
-  const blocks = useMemo(() => (doc ? flattenBlocks(doc.blocks) : []), [doc]);
+  // Slide summaries (accessory blocks) take no time and are never shown.
+  const blocks = useMemo(
+    () => (doc ? flattenBlocks(doc.blocks).filter((block) => !block.accessoryBlock) : []),
+    [doc],
+  );
   const timingLocked = doc ? usesDynamicPresentation(doc) : false;
 
   // Tiny slideshow thumbnail for every block, filling its bar. Resolved once
@@ -556,6 +560,16 @@ export function TimelineTrack({
     }
   }, []);
   useEffect(() => clearLongPress, [clearLongPress]);
+  // The post-commit fallback below, held so an unmount (or the next commit)
+  // cancels it rather than letting it set state on a component that is gone.
+  const commitFallbackTimerRef = useRef<number | null>(null);
+  const clearCommitFallback = useCallback(() => {
+    if (commitFallbackTimerRef.current != null) {
+      window.clearTimeout(commitFallbackTimerRef.current);
+      commitFallbackTimerRef.current = null;
+    }
+  }, []);
+  useEffect(() => clearCommitFallback, [clearCommitFallback]);
   useEffect(() => {
     if (!isDragging) return;
     const owns = (d: DragState, e: PointerEvent) =>
@@ -596,7 +610,9 @@ export function TimelineTrack({
       setDrag({ ...d, committed: true });
       // Fallback: if the edit produced identical markdown (no re-parse), drop
       // the committed preview anyway so it can't get stuck.
-      window.setTimeout(() => {
+      clearCommitFallback();
+      commitFallbackTimerRef.current = window.setTimeout(() => {
+        commitFallbackTimerRef.current = null;
         if (dragRef.current?.committed) setDrag(null);
       }, 500);
     };
@@ -621,7 +637,7 @@ export function TimelineTrack({
       window.removeEventListener('pointercancel', onCancel);
       window.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [isDragging, clearLongPress]);
+  }, [isDragging, clearLongPress, clearCommitFallback]);
 
   // Once a finger has lifted a clip, its travel moves the clip, not the track.
   // Bound for the timeline's lifetime rather than per drag: browsers decide at

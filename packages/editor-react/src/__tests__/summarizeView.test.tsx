@@ -3,9 +3,10 @@
  *
  * Edit › Summaries: the Write tab's mode for choosing how slides and video
  * summarize the document. It takes the Write surface's place (which stays
- * mounted behind it, so its changes stay undoable), offers None, the built-in
- * styles and Custom, writes the choice to `squisq-transform`, and shows either
- * the host's Custom designer or the slides the chosen style makes.
+ * mounted behind it, so its changes stay undoable), offers None, Custom and the
+ * built-in styles from the Summary style dropdown, writes the choice to
+ * `squisq-transform`, and shows either the host's Custom designer or the slides
+ * the chosen style makes.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -24,6 +25,15 @@ vi.mock('../PreviewPanel', () => ({
 import { EditorShell, type EditorShellProps } from '../EditorShell';
 
 const TWO_SECTIONS = '# One\n\nThe first section.\n\n## Two\n\nThe second section.\n';
+const FACTS = [
+  '# Results',
+  '',
+  'Revenue grew 40% in 2025, the best year since 1999. Most of it came from new customers in the north. "We doubled the team," said the founder.',
+  '',
+  '## Next',
+  '',
+  'We open three new offices in March 2026 and hire forty people across the regions. Sales should reach $12 million by 2027.',
+].join('\n');
 
 beforeEach(() => {
   if (typeof window.matchMedia !== 'function') {
@@ -80,11 +90,32 @@ function chooseView(name: string) {
   fireEvent.click(within(menu).getByRole('menuitemradio', { name }));
 }
 
-function styleNames(view: HTMLElement): string[] {
-  return within(view)
-    .getAllByRole('radio')
-    .map((radio) => radio.getAttribute('aria-labelledby'))
-    .map((id) => document.getElementById(id!)?.textContent ?? '');
+/** The Summary style dropdown, named for the field and the style it shows. */
+function styleTrigger(view: HTMLElement, style = /.*/): HTMLButtonElement {
+  return within(view).getByRole<HTMLButtonElement>('button', {
+    name: new RegExp(`^Summary style ${style.source}$`),
+  });
+}
+
+/** Opens the Summary style list, which is portaled to the body. */
+function openStyles(view: HTMLElement): HTMLElement {
+  fireEvent.click(styleTrigger(view));
+  return screen.getByRole('listbox', { name: 'Summary style' });
+}
+
+function chooseStyle(view: HTMLElement, name: string) {
+  fireEvent.click(within(openStyles(view)).getByRole('option', { name }));
+}
+
+/** Each group of slides in the deck, by the block (or addition) it names. */
+function groupNames(deck: HTMLElement): string[] {
+  return within(deck)
+    .getAllByRole('group')
+    .map((group) => document.getElementById(group.getAttribute('aria-labelledby')!)!.textContent!);
+}
+
+function nameOf(element: Element): string {
+  return document.getElementById(element.getAttribute('aria-labelledby')!)?.textContent ?? '';
 }
 
 describe('Edit › Summaries', () => {
@@ -104,39 +135,94 @@ describe('Edit › Summaries', () => {
     expect(screen.queryByRole('button', { name: 'Bold' })).toBeNull();
   });
 
-  it('offers None, the built-in styles, and Custom, and writes the choice', async () => {
+  it('offers None, Custom, and the built-in styles from a dropdown, and writes the choice', async () => {
     const { latest } = renderShell();
     const view = openSummarize();
 
-    const names = styleNames(view);
-    expect(names[0]).toBe('None');
-    expect(names[names.length - 1]).toBe('Custom');
+    // The trigger says what the chosen style does, as the list does for each.
+    expect(styleTrigger(view, /None/).textContent).toContain(
+      'Each section is one slide, shown as you wrote it',
+    );
+    const list = openStyles(view);
+    const options = within(list).getAllByRole('option');
+    const names = options.map(nameOf);
+    expect(names.slice(0, 2)).toEqual(['None', 'Custom']);
     expect(names).toEqual(expect.arrayContaining(['Minimal', 'Narrative', 'Documentary']));
     expect(names).not.toContain('Dynamic slides');
-    expect(within(view).getByRole<HTMLInputElement>('radio', { name: 'None' }).checked).toBe(true);
-
-    fireEvent.click(within(view).getByRole('radio', { name: 'Minimal' }));
-    await waitFor(() => expect(latest()).toMatch(/^squisq-transform: minimal$/m));
-    expect(within(view).getByRole<HTMLInputElement>('radio', { name: 'Minimal' }).checked).toBe(
-      true,
+    expect(options.map((option) => option.getAttribute('aria-selected'))).toEqual(
+      names.map((name) => String(name === 'None')),
     );
+    for (const option of options)
+      expect(
+        document.getElementById(option.getAttribute('aria-describedby')!)?.textContent,
+      ).toBeTruthy();
 
-    fireEvent.click(within(view).getByRole('radio', { name: 'Custom' }));
+    fireEvent.click(within(list).getByRole('option', { name: 'Minimal' }));
+    expect(screen.queryByRole('listbox')).toBeNull();
+    await waitFor(() => expect(latest()).toMatch(/^squisq-transform: minimal$/m));
+    expect(styleTrigger(view, /Minimal/)).toBeTruthy();
+
+    chooseStyle(view, 'Custom');
     await waitFor(() => expect(latest()).toMatch(/^squisq-transform: dynamic-slides$/m));
 
     // None is the default, so it removes the key rather than writing it.
-    fireEvent.click(within(view).getByRole('radio', { name: 'None' }));
+    chooseStyle(view, 'None');
     await waitFor(() => expect(latest()).not.toMatch(/squisq-transform/));
     expect(latest()).toContain('The second section.');
   });
 
-  it('shows the slides the chosen style makes', async () => {
+  it('opens from the keyboard on the chosen style, moves with the arrows, and closes', async () => {
+    const { latest } = renderShell();
+    const view = openSummarize();
+    const trigger = styleTrigger(view, /None/);
+
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const list = screen.getByRole('listbox', { name: 'Summary style' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    // Focus lands once the list is shown; a browser will not focus a hidden one.
+    expect(list.style.visibility).toBe('visible');
+    expect(nameOf(document.activeElement!)).toBe('None');
+    fireEvent.keyDown(list, { key: 'ArrowDown' });
+    expect(nameOf(document.activeElement!)).toBe('Custom');
+    fireEvent.keyDown(list, { key: 'End' });
+    fireEvent.keyDown(list, { key: 'Home' });
+    expect(nameOf(document.activeElement!)).toBe('None');
+
+    // Escape closes without choosing, and gives focus back to the field.
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(document.activeElement).toBe(trigger);
+    expect(latest()).not.toMatch(/squisq-transform/);
+
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    fireEvent.keyDown(screen.getByRole('listbox'), { key: 'ArrowDown' });
+    fireEvent.click(document.activeElement!);
+    await waitFor(() => expect(latest()).toMatch(/^squisq-transform: dynamic-slides$/m));
+    expect(document.activeElement).toBe(styleTrigger(view, /Custom/));
+  });
+
+  it('shows the slides the chosen style makes, beside the block each came from', async () => {
     renderShell();
     const view = openSummarize();
-    const slides = await within(view).findByRole('list', { name: 'Slides' });
+    const slides = await within(view).findByRole('group', { name: 'Slides' });
     await waitFor(() => expect(within(slides).getAllByRole('listitem').length).toBe(2));
     expect(within(slides).getByRole('img', { name: /^Slide 1/ })).toBeTruthy();
     expect(within(view).getByRole('status').textContent).toBe('2 slides');
+    expect(groupNames(slides)).toEqual(['One 1 slide', 'Two 1 slide']);
+  });
+
+  it('groups a style’s slides by block, and sets apart the slides it adds', async () => {
+    renderShell({ initialMarkdown: `---\nsquisq-transform: narrative\n---\n\n${FACTS}` });
+    const view = openSummarize();
+    const slides = await within(view).findByRole('group', { name: 'Slides' });
+    // A section header and a dated event from Next, then the closing title.
+    await waitFor(() =>
+      expect(groupNames(slides)).toEqual(['Next 2 slides', 'Document title 1 slide']),
+    );
+    const groups = within(slides).getAllByRole('group');
+    expect(groups.map((group) => group.hasAttribute('data-added'))).toEqual([false, true]);
+    // Numbered through the deck, not within each group.
+    expect(within(groups[1]!).getByRole('img').getAttribute('aria-label')).toMatch(/^Slide 3/);
   });
 
   it('shows the host’s designer for Custom, and the slides for every other style', async () => {
@@ -146,15 +232,13 @@ describe('Edit › Summaries', () => {
     });
     const view = openSummarize();
 
-    expect(within(view).getByRole<HTMLInputElement>('radio', { name: 'Custom' }).checked).toBe(
-      true,
-    );
+    expect(styleTrigger(view, /Custom/)).toBeTruthy();
     expect(within(view).getByTestId('designer')).toBeTruthy();
-    expect(within(view).queryByRole('list', { name: 'Slides' })).toBeNull();
+    expect(within(view).queryByRole('group', { name: 'Slides' })).toBeNull();
 
-    fireEvent.click(within(view).getByRole('radio', { name: 'Narrative' }));
+    chooseStyle(view, 'Narrative');
     await waitFor(() => expect(within(view).queryByTestId('designer')).toBeNull());
-    expect(await within(view).findByRole('list', { name: 'Slides' })).toBeTruthy();
+    expect(await within(view).findByRole('group', { name: 'Slides' })).toBeTruthy();
   });
 
   it('designs Custom with the built-in designer when the host supplies none', async () => {
@@ -165,7 +249,7 @@ describe('Edit › Summaries', () => {
     const designer = await within(view).findByRole('region', { name: 'Summarization designer' });
     const list = await within(designer).findByRole('navigation', { name: 'Presentation slides' });
     await waitFor(() => expect(within(list).getAllByRole('button').length).toBeGreaterThan(0));
-    expect(within(view).queryByRole('list', { name: 'Slides' })).toBeNull();
+    expect(within(view).queryByRole('group', { name: 'Slides' })).toBeNull();
     // With no assistant there is no AI to offer.
     expect(within(designer).queryByRole('button', { name: 'Suggest with AI' })).toBeNull();
   });
@@ -210,9 +294,9 @@ describe('Edit › Summaries', () => {
   it('offers the choice read-only when the editor is read-only', () => {
     renderShell({ readOnly: true });
     const view = openSummarize();
-    // The fieldset disables its radios; their own `disabled` stays unset.
-    for (const radio of within(view).getAllByRole<HTMLInputElement>('radio')) {
-      expect(radio.matches(':disabled')).toBe(true);
-    }
+    const trigger = styleTrigger(view, /None/);
+    expect(trigger.disabled).toBe(true);
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 });

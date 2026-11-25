@@ -344,6 +344,41 @@ describe('<EditorShell> link delegation', () => {
   });
 });
 
+describe('<EditorShell> documentHeaderSlot', () => {
+  function SourceLength() {
+    const { markdownSource } = useEditorContext();
+    return <span data-testid="header-source">{markdownSource.length}</span>;
+  }
+
+  it('renders between the toolbar and the document, inside the editor context', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="raw"
+        documentHeaderSlot={<SourceLength />}
+      />,
+    );
+    const row = container.querySelector('.squisq-editor-document-header');
+    expect(row).not.toBeNull();
+    expect(screen.getByTestId('header-source').textContent).toBe(String('# hi'.length));
+    const header = container.querySelector('.squisq-editor-header');
+    const content = container.querySelector('.squisq-editor-content');
+    expect(header?.compareDocumentPosition(row!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(row?.compareDocumentPosition(content!)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it('is left out of the preview', () => {
+    const { container } = render(
+      <EditorShell
+        initialMarkdown="# hi"
+        initialView="preview"
+        documentHeaderSlot={<span>Due today</span>}
+      />,
+    );
+    expect(container.querySelector('.squisq-editor-document-header')).toBeNull();
+  });
+});
+
 describe('<EditorShell> Write canvas settings', () => {
   it('exposes host settings as live CSS variables on the shell', () => {
     const { container, rerender } = render(

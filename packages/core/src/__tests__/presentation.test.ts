@@ -26,15 +26,21 @@ import { MemoryContentContainer } from '../storage/ContentContainer.js';
 import { applyTransform } from '../transform/applyTransform.js';
 import { createPresentationPlan } from '../transform/presentationPlanner.js';
 import { compilePresentationPlan } from '../transform/presentationCompiler.js';
-import { collectPresentationMedia, presentationMediaNode } from '../transform/presentationMedia.js';
+import {
+  collectPresentationMedia,
+  presentationMediaNode,
+  type PresentationNodeMediaItem,
+} from '../transform/presentationMedia.js';
 import {
   parsePresentationPlan,
   serializePresentationPlan,
   PRESENTATION_KEY,
+  PRESENTATION_LIMITS,
   type PresentationBeatLayout,
 } from '../transform/presentationPlan.js';
 import { extractEmbeddedVideos } from '../doc/templateInputs.js';
 import { resolveMediaSchedule } from '../schemas/Media.js';
+import { readPresentationHints } from '../transform/presentationHintsDoc.js';
 import type { Doc } from '../schemas/Doc.js';
 
 const source =
@@ -549,9 +555,41 @@ describe('dynamic slides with embedded videos and diagrams', () => {
     expect(bed.map((clip) => [clip.absoluteStart, clip.absoluteEnd])).toEqual([[10, 70]]);
   });
 
+  it('starts the bed of a block shown on the slide before it when its passage starts', async () => {
+    const rolled = [
+      '# Results',
+      '',
+      'Revenue grew 40% last year. Most of it came from new customers.',
+      '',
+      '## By region {[barChart slideLayout=feature]}',
+      '',
+      'North led every quarter.',
+      '',
+      '| Region | Sales |',
+      '| --- | --- |',
+      '| North | 40 |',
+      '',
+      '{[audio src=audio/bed.mp3]}',
+      '',
+      '## Terms',
+      '',
+      'Net thirty days. Prices are fixed for the year.',
+    ].join('\n');
+    const { doc } = await narrated(rolled, [0, 20, 40, 60]);
+    const { hints } = readPresentationHints(doc);
+    const plan = createPresentationPlan(doc, hints);
+    expect(plan.beats.map((beat) => beat.layout)).toContain('feature');
+    const compiled = compilePresentationPlan(doc, plan);
+    expect(compiled.blocks.some((block) => block.sourceBlockId === 'by-region')).toBe(false);
+    const bed = resolveMediaSchedule(compiled).filter((clip) => clip.src === 'audio/bed.mp3');
+    expect(bed.map((clip) => [clip.absoluteStart, clip.absoluteEnd])).toEqual([[20, 40]]);
+  });
+
   it('resumes a video only within its authored clip and refuses stale visuals', async () => {
     const { doc } = await narrated(demo, [0, 10, 70, 90]);
-    const item = collectPresentationMedia(doc, ['opening', 'demo', 'how-it-fits']).get('demo')![0]!;
+    const item = collectPresentationMedia(doc, ['opening', 'demo', 'how-it-fits']).get(
+      'demo',
+    )![0]! as PresentationNodeMediaItem;
     const attributes = (seconds: number) =>
       extractEmbeddedVideos([presentationMediaNode(item, seconds)!])[0];
     expect(attributes(12)).toMatchObject({ clipStart: 12, clipEnd: 50 });
@@ -1113,5 +1151,70 @@ describe('presentation slides timed by the presenter', () => {
     expect(unmarked).toBeGreaterThan(0);
     expect(unmarked).toBeLessThan(19);
     expect(next).toBe(19);
+  });
+});
+
+describe('long presentations', () => {
+  const sections = (count: number, body: string) =>
+    Array.from({ length: count }, (_, index) => `## Part ${index + 1}\n\n${body}`).join('\n\n');
+  const limit = PRESENTATION_LIMITS.beats;
+
+  it('makes, saves and compiles a document near the length limit at every density', () => {
+    // 2026-11-23: a 3,750-word post made 85 Balanced slides against a limit
+    // of 80, and was told it had too many sections (it had eight).
+    const doc = parse(
+      sections(
+        30,
+        'Each slide should carry one idea that the narration explains in more depth. '.repeat(16),
+      ),
+    );
+    expect(buildNarrationScript(doc).sourceText.length).toBeGreaterThan(36_000);
+    for (const density of ['concise', 'balanced', 'detailed', 'section'] as const) {
+      const plan = createPresentationPlan(doc, { ...defaultPresentationHints(), density });
+      if (density === 'balanced') expect(plan.beats.length).toBeGreaterThan(80);
+      expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+      expect(compilePresentationPlan(doc, plan).blocks).toHaveLength(plan.beats.length);
+    }
+  });
+
+  it('counts the slides and names only the densities that would fit', () => {
+    // Three-letter words: Concise passes the limit, Balanced does not.
+    const doc = parse(sections(12, 'A cat sat on a mat. '.repeat(150)));
+    const hints = { ...defaultPresentationHints(), density: 'concise' as const };
+    expect(() => createPresentationPlan(doc, hints)).toThrow(
+      new RegExp(
+        `^With Concise density this document makes \\d+ slides, and a presentation holds at most ${limit}\\. ` +
+          'Choose Balanced, Detailed, or One slide per section to put more on each slide, or split the document\\.$',
+      ),
+    );
+    expect(
+      createPresentationPlan(doc, { ...hints, density: 'balanced' }).beats.length,
+    ).toBeLessThanOrEqual(limit);
+  });
+
+  it('asks for a split when even one slide per section is too many', () => {
+    const doc = parse(sections(limit + 10, 'Short line.'));
+    expect(() => createPresentationPlan(doc)).toThrow(
+      `With Balanced density this document makes ${limit + 10} slides, and a presentation holds at most ${limit}. Split it into shorter documents.`,
+    );
+    expect(() =>
+      createPresentationPlan(doc, { ...defaultPresentationHints(), density: 'section' }),
+    ).toThrow(
+      `This document makes ${limit + 10} slides, one per section, and a presentation holds at most ${limit}. Split it into shorter documents.`,
+    );
+  });
+
+  it('saves a design for as many sections as a deck has slides', () => {
+    const design = (count: number): PresentationHints => ({
+      ...defaultPresentationHints(),
+      blocks: Array.from({ length: count }, (_, index) => ({
+        blockId: `block-${index}`,
+        layout: 'cards' as const,
+      })),
+    });
+    expect(parsePresentationHints(serializePresentationHints(design(limit)))).toEqual(
+      design(limit),
+    );
+    expect(parsePresentationHints(design(limit + 1))).toBeNull();
   });
 });

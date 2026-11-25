@@ -52,7 +52,7 @@ export function dataTableCacheFor(
  * load, file read, parse) falls back to the input doc: the body link still
  * renders, matching the resolver's own never-throw contract.
  */
-async function resolveDataPreviews(
+export async function resolveDataPreviews(
   doc: Doc,
   container: ContentContainer,
   mediaRevision: number,

@@ -12,6 +12,7 @@
 
 import type { Doc, Layer, Block, ThemeRegistry } from '@bendyline/squisq/schemas';
 import { readFrontmatterThemeId } from '@bendyline/squisq/markdown';
+import { withoutAccessoryBlocks } from '@bendyline/squisq/doc';
 import { arrayBufferToBase64DataUrl, inferMimeType } from './imageUtils.js';
 import { exportImageBytes } from '../shared/svgIslands.js';
 
@@ -340,7 +341,8 @@ export function generateInlineHtml(doc: Doc, options: HtmlExportOptions): string
     themeRegistry,
   } = options;
 
-  doc = applyThemeSelection(doc, themeId, themeRegistry);
+  // Accessory blocks (slide summaries) are never shown; leave them out of the page.
+  doc = withoutAccessoryBlocks(applyThemeSelection(doc, themeId, themeRegistry));
 
   const { imageMap, imageAliases } = buildInlineImageMaps(images);
   const { imageMap: audioMap, imageAliases: audioAliases } = buildInlineImageMaps(options.audio);
@@ -440,7 +442,8 @@ export function generateExternalHtml(
     basePath = '.',
   } = options;
 
-  doc = applyThemeSelection(doc, themeId, themeRegistry);
+  // Accessory blocks (slide summaries) are never shown; leave them out of the page.
+  doc = withoutAccessoryBlocks(applyThemeSelection(doc, themeId, themeRegistry));
 
   const docJson = escapeForScript(JSON.stringify(doc));
   const imageMapJson = imagePathMap ? escapeForScript(JSON.stringify(imagePathMap)) : '{}';

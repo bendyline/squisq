@@ -42,8 +42,12 @@ import {
   normalizeShapeKind,
   SHAPE_NAMES,
 } from './templates/index.js';
-import { TEMPLATE_ALIASES } from './templates/templateNames.js';
+import { TEMPLATE_ALIASES, isFeatureBlockTemplate } from './templates/templateNames.js';
+import { FEATURE_PRESENTATION_LAYOUT } from '../schemas/PresentationLayouts.js';
 import { nearestName } from './utils/nearest.js';
+import { isAccessoryBlock } from './accessoryBlocks.js';
+import { readStudyCards } from './flashcards/studyCards.js';
+import { accessoryBlockTypeInfo, isAccessoryBlockType } from './accessoryBlockTypes.js';
 
 // ============================================
 // Options & result
@@ -110,17 +114,23 @@ export function validateMarkdownDoc(
   // direct child of a `{[drawing]}` block, so the template check needs each
   // block's parent. Drawing connectors are validated against their siblings.
   const visit = (block: Block, parent: Block | undefined): void => {
+    // An accessory block (and anything under its heading) is side information:
+    // its tag is not a template and its body is never drawn.
+    if (isAccessoryBlock(block)) return;
     checkTemplate(block, parent, knownTemplates, diagnostics);
     checkAttributeCoercion(block, parent, diagnostics);
     checkConflictingAnnotationKeys(block, diagnostics);
     checkTemplateInputs(block, parent, customNames, diagnostics);
     checkPossibleDataFences(block, diagnostics);
+    checkRollUp(block, diagnostics);
     if (isDrawingBlock(block)) checkDrawingConnectors(block, diagnostics);
     for (const child of block.children ?? []) visit(child, block);
   };
   for (const block of doc.blocks) visit(block, undefined);
 
   checkUnrecognizedAnnotations(markdownDoc, diagnostics);
+  checkShadowedCustomTemplates(doc, diagnostics);
+  checkStudyCards(doc, diagnostics);
 
   if (options?.assets) {
     const hasAsset = normalizeAssetCheck(options.assets);
@@ -143,6 +153,24 @@ export function validateMarkdownDoc(
 // ============================================
 // Template checks
 // ============================================
+
+/**
+ * A custom template named like an accessory block type (`summary`) is never
+ * used: the tag marks an accessory block instead, as built-in names win.
+ */
+function checkShadowedCustomTemplates(doc: Doc, diagnostics: DocDiagnostic[]): void {
+  for (const template of doc.customTemplates ?? []) {
+    if (!isAccessoryBlockType(template.name)) continue;
+    diagnostics.push({
+      severity: 'warning',
+      code: 'custom-template-shadowed',
+      message:
+        `Custom template "${template.name}" is never used: {[${template.name}]} marks a ` +
+        `${accessoryBlockTypeInfo(template.name).label.toLowerCase()}, kept with a section and ` +
+        'never shown. Rename the template.',
+    });
+  }
+}
 
 function collectKnownTemplates(doc: Doc, options?: ValidateOptions): Set<string> {
   return new Set<string>([
@@ -250,6 +278,43 @@ function checkTemplate(
     message:
       `Unknown template "${requested}" — the block will render as a plain fallback card` +
       (suggestion ? `. Did you mean "${suggestion}"?` : ''),
+    blockId: block.id,
+    ...lineOf(block),
+  });
+}
+
+/**
+ * Study cards are accessory blocks, which the block walk skips: what is wrong
+ * with one comes from the card reader, as a warning (the document is fine; the
+ * card is left out of the deck or cannot be checked).
+ */
+function checkStudyCards(doc: Doc, diagnostics: DocDiagnostic[]): void {
+  for (const issue of readStudyCards(doc).issues) {
+    diagnostics.push({
+      severity: 'warning',
+      code: `study-${issue.code}`,
+      message: issue.message,
+      blockId: issue.accessoryBlockId,
+      ...(issue.line !== undefined ? { line: issue.line } : {}),
+    });
+  }
+}
+
+/**
+ * `slideLayout=feature` asks a Custom summary to draw the block on the slide
+ * of the section before it. Only a block that draws a picture can be; any
+ * other gets a slide of its own, as authored.
+ */
+function checkRollUp(block: Block, diagnostics: DocDiagnostic[]): void {
+  if (block.slideLayout !== FEATURE_PRESENTATION_LAYOUT || isFeatureBlockTemplate(block.template))
+    return;
+  diagnostics.push({
+    severity: 'warning',
+    code: 'slide-layout-feature-unsupported',
+    message:
+      'slideLayout=feature draws a chart, data table, diagram, drawing, layout, map, tree or ' +
+      `timeline on the slide before it. ${block.template ? `A "${block.template}" block` : 'This block'} ` +
+      'cannot be drawn there, so it gets a slide of its own.',
     blockId: block.id,
     ...lineOf(block),
   });

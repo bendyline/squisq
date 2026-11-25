@@ -930,6 +930,26 @@ describe('round-trip: markdownToTiptap → tiptapToMarkdown', () => {
     expect(result).toContain('2. Second');
   });
 
+  it('keeps a quiz card’s question, ticked choice and explanation as written', () => {
+    const quiz = [
+      '## Photosynthesis',
+      '',
+      'Plants turn light into sugar.',
+      '',
+      '### Where does it happen? {[quiz origin=ai passage=k3f9-2a]}',
+      '',
+      '- [ ] In the roots',
+      '- [x] In the chloroplasts',
+      '',
+      'Chloroplasts hold the chlorophyll.',
+      '',
+      '### What do plants make? {[flashcard]}',
+      '',
+      'Sugar.',
+    ].join('\n');
+    expect(roundTrip(quiz).trim()).toBe(quiz);
+  });
+
   it('preserves task lists with mixed checked state', () => {
     const result = roundTrip('- [ ] buy milk\n- [x] walk dog');
     expect(result).toContain('- [ ] buy milk');

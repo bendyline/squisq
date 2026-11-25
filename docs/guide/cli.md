@@ -146,15 +146,15 @@ quality or layout, use [`squisq video`](#squisq-video) and [`squisq image`](#squ
 `--transform` (on `convert`, `video` and `image`) rebuilds the document as slides in a style. It
 doesn't touch your file.
 
-| Style                   | What it does                                                               |
-| ----------------------- | -------------------------------------------------------------------------- |
-| `documentary`           | Conservative: highlights only the strongest stats, dates and quotes        |
-| `magazine`              | Visual variety with pull quotes, facts and rich image layouts              |
-| `data-driven`           | Aggressively highlights statistics, comparisons and timelines              |
-| `narrative`             | Story-driven, with timeline events, quotes and impact moments              |
-| `minimal`               | Short highlights and a single brief line per section                       |
-| `headings-and-features` | Headings with their images, videos and diagrams; no body prose             |
-| `dynamic-slides`        | Generates concise slides and diagrams from the current text and your hints |
+| Style                   | What it does                                                                   |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `documentary`           | Conservative: highlights only the strongest stats, dates and quotes            |
+| `magazine`              | Visual variety with pull quotes, facts and rich image layouts                  |
+| `data-driven`           | Aggressively highlights statistics, comparisons and timelines                  |
+| `narrative`             | Story-driven, with timeline events, quotes and impact moments                  |
+| `minimal`               | Short highlights and a single brief line per section                           |
+| `headings-and-features` | Headings with their images, videos and diagrams; no body prose                 |
+| `dynamic-slides`        | Concise slides and diagrams from the current text and its `{[summary]}` blocks |
 
 Don't confuse these with [`squisq transform`](#squisq-transform), which rewrites the Markdown text
 itself.

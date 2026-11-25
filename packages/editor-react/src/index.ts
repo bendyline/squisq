@@ -149,7 +149,7 @@ export type { WysiwygEditorProps } from './WysiwygEditor.js';
 export type { WriteCanvasSettings } from './writeCanvasSettings.js';
 
 export { PreviewPanel } from './PreviewPanel.js';
-export type { PreviewPanelProps } from './PreviewPanel.js';
+export type { PreviewPanelProps, FlashcardStudyCallbacks } from './PreviewPanel.js';
 export { PlainHtmlPreview } from './PlainHtmlPreview.js';
 export type { PlainHtmlPreviewProps } from './PlainHtmlPreview.js';
 export { EmojiPicker } from './EmojiPicker.js';
@@ -206,6 +206,13 @@ export type {
   SummarizationAssistant,
   SuggestSlidesOptions,
 } from './summarize/summarizationAssistant.js';
+// Edit › Study cards: the AI a host lends for Generate.
+export type {
+  StudyAssistant,
+  StudyCardsRequest,
+  GenerateStudyCardsCallbacks,
+} from './study/studyAssistant.js';
+export { replacesWriteSurface } from './writeModes.js';
 export { TransformMenu } from './TransformMenu.js';
 export { ingestForWrite, persistFromWrite } from './wrapPolicy.js';
 export type { WrapPolicyIngest } from './wrapPolicy.js';
@@ -856,6 +863,10 @@ export type {
 // Pairs with `ImageViewer` and the `<basename>_files/` sidecar convention.
 export { ImageEditor } from './ImageEditor.js';
 export type { ImageEditorProps } from './ImageEditor.js';
+// Outside-in editing of an image file: layers in its sidecar, Save and
+// leaving write the flattened picture back over the file.
+export { ImageFileEditor } from './imageEditor/ImageFileEditor.js';
+export type { ImageFileEditorProps, ImageWriteBackContext } from './imageEditor/ImageFileEditor.js';
 export { useImageEditor } from './imageEditor/useImageEditor.js';
 export type { UseImageEditorOptions, UseImageEditorReturn } from './imageEditor/useImageEditor.js';
 export { imageEditorReducer, initialImageEditorState } from './imageEditor/state.js';

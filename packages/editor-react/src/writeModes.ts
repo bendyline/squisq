@@ -46,7 +46,23 @@ export const WRITE_MODE_OPTIONS: ViewModeOption<LayoutMode>[] = [
     summary: 'Choose how slides summarize your text.',
     view: 'wysiwyg',
   },
+  {
+    key: 'study',
+    label: 'Study cards',
+    icon: 'fa-solid fa-layer-group',
+    summary: 'Make flashcards and quiz questions for each section.',
+    view: 'wysiwyg',
+  },
 ];
+
+/**
+ * Layouts that replace the Write surface with a view of their own (Summaries,
+ * Study cards). The whole-document editor stays mounted, hidden, behind them,
+ * so the changes they write are undoable steps there.
+ */
+export function replacesWriteSurface(mode: LayoutMode): boolean {
+  return mode === 'summary' || mode === 'study';
+}
 
 /** An Edit entry in the View menu: one of the layouts, or Source — the Markdown file itself. */
 export type WriteMenuKey = LayoutMode | 'source';

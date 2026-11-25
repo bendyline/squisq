@@ -89,3 +89,49 @@ describe('<ImageEditor> save feedback', () => {
     expect(screen.getByRole('button', { name: 'Save and close' })).toBeTruthy();
   });
 });
+
+describe('<ImageEditor> Export menu', () => {
+  function captureDownloads(): { names: string[]; restore: () => void } {
+    const names: string[] = [];
+    const spy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      names.push(this.download);
+    });
+    return { names, restore: () => spy.mockRestore() };
+  }
+
+  it('downloads a copy instead of writing back when Save writes the picture back', async () => {
+    const downloads = captureDownloads();
+    const onExport = vi.fn(async () => {});
+    render(
+      <ImageEditor
+        filesContainer={await sidecar()}
+        onExport={onExport}
+        saveBehavior="export"
+        saveFormat="png"
+        exportBasename="photo"
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Export/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Export as JPEG' }));
+
+    await waitFor(() => expect(downloads.names).toEqual(['photo.jpg']));
+    // A JPEG must never reach the host that writes over the PNG.
+    expect(onExport).not.toHaveBeenCalled();
+    downloads.restore();
+  });
+
+  it('still hands Export to the host when Save only keeps the layers', async () => {
+    const downloads = captureDownloads();
+    const onExport = vi.fn(async (_blob: Blob, _format: string, _doc: ImageEditDoc) => {});
+    render(<ImageEditor filesContainer={await sidecar()} onExport={onExport} />);
+    fireEvent.click(await screen.findByRole('button', { name: /^Export/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Export as WebP' }));
+
+    await waitFor(() => expect(onExport).toHaveBeenCalledTimes(1));
+    expect(onExport.mock.calls[0]![1]).toBe('webp');
+    expect(downloads.names).toEqual([]);
+    downloads.restore();
+  });
+});

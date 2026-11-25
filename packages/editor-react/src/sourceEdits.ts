@@ -17,6 +17,7 @@
 
 import { parseMarkdown, type MarkdownSourceEdit } from '@bendyline/squisq/markdown';
 import {
+  isAccessoryBlockType,
   isContainerTemplate,
   resolveTemplateName,
   TABLE_FED_TEMPLATES,
@@ -56,6 +57,11 @@ export interface OutlineBlock {
   headingDepth: number | null;
   /** True for a heading whose template consumes the headings under it. */
   container: boolean;
+  /**
+   * True for an accessory block's heading (a slide summary): side information
+   * about the section above, never a place new content goes.
+   */
+  accessory?: boolean;
   /**
    * Blocks right after this one that belong to it: a chart's or data table's
    * heading owns the table beneath it (its data). An `afterBlock` insert
@@ -150,11 +156,35 @@ function containerOwners(blocks: readonly OutlineBlock[]): number[] {
 }
 
 /**
+ * For each block, the index where the run of accessory blocks (slide
+ * summaries) holding it starts, or -1. An accessory block runs to the next
+ * heading at its depth or shallower; consecutive ones are one run.
+ */
+function accessoryRunStarts(blocks: readonly OutlineBlock[]): number[] {
+  const starts: number[] = [];
+  let run: { start: number; depth: number } | null = null;
+  blocks.forEach((block, index) => {
+    if (block.headingDepth !== null) {
+      if (run && block.headingDepth <= run.depth) {
+        run = block.accessory ? { start: run.start, depth: block.headingDepth } : null;
+      } else if (!run && block.accessory) {
+        run = { start: index, depth: block.headingDepth };
+      }
+    }
+    starts.push(run ? run.start : -1);
+  });
+  return starts;
+}
+
+/**
  * Decide where a block goes in an outline, given the block holding the cursor
  * (`cursorIndex`, -1 when the cursor is before every block).
  *
  * A cursor inside a container template never puts a block among its children:
  * `afterBlock` moves before the container and `sectionEnd` after its subtree.
+ * A cursor in a section's slide summaries inserts before them, at the end of
+ * the section's own content: whatever follows a summary's heading is part of
+ * that summary.
  */
 export function resolveOutlineInsertion(
   blocks: readonly OutlineBlock[],
@@ -162,7 +192,9 @@ export function resolveOutlineInsertion(
   placement: BlockPlacement,
 ): OutlineInsertion {
   const owners = containerOwners(blocks);
-  const cursor = Math.min(Math.max(cursorIndex, -1), blocks.length - 1);
+  const accessory = accessoryRunStarts(blocks);
+  let cursor = Math.min(Math.max(cursorIndex, -1), blocks.length - 1);
+  if (cursor >= 0 && (accessory[cursor] ?? -1) >= 0) cursor = accessory[cursor]! - 1;
   const firstHeadingFrom = (from: number): number => {
     for (let i = Math.max(from, 0); i < blocks.length; i++) {
       if (blocks[i]?.headingDepth !== null) return i;
@@ -197,9 +229,10 @@ export function resolveOutlineInsertion(
   const nextHeadingDepth =
     nextHeading < blocks.length ? (blocks[nextHeading]?.headingDepth ?? null) : null;
 
+  // The section a new block joins is its nearest heading that is not a summary.
   let previousHeading = -1;
   for (let i = index - 1; i >= 0; i--) {
-    if (blocks[i]?.headingDepth !== null) {
+    if (blocks[i]?.headingDepth !== null && (accessory[i] ?? -1) < 0) {
       previousHeading = i;
       break;
     }
@@ -266,6 +299,7 @@ export function sourceOutline(source: string): {
       blocks.push({
         headingDepth: node.depth,
         container: isContainerTemplate(template),
+        ...(isAccessoryBlockType(template) ? { accessory: true } : {}),
         ...(ownsTable ? { ownsFollowing: 1 } : {}),
       });
     } else {

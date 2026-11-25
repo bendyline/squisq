@@ -3,10 +3,13 @@ import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import type { ImageEditDoc } from '@bendyline/squisq/schemas';
 import {
   IMAGE_EDIT_WRITE_BACK_FILENAME,
+  digestBytes,
   imageEditSignature,
+  imageSaveFormatForPath,
   isPristineImageEditDoc,
   needsWriteBack,
   readWriteBackSignature,
+  readWriteBackState,
   writeWriteBackSignature,
 } from '../imageEditor/writeBack';
 
@@ -101,5 +104,38 @@ describe('image-edit write-back bookkeeping', () => {
     expect(await readWriteBackSignature(sidecar)).toBe('abc123');
     await sidecar.writeFile(IMAGE_EDIT_WRITE_BACK_FILENAME, new TextEncoder().encode('{nope'));
     expect(await readWriteBackSignature(sidecar)).toBeNull();
+  });
+
+  it('records the picture digest beside the signature, and reads old records without one', async () => {
+    const sidecar = new MemoryContentContainer();
+    await writeWriteBackSignature(sidecar, 'abc123');
+    expect(await readWriteBackState(sidecar)).toEqual({ signature: 'abc123', pictureDigest: null });
+    await writeWriteBackSignature(sidecar, 'def456', 'digest-1');
+    expect(await readWriteBackState(sidecar)).toEqual({
+      signature: 'def456',
+      pictureDigest: 'digest-1',
+    });
+    expect(await readWriteBackSignature(sidecar)).toBe('def456');
+  });
+
+  it('digests bytes by content, for any view of them', () => {
+    const a = new Uint8Array([1, 2, 3, 4]);
+    expect(digestBytes(a)).toBe(digestBytes(new Uint8Array([1, 2, 3, 4]).buffer));
+    expect(digestBytes(a)).not.toBe(digestBytes(new Uint8Array([1, 2, 3, 5])));
+    // Same prefix, different length.
+    expect(digestBytes(a)).not.toBe(digestBytes(new Uint8Array([1, 2, 3, 4, 0])));
+    // A view into a larger buffer digests only its own bytes.
+    const view = new Uint8Array([9, 1, 2, 3, 4, 9]).subarray(1, 5);
+    expect(digestBytes(view)).toBe(digestBytes(a));
+  });
+
+  it('saves pictures back only in a format that keeps the file type', () => {
+    expect(imageSaveFormatForPath('a.png')).toBe('png');
+    expect(imageSaveFormatForPath('shots/Photo.JPG')).toBe('jpeg');
+    expect(imageSaveFormatForPath('x.jpeg?v=2')).toBe('jpeg');
+    expect(imageSaveFormatForPath('x.webp#frag')).toBe('webp');
+    for (const name of ['x.gif', 'x.svg', 'x.avif', 'x.bmp', 'x.ico', 'png']) {
+      expect(imageSaveFormatForPath(name)).toBeNull();
+    }
   });
 });

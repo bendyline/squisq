@@ -3,20 +3,23 @@
  * Summarize while Custom (core's `dynamic-slides`) is chosen.
  *
  * Custom slides are generated from the document's current text on every
- * projection. What persists is the author's INTENT, in
- * `squisq-presentation-hints`: how dense the slides are, a layout per section,
- * slides to hide, and wording for a section's opening slide — each keyed to
- * the exact passage it was written for, so changing the text returns that
- * slide to an automatic summary rather than showing stale words. Generated
- * slides are never saved.
+ * projection. What persists is the author's INTENT, in the document itself
+ * where it can be read (core's `presentationHintsDoc.ts`): the density and
+ * supporting-slides choice as frontmatter keys, a section's layout on its
+ * heading's tag, and each designed slide as a `{[summary]}` block under its
+ * section — your wording for a section's opening slide (kept when the text
+ * changes), an AI suggestion or a hidden slide keyed to the exact passage it
+ * was made for. Generated slides are never saved.
  *
- * Summarize is a mode the author can leave at any moment, so each change is
- * written as it is made. The Write editor stays mounted behind the view, so
- * each write is a step Write can undo, and an undo there flows back here.
+ * The document is the only copy of the design: this view reads it on every
+ * change and writes each change as it is made (`writePresentationHints`), so
+ * an undo in Write, an edit in Source, or a summary typed by hand flows back
+ * here. A design saved the old way (the `squisq-presentation-hints` key) is
+ * shown as it is and converted on the first change.
  *
  * AI is optional: a host that lends a `SummarizationAssistant` gets "Suggest
- * with AI", which words and lays out the slides one at a time, each suggestion
- * saved with the passage it summarizes.
+ * with AI", which words and lays out the slides one at a time; suggestions
+ * are saved in batches, each with the passage it summarizes.
  */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { BlockRenderer, MediaContext } from '@bendyline/squisq-react';
@@ -25,33 +28,55 @@ import {
   resolveAudioMapping,
   buildPreviewDoc,
   expandDocBlocks,
+  flattenBlocks,
+  flattenContentBlocks,
   flattenRenderableBlocks,
   getPinnedBlockMeta,
+  isFeatureBlockTemplate,
   previewBlockTemplate,
   PRESENTATION_LAYOUT_LABELS,
 } from '@bendyline/squisq/doc';
-import { parseMarkdown, setFrontmatterValues } from '@bendyline/squisq/markdown';
+import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { VIEWPORT_PRESETS, type Doc } from '@bendyline/squisq/schemas';
 import {
   compilePresentationPlan,
   createPresentationPlan,
+  createPresentationPlanReport,
   defaultPresentationHints,
   parsePresentationHints,
-  serializePresentationHints,
   presentationSections,
-  PRESENTATION_HINTS_KEY,
+  presentationHintUsage,
+  presentationHintsForPlan,
+  readPresentationHints,
+  removeSummaryBlocks,
+  resetPresentationHints,
+  slideHintHasWording,
+  withBlockHint,
+  withSlideHint,
+  writePresentationHints,
   PRESENTATION_LAYOUTS,
+  PRESENTATION_LIMITS,
   AUTHORED_PRESENTATION_LAYOUT,
+  FEATURE_PRESENTATION_LAYOUT,
+  isSummaryPresentationLayout,
   presentationBeatExtras,
+  presentationBeatIsSlide,
   presentationLayoutNeeds,
   presentationPassageKey,
   type PresentationHints,
-  type PresentationBlockHint,
+  type PresentationHintIssue,
+  type PresentationRollup,
+  type PresentationSlideHint,
   type PresentationBeat,
   type PresentationBeatLayout,
 } from '@bendyline/squisq/transform';
 import { useEditorContext } from '../EditorContext';
+import { useAssistantReadiness } from '../designer/useAssistantReadiness';
+import { useBatchedSave } from '../designer/useBatchedSave';
+import { AssistantRunControls } from '../designer/AssistantRunControls';
+import { gist, sectionName } from '../designer/designerText';
 import { usePreviewSettingsOptional } from '../PreviewControls';
+import { resolveDataPreviews } from '../usePreviewProjection';
 import { templateLabel } from '../TemplatePicker';
 import { setBlockDurationInSource, setBlockStartTimeInSource } from '../timelineSource';
 import { Icon } from '../Icon';
@@ -67,14 +92,36 @@ function summaryLayoutLabel(layout: string): string {
 }
 /** What a chosen layout shows, and which slides it can apply to: Squisq's
  * description of the layout, then what a slide needs for it to apply. */
-function layoutHelp(layout: PresentationBeatLayout): string {
+function layoutHelp(layout: PresentationBeatLayout, before: string | undefined): string {
   if (layout === AUTHORED_PRESENTATION_LAYOUT)
     return 'Shows this section as written, as one slide for its whole narration. To change its block type, use the block picker in the editor.';
+  if (layout === FEATURE_PRESENTATION_LAYOUT)
+    return `Draws this block beneath the headline of ${before ? `the last slide of “${before}”` : 'the slide before it'} instead of on a slide of its own. Its text is still narrated while that slide stays up.`;
   const described = (
     PRESENTATION_LAYOUT_LABELS as Record<string, { description: string } | undefined>
   )[layout]?.description;
   const needs = presentationLayoutNeeds(layout, { points: 'highlights' });
   return [described, needs ? `Used on slides with ${needs}.` : ''].filter(Boolean).join(' ');
+}
+/** Why a section asked to be shown on the slide before it has a slide of its own. */
+function rollupProblem(
+  problem: NonNullable<PresentationRollup['problem']>,
+  type: string,
+  before: string | undefined,
+): string {
+  const named = before ? `“${before}”` : 'the section before it';
+  switch (problem) {
+    case 'not-eligible':
+      return `A ${type} block cannot be drawn on another slide, so it has a slide of its own.`;
+    case 'no-section-before':
+      return 'Nothing comes before this section to carry it, so it has a slide of its own.';
+    case 'section-before-authored':
+      return `${named[0]!.toUpperCase()}${named.slice(1)} is shown as authored, so this section has a slide of its own.`;
+    case 'section-before-hidden':
+      return `Every slide of ${named} is hidden, so this section has a slide of its own.`;
+    case 'no-room':
+      return `The last slide of ${named} already carries ${PRESENTATION_LIMITS.mediaPerBeat} things, so this section has a slide of its own.`;
+  }
 }
 
 type Sections = ReturnType<typeof presentationSections>;
@@ -89,90 +136,83 @@ interface SuggestionProgress {
 function sectionAt(sections: Sections, offset: number) {
   return sections.find((item) => offset >= item.sourceStart && offset < item.sourceEnd);
 }
-/** Store one accepted suggestion keyed to the exact passage it summarizes, so
- * Squisq reapplies it only while that passage is unchanged. */
-function withSuggestion(
+/** A slide's passage key: how its summary block names the slide. */
+function passageKeyOf(item: PresentationBeat, sourceText: string): string {
+  return presentationPassageKey(sourceText.slice(item.sourceStart, item.sourceEnd));
+}
+/** One AI suggestion as a slide design, or null when the design could not hold it. */
+function suggestedSlide(item: PresentationBeat): PresentationSlideHint | null {
+  if (!isSummaryPresentationLayout(item.layout)) return null;
+  const slide: PresentationSlideHint = {
+    origin: 'ai',
+    layout: item.layout,
+    headline: item.headline,
+    points: [...item.points],
+    // A hub's centre and a matrix's axes are part of the suggestion.
+    ...presentationBeatExtras(item.layout, item),
+  };
+  const valid = parsePresentationHints({
+    ...defaultPresentationHints(),
+    blocks: [{ blockId: 'x', slides: [slide] }],
+  });
+  return valid ? slide : null;
+}
+/** An accepted AI suggestion: the slide it is for, and its design. */
+interface Suggestion {
+  blockId: string;
+  passage: string;
+  slide: PresentationSlideHint;
+}
+/** Store accepted suggestions, each keyed to the exact passage it summarizes, so
+ * Squisq applies it only while that passage is unchanged. A slide you worded
+ * yourself keeps your wording; a hidden slide stays hidden. */
+function withSuggestions(
   current: PresentationHints,
-  sections: Sections,
-  sourceText: string,
-  item: PresentationBeat,
+  suggestions: readonly Suggestion[],
 ): PresentationHints {
-  const parent = sectionAt(sections, item.sourceStart);
-  if (!parent || item.layout === AUTHORED_PRESENTATION_LAYOUT) return current;
-  const source = sourceText.slice(item.sourceStart, item.sourceEnd);
-  const existing = current.blocks.find((block) => block.blockId === parent.blockId);
-  const target: PresentationBlockHint = {
-    ...(existing ?? { blockId: parent.blockId }),
-    ai: [
-      ...(existing?.ai ?? []).filter((entry) => entry.source !== source),
-      {
-        source,
-        layout: item.layout,
-        headline: item.headline,
-        points: [...item.points],
-        // A hub's centre and a matrix's axes are part of the suggestion.
-        ...presentationBeatExtras(item.layout, item),
-      },
-    ].slice(-80),
-  };
-  return {
-    ...current,
-    blocks: [...current.blocks.filter((block) => block.blockId !== parent.blockId), target],
-  };
-}
-
-/** A design as the designer writes it: canonical JSON, or null when it is not valid. */
-function hintsJson(hints: PresentationHints): string | null {
-  try {
-    return serializePresentationHints(hints);
-  } catch {
-    return null;
+  let next = current;
+  for (const { blockId, passage, slide } of suggestions) {
+    const existing = next.blocks
+      .find((block) => block.blockId === blockId)
+      ?.slides?.find((entry) => entry.passage === passage);
+    if (existing && !existing.origin && slideHintHasWording(existing)) continue;
+    next = withSlideHint(next, blockId, passage, {
+      ...slide,
+      ...(existing?.hidden ? { hidden: true as const } : {}),
+    });
   }
-}
-const EMPTY_HINTS = defaultPresentationHints();
-const DEFAULT_HINTS_JSON = hintsJson(EMPTY_HINTS)!;
-/** The design the document holds. No key is the default design, and so is an
- * unreadable one, which the first change then replaces. */
-function storedHints(markdown: string): string {
-  const raw = parseMarkdown(markdown).frontmatter?.[PRESENTATION_HINTS_KEY];
-  const hints = raw === undefined ? null : parsePresentationHints(raw);
-  return (hints && hintsJson(hints)) ?? DEFAULT_HINTS_JSON;
+  return next;
 }
 /** The AI wording a design holds, as text, for a host's report control. */
 function suggestionsText(hints: PresentationHints): string {
+  const wording = (headline: string | undefined, points: readonly string[] | undefined) =>
+    [headline ?? '', ...(points ?? []).map((point) => `- ${point}`)].join('\n').trim();
   return hints.blocks
-    .flatMap((block) => block.ai ?? [])
-    .map((entry) => [entry.headline, ...entry.points.map((point) => `- ${point}`)].join('\n'))
+    .flatMap((block) => [
+      ...(block.slides ?? [])
+        .filter((slide) => slide.origin === 'ai')
+        .map((slide) => wording(slide.headline, slide.points)),
+      ...(block.ai ?? []).map((entry) => wording(entry.headline, entry.points)),
+    ])
+    .filter(Boolean)
     .join('\n\n');
 }
 
-/** The assistant's readiness: undefined while checking, null when ready, else why not. */
-function useAssistantReadiness(assistant?: SummarizationAssistant): string | null | undefined {
-  const [reason, setReason] = useState<string | null | undefined>(undefined);
-  useEffect(() => {
-    if (!assistant) return;
-    let live = true;
-    setReason(undefined);
-    const read = () => {
-      Promise.resolve()
-        .then(() => assistant.readiness())
-        .then(
-          (next) => {
-            if (live) setReason(next);
-          },
-          (cause: unknown) => {
-            if (live) setReason(cause instanceof Error ? cause.message : String(cause));
-          },
-        );
-    };
-    read();
-    const stop = assistant.onReadinessChange?.(read);
-    return () => {
-      live = false;
-      stop?.();
-    };
-  }, [assistant]);
-  return reason;
+/**
+ * What a slide says about itself in the list. Its group names the section, so
+ * a slide titled with the section's heading (as automatic slides are) shows
+ * the opening of the passage it covers instead, and consecutive slides of one
+ * section read as the parts of it they are. A headline of its own (custom or
+ * AI wording) is what the slide shows, so the list shows that.
+ */
+function slideLabel(item: PresentationBeat, sourceText: string, heading?: string): string {
+  const title = heading?.trim() ?? '';
+  const headline = item.headline.trim();
+  const clipped = headline.endsWith('…') && title.startsWith(headline.slice(0, -1).trim());
+  if (!title || (headline.toLowerCase() !== title.toLowerCase() && !clipped)) return headline;
+  const passage = sourceText.slice(item.sourceStart, item.sourceEnd).trim();
+  const rest = passage.startsWith(title) ? passage.slice(title.length) : passage;
+  return gist(rest, 160) || headline;
 }
 
 export interface SummaryDesignerProps {
@@ -189,73 +229,91 @@ export function SummaryDesigner({
   readOnly = false,
   basePath = '/',
 }: SummaryDesignerProps) {
-  const { workspaceContainer, markdownSource, replaceAll, mediaProvider } = useEditorContext();
+  const { workspaceContainer, markdownSource, replaceAll, mediaProvider, mediaRevision } =
+    useEditorContext();
   const preview = usePreviewSettingsOptional();
   const viewport = preview?.activeViewport ?? VIEWPORT_PRESETS.landscape;
   const originalTextId = useId();
   const layoutHelpId = useId();
   const slidePickerId = useId();
+  const headingNoteId = useId();
+  const rollupNoteId = useId();
   const readiness = useAssistantReadiness(assistant);
 
-  // ── The design, saved as it changes ─────────────────────────────────
-  const stored = useMemo(() => storedHints(markdownSource), [markdownSource]);
-  const storedRef = useRef(stored);
-  storedRef.current = stored;
+  // ── The design: read from the document, written back as it changes ──
   const sourceRef = useRef(markdownSource);
   sourceRef.current = markdownSource;
-  const [hints, setHints] = useState<PresentationHints>(() => parsePresentationHints(stored)!);
+  const parsed = useMemo(() => markdownToDoc(parseMarkdown(markdownSource)), [markdownSource]);
+  const read = useMemo(() => readPresentationHints(parsed), [parsed]);
+  /** AI suggestions accepted but not yet written: they are saved in batches. */
+  const batch = useBatchedSave<Suggestion>((pending) =>
+    commit((design) => withSuggestions(design, pending)),
+  );
+  const hints = useMemo(
+    () => withSuggestions(read.hints, batch.pending),
+    [read.hints, batch.pending],
+  );
   const [error, setError] = useState<string | null>(null);
-  /** Designs written but not yet read back from the document, oldest first. */
-  const pending = useRef<string[]>([]);
-  // Save each change as it is made. Reads the document through refs: when the
-  // design changes because the document did (below), there is nothing to save.
-  useEffect(() => {
-    const json = hintsJson(hints);
-    if (json === null) {
-      setError('The slide design is too large to save. Reset the design or hide fewer slides.');
-      return;
+  /**
+   * Write one change to the design into the document, as one undo step. The
+   * change applies to the design the document holds now; one saved the old
+   * way becomes summaries first, keeping what still applies.
+   */
+  const commit = (change: (design: PresentationHints) => PresentationHints): void => {
+    if (readOnly) return;
+    const source = sourceRef.current;
+    const doc = markdownToDoc(parseMarkdown(source));
+    const current = readPresentationHints(doc);
+    let base = current.hints;
+    if (current.format === 'legacy') {
+      try {
+        base = presentationHintsForPlan(
+          doc,
+          current.hints,
+          createPresentationPlan(doc, current.hints),
+        );
+      } catch {
+        base = {
+          ...defaultPresentationHints(),
+          density: base.density,
+          inbetweens: base.inbetweens,
+        };
+      }
+      setNotice('Slide summaries are now saved in the document, under each section.');
     }
-    if (json === storedRef.current) return;
-    try {
-      // The default design is no design: leave no key behind.
-      const value = json === DEFAULT_HINTS_JSON ? null : json;
-      replaceAll(setFrontmatterValues(sourceRef.current, { [PRESENTATION_HINTS_KEY]: value }));
-      pending.current.push(json);
-    } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+    const written = writePresentationHints(source, change(base));
+    if (written.result !== source) {
+      sourceRef.current = written.result;
+      replaceAll(written.result);
     }
-  }, [hints, replaceAll]);
-  // Follow the document when it changes the design itself: an undo in Write, or
-  // an edit in Source. Each design this view wrote is skipped as it reads back.
-  useEffect(() => {
-    const ours = pending.current.indexOf(stored);
-    if (ours >= 0) {
-      pending.current.splice(0, ours + 1);
-      return;
-    }
-    pending.current = [];
-    setHints((current) =>
-      hintsJson(current) === stored ? current : parsePresentationHints(stored)!,
-    );
-  }, [stored]);
+    setError(written.rejected[0]?.message ?? null);
+  };
+  const replaceSource = (next: { result: string }) => {
+    if (readOnly || next.result === sourceRef.current) return;
+    sourceRef.current = next.result;
+    replaceAll(next.result);
+  };
 
   // One slide per section never adds supporting slides, so their controls rest.
   const perSection = hints.density === 'section';
   const [loaded, setLoaded] = useState<{ doc: Doc; source: string } | null>(null);
   const [selectedSourceStart, setSelectedSourceStart] = useState(0);
   const [notice, setNotice] = useState('');
+  /** Slide wording starts open; closing it keeps it closed from slide to slide. */
+  const [wordingOpen, setWordingOpen] = useState(true);
   const [progress, setProgress] = useState<SuggestionProgress | null>(null);
   const controller = useRef<AbortController | null>(null);
   /** Show each slide as it is suggested until the person picks one themselves. */
   const follow = useRef(false);
-  const suggestButton = useRef<HTMLButtonElement>(null);
-  const stopButton = useRef<HTMLButtonElement>(null);
   const slidesRef = useRef<HTMLElement>(null);
   useEffect(() => {
     let disposed = false;
-    const parsed = markdownToDoc(parseMarkdown(markdownSource));
+    // A chart or table that reads its rows from a file (`src=`) previews them,
+    // as the preview panel does; a file that cannot be read leaves it as it is.
     const load = workspaceContainer
-      ? resolveAudioMapping(parsed, workspaceContainer)
+      ? resolveAudioMapping(parsed, workspaceContainer).then((doc) =>
+          resolveDataPreviews(doc, workspaceContainer, mediaRevision ?? 0),
+        )
       : Promise.resolve(parsed);
     void load
       .then((doc) => {
@@ -267,21 +325,13 @@ export function SummaryDesigner({
     return () => {
       disposed = true;
     };
-  }, [markdownSource, workspaceContainer]);
+  }, [markdownSource, parsed, workspaceContainer, mediaRevision]);
   // Each saved change rewrites the document, so a run of suggestions outlives
-  // many loads; only leaving the designer stops it.
+  // many loads; only leaving the designer stops it, keeping what it suggested.
+  // (The batch saves what was accepted when the designer goes.)
   useEffect(() => () => controller.current?.abort(), []);
   const running = progress !== null;
   const locked = running || readOnly;
-  const wasRunning = useRef(false);
-  useEffect(() => {
-    if (wasRunning.current === running) return;
-    wasRunning.current = running;
-    // The Suggest button leaves for the run and Stop takes its place; keep
-    // keyboard focus with them instead of dropping it on the page.
-    if (document.activeElement === null || document.activeElement === document.body)
-      (running ? stopButton.current : suggestButton.current)?.focus();
-  }, [running]);
 
   // Every saved change reloads the document. Keep showing the last one until
   // the reload lands, rather than blanking the slides on each change.
@@ -290,12 +340,22 @@ export function SummaryDesigner({
   const generated = useMemo(() => {
     if (!doc) return null;
     try {
-      return { plan: createPresentationPlan(doc, hints), error: null };
+      const planned = createPresentationPlanReport(doc, hints);
+      return { plan: planned.plan, rollups: planned.rollups, error: null };
     } catch (cause: unknown) {
-      return { plan: null, error: cause instanceof Error ? cause.message : String(cause) };
+      return {
+        plan: null,
+        rollups: [],
+        error: cause instanceof Error ? cause.message : String(cause),
+      };
     }
   }, [doc, hints]);
   const plan = generated?.plan;
+  /** Each section asked to be shown on the slide before it, by its block. */
+  const rollups = useMemo(
+    () => new Map((generated?.rollups ?? []).map((rollup) => [rollup.blockId, rollup])),
+    [generated],
+  );
   const sections = useMemo(() => (doc ? presentationSections(doc) : []), [doc]);
   const projection = useMemo(() => {
     if (!doc || !plan) return null;
@@ -365,28 +425,69 @@ export function SummaryDesigner({
   // marks a slide in the list as AI-suggested.
   const aiEntries = useMemo(() => {
     const entries = new Map<string, Map<string, PresentationBeat['layout']>>();
-    for (const block of hints.blocks)
-      entries.set(
-        block.blockId,
-        new Map((block.ai ?? []).map((entry) => [entry.source, entry.layout])),
-      );
+    for (const block of hints.blocks) {
+      const layouts = new Map<string, PresentationBeat['layout']>();
+      for (const entry of block.ai ?? [])
+        layouts.set(presentationPassageKey(entry.source), entry.layout);
+      for (const slide of block.slides ?? [])
+        if (slide.origin === 'ai' && slide.passage && slide.layout)
+          layouts.set(slide.passage, slide.layout);
+      entries.set(block.blockId, layouts);
+    }
     return entries;
   }, [hints]);
-  // Names the block type each section renders with when shown as authored.
-  const authoredLabels = useMemo(() => {
-    const labels = new Map<string, string>();
-    if (!doc) return labels;
+  // Names the block type each section renders with when shown as authored, and
+  // which sections draw a picture that can go on the slide before them.
+  const blockTypes = useMemo(() => {
+    const types = new Map<string, { label: string; drawn: boolean }>();
+    if (!doc) return types;
     for (const block of flattenRenderableBlocks(doc.blocks))
-      labels.set(
-        block.id,
-        `As authored (${templateLabel(previewBlockTemplate(block, doc), doc.customTemplates)})`,
-      );
-    return labels;
+      types.set(block.id, {
+        label: templateLabel(previewBlockTemplate(block, doc), doc.customTemplates),
+        drawn: isFeatureBlockTemplate(block.template),
+      });
+    return types;
   }, [doc]);
-  const layoutLabel = (layout: PresentationBeatLayout, blockId: string | undefined) =>
-    layout === AUTHORED_PRESENTATION_LAYOUT
-      ? (authoredLabels.get(blockId ?? '') ?? 'As authored')
-      : summaryLayoutLabel(layout);
+  const typeLabel = (blockId: string | undefined) =>
+    blockTypes.get(blockId ?? '')?.label ?? 'Block';
+  /**
+   * The section whose last slide carries `blockId` when it is shown on the
+   * slide before it: the nearest section before it that makes slides.
+   */
+  const sectionBefore = (blockId: string): Sections[number] | undefined => {
+    const named = (id: string | undefined) => sections.find((item) => item.blockId === id);
+    const rollup = rollups.get(blockId);
+    if (rollup) return named(rollup.ownerId);
+    if (!plan) return undefined;
+    const first = plan.beats.findIndex(
+      (item) => sectionAt(sections, item.sourceStart)?.blockId === blockId,
+    );
+    for (let index = first - 1; index >= 0; index--) {
+      const item = plan.beats[index]!;
+      if (item.layout !== FEATURE_PRESENTATION_LAYOUT) return sectionAt(sections, item.sourceStart);
+    }
+    return undefined;
+  };
+  const beforeName = (blockId: string) => {
+    const before = sectionBefore(blockId);
+    return before ? sectionName(before) : undefined;
+  };
+  const layoutLabel = (layout: PresentationBeatLayout, blockId: string | undefined) => {
+    if (layout === AUTHORED_PRESENTATION_LAYOUT)
+      return blockTypes.has(blockId ?? '') ? `As authored (${typeLabel(blockId)})` : 'As authored';
+    if (layout === FEATURE_PRESENTATION_LAYOUT) {
+      const before = blockId ? beforeName(blockId) : undefined;
+      return `${before ? `On the last slide of “${before}”` : 'On the slide before it'} (${typeLabel(blockId)})`;
+    }
+    return summaryLayoutLabel(layout);
+  };
+  // Slides number as the deck shows them; a section on another slide has no number.
+  const slideNumbers = useMemo(() => {
+    let counted = 0;
+    return (plan?.beats ?? []).map((item) =>
+      item.layout === FEATURE_PRESENTATION_LAYOUT ? null : ++counted,
+    );
+  }, [plan]);
   // Layout changes can split or merge slides. Follow the source passage rather
   // than a slide number, which could now belong to a different section.
   const selectedIndex = Math.max(
@@ -398,22 +499,73 @@ export function SummaryDesigner({
   const beat = plan?.beats[selectedIndex];
   const section = beat && sectionAt(sections, beat.sourceStart);
   const hint = hints.blocks.find((item) => item.blockId === section?.blockId);
-  const visual = projection?.blocks.find((block) => block.id === beat?.id);
+  // Text before the first heading, or a section made by a standalone tag, has
+  // no heading to hold section settings; its slides can still be worded.
+  const headed = !!(
+    doc &&
+    section &&
+    flattenContentBlocks(doc.blocks).find((block) => block.id === section.blockId)?.sourceHeading
+  );
+  // Summaries in the document that the deck does not use now, and why: their
+  // slide is gone (the text changed, or the density cuts it differently — it
+  // comes back with the slide), or the summary cannot be read.
+  const unused = useMemo((): PresentationHintIssue[] => {
+    if (!plan || !current) return [];
+    const seen = new Set<string>();
+    return [
+      ...read.issues.filter((issue) => issue.accessoryBlockId),
+      ...presentationHintUsage(parsed, plan, read),
+    ].filter((issue) => {
+      if (seen.has(issue.accessoryBlockId!)) return false;
+      seen.add(issue.accessoryBlockId!);
+      return true;
+    });
+  }, [plan, current, read, parsed]);
+  const summaryTitles = useMemo(
+    () => new Map(flattenBlocks(parsed.blocks).map((block) => [block.id, block.title ?? ''])),
+    [parsed],
+  );
+  const removeSummaries = (ids: string[]) =>
+    replaceSource(removeSummaryBlocks(sourceRef.current, ids));
+  /** The selected section, when it is shown on the slide before it. */
+  const rollup = section ? rollups.get(section.blockId) : undefined;
+  const rolledUp = beat?.layout === FEATURE_PRESENTATION_LAYOUT;
+  const carrierIndex =
+    rolledUp && plan ? plan.beats.findIndex((item) => item.id === rollup?.carrierBeatId) : -1;
+  // A section on another slide previews the slide that carries it.
+  const previewBeat = rolledUp ? plan?.beats[carrierIndex] : beat;
+  const previewNumber = slideNumbers[rolledUp ? carrierIndex : selectedIndex];
+  const visual = projection?.blocks.find((block) => block.id === previewBeat?.id);
   // What the slide list and the small-panel picker both say about each slide.
   const slideTags = !plan
     ? []
-    : plan.beats.map((item) => {
+    : plan.beats.map((item, index) => {
         const owner = sectionAt(sections, item.sourceStart);
         const layout =
-          owner &&
-          aiEntries
-            .get(owner.blockId)
-            ?.get(plan.sourceText.slice(item.sourceStart, item.sourceEnd));
+          owner && aiEntries.get(owner.blockId)?.get(passageKeyOf(item, plan.sourceText));
         const active = progress?.active;
+        const onto =
+          item.layout === FEATURE_PRESENTATION_LAYOUT
+            ? plan.beats.findIndex(
+                (other) => other.id === rollups.get(owner?.blockId ?? '')?.carrierBeatId,
+              )
+            : -1;
         return {
-          layout: layoutLabel(item.layout, owner?.blockId),
+          owner,
+          number: slideNumbers[index] ?? null,
+          label: slideLabel(item, plan.sourceText, owner?.heading),
+          // A section on another slide is tagged with its type and that slide.
+          layout:
+            item.layout === FEATURE_PRESENTATION_LAYOUT
+              ? typeLabel(owner?.blockId)
+              : layoutLabel(item.layout, owner?.blockId),
+          onSlide: onto >= 0 ? (slideNumbers[onto] ?? null) : null,
+          // The blocks a slide carries from the sections after it.
+          carries: [...rollups.values()]
+            .filter((entry) => entry.carrierBeatId === item.id)
+            .map((entry) => typeLabel(entry.blockId)),
           suggested:
-            item.layout !== AUTHORED_PRESENTATION_LAYOUT &&
+            isSummaryPresentationLayout(item.layout) &&
             layout !== undefined &&
             (layout !== 'image' || !!item.imageSrc),
           pending:
@@ -422,6 +574,24 @@ export function SummaryDesigner({
             active.sourceEnd === item.sourceEnd,
         };
       });
+  /** What the list and the picker show as a slide's title. */
+  const numbered = (index: number) => {
+    const { number, label } = slideTags[index]!;
+    return number === null ? label : `${number}. ${label}`;
+  };
+  // Every slide is made from one block of the document, and a block's slides
+  // are consecutive, so the list groups them under the block they came from.
+  const slideGroups: Array<{ key: string; name: string; indexes: number[] }> = [];
+  slideTags.forEach(({ owner }, index) => {
+    const last = slideGroups[slideGroups.length - 1];
+    if (last && owner && last.key === owner.blockId) last.indexes.push(index);
+    else
+      slideGroups.push({
+        key: owner?.blockId ?? `slide-${index}`,
+        name: sectionName(owner),
+        indexes: [index],
+      });
+  });
   /** Select a slide by position; the person chose it, so stop following the AI run. */
   const selectSlide = (index: number) => {
     const next = plan?.beats[Math.max(0, Math.min(plan.beats.length - 1, index))];
@@ -459,34 +629,63 @@ export function SummaryDesigner({
     button?.focus({ preventScroll: true });
     button?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
-  const updateHint = (patch: Partial<PresentationBlockHint>) => {
+  /** Change the selected slide's section's settings (on its heading). */
+  const setSectionSetting = (patch: { layout?: PresentationBeatLayout; inbetweens?: boolean }) => {
     if (!section) return;
-    const entry = { ...hint, blockId: section.blockId, ...patch };
-    if (entry.wording && entry.wording.headline === undefined && entry.wording.points === undefined)
-      delete entry.wording;
-    const next = {
-      ...hints,
-      blocks: [...hints.blocks.filter((item) => item.blockId !== section.blockId), entry],
-    };
-    if (!parsePresentationHints(next)) {
+    commit((design) => withBlockHint(design, section.blockId, patch));
+  };
+  /** Your wording for the section's opening slide: its keyless summary block. */
+  const openingWording = hint?.slides?.find((slide) => !slide.passage && !slide.origin);
+  const setOpeningWording = (patch: { headline?: string; points?: string[] }) => {
+    if (!section) return;
+    if (
+      patch.points &&
+      (patch.points.length > PRESENTATION_LIMITS.points ||
+        patch.points.some((point) => point.length > PRESENTATION_LIMITS.point))
+    ) {
       setError(
-        'Use a headline of at most 110 characters and up to four highlights of at most 180 characters each.',
+        `Use up to ${PRESENTATION_LIMITS.points} highlights of at most ${PRESENTATION_LIMITS.point} characters each.`,
       );
       return;
     }
-    setError(null);
-    setHints(next);
+    commit((design) => {
+      const existing =
+        design.blocks
+          .find((block) => block.blockId === section.blockId)
+          ?.slides?.find((slide) => !slide.passage && !slide.origin) ?? {};
+      const next: PresentationSlideHint = { ...existing, ...patch };
+      if ('headline' in patch && patch.headline === undefined) delete next.headline;
+      const keep = next.headline !== undefined || next.points !== undefined || next.hidden;
+      return withSlideHint(design, section.blockId, undefined, keep ? next : null);
+    });
   };
   const hiddenCount = plan?.beats.filter((item) => item.hidden).length ?? 0;
-  const shownCount = (plan?.beats.length ?? 0) - hiddenCount;
-  const slideCount = `${shownCount} ${shownCount === 1 ? 'slide' : 'slides'}${hiddenCount ? ` · ${hiddenCount} hidden` : ''}`;
+  const rolledUpCount =
+    plan?.beats.filter((item) => item.layout === FEATURE_PRESENTATION_LAYOUT).length ?? 0;
+  const shownCount = plan?.beats.filter(presentationBeatIsSlide).length ?? 0;
+  const slideCount = `${shownCount} ${shownCount === 1 ? 'slide' : 'slides'}${hiddenCount ? ` · ${hiddenCount} hidden` : ''}${rolledUpCount ? ` · ${rolledUpCount} on another slide` : ''}`;
   /** Hide or show the selected slide, remembered by its exact source passage. */
   const setHidden = (hide: boolean) => {
-    if (!plan || !beat) return;
-    const key = presentationPassageKey(plan.sourceText.slice(beat.sourceStart, beat.sourceEnd));
-    const rest = (hint?.hidden ?? []).filter((item) => item !== key);
-    const hidden = hide ? [...rest, key].slice(-80) : rest;
-    updateHint({ hidden: hidden.length ? hidden : undefined });
+    if (!plan || !beat || !section) return;
+    const key = passageKeyOf(beat, plan.sourceText);
+    const headline = beat.headline;
+    commit((design) => {
+      const existing = design.blocks
+        .find((block) => block.blockId === section.blockId)
+        ?.slides?.find((slide) => slide.passage === key);
+      if (hide)
+        return withSlideHint(design, section.blockId, key, {
+          ...(existing ?? { label: headline }),
+          hidden: true,
+        });
+      if (!existing) return design;
+      // A summary that only hid the slide goes; one with wording stays, shown.
+      const { hidden: _hidden, label: _label, passage: _passage, ...rest } = existing;
+      void _hidden;
+      void _label;
+      void _passage;
+      return withSlideHint(design, section.blockId, key, slideHintHasWording(rest) ? rest : null);
+    });
   };
   const suggest = async () => {
     if (!assistant || !plan || controller.current || readOnly) return;
@@ -520,13 +719,20 @@ export function SummaryDesigner({
         onBeat: (_index, item) => {
           // A suggestion the design could not hold (no section of its own, or
           // wording past the limits) keeps the automatic slide.
-          const alone = item && withSuggestion(EMPTY_HINTS, sections, plan.sourceText, item);
-          if (!item || !alone?.blocks.length || !parsePresentationHints(alone)) {
+          const parent = item && sectionAt(sections, item.sourceStart);
+          const slide = item && suggestedSlide(item);
+          if (!item || !parent || !slide) {
             outcome.retained++;
             return;
           }
           outcome.refined++;
-          setHints((latest) => withSuggestion(latest, sections, plan.sourceText, item));
+          const suggestion = {
+            blockId: parent.blockId,
+            passage: passageKeyOf(item, plan.sourceText),
+            slide,
+          };
+          // Saved in batches: each save rewrites the document and is an undo step.
+          batch.add(suggestion);
         },
       });
       run.signal.throwIfAborted();
@@ -548,15 +754,20 @@ export function SummaryDesigner({
           }`,
         );
     } finally {
+      batch.flush();
       if (controller.current === run) {
         controller.current = null;
         setProgress(null);
       }
     }
   };
-  const aiReady = readiness === null;
   const report =
-    notice && !running && assistant?.renderReport && hints.blocks.some((block) => block.ai?.length)
+    notice &&
+    !running &&
+    assistant?.renderReport &&
+    hints.blocks.some(
+      (block) => block.ai?.length || block.slides?.some((slide) => slide.origin === 'ai'),
+    )
       ? assistant.renderReport(suggestionsText(hints))
       : null;
 
@@ -575,10 +786,10 @@ export function SummaryDesigner({
                 value={hints.density}
                 disabled={locked}
                 onChange={(event) =>
-                  setHints({
-                    ...hints,
+                  commit((design) => ({
+                    ...design,
                     density: event.target.value as PresentationHints['density'],
-                  })
+                  }))
                 }
               >
                 <option value="concise">Concise — shorter passages per slide</option>
@@ -594,7 +805,9 @@ export function SummaryDesigner({
                 type="checkbox"
                 checked={hints.inbetweens && !perSection}
                 disabled={locked || perSection}
-                onChange={(event) => setHints({ ...hints, inbetweens: event.target.checked })}
+                onChange={(event) =>
+                  commit((design) => ({ ...design, inbetweens: event.target.checked }))
+                }
               />{' '}
               Add supporting visual slides where useful
             </label>
@@ -605,7 +818,9 @@ export function SummaryDesigner({
               disabled={locked}
               title="Return every slide to its automatic summary."
               onClick={() => {
-                setHints(defaultPresentationHints());
+                // Every summary, setting and key, including ones not in use.
+                replaceSource(resetPresentationHints(sourceRef.current));
+                batch.clear();
                 setSelectedSourceStart(0);
                 setError(null);
                 setNotice('');
@@ -613,47 +828,28 @@ export function SummaryDesigner({
             >
               Reset design
             </button>
-            {assistant && !progress && (
-              <button
-                ref={suggestButton}
-                type="button"
-                disabled={!plan || !aiReady || readOnly}
-                title={
-                  readiness === undefined
-                    ? 'Checking whether AI is available…'
-                    : (readiness ??
-                      'Suggest layouts and shorter slide wording from the current text.')
-                }
-                onClick={() => void suggest()}
-              >
-                Suggest with AI
-              </button>
-            )}
-            {assistant && progress && (
-              <>
-                <div className="squisq-summary-designer-progress" role="status">
-                  <span className="squisq-summary-designer-spinner" aria-hidden="true" />
-                  <span>
-                    {progress.planning
+            {assistant && (
+              <AssistantRunControls
+                label="Suggest with AI"
+                title="Suggest layouts and shorter slide wording from the current text."
+                readiness={readiness}
+                disabled={!plan}
+                readOnly={readOnly}
+                progress={
+                  progress && {
+                    label: progress.planning
                       ? 'Planning the slides…'
-                      : `Suggesting slide ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`}
-                  </span>
-                  {/* No value while planning: the bar shows activity, not an amount. */}
-                  <progress
-                    max={progress.total}
-                    value={progress.planning ? undefined : progress.done}
-                    aria-label="Slides suggested so far"
-                  />
-                </div>
-                <button
-                  ref={stopButton}
-                  type="button"
-                  title="Stop suggesting. Slides already suggested keep their new wording."
-                  onClick={() => controller.current?.abort()}
-                >
-                  Stop
-                </button>
-              </>
+                      : `Suggesting slide ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`,
+                    done: progress.done,
+                    // While planning the bar shows activity, not an amount.
+                    total: progress.planning ? 0 : progress.total,
+                    measure: 'Slides suggested so far',
+                  }
+                }
+                stopTitle="Stop suggesting. Slides already suggested keep their new wording."
+                onStart={() => void suggest()}
+                onStop={() => controller.current?.abort()}
+              />
             )}
           </div>
         </div>
@@ -662,7 +858,11 @@ export function SummaryDesigner({
             ? `${slideCount} · ${projection.doc.duration.toFixed(1)} seconds · ${doc?.presentationNarration ? 'Follows narration' : 'Estimated pacing — add narration to synchronize'}`
             : plan && projection?.error
               ? `${slideCount} · Not synchronized with the narration`
-              : 'Preparing slides…'}
+              : // A deck that could not be made says why in the alert; it is
+                // not still on its way.
+                error || generated?.error
+                ? ''
+                : 'Preparing slides…'}
         </p>
         {(error || generated?.error || projection?.error) && (
           <p className="squisq-summary-designer-alert" role="alert">
@@ -683,6 +883,43 @@ export function SummaryDesigner({
             {report && <> {report}</>}
           </p>
         )}
+        {unused.length > 0 && (
+          <details className="squisq-summary-designer-unused">
+            <summary>
+              {unused.length === 1
+                ? '1 summary in the document is not in use'
+                : `${unused.length} summaries in the document are not in use`}
+            </summary>
+            <ul>
+              {unused.map((issue) => (
+                <li key={issue.accessoryBlockId}>
+                  <span>
+                    <strong>
+                      {summaryTitles.get(issue.accessoryBlockId!) || 'Untitled summary'}
+                    </strong>{' '}
+                    — {issue.message}
+                  </span>{' '}
+                  <button
+                    type="button"
+                    disabled={locked}
+                    onClick={() => removeSummaries([issue.accessoryBlockId!])}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {unused.length > 1 && (
+              <button
+                type="button"
+                disabled={locked}
+                onClick={() => removeSummaries(unused.map((issue) => issue.accessoryBlockId!))}
+              >
+                Remove all
+              </button>
+            )}
+          </details>
+        )}
         {plan && beat && section && (
           <div className="squisq-summary-designer-workspace">
             <nav
@@ -690,35 +927,97 @@ export function SummaryDesigner({
               className="squisq-summary-designer-slides"
               aria-label="Presentation slides"
             >
-              {plan.beats.map((item, index) => {
-                const { layout, suggested, pending: requested } = slideTags[index]!;
+              {/* Each block of the document beside the slides made from it. The
+                  slide buttons stay the list's only buttons, in deck order, so
+                  ← and → still move through them by position. */}
+              {slideGroups.map((group, groupIndex) => {
+                const groupLabelId = `${slidePickerId}-section-${groupIndex}`;
+                const count = group.indexes.length;
                 return (
-                  <button
-                    type="button"
-                    key={item.id}
-                    className={item.hidden ? 'squisq-summary-designer-slide--hidden' : undefined}
-                    aria-current={index === selectedIndex ? 'step' : undefined}
-                    title={item.headline}
-                    onClick={() => selectSlide(index)}
+                  <div
+                    key={group.key}
+                    role="group"
+                    aria-labelledby={groupLabelId}
+                    className={`squisq-summary-designer-section${
+                      group.indexes.includes(selectedIndex)
+                        ? ' squisq-summary-designer-section--current'
+                        : ''
+                    }`}
                   >
-                    <span className="squisq-summary-designer-slide-title">
-                      {index + 1}. {item.headline}
-                    </span>
-                    <span className="squisq-summary-designer-slide-tags">
-                      <small>{layout}</small>
-                      {item.hidden && <small>Hidden</small>}
-                      {requested ? (
-                        <small className="squisq-summary-designer-slide-ai">
-                          <span className="squisq-summary-designer-spinner" aria-hidden="true" />
-                          Suggesting…
-                        </small>
-                      ) : suggested ? (
-                        <small className="squisq-summary-designer-slide-ai">
-                          <span className="squisq-sr-only">Suggested by </span>AI
-                        </small>
-                      ) : null}
-                    </span>
-                  </button>
+                    <div id={groupLabelId} className="squisq-summary-designer-section-source">
+                      <span className="squisq-summary-designer-section-name">{group.name}</span>{' '}
+                      <small>
+                        {group.indexes.every((index) => slideTags[index]!.number === null)
+                          ? 'On another slide'
+                          : count === 1
+                            ? '1 slide'
+                            : `${count} slides`}
+                      </small>
+                    </div>
+                    <div className="squisq-summary-designer-section-slides">
+                      {group.indexes.map((index) => {
+                        const item = plan.beats[index]!;
+                        const {
+                          label,
+                          layout,
+                          onSlide,
+                          carries,
+                          suggested,
+                          pending: requested,
+                        } = slideTags[index]!;
+                        const onAnother = item.layout === FEATURE_PRESENTATION_LAYOUT;
+                        return (
+                          <button
+                            type="button"
+                            key={item.id}
+                            className={
+                              item.hidden
+                                ? 'squisq-summary-designer-slide--hidden'
+                                : onAnother
+                                  ? 'squisq-summary-designer-slide--rolled-up'
+                                  : undefined
+                            }
+                            aria-current={index === selectedIndex ? 'step' : undefined}
+                            title={label}
+                            onClick={() => selectSlide(index)}
+                          >
+                            <span className="squisq-summary-designer-slide-title">
+                              {numbered(index)}
+                            </span>
+                            <span className="squisq-summary-designer-slide-tags">
+                              <small>{layout}</small>
+                              {onAnother && (
+                                <small>
+                                  {onSlide ? `On slide ${onSlide}` : 'On another slide'}
+                                </small>
+                              )}
+                              {carries.map((type, at) => (
+                                <small key={at}>
+                                  <span aria-hidden="true">+ </span>
+                                  <span className="squisq-sr-only">Carries </span>
+                                  {type}
+                                </small>
+                              ))}
+                              {item.hidden && <small>Hidden</small>}
+                              {requested ? (
+                                <small className="squisq-summary-designer-slide-ai">
+                                  <span
+                                    className="squisq-summary-designer-spinner"
+                                    aria-hidden="true"
+                                  />
+                                  Suggesting…
+                                </small>
+                              ) : suggested ? (
+                                <small className="squisq-summary-designer-slide-ai">
+                                  <span className="squisq-sr-only">Suggested by </span>AI
+                                </small>
+                              ) : null}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 );
               })}
             </nav>
@@ -741,19 +1040,33 @@ export function SummaryDesigner({
                   value={selectedIndex}
                   onChange={(event) => selectSlide(Number(event.target.value))}
                 >
-                  {plan.beats.map((item, index) => {
-                    const { layout, suggested, pending: requested } = slideTags[index]!;
-                    const status = [
-                      layout,
-                      item.hidden && 'Hidden',
-                      requested ? 'Suggesting…' : suggested && 'Suggested by AI',
-                    ].filter(Boolean);
-                    return (
-                      <option key={item.id} value={index}>
-                        {`${index + 1}. ${item.headline} · ${status.join(' · ')}`}
-                      </option>
-                    );
-                  })}
+                  {slideGroups.map((group) => (
+                    <optgroup key={group.key} label={group.name}>
+                      {group.indexes.map((index) => {
+                        const item = plan.beats[index]!;
+                        const {
+                          layout,
+                          onSlide,
+                          carries,
+                          suggested,
+                          pending: requested,
+                        } = slideTags[index]!;
+                        const status = [
+                          layout,
+                          item.layout === FEATURE_PRESENTATION_LAYOUT &&
+                            (onSlide ? `On slide ${onSlide}` : 'On another slide'),
+                          ...carries.map((type) => `+ ${type}`),
+                          item.hidden && 'Hidden',
+                          requested ? 'Suggesting…' : suggested && 'Suggested by AI',
+                        ].filter(Boolean);
+                        return (
+                          <option key={item.id} value={index}>
+                            {`${numbered(index)} · ${status.join(' · ')}`}
+                          </option>
+                        );
+                      })}
+                    </optgroup>
+                  ))}
                 </select>
                 <button
                   type="button"
@@ -771,7 +1084,11 @@ export function SummaryDesigner({
                 className={`squisq-summary-designer-preview${beat.hidden ? ' squisq-summary-designer-preview--hidden' : ''}`}
                 style={{ aspectRatio: `${viewport.width} / ${viewport.height}` }}
                 role="img"
-                aria-label={`Slide ${selectedIndex + 1}${beat.hidden ? ' (hidden)' : ''}: ${beat.headline}`}
+                aria-label={
+                  rolledUp
+                    ? `Slide ${previewNumber ?? ''}, which carries this section: ${previewBeat?.headline ?? beat.headline}`
+                    : `Slide ${previewNumber ?? selectedIndex + 1}${beat.hidden ? ' (hidden)' : ''}: ${beat.headline}`
+                }
               >
                 <MediaContext.Provider value={mediaProvider ?? null}>
                   {visual && (
@@ -786,25 +1103,34 @@ export function SummaryDesigner({
                   )}
                 </MediaContext.Provider>
               </div>
-              <label className="squisq-summary-designer-toggle">
-                <input
-                  type="checkbox"
-                  checked={!!beat.hidden}
-                  // A deck needs at least one slide.
-                  disabled={locked || (!beat.hidden && shownCount <= 1)}
-                  onChange={(event) => setHidden(event.target.checked)}
-                />{' '}
-                Hide this slide in the presentation
-              </label>
+              {/* A section on another slide has no slide of its own to hide. */}
+              {!rolledUp && (
+                <label className="squisq-summary-designer-toggle">
+                  <input
+                    type="checkbox"
+                    checked={!!beat.hidden}
+                    // A deck needs at least one slide.
+                    disabled={locked || (!beat.hidden && shownCount <= 1)}
+                    onChange={(event) => setHidden(event.target.checked)}
+                  />{' '}
+                  Hide this slide in the presentation
+                </label>
+              )}
               <div className="squisq-summary-designer-fields">
                 <label>
                   Layout preference for this section
                   <select
                     value={hint?.layout ?? ''}
-                    disabled={locked}
-                    aria-describedby={hint?.layout ? layoutHelpId : undefined}
+                    disabled={locked || !headed}
+                    aria-describedby={
+                      !headed
+                        ? headingNoteId
+                        : [hint?.layout && layoutHelpId, rollup?.problem && rollupNoteId]
+                            .filter(Boolean)
+                            .join(' ') || undefined
+                    }
                     onChange={(event) =>
-                      updateHint({
+                      setSectionSetting({
                         layout: (event.target.value || undefined) as
                           PresentationBeatLayout | undefined,
                       })
@@ -814,6 +1140,12 @@ export function SummaryDesigner({
                     <option value={AUTHORED_PRESENTATION_LAYOUT}>
                       {layoutLabel(AUTHORED_PRESENTATION_LAYOUT, section.blockId)}
                     </option>
+                    {(blockTypes.get(section.blockId)?.drawn ||
+                      hint?.layout === FEATURE_PRESENTATION_LAYOUT) && (
+                      <option value={FEATURE_PRESENTATION_LAYOUT}>
+                        {layoutLabel(FEATURE_PRESENTATION_LAYOUT, section.blockId)}
+                      </option>
+                    )}
                     <optgroup label="Summary layouts">
                       {PRESENTATION_LAYOUTS.filter(
                         (layout) => layout !== 'image' || beat.imageSrc,
@@ -825,14 +1157,15 @@ export function SummaryDesigner({
                     </optgroup>
                   </select>
                 </label>
-                {!perSection && beat.layout !== AUTHORED_PRESENTATION_LAYOUT && (
+                {!perSection && isSummaryPresentationLayout(beat.layout) && (
                   <label>
                     Supporting slides for this section
                     <select
                       value={hint?.inbetweens === undefined ? '' : String(hint.inbetweens)}
-                      disabled={locked}
+                      disabled={locked || !headed}
+                      aria-describedby={!headed ? headingNoteId : undefined}
                       onChange={(event) =>
-                        updateHint({
+                        setSectionSetting({
                           inbetweens:
                             event.target.value === '' ? undefined : event.target.value === 'true',
                         })
@@ -845,42 +1178,59 @@ export function SummaryDesigner({
                   </label>
                 )}
               </div>
-              {hint?.layout && (
-                <p id={layoutHelpId} className="squisq-summary-designer-layout-help">
-                  {layoutHelp(hint.layout)}
+              {!headed && (
+                <p id={headingNoteId} className="squisq-summary-designer-layout-help">
+                  This part of the document has no heading to hold section settings. Add a heading
+                  above it to choose its layout.
                 </p>
               )}
-              <section className="squisq-summary-designer-source" aria-labelledby={originalTextId}>
-                <div className="squisq-summary-designer-source-label">
-                  <h3 id={originalTextId}>Original document text</h3>
-                  <span>Read only</span>
-                </div>
-                <p>{section.text}</p>
-              </section>
+              {hint?.layout && (
+                <p id={layoutHelpId} className="squisq-summary-designer-layout-help">
+                  {layoutHelp(
+                    hint.layout,
+                    hint.layout === FEATURE_PRESENTATION_LAYOUT
+                      ? beforeName(section.blockId)
+                      : undefined,
+                  )}
+                </p>
+              )}
+              {rollup?.problem && (
+                <p
+                  id={rollupNoteId}
+                  className="squisq-summary-designer-layout-help squisq-summary-designer-layout-problem"
+                >
+                  {rollupProblem(
+                    rollup.problem,
+                    typeLabel(section.blockId),
+                    beforeName(section.blockId),
+                  )}
+                </p>
+              )}
               {beat.sourceStart === section.sourceStart &&
-                beat.layout !== AUTHORED_PRESENTATION_LAYOUT && (
-                  <details className="squisq-summary-designer-wording">
+                isSummaryPresentationLayout(beat.layout) && (
+                  <details
+                    className="squisq-summary-designer-wording"
+                    open={wordingOpen}
+                    onToggle={(event) => setWordingOpen(event.currentTarget.open)}
+                  >
                     <summary>Customize slide wording (slides only)</summary>
                     <p>
-                      This section’s opening slide can use your wording. If you change the section
-                      text, it returns to an automatic summary.
+                      This section’s opening slide can use your wording. It is saved in the
+                      document, under the section, and stays when you change the section’s text.
                     </p>
                     <label>
                       Slide headline
                       <input
                         key={beat.headline}
                         defaultValue={beat.headline}
-                        maxLength={110}
+                        maxLength={PRESENTATION_LIMITS.headline}
                         disabled={locked}
-                        onBlur={(event) =>
-                          updateHint({
-                            wording: {
-                              ...(hint?.wording?.source === section.text ? hint.wording : {}),
-                              source: section.text,
-                              headline: event.target.value.trim() || undefined,
-                            },
-                          })
-                        }
+                        onBlur={(event) => {
+                          // Leaving the field unchanged saves nothing.
+                          const value = event.target.value.trim();
+                          if (value === beat.headline.trim()) return;
+                          setOpeningWording({ headline: value || undefined });
+                        }}
                       />
                     </label>
                     <label>
@@ -890,19 +1240,38 @@ export function SummaryDesigner({
                         key={beat.points.join('\n')}
                         defaultValue={beat.points.join('\n')}
                         disabled={locked}
-                        onBlur={(event) =>
-                          updateHint({
-                            wording: {
-                              ...(hint?.wording?.source === section.text ? hint.wording : {}),
-                              source: section.text,
-                              points: event.target.value.split('\n').filter(Boolean),
-                            },
-                          })
-                        }
+                        onBlur={(event) => {
+                          const points = event.target.value
+                            .split('\n')
+                            .map((point) => point.trim())
+                            .filter(Boolean);
+                          if (points.join('\n') === beat.points.join('\n')) return;
+                          setOpeningWording({ points });
+                        }}
                       />
                     </label>
+                    {openingWording && (
+                      <button
+                        type="button"
+                        disabled={locked}
+                        onClick={() => {
+                          commit((design) =>
+                            withSlideHint(design, section.blockId, undefined, null),
+                          );
+                        }}
+                      >
+                        Use automatic wording
+                      </button>
+                    )}
                   </details>
                 )}
+              <section className="squisq-summary-designer-source" aria-labelledby={originalTextId}>
+                <div className="squisq-summary-designer-source-label">
+                  <h3 id={originalTextId}>Original document text</h3>
+                  <span>Read only</span>
+                </div>
+                <p>{section.text}</p>
+              </section>
             </div>
           </div>
         )}

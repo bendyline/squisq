@@ -11,6 +11,7 @@
  */
 
 import { Extension } from '@tiptap/core';
+import { isAccessoryBlockType } from '@bendyline/squisq/doc';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import type { EditorState } from '@tiptap/pm/state';
@@ -168,14 +169,29 @@ function buildDecorations(
     );
 
     // Hide direct sub-headings of this block — the Scene canvas is the
-    // visible representation of any nested structure.
+    // visible representation of any nested structure. A summary under it
+    // (an accessory block) is not part of the drawing; it folds on its own.
     let cursor = pos + node.nodeSize;
+    let accessoryLevel = 0;
     while (cursor < state.doc.content.size) {
       const child = state.doc.nodeAt(cursor);
       if (!child) break;
       if (child.type.name === 'heading') {
         const childLevel = (child.attrs as { level: number }).level;
         if (childLevel <= parentDepth) break;
+        if (accessoryLevel && childLevel > accessoryLevel) {
+          cursor += child.nodeSize;
+          continue;
+        }
+        accessoryLevel = isAccessoryBlockType(
+          (child.attrs as { dataTemplate?: string | null }).dataTemplate,
+        )
+          ? childLevel
+          : 0;
+        if (accessoryLevel) {
+          cursor += child.nodeSize;
+          continue;
+        }
         decos.push(
           Decoration.node(cursor, cursor + child.nodeSize, {
             'data-squisq-scene-child': 'true',

@@ -7,6 +7,7 @@
 
 import type { MarkdownNode, MarkdownDocument, HtmlNode } from './types.js';
 import { parseHtmlToNodes } from './htmlParse.js';
+import { withoutAccessorySectionNodes } from './accessorySections.js';
 
 /**
  * Get the children of any markdown node, if it has children.
@@ -1061,7 +1062,8 @@ export function inferDocumentTitle(doc: MarkdownDocument): string | undefined {
   }
 
   let best: { depth: number; text: string } | null = null;
-  for (const node of doc.children) {
+  // A summary's heading is a slide headline, never the document's title.
+  for (const node of withoutAccessorySectionNodes(doc.children)) {
     if (node.type !== 'heading') continue;
     const text = extractPlainText(node).trim();
     if (!text) continue;

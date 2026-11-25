@@ -133,6 +133,61 @@ describe('extractContent — statistic descriptions', () => {
   });
 });
 
+describe('extractContent — currency statistics', () => {
+  const values = (text: string): string[] =>
+    extractContent(text, { types: ['stat'] }).elements.map((element) =>
+      element.data.type === 'stat' ? element.data.value : '',
+    );
+
+  it('keeps the currency sign of an amount, with or without a magnitude', () => {
+    expect(
+      values('In December 2007 the company announced a $500 million plan to reopen the mine.'),
+    ).toEqual(['$500 million']);
+    expect(
+      values('The assessor put the damage across the county at $85,444,052 that July.'),
+    ).toEqual(['$85,444,052']);
+    expect(
+      values('Insurance claims for the fire came to more than $453.7 million in all.'),
+    ).toEqual(['$453.7 million']);
+    expect(values('The stadium was built for €1.2 billion before the tournament.')).toEqual([
+      '€1.2 billion',
+    ]);
+    expect(values('The tower was first expected to cost US$400 million to complete.')).toEqual([
+      'US$400 million',
+    ]);
+  });
+
+  it('does not take the comma that follows an amount', () => {
+    expect(values('It sold for $9,000, then changed hands twice more in a decade.')).toEqual([
+      '$9,000',
+    ]);
+  });
+
+  it('still finds plain magnitudes beside a currency amount', () => {
+    expect(
+      values('The canal cost $8 million to dig. Some 14 million tons of cargo pass each year.'),
+    ).toEqual(['$8 million', '14 million']);
+  });
+
+  it('keeps the bigger figure of a sentence over an amount that only comes with it', () => {
+    expect(
+      values('The reserve covers 5 billion barrels, though the first lease sold for US$320,000.'),
+    ).toEqual(['5 billion']);
+  });
+
+  it('does not make a slide of small change', () => {
+    expect(values('Admission was £5 in its first season, and the bus cost another $2.')).toEqual(
+      [],
+    );
+  });
+
+  it('keeps "fewer than" on a percentage, as it keeps "less than"', () => {
+    expect(values('Census figures put fewer than 5% of residents below the poverty line.')).toEqual(
+      ['fewer than 5%'],
+    );
+  });
+});
+
 describe('extractContent — comparisons', () => {
   it('detects "from X to Y" comparisons', () => {
     const text = 'Temperatures range from 20 degrees to 70 degrees depending on altitude.';

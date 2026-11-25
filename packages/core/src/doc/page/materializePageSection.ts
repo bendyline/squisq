@@ -35,6 +35,7 @@ import type { MarkdownBlockNode } from '../../markdown/types.js';
 import { extractBodyPlainText, isPictureFence } from '../templateInputs.js';
 import { isContainerTemplate } from '../templates/templateNames.js';
 import { isTemplatedPageBlock, resolvePageBlock } from './resolvePageBlock.js';
+import { withoutAccessoryBlocks } from '../accessoryBlocks.js';
 import { sectionExtractors, type PageSectionDraft } from './sectionExtractors.js';
 import type {
   PageSection,
@@ -566,6 +567,8 @@ export function materializePageSections(
   doc: Doc,
   options: MaterializePageSectionsOptions = {},
 ): PageSectionMaterialization[] {
+  // Accessory blocks (summaries and other side information) are not sections.
+  doc = withoutAccessoryBlocks(doc);
   const theme = options.theme ?? DEFAULT_THEME;
   const viewport = options.viewport ?? VIEWPORT_PRESETS.landscape;
   const variant = options.variant ?? 'page';

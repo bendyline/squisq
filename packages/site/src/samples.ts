@@ -40,6 +40,7 @@ export const SAMPLE_LABELS: Record<string, string> = {
   'video-embeds': 'Video embeds (YouTube, Vimeo…)',
   'svg-islands': 'SVG islands',
   'flashcards-demo': 'Flashcards & quiz',
+  'study-cards': 'Study cards',
 };
 
 /** Return the human-readable dropdown label for an inline sample. */
@@ -87,7 +88,13 @@ export const SAMPLE_GROUPS: SampleGroup[] = [
   },
   {
     label: 'Templates & theming',
-    keys: ['custom-template-demo', 'gallery-template-demo', 'dashboard-demo', 'flashcards-demo'],
+    keys: [
+      'custom-template-demo',
+      'gallery-template-demo',
+      'dashboard-demo',
+      'flashcards-demo',
+      'study-cards',
+    ],
   },
   {
     label: 'Media & narration',
@@ -317,6 +324,42 @@ End on a steady, confident line. When you stop speaking, the prompter stops with
 
   // Flashcards-mode demo: ordinary nested headings become reveal cards;
   // study metadata is only needed to disambiguate multiple choice.
+  // Study cards kept with each section ({[flashcard]} / {[quiz]} accessory
+  // blocks): Write › Study cards edits them, Use › Flashcards studies them.
+  // The AI card under "How leaves work" records text the section no longer
+  // says, so it shows as changed.
+  'study-cards': `---
+title: How Plants Work
+---
+
+# How Plants Work
+
+Plants feed themselves. They turn light, water and air into the sugar they live on.
+
+## How leaves work
+
+Leaves catch sunlight with chlorophyll, the pigment that makes them green. Inside each leaf, the light splits water and joins its hydrogen to carbon dioxide from the air.
+
+### What makes leaves green? {[flashcard origin=ai passage=abc-1]}
+
+Chlorophyll, the pigment that catches sunlight.
+
+### Where does the carbon in sugar come from? {[quiz]}
+
+- [ ] The soil
+- [x] Carbon dioxide in the air
+- [ ] The water in the roots
+
+Leaves take carbon dioxide from the air and join it to hydrogen from water.
+
+## How roots work
+
+Roots anchor the plant and drink water from the soil. Fine root hairs give them a huge surface for soaking water up.
+
+### What gives roots their huge surface? {[flashcard]}
+
+Fine root hairs.
+`,
   'flashcards-demo': `---
 title: Squisq Study Deck
 display-mode: flashcards

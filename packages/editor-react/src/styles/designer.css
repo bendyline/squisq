@@ -1,0 +1,58 @@
+/**
+ * Shared by the designers that offer AI (Summaries, Study cards): why AI is
+ * unavailable, and a run's progress with Stop in the button's place.
+ */
+
+/* Why an AI action is unavailable, read just before the button. A host's
+   message can be long, so it wraps in a narrow column rather than widening
+   the row. */
+.squisq-designer-reason {
+  max-width: 32ch;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: end;
+  color: var(--squisq-text-soft);
+}
+
+/* While a run goes, this takes the action's place, with Stop beside it, so
+   progress sits where the action started. */
+.squisq-designer-progress {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  color: var(--squisq-text-soft);
+  font: 600 12px/1.2 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+}
+
+.squisq-designer-progress progress {
+  width: 120px;
+  height: 6px;
+  accent-color: var(--squisq-accent);
+}
+
+.squisq-designer-spinner {
+  display: inline-block;
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 2px solid var(--squisq-accent-soft);
+  border-top-color: var(--squisq-accent);
+  border-radius: 50%;
+  animation: squisq-designer-spin 0.8s linear infinite;
+}
+
+@keyframes squisq-designer-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .squisq-designer-spinner {
+    animation-duration: 2.4s;
+  }
+}

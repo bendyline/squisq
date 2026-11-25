@@ -109,6 +109,18 @@ function validateBlocks(values: unknown[], path: string, issues: DocSchemaIssue[
     optionalStringRecord(block, 'templateOverrides', `${blockPath}.templateOverrides`, issues);
     optionalRecord(block, 'templateData', `${blockPath}.templateData`, issues);
     optionalArray(block, 'contents', `${blockPath}.contents`, issues);
+    optionalString(block, 'slideLayout', `${blockPath}.slideLayout`, issues);
+    optionalBoolean(block, 'supportingSlides', `${blockPath}.supportingSlides`, issues);
+    if (block.accessoryBlock !== undefined) {
+      const accessoryPath = `${blockPath}.accessoryBlock`;
+      if (isRecord(block.accessoryBlock)) {
+        requiredString(block.accessoryBlock, 'type', `${accessoryPath}.type`, issues);
+        optionalString(block.accessoryBlock, 'of', `${accessoryPath}.of`, issues);
+        optionalString(block.accessoryBlock, 'within', `${accessoryPath}.within`, issues);
+      } else {
+        add(issues, accessoryPath, 'must be an object', block.accessoryBlock);
+      }
+    }
 
     if (block.layers !== undefined) validateLayers(block.layers, `${blockPath}.layers`, issues);
     if (block.children !== undefined) {
@@ -116,6 +128,13 @@ function validateBlocks(values: unknown[], path: string, issues: DocSchemaIssue[
         validateBlocks(block.children, `${blockPath}.children`, issues);
       } else {
         add(issues, `${blockPath}.children`, 'must be an array', block.children);
+      }
+    }
+    if (block.featureBlocks !== undefined) {
+      if (Array.isArray(block.featureBlocks)) {
+        validateBlocks(block.featureBlocks, `${blockPath}.featureBlocks`, issues);
+      } else {
+        add(issues, `${blockPath}.featureBlocks`, 'must be an array', block.featureBlocks);
       }
     }
     if (block.connectsTo !== undefined) {

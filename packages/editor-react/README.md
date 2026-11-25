@@ -46,7 +46,7 @@ function App() {
 | `EditorProvider`                                     | Context provider for editor state management                     |
 | `RawEditor` / `WysiwygEditor` / `PreviewPanel`       | The individual views, exported for custom layouts                |
 | `JsonEditor`                                         | Editable form for JSON values bound to a Squisq-annotated schema |
-| `ImageEditor` / `ImageViewer`                        | Layered raster authoring surface + read-only viewer              |
+| `ImageEditor` / `ImageFileEditor` / `ImageViewer`    | Layered raster authoring, outside-in file editing, viewer        |
 | `RecorderPanel` / `RecorderButton` / `RecorderModal` | Browser audio/camera/screen recording (MediaRecorder)            |
 | `FolderView`                                         | Standalone folder browser surface                                |
 

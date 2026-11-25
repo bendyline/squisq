@@ -25,9 +25,9 @@ const BUILT_IN = getTransformStyleSummaries().map(({ id, name, description }) =>
   description,
 }));
 
-/** None first, the built-in styles in registry order, and Custom last. */
+/** None first, then Custom, then the built-in styles in registry order. */
 export const SUMMARY_STYLE_OPTIONS: readonly SummaryStyleOption[] = [
   { id: '', name: 'None', description: 'Each section is one slide, shown as you wrote it' },
-  ...BUILT_IN.filter((option) => option.id !== CUSTOM_SUMMARY_STYLE),
   ...BUILT_IN.filter((option) => option.id === CUSTOM_SUMMARY_STYLE),
+  ...BUILT_IN.filter((option) => option.id !== CUSTOM_SUMMARY_STYLE),
 ];

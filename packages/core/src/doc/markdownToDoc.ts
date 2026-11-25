@@ -71,6 +71,9 @@ import { isEligibleAsciiTimelineFenceLang } from './asciiTimeline/detect.js';
 import { parseAsciiTimeline } from './asciiTimeline/parse.js';
 import type { MediaClip } from '../schemas/Media.js';
 import { blockVideoLength, type VideoDurationLookup } from './videoTiming.js';
+import { ACCESSORY_BLOCK_OWNER_PARAM, isAccessoryBlockType } from './accessoryBlockTypes.js';
+import { flattenContentBlocks, isAccessoryBlock, realChildren } from './accessoryBlocks.js';
+import { withoutAccessorySections } from '../markdown/accessorySections.js';
 
 // ============================================
 // Options
@@ -230,6 +233,8 @@ function applyBlockMeta(block: Block, m: CoercedBlockMeta): void {
   if (m.duration != null) block.duration = m.duration;
   if (m.connectsTo) block.connectsTo = m.connectsTo;
   if (m.transition) block.transition = m.transition;
+  if (m.slideLayout) block.slideLayout = m.slideLayout;
+  if (m.supportingSlides != null) block.supportingSlides = m.supportingSlides;
 }
 
 /**
@@ -336,6 +341,11 @@ function expandStandaloneAnnotations(
 ): Block[] {
   const out: Block[] = [];
   for (const block of blocks) {
+    // An accessory block's tags are its own business, never slides.
+    if (isAccessoryBlock(block)) {
+      out.push(block);
+      continue;
+    }
     if (block.children && block.children.length > 0) {
       block.children = expandStandaloneAnnotations(block.children, makeId, defaultDuration);
     }
@@ -354,10 +364,19 @@ function expandStandaloneAnnotations(
     // produced block nested there would become a diagram node rather than a
     // slide — and would suppress the parent's ASCII-fence parsing
     // ("native children win"). Those keep the sibling slot.
-    const nestable = (block.children?.length ?? 0) > 0 && !isContainerTemplate(block.template);
+    const real = realChildren(block);
+    const nestable = real.length > 0 && !isContainerTemplate(block.template);
     if (nestable) {
       block.children = [...produced, ...block.children!];
       out.push(block);
+    } else if (real.length === 0 && block.children && block.children.length > 0) {
+      // Only accessory blocks sit under this block. In the source they follow
+      // the produced blocks (they come after the body), so they move out with
+      // them to keep that order; each still names its owner in `of`. Pruned,
+      // the tree is exactly the one the document makes without them.
+      const accessory = block.children;
+      delete block.children;
+      out.push(block, ...produced, ...accessory);
     } else {
       out.push(block, ...produced);
     }
@@ -375,6 +394,16 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   let rootBlocks: Block[] = [];
   const diagnostics: DocDiagnostic[] = [];
   let headingIndex = 0;
+  // Accessory blocks number within their own namespace, never the shared
+  // slug counter: adding a summary must not renumber a real block's id.
+  const accessoryIdCounts = new Map<string, number>();
+  let preamble: Block | null = null;
+
+  function nextAccessoryId(base: string): string {
+    const count = (accessoryIdCounts.get(base) ?? 0) + 1;
+    accessoryIdCounts.set(base, count);
+    return count === 1 ? base : `${base}-${count}`;
+  }
 
   // Stack tracks the nesting context: each entry is a block and its heading depth.
   // We push when we go deeper, pop when we come back up.
@@ -392,22 +421,65 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
     }
   }
 
-  function makeBlock(heading: MarkdownHeading | null): Block {
+  const nestedAccessoryCounts = new Map<string, number>();
+
+  /**
+   * What makes this heading an accessory block, if anything: its tag names
+   * an accessory type, or it sits inside one. `parent` is the block it
+   * nests under (null at the top level).
+   */
+  function accessoryInfo(
+    heading: MarkdownHeading,
+    parent: Block | null,
+  ): Block['accessoryBlock'] | undefined {
+    if (parent?.accessoryBlock) {
+      const outer = parent.accessoryBlock;
+      return {
+        type: outer.type,
+        ...(outer.of !== undefined ? { of: outer.of } : {}),
+        within: outer.within ?? parent.id,
+      };
+    }
+    const type = heading.templateAnnotation?.template;
+    if (!isAccessoryBlockType(type)) return undefined;
+    const named = heading.templateAnnotation?.params?.[ACCESSORY_BLOCK_OWNER_PARAM]?.trim();
+    const of = named || parent?.id || preamble?.id;
+    return { type, ...(of ? { of } : {}) };
+  }
+
+  function makeBlock(heading: MarkdownHeading | null, parent: Block | null = null): Block {
+    const accessory = heading ? accessoryInfo(heading, parent) : undefined;
+
     // Pandoc `{#id}` overrides slug-from-heading when present. Pinned ids
     // are reserved in the slug generator so a later un-pinned heading with
-    // the same slugified text doesn't collide.
-    const pandocId = heading?.attributes?.id;
-    const id = pandocId ? pandocId : heading ? generateId(heading, headingIndex++) : 'preamble';
-    if (pandocId && idGenerator) {
-      idGenerator.reserve(pandocId);
+    // the same slugified text doesn't collide. Accessory blocks take ids
+    // from their own namespace instead (a `{#id}` on one round-trips but is
+    // not its id), so they never shift a real block's id or index.
+    let id: string;
+    if (accessory?.within !== undefined) {
+      const count = (nestedAccessoryCounts.get(accessory.within) ?? 0) + 1;
+      nestedAccessoryCounts.set(accessory.within, count);
+      id = `${accessory.within}~${count}`;
+    } else if (accessory) {
+      id = nextAccessoryId(`${accessory.of ?? ''}~${accessory.type}`);
+    } else {
+      const pandocId = heading?.attributes?.id;
+      id = pandocId ? pandocId : heading ? generateId(heading, headingIndex++) : 'preamble';
+      if (pandocId && idGenerator) {
+        idGenerator.reserve(pandocId);
+      }
     }
 
     // Use template from annotation if present, otherwise fall back to default.
     // Legacy template ids (e.g. `titleBlock`) are normalized to their canonical
     // short form (`title`) so downstream comparisons can rely on the new names
-    // without sprinkling alias resolution everywhere.
+    // without sprinkling alias resolution everywhere. An accessory block has
+    // no template: it is never drawn. Its tag still round-trips, because
+    // `docToMarkdown` re-emits the parsed annotation for a template-less block.
     const annotation = heading?.templateAnnotation;
-    const rawTemplate = annotation?.template ?? (heading ? defaultTemplate : undefined);
+    const rawTemplate = accessory
+      ? undefined
+      : (annotation?.template ?? (heading ? defaultTemplate : undefined));
     const template = rawTemplate != null ? resolveTemplateName(rawTemplate) : undefined;
 
     // Extract heading text so templates (e.g. sectionHeader) that expect a
@@ -422,7 +494,9 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
       template,
       ...(heading ? { sourceHeading: heading } : {}),
       ...(title ? { title } : {}),
+      ...(accessory ? { accessoryBlock: accessory } : {}),
     };
+    if (!heading) preamble = block;
 
     // {[…]} template params → templateOverrides (template-specific overrides).
     // Known block-meta keys (duration, startTime, x, y, connectsTo) are *also*
@@ -460,37 +534,30 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
       // Flush any accumulated content to the current block
       flushContents();
 
-      // Create the new block for this heading
-      const newBlock = makeBlock(heading);
+      // Find where this heading fits in the hierarchy: pop blocks from the
+      // stack until the top is a parent with lower depth (or none is left).
+      // The parent is known before the block is made, because whether a
+      // heading is an accessory block — and whose — depends on it.
+      while (stack.length > 0 && stack[stack.length - 1].depth >= depth) {
+        stack.pop();
+      }
+      const parent = stack.length > 0 ? stack[stack.length - 1].block : null;
+      const newBlock = makeBlock(heading, parent);
 
-      if (stack.length === 0) {
-        // If there's a preamble block with no heading, push it first
-        if (currentBlock && !currentBlock.sourceHeading) {
+      if (!parent) {
+        // The first heading: a preamble block (content before any heading)
+        // goes first.
+        if (currentBlock && !currentBlock.sourceHeading && !rootBlocks.includes(currentBlock)) {
           rootBlocks.push(currentBlock);
         }
-
-        // This is a root-level block (or the first heading)
+        // A root-level block (the same level as the root or shallower).
         rootBlocks.push(newBlock);
-        stack.push({ block: newBlock, depth });
       } else {
-        // Find where this heading fits in the hierarchy
-        // Pop blocks from the stack until we find a parent with lower depth
-        while (stack.length > 0 && stack[stack.length - 1].depth >= depth) {
-          stack.pop();
-        }
-
-        if (stack.length === 0) {
-          // Same level as root or shallower — new root block
-          rootBlocks.push(newBlock);
-          stack.push({ block: newBlock, depth });
-        } else {
-          // Deeper — child of the current stack top
-          const parent = stack[stack.length - 1].block;
-          if (!parent.children) parent.children = [];
-          parent.children.push(newBlock);
-          stack.push({ block: newBlock, depth });
-        }
+        // Deeper — child of the current stack top
+        if (!parent.children) parent.children = [];
+        parent.children.push(newBlock);
       }
+      stack.push({ block: newBlock, depth });
 
       currentBlock = newBlock;
     } else {
@@ -515,8 +582,10 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // into typed clips: block-anchored clips ride on `block.media`; clips flagged
   // `anchor=document` collect into the doc-level `documentMedia`. Done before
   // the reading-time pass so annotation text doesn't inflate block durations.
+  // An accessory block's body is left alone: a clip written in a summary is
+  // part of the summary, not narration or a clip of the presentation.
   const documentMedia: MediaClip[] = [];
-  for (const block of flattenBlocks(rootBlocks)) {
+  for (const block of flattenContentBlocks(rootBlocks)) {
     const {
       media,
       documentMedia: docMedia,
@@ -552,7 +621,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // Runs after media extraction (media names keep their meaning) and before the
   // heading-less standalone pass (a promoted tag is removed from `contents`
   // first, so it isn't also lifted into a separate block).
-  promoteBodyAnnotations(flattenBlocks(rootBlocks));
+  promoteBodyAnnotations(flattenContentBlocks(rootBlocks));
 
   // Standalone `{[templateName …]}` paragraphs (non-media) become heading-less
   // template blocks; the body after each one, up to the next annotation,
@@ -581,13 +650,16 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   }
 
   const allBlocks = flattenBlocks(rootBlocks);
+  // The blocks whose bodies are read as content: everything but accessory
+  // blocks and what is nested in them.
+  const contentBlocks = flattenContentBlocks(rootBlocks);
 
   // Structured template data: ```json data / ```yaml data fences in a
   // block's body parse into `templateData`; for dataTable blocks the first
   // GFM table supplies headers/rows when not explicitly provided. Parse
   // failures degrade gracefully (the fence stays visible as code) and are
   // recorded as diagnostics.
-  for (const block of allBlocks) {
+  for (const block of contentBlocks) {
     applyStructuredData(block, diagnostics);
   }
 
@@ -595,7 +667,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // ASCII-art fence get nodes/edges derived from it — no detection
   // threshold, the author asked for a diagram. Children-driven diagrams
   // and author `json data` node lists win over the fence.
-  for (const block of allBlocks) {
+  for (const block of contentBlocks) {
     applyAsciiDiagramData(block, diagnostics);
     applyTimelineData(block, diagnostics);
     applyTreeData(block, diagnostics);
@@ -617,13 +689,13 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // Timeline parsing is intentionally tolerant and can retain unresolved
   // branch declarations as warnings. Surface those after auto-template
   // selection so both explicit and auto-derived timeline blocks participate.
-  for (const block of allBlocks) collectTimelineWarnings(block, diagnostics);
+  for (const block of contentBlocks) collectTimelineWarnings(block, diagnostics);
 
   // A concept template that cannot draw its own picture draws cards (or a
   // process, or a list) instead of a broken diagram. That is right for a
   // reader and silent for an author, so say what was asked for and why it
   // was not drawn.
-  for (const block of allBlocks) collectShapeWarning(block, diagnostics);
+  for (const block of contentBlocks) collectShapeWarning(block, diagnostics);
 
   // Duplicate ids make connections and navigation ambiguous. Generated
   // slugs are already deduped; this catches author-pinned `{#id}` clashes.
@@ -643,7 +715,7 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   }
 
   // connectsTo targets must resolve to a block id in this doc.
-  for (const block of allBlocks) {
+  for (const block of contentBlocks) {
     for (const conn of block.connectsTo ?? []) {
       if (!seenIds.has(conn.target)) {
         diagnostics.push({
@@ -666,6 +738,11 @@ export function markdownToDoc(markdownDoc: MarkdownDocument, options?: MarkdownT
   // Skip blocks that pinned an explicit duration via a heading attribute —
   // author intent wins over reading-time heuristics.
   for (const block of allBlocks) {
+    // An accessory block takes no time: it is never shown or spoken.
+    if (isAccessoryBlock(block)) {
+      block.duration = 0;
+      continue;
+    }
     if (pinnedMeta(block).duration != null) continue;
     const bodyText = getBlockBodyText(block);
     const estimate =
@@ -741,6 +818,13 @@ function sequenceBlockTimeline(
   const phrases: CaptionPhrase[] = [];
   let currentTime = 0;
   for (const block of blocks) {
+    // An accessory block takes no time and has no captions; it sits where
+    // its place in the document falls, so nothing after it moves.
+    if (isAccessoryBlock(block)) {
+      block.startTime = currentTime;
+      block.duration = 0;
+      continue;
+    }
     const explicitStart = pinnedMeta(block).startTime;
     if (explicitStart == null) {
       block.startTime = currentTime;
@@ -805,7 +889,7 @@ const VIDEO_FLOOR_EPSILON = 1e-3;
  */
 export function applyVideoDurations(doc: Doc, lookup: VideoDurationLookup): Doc {
   const grownBy = new Map<Block, number>();
-  for (const block of flattenBlocks(doc.blocks)) {
+  for (const block of flattenContentBlocks(doc.blocks)) {
     if (pinnedMeta(block).duration != null) continue;
     const floor = blockVideoLength(block, lookup);
     if (floor != null && floor > block.duration + VIDEO_FLOOR_EPSILON) grownBy.set(block, floor);
@@ -858,6 +942,9 @@ export function flattenBlocks(blocks: Block[]): Block[] {
  * render (as nodes / shapes), so they must not also surface as their own
  * slides or sections.
  *
+ * Accessory blocks (`doc/accessoryBlocks.ts`) are side information, never
+ * rendered, so they and what is nested in them are left out too.
+ *
  * Use this anywhere a doc is flattened for rendering (slideshow, video,
  * static pages). Use {@link flattenBlocks} when you genuinely need every
  * block regardless of role — validation, timing, duplicate-id checks.
@@ -865,6 +952,7 @@ export function flattenBlocks(blocks: Block[]): Block[] {
 export function flattenRenderableBlocks(blocks: Block[]): Block[] {
   const result: Block[] = [];
   for (const block of blocks) {
+    if (isAccessoryBlock(block)) continue;
     result.push(block);
     if (block.children && !isContainerTemplate(block.template)) {
       result.push(...flattenRenderableBlocks(block.children));
@@ -874,11 +962,14 @@ export function flattenRenderableBlocks(blocks: Block[]): Block[] {
 }
 
 /**
- * Count the total number of blocks in a nested tree (including children at all levels).
+ * Count the total number of blocks in a nested tree (including children at
+ * all levels). Accessory blocks are side information about a block, not
+ * blocks of the document, so they are not counted.
  */
 export function countBlocks(blocks: Block[]): number {
   let count = 0;
   for (const block of blocks) {
+    if (isAccessoryBlock(block)) continue;
     count += 1;
     if (block.children) {
       count += countBlocks(block.children);
@@ -1092,6 +1183,8 @@ function applyAutoTemplates(
   state: { featureIndex: number; concepts: boolean },
 ): void {
   for (const block of blocks) {
+    // An accessory block is never drawn, so nothing in it is picked.
+    if (isAccessoryBlock(block)) continue;
     // A promoted body annotation is author-intended — treat it as annotated so a
     // promoted `{[sectionHeader]}` (== default) isn't re-picked by auto-template.
     const annotated =
@@ -1290,6 +1383,8 @@ function findFirstImage(node: MarkdownNode): ImageRef | undefined {
 function shallowestHeadingBlock(rootBlocks: Block[]): Block | undefined {
   let best: Block | undefined;
   for (const block of rootBlocks) {
+    // A top-level summary is about the document, not its title.
+    if (isAccessoryBlock(block)) continue;
     const depth = block.sourceHeading?.depth;
     if (depth === undefined) continue;
     const title = block.title ?? extractPlainText(block.sourceHeading!);
@@ -1346,15 +1441,16 @@ function buildStartBlock(
     typeof markdownDoc.frontmatter?.subtitle === 'string'
       ? markdownDoc.frontmatter.subtitle.trim()
       : undefined;
-  const subtitleBlock = headingBlock ?? rootBlocks[0];
+  const subtitleBlock = headingBlock ?? rootBlocks.find((block) => !isAccessoryBlock(block));
   const inferredSubtitle =
     subtitleBlock?.contents?.[0]?.type === 'paragraph'
       ? extractPlainText(subtitleBlock.contents[0])
       : undefined;
   const subtitle = frontmatterSubtitle || inferredSubtitle;
 
-  // Scan the whole document for the first image to use as the hero
-  const firstImage = findFirstImage(markdownDoc);
+  // Scan the whole document (but not its accessory sections) for the first
+  // image to use as the hero
+  const firstImage = findFirstImage(withoutAccessorySections(markdownDoc));
 
   const config: StartBlockConfig = {
     title,

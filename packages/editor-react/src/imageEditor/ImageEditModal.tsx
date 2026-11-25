@@ -14,6 +14,7 @@ import { ImageEditor, type ImageEditorHandle } from '../ImageEditor';
 import { useModalDialog } from '../modal/useModalDialog';
 import {
   imageEditSignature,
+  imageSaveFormatForPath,
   needsWriteBack,
   readWriteBackSignature,
   writeWriteBackSignature,
@@ -66,15 +67,7 @@ export function ImageEditModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<ImageEditorHandle>(null);
-  const extension = relativePath.split(/[?#]/, 1)[0]?.split('.').pop()?.toLowerCase();
-  const saveFormat: 'png' | 'jpeg' | 'webp' | null =
-    extension === 'png'
-      ? 'png'
-      : extension === 'jpg' || extension === 'jpeg'
-        ? 'jpeg'
-        : extension === 'webp'
-          ? 'webp'
-          : null;
+  const saveFormat = imageSaveFormatForPath(relativePath);
   // Each unique image path gets its own sidecar so multiple images in the
   // same doc can be edited independently without colliding state. When the
   // host didn't supply a `container`, fall back to a fresh in-memory one

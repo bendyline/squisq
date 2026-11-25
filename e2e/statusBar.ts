@@ -8,7 +8,14 @@ import { selectUseMode, selectWriteMode, type UseMode, type WriteMode } from './
  * (status-bar-touch.spec.ts).
  */
 
-const WRITE_MODES: WriteMode[] = ['Write', 'Source', 'Blocks', 'Timeline', 'Summaries'];
+const WRITE_MODES: WriteMode[] = [
+  'Write',
+  'Source',
+  'Blocks',
+  'Timeline',
+  'Summaries',
+  'Study cards',
+];
 const USE_MODES: UseMode[] = [
   'Slideshow',
   'Video',

@@ -25,19 +25,35 @@ import {
 } from '@bendyline/squisq/doc';
 import {
   DYNAMIC_PRESENTATION_STYLE,
-  PRESENTATION_HINTS_KEY,
   createPresentationPlan,
-  defaultPresentationHints,
   parsePresentationHints,
-  serializePresentationHints,
+  presentationHintsForPlan,
+  readPresentationHints,
+  writePresentationHints,
   type PresentationHints,
 } from '@bendyline/squisq/transform';
 import { VIEWPORT_PRESETS, resolveTheme, type Block, type Theme } from '@bendyline/squisq/schemas';
 import '@bendyline/squisq-react/styles';
 import { measureFrame, type SwatchMetrics } from '../swatches/measure';
 
-/** Frames render at two-thirds of the 1920×1080 viewport, so a slide is 1280×720. */
-const CSS = { width: 1280, height: 720 };
+type ReviewViewport = (typeof VIEWPORT_PRESETS)[keyof typeof VIEWPORT_PRESETS];
+
+/** The slide shape to review (`?viewport=landscape|portrait|square`; landscape by default). */
+function reviewViewport(): ReviewViewport {
+  const name = new URLSearchParams(window.location.search).get('viewport') ?? 'landscape';
+  return (
+    (VIEWPORT_PRESETS as Record<string, ReviewViewport | undefined>)[name] ??
+    VIEWPORT_PRESETS.landscape
+  );
+}
+
+/** Frames render at two-thirds of the viewport, so a 1920×1080 slide is 1280×720. */
+function frameSize(viewport: ReviewViewport): { width: number; height: number } {
+  return {
+    width: Math.round((viewport.width * 2) / 3),
+    height: Math.round((viewport.height * 2) / 3),
+  };
+}
 
 export interface DeckReviewSlide {
   index: number;
@@ -85,35 +101,35 @@ async function buildDeck(
   name: string,
   themeId: string | null,
   density: string | null,
+  viewport: ReviewViewport,
 ): Promise<Deck> {
   const response = await fetch(`/deck-review-docs/${encodeURIComponent(name)}`);
   if (!response.ok) throw new Error(`Document "${name}" is not served (${response.status}).`);
   const markdown = await response.text();
-  // An optional sidecar of hints (AI wording, layouts) stands in for the
-  // designer's saved choices; otherwise the document's own or the defaults.
+  // An optional sidecar of hints (AI wording, layouts, as JSON) stands in for
+  // the designer's saved choices; otherwise the document's own design.
   const sidecar = await fetch(`/deck-review-docs/${encodeURIComponent(name)}.hints.json`);
   const parsed = markdownToDoc(parseMarkdown(markdown));
   let hints: PresentationHints =
     (sidecar.ok ? parsePresentationHints(await sidecar.json()) : null) ??
-    parsePresentationHints(parsed.frontmatter?.[PRESENTATION_HINTS_KEY]) ??
-    defaultPresentationHints();
+    readPresentationHints(parsed).hints;
   if (density) hints = { ...hints, density: density as PresentationHints['density'] };
   const theme = resolveTheme(themeId ?? String(parsed.frontmatter?.['squisq-theme'] ?? 'standard'));
-  const doc = markdownToDoc(
-    parseMarkdown(
-      setFrontmatterValues(markdown, {
-        'squisq-transform': DYNAMIC_PRESENTATION_STYLE,
-        'squisq-theme': theme.id,
-        [PRESENTATION_HINTS_KEY]: serializePresentationHints(hints),
-      }),
-    ),
-  );
+  // The design goes into the document the way the designer saves it: as
+  // summary blocks, section settings and frontmatter keys.
+  const base = setFrontmatterValues(markdown, {
+    'squisq-transform': DYNAMIC_PRESENTATION_STYLE,
+    'squisq-theme': theme.id,
+  });
+  const baseDoc = markdownToDoc(parseMarkdown(base));
+  const design = presentationHintsForPlan(baseDoc, hints, createPresentationPlan(baseDoc, hints));
+  const doc = markdownToDoc(parseMarkdown(writePresentationHints(base, design).result));
+  hints = readPresentationHints(doc).hints;
   // Reviews show slides as a reading estimate times them; a recorded take
   // needs its timing sidecar, which the harness does not have.
   delete doc.documentMedia;
   const plan = createPresentationPlan(doc, hints);
   const deck = buildPreviewDoc(doc);
-  const viewport = VIEWPORT_PRESETS.landscape;
   const blocks = expandDocBlocks(deck.blocks, {
     theme,
     viewport,
@@ -193,6 +209,8 @@ export function DeckReviewApp() {
   const themeId = query('theme');
   const density = query('density');
   const film = query('film') === '1';
+  const [viewport] = useState(reviewViewport);
+  const CSS = frameSize(viewport);
   /** Seconds into each slide to draw: late enough for every entrance to settle. */
   const at = Number(query('at') ?? '30');
   const [deck, setDeck] = useState<Deck | null>(null);
@@ -203,12 +221,12 @@ export function DeckReviewApp() {
       publish({ ready: true });
       return;
     }
-    buildDeck(name, themeId, density).then(setDeck, (reason: unknown) => {
+    buildDeck(name, themeId, density, viewport).then(setDeck, (reason: unknown) => {
       const message = reason instanceof Error ? reason.message : String(reason);
       setError(message);
       publish({ ready: true, error: message });
     });
-  }, [name, themeId, density]);
+  }, [name, themeId, density, viewport]);
 
   useEffect(() => {
     if (!deck) return;
@@ -224,7 +242,6 @@ export function DeckReviewApp() {
       .then(twoFrames)
       .then(() => {
         if (cancelled) return;
-        const viewport = VIEWPORT_PRESETS.landscape;
         const slides = deck.slides.map((slide) => {
           const frame = document.querySelector<HTMLElement>(
             `section.deck-slide[data-index="${slide.index}"]`,
@@ -244,7 +261,7 @@ export function DeckReviewApp() {
     return () => {
       cancelled = true;
     };
-  }, [deck, name, film]);
+  }, [deck, name, film, viewport]);
 
   if (!name)
     return <p className="deck-label">Add ?doc=&lt;name&gt;&amp;theme=&lt;id&gt; to render.</p>;
@@ -271,7 +288,7 @@ export function DeckReviewApp() {
                 block={block}
                 blockTime={time}
                 basePath="/"
-                viewport={VIEWPORT_PRESETS.landscape}
+                viewport={viewport}
                 isPlaying={false}
                 respectReducedMotion={false}
                 buildPlayback="timed"
@@ -303,7 +320,7 @@ export function DeckReviewApp() {
               block={block}
               blockTime={Math.min(at, Math.max(0, block.duration - 0.05))}
               basePath="/"
-              viewport={VIEWPORT_PRESETS.landscape}
+              viewport={viewport}
               isPlaying={false}
               animationsEnabled={false}
               buildPlayback="all"

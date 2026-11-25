@@ -18,6 +18,7 @@
  */
 
 import type { Block, CaptionTrack, Doc } from '../schemas/Doc.js';
+import { isAccessoryBlock } from '../doc/accessoryBlocks.js';
 
 export interface CaptionFileOptions {
   /** Seconds added to every time, for a video that starts before the doc does (a cover pre-roll). */
@@ -123,6 +124,8 @@ export function docChapters(
   const chapters: DocChapter[] = [];
   const visit = (list: readonly Block[]) => {
     for (const block of list) {
+      // Accessory blocks take no time and are never a chapter.
+      if (isAccessoryBlock(block)) continue;
       const title = (block.title ?? '').replace(/\s+/gu, ' ').trim();
       const startTime = Math.max(0, (block.startTime ?? 0) + offset);
       const previous = chapters[chapters.length - 1];

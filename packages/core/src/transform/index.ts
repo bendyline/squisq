@@ -31,15 +31,30 @@ export type { AnalyzedBlock, BlockImage } from './blockAnalyzer.js';
 export { analyzeBlocks, extractDocImages } from './blockAnalyzer.js';
 
 export * from './presentationPlan.js';
-export { createPresentationPlan } from './presentationPlanner.js';
+export {
+  createPresentationPlan,
+  createPresentationPlanReport,
+  type PresentationPlanReport,
+  type PresentationRollup,
+  type PresentationRollupProblem,
+} from './presentationPlanner.js';
 export { compilePresentationPlan, applySavedPresentation } from './presentationCompiler.js';
-export { collectPresentationMedia, type PresentationMediaItem } from './presentationMedia.js';
+export {
+  collectPresentationMedia,
+  type PresentationMediaItem,
+  type PresentationNodeMediaItem,
+  type PresentationBlockMediaItem,
+} from './presentationMedia.js';
 
 export * from './presentationHints.js';
+export * from './presentationHintsDoc.js';
+export * from './presentationHintsSource.js';
 
 export * from './grounding.js';
 // The protocol a model follows to word a deck: prompts, reply shapes, and the gates on a reply.
 export * from './presentationAuthor.js';
 // The loop that runs that protocol; a host supplies only the transport.
 export * from './presentationWording.js';
+// The model transport the authoring protocols share (study cards are `@bendyline/squisq/study`).
+export * from './authorModel.js';
 export * from './conceptReveal.js';

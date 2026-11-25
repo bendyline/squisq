@@ -1,16 +1,41 @@
 /**
  * Flashcard-mode projection.
  *
- * Flashcards are a study rendition of the existing heading-driven Block tree,
- * not a visual template. The projection keeps rich Markdown nodes and nested
+ * Flashcards are a study rendition of a document, not a visual template. A
+ * deck is made from two kinds of source:
+ *
+ * - **Study cards kept with a section** — `{[flashcard]}` / `{[quiz]}`
+ *   accessory blocks (see `studyCards.ts`), each labelled with its section.
+ * - **The heading tree** — cards inferred from heading structure, or marked
+ *   with `{study=flashcard}` / `{study=multiple-choice-flashcard}`.
+ *
+ * A document holding any study card block is studied from its study cards
+ * and its marked cards; without one, cards are inferred from its headings as
+ * they always have been. The projection keeps rich Markdown nodes and nested
  * blocks intact so React and future exporters can render the same authored
  * content without reducing cards to strings.
  */
 
 import type { Block, Doc } from '../../schemas/Doc.js';
+import type { MarkdownBlockNode } from '../../markdown/types.js';
+import { withoutAccessoryBlocks } from '../accessoryBlocks.js';
+import { isAccessoryBlockType } from '../accessoryBlockTypes.js';
+import { flattenBlocks } from '../markdownToDoc.js';
+import {
+  hasStudyCards,
+  readStudyCards,
+  type StudyCard,
+  type StudyCardIssueCode,
+} from './studyCards.js';
 
 export type FlashcardKind = 'basic' | 'multiple-choice';
-export type FlashcardSourceMode = 'auto' | 'explicit';
+/**
+ * Where a deck's cards come from: `auto` (study cards and marked cards when
+ * the document has study cards, otherwise cards inferred from headings),
+ * `explicit` (study cards and marked cards), `headings` (cards inferred from
+ * headings, study cards left out), `cards` (study cards only).
+ */
+export type FlashcardSourceMode = 'auto' | 'explicit' | 'headings' | 'cards';
 
 export interface FlashcardFace {
   /** Blocks rendered on this face, in source order. */
@@ -25,9 +50,14 @@ export interface FlashcardChoice {
 }
 
 export interface Flashcard {
+  /** For a study card, its lasting key (`studyCardKey`); otherwise its block's id. */
   id: string;
   sourceBlockId: string;
   kind: FlashcardKind;
+  /** A study card's section. */
+  ownerBlockId?: string;
+  /** A study card written by AI. */
+  origin?: 'ai';
   /** Optional parent heading used as a compact deck/category label. */
   label?: string;
   front: FlashcardFace;
@@ -39,7 +69,11 @@ export interface Flashcard {
 }
 
 export type FlashcardDiagnosticCode =
-  'empty-front' | 'empty-back' | 'multiple-choice-needs-distractor' | 'multiple-correct-answers';
+  | 'empty-front'
+  | 'empty-back'
+  | 'multiple-choice-needs-distractor'
+  | 'multiple-correct-answers'
+  | StudyCardIssueCode;
 
 export interface FlashcardDiagnostic {
   severity: 'warning' | 'error';
@@ -55,11 +89,7 @@ export interface FlashcardDeck {
 }
 
 export interface MaterializeFlashcardsOptions {
-  /**
-   * `auto` (default) discovers card-shaped blocks and honors explicit study
-   * metadata. `explicit` includes only blocks marked `study=flashcard` or
-   * `study=multiple-choice-flashcard` (and their class/template aliases).
-   */
+  /** Where the cards come from (see {@link FlashcardSourceMode}); `auto` by default. */
   source?: FlashcardSourceMode;
 }
 
@@ -117,6 +147,9 @@ export function resolveFlashcardMarker(block: Block): FlashcardMarker | undefine
   // Programmatic Docs and early adopters may already use template-like names.
   // Admit those as semantic aliases, but the canonical Markdown authoring form
   // remains `{study=...}` so visual templates and study behavior stay separate.
+  // A name that marks an accessory block (`{[flashcard]}`, `{[quiz]}`) is a
+  // study card kept with its section, read by `readStudyCards`, never this.
+  if (isAccessoryBlockType(block.template)) return undefined;
   return markerFromValue(block.template);
 }
 
@@ -360,7 +393,21 @@ export function materializeFlashcards(
   doc: Doc,
   options: MaterializeFlashcardsOptions = {},
 ): FlashcardDeck {
-  const source = options.source ?? 'auto';
+  const full = doc;
+  const requested = options.source ?? 'auto';
+  const studyCards =
+    requested === 'cards' ||
+    requested === 'explicit' ||
+    (requested === 'auto' && hasStudyCards(full));
+  // Cards inferred from headings only when study cards are not the deck.
+  const source: 'auto' | 'explicit' | 'none' =
+    requested === 'cards'
+      ? 'none'
+      : requested === 'headings' || (requested === 'auto' && !studyCards)
+        ? 'auto'
+        : 'explicit';
+  // Other accessory blocks are side information, never a card or a card's back.
+  doc = withoutAccessoryBlocks(doc);
   const cards: Flashcard[] = [];
   const diagnostics: FlashcardDiagnostic[] = [];
 
@@ -402,7 +449,26 @@ export function materializeFlashcards(
     for (const child of block.children ?? []) visit(child);
   };
 
-  for (const block of doc.blocks) visit(block);
+  if (source !== 'none') for (const block of doc.blocks) visit(block);
+  if (studyCards) {
+    const read = readStudyCards(full);
+    for (const issue of read.issues)
+      diagnostics.push({
+        severity: issue.severity,
+        code: issue.code,
+        message: issue.message,
+        blockId: issue.accessoryBlockId,
+      });
+    const owners = new Map(flattenBlocks(full.blocks).map((block) => [block.id, block]));
+    cards.push(
+      ...read.cards.filter((card) => card.usable).map((card) => fromStudyCard(card, owners)),
+    );
+    // Study cards and marked cards in document order.
+    const position = new Map(flattenBlocks(full.blocks).map((block, index) => [block.id, index]));
+    cards.sort(
+      (a, b) => (position.get(a.sourceBlockId) ?? 0) - (position.get(b.sourceBlockId) ?? 0),
+    );
+  }
 
   const resolvedTitle = resolveDeckTitle(doc);
   const authoredTitle =
@@ -420,5 +486,59 @@ export function materializeFlashcards(
     ...(title ? { title } : {}),
     cards,
     diagnostics,
+  };
+}
+
+/** A face block made for a study card: its title and body, nothing else. */
+function studyFaceBlock(id: string, title?: string, contents?: MarkdownBlockNode[]): Block {
+  return {
+    id,
+    startTime: 0,
+    duration: 0,
+    audioSegment: 0,
+    ...(title ? { title } : {}),
+    ...(contents?.length ? { contents } : {}),
+  };
+}
+
+/** A study card kept with a section, as a deck card labelled with its section. */
+function fromStudyCard(card: StudyCard, owners: ReadonlyMap<string, Block>): Flashcard {
+  const label = card.ownerId ? owners.get(card.ownerId)?.title?.trim() : undefined;
+  const front = face(studyFaceBlock(`${card.key}:front`, card.question, card.prompt));
+  const shared = {
+    id: card.key,
+    sourceBlockId: card.accessoryBlockId,
+    ...(card.ownerId ? { ownerBlockId: card.ownerId } : {}),
+    ...(card.origin ? { origin: card.origin } : {}),
+    ...(label ? { label } : {}),
+    front,
+  };
+  if (card.kind === 'flashcard')
+    return {
+      ...shared,
+      kind: 'basic',
+      back: face(studyFaceBlock(`${card.key}:back`, undefined, card.answer)),
+    };
+  const used = new Map<string, number>();
+  const choices = (card.choices ?? []).map((choice) => {
+    const count = used.get(choice.key) ?? 0;
+    used.set(choice.key, count + 1);
+    const id = `${card.key}:${choice.key}${count ? `~${count + 1}` : ''}`;
+    return {
+      id,
+      sourceBlockId: card.accessoryBlockId,
+      content: face(studyFaceBlock(id, undefined, choice.content)),
+      correct: choice.correct,
+    };
+  });
+  const right = choices.find((choice) => choice.correct) ?? choices[0]!;
+  return {
+    ...shared,
+    kind: 'multiple-choice',
+    back: right.content,
+    choices,
+    ...(card.explanation
+      ? { explanation: face(studyFaceBlock(`${card.key}:why`, undefined, card.explanation)) }
+      : {}),
   };
 }

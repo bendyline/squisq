@@ -28,4 +28,23 @@ describe('transform image discovery', () => {
       { src: 'images/inline.png', alt: 'Inline' },
     ]);
   });
+
+  it('never takes a picture from side information such as a slide summary', () => {
+    const doc = markdownToDoc(
+      parseMarkdown(
+        [
+          '# Results',
+          '',
+          '![The chart](images/chart.png)',
+          '',
+          '## Results slide {[summary]}',
+          '',
+          '- A point',
+          '',
+          '![Not content](images/summary.png)',
+        ].join('\n'),
+      ),
+    );
+    expect(extractDocImages(doc.blocks).map((image) => image.src)).toEqual(['images/chart.png']);
+  });
 });

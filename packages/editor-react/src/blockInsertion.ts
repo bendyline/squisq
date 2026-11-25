@@ -10,6 +10,7 @@
 import type { EditorState } from '@tiptap/pm/state';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import {
+  isAccessoryBlockType,
   isContainerTemplate,
   resolveTemplateName,
   TABLE_FED_TEMPLATES,
@@ -42,6 +43,7 @@ export function tiptapOutline(doc: ProseMirrorNode): {
       blocks.push({
         headingDepth: attrs.level ?? 1,
         container: isContainerTemplate(template),
+        ...(isAccessoryBlockType(template) ? { accessory: true } : {}),
         ...(ownsTable ? { ownsFollowing: 1 } : {}),
       });
     } else {
