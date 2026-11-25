@@ -19,6 +19,7 @@ import { selectAndBuild } from './templateSelector.js';
 import type { SelectionResult } from './templateSelector.js';
 import { briefText, summarizeBlock } from './contentSummary.js';
 import { flattenRenderableBlocks } from '../doc/markdownToDoc.js';
+import { withoutAccessoryBlocks } from '../doc/accessoryBlocks.js';
 import { allocateTiming } from './timingAllocator.js';
 import { hashString } from '../random/SeededRandom.js';
 
@@ -58,6 +59,9 @@ export function applyTransform(
   if (usesDynamicPresentation(doc)) {
     doc = { ...doc, frontmatter: { ...doc.frontmatter, 'squisq-transform': baseConfig.id } };
   }
+  // A transform style re-cuts the document's content; accessory blocks
+  // (summaries and other side information) are not content.
+  doc = withoutAccessoryBlocks(doc);
   const config = options?.overrides
     ? { ...baseConfig, ...options.overrides, id: baseConfig.id }
     : baseConfig;

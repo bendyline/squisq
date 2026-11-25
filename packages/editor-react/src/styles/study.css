@@ -1,0 +1,315 @@
+/*
+ * Write › Study cards — the sections of the document beside the selected
+ * section's flashcards and quiz questions. The view fills the editing area
+ * and scrolls as a whole; in a narrow or short panel the section list becomes
+ * a picker above the cards.
+ */
+
+.squisq-study {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--squisq-bg);
+  color: var(--squisq-text);
+  font-family: var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+}
+
+.squisq-study-inner {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 24px 24px;
+}
+
+.squisq-study-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.squisq-study-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--squisq-text-strong);
+}
+
+.squisq-study-intro,
+.squisq-study-status,
+.squisq-study-empty,
+.squisq-study-none {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--squisq-text-soft);
+}
+
+.squisq-study-alert {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--squisq-danger-soft, var(--squisq-surface-subtle));
+  color: var(--squisq-text);
+  font-size: 13px;
+}
+
+.squisq-study-cards {
+  container: squisq-study-cards / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.squisq-study button {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--squisq-border-strong);
+  border-radius: 5px;
+  background: var(--squisq-surface);
+  color: var(--squisq-text);
+  font: 600 12px/1.2 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+  cursor: pointer;
+}
+
+.squisq-study button:hover:not(:disabled) {
+  border-color: var(--squisq-accent-border);
+  background: var(--squisq-surface-hover);
+  color: var(--squisq-text-strong);
+}
+
+.squisq-study button:focus-visible,
+.squisq-study input:focus-visible,
+.squisq-study textarea:focus-visible,
+.squisq-study select:focus-visible {
+  outline: 2px solid var(--squisq-focus-ring);
+  outline-offset: 2px;
+}
+
+.squisq-study button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.squisq-study-workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 30%) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+/* The section list: one button per section, its card counts beneath. */
+.squisq-study-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.squisq-study-sections button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  text-align: start;
+  font-weight: 500;
+}
+
+.squisq-study-sections button[aria-current='true'] {
+  border-color: var(--squisq-accent);
+  background: var(--squisq-accent-soft);
+  color: var(--squisq-text-strong);
+}
+
+.squisq-study-section-name {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.squisq-study-section-tags,
+.squisq-study-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.squisq-study-section-tags small,
+.squisq-study-card-tag {
+  color: var(--squisq-text-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.squisq-study-tag--warn,
+.squisq-study-card-tag--warn {
+  color: var(--squisq-warning-strong, var(--squisq-text));
+}
+
+/* Stands in for the list when the panel is too narrow for two columns. */
+.squisq-study-picker {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.squisq-study-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.squisq-study-detail-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--squisq-text-strong);
+}
+
+.squisq-study-passage {
+  margin: 0;
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--squisq-border);
+  color: var(--squisq-text-soft);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* A section whose text changed after AI wrote some of its cards. */
+.squisq-study-flag {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-inline-start: 3px solid var(--squisq-warning, var(--squisq-accent-strong));
+  background: var(--squisq-surface-subtle);
+  font-size: 13px;
+}
+
+.squisq-study-flag p {
+  flex: 1 1 240px;
+  margin: 0;
+}
+
+.squisq-study-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--squisq-border);
+  border-radius: 8px;
+  background: var(--squisq-surface);
+}
+
+.squisq-study-card--stale {
+  border-color: var(--squisq-warning, var(--squisq-border-strong));
+}
+
+.squisq-study-card--invalid {
+  border-style: dashed;
+}
+
+.squisq-study-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.squisq-study-card-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.squisq-study-field,
+.squisq-study-generate label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.squisq-study input:not([type='radio']),
+.squisq-study textarea,
+.squisq-study select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--squisq-border-strong);
+  border-radius: 5px;
+  background: var(--squisq-bg);
+  color: var(--squisq-text);
+  font: 400 13px/1.4 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
+}
+
+.squisq-study-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--squisq-border);
+  border-radius: 6px;
+}
+
+.squisq-study-choices legend {
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.squisq-study-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.squisq-study-card-issues {
+  margin: 0;
+  padding-inline-start: 18px;
+  font-size: 12px;
+  color: var(--squisq-text);
+}
+
+.squisq-study-card-actions,
+.squisq-study-add,
+.squisq-study-generate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.squisq-study-generate label {
+  min-width: 140px;
+}
+
+@container squisq-study-cards (max-width: 640px) {
+  .squisq-study-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .squisq-study-sections {
+    display: none;
+  }
+
+  .squisq-study-picker {
+    display: flex;
+  }
+}

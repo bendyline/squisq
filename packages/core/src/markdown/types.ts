@@ -181,6 +181,8 @@ export interface HeadingAttributes {
     duration?: number;
     connectsTo?: BlockConnection[];
     transition?: import('../schemas/Transitions.js').Transition;
+    slideLayout?: import('../schemas/PresentationLayouts.js').PresentationBeatLayout;
+    supportingSlides?: boolean;
   };
   /** Subset of `params` whose keys are NOT in the known-key registry. */
   metadata?: Record<string, string>;

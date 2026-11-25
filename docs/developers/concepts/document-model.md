@@ -119,6 +119,43 @@ and `duration` attributes set the block's timing.
 **Precomputed layers.** `layers` is optional. Blocks from Markdown omit it and compute layers on
 demand; a block you build by hand can supply its own.
 
+**Accessory blocks.** A heading tagged with a registered accessory type (`### Headline {[summary]}`,
+`ACCESSORY_BLOCK_TYPES` in `doc/accessoryBlockTypes.ts`) is side information about another block,
+recorded in `accessoryBlock: { type, of?, within? }` — `of` is the block it is about, `within` marks a
+heading nested inside one. Accessory blocks stay in the tree, so `flattenBlocks` and `docToMarkdown`
+see them and the markdown round-trips, but they have no `template`, take no time, and are never
+output: `flattenRenderableBlocks` and `countBlocks` skip them, and anything that walks `children`
+itself starts from `pruneAccessoryBlocks` / `withoutAccessoryBlocks` (`withoutAccessorySections` for
+a `MarkdownDocument`). Prune rather than skip: a section whose only child is a summary must still
+read as a section without children. Their ids (`<owner>~summary`) never use the slug counter, so
+adding one never renumbers a real block. A section's summary settings are typed fields too:
+`slideLayout` and `supportingSlides`. `readPresentationHints` / `writePresentationHints`
+(`transform/presentationHintsDoc.ts`, `presentationHintsSource.ts`) read and write the Custom
+summary design they hold.
+
+**Study cards.** Two more accessory types hold study cards about their section: `flashcard`
+(heading = question, body = answer) and `quiz` (heading = question, first list = a checklist of
+choices with one ticked, then an explanation). `readStudyCards` (`doc/flashcards/studyCards.ts`)
+reads them with a lasting `key` — `studyCardKey(kind, question)`, not the ordinal accessory id —
+and `writeStudyCards` (`studyCardsSource.ts`) edits them by key on the shared accessory block
+writer (`doc/accessoryBlockSource.ts`), which places new blocks by type `order` (summaries before
+cards). An AI card records its section's passage key (`doc/sectionPassages.ts`: the section's own
+body text, whitespace collapsed) so a changed section flags it as `stale`.
+
+**Blocks drawn on another slide.** `slideLayout=feature` on a block that draws a picture
+(`isFeatureBlockTemplate`, `FEATURE_BLOCK_TEMPLATES` in `doc/templates/templateNames.ts`) rolls it
+up in a Custom summary. The planner (`createPresentationPlanReport`) gives the rolled-up section
+one `feature` beat over its whole passage — narrated, never a slide, never worded by AI
+(`presentationBeatIsSlide`, `presentationBeatIsWorded`) — and puts a `block` media item
+(`<owner>#block-<n>`, `collectPresentationMedia`) first on the last shown summary beat of the
+section before it. A roll-up with no carrier is refused and the deck planned again, so a
+fallback is exactly the `authored` plan; the report says why for each roll-up. The compiler
+turns block refs into `Block.featureBlocks` on the carrying slide, which `materializeBlockLayers`
+draws as a rich-media item: the block's own template rendered into its cell (a `layout` at slide
+size, shrunk whole), without its full-slide backdrop, held still, its text marked
+`TextStyle.keepSize` so slide text fitting (React and PowerPoint) leaves it alone. Embedded
+blocks never draw their own `featureBlocks`.
+
 ## `TemplateBlock`, `DocBlock`, and `isTemplateBlock`
 
 Each built-in template has a typed input interface — `TitleBlockInput`, `StatHighlightInput`,

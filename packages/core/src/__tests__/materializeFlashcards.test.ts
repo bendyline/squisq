@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseMarkdown } from '../markdown/index.js';
 import { markdownToDoc } from '../doc/markdownToDoc.js';
+import { strip } from './accessoryBlockFixtures';
 import {
   materializeFlashcards,
   resolveFlashcardMarker,
@@ -109,5 +110,111 @@ describe('materializeFlashcards', () => {
     expect(result.diagnostics).toContainEqual(
       expect.objectContaining({ code: 'empty-back', blockId: 'empty' }),
     );
+  });
+
+  it('leaves a study card kept with a section to the card reader, and keeps every marker', () => {
+    // A programmatic block may still carry the old template-like names; the
+    // two that now mark accessory blocks are no longer heading markers.
+    const doc = markdownToDoc(parseMarkdown('## Question\n\nAnswer.\n'));
+    const block = { ...doc.blocks[0]!, template: 'quiz' };
+    expect(resolveFlashcardMarker(block)).toBeUndefined();
+    expect(resolveFlashcardMarker({ ...block, template: 'flashcard' })).toBeUndefined();
+    expect(resolveFlashcardMarker({ ...block, template: 'deck' })).toBe('group');
+    const marked = markdownToDoc(
+      parseMarkdown('## Pick one {study=quiz}\n\n### Q\n\n### A {correct=true}\n\n### B\n'),
+    );
+    expect(resolveFlashcardMarker(marked.blocks[0]!)).toBe('multiple-choice');
+  });
+
+  describe('with study cards kept with a section', () => {
+    const DOC = [
+      '## Photosynthesis',
+      '',
+      'Plants turn light into sugar.',
+      '',
+      '### What do plants make? {[flashcard origin=ai]}',
+      '',
+      'Sugar.',
+      '',
+      '## Marked {study=flashcard}',
+      '',
+      'A marked card’s answer.',
+      '',
+      '## Water',
+      '',
+      'Roots drink water.',
+      '',
+      '### Which part drinks? {[quiz]}',
+      '',
+      '- [ ] Petals',
+      '- [x] Roots',
+      '',
+      'Roots take up water.',
+      '',
+      '### Broken? {[quiz]}',
+      '',
+      '- [ ] No tick',
+      '- [ ] Anywhere',
+    ].join('\n');
+    const docOf = (md: string) => markdownToDoc(parseMarkdown(md));
+
+    it('studies the study cards and marked cards, in document order, each labelled with its section', () => {
+      const result = materializeFlashcards(docOf(DOC));
+      expect(
+        result.cards.map((card) => [card.kind, card.label, card.front.blocks[0]?.title]),
+      ).toEqual([
+        ['basic', 'Photosynthesis', 'What do plants make?'],
+        ['basic', undefined, 'Marked'],
+        ['multiple-choice', 'Water', 'Which part drinks?'],
+      ]);
+      const [flashcard, , question] = result.cards;
+      expect(flashcard).toMatchObject({ ownerBlockId: 'photosynthesis', origin: 'ai' });
+      expect(flashcard!.id).toMatch(/^f/);
+      expect(question!.choices!.map((choice) => choice.correct)).toEqual([false, true]);
+      expect(question!.back).toEqual(question!.choices![1]!.content);
+      expect(question!.explanation?.blocks[0]?.contents).toHaveLength(1);
+      // The broken question is left out and said why.
+      expect(result.diagnostics).toContainEqual(
+        expect.objectContaining({ code: 'quiz-no-correct', severity: 'error' }),
+      );
+    });
+
+    it('chooses its source: study cards only, headings only, or study and marked cards', () => {
+      const titles = (source: 'cards' | 'headings' | 'explicit') =>
+        materializeFlashcards(docOf(DOC), { source }).cards.map(
+          (card) => card.front.blocks[0]?.title,
+        );
+      expect(titles('cards')).toEqual(['What do plants make?', 'Which part drinks?']);
+      expect(titles('explicit')).toEqual(['What do plants make?', 'Marked', 'Which part drinks?']);
+      // From headings, a study card is never a card or part of one.
+      expect(titles('headings')).not.toContain('What do plants make?');
+      expect(
+        JSON.stringify(materializeFlashcards(docOf(DOC), { source: 'headings' })),
+      ).not.toContain('Sugar.');
+    });
+
+    it('infers cards from headings exactly as before in a document with no study cards', () => {
+      const plain = '## One\n\nFirst answer.\n\n## Two\n\nSecond answer.\n';
+      expect(materializeFlashcards(docOf(plain))).toEqual(
+        materializeFlashcards(docOf(plain), { source: 'headings' }),
+      );
+      const withSummary = plain.replace('## Two', '### A slide {[summary]}\n\n- Point\n\n## Two');
+      expect(strip(materializeFlashcards(docOf(withSummary)))).toEqual(
+        strip(materializeFlashcards(docOf(plain))),
+      );
+    });
+
+    it('keeps each card’s id when cards are reordered', () => {
+      const ids = (md: string) =>
+        materializeFlashcards(docOf(md), { source: 'cards' }).cards.map((card) => card.id);
+      const swapped = DOC.replace(
+        '### What do plants make? {[flashcard origin=ai]}\n\nSugar.',
+        'Plants also need water.',
+      ).replace(
+        '## Water\n\nRoots drink water.',
+        '## Water\n\nRoots drink water.\n\n### What do plants make? {[flashcard origin=ai]}\n\nSugar.',
+      );
+      expect(new Set(ids(swapped))).toEqual(new Set(ids(DOC)));
+    });
   });
 });

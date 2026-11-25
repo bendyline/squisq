@@ -130,6 +130,7 @@ export { isContainerTemplate } from './templateNames.js';
  * `templateData` unless the author supplied data explicitly.
  */
 export { TABLE_FED_TEMPLATES } from './templateNames.js';
+export { FEATURE_BLOCK_TEMPLATES, isFeatureBlockTemplate } from './templateNames.js';
 
 /**
  * Audio segment timing info for aligning blocks with audio.

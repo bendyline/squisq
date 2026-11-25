@@ -26,6 +26,32 @@ export {
   applyVideoDurations,
 } from './markdownToDoc.js';
 export type { MarkdownToDocOptions } from './markdownToDoc.js';
+// Accessory blocks: side information about another block, left out of
+// every output. See accessoryBlocks.ts.
+export {
+  isAccessoryBlock,
+  realChildren,
+  pruneAccessoryBlocks,
+  withoutAccessoryBlocks,
+  flattenContentBlocks,
+  collectAccessoryBlocks,
+} from './accessoryBlocks.js';
+export {
+  ACCESSORY_BLOCK_TYPES,
+  ACCESSORY_BLOCK_OWNER_PARAM,
+  isAccessoryBlockType,
+  accessoryBlockTypeInfo,
+  type AccessoryBlockType,
+  type AccessoryBlockTypeInfo,
+} from './accessoryBlockTypes.js';
+export {
+  isPassageKey,
+  passageKey,
+  sectionPassage,
+  sectionPassages,
+  sectionPassageText,
+  type SectionPassage,
+} from './sectionPassages.js';
 // A block's video sets the floor on its length — see videoTiming.ts.
 export {
   blockVideoLength,
@@ -175,6 +201,22 @@ export type {
   FlashcardSourceMode,
   MaterializeFlashcardsOptions,
 } from './flashcards/materializeFlashcards.js';
+// Study cards kept with a section: `{[flashcard]}` / `{[quiz]}` accessory blocks.
+// Reading them only; writing and making them is `@bendyline/squisq/study`.
+export {
+  STUDY_CARD_KINDS,
+  hasStudyCards,
+  isStudyCardKind,
+  readStudyCards,
+  studyCardKey,
+  studyCardTextKey,
+  type StudyCard,
+  type StudyCardChoice,
+  type StudyCardIssue,
+  type StudyCardIssueCode,
+  type StudyCardKind,
+  type StudyCardsRead,
+} from './flashcards/studyCards.js';
 export { resolveAudioMapping, scoreTextSimilarity } from './audioMapping.js';
 export { applyNarrationTiming, type NarrationResolution } from './applyNarrationTiming.js';
 export {

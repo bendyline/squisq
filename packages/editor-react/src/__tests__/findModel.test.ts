@@ -3,6 +3,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import { HeadingWithTemplate } from '../TemplateAnnotation';
+import { markdownToTiptap } from '../tiptapBridge';
 import {
   FindHighlightExtension,
   replaceAllTiptapFindMatches,
@@ -45,6 +47,35 @@ describe('Find model', () => {
 
     expect(findProseMirrorMatches(editor.state.doc, 'hello wide world')).toHaveLength(1);
     expect(findProseMirrorMatches(editor.state.doc, 'worldhello')).toHaveLength(0);
+  });
+
+  it('leaves the side information folded in Write alone: slide summaries and study cards', () => {
+    const editor = new Editor({
+      extensions: [
+        StarterKit.configure({ heading: false }),
+        HeadingWithTemplate.configure({ levels: [1, 2, 3, 4, 5, 6] }),
+      ],
+      content: markdownToTiptap(
+        [
+          '## Plants',
+          '',
+          'Leaves catch the light.',
+          '',
+          '### Where does it happen? {[quiz]}',
+          '',
+          '- [ ] In the roots',
+          '- [x] In the leaves',
+          '',
+          '## Water',
+          '',
+          'Roots drink from the leaves of grass.',
+        ].join('\n'),
+      ),
+    });
+    editors.push(editor);
+    // "leaves" appears in the section's text, the card, and the next section.
+    expect(findProseMirrorMatches(editor.state.doc, 'leaves')).toHaveLength(2);
+    expect(findProseMirrorMatches(editor.state.doc, 'In the roots')).toHaveLength(0);
   });
 
   it('decorates every WYSIWYG match and marks the selected one separately', () => {

@@ -178,6 +178,7 @@ describe('View menu', () => {
       'Blocks',
       'Timeline',
       'Summaries',
+      'Study cards',
     ]);
     expect(viewLabels(within(views).getByRole('group', { name: 'Use' }))).toEqual([
       'Slideshow',

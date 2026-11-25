@@ -294,7 +294,11 @@ function designedLayout(
   }
 }
 
-function resolvePositionValue(value: number | string | undefined, dimension: number): number {
+/** A position value (pixels or a percentage of `dimension`) in pixels. */
+export function resolvePositionValue(
+  value: number | string | undefined,
+  dimension: number,
+): number {
   if (value === undefined) return 0;
   if (typeof value === 'number') return value;
   const percent = value.match(/^\s*(-?\d+(?:\.\d+)?)%\s*$/);
@@ -305,6 +309,22 @@ function resolvePositionValue(value: number | string | undefined, dimension: num
 
 function isZero(value: number | string): boolean {
   return value === 0 || value === '0' || value === '0%';
+}
+
+/**
+ * The layers without the full-viewport backdrop a template paints first (a
+ * chart's or a table's surface gradient), so a block drawn inside another
+ * slide shows on that slide's own background. Only a leading shape is
+ * dropped: a full-bleed picture is content.
+ */
+export function stripFullViewportBackdrop(
+  layers: readonly Layer[],
+  viewport: ViewportConfig,
+): Layer[] {
+  const first = layers[0];
+  return first && first.type === 'shape' && isFullViewportBackground(first, viewport)
+    ? layers.slice(1)
+    : [...layers];
 }
 
 function isFullViewportBackground(layer: Layer, viewport: ViewportConfig): boolean {
@@ -345,16 +365,29 @@ function mapPosition(
  * Translate a template rendered against a local viewport into a root-level
  * media rectangle. Spatial templates emit absolute SVG path coordinates, so
  * those coordinates must move with ordinary layer positions.
+ *
+ * With `scaleStyles`, a picture drawn at another size shrinks whole: shape
+ * strokes and corners and text padding and borders scale with it,
+ * as its positions and type do.
  */
 export function placeLayersInRect(
   layers: readonly Layer[],
   sourceViewport: ViewportConfig,
   target: LayerRect,
   idPrefix: string,
+  options: { scaleStyles?: boolean } = {},
 ): Layer[] {
   const scaleX = target.width / sourceViewport.width;
   const scaleY = target.height / sourceViewport.height;
   const fontScale = Math.min(scaleX, scaleY);
+  const scaled = <T extends object>(values: T, keys: readonly (keyof T)[]): T => {
+    if (!options.scaleStyles || fontScale === 1) return values;
+    const next = { ...values };
+    for (const key of keys)
+      if (typeof next[key] === 'number')
+        next[key] = ((next[key] as number) * fontScale) as T[keyof T];
+    return next;
+  };
   return layers.map((layer) => {
     const position: Position = {
       ...layer.position,
@@ -392,12 +425,18 @@ export function placeLayersInRect(
         content: {
           ...layer.content,
           style: {
-            ...layer.content.style,
+            ...scaled(layer.content.style, ['padding', 'borderWidth']),
             fontSize: Math.max(10, layer.content.style.fontSize * fontScale),
           },
         },
       };
     }
+    if (layer.type === 'shape' && options.scaleStyles)
+      return {
+        ...base,
+        type: 'shape',
+        content: scaled(layer.content, ['strokeWidth', 'borderRadius']),
+      };
     return base as Layer;
   });
 }

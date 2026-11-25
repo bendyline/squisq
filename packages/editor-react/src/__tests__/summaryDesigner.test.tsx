@@ -2,10 +2,12 @@
  * @vitest-environment jsdom
  *
  * The Custom summary designer (Write › Summarize, Custom). It saves the
- * author's intent — density, per-section layouts, hidden slides, wording,
- * AI suggestions — to `squisq-presentation-hints` as each change is made,
- * follows the document when something else changes that design, and offers
- * "Suggest with AI" only when a host lends a `SummarizationAssistant`.
+ * author's intent in the document as each change is made — the density as a
+ * frontmatter key, a section's layout on its heading, wording, AI suggestions
+ * and hidden slides as `{[summary]}` blocks under the section — follows the
+ * document when something else changes that design, converts a design saved
+ * the old way on its first change, and offers "Suggest with AI" only when a
+ * host lends a `SummarizationAssistant`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -14,7 +16,11 @@ import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { buildNarrationScript } from '@bendyline/squisq/narration';
 import { MemoryContentContainer } from '@bendyline/squisq/storage';
 import {
+  PRESENTATION_HINTS_KEY,
   PRESENTATION_LIMITS,
+  createPresentationPlan,
+  defaultPresentationHints,
+  serializePresentationHints,
   type PresentationBeat,
   type PresentationPlan,
 } from '@bendyline/squisq/transform';
@@ -202,9 +208,11 @@ describe('SummaryDesigner', () => {
     );
 
     chooseOption(layout(), 'authored');
-    await waitFor(() => expect(source.latest).toContain('"layout":"authored"'));
-    // Only the frontmatter changes; the document text is left as written.
-    expect(source.latest).toContain('North led every quarter.');
+    await waitFor(() =>
+      expect(source.latest).toMatch(/^## By region \{\[barChart slideLayout=authored\]\}$/m),
+    );
+    // Only the heading's tag changes; the document text is left as written.
+    expect(source.latest).toBe(REPORT.replace('{[barChart]}', '{[barChart slideLayout=authored]}'));
     expect(screen.getByText(/block picker/)).toBeTruthy();
     // Nothing to word and no supporting slides: the section is shown as written.
     expect(screen.queryByText('Customize slide wording (slides only)')).toBeNull();
@@ -225,7 +233,7 @@ describe('SummaryDesigner', () => {
     await waitFor(() => expect(slides()).toHaveLength(2));
     expect(supporting.checked).toBe(false);
     expect(supporting.disabled).toBe(true);
-    expect(source.latest).toContain('"density":"section"');
+    expect(source.latest).toContain('squisq-summary-density: section');
   });
 
   it('says why it cannot make the slides instead of still preparing them', async () => {
@@ -240,7 +248,7 @@ describe('SummaryDesigner', () => {
     expect(statuses()).not.toContain('Preparing slides');
   });
 
-  it('hides a slide by its passage, keeps one slide shown, and saves only a key', async () => {
+  it('hides a slide by its passage, keeps one slide shown, and saves a summary naming it', async () => {
     renderDesigner(LONG);
     await waitFor(() => expect(slides().length).toBeGreaterThan(2));
     const count = slides().length;
@@ -259,11 +267,17 @@ describe('SummaryDesigner', () => {
     await waitFor(() => expect(statuses()).toMatch(/1 slide · 1 hidden/));
     fireEvent.click(slides()[1]!);
     expect(hideSlide().disabled).toBe(true);
-    // Both keys are kept, so returning to Balanced hides its slide again.
+    // Both are kept, so returning to Balanced hides its slide again. Each is a
+    // summary that only hides its slide: a heading naming it, no points.
     await waitFor(() =>
-      expect(source.latest).toMatch(/"hidden":\["[0-9a-z]+-[0-9a-z]+","[0-9a-z]+-[0-9a-z]+"\]/),
+      expect(
+        source.latest.match(/^## Plan \{\[summary passage=[0-9a-z]+-[0-9a-z]+ hidden=true\]\}$/gm),
+      ).toHaveLength(2),
     );
+    expect(source.latest).not.toMatch(/hidden=true\]\}\n\n- /);
     expect(source.latest.match(/Each slide should carry/g)).toHaveLength(8);
+    // The one Balanced made is not in use at One slide per section, and says so.
+    expect(within(designer()).getByText('1 summary in the document is not in use')).toBeTruthy();
   });
 
   it('groups the slides under the block of the document each was made from', async () => {
@@ -296,6 +310,27 @@ describe('SummaryDesigner', () => {
     ]);
   });
 
+  it('opens the slide wording above the document text, and keeps it closed once closed', async () => {
+    renderDesigner(LONG);
+    await waitFor(() => expect(slides().length).toBeGreaterThan(2));
+    const wording = () =>
+      screen.queryByText('Customize slide wording (slides only)')?.closest('details') ?? null;
+    const original = () => screen.getByRole('region', { name: 'Original document text' });
+    expect(wording()?.open).toBe(true);
+    expect(screen.getByRole('textbox', { name: 'Slide headline' })).toBeTruthy();
+    expect(
+      wording()!.compareDocumentPosition(original()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    wording()!.open = false;
+    fireEvent(wording()!, new Event('toggle'));
+    // Only a section's opening slide has wording to change.
+    fireEvent.click(slides()[1]!);
+    expect(wording()).toBeNull();
+    fireEvent.click(slides()[0]!);
+    expect(wording()?.open).toBe(false);
+  });
+
   it('offers the same slides in the picker, with Previous and Next', async () => {
     renderDesigner(LONG);
     await waitFor(() => expect(slides().length).toBeGreaterThan(2));
@@ -326,7 +361,7 @@ describe('SummaryDesigner', () => {
     expect(source.latest).toBe(LONG);
 
     chooseOption(density(), 'concise');
-    await waitFor(() => expect(source.latest).toContain('"density":"concise"'));
+    await waitFor(() => expect(source.latest).toContain('squisq-summary-density: concise'));
     expect(source.latest.endsWith(LONG)).toBe(true);
 
     // An undo in Write puts the document back. The designer follows it, and
@@ -334,6 +369,96 @@ describe('SummaryDesigner', () => {
     act(() => source.set(LONG));
     await waitFor(() => expect(density().value).toBe('balanced'));
     expect(source.latest).toBe(LONG);
+  });
+
+  it('keeps your opening wording when the text changes, and saves nothing for an untouched field', async () => {
+    renderDesigner(DECK);
+    await waitFor(() => expect(slides().length).toBeGreaterThan(1));
+    const headline = screen.getByRole<HTMLInputElement>('textbox', { name: 'Slide headline' });
+    fireEvent.blur(headline);
+    fireEvent.blur(screen.getByRole('textbox', { name: 'Slide highlights, one per line' }));
+    expect(source.latest).toBe(DECK);
+
+    fireEvent.change(headline, { target: { value: 'March, together' } });
+    fireEvent.blur(headline);
+    await waitFor(() =>
+      expect(source.latest).toContain(
+        'Two teams share the work.\n\n## March, together {[summary]}\n\n## What ships',
+      ),
+    );
+    act(() => source.set(source.latest.replace('in March', 'in April')));
+    await waitFor(() => expect(preview().getAttribute('aria-label')).toMatch(/March, together/));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use automatic wording' }));
+    await waitFor(() => expect(source.latest).not.toContain('{[summary]}'));
+  });
+
+  it('follows a summary written by hand, and lists and removes one not in use', async () => {
+    renderDesigner(
+      `${DECK.replace('Two teams share the work.', 'Two teams share the work.\n\n## Typed by hand {[summary]}')}\n\n### Old {[summary passage=zzzz-1 hidden=true]}`,
+    );
+    await waitFor(() => expect(preview().getAttribute('aria-label')).toMatch(/Typed by hand/));
+    const unused = await within(designer()).findByText('1 summary in the document is not in use');
+    fireEvent.click(unused);
+    fireEvent.click(within(designer()).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(source.latest).not.toContain('zzzz-1'));
+    expect(source.latest).toContain('## Typed by hand {[summary]}');
+  });
+
+  it('converts a design saved the old way on its first change, keeping the deck', async () => {
+    const doc = markdownToDoc(parseMarkdown(DECK));
+    const plan = createPresentationPlan(doc);
+    const legacy = {
+      ...defaultPresentationHints(),
+      blocks: [
+        {
+          blockId: 'what-ships',
+          ai: [
+            {
+              source: plan.sourceText.slice(plan.beats[1]!.sourceStart, plan.beats[1]!.sourceEnd),
+              layout: 'statement' as const,
+              headline: 'Everything ships together',
+              points: [],
+            },
+          ],
+        },
+      ],
+    };
+    const md = `---\n${PRESENTATION_HINTS_KEY}: ${serializePresentationHints(legacy)}\n---\n${DECK}`;
+    renderDesigner(md);
+    await waitFor(() => expect(slides()[1]!.textContent).toContain('Everything ships together'));
+    expect(source.latest).toBe(md);
+
+    chooseOption(density(), 'detailed');
+    await waitFor(() => expect(source.latest).not.toContain(PRESENTATION_HINTS_KEY));
+    expect(source.latest).toContain('squisq-summary-density: detailed');
+    expect(source.latest).toMatch(
+      /### Everything ships together \{\[summary passage=[0-9a-z]+-[0-9a-z]+ origin=ai layout=statement points=none\]\}/,
+    );
+    expect(statuses()).toContain('Slide summaries are now saved in the document');
+  });
+
+  it('resets every summary, setting and key in one step', async () => {
+    renderDesigner(
+      `---\nsquisq-summary-density: concise\n---\n${DECK.replace('# Launch plan', '# Launch plan {[slideLayout=cards]}')}\n\n### Old {[summary passage=zzzz-1 hidden=true]}`,
+    );
+    await waitFor(() => expect(slides().length).toBeGreaterThan(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Reset design' }));
+    // The document ends where its content does, with one line ending.
+    await waitFor(() => expect(source.latest).toBe(`${DECK}\n`));
+  });
+
+  it('never changes what is narrated', async () => {
+    renderDesigner(LONG);
+    await waitFor(() => expect(slides().length).toBeGreaterThan(2));
+    const spoken = () =>
+      buildNarrationScript(markdownToDoc(parseMarkdown(source.latest))).sourceText;
+    const before = spoken();
+    fireEvent.click(slides()[1]!);
+    fireEvent.click(hideSlide());
+    chooseOption(layout(), 'cards');
+    await waitFor(() => expect(source.latest).toContain('slideLayout=cards'));
+    expect(spoken()).toBe(before);
   });
 
   it('keeps the design but changes nothing when read-only', async () => {
@@ -477,11 +602,180 @@ describe('SummaryDesigner with an assistant', () => {
     fireEvent.click(suggest);
 
     await waitFor(() => expect(statuses()).toContain('AI summaries are ready to review.'));
-    await waitFor(() => expect(source.latest).toContain('A plan for March'));
+    await waitFor(() =>
+      expect(source.latest).toMatch(
+        /^## A plan for March \{\[summary passage=[0-9a-z]+-[0-9a-z]+ origin=ai layout=\w+/m,
+      ),
+    );
     expect(slides()[0]!.textContent).toContain('A plan for March');
     expect(slides()[0]!.textContent).toContain('Suggested by AI');
     expect(report).toHaveBeenCalled();
     expect(report.mock.calls[report.mock.calls.length - 1]?.[0]).toContain('A plan for March');
     expect(screen.getByRole('button', { name: /^Report \d+$/ })).toBeTruthy();
+  });
+});
+
+describe('SummaryDesigner with a block on the slide before it', () => {
+  const ROLLED = REPORT.replace('{[barChart]}', '{[barChart slideLayout=feature]}');
+  const WITH_TERMS = `${ROLLED}\n\n## Terms\n\nNet thirty days. Prices are fixed for the year.`;
+  const group = (name: RegExp) =>
+    within(screen.getByRole('navigation', { name: 'Presentation slides' })).getByRole('group', {
+      name: name,
+    });
+
+  it('offers to show a chart on the last slide of the section before it, saving only the tag', async () => {
+    renderDesigner(REPORT);
+    await waitFor(() => expect(slides().length).toBeGreaterThan(1));
+    fireEvent.click(within(group(/^By region/)).getAllByRole('button')[0]!);
+    const offered = Array.from(layout().options).map((option) => option.textContent);
+    expect(offered).toContain('On the last slide of “Results” (Bar Chart)');
+    expect(offered.indexOf('On the last slide of “Results” (Bar Chart)')).toBe(
+      offered.indexOf('As authored (Bar Chart)') + 1,
+    );
+
+    chooseOption(layout(), 'feature');
+    await waitFor(() => expect(source.latest).toBe(ROLLED));
+    await waitFor(() => expect(statuses()).toMatch(/\d+ slides? · 1 on another slide/));
+    expect(screen.getByText(/still narrated while that slide stays up/)).toBeTruthy();
+
+    // Switching back restores the document exactly.
+    chooseOption(layout(), '');
+    await waitFor(() => expect(source.latest).toBe(REPORT));
+    await waitFor(() => expect(statuses()).not.toContain('on another slide'));
+  });
+
+  it('lists it without a number, tagged with the slide carrying it, and previews that slide', async () => {
+    renderDesigner(WITH_TERMS);
+    await waitFor(() => expect(statuses()).toContain('1 on another slide'));
+    const entry = within(group(/^By region/)).getByRole('button');
+    expect(group(/^By region/).textContent).toContain('On another slide');
+    const results = within(group(/^Results/)).getAllByRole('button');
+    const carrier = results[results.length - 1]!;
+    const carrierNumber = Number(/^(\d+)\./.exec(carrier.textContent ?? '')?.[1]);
+    expect(entry.textContent).not.toMatch(/^\d+\./);
+    expect(entry.textContent).toContain('Bar Chart');
+    expect(entry.textContent).toContain(`On slide ${carrierNumber}`);
+    expect(carrier.textContent).toContain('Carries Bar Chart');
+    // The next slide numbers as if the section had none.
+    expect(within(group(/^Terms/)).getByRole('button').textContent).toMatch(
+      new RegExp(`^${carrierNumber + 1}\\.`),
+    );
+
+    fireEvent.click(entry);
+    expect(preview().getAttribute('aria-label')).toMatch(
+      new RegExp(`^Slide ${carrierNumber}, which carries this section`),
+    );
+    expect(preview().childElementCount).toBeGreaterThan(0);
+    // It has no slide of its own to hide, word, or add supporting slides to.
+    expect(
+      screen.queryByRole('checkbox', { name: 'Hide this slide in the presentation' }),
+    ).toBeNull();
+    expect(screen.queryByText('Customize slide wording (slides only)')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Supporting slides for this section' })).toBe(
+      null,
+    );
+    expect(layout().value).toBe('feature');
+  });
+
+  it('crosses it with the arrow keys like any slide', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    renderDesigner(WITH_TERMS);
+    await waitFor(() => expect(statuses()).toContain('1 on another slide'));
+    const all = slides();
+    const at = all.indexOf(within(group(/^By region/)).getByRole('button'));
+    fireEvent.click(all[at - 1]!);
+    fireEvent.keyDown(all[at - 1]!, { key: 'ArrowRight' });
+    expect(slides()[at]!.getAttribute('aria-current')).toBe('step');
+    fireEvent.keyDown(slides()[at]!, { key: 'ArrowRight' });
+    expect(slides()[at + 1]!.getAttribute('aria-current')).toBe('step');
+    expect(scroll).toHaveBeenCalled();
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  it('says why it has a slide of its own when nothing before it can carry it', async () => {
+    const first = [
+      '## By region {[barChart slideLayout=feature]}',
+      '',
+      '| Region | Sales |',
+      '| --- | --- |',
+      '| North | 40 |',
+      '',
+      '## Terms',
+      '',
+      'Net thirty days.',
+    ].join('\n');
+    renderDesigner(first);
+    await waitFor(() => expect(slides().length).toBeGreaterThan(1));
+    expect(
+      screen.getByText(
+        'Nothing comes before this section to carry it, so it has a slide of its own.',
+      ),
+    ).toBeTruthy();
+    expect(layout().getAttribute('aria-describedby')).toContain(
+      screen.getByText(/^Nothing comes before/).id,
+    );
+    expect(statuses()).not.toContain('on another slide');
+    cleanup();
+
+    renderDesigner(ROLLED.replace('# Results', '# Results {[slideLayout=authored]}'));
+    await waitFor(() => expect(slides().length).toBeGreaterThan(1));
+    fireEvent.click(within(group(/^By region/)).getByRole('button'));
+    expect(
+      screen.getByText('“Results” is shown as authored, so this section has a slide of its own.'),
+    ).toBeTruthy();
+  });
+
+  it('previews a block that reads its rows from a file', async () => {
+    const sidecar = 'report_files/data/report.csv';
+    const container = new MemoryContentContainer();
+    await container.writeFile(
+      sidecar,
+      new TextEncoder().encode('Name,Value\nAlpha,100\nBeta,200\n'),
+      'text/csv',
+    );
+    renderDesigner(
+      [
+        '# Results',
+        '',
+        'Revenue grew 40% last year. Most of it came from new customers.',
+        '',
+        `## Totals {[dataTable src=${sidecar} slideLayout=authored]}`,
+        '',
+        `[report.csv](${sidecar})`,
+      ].join('\n'),
+      { container },
+    );
+    await waitFor(() => expect(slides().length).toBeGreaterThan(1));
+    fireEvent.click(within(group(/^Totals/)).getByRole('button'));
+    await waitFor(() => expect(preview().textContent).toContain('Alpha'));
+  });
+
+  it('never saves AI wording for a section on another slide', async () => {
+    const assistant: SummarizationAssistant = {
+      readiness: () => null,
+      // A host that asks about every slide, against Squisq's own rule.
+      suggestSlides: async (plan: PresentationPlan, options: SuggestSlidesOptions) => {
+        plan.beats.forEach((beat, index) =>
+          options.onBeat(index, { ...beat, headline: `Reworded ${index}` }),
+        );
+        options.onProgress(plan.beats.length, plan.beats.length);
+      },
+    };
+    renderDesigner(WITH_TERMS, { assistant });
+    await waitFor(() => expect(statuses()).toContain('1 on another slide'));
+    const suggest = await screen.findByRole<HTMLButtonElement>('button', {
+      name: 'Suggest with AI',
+    });
+    await waitFor(() => expect(suggest.disabled).toBe(false));
+    fireEvent.click(suggest);
+    await waitFor(() => expect(source.latest).toContain('origin=ai'));
+    await waitFor(() => expect(statuses()).toContain('Kept automatic summaries for 1 slides'));
+    const regionPart = source.latest.slice(
+      source.latest.indexOf('## By region'),
+      source.latest.indexOf('## Terms'),
+    );
+    expect(regionPart).not.toContain('{[summary');
+    expect(source.latest).toContain('## By region {[barChart slideLayout=feature]}');
   });
 });

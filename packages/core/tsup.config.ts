@@ -25,6 +25,7 @@ export default defineConfig({
     'proof/index': 'src/proof/index.ts',
     'review/index': 'src/review/index.ts',
     'table/index': 'src/table/index.ts',
+    'study/index': 'src/study/index.ts',
   },
   format: ['esm'],
   dts: true,

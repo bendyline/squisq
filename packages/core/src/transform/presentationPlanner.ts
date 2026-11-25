@@ -6,7 +6,10 @@ import {
   defaultPresentationHints,
   parsePresentationHints,
   presentationPassageKey,
+  slideHintHasWording,
+  type PresentationBlockHint,
   type PresentationHints,
+  type PresentationSlideHint,
 } from './presentationHints.js';
 import type { Doc } from '../schemas/Doc.js';
 import { matchNumberHighlight } from '../recommend/numberHighlight.js';
@@ -16,11 +19,20 @@ import { transformNarratedSegment } from './narratedSegment.js';
 import { conceptTemplate } from './conceptReveal.js';
 import { shapeIsStated } from '../recommend/listShape.js';
 import { flattenRenderableBlocks } from '../doc/markdownToDoc.js';
-import { resolveTemplateName } from '../doc/templates/templateNames.js';
-import { collectPresentationMedia, type PresentationMediaItem } from './presentationMedia.js';
+import { realChildren } from '../doc/accessoryBlocks.js';
+import { isFeatureBlockTemplate, resolveTemplateName } from '../doc/templates/templateNames.js';
+import {
+  collectPresentationMedia,
+  type PresentationBlockMediaItem,
+  type PresentationMediaItem,
+  type PresentationNodeMediaItem,
+} from './presentationMedia.js';
 import {
   AUTHORED_PRESENTATION_LAYOUT,
+  FEATURE_PRESENTATION_LAYOUT,
   PRESENTATION_LIMITS,
+  isSummaryPresentationLayout,
+  presentationBeatIsWorded,
   presentationBeatExtras,
   presentationLayoutFits,
   type PresentationBeat,
@@ -219,7 +231,8 @@ function featureSpans(
   const spans: Array<[number, number]> = [];
   let cursor = from;
   for (const item of items) {
-    if (item.kind === 'image') continue;
+    // A picture has no words, and a carried block's words are its own passage.
+    if (item.kind === 'image' || item.kind === 'block') continue;
     const text = extractPlainText(item.node).trim();
     const at = text ? sourceText.indexOf(text, cursor) : -1;
     if (at < 0 || at + text.length > to) continue;
@@ -237,10 +250,55 @@ export function createPresentationPlan(
   doc: Doc,
   hints: PresentationHints = defaultPresentationHints(),
 ): PresentationPlan {
-  const plan = planPresentation(doc, hints);
-  if (plan.beats.length > PRESENTATION_LIMITS.beats)
-    throw new Error(tooManySlides(doc, hints, plan.beats.length));
-  return plan;
+  return createPresentationPlanReport(doc, hints).plan;
+}
+
+/** Why a section asked to be shown on the slide before it has a slide of its own. */
+export type PresentationRollupProblem =
+  /** Its block does not draw a picture (`isFeatureBlockTemplate`). */
+  | 'not-eligible'
+  /** No section comes before it. */
+  | 'no-section-before'
+  /** The section before it is shown as authored, which carries nothing. */
+  | 'section-before-authored'
+  /** Every slide of the section before it is hidden. */
+  | 'section-before-hidden'
+  /** The last slide of the section before it already carries four things. */
+  | 'no-room';
+
+/** A section asked to be shown on the slide of the section before it (`slideLayout=feature`). */
+export interface PresentationRollup {
+  /** The section's block. */
+  blockId: string;
+  /** Its beat: `feature`, or `authored` when it has a slide of its own. */
+  beatId?: string;
+  /** The section before it, whose slide carries it (or would). */
+  ownerId?: string;
+  /** The beat that carries it. */
+  carrierBeatId?: string;
+  /** Why it has a slide of its own instead. */
+  problem?: PresentationRollupProblem;
+}
+
+export interface PresentationPlanReport {
+  plan: PresentationPlan;
+  /** Every section asked to be shown on the slide before it, in document order. */
+  rollups: PresentationRollup[];
+}
+
+/**
+ * The deck for these hints, and where each section asked to be shown on the
+ * slide before it ended up. A section that cannot be carried has a slide of
+ * its own, exactly as `slideLayout=authored` would give it, and says why.
+ */
+export function createPresentationPlanReport(
+  doc: Doc,
+  hints: PresentationHints = defaultPresentationHints(),
+): PresentationPlanReport {
+  const report = planPresentation(doc, hints);
+  if (report.plan.beats.length > PRESENTATION_LIMITS.beats)
+    throw new Error(tooManySlides(doc, hints, report.plan.beats.length));
+  return report;
 }
 /** Each density as the summary designer names it, from the shortest passages
  * per slide to the longest. */
@@ -261,7 +319,7 @@ function tooManySlides(doc: Doc, hints: PresentationHints, slides: number): stri
     return `This document makes ${slides} slides, one per section, and a presentation holds at most ${limit}. Split it into shorter documents.`;
   const at = DENSITY_NAMES.findIndex(([density]) => density === hints.density);
   const fits = DENSITY_NAMES.slice(at + 1)
-    .filter(([density]) => planPresentation(doc, { ...hints, density }).beats.length <= limit)
+    .filter(([density]) => planPresentation(doc, { ...hints, density }).plan.beats.length <= limit)
     .map(([, name]) => name);
   const choice =
     fits.length > 2
@@ -273,8 +331,49 @@ function tooManySlides(doc: Doc, hints: PresentationHints, slides: number): stri
       : 'Split it into shorter documents.'
   }`;
 }
-/** The deck for these hints, however many slides it makes. */
-function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan {
+/**
+ * The author's wording for a section's opening slide: its keyless summary —
+ * which stays when the section's text changes — or, from a legacy design,
+ * wording saved while the section still reads `sectionText`.
+ */
+function openingWording(
+  hint: PresentationBlockHint | undefined,
+  sectionText: string,
+): { headline?: string; points?: string[] } | undefined {
+  const keyless = hint?.slides?.find((slide) => slide.passage === undefined && !slide.origin);
+  if (keyless && (keyless.headline !== undefined || keyless.points !== undefined))
+    return {
+      ...(keyless.headline !== undefined ? { headline: keyless.headline } : {}),
+      ...(keyless.points !== undefined ? { points: keyless.points } : {}),
+    };
+  return hint?.wording?.source === sectionText ? hint.wording : undefined;
+}
+/**
+ * The deck for these hints, however many slides it makes. A section that
+ * asked to be shown on the slide before it but cannot be carried there is
+ * planned again as authored, until every remaining one is carried.
+ */
+function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlanReport {
+  const refused = new Map<string, PresentationRollupProblem>();
+  for (;;) {
+    const attempt = planOnce(doc, hints, refused);
+    if (!attempt.refusals.size) return { plan: attempt.plan, rollups: attempt.rollups };
+    for (const [blockId, problem] of attempt.refusals) refused.set(blockId, problem);
+  }
+}
+
+interface PlanAttempt {
+  plan: PresentationPlan;
+  rollups: PresentationRollup[];
+  /** Sections this attempt could not carry; planned again as authored. */
+  refusals: Map<string, PresentationRollupProblem>;
+}
+
+function planOnce(
+  doc: Doc,
+  hints: PresentationHints,
+  refused: ReadonlyMap<string, PresentationRollupProblem>,
+): PlanAttempt {
   if (!parsePresentationHints(hints)) throw new Error('The slide hints are invalid.');
   const script = buildNarrationScript(doc);
   if (!script.sourceText.trim()) throw new Error('Add some text before making a presentation.');
@@ -282,13 +381,6 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
     throw new Error(
       'This document is too long for one presentation. Split it into shorter documents.',
     );
-  // A section's features (tables, pictures, videos and diagrams) accompany its
-  // slides; each picture is shown once, in the narrated section that contains
-  // it (or the nearest narrated section before it).
-  const sectionMedia = collectPresentationMedia(
-    doc,
-    script.blocks.map((block) => block.blockId),
-  );
   // A section whose body is a list already drawn as what it is a picture of
   // (a process, a cycle, key numbers: an author's tag, or a list whose shape
   // is clear) keeps that drawing. Dealt into summary cards it would lose the
@@ -308,10 +400,63 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
             block.contents[0]!.type === 'list') ||
           (!block.autoTemplate &&
             HAND_DRAWN_TEMPLATES.has(resolveTemplateName(block.template ?? '')) &&
-            !!block.children?.length),
+            realChildren(block).length > 0),
       )
       .map((block) => block.id),
   );
+  // Sections shown on the slide of the section before them: a block that
+  // draws a picture, after a section that makes slides of its own. Decided
+  // before anything else, since it decides which section owns what.
+  const blocksById = new Map(flattenRenderableBlocks(doc.blocks).map((block) => [block.id, block]));
+  const hintOf = (blockId: string) => hints.blocks.find((item) => item.blockId === blockId);
+  const rollupOwners = new Map<string, string>();
+  const rollups: PresentationRollup[] = [];
+  let previous: { blockId: string; authored: boolean } | undefined;
+  for (const block of script.blocks) {
+    const hint = hintOf(block.blockId);
+    if (hint?.layout === FEATURE_PRESENTATION_LAYOUT) {
+      const problem: PresentationRollupProblem | undefined =
+        refused.get(block.blockId) ??
+        (!isFeatureBlockTemplate(blocksById.get(block.blockId)?.template)
+          ? 'not-eligible'
+          : !previous
+            ? 'no-section-before'
+            : previous.authored
+              ? 'section-before-authored'
+              : undefined);
+      if (!problem) {
+        rollupOwners.set(block.blockId, previous!.blockId);
+        rollups.push({ blockId: block.blockId, ownerId: previous!.blockId });
+        continue;
+      }
+      // It has a slide of its own, as authored.
+      rollups.push({
+        blockId: block.blockId,
+        ...(previous ? { ownerId: previous.blockId } : {}),
+        problem,
+      });
+      previous = { blockId: block.blockId, authored: true };
+      continue;
+    }
+    const source = script.sourceText.slice(block.charStart, block.charEnd);
+    previous = {
+      blockId: block.blockId,
+      authored:
+        hint?.layout === AUTHORED_PRESENTATION_LAYOUT ||
+        (hint?.layout === undefined &&
+          !openingWording(hint, source) &&
+          drawnLists.has(block.blockId)),
+    };
+  }
+  // A section's features (tables, pictures, videos and diagrams) accompany its
+  // slides; each picture is shown once, in the narrated section that contains
+  // it (or the nearest narrated section before it).
+  const sectionMedia = collectPresentationMedia(
+    doc,
+    script.blocks.map((block) => block.blockId),
+    new Set(rollupOwners.keys()),
+  );
+  const refusals = new Map<string, PresentationRollupProblem>();
   const beats: PresentationBeat[] = [];
   /** Where the deck last showed a key number or a big statement. */
   let lastStat = -Infinity;
@@ -326,14 +471,33 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
     const source = script.sourceText.slice(block.charStart, block.charEnd);
     const words = [...source.matchAll(/\S+/gu)];
     const hint = hints.blocks.find((item) => item.blockId === block.blockId);
-    const wording = hint?.wording?.source === source ? hint.wording : undefined;
+    const wording = openingWording(hint, source);
     const inbetweens = !perSection && (hint?.inbetweens ?? hints.inbetweens);
     const heading = block.heading?.trim();
     const headingEnd = block.charStart + (heading?.length ?? 0);
+    // A section shown on the slide before it is one beat for its whole
+    // narration, never a slide: the slide carrying it stays up meanwhile.
+    if (rollupOwners.has(block.blockId)) {
+      if (!words.length) continue;
+      const start = block.charStart + words[0]!.index;
+      const last = words[words.length - 1]!;
+      const end = block.charStart + last.index + last[0].length;
+      beats.push({
+        id: `beat-${beats.length + 1}`,
+        sourceStart: start,
+        sourceEnd: end,
+        layout: FEATURE_PRESENTATION_LAYOUT,
+        headline: headlineText(heading || sentencesIn(script.sourceText, start, end)[0]!.text),
+        points: [],
+      });
+      continue;
+    }
     // An authored section is one slide for its whole narration: its own block,
     // never summarized, split, or given the section's media a second time.
+    // (So is a section asked to be shown on the slide before it that cannot be.)
     if (
       hint?.layout === AUTHORED_PRESENTATION_LAYOUT ||
+      hint?.layout === FEATURE_PRESENTATION_LAYOUT ||
       (hint?.layout === undefined && !wording && drawnLists.has(block.blockId))
     ) {
       if (!words.length) continue;
@@ -350,7 +514,7 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
       });
       continue;
     }
-    const preferred: PresentationLayout | undefined = hint?.layout;
+    const preferred = isSummaryPresentationLayout(hint?.layout) ? hint.layout : undefined;
     const media = sectionMedia.get(block.blockId) ?? [];
     const spans = featureSpans(script.sourceText, block.charStart, block.charEnd, media);
     const inFeature = (from: number, to: number) => spans.some(([s, e]) => from < e && to > s);
@@ -367,7 +531,7 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
       }
     }
     // A section's images go on its closing slides, never on the deck's opening title.
-    const images = media.filter((item) => item.kind === 'image');
+    const images = media.filter((item): item is PresentationNodeMediaItem => item.kind === 'image');
     const opensDeck = beats.length === 0;
     for (const [chunk, [first, last]] of chunks.entries()) {
       const fromEnd = chunks.length - 1 - chunk;
@@ -579,20 +743,36 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
       });
     }
   }
+  // Each section's opening slide: where its keyless summary (your wording,
+  // whatever the passage now says) applies.
+  const openings = new Set<string>();
+  for (const block of script.blocks) {
+    const first = beats.find(
+      (beat) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
+    );
+    if (first) openings.add(first.id);
+  }
   // A hidden slide stays in the plan so the designer can show it again; the
   // deck leaves it out, so it carries none of the section's visuals.
   for (const block of script.blocks) {
-    const hidden = hints.blocks.find((item) => item.blockId === block.blockId)?.hidden;
-    if (!hidden) continue;
-    for (const beat of beats)
+    const hint = hints.blocks.find((item) => item.blockId === block.blockId);
+    const legacy = hint?.hidden;
+    const hidden = hint?.slides?.filter((slide) => slide.hidden);
+    if (!legacy?.length && !hidden?.length) continue;
+    for (const beat of beats) {
+      if (beat.sourceStart < block.charStart || beat.sourceStart >= block.charEnd) continue;
+      // A section shown on another slide has no slide to hide.
+      if (beat.layout === FEATURE_PRESENTATION_LAYOUT) continue;
+      const key = presentationPassageKey(script.sourceText.slice(beat.sourceStart, beat.sourceEnd));
       if (
-        beat.sourceStart >= block.charStart &&
-        beat.sourceStart < block.charEnd &&
-        hidden.includes(
-          presentationPassageKey(script.sourceText.slice(beat.sourceStart, beat.sourceEnd)),
+        legacy?.includes(key) ||
+        hidden?.some(
+          (slide) =>
+            slide.passage === key || (slide.passage === undefined && openings.has(beat.id)),
         )
       )
         beat.hidden = true;
+    }
   }
   const closing = beats[beats.length - 1];
   if (
@@ -621,22 +801,34 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
   const suggested = new Set<string>();
   let origin: PresentationPlan['origin'] = 'automatic';
   for (const beat of beats) {
-    if (beat.layout === AUTHORED_PRESENTATION_LAYOUT) continue;
+    // Only summaries are worded: not a section shown as authored or on another slide.
+    if (!isSummaryPresentationLayout(beat.layout)) continue;
     const section = sectionOf(beat);
     const hint = hintFor(beat);
     const passage = script.sourceText.slice(beat.sourceStart, beat.sourceEnd);
-    const cached = hint?.ai?.find((item) => item.source === passage);
+    // This slide's summaries: the one keyed to its exact passage, and on a
+    // section's opening slide the keyless one.
+    const key = presentationPassageKey(passage);
+    const keyed = hint?.slides?.find((slide) => slide.passage === key);
+    const keyless = openings.has(beat.id)
+      ? hint?.slides?.find((slide) => slide.passage === undefined)
+      : undefined;
+    const cached =
+      [keyed, keyless].find((slide) => slide?.origin === 'ai') ??
+      hint?.ai?.find((item) => item.source === passage);
     if (cached && (cached.layout !== 'image' || beat.imageSrc)) {
-      beat.headline = cached.headline;
-      beat.points = [...cached.points];
-      beat.layout = cached.layout;
-      Object.assign(beat, presentationBeatExtras(cached.layout, cached));
+      if (cached.headline !== undefined) beat.headline = cached.headline;
+      if (cached.points !== undefined) beat.points = [...cached.points];
+      if (cached.layout) {
+        beat.layout = cached.layout;
+        Object.assign(beat, presentationBeatExtras(cached.layout, cached));
+      }
       suggested.add(beat.id);
       origin = 'ai';
     }
     // A deliberate author choice takes precedence over an AI suggestion; a
     // quote then shows the passage's own sentence, not the AI's wording.
-    const preferred = hint?.layout === AUTHORED_PRESENTATION_LAYOUT ? undefined : hint?.layout;
+    const preferred = isSummaryPresentationLayout(hint?.layout) ? hint.layout : undefined;
     if (preferred && !supportingOpeners.has(beat.id)) {
       const headline = (preferred === 'quote' && quotes.get(beat.id)) || beat.headline;
       if (
@@ -648,14 +840,31 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
         beat.headline = headline;
       }
     }
-    if (
+    // The author's wording wins over AI: the section's opening wording (its
+    // keyless summary, or legacy wording while the text still matches), then
+    // wording for this exact slide.
+    const manual = [keyless, keyed].filter(
+      (slide): slide is PresentationSlideHint =>
+        !!slide && !slide.origin && slideHintHasWording(slide),
+    );
+    const legacyOpening =
+      !manual.some((slide) => slide.passage === undefined) &&
       section &&
       beat.sourceStart === section.charStart &&
       hint?.wording?.source === script.sourceText.slice(section.charStart, section.charEnd)
-    ) {
-      beat.headline = hint.wording.headline ?? beat.headline;
-      beat.points = hint.wording.points ?? beat.points;
-      if (hint.wording.points) worded.add(beat.id);
+        ? hint.wording
+        : undefined;
+    for (const wording of [...(legacyOpening ? [legacyOpening] : []), ...manual]) {
+      if (wording.headline !== undefined) beat.headline = wording.headline;
+      if (wording.points !== undefined) {
+        beat.points = [...wording.points];
+        worded.add(beat.id);
+      }
+      const layout = 'layout' in wording ? wording.layout : undefined;
+      if (layout && (layout !== 'image' || beat.imageSrc)) {
+        beat.layout = layout;
+        Object.assign(beat, presentationBeatExtras(layout, wording));
+      }
     }
     // Custom wording can leave a layout without what it shows (two sides of a
     // comparison, a number, the passage's exact words); say it plainly instead.
@@ -672,18 +881,54 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
   // deck's opener and image slides keep their own visual whenever the section
   // has other slides. A picture rides along only where no slide shows it
   // full-bleed (a hidden image slide's picture stays hidden with it).
+  //
+  // A block shown on the slide before it rides on the last shown slide of the
+  // section before it — that slide stays up while the block's own text is
+  // narrated. A picture slide there becomes a text slide, its picture riding
+  // with the block on that slide alone; the section's other slides are left
+  // as they are.
+  const carriers = new Map<string, PresentationBeat>();
+  /** The picture each carrier showed full-bleed before it carried a block. */
+  const displaced = new Map<string, string>();
+  for (const [blockId, ownerId] of rollupOwners) {
+    if (carriers.has(ownerId)) continue;
+    const owner = script.blocks.find((block) => block.blockId === ownerId)!;
+    const target = [...beats]
+      .reverse()
+      .find(
+        (beat) =>
+          beat.sourceStart >= owner.charStart &&
+          beat.sourceStart < owner.charEnd &&
+          presentationBeatIsWorded(beat),
+      );
+    if (!target) {
+      refusals.set(blockId, 'section-before-hidden');
+      continue;
+    }
+    if (target.layout === 'image') {
+      if (target.imageSrc) displaced.set(ownerId, target.imageSrc);
+      delete target.imageSrc;
+      const passage = script.sourceText.slice(target.sourceStart, target.sourceEnd);
+      target.layout = presentationLayoutFits('cards', target.headline, target.points, passage)
+        ? 'cards'
+        : 'statement';
+    }
+    carriers.set(ownerId, target);
+  }
   const fullBleed = new Set(beats.flatMap((beat) => (beat.imageSrc ? [beat.imageSrc] : [])));
   for (const block of script.blocks) {
     const items = (sectionMedia.get(block.blockId) ?? []).filter(
-      (item) => item.kind !== 'image' || !fullBleed.has(item.src!),
+      (item) =>
+        item.kind !== 'block' &&
+        (item.kind !== 'image' ||
+          (!fullBleed.has(item.src!) && displaced.get(block.blockId) !== item.src)),
     );
     if (!items.length) continue;
     const own = beats.filter(
       (beat) =>
         beat.sourceStart >= block.charStart &&
         beat.sourceStart < block.charEnd &&
-        beat.layout !== AUTHORED_PRESENTATION_LAYOUT &&
-        !beat.hidden,
+        presentationBeatIsWorded(beat),
     );
     if (!own.length) continue;
     const open = own.filter((beat) => beat !== beats[0] && beat.layout !== 'image');
@@ -701,6 +946,26 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
       if (refs.length) beat.media = refs;
     });
   }
+  // Then each carrier takes its blocks, first, as long as there is room.
+  for (const [ownerId, target] of carriers) {
+    const blocks = (sectionMedia.get(ownerId) ?? []).filter(
+      (item): item is PresentationBlockMediaItem =>
+        item.kind === 'block' && rollupOwners.get(item.block.id) === ownerId,
+    );
+    const picture = (sectionMedia.get(ownerId) ?? []).find(
+      (item) => item.kind === 'image' && item.src === displaced.get(ownerId),
+    );
+    const existing = [...(picture ? [picture.ref] : []), ...(target.media ?? [])];
+    const room = Math.max(0, PRESENTATION_LIMITS.mediaPerBeat - existing.length);
+    for (const overflow of blocks.slice(room)) refusals.set(overflow.block.id, 'no-room');
+    const fitting = blocks.slice(0, room);
+    const carried = [...fitting.map((item) => item.ref), ...existing];
+    if (carried.length) target.media = carried;
+    for (const item of fitting) {
+      const rollup = rollups.find((entry) => entry.blockId === item.block.id);
+      if (rollup) rollup.carrierBeatId = target.id;
+    }
+  }
   const mediaKinds = new Map(
     [...sectionMedia.values()].flatMap((items) => items.map((item) => [item.ref, item.kind])),
   );
@@ -711,7 +976,8 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
     // and a timeline cut to two dates ends early (2026-11-12). A table takes
     // the slide's width, so beside one every layout is words above it.
     const drawn =
-      !!conceptTemplate(beat.layout) && !beat.media.some((ref) => mediaKinds.get(ref) === 'table');
+      !!conceptTemplate(beat.layout) &&
+      !beat.media.some((ref) => mediaKinds.get(ref) === 'table' || mediaKinds.get(ref) === 'block');
     // A feature needs the room, so the words beside it are fewer and shorter;
     // points the author typed stand as written.
     if (!worded.has(beat.id) && !drawn) {
@@ -742,5 +1008,18 @@ function planPresentation(doc: Doc, hints: PresentationHints): PresentationPlan 
     delete beat.yAxis;
     Object.assign(beat, extras);
   }
-  return { version: 1, sourceText: script.sourceText, origin, beats };
+  for (const rollup of rollups) {
+    const section = script.blocks.find((block) => block.blockId === rollup.blockId);
+    const beat =
+      section &&
+      beats.find(
+        (item) => item.sourceStart >= section.charStart && item.sourceStart < section.charEnd,
+      );
+    if (beat) rollup.beatId = beat.id;
+  }
+  return {
+    plan: { version: 1, sourceText: script.sourceText, origin, beats },
+    rollups,
+    refusals,
+  };
 }

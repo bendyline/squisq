@@ -7,6 +7,7 @@
 import type { Block, Doc } from '../schemas/Doc.js';
 import type { MarkdownBlockNode } from '../markdown/types.js';
 import { flattenRenderableBlocks } from '../doc/markdownToDoc.js';
+import { realChildren } from '../doc/accessoryBlocks.js';
 import {
   extractEmbeddedVideos,
   extractImages,
@@ -21,7 +22,8 @@ import { isExplicitTreeLang } from '../doc/treeview/detect.js';
 import { parseTimeSeconds } from '../markdown/annotationCoercion.js';
 import { cloneData } from '../internal/immutable.js';
 
-export interface PresentationMediaItem {
+/** A visual in a section's body: a video, a diagram fence, a table, a picture. */
+export interface PresentationNodeMediaItem {
   /** `<section block id>#<index>` for videos and diagrams, `#table-<index>` and
    * `#image-<index>` for tables and pictures; stable while the section's
    * visuals are unchanged. */
@@ -37,6 +39,21 @@ export interface PresentationMediaItem {
   src?: string;
 }
 
+/**
+ * A whole block shown on the slide of the section before it
+ * (`slideLayout=feature`): a chart, a table, a diagram, drawn by its own
+ * template. Ref `<section block id>#block-<index>`.
+ */
+export interface PresentationBlockMediaItem {
+  ref: string;
+  kind: 'block';
+  continuous: true;
+  /** The block as authored. */
+  block: Block;
+}
+
+export type PresentationMediaItem = PresentationNodeMediaItem | PresentationBlockMediaItem;
+
 /** Each block's own pictures. Children follow their parent in the flattened
  * order, so pictures are claimed children-first; a container template keeps
  * the pictures of its nested parts. */
@@ -51,7 +68,8 @@ export function presentationBlockImages(
       seen.add(image.src);
       return true;
     }),
-    ...(block.children ?? []).flatMap(claim),
+    // A summary's pictures are not the section's.
+    ...realChildren(block).flatMap(claim),
   ];
   for (const block of [...flattenRenderableBlocks(doc.blocks)].reverse())
     own.set(block.id, claim(block));
@@ -60,7 +78,7 @@ export function presentationBlockImages(
 
 function mediaKind(
   node: MarkdownBlockNode,
-): Omit<PresentationMediaItem, 'ref' | 'node' | 'src'> | null {
+): Omit<PresentationNodeMediaItem, 'ref' | 'node' | 'src'> | null {
   if (node.type === 'table') return { kind: 'table', continuous: true };
   if (node.type === 'code')
     return isPictureFence(node) ||
@@ -81,21 +99,37 @@ function mediaKind(
 
 /** Each section's visuals in source order (a block's pictures after its other
  * visuals), claimed like images: a nested block's visuals belong to the
- * nearest narrated section at or before it. */
+ * nearest narrated section at or before it.
+ *
+ * `rollupIds` are sections shown on the slide of the section before them
+ * (`slideLayout=feature`). Each is never an owner: it becomes one `block`
+ * item of the section that owns its place, and its own body visuals stay
+ * inside it, drawn by its template. */
 export function collectPresentationMedia(
   doc: Doc,
   sectionIds: string[],
+  rollupIds: ReadonlySet<string> = new Set(),
 ): Map<string, PresentationMediaItem[]> {
-  const sections = new Set(sectionIds);
+  const sections = new Set(sectionIds.filter((id) => !rollupIds.has(id)));
   const result = new Map<string, PresentationMediaItem[]>();
   const pictures = presentationBlockImages(doc);
-  let owner = sectionIds[0];
+  let owner = sectionIds.find((id) => !rollupIds.has(id));
   for (const block of flattenRenderableBlocks(doc.blocks)) {
     if (sections.has(block.id)) owner = block.id;
     if (!owner) continue;
     const items = result.get(owner) ?? [];
     const count = (kind: PresentationMediaItem['kind']) =>
       items.filter((item) => item.kind === kind).length;
+    if (rollupIds.has(block.id)) {
+      items.push({
+        kind: 'block',
+        continuous: true,
+        ref: `${owner}#block-${count('block')}`,
+        block,
+      });
+      result.set(owner, items);
+      continue;
+    }
     for (const node of block.contents ?? []) {
       const kind = mediaKind(node);
       if (!kind) continue;
@@ -143,7 +177,7 @@ function videoElements(node: unknown, found: Array<Record<string, unknown>> = []
  * first slide showing it: a video picks up where that slide left off, and is
  * dropped once its authored out-point has passed. */
 export function presentationMediaNode(
-  item: PresentationMediaItem,
+  item: PresentationNodeMediaItem,
   elapsed: number,
 ): MarkdownBlockNode | null {
   const node = cloneData(item.node);

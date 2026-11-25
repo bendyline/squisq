@@ -18,7 +18,7 @@ import Editor, { type OnMount, type OnChange, type BeforeMount } from '@monaco-e
 import type * as monaco from 'monaco-editor';
 import { wikiQueryAt, validWikiSuggestions } from './wikiSuggestions';
 import { useEditorContext } from './EditorContext';
-import { getAvailableTemplates } from '@bendyline/squisq/doc';
+import { ACCESSORY_BLOCK_TYPES, getAvailableTemplates } from '@bendyline/squisq/doc';
 import { suggestIcons, resolveIcon, iconGlyph } from '@bendyline/squisq/icons';
 import { BLOCK_META_KEY_DESCRIPTORS, tokenizeAttrTokens } from '@bendyline/squisq/markdown';
 import {
@@ -34,6 +34,7 @@ import {
 } from './rawEditorIsolation';
 import { useMonacoLoader } from './useMonacoLoader';
 import { monacoLanguagesForDocument, normalizeMonacoLanguage } from './monacoLanguageDetection';
+import { refoldAccessoryBlocks, registerMarkdownAccessoryFolding } from './monacoMarkdownFolding';
 import { useEditorContextMenuAvailable } from './EditorContextMenu';
 
 // Monaco is loaded lazily through `useMonacoLoader` (see the hook for the
@@ -85,6 +86,8 @@ const FULL_GUTTER = {
   lineNumbersMinChars: 5,
   glyphMargin: true,
   folding: true,
+  showFoldingControls: 'mouseover',
+  unfoldOnClickAfterEndOfLine: false,
   // Monaco's default is 10; 12 more become the breathing strip.
   lineDecorationsWidth: 22,
   breathing: 12,
@@ -94,7 +97,11 @@ const FULL_GUTTER = {
 const COMPACT_GUTTER = {
   lineNumbersMinChars: 2,
   glyphMargin: false,
-  folding: false,
+  // Folding stays on so a summary opens folded on a phone too; there is no
+  // room for the controls, so tapping a folded line's `⋯` opens it.
+  folding: true,
+  showFoldingControls: 'never',
+  unfoldOnClickAfterEndOfLine: true,
   // 4px number inset, 6px between the digits and the seam, 6px breathing.
   lineDecorationsWidth: 16,
   breathing: 6,
@@ -179,6 +186,20 @@ export interface RawEditorProps {
  * Raw markdown editor using Monaco Editor.
  * Binds to the shared EditorContext for source synchronization.
  */
+/**
+ * The `{[…]}` names Source suggests: every block template, then the
+ * accessory block types (a slide summary), which mark side information.
+ */
+function builtInTagEntries(): { name: string; detail: string }[] {
+  return [
+    ...getAvailableTemplates().map((name) => ({ name, detail: 'Block template' })),
+    ...Object.entries(ACCESSORY_BLOCK_TYPES).map(([name, info]) => ({
+      name,
+      detail: `${info.label}: ${info.description}`,
+    })),
+  ];
+}
+
 export function RawEditor({
   ariaLabel = 'Document source',
   monacoTheme = 'vs',
@@ -246,16 +267,10 @@ export function RawEditor({
   const docCustomTemplates = doc?.customTemplates;
   const templateEntriesRef = useRef<{ name: string; detail: string }[] | null>(null);
   if (templateEntriesRef.current === null) {
-    templateEntriesRef.current = getAvailableTemplates().map((name) => ({
-      name,
-      detail: 'Block template',
-    }));
+    templateEntriesRef.current = builtInTagEntries();
   }
   useEffect(() => {
-    const builtIns = getAvailableTemplates().map((name) => ({
-      name,
-      detail: 'Block template',
-    }));
+    const builtIns = builtInTagEntries();
     const seen = new Set(builtIns.map((b) => b.name));
     const custom = (docCustomTemplates ?? [])
       .filter((t) => !seen.has(t.name))
@@ -294,6 +309,7 @@ export function RawEditor({
   const handleMount: OnMount = useCallback(
     (editor, monaco) => {
       editorRef.current = editor;
+      registerMarkdownAccessoryFolding(monaco);
       setMonacoEditor(editor);
       const selection = fallbackSelection.current;
       const model = editor.getModel();
@@ -804,6 +820,8 @@ export function RawEditor({
         isExternalUpdate.current = true;
         editor.setValue(editorSource);
         isExternalUpdate.current = false;
+        // A new text from outside opens with its summaries folded, as on open.
+        refoldAccessoryBlocks(editor);
       }
     }
   }, [editorSource]);
@@ -977,6 +995,9 @@ export function RawEditor({
           // EditorShell owns one consistent, host-extensible menu across
           // Source, Write, and Preview. Proofing still intercepts squiggles.
           contextmenu: !contextMenuOwnedByShell,
+          // Slide summaries (accessory blocks) open folded; see
+          // monacoMarkdownFolding.ts.
+          foldingImportsByDefault: true,
           readOnly,
           domReadOnly: readOnly,
         }}

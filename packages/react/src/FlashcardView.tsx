@@ -28,8 +28,10 @@ import {
   type Flashcard,
   type FlashcardChoice,
   type FlashcardFace,
+  type FlashcardKind,
   type FlashcardSourceMode,
 } from '@bendyline/squisq/doc';
+import { SeededRandom, hashString } from '@bendyline/squisq/random';
 import type { FenceRendererMap } from '@bendyline/squisq/fence';
 import { MarkdownRenderer, type CodeBlockCopyHandler } from './MarkdownRenderer';
 import { BlockRenderer } from './BlockRenderer';
@@ -64,11 +66,64 @@ export interface FlashcardViewProps {
    * its Retry missed and Study again buttons, which are that screen's content.
    */
   renderControls?: (controls: FlashcardControls) => ReactNode;
+  /** Study only these kinds of card (default: every kind). */
+  kinds?: readonly FlashcardKind[];
+  /** A basic card was rated. */
+  onRate?: (event: FlashcardRateEvent) => void;
+  /** A multiple-choice card was answered, or its answer shown unchosen (`choiceId` null). */
+  onAnswer?: (event: FlashcardAnswerEvent) => void;
+  /** The last card of a session was passed and the summary shows. */
+  onComplete?: (event: FlashcardCompleteEvent) => void;
 }
 
 /** How a person rates a basic card once its answer shows. */
 export type FlashcardRating = 'again' | 'got-it';
 type CardRating = FlashcardRating;
+
+/**
+ * The card an event is about. `id` lasts: a study card's key stays the same
+ * when cards are reordered, moved or their answers fixed, so a host can keep
+ * progress against it.
+ */
+export interface FlashcardCardRef {
+  id: string;
+  kind: FlashcardKind;
+  sourceBlockId: string;
+  ownerBlockId?: string;
+}
+
+export interface FlashcardRateEvent {
+  card: FlashcardCardRef;
+  rating: FlashcardRating;
+  /** Rated while retrying the missed cards. */
+  retry: boolean;
+}
+
+export interface FlashcardAnswerEvent {
+  card: FlashcardCardRef;
+  /** The choice picked, or null when the answer was shown without one (counted as missed). */
+  choiceId: string | null;
+  correct: boolean;
+  retry: boolean;
+}
+
+export interface FlashcardCompleteEvent {
+  /** Every card of the session with how it went (null when passed without a rating). */
+  results: Array<{ card: FlashcardCardRef; rating: FlashcardRating | null }>;
+  remembered: number;
+  missed: number;
+  total: number;
+  retry: boolean;
+}
+
+function cardRef(card: Flashcard): FlashcardCardRef {
+  return {
+    id: card.id,
+    kind: card.kind,
+    sourceBlockId: card.sourceBlockId,
+    ...(card.ownerBlockId ? { ownerBlockId: card.ownerBlockId } : {}),
+  };
+}
 
 /** What a host's flashcard controls draw from (`FlashcardView`'s `renderControls`). */
 export interface FlashcardControls {
@@ -248,30 +303,9 @@ export function FlashcardFaceView(props: FlashcardFaceViewProps) {
   return <FaceContent {...props} viewport={props.viewport ?? VIEWPORT_PRESETS.landscape} />;
 }
 
-function hashSeed(value: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index++) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
+/** A copy of `values` in an order that depends only on `seed`. */
 function shuffled<T>(values: readonly T[], seed: string): T[] {
-  const result = [...values];
-  let state = hashSeed(seed) || 1;
-  const random = () => {
-    state += 0x6d2b79f5;
-    let next = state;
-    next = Math.imul(next ^ (next >>> 15), next | 1);
-    next ^= next + Math.imul(next ^ (next >>> 7), next | 61);
-    return ((next ^ (next >>> 14)) >>> 0) / 4294967296;
-  };
-  for (let index = result.length - 1; index > 0; index--) {
-    const other = Math.floor(random() * (index + 1));
-    [result[index], result[other]] = [result[other], result[index]];
-  }
-  return result;
+  return new SeededRandom(hashString(seed) || 1).shuffled(values);
 }
 
 function ChoiceContent(props: Omit<FaceContentProps, 'face'> & { choice: FlashcardChoice }) {
@@ -318,6 +352,10 @@ export function FlashcardView({
   density = 'comfortable',
   className,
   renderControls,
+  kinds,
+  onRate,
+  onAnswer,
+  onComplete,
 }: FlashcardViewProps) {
   const compact = density === 'compact';
   // The host draws the controls (the editor's status bar): no toolbar, no
@@ -328,7 +366,17 @@ export function FlashcardView({
     (compact ? ' squisq-flashcards--compact' : '') +
     (className ? ` ${className}` : '');
   const activeTheme = useMemo(() => theme ?? resolveThemeForDoc(doc), [doc, theme]);
-  const deck = useMemo(() => materializeFlashcards(doc, { source }), [doc, source]);
+  const kindsKey = kinds?.join(',');
+  const deck = useMemo(() => {
+    const built = materializeFlashcards(doc, { source });
+    const wanted = kindsKey?.split(',');
+    return wanted
+      ? { ...built, cards: built.cards.filter((card) => wanted.includes(card.kind)) }
+      : built;
+  }, [doc, source, kindsKey]);
+  // Hosts pass callbacks inline; the handlers read the latest ones.
+  const callbacks = useRef({ onRate, onAnswer, onComplete });
+  callbacks.current = { onRate, onAnswer, onComplete };
   const [shuffleEnabled, setShuffleEnabled] = useState(initialShuffle);
   const [sessionSeed, setSessionSeed] = useState(1);
   const [cardIndex, setCardIndex] = useState(0);
@@ -356,6 +404,31 @@ export function FlashcardView({
   );
   const currentCard = sessionCards[cardIndex];
   const finished = sessionCards.length > 0 && cardIndex >= sessionCards.length;
+  // The choices in the order shown: what the number keys pick from.
+  const choices = useMemo(
+    () =>
+      currentCard?.choices ? shuffled(currentCard.choices, `${currentCard.id}:${sessionSeed}`) : [],
+    [currentCard, sessionSeed],
+  );
+  /** Tell the host the session is over, once, from the handler that ends it. */
+  const complete = useCallback(
+    (finalRatings: Record<string, CardRating>) => {
+      const handler = callbacks.current.onComplete;
+      if (!handler) return;
+      const results = sessionCards.map((card) => ({
+        card: cardRef(card),
+        rating: finalRatings[card.id] ?? null,
+      }));
+      handler({
+        results,
+        remembered: results.filter((result) => result.rating === 'got-it').length,
+        missed: results.filter((result) => result.rating === 'again').length,
+        total: results.length,
+        retry: retryIds !== null,
+      });
+    },
+    [retryIds, sessionCards],
+  );
 
   const resetPosition = useCallback(() => {
     setCardIndex(0);
@@ -417,8 +490,14 @@ export function FlashcardView({
     setRevealed(true);
     if (currentCard.kind === 'multiple-choice' && selectedChoiceId === null) {
       setRatings((current) => ({ ...current, [currentCard.id]: 'again' }));
+      callbacks.current.onAnswer?.({
+        card: cardRef(currentCard),
+        choiceId: null,
+        correct: false,
+        retry: retryIds !== null,
+      });
     }
-  }, [currentCard, selectedChoiceId]);
+  }, [currentCard, retryIds, selectedChoiceId]);
 
   const nextCard = useCallback(() => {
     if (!currentCard) return;
@@ -426,10 +505,11 @@ export function FlashcardView({
       revealAnswer();
       return;
     }
+    if (cardIndex === sessionCards.length - 1) complete(ratings);
     setCardIndex((index) => index + 1);
     setRevealed(false);
     setSelectedChoiceId(null);
-  }, [currentCard, revealAnswer, revealed]);
+  }, [cardIndex, complete, currentCard, ratings, revealAnswer, revealed, sessionCards.length]);
 
   const previousCard = useCallback(() => {
     if (finished) {
@@ -458,26 +538,39 @@ export function FlashcardView({
         ...current,
         [currentCard.id]: choice.correct ? 'got-it' : 'again',
       }));
+      callbacks.current.onAnswer?.({
+        card: cardRef(currentCard),
+        choiceId: choice.id,
+        correct: choice.correct,
+        retry: retryIds !== null,
+      });
     },
-    [currentCard, revealed],
+    [currentCard, retryIds, revealed],
   );
 
   const rate = useCallback(
     (rating: CardRating) => {
       if (!currentCard) return;
-      setRatings((current) => ({ ...current, [currentCard.id]: rating }));
+      const next = { ...ratings, [currentCard.id]: rating };
+      setRatings(next);
+      callbacks.current.onRate?.({
+        card: cardRef(currentCard),
+        rating,
+        retry: retryIds !== null,
+      });
+      if (cardIndex === sessionCards.length - 1) complete(next);
       setCardIndex((index) => index + 1);
       setRevealed(false);
       setSelectedChoiceId(null);
     },
-    [currentCard],
+    [cardIndex, complete, currentCard, ratings, retryIds, sessionCards.length],
   );
 
   const handleShortcut = useCallback(
     (event: KeyboardEvent | ReactKeyboardEvent<HTMLDivElement>) => {
       if (event.defaultPrevented || isInteractiveTarget(event.target)) return;
       if (/^[1-9]$/.test(event.key) && currentCard?.kind === 'multiple-choice' && !revealed) {
-        const choice = currentCard.choices?.[Number(event.key) - 1];
+        const choice = choices[Number(event.key) - 1];
         if (choice) {
           event.preventDefault();
           choose(choice);
@@ -492,7 +585,7 @@ export function FlashcardView({
         nextCard();
       }
     },
-    [choose, currentCard, nextCard, previousCard, revealed],
+    [choices, choose, currentCard, nextCard, previousCard, revealed],
   );
 
   useEffect(() => {
@@ -630,9 +723,6 @@ export function FlashcardView({
     );
   }
 
-  const choices = currentCard?.choices
-    ? shuffled(currentCard.choices, `${currentCard.id}:${sessionSeed}`)
-    : [];
   const selectedChoice = choices.find((choice) => choice.id === selectedChoiceId);
   const position = `Card ${cardIndex + 1} of ${sessionCards.length}`;
   const nextLabel = revealed ? (lastCard ? 'Finish' : 'Next card') : 'Reveal';

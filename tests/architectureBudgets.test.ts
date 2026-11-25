@@ -19,7 +19,8 @@ describe('large-module architecture budgets', () => {
     expect(
       lineCount('packages/editor-react/src/EditorShell.tsx'),
       'EditorShell.tsx',
-    ).toBeLessThanOrEqual(2_050);
+      // 2,060: the Study cards layout and its two host props (2026-11-24).
+    ).toBeLessThanOrEqual(2_060);
     expect(
       lineCount('packages/editor-react/src/styles/editor.css'),
       'editor.css',

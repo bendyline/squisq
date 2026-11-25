@@ -1,4 +1,5 @@
 import { blockBuildSteps, hasBlockBuilds } from './builds.js';
+import { pruneAccessoryBlocks } from './accessoryBlocks.js';
 /**
  * Canonical block-to-layer materialization contract.
  *
@@ -58,7 +59,9 @@ import {
   placeLayersInRect,
   resolveSupplementalMediaLayout,
   resolveFeatureSummaryLayout,
+  stripFullViewportBackdrop,
   type LayerRect,
+  resolvePositionValue,
 } from './richMediaLayout.js';
 import {
   detectAsciiDiagram,
@@ -211,6 +214,7 @@ export function materializeBlockLayersWithRuntime(
       theme,
       viewport,
       options.mediaAspectRatios,
+      runtime,
     );
     return {
       layers: injectPersistentLayers(
@@ -231,6 +235,7 @@ export function materializeBlockLayersWithRuntime(
       theme,
       viewport,
       options.mediaAspectRatios,
+      runtime,
     );
     return {
       layers: injectPersistentLayers(
@@ -279,6 +284,7 @@ export function materializeBlockLayersWithRuntime(
       theme,
       viewport,
       options.mediaAspectRatios,
+      runtime,
     );
     return {
       layers: injectPersistentLayers(
@@ -303,7 +309,7 @@ export function materializeBlockLayersWithRuntime(
 
   const diagnostic = toLayerMaterializationDiagnostic(block.template, execution);
   if ((options.failureMode ?? 'fallback') === 'empty') {
-    const layers = appendRichContentLayers([], block as Block, theme, viewport);
+    const layers = appendRichContentLayers([], block as Block, theme, viewport, undefined, runtime);
     return {
       layers: injectPersistentLayers(
         layers,
@@ -322,6 +328,8 @@ export function materializeBlockLayersWithRuntime(
     block as Block,
     theme,
     viewport,
+    undefined,
+    runtime,
   );
   return {
     layers: injectPersistentLayers(
@@ -403,7 +411,8 @@ type RichMediaItem =
       template: 'diagram' | 'tree' | 'timeline';
       data: Record<string, unknown>;
       aspectRatio: number;
-    };
+    }
+  | { kind: 'block'; block: Block; aspectRatio: number };
 
 /**
  * Body tables a summary slide shows as features. Only a summary carries its
@@ -549,14 +558,142 @@ function collectRichMediaItems(layers: readonly Layer[], block: Block): RichMedi
       aspectRatio: featureTableAspect(table),
     })),
     ...embeddedSpatialMedia(block),
+    // Blocks this slide carries (a chart shown on the slide before it).
+    ...(block.featureBlocks ?? []).map((featured): RichMediaItem => ({
+      kind: 'block',
+      block: featured,
+      aspectRatio: 16 / 9,
+    })),
   ];
 }
 
+/**
+ * A block drawn as a feature of another slide: rendered by its own template
+ * into a viewport the size of its cell, without its full-slide backdrop, then
+ * placed in the cell. It draws as it would on a slide of its own, held still:
+ * no entrance, no builds (the slide carrying it may stay up for a while, and
+ * a chart growing again on each showing reads as a glitch), and its text keeps
+ * the size its template chose rather than fitting the host slide's words.
+ */
+function embeddedBlockLayers(
+  embedded: Block,
+  cell: LayerRect,
+  host: Block,
+  theme: Theme,
+  viewport: ViewportConfig,
+  runtime: MaterializationRuntime | undefined,
+  kindIndex: number,
+): Layer[] {
+  // Most templates fit their picture to whatever box they are given. A layout
+  // places its parts at slide coordinates, so it is drawn at the slide's size
+  // and what it draws is shrunk whole into the cell (never enlarged), keeping
+  // its shape.
+  const slideSized = resolveTemplateName(embedded.template ?? '') === 'layout';
+  const localViewport: ViewportConfig = slideSized
+    ? { ...viewport, name: `Embedded ${embedded.template ?? 'block'}` }
+    : {
+        width: Math.max(1, Math.round(cell.width)),
+        height: Math.max(1, Math.round(cell.height)),
+        name: `Embedded ${embedded.template ?? 'block'}`,
+      };
+  // A block drawn inside another never carries blocks of its own.
+  const { featureBlocks: _nested, ...own } = embedded;
+  void _nested;
+  const result = materializeBlockLayersWithRuntime(
+    own as DocBlock,
+    { theme, viewport: localViewport, persistentLayers: false },
+    { registry: runtime?.registry ?? (templateRegistry as unknown as RuntimeTemplateRegistry) },
+  );
+  const still = stripFullViewportBackdrop(result.layers, localViewport)
+    .map(holdStill)
+    .map((layer) => (slideSized ? layer : framedAsAuthored(layer, localViewport, viewport)));
+  const prefix = `${host.id}-feature-${kindIndex}`;
+  if (!slideSized) return placeLayersInRect(still, localViewport, cell, prefix);
+  const drawn = drawnBounds(still, localViewport);
+  // Templates that fit themselves keep a margin inside their box; a layout's
+  // parts can run to its edges, so it gets one here.
+  const margin = Math.min(viewport.width, viewport.height) * 0.03;
+  const room: LayerRect = {
+    x: cell.x + margin,
+    y: cell.y + margin,
+    width: Math.max(1, cell.width - margin * 2),
+    height: Math.max(1, cell.height - margin * 2),
+  };
+  const fit = Math.min(1, room.width / drawn.width, room.height / drawn.height);
+  // Where the whole slide lands so that what it draws is centred in the cell.
+  const slide: LayerRect = {
+    x: room.x + (room.width - drawn.width * fit) / 2 - drawn.x * fit,
+    y: room.y + (room.height - drawn.height * fit) / 2 - drawn.y * fit,
+    width: localViewport.width * fit,
+    height: localViewport.height * fit,
+  };
+  return placeLayersInRect(still, localViewport, slide, prefix, { scaleStyles: true });
+}
+
+/**
+ * A map drawn in a smaller box than its slide shows less ground at the same
+ * zoom. Tiles come in whole zoom levels, so it steps out as far as it takes to
+ * keep what its own slide showed in view (a sliver may be cropped rather than
+ * step out twice as far).
+ */
+function framedAsAuthored(layer: Layer, box: ViewportConfig, slide: ViewportConfig): Layer {
+  if (layer.type !== 'map') return layer;
+  const shrink = Math.max(slide.width / box.width, slide.height / box.height);
+  const steps = Math.max(0, Math.ceil(Math.log2(shrink) - 0.15));
+  if (!steps) return layer;
+  return {
+    ...layer,
+    content: { ...layer.content, zoom: Math.max(0, layer.content.zoom - steps) },
+  };
+}
+
+/** The box around everything the layers draw (the whole viewport when they draw nothing). */
+function drawnBounds(layers: readonly Layer[], viewport: ViewportConfig): LayerRect {
+  const boxes = layers.map((layer) => {
+    const x = resolvePositionValue(layer.position.x, viewport.width);
+    const y = resolvePositionValue(layer.position.y, viewport.height);
+    return {
+      x,
+      y,
+      right: x + resolvePositionValue(layer.position.width ?? 0, viewport.width),
+      bottom: y + resolvePositionValue(layer.position.height ?? 0, viewport.height),
+    };
+  });
+  if (!boxes.length) return { x: 0, y: 0, width: viewport.width, height: viewport.height };
+  const x = Math.min(...boxes.map((box) => box.x));
+  const y = Math.min(...boxes.map((box) => box.y));
+  return {
+    x,
+    y,
+    width: Math.max(1, Math.max(...boxes.map((box) => box.right)) - x),
+    height: Math.max(1, Math.max(...boxes.map((box) => box.bottom)) - y),
+  };
+}
+
+/** A layer without its entrance or build step; text keeps its size. */
+function holdStill(layer: Layer): Layer {
+  const { animation: _animation, buildStep: _buildStep, ...rest } = layer;
+  void _animation;
+  void _buildStep;
+  if (rest.type !== 'text') return rest as Layer;
+  return {
+    ...rest,
+    content: { ...rest.content, style: { ...rest.content.style, keepSize: true } },
+  } as Layer;
+}
+
+/**
+ * Cells for `count` items in `region`. Given the items' shapes (`aspects`),
+ * the grid is the one that shows them largest — two charts in a tall band
+ * stack rather than squeeze side by side; otherwise it follows the region's
+ * shape.
+ */
 function gridCells(
   region: LayerRect,
   count: number,
   viewport: ViewportConfig,
   inset: boolean,
+  aspects?: readonly number[],
 ): LayerRect[] {
   const unit = Math.min(viewport.width, viewport.height);
   const padding = inset ? unit * 0.025 : 0;
@@ -567,13 +704,31 @@ function gridCells(
     width: Math.max(0, region.width - padding * 2),
     height: Math.max(0, region.height - padding * 2),
   };
-  const columns = Math.min(
-    count,
-    Math.max(1, Math.ceil(Math.sqrt(count * (inner.width / Math.max(1, inner.height))))),
-  );
-  const rows = Math.ceil(count / columns);
-  const width = (inner.width - gap * (columns - 1)) / columns;
-  const height = (inner.height - gap * (rows - 1)) / rows;
+  const cellSize = (columns: number) => {
+    const rows = Math.ceil(count / columns);
+    return {
+      width: (inner.width - gap * (columns - 1)) / columns,
+      height: (inner.height - gap * (rows - 1)) / rows,
+    };
+  };
+  const shown = (columns: number) => {
+    const cell = cellSize(columns);
+    return (aspects ?? []).reduce(
+      (area, aspect) =>
+        area +
+        Math.min(cell.width, cell.height * aspect) * Math.min(cell.height, cell.width / aspect),
+      0,
+    );
+  };
+  const columns = aspects
+    ? Array.from({ length: count }, (_, index) => index + 1).reduce((best, next) =>
+        shown(next) > shown(best) ? next : best,
+      )
+    : Math.min(
+        count,
+        Math.max(1, Math.ceil(Math.sqrt(count * (inner.width / Math.max(1, inner.height))))),
+      );
+  const { width, height } = cellSize(columns);
   return Array.from({ length: count }, (_, index) => ({
     x: inner.x + (index % columns) * (width + gap),
     y: inner.y + Math.floor(index / columns) * (height + gap),
@@ -593,7 +748,7 @@ function effectiveImageTreatment(theme: Theme, block: Block): ImageTreatment | u
 }
 
 function richMediaLayers(
-  item: RichMediaItem,
+  item: Exclude<RichMediaItem, { kind: 'block' }>,
   position: LayerRect,
   block: Block,
   theme: Theme,
@@ -811,9 +966,10 @@ function appendRichContentLayers(
   theme: Theme,
   viewport: ViewportConfig,
   mediaAspectRatios?: Readonly<Record<string, number>>,
+  runtime?: MaterializationRuntime,
 ): Layer[] {
   return applyEmbeddedVideoEdits(
-    placeRichContentLayers(layers, block, theme, viewport, mediaAspectRatios),
+    placeRichContentLayers(layers, block, theme, viewport, mediaAspectRatios, runtime),
     block,
   );
 }
@@ -824,6 +980,7 @@ function placeRichContentLayers(
   theme: Theme,
   viewport: ViewportConfig,
   mediaAspectRatios?: Readonly<Record<string, number>>,
+  runtime?: MaterializationRuntime,
 ): Layer[] {
   const timedLayers = applyEmbeddedVideoTiming(layers, block);
   const items = collectRichMediaItems(timedLayers, block);
@@ -840,8 +997,10 @@ function placeRichContentLayers(
           : undefined;
     const intrinsic = key ? mediaAspectRatios?.[key] : undefined;
     if (intrinsic && Number.isFinite(intrinsic) && intrinsic > 0) return intrinsic;
-    // A table reflows to the box it is given, so it has no shape of its own.
-    return item.kind === 'video' || item.kind === 'table' ? undefined : item.aspectRatio;
+    // A table, or a block drawn for the box it is given, has no shape of its own.
+    return item.kind === 'video' || item.kind === 'table' || item.kind === 'block'
+      ? undefined
+      : item.aspectRatio;
   });
   const aspects = items.map((item, index) => knownAspects[index] ?? item.aspectRatio);
   const layout =
@@ -859,10 +1018,20 @@ function placeRichContentLayers(
               !timedLayers.some((layer) => layer.id === 'feature-body'),
             stackColumns: createTemplateContext(theme, 0, 1, viewport).layout.stackColumns,
             knownAspectRatios: knownAspects,
-            table: items.some((item) => item.kind === 'table'),
+            // A block (a chart, a diagram) needs the room a table gets: the
+            // slide's full width, beneath its words.
+            table: items.some((item) => item.kind === 'table' || item.kind === 'block'),
           },
         );
-  const cells = gridCells(layout.mediaRect, items.length, viewport, layout.framed);
+  const cells = gridCells(
+    layout.mediaRect,
+    items.length,
+    viewport,
+    layout.framed,
+    items.some((item) => item.kind === 'block')
+      ? aspects.map((aspect) => aspect ?? 16 / 9)
+      : undefined,
+  );
   const counters: Record<RichMediaItem['kind'], number> = {
     image: 0,
     video: 0,
@@ -871,9 +1040,20 @@ function placeRichContentLayers(
     svg: 0,
     table: 0,
     spatial: 0,
+    block: 0,
   };
   const mediaLayers = items.flatMap((item, index) => {
     counters[item.kind] += 1;
+    if (item.kind === 'block')
+      return embeddedBlockLayers(
+        item.block,
+        cells[index],
+        block,
+        theme,
+        viewport,
+        runtime,
+        counters.block,
+      );
     return richMediaLayers(item, cells[index], block, theme, viewport, counters[item.kind]);
   });
   const frame: ShapeLayer | undefined = layout.framed
@@ -900,7 +1080,9 @@ function executeTemplateMaterialization(
 ): TemplateLayerMaterialization {
   const safeTemplateBlock = cloneData(templateBlock);
   const safeContext = cloneData(context);
-  const maybeChildren = (safeTemplateBlock as Block).children;
+  // A container draws its real children; accessory blocks under it are not parts.
+  const ownChildren = (safeTemplateBlock as Block).children;
+  const maybeChildren = ownChildren && pruneAccessoryBlocks(ownChildren);
   if ((!safeContext.children || safeContext.children.length === 0) && maybeChildren?.length) {
     safeContext.children = maybeChildren;
   }

@@ -27,6 +27,8 @@ export interface PrintPreviewProps {
   displayMode: DisplayMode;
   previewDoc: Doc | null;
   contentDoc: Doc | null;
+  /** The document the flashcard sheets are made from, when it is not `contentDoc`. */
+  flashcardDoc?: Doc | null;
   documentMarkdown: string;
   basePath: string;
   viewport: ViewportConfig;
@@ -50,6 +52,7 @@ export function PrintPreview({
   displayMode,
   previewDoc,
   contentDoc,
+  flashcardDoc,
   documentMarkdown,
   basePath,
   viewport,
@@ -81,10 +84,10 @@ export function PrintPreview({
       layers: expandCoverBlock(previewDoc.startBlock, context),
     };
   }, [previewDoc?.startBlock, showCover, theme, viewport]);
-  const flashcardDeck = useMemo(
-    () => (contentDoc ? materializeFlashcards(contentDoc) : null),
-    [contentDoc],
-  );
+  const flashcardDeck = useMemo(() => {
+    const source = flashcardDoc ?? contentDoc;
+    return source ? materializeFlashcards(source) : null;
+  }, [contentDoc, flashcardDoc]);
 
   const isTextDocument = displayMode === 'page' || displayMode === 'narrate';
   useEffect(() => {

@@ -210,13 +210,32 @@ describe('KNOWN_BLOCK_META_KEYS', () => {
       'buildPrevious',
       'connectsTo',
       'duration',
+      'slideLayout',
       'startTime',
+      'supportingSlides',
       'transition',
       'transitionDirection',
       'transitionDuration',
       'x',
       'y',
     ]);
+  });
+});
+
+describe('summary section settings', () => {
+  it('types a section’s slide layout and supporting slides', () => {
+    expect(
+      coerceAnnotationValues({ slideLayout: 'cards', supportingSlides: 'false' }).blockMeta,
+    ).toEqual({ slideLayout: 'cards', supportingSlides: false });
+    expect(coerceAnnotationValues({ slideLayout: 'authored' }).blockMeta).toEqual({
+      slideLayout: 'authored',
+    });
+  });
+
+  it('drops values it does not know, with a warning', () => {
+    const result = coerceAnnotationValues({ slideLayout: 'poster', supportingSlides: 'maybe' });
+    expect(result.blockMeta).toEqual({});
+    expect(result.warnings).toHaveLength(2);
   });
 });
 

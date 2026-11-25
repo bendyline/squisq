@@ -38,6 +38,7 @@
  */
 
 import type { Block, Doc } from '../schemas/Doc.js';
+import { isAccessoryBlock } from './accessoryBlocks.js';
 import type { MediaClip } from '../schemas/Media.js';
 import type { MediaCut } from '../mediaEdit/recipe.js';
 import { createMediaTimeMap } from '../mediaEdit/timeMap.js';
@@ -132,6 +133,8 @@ export function collectVideoDurationSources(doc: Doc): string[] {
   const sources = new Set<string>();
   const visit = (blocks: readonly Block[]): void => {
     for (const block of blocks) {
+      // A summary's video is never played.
+      if (isAccessoryBlock(block)) continue;
       for (const video of blockVideos(block)) {
         if (video.clipEnd == null && video.src) sources.add(video.src);
       }

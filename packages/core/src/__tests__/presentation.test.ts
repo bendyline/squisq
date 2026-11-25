@@ -26,7 +26,11 @@ import { MemoryContentContainer } from '../storage/ContentContainer.js';
 import { applyTransform } from '../transform/applyTransform.js';
 import { createPresentationPlan } from '../transform/presentationPlanner.js';
 import { compilePresentationPlan } from '../transform/presentationCompiler.js';
-import { collectPresentationMedia, presentationMediaNode } from '../transform/presentationMedia.js';
+import {
+  collectPresentationMedia,
+  presentationMediaNode,
+  type PresentationNodeMediaItem,
+} from '../transform/presentationMedia.js';
 import {
   parsePresentationPlan,
   serializePresentationPlan,
@@ -36,6 +40,7 @@ import {
 } from '../transform/presentationPlan.js';
 import { extractEmbeddedVideos } from '../doc/templateInputs.js';
 import { resolveMediaSchedule } from '../schemas/Media.js';
+import { readPresentationHints } from '../transform/presentationHintsDoc.js';
 import type { Doc } from '../schemas/Doc.js';
 
 const source =
@@ -550,9 +555,41 @@ describe('dynamic slides with embedded videos and diagrams', () => {
     expect(bed.map((clip) => [clip.absoluteStart, clip.absoluteEnd])).toEqual([[10, 70]]);
   });
 
+  it('starts the bed of a block shown on the slide before it when its passage starts', async () => {
+    const rolled = [
+      '# Results',
+      '',
+      'Revenue grew 40% last year. Most of it came from new customers.',
+      '',
+      '## By region {[barChart slideLayout=feature]}',
+      '',
+      'North led every quarter.',
+      '',
+      '| Region | Sales |',
+      '| --- | --- |',
+      '| North | 40 |',
+      '',
+      '{[audio src=audio/bed.mp3]}',
+      '',
+      '## Terms',
+      '',
+      'Net thirty days. Prices are fixed for the year.',
+    ].join('\n');
+    const { doc } = await narrated(rolled, [0, 20, 40, 60]);
+    const { hints } = readPresentationHints(doc);
+    const plan = createPresentationPlan(doc, hints);
+    expect(plan.beats.map((beat) => beat.layout)).toContain('feature');
+    const compiled = compilePresentationPlan(doc, plan);
+    expect(compiled.blocks.some((block) => block.sourceBlockId === 'by-region')).toBe(false);
+    const bed = resolveMediaSchedule(compiled).filter((clip) => clip.src === 'audio/bed.mp3');
+    expect(bed.map((clip) => [clip.absoluteStart, clip.absoluteEnd])).toEqual([[20, 40]]);
+  });
+
   it('resumes a video only within its authored clip and refuses stale visuals', async () => {
     const { doc } = await narrated(demo, [0, 10, 70, 90]);
-    const item = collectPresentationMedia(doc, ['opening', 'demo', 'how-it-fits']).get('demo')![0]!;
+    const item = collectPresentationMedia(doc, ['opening', 'demo', 'how-it-fits']).get(
+      'demo',
+    )![0]! as PresentationNodeMediaItem;
     const attributes = (seconds: number) =>
       extractEmbeddedVideos([presentationMediaNode(item, seconds)!])[0];
     expect(attributes(12)).toMatchObject({ clipStart: 12, clipEnd: 50 });

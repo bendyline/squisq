@@ -49,7 +49,11 @@ test('startup keeps optional encoders and diagrams out of the initial script pay
   });
   // The first split left 7.32 MB eager. Native import boundaries and deferred
   // capture/ZIP tools bring it below 4 MB, including post-mount startup scripts.
-  expect(total).toBeLessThan(4_000_000);
+  // 4.05 MB since 2026-11-24: the slide projection draws blocks rolled up onto
+  // another slide, and the Flashcards view reads study cards kept with a
+  // section — both run at startup. Writing and making cards stays lazy
+  // (`@bendyline/squisq/study`).
+  expect(total).toBeLessThan(4_050_000);
   expect(
     payload.filter((script) =>
       /\/(?:rnnoise|mermaid|html2canvas|captureVideoCodecs|pdf|jszip)[.-]/.test(script.name),

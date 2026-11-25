@@ -1,3 +1,5 @@
+import { isAccessoryBlockType } from '../accessoryBlockTypes.js';
+
 /** Canonical aliases for historical template ids. Kept dependency-free. */
 export const TEMPLATE_ALIASES: Readonly<Record<string, string>> = Object.freeze({
   titleBlock: 'title',
@@ -28,6 +30,27 @@ export const TABLE_FED_TEMPLATES: ReadonlySet<string> = new Set([
   'areaChart',
   'scatterChart',
 ]);
+
+/**
+ * Templates whose block draws a self-contained picture, so a Custom summary
+ * can show the block on the slide of the section before it
+ * (`slideLayout=feature`) instead of giving it a slide of its own. Grows as
+ * each kind is checked at that size; a block not listed is shown as authored.
+ */
+export const FEATURE_BLOCK_TEMPLATES: ReadonlySet<string> = new Set([
+  ...TABLE_FED_TEMPLATES,
+  'diagram',
+  'drawing',
+  'layout',
+  'map',
+  'tree',
+  'timeline',
+]);
+
+/** True when a block of this template (or alias) can be shown on another section's slide. */
+export function isFeatureBlockTemplate(name: string | undefined): boolean {
+  return !!name && FEATURE_BLOCK_TEMPLATES.has(resolveTemplateName(name));
+}
 
 /** Templates that consume their child headings rather than rendering them. */
 export const CONTAINER_TEMPLATES: ReadonlySet<string> = new Set(['diagram', 'drawing', 'layout']);
@@ -98,10 +121,11 @@ export const TEMPLATE_TOKEN_NAMES: ReadonlySet<string> = new Set([
 
 /**
  * True when a bare `{[token]}` names a block template (directly or via a legacy
- * alias) and must therefore NOT be treated as an inline FontAwesome icon — block
- * tags win over icon tokens. Qualified icon tokens (`fa-solid:list`) contain a
- * `:` and never resolve to a template id, so they still render as icons.
+ * alias) or an accessory block type, and must therefore NOT be treated as an
+ * inline FontAwesome icon — block tags win over icon tokens. Qualified icon
+ * tokens (`fa-solid:list`) contain a `:` and never resolve to a template id,
+ * so they still render as icons.
  */
 export function isReservedAnnotationToken(token: string): boolean {
-  return TEMPLATE_TOKEN_NAMES.has(resolveTemplateName(token));
+  return TEMPLATE_TOKEN_NAMES.has(resolveTemplateName(token)) || isAccessoryBlockType(token);
 }

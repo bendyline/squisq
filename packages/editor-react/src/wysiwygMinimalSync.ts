@@ -12,7 +12,11 @@ import { createDocument, type Editor } from '@tiptap/core';
 import { Fragment, type Node as PMNode } from '@tiptap/pm/model';
 import { closeHistory } from '@tiptap/pm/history';
 import type { Transaction } from '@tiptap/pm/state';
-import { needsTrailingParagraph, withoutTrailingParagraph } from './trailingParagraph';
+import {
+  appendedTrailingParagraph,
+  documentContentEnd,
+  needsTrailingParagraph,
+} from './trailingParagraph';
 
 /**
  * `next` ending with the editor's own trailing paragraph (the same node) when
@@ -24,10 +28,13 @@ import { needsTrailingParagraph, withoutTrailingParagraph } from './trailingPara
  * in the media-edit dialog collapsed the clip's tray pill.
  */
 function keepTrailingParagraph(current: PMNode, next: PMNode): PMNode {
-  const trailing = current.lastChild;
-  if (!trailing || withoutTrailingParagraph(current) === current) return next;
-  if (!needsTrailingParagraph(next)) return next;
-  return next.copy(next.content.append(Fragment.from(trailing)));
+  const trailing = appendedTrailingParagraph(current);
+  if (!trailing || !needsTrailingParagraph(next)) return next;
+  // It goes where the document's content ends: before summaries that end it.
+  const at = documentContentEnd(next);
+  return next.copy(
+    next.content.cut(0, at).append(Fragment.from(trailing)).append(next.content.cut(at)),
+  );
 }
 
 /**

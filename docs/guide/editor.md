@@ -101,12 +101,20 @@ you were on, and switching back opens Write on the block holding the Source curs
     document sits beside the slides made from it (in a narrow window, from the **Slide** menu
     with **Previous** and **Next**, or with ← and →). For the slide you picked, you
     can hide it, choose its section's **Layout preference** — including **As authored**, which
-    shows the section as you wrote it — and, under **Customize slide wording**, rewrite the
-    headline and highlights of a section's first slide. **Reset design** returns every slide to its
-    automatic summary. Apps that connect an AI add **Suggest with AI**, which proposes a layout and
-    shorter wording for each slide. Each change is saved as you make it, and Ctrl+Z in Write
-    undoes it. Wording you write applies only while the section's text is unchanged; edit the
-    text and that slide returns to an automatic summary.
+    shows the section as you wrote it, and, for a chart, table, diagram or other picture,
+    **On the last slide of** the section before it, which draws it there instead of on a slide
+    of its own (it stays in the list without a number, tagged with the slide carrying it, and
+    says why when it cannot be carried) — and, under **Customize slide wording**, rewrite the
+    headline and highlights of a section's first slide (**Use automatic wording** takes yours
+    away). **Reset design** returns every slide to its automatic summary. Apps that connect an AI
+    add **Suggest with AI**, which proposes a layout and shorter wording for each slide. Each
+    change is saved as you make it, in the document itself: a section's slide wording, AI
+    suggestions and hidden slides as `{[summary]}` blocks under it (see
+    [Accessory blocks](markup.md#accessory-blocks)), its layout on its heading. Write folds a
+    section's summaries into one **Slide summaries** row you can open; Source folds each. Ctrl+Z
+    in Write undoes a change. Your wording stays when you edit the section's text; an AI
+    suggestion or a hidden slide applies only while its passage is unchanged, and a list of
+    summaries **not in use** lets you remove the ones that no longer apply.
   - **Documentary**, **Magazine**, **Data-Driven**, **Narrative**, **Minimal**, or **Headings and
     features** — the document re-cut into a presentation in that style. Below the choice are the
     slides it makes, each beside the section it came from; slides a style adds around your text,
@@ -114,6 +122,18 @@ you were on, and switching back opens Write on the block holding the Source curs
 
   Your Markdown and narration are not changed; the choice is saved in the document's
   frontmatter. Formatting buttons are hidden while Summaries is open.
+
+- **Study cards** — flashcards and quiz questions kept with each section (see
+  [Study cards](markup.md#study-cards)). The sections of the document are listed with their card
+  counts; pick one to see and edit its cards beside it. **Add flashcard** and **Add quiz question**
+  open a new card, saved once it has a question and an answer (or two choices with the right one
+  marked); a card's fields save when you leave them; **Remove card** deletes it. A section whose
+  text changed after AI wrote some of its cards says so, with **Keep all** and, in apps that
+  connect an AI, **Regenerate**. Apps that connect an AI add **Generate for this section** and
+  **Generate for all sections without cards**, with a **Make** choice of flashcards, quiz
+  questions or both; progress and **Stop** take the button's place, and cards are saved a
+  section at a time, so stopping keeps what was made. **Study these cards** opens Use ›
+  Flashcards. In a narrow window the section list becomes a **Section** menu.
 
 ## The toolbar
 
@@ -296,7 +316,8 @@ The **Find** button in the demo's top bar opens the find bar in place of the for
 
 Find works in all three views; in the Use view it highlights matches in the preview, without
 Replace. The demo doesn't bind Ctrl+F (⌘F) to this bar: in Source, Ctrl+F opens the code
-editor's own find box, and in Write it opens your browser's.
+editor's own find box, and in Write it opens your browser's. In Write, Find and Replace leave slide summaries and study cards alone — they are folded
+away and are not your text — while Source finds them like any other line.
 
 ## Spelling and grammar
 

@@ -1,9 +1,9 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 export type ViewTab = 'Markdown' | 'Editor' | 'Play' | 'Preview';
 export type UseMode =
   'Slideshow' | 'Video' | 'Page' | 'Document' | 'Dashboard' | 'Narrate' | 'Flashcards';
-export type WriteMode = 'Write' | 'Source' | 'Blocks' | 'Timeline' | 'Summaries';
+export type WriteMode = 'Write' | 'Source' | 'Blocks' | 'Timeline' | 'Summaries' | 'Study cards';
 
 const VIEW_IDS: Record<ViewTab, string> = {
   // Tests use the historical view-mode concepts while the toolbar shows only
@@ -80,11 +80,22 @@ export async function toggleViewPane(
   await page.keyboard.press('Escape');
 }
 
-/** Chooses how slides and video summarize the document, in Edit › Summaries. */
+/**
+ * Chooses how slides and video summarize the document, in Edit › Summaries:
+ * opens the Summary style dropdown and picks `style` from its list. The list
+ * is portaled to the body, so it is found from the page, not the view. The
+ * dropdown names the style it shows ("Summary style Minimal") once the choice
+ * lands.
+ */
 export async function chooseSummaryStyle(page: Page, style: string): Promise<void> {
   await selectWriteMode(page, 'Summaries');
-  await page
+  const trigger = page
     .getByRole('region', { name: 'Summaries', exact: true })
-    .getByRole('radio', { name: style, exact: true })
-    .check();
+    .getByRole('button', { name: /^Summary style\b/ });
+  await trigger.click();
+  await page
+    .getByRole('listbox', { name: 'Summary style', exact: true })
+    .getByRole('option', { name: style, exact: true })
+    .click();
+  await expect(trigger).toHaveAccessibleName(`Summary style ${style}`);
 }

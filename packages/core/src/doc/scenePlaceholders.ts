@@ -11,6 +11,7 @@
  */
 
 import type { Block } from '../schemas/Doc.js';
+import { realChildren } from './accessoryBlocks.js';
 import { extractPlainText } from '../markdown/utils.js';
 
 /** The title Insert → Drawing gives a new drawing. */
@@ -29,7 +30,7 @@ function plainContents(block: Block): string {
 export function isUntouchedScenePlaceholder(block: Block): boolean {
   const title = block.title?.trim();
   const ownWords = plainContents(block);
-  const children = block.children ?? [];
+  const children = realChildren(block);
   if (block.template === 'drawing') {
     return (
       title === DRAWING_PLACEHOLDER_TITLE &&

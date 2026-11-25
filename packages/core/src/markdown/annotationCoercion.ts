@@ -21,6 +21,11 @@ import {
   TRANSITION_TYPES,
   TRANSITION_DIRECTIONS,
 } from '../schemas/Transitions.js';
+import {
+  PRESENTATION_BEAT_LAYOUTS,
+  isPresentationBeatLayout,
+  type PresentationBeatLayout,
+} from '../schemas/PresentationLayouts.js';
 
 /**
  * Registry of known block-meta keys and their coercion strategies.
@@ -42,6 +47,8 @@ export const KNOWN_BLOCK_META_KEYS = {
   transition: 'transition',
   transitionDuration: 'time',
   transitionDirection: 'transitionDirection',
+  slideLayout: 'presentationLayout',
+  supportingSlides: 'boolean',
 } as const;
 
 export type KnownBlockMetaKey = keyof typeof KNOWN_BLOCK_META_KEYS;
@@ -123,6 +130,17 @@ export const BLOCK_META_KEY_DESCRIPTORS: readonly BlockMetaKeyDescriptor[] = [
     description: 'Diagram connections to other blocks',
     valueHint: 'comma-separated target or target:type — e.g. foo,bar:flow',
   },
+  {
+    key: 'slideLayout',
+    description:
+      'Layout its summary slides prefer (authored shows the block itself; feature shows it on the slide before)',
+    values: PRESENTATION_BEAT_LAYOUTS,
+  },
+  {
+    key: 'supportingSlides',
+    description: 'Whether its summary may add supporting slides',
+    values: ['true', 'false'],
+  },
 ];
 
 /**
@@ -141,6 +159,10 @@ export interface CoercedBlockMeta {
     duration?: number;
     direction?: TransitionDirection;
   };
+  /** The layout this section's summary slides prefer (`slideLayout=`). */
+  slideLayout?: PresentationBeatLayout;
+  /** Whether this section's summary may add supporting slides (`supportingSlides=`). */
+  supportingSlides?: boolean;
 }
 
 export interface CoerceResult {
@@ -209,6 +231,12 @@ export function coerceAnnotationValues(params: Record<string, string>): CoerceRe
       } else {
         transitionType = transition;
       }
+    } else if (kind === 'presentationLayout') {
+      if (isPresentationBeatLayout(raw)) blockMeta.slideLayout = raw;
+      else warnings.push(`Invalid slide layout for "${key}": ${JSON.stringify(raw)}`);
+    } else if (kind === 'boolean') {
+      if (raw === 'true' || raw === 'false') blockMeta.supportingSlides = raw === 'true';
+      else warnings.push(`Invalid value for "${key}": ${JSON.stringify(raw)} (true or false)`);
     } else if (kind === 'transitionDirection') {
       const direction = normalizeTransitionDirection(raw);
       if (direction == null) {

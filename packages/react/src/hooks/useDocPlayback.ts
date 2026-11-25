@@ -26,6 +26,7 @@ import {
 import {
   expandDocBlocks,
   flattenRenderableBlocks,
+  isAccessoryBlock,
   isTemplateBlock,
   resolvePersistentLayers,
   VIEWPORT_PRESETS,
@@ -128,8 +129,12 @@ export function useDocPlayback(
     // `flattenRenderableBlocks` skips the children of container templates
     // (`diagram`, `drawing`) — those are consumed by the parent's render as
     // nodes/shapes, so they must not also appear as their own slides.
-    const hasChildren = script.blocks.some((b) => b.children && b.children.length > 0);
-    const flatBlocks = hasChildren ? flattenRenderableBlocks(script.blocks) : script.blocks;
+    // It also leaves out accessory blocks (slide summaries), which can sit at
+    // the top level of an otherwise flat document.
+    const needsFlattening = script.blocks.some(
+      (b) => (b.children && b.children.length > 0) || isAccessoryBlock(b),
+    );
+    const flatBlocks = needsFlattening ? flattenRenderableBlocks(script.blocks) : script.blocks;
 
     // Check if any blocks are templates
     const hasTemplates = flatBlocks.some(isTemplateBlock);

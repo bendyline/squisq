@@ -86,7 +86,7 @@ import type {
 } from './types';
 
 import type { DocPlayerProps } from './DocPlayerProps';
-export type { DocPlayerProps } from './DocPlayerProps';
+export type { DocPlayerProps, DocPlayerFlashcardOptions } from './DocPlayerProps';
 import { buildSegmentTitleMap } from './docPlayer/segmentTitles';
 import { resolveDocPlayerAppearance } from './docPlayer/playerAppearance';
 import { blockVideoSourceTime, seekVideoToFrame } from './docPlayer/renderReadiness';
@@ -171,6 +171,7 @@ export function DocPlayer(props: DocPlayerProps) {
     return (
       <div className="doc-player doc-player--flashcards">
         <FlashcardView
+          {...props.flashcards}
           doc={resolvedDoc}
           basePath={props.basePath}
           theme={props.theme}

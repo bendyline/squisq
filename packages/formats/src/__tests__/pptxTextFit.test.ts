@@ -33,6 +33,18 @@ describe('estimateSlideTextScale', () => {
     expect(estimateSlideTextScale([layer])).toBe(2);
   });
 
+  it('leaves out text that keeps its size, such as a chart drawn on the slide', () => {
+    const label = textLayer(
+      'label',
+      'A label that fills its box exactly',
+      { x: 100, y: 600, width: 200, height: 48 },
+      { keepSize: true },
+    );
+    const short = textLayer('t', 'Short', { x: 100, y: 100, width: 1600, height: 400 });
+    expect(estimateSlideTextScale([short, label])).toBe(2);
+    expect(estimateSlideTextScale([label])).toBe(1);
+  });
+
   it('keeps text that already fills its box at its base size', () => {
     // Two lines at 40px × 1.2 need 96px; the box holds exactly that.
     const layer = textLayer('t', 'One\nTwo', { x: 100, y: 100, width: 1600, height: 96 });

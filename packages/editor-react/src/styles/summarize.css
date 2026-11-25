@@ -457,17 +457,6 @@
   gap: 8px;
 }
 
-/* Why Suggest with AI is unavailable, read just before the button. A host's
-   message can be long, so it wraps in a narrow column rather than widening
-   the row. */
-.squisq-summary-designer-ai-reason {
-  max-width: 32ch;
-  font-size: 12px;
-  line-height: 1.35;
-  text-align: end;
-  color: var(--squisq-text-soft);
-}
-
 .squisq-summary-designer button {
   min-height: 34px;
   padding: 6px 10px;
@@ -495,25 +484,7 @@
   cursor: default;
 }
 
-/* While slides are suggested, this takes the Suggest button's place, with
-   Stop beside it, so progress sits where the action started. */
-.squisq-summary-designer-progress {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  min-height: 34px;
-  color: var(--squisq-text-soft);
-  font: 600 12px/1.2 var(--squisq-ux-font, system-ui, -apple-system, sans-serif);
-}
-
-.squisq-summary-designer-progress progress {
-  width: 120px;
-  height: 6px;
-  accent-color: var(--squisq-accent);
-}
-
+/* The slide list marks a slide being suggested with the shared spinner. */
 .squisq-summary-designer-spinner {
   display: inline-block;
   flex: 0 0 12px;
@@ -523,13 +494,7 @@
   border: 2px solid var(--squisq-accent-soft);
   border-top-color: var(--squisq-accent);
   border-radius: 50%;
-  animation: squisq-summary-designer-spin 0.8s linear infinite;
-}
-
-@keyframes squisq-summary-designer-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  animation: squisq-designer-spin 0.8s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -717,6 +682,13 @@
   text-decoration: line-through;
 }
 
+/* A section drawn on another slide stays listed so it can be selected and
+   switched back; it has no slide of its own, so it is set in from the slides. */
+.squisq-summary-designer-slides button.squisq-summary-designer-slide--rolled-up {
+  margin-inline-start: 12px;
+  border-style: dotted;
+}
+
 .squisq-summary-designer-detail {
   display: flex;
   flex-direction: column;
@@ -753,6 +725,46 @@
   flex-shrink: 0;
   color: var(--squisq-text-soft);
   line-height: 1.5;
+}
+
+/* Why a section asked to go on the slide before it has a slide of its own. */
+.squisq-summary-designer-layout-problem {
+  color: var(--squisq-text);
+  padding-inline-start: 8px;
+  border-inline-start: 3px solid var(--squisq-warning, var(--squisq-accent-strong));
+}
+
+/* Summaries in the document the deck does not use now, with a way to remove them. */
+.squisq-summary-designer-unused {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  color: var(--squisq-text-soft);
+  background: var(--squisq-surface-subtle);
+  border: 1px solid var(--squisq-border-subtle);
+  border-radius: 6px;
+}
+
+.squisq-summary-designer-unused summary {
+  color: var(--squisq-text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.squisq-summary-designer-unused ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.squisq-summary-designer-unused li {
+  line-height: 1.45;
+}
+
+.squisq-summary-designer-unused strong {
+  color: var(--squisq-text);
 }
 
 .squisq-summary-designer-source {

@@ -24,6 +24,7 @@ import { coverRepeatsLeadingBlock } from './coverLeadingBlock.js';
 import { isUntouchedScenePlaceholder } from './scenePlaceholders.js';
 import { hasTemplate } from './templates/index.js';
 import { isContainerTemplate } from './templates/templateNames.js';
+import { withoutAccessoryBlocks } from './accessoryBlocks.js';
 import { KNOWN_BLOCK_META_KEYS } from '../markdown/annotationCoercion.js';
 import {
   extractPlainText,
@@ -365,6 +366,10 @@ function blockToSlide(
     sourceHeading: _sh,
     templateOverrides: _to,
     templateData: _td,
+    // Summary settings shape the Custom summary planner, never a slide.
+    slideLayout: _sl,
+    supportingSlides: _ss,
+    featureBlocks: _fb,
     ...extraFields
   } = block as unknown as Record<string, unknown>;
 
@@ -408,6 +413,15 @@ function blockToSlide(
     // animate. Omit them from the content spreads so the typed fields win.
     ...omitBlockMeta(block.templateData),
     ...coercedTemplateOverrides,
+    // A block this slide carries (a chart shown on the slide before it) is
+    // drawn by its own template, so it becomes a slide record the same way.
+    ...(block.featureBlocks?.length
+      ? {
+          featureBlocks: block.featureBlocks.map((featured, featuredIndex) =>
+            blockToSlide(featured, featuredIndex, knownTemplates, documentTitle),
+          ),
+        }
+      : {}),
   };
 }
 
@@ -516,6 +530,10 @@ export function buildPreviewDoc(doc: Doc, options?: BuildPreviewDocOptions): Doc
   const sourceDoc = doc;
   doc = applySavedPresentation(doc);
   if (doc.presentationApplied) options = { ...options, interleaveImages: false };
+  // Accessory blocks (summaries and other side information) are read by the
+  // saved presentation above and are never slides, pictures to interleave,
+  // or a container's drawn children.
+  doc = withoutAccessoryBlocks(doc);
   // Container templates (`diagram`, `drawing`) render their children as
   // nodes/shapes, so those children must not also become preview slides.
   const flat = flattenRenderableBlocks(doc.blocks).filter(

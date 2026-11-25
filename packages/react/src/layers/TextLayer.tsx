@@ -72,6 +72,23 @@ export function TextLayer(props: TextLayerProps) {
   return <PlainTextLayer {...props} />;
 }
 
+/**
+ * The scale a layer draws at: the slide's shared text scale, unless the layer
+ * keeps its size (text inside a block embedded in the slide, such as a chart's
+ * labels, sized for its own box).
+ */
+function keptScale(layer: TextLayerProps['layer'], fitScale: number): number {
+  return layer.content.style.keepSize ? 1 : fitScale;
+}
+
+/** The fit marker BlockRenderer scales; absent when the layer keeps its size. */
+function fitTarget(
+  layer: TextLayerProps['layer'],
+  kind: 'html' | 'svg',
+): 'html' | 'svg' | undefined {
+  return layer.content.style.keepSize ? undefined : kind;
+}
+
 /** Escape text so it's safe inside the synthesized icon HTML. */
 function escapeHtml(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -96,7 +113,8 @@ function iconRunsToHtml(text: string): string {
  * page). Height is derived from the wrapped, icon-free projection when the
  * layer has no explicit height, and overflow is visible to guard estimates.
  */
-function IconTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerProps) {
+function IconTextLayer({ layer, viewport, blockTime, textScale: fitScale = 1 }: TextLayerProps) {
+  const textScale = keptScale(layer, fitScale);
   const { content, position, animation } = layer;
   const { text, style } = content;
 
@@ -169,7 +187,7 @@ function IconTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
             flows inline instead of each node becoming a stacked flex item. */}
         <div
           {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)}
-          data-squisq-text-fit="html"
+          data-squisq-text-fit={fitTarget(layer, 'html')}
           data-squisq-base-font-size={style.fontSize}
           style={boxStyle}
         >
@@ -189,7 +207,8 @@ function IconTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
   );
 }
 
-function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerProps) {
+function PlainTextLayer({ layer, viewport, blockTime, textScale: fitScale = 1 }: TextLayerProps) {
+  const textScale = keptScale(layer, fitScale);
   const defsId = defsIdFor(useId(), layer.id);
   const { content, position, animation } = layer;
   const { text, style } = content;
@@ -425,7 +444,7 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
           Every text layer receives the same factor from BlockRenderer, so
           headings, markers, and item bodies preserve their hierarchy. */}
       <g
-        data-squisq-text-fit="svg"
+        data-squisq-text-fit={fitTarget(layer, 'svg')}
         data-squisq-fit-width={fitWidth}
         data-squisq-fit-height={fitHeight}
         style={{
@@ -479,7 +498,8 @@ function PlainTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayer
  * drag/resize stay aligned. `content.text` remains the plain projection
  * used by export/search.
  */
-function RichTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerProps) {
+function RichTextLayer({ layer, viewport, blockTime, textScale: fitScale = 1 }: TextLayerProps) {
+  const textScale = keptScale(layer, fitScale);
   const { content, position, animation } = layer;
   const { html, style } = content;
 
@@ -605,7 +625,7 @@ function RichTextLayer({ layer, viewport, blockTime, textScale = 1 }: TextLayerP
         {/* xmlns is required for HTML inside SVG foreignObject (see TableLayer) */}
         <div
           {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as Record<string, string>)}
-          data-squisq-text-fit="html"
+          data-squisq-text-fit={fitTarget(layer, 'html')}
           data-squisq-base-font-size={style.fontSize}
           style={boxStyle}
           onPointerDown={stopEmbeddedTableEvent}

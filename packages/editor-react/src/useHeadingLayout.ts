@@ -82,11 +82,18 @@ export function useHeadingLayout(refInsideWrapper: RefObject<HTMLElement | null>
         const editorRect = wysiwygContainer.getBoundingClientRect();
         const next: HeadingLayoutEntry[] = [];
         flatBlocks.forEach((block, i) => {
+          // A slide summary (an accessory block) is part of its section's
+          // span, never a block of its own; folded, its heading has no box.
+          if (block.accessoryBlock) return;
           const h = anchors[i];
           if (!h) return;
           const top = h.getBoundingClientRect().top - wrapperRect.top;
           let nextIndex = i + 1;
-          while (nextIndex < anchors.length && !anchors[nextIndex]) nextIndex++;
+          while (
+            nextIndex < anchors.length &&
+            (!anchors[nextIndex] || flatBlocks[nextIndex]!.accessoryBlock)
+          )
+            nextIndex++;
           const nextH = anchors[nextIndex];
           const bottom = nextH
             ? nextH.getBoundingClientRect().top - wrapperRect.top
@@ -167,11 +174,13 @@ export function useHeadingLayout(refInsideWrapper: RefObject<HTMLElement | null>
         const layoutInfo = monacoEditor.getLayoutInfo();
         const next: HeadingLayoutEntry[] = [];
         flatBlocks.forEach((block, i) => {
+          // A slide summary is part of its section's span (see above).
+          if (block.accessoryBlock) return;
           const line = blockStartLine(block);
           if (typeof line !== 'number') return;
           const lineTop = monacoEditor.getTopForLineNumber(line) - scrollTop + monacoTop;
           // Bottom = next block's top, or the visible bottom of the editor.
-          const nextBlock = flatBlocks[i + 1];
+          const nextBlock = flatBlocks.slice(i + 1).find((item) => !item.accessoryBlock);
           const nextLine = nextBlock ? blockStartLine(nextBlock) : undefined;
           const bottom =
             typeof nextLine === 'number'

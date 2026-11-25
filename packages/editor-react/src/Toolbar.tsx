@@ -22,7 +22,7 @@ import type { IRange, editor as MonacoEditor } from 'monaco-editor';
 import type { Editor as TiptapEditor } from '@tiptap/core';
 import type { Block } from '@bendyline/squisq/schemas';
 import { VIEWPORT_PRESETS } from '@bendyline/squisq/schemas';
-import { DEFAULT_THEME, flattenBlocks } from '@bendyline/squisq/doc';
+import { DEFAULT_THEME, flattenBlocks, isAccessoryBlockType } from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
 import { VersionHistoryPanel } from './VersionHistoryPanel';
 import { RecorderEntry } from './RecorderEntry';
@@ -211,6 +211,7 @@ import {
   type ChartTypeEntry,
 } from './chart/chartTypes';
 import { ChartTypeThumbnail } from './chart/ChartTypeThumbnail';
+import { replacesWriteSurface } from './writeModes';
 
 function findBlockBySourceLine(blocks: readonly Block[], lineNumber: number): Block | null {
   for (const block of blocks) {
@@ -543,7 +544,7 @@ export function Toolbar({
   // Summarize view, whose Write editor is hidden. Without it nothing is
   // measured, so nothing may stay collapsed: the ··· menu that would hold the
   // collapsed chrome isn't rendered either.
-  const summarizing = activeView === 'wysiwyg' && layoutMode === 'summary';
+  const summarizing = activeView === 'wysiwyg' && replacesWriteSurface(layoutMode);
   const actionsLaneShown =
     !findMode &&
     activeView !== 'preview' &&
@@ -1483,7 +1484,10 @@ export function Toolbar({
     };
   }, [isWysiwyg, tiptapEditor]);
 
-  const currentTemplate = isWysiwyg ? wysiwygTemplate : isRawView ? rawTemplate : null;
+  // A summary (an accessory block) is side information, never a slide, so
+  // the caret on its heading offers no block type to change it to.
+  const headingTemplate = isWysiwyg ? wysiwygTemplate : isRawView ? rawTemplate : null;
+  const currentTemplate = isAccessoryBlockType(headingTemplate) ? null : headingTemplate;
 
   // Compute recommended templates for the active block. The heading slice
   // comes from the context's debounced `markdownDoc`, never a fresh parse of
@@ -1605,14 +1609,15 @@ export function Toolbar({
   // Non-null exactly when a block (heading) is active — same condition as
   // the template picker. Read from the Pandoc `{…}` block (canonical), with
   // the `{[…]}` params as a fallback for hand-typed transitions.
+  // A summary has no transition, so it reads as no block.
   let currentTransition: TransitionFields | null = null;
-  if (isWysiwyg && wysiwygTemplate !== null) {
+  if (currentTemplate !== null && isWysiwyg && wysiwygTemplate !== null) {
     const attrs = tiptapEditor.getAttributes('heading') as {
       dataBlockAttrs?: string | null;
       dataTemplateParams?: string | null;
     };
     currentTransition = readBlockAttrsTransition(attrs.dataBlockAttrs, attrs.dataTemplateParams);
-  } else if (isRawView && rawTemplate !== null) {
+  } else if (currentTemplate !== null && isRawView && rawTemplate !== null) {
     currentTransition = rawTransition;
   }
 

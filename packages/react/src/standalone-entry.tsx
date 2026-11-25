@@ -40,6 +40,7 @@ import { DocPlayer } from './DocPlayer';
 import { LinearDocView } from './LinearDocView';
 import { MediaContext } from './hooks/MediaContext';
 import type { CodeBlockCopyHandler } from './MarkdownRenderer';
+import type { DocPlayerFlashcardOptions } from './DocPlayerProps';
 
 // Animation CSS is loaded as text and injected into the standalone player.
 // Font Awesome's webfonts remain in the package stylesheet instead of being
@@ -60,6 +61,8 @@ export interface MountOptions {
   /** Loop playback when the timeline ends (video mode only, default: false). */
   loop?: boolean;
   /** Dashboard-mode options (ignored by the other modes). */
+  /** Flashcards mode: where the cards come from, which kinds, and answer callbacks. */
+  flashcards?: DocPlayerFlashcardOptions;
   dashboard?: {
     /** Layout id or 'auto'. Overrides doc frontmatter. */
     layout?: string;
@@ -316,6 +319,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
   const {
     mode = 'slideshow',
     dashboard,
+    flashcards,
     basePath = '.',
     images,
     audio,
@@ -418,6 +422,7 @@ export function mount(element: Element, doc: Doc, options: MountOptions = {}): S
       dashboardShowTitle: dashboard?.title,
       dashboardStyle: dashboard?.style,
       dashboardDocumentTitle: dashboard?.documentTitle,
+      ...(flashcards ? { flashcards } : {}),
       forceViewport: forcedViewport,
       autoPlay: renderMode ? false : autoPlay,
       showControls: !renderMode,

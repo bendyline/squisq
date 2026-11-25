@@ -290,7 +290,11 @@ export function TimelineTrack({
   const scaleRef = useRef(pxPerSecond);
   scaleRef.current = pxPerSecond;
 
-  const blocks = useMemo(() => (doc ? flattenBlocks(doc.blocks) : []), [doc]);
+  // Slide summaries (accessory blocks) take no time and are never shown.
+  const blocks = useMemo(
+    () => (doc ? flattenBlocks(doc.blocks).filter((block) => !block.accessoryBlock) : []),
+    [doc],
+  );
   const timingLocked = doc ? usesDynamicPresentation(doc) : false;
 
   // Tiny slideshow thumbnail for every block, filling its bar. Resolved once

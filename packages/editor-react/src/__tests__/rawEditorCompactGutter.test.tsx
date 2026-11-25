@@ -68,6 +68,7 @@ function gutterOf(options: MonacoOptions | null) {
     lineNumbersMinChars: options?.lineNumbersMinChars,
     glyphMargin: options?.glyphMargin,
     folding: options?.folding,
+    showFoldingControls: options?.showFoldingControls,
     lineDecorationsWidth: options?.lineDecorationsWidth,
   };
 }
@@ -91,6 +92,7 @@ describe('RawEditor compact gutter', () => {
       lineNumbersMinChars: 5,
       glyphMargin: true,
       folding: true,
+      showFoldingControls: 'mouseover',
       lineDecorationsWidth: 22,
     });
     const host = getByTestId('raw-editor');
@@ -101,12 +103,17 @@ describe('RawEditor compact gutter', () => {
   it('trims the gutter to line numbers on a narrow editor', () => {
     const { getByTestId } = renderAtWidth(390);
 
+    // Folding stays on (summaries open folded) with no controls column; a
+    // folded line's `⋯` opens on a tap.
     expect(gutterOf(captured.options)).toEqual({
       lineNumbersMinChars: 2,
       glyphMargin: false,
-      folding: false,
+      folding: true,
+      showFoldingControls: 'never',
       lineDecorationsWidth: 16,
     });
+    expect(captured.options?.unfoldOnClickAfterEndOfLine).toBe(true);
+    expect(captured.options?.foldingImportsByDefault).toBe(true);
     const host = getByTestId('raw-editor');
     expect(host.style.getPropertyValue('--squisq-raw-editor-breathing')).toBe('6px');
     expect(host.style.getPropertyValue('--squisq-raw-editor-number-inset')).toBe('4px');
@@ -121,6 +128,7 @@ describe('RawEditor compact gutter', () => {
       lineNumbersMinChars: 5,
       glyphMargin: true,
       folding: true,
+      showFoldingControls: 'mouseover',
       lineDecorationsWidth: 22,
     });
   });

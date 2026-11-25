@@ -18,7 +18,7 @@
  * coupling — so any host can reuse them.
  */
 
-import { parseMarkdown } from '@bendyline/squisq/markdown';
+import { parseMarkdown, isAccessoryHeading } from '@bendyline/squisq/markdown';
 import type { MarkdownDocument } from '@bendyline/squisq/markdown';
 import { frontmatterEndOffset } from './frontmatter';
 
@@ -72,8 +72,14 @@ export function getBlockSlices(fullSource: string): BlockSlice[] {
 
   const lineStarts = computeLineStarts(fullSource);
   const headingOffsets: number[] = [];
+  // A slide summary (an accessory block) and the headings under it belong to
+  // the section above: they start no card of their own.
+  let insideAccessory = 0;
   for (const node of doc.children) {
     if (node.type !== 'heading') continue;
+    if (insideAccessory && node.depth > insideAccessory) continue;
+    insideAccessory = isAccessoryHeading(node) ? node.depth : 0;
+    if (insideAccessory) continue;
     const line = node.position?.start.line;
     if (typeof line !== 'number') continue;
     const off = lineStarts[line - 1];

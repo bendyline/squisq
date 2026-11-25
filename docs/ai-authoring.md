@@ -164,6 +164,35 @@ The automatic plan keeps a short tail with its slide. A section a little longer 
 is not cut into a slide and a one-sentence remainder, so a cycle keeps the sentence that closes
 it and a matrix its fourth panel, and the model sees the whole shape.
 
+## Making study cards with a model
+
+`generateStudyCards` (`@bendyline/squisq/study`; `core/src/transform/studyGeneration.ts`) writes
+flashcards and quiz questions for a document's sections, with the same split as slide wording: Squisq owns the
+prompts, the reply formats and the checks, and the host passes one transport function. The
+request type extends the shared `AuthorModelRequest` (`authorModel.ts`), so one host function
+serves slide wording and study cards. The Study cards view runs it through the `StudyAssistant`
+a host lends `EditorShell` as `studyAssistant`.
+
+- **One section and one request at a time.** A phone's model runs one request at a time. A
+  section longer than one request can carry is split between sentences.
+- **Sized for small models.** `studyBudget(limits)` takes the model's context window (4,096 when
+  unknown) and reply cap (Apple's on-device model stops at 1,024 tokens) and sets how much
+  passage a request carries and how many cards it asks for.
+- **Read leniently.** `readStudyCardReply` finds the JSON in fences, after reasoning, or with
+  words around it; reads `front`/`back`, `term`/`definition` and `choices` with an `answer`
+  index; and keeps the cards a cut-off reply finished — hosts on phones cannot enforce the reply
+  format.
+- **Judged before writing.** `judgeStudyCard` refuses a card whose answer or right choice the
+  passage does not support or whose numbers it does not state, a question about the passage
+  itself or addressed to a model, and one that repeats a question the document already asks. A
+  quiz question keeps only wrong answers that are distinct and cannot also be right ("all of the
+  above", one containing the right answer), needs two of them, and lists its choices in an order
+  set by the question.
+- **Repaired once.** A reply that cannot be used is asked for again with what was wrong, or with
+  half as many cards when it ran out of room with nothing finished.
+- **Handed over as made.** Each accepted card reaches `onCard` before the next request, as a
+  draft for `writeStudyCards` marked `origin=ai` with its section's passage key.
+
 ## What the output is held to
 
 `@bendyline/squisq/transform` exports the grounding checks (`core/src/transform/grounding.ts`).

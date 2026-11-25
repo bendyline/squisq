@@ -29,6 +29,7 @@ import { Extension } from '@tiptap/core';
 import type { Node as PMNode, Schema } from '@tiptap/pm/model';
 import { Plugin, PluginKey, type EditorState, type Transaction } from '@tiptap/pm/state';
 import { dataLinkHrefOf } from './dataCard/DataCardExtension';
+import { documentFinalAccessoryRun } from './accessoryBlocks/accessoryBlockRuns';
 
 export const TRAILING_PARAGRAPH_KEY = new PluginKey('squisq-trailing-paragraph');
 
@@ -36,12 +37,24 @@ export const TRAILING_PARAGRAPH_KEY = new PluginKey('squisq-trailing-paragraph')
 const SELF_EXITING_BLOCKS = new Set(['bulletList', 'orderedList', 'taskList', 'blockquote']);
 
 /**
- * True when the document's last top-level block leaves no visible place to
- * keep typing after it.
+ * Where the document's own content ends: before the accessory blocks (slide
+ * summaries) that end it, if any — text typed after those would belong to
+ * the last one.
+ */
+export function documentContentEnd(doc: PMNode): number {
+  return documentFinalAccessoryRun(doc)?.from ?? doc.content.size;
+}
+
+/**
+ * True when the document's last block of content leaves no visible place to
+ * keep typing after it. Summaries that end the document are not content, so
+ * the block before them decides, and a document with nothing before them
+ * needs a place to type.
  */
 export function needsTrailingParagraph(doc: PMNode): boolean {
-  const last = doc.lastChild;
-  if (!last) return false;
+  const end = documentContentEnd(doc);
+  const last = doc.resolve(end).nodeBefore;
+  if (!last) return end !== doc.content.size;
   const name = last.type.name;
   // A paragraph is a place to type — unless it is a data card's link line,
   // which the card hides and draws over.
@@ -84,9 +97,15 @@ export function trailingParagraphTransaction(state: EditorState): Transaction | 
   const node = createTrailingParagraph(state.schema);
   if (!node) return null;
   return state.tr
-    .insert(state.doc.content.size, node)
+    .insert(documentContentEnd(state.doc), node)
     .setMeta(TRAILING_PARAGRAPH_KEY, true)
     .setMeta('addToHistory', false);
+}
+
+/** The empty paragraph this extension added, if it is still untouched where it was put. */
+export function appendedTrailingParagraph(doc: PMNode): PMNode | null {
+  const last = doc.resolve(documentContentEnd(doc)).nodeBefore;
+  return last && appendedParagraphs.has(last) && last.content.size === 0 ? last : null;
 }
 
 /**
@@ -95,9 +114,10 @@ export function trailingParagraphTransaction(state: EditorState): Transaction | 
  * place to type is never written to the file as a blank line.
  */
 export function withoutTrailingParagraph(doc: PMNode): PMNode {
-  const last = doc.lastChild;
-  if (!last || !appendedParagraphs.has(last) || last.content.size > 0) return doc;
-  return doc.copy(doc.content.cut(0, doc.content.size - last.nodeSize));
+  const last = appendedTrailingParagraph(doc);
+  if (!last) return doc;
+  const end = documentContentEnd(doc);
+  return doc.copy(doc.content.cut(0, end - last.nodeSize).append(doc.content.cut(end)));
 }
 
 export const TrailingParagraphExtension = Extension.create({

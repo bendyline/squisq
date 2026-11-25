@@ -33,14 +33,16 @@ doesn't.
 
 ## Where tags are recognized
 
-| Where you put it                                                        | What it means                                                                         |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| At the end of a heading                                                 | The block's template and settings                                                     |
-| A paragraph that is only `{[templateName …]}`                           | A heading-less block — see [Standalone tags](#standalone-tags)                        |
-| The last thing in an untagged section's body                            | The section's tag — see [tags in a section's body](markup.md#tags-in-a-sections-body) |
-| A paragraph that is only `{[audio …]}`, `{[video …]}`, or `{[media …]}` | A timed media clip — see [Timed media clips](#timed-media-clips)                      |
-| At the end of a child heading inside `{[drawing]}` or `{[layout]}`      | A shape or layer — see [Shapes and layers](#shapes-and-layers)                        |
-| In body text, when the name is an icon                                  | An inline icon — see [Inline icons](#inline-icons)                                    |
+| Where you put it                                                        | What it means                                                                                            |
+| ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| At the end of a heading                                                 | The block's template and settings                                                                        |
+| A paragraph that is only `{[templateName …]}`                           | A heading-less block — see [Standalone tags](#standalone-tags)                                           |
+| The last thing in an untagged section's body                            | The section's tag — see [tags in a section's body](markup.md#tags-in-a-sections-body)                    |
+| A paragraph that is only `{[audio …]}`, `{[video …]}`, or `{[media …]}` | A timed media clip — see [Timed media clips](#timed-media-clips)                                         |
+| At the end of a child heading inside `{[drawing]}` or `{[layout]}`      | A shape or layer — see [Shapes and layers](#shapes-and-layers)                                           |
+| `{[summary …]}` at the end of a heading                                 | A slide summary, side information about the section — see [Accessory blocks](markup.md#accessory-blocks) |
+| `{[flashcard …]}` or `{[quiz …]}` at the end of a heading               | A study card about the section — see [Study cards](markup.md#study-cards)                                |
+| In body text, when the name is an icon                                  | An inline icon — see [Inline icons](#inline-icons)                                                       |
 
 Anywhere else, `{[…]}` stays as literal text. In particular, a tag in the _middle_ of a heading
 (`## The {[quote]} section`) isn't a tag, and a tag-only paragraph inside a list item,
@@ -204,6 +206,45 @@ Three more parameters work with every built-in template:
 | `imageTreatment` | Overrides the theme's photo grade for this block's pictures: `none`, `mono`, `duotone`, `warm`, or `cool` |
 | `useTopLayer`    | `false` hides the document's top persistent layers on this block                                          |
 | `useBottomLayer` | `false` hides the document's bottom persistent layers on this block                                       |
+
+### Summary settings
+
+Two settings shape a section's slides in a **Custom** summary. The summary designer writes them,
+and they never change the block's own slide:
+
+| Parameter          | What it does                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `slideLayout`      | The layout this section's summary slides prefer, such as `cards` or `steps`; `authored` shows the block as written; `feature` is described below |
+| `supportingSlides` | `false` keeps the summary from adding supporting slides to this section; `true` allows them                                                      |
+
+`slideLayout=feature` is for a block that draws a picture: a chart, a data table, a diagram, a
+drawing, a layout, a map, a tree or a timeline. The block makes no slide of its own. It is drawn
+beneath the headline of the **last slide of the section before it** — the nearest section before
+it that makes slides, not necessarily its parent:
+
+```markdown
+## Results
+
+Revenue grew 40% last year. Most of it came from new customers.
+
+## By region {[barChart slideLayout=feature]}
+
+| Region | Sales |
+| --- | --- |
+| North | 40 |
+| South | 25 |
+```
+
+Here the last slide of **Results** shows its words with the bar chart beneath them. The
+**By region** text is still narrated while that slide stays up, so nothing narrated changes.
+Several such blocks in a row join the same slide, up to four things on one slide. If that slide
+was a full-screen picture, it becomes a text slide and the picture sits beside the block. The
+block is drawn still: its entrance and its own `build=` setting are left out.
+
+When nothing before it can carry it, the block gets a slide of its own as if it were
+`authored`, and the summary designer says why: nothing comes before it, the section before it
+is shown as authored, every slide of that section is hidden, that slide already carries four
+things, or the block is not a kind that draws a picture (the validator warns about this one).
 
 ## Standalone tags
 

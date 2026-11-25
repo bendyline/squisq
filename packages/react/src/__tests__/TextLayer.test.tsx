@@ -445,4 +445,29 @@ describe('TextLayer motion', () => {
     expect(words.every((w) => w.getAttribute('dominant-baseline') === baseline)).toBe(true);
     expect(container.querySelector('text')!.textContent).toContain('Hello wide world');
   });
+
+  it('keeps the size of text that keeps its size, in every text form', () => {
+    const plain: TextLayerType = {
+      id: 'chart-label',
+      type: 'text',
+      content: { text: 'North', style: { fontSize: 18, color: '#000', keepSize: true } },
+      position: { x: 10, y: 10, width: 200, height: 30 },
+    };
+    const rich: TextLayerType = {
+      ...plain,
+      id: 'chart-title',
+      content: { ...plain.content, html: '<strong>By region</strong>' },
+    };
+    const { container } = render(
+      <svg>
+        <TextLayer layer={plain} viewport={viewport} blockTime={0} textScale={2} />
+        <TextLayer layer={rich} viewport={viewport} blockTime={0} textScale={2} />
+      </svg>,
+    );
+    // Not a fit target, so the slide's shared scale never reaches it…
+    expect(container.querySelectorAll('[data-squisq-text-fit]')).toHaveLength(0);
+    // …and the scale passed in is ignored.
+    const richBox = container.querySelector<HTMLElement>('[data-squisq-base-font-size]');
+    expect(richBox?.style.fontSize).toBe('18px');
+  });
 });

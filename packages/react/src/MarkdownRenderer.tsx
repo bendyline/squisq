@@ -37,6 +37,7 @@ import {
   MarkdownListItem,
   MarkdownTableRow,
   MarkdownTableCell,
+  withoutAccessorySectionNodes,
 } from '@bendyline/squisq/markdown';
 import { useMediaProvider, useMediaUrl } from './hooks/MediaContext';
 import { useFenceRenderers } from './hooks/FenceRendererContext';
@@ -1032,11 +1033,13 @@ export function MarkdownRenderer({
       cancelled = true;
     };
   }, [mediaProvider]);
-  if (!nodes || nodes.length === 0) return null;
+  // Accessory sections (slide summaries) are side information, never content.
+  const shown = nodes && withoutAccessorySectionNodes(nodes);
+  if (!shown || shown.length === 0) return null;
 
   return (
     <div className={`squisq-md ${className || ''}`}>
-      {renderBlocks(nodes, '', {
+      {renderBlocks(shown, '', {
         htmlPolicy,
         linkSchemes,
         theme,

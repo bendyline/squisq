@@ -13,6 +13,7 @@ import type { TransformImage } from './types.js';
 import { extractContent, stripMarkdown } from '../generate/contentExtractor.js';
 import { extractPlainText } from '../markdown/utils.js';
 import { extractImages } from '../doc/templateInputs.js';
+import { isAccessoryBlock } from '../doc/accessoryBlocks.js';
 
 /** An image found in a block's markdown contents. */
 export interface BlockImage {
@@ -97,6 +98,8 @@ export function extractDocImages(blocks: Block[]): TransformImage[] {
 
   function walk(blockList: Block[]): void {
     for (const block of blockList) {
+      // Side information (a slide summary, a study card) is never content.
+      if (isAccessoryBlock(block)) continue;
       for (const img of extractImages(block.contents)) {
         if (!seen.has(img.src)) {
           seen.add(img.src);

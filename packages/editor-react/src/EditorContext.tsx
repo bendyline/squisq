@@ -87,6 +87,7 @@ import {
   applyAsMonacoLayoutSettles,
   restoreWysiwygScrollRatio,
 } from './editorScrollSync';
+import { replacesWriteSurface } from './writeModes';
 
 /** Monaco standalone code editor instance type */
 type MonacoEditor = MonacoEditorNs.IStandaloneCodeEditor;
@@ -203,12 +204,12 @@ export type EditorColorScheme = 'light' | 'dark';
  * heading-defined block on a card at a time, with Write scoped to just that
  * block. `'timeline'` is block mode plus a horizontal timeline track for
  * editing block durations and media slices. `'summary'` replaces the editing
- * surface with the Summarize view — how slides and video summarize the
+ * surface with the Summarize view (and `'study'` with the Study cards view) — how slides and video summarize the
  * document — while the whole-document editor stays mounted behind it, as it
  * does behind Use, so its changes stay undoable. These are Write modes:
  * Source always shows and edits the whole file. See {@link useBlockNavigator}.
  */
-export type LayoutMode = 'document' | 'block' | 'timeline' | 'summary';
+export type LayoutMode = 'document' | 'block' | 'timeline' | 'summary' | 'study';
 /**
  * How much of the active Squisq theme the WYSIWYG editing surface
  * mirrors. `'fonts'` is the historical default — body and heading
@@ -1594,7 +1595,7 @@ export function EditorProvider({
   // Summarize hides the Write editor, as Use does: it has no caret or
   // selection to act on. Whole-document writes still reach it (see
   // `applySourceEdits`), which is what makes them undoable there.
-  const writeEditorShown = activeView === 'wysiwyg' && layoutModeState !== 'summary';
+  const writeEditorShown = activeView === 'wysiwyg' && !replacesWriteSurface(layoutModeState);
   const getSelection = useCallback((): EditorSelectionInfo | null => {
     if (writeEditorShown && tiptapEditor) {
       const { from, to, empty } = tiptapEditor.state.selection;

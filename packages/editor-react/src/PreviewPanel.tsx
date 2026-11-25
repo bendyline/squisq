@@ -23,11 +23,13 @@ import type {
   AudioController,
   CodeBlockCopyHandler,
   FlashcardControls,
+  FlashcardViewProps,
   PlaybackControlsProps,
   PlaybackState,
   SlideshowControlsProps,
 } from '@bendyline/squisq-react';
 import { resolveTransformStyle } from '@bendyline/squisq/transform';
+import { hasStudyCards } from '@bendyline/squisq/doc';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import { useEditorContext } from './EditorContext';
 import { usePreviewSettings } from './PreviewControls';
@@ -67,7 +69,15 @@ export interface PreviewPanelProps {
   showCodeCopyButton?: boolean;
   /** Optional host clipboard adapter; otherwise the browser Clipboard API is used. */
   onCopyCode?: CodeBlockCopyHandler;
+  /** Told how each card went in the Flashcards view (see `EditorShell`'s `flashcardStudy`). */
+  flashcardStudy?: FlashcardStudyCallbacks;
 }
+
+/** What a host is told as a person studies (see `FlashcardView`). */
+export type FlashcardStudyCallbacks = Pick<
+  FlashcardViewProps,
+  'onAnswer' | 'onRate' | 'onComplete'
+>;
 
 // ── Component ──────────────────────────────────────────────────────
 
@@ -110,6 +120,7 @@ export function PreviewPanel({
   onLinkClick,
   showCodeCopyButton = false,
   onCopyCode,
+  flashcardStudy,
 }: PreviewPanelProps) {
   const {
     doc,
@@ -181,6 +192,18 @@ export function PreviewPanel({
 
   const previewDoc = previewProjection?.playerDoc ?? null;
   const contentDoc = previewProjection?.contentDoc ?? null;
+  // The Flashcards view studies a document's study cards when it has any. A
+  // summary style's projection leaves them out with every accessory block, so
+  // the deck is then made from the document as written.
+  const flashcardDoc = useMemo(
+    () =>
+      contentDoc && hasStudyCards(contentDoc)
+        ? contentDoc
+        : doc && hasStudyCards(doc)
+          ? doc
+          : (contentDoc ?? doc),
+    [contentDoc, doc],
+  );
 
   // The primary player's state feeds two listeners: the audience window, which
   // follows it while open, and the toolbar, which acts on the slide on screen.
@@ -385,6 +408,7 @@ export function PreviewPanel({
           displayMode={activeDisplayMode}
           previewDoc={previewDoc}
           contentDoc={contentDoc ?? doc}
+          flashcardDoc={flashcardDoc}
           documentMarkdown={documentMarkdown}
           basePath={basePath}
           viewport={activeViewport}
@@ -466,7 +490,8 @@ export function PreviewPanel({
     if (isFlashcardsMode) {
       return (
         <FlashcardView
-          doc={contentDoc ?? doc!}
+          {...(!audience ? flashcardStudy : {})}
+          doc={flashcardDoc!}
           basePath={basePath}
           theme={activeTheme}
           globalKeyboardShortcuts={!audience}

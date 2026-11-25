@@ -53,8 +53,9 @@ import { TimelineToolbar } from './TimelineToolbar';
 import { useTimelineClock } from './useTimelineClock';
 import { usePreviewProjection } from './usePreviewProjection';
 import { collectEmbeddedVideoSchedule } from './embeddedMedia';
-import { PreviewPanel } from './PreviewPanel';
+import { PreviewPanel, type FlashcardStudyCallbacks } from './PreviewPanel';
 import { SummarizeView } from './summarize/SummarizeView';
+import { StudyView, type StudyAssistant } from './study/StudyView';
 import type { SummarizationAssistant } from './summarize/summarizationAssistant';
 import { ImageEditModal } from './imageEditor/ImageEditModal';
 import type { ImageWriteBack } from './imageEditor/ImageFileEditor';
@@ -321,6 +322,10 @@ export interface EditorShellProps {
    * save as it goes. Most hosts want `summarizationAssistant` instead.
    */
   summarizationDesigner?: ReactNode;
+  /** Told how each card went in Use › Flashcards, so a host can keep progress (`FlashcardView`). */
+  flashcardStudy?: FlashcardStudyCallbacks;
+  /** AI for Edit › Study cards' Generate (the host makes the calls); the view works without it. */
+  studyAssistant?: StudyAssistant;
   /** Host-supplied content rendered at the right edge of the bottom status bar. */
   statusBarSlotRight?: ReactNode;
   /**
@@ -862,6 +867,8 @@ export function EditorShell({
   toolbarPosition = 'top',
   summarizationAssistant,
   summarizationDesigner,
+  flashcardStudy,
+  studyAssistant,
   statusBarSlotRight,
   sidePanelSlot,
   documentHeaderSlot,
@@ -1073,6 +1080,8 @@ export function EditorShell({
                 toolbarPosition={toolbarPosition}
                 summarizationAssistant={summarizationAssistant}
                 summarizationDesigner={summarizationDesigner}
+                flashcardStudy={flashcardStudy}
+                studyAssistant={studyAssistant}
                 statusBarSlotRight={statusBarSlotRight}
                 sidePanelSlot={sidePanelSlot}
                 documentHeaderSlot={documentHeaderSlot}
@@ -1140,6 +1149,8 @@ interface EditorShellInnerProps {
   toolbarPosition: EditorToolbarPosition;
   summarizationAssistant?: SummarizationAssistant;
   summarizationDesigner?: ReactNode;
+  flashcardStudy?: FlashcardStudyCallbacks;
+  studyAssistant?: StudyAssistant;
   statusBarSlotRight?: ReactNode;
   sidePanelSlot?: ReactNode;
   documentHeaderSlot?: ReactNode;
@@ -1240,6 +1251,8 @@ function EditorShellInner({
   toolbarPosition,
   summarizationAssistant,
   summarizationDesigner,
+  flashcardStudy,
+  studyAssistant,
   statusBarSlotRight,
   sidePanelSlot,
   documentHeaderSlot,
@@ -1337,7 +1350,8 @@ function EditorShellInner({
   const isTimelineMode = isCardMode && layoutMode === 'timeline';
   // Summarize replaces the Write surface, which stays mounted behind it.
   const isSummarizing = isMarkdownMode && editingView === 'wysiwyg' && layoutMode === 'summary';
-  const wysiwygHidden = isPreview || isSummarizing;
+  const isStudying = isMarkdownMode && editingView === 'wysiwyg' && layoutMode === 'study';
+  const wysiwygHidden = isPreview || isSummarizing || isStudying;
   // The timeline mirrors the *played* document, not the raw parse: block bars,
   // the playhead, and the clock use the same narration-timed projection the
   // Video composition renders, so an unpinned slide occupies its recorded-voice
@@ -1884,6 +1898,9 @@ function EditorShellInner({
                     hidden={isPreview}
                   />
                 )}
+                {isStudying && (
+                  <StudyView assistant={studyAssistant} readOnly={readOnly} hidden={isPreview} />
+                )}
                 {isMarkdownMode && isPreview && (
                   <PreviewPanel
                     basePath={basePath}
@@ -1891,6 +1908,7 @@ function EditorShellInner({
                     onLinkClick={onLinkClick}
                     showCodeCopyButton={showCodeCopyButton}
                     onCopyCode={onCopyCode}
+                    flashcardStudy={flashcardStudy}
                   />
                 )}
               </div>

@@ -1,5 +1,5 @@
 import type { Doc } from '@bendyline/squisq/schemas';
-import { flattenBlocks } from '@bendyline/squisq/doc';
+import { flattenContentBlocks } from '@bendyline/squisq/doc';
 
 export type StandalonePlayerVariant = 'light' | 'full';
 
@@ -9,7 +9,8 @@ export type StandalonePlayerVariant = 'light' | 'full';
  * already-materialized layer contains Mermaid content.
  */
 export function selectStandalonePlayerVariant(doc: Pick<Doc, 'blocks'>): StandalonePlayerVariant {
-  for (const block of flattenBlocks(doc.blocks)) {
+  // A slide summary is never drawn, so its diagrams never need the full player.
+  for (const block of flattenContentBlocks(doc.blocks)) {
     if (block.layers?.some((layer) => layer.type === 'mermaid')) return 'full';
     if (containsMermaidFence(block.contents)) return 'full';
   }

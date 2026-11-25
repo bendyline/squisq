@@ -149,6 +149,23 @@ describe('snapEndpoints', () => {
     expect(r.end).toMatchObject({ port: 'top-left', x: 150, y: 120 });
   });
 
+  it('joins a box to two boxes below it the same way, whatever the rounding', () => {
+    // Centre-to-corner and corner-to-centre tie exactly here, so rounding
+    // alone once sent one connector of the pair from a corner (a drawing's
+    // boxes at the size a summary slide drew them, 2026-11-24).
+    const box = (x: number, y: number, width: number, height: number) => ({
+      cx: x + width / 2,
+      cy: y + height / 2,
+      rx: width / 2,
+      ry: height / 2,
+    });
+    const [width, height] = [237.3090909090909, 103.8227272727273];
+    const manager = box(841.3454545454546, 703.3636363636365, width, height);
+    const left = snapEndpoints(manager, box(663.3636363636364, 896.1772727272729, width, height));
+    const right = snapEndpoints(manager, box(1019.3272727272727, 896.1772727272729, width, height));
+    expect(left.start.port).toBe(right.start.port);
+  });
+
   it('finds the nearest port toward a free pointer', () => {
     expect(nearestSnapPoint(a, { x: 100, y: 10 }).port).toBe('top-right');
   });

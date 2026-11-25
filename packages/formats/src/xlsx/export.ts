@@ -34,6 +34,7 @@
 import type { Doc } from '@bendyline/squisq/schemas';
 import { docToMarkdown } from '@bendyline/squisq/doc';
 import type { MarkdownDocument, MarkdownInlineNode } from '@bendyline/squisq/markdown';
+import { withoutAccessorySections } from '@bendyline/squisq/markdown';
 import { inlineToPlainText } from '../shared/text.js';
 
 import { createPackage } from '../ooxml/writer.js';
@@ -276,10 +277,12 @@ function stylesXml(): string {
  * yields a single empty sheet (a valid, openable file — never throws).
  */
 export async function markdownDocToXlsx(
-  doc: MarkdownDocument,
+  source: MarkdownDocument,
   options: XlsxExportOptions = {},
 ): Promise<ArrayBuffer> {
   options.signal?.throwIfAborted();
+  // A table in a slide summary is not one of the document's tables.
+  const doc = withoutAccessorySections(source);
   const prefix = cleanSheetName(options.sheetNamePrefix ?? 'Sheet') || 'Sheet';
   const maxCells = options.maxCells ?? 100_000;
   if (!Number.isSafeInteger(maxCells) || maxCells < 0) {
