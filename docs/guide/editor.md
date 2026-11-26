@@ -105,16 +105,18 @@ you were on, and switching back opens Write on the block holding the Source curs
     **On the last slide of** the section before it, which draws it there instead of on a slide
     of its own (it stays in the list without a number, tagged with the slide carrying it, and
     says why when it cannot be carried) — and, under **Customize slide wording**, rewrite the
-    headline and highlights of a section's first slide (**Use automatic wording** takes yours
-    away). **Reset design** returns every slide to its automatic summary. Apps that connect an AI
-    add **Suggest with AI**, which proposes a layout and shorter wording for each slide. Each
-    change is saved as you make it, in the document itself: a section's slide wording, AI
-    suggestions and hidden slides as `{[summary]}` blocks under it (see
+    slide's headline and highlights (**Use automatic wording** takes yours away). Changing the
+    wording of a slide the AI suggested makes all of that slide's wording yours, and suggesting
+    again keeps it. **Reset design** returns every slide to its automatic summary. Apps that
+    connect an AI add **Suggest with AI**, which proposes a layout and shorter wording for each
+    slide. Each change is saved as you make it, in the document itself: a section's slide
+    wording, AI suggestions and hidden slides as `{[summary]}` blocks under it (see
     [Accessory blocks](markup.md#accessory-blocks)), its layout on its heading. Write folds a
     section's summaries into one **Slide summaries** row you can open; Source folds each. Ctrl+Z
-    in Write undoes a change. Your wording stays when you edit the section's text; an AI
-    suggestion or a hidden slide applies only while its passage is unchanged, and a list of
-    summaries **not in use** lets you remove the ones that no longer apply.
+    in Write undoes a change. Your wording for a section's first slide stays when you edit the
+    section's text; your wording for its other slides, an AI suggestion or a hidden slide applies
+    only while its passage is unchanged, and a list of summaries **not in use** lets you remove
+    the ones that no longer apply.
   - **Documentary**, **Magazine**, **Data-Driven**, **Narrative**, **Minimal**, or **Headings and
     features** — the document re-cut into a presentation in that style. Below the choice are the
     slides it makes, each beside the section it came from; slides a style adds around your text,

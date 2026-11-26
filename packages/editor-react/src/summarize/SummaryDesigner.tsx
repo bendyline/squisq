@@ -8,8 +8,9 @@
  * supporting-slides choice as frontmatter keys, a section's layout on its
  * heading's tag, and each designed slide as a `{[summary]}` block under its
  * section — your wording for a section's opening slide (kept when the text
- * changes), an AI suggestion or a hidden slide keyed to the exact passage it
- * was made for. Generated slides are never saved.
+ * changes); your wording for any other slide, an AI suggestion or a hidden
+ * slide keyed to the exact passage it was made for. Generated slides are
+ * never saved.
  *
  * The document is the only copy of the design: this view reads it on every
  * change and writes each change as it is made (`writePresentationHints`), so
@@ -182,6 +183,21 @@ function withSuggestions(
     });
   }
   return next;
+}
+/**
+ * A slide design that reads back as written. A hidden slide's summary whose
+ * only wording is a headline would read back with that headline as the
+ * slide's label (a hidden slide's lone heading only names it), so it also
+ * keeps the points the slide shows.
+ */
+function keepingHeadline<T extends PresentationSlideHint>(slide: T, points: readonly string[]): T {
+  return slide.hidden &&
+    !slide.origin &&
+    slide.headline !== undefined &&
+    slide.points === undefined &&
+    slide.layout === undefined
+    ? { ...slide, points: [...points] }
+    : slide;
 }
 /** The AI wording a design holds, as text, for a host's report control. */
 function suggestionsText(hints: PresentationHints): string {
@@ -634,10 +650,34 @@ export function SummaryDesigner({
     if (!section) return;
     commit((design) => withBlockHint(design, section.blockId, patch));
   };
-  /** Your wording for the section's opening slide: its keyless summary block. */
-  const openingWording = hint?.slides?.find((slide) => !slide.passage && !slide.origin);
-  const setOpeningWording = (patch: { headline?: string; points?: string[] }) => {
-    if (!section) return;
+  // Where your wording for the selected slide is saved. A section's opening
+  // slide keeps it in the section's keyless summary, which stays when the
+  // section's text changes; any other slide in a summary keyed to its exact
+  // passage, which applies while that passage reads the same. Your wording
+  // already keyed to the opening slide's passage wins there, so it is changed
+  // where it is.
+  const beatKey = plan && beat ? passageKeyOf(beat, plan.sourceText) : undefined;
+  const opening =
+    !!plan &&
+    !!section &&
+    plan.beats.find(
+      (item) => sectionAt(sections, item.sourceStart)?.blockId === section.blockId,
+    ) === beat;
+  const keyed = hint?.slides?.find((slide) => slide.passage === beatKey);
+  const keyedOwn = !!keyed && !keyed.origin && slideHintHasWording(keyed);
+  const wordingPassage = opening && !keyedOwn ? undefined : beatKey;
+  const wordingIn = (slides: readonly PresentationSlideHint[] | undefined) =>
+    slides?.find((slide) =>
+      wordingPassage === undefined
+        ? slide.passage === undefined && !slide.origin
+        : slide.passage === wordingPassage,
+    );
+  const savedWording = wordingIn(hint?.slides);
+  /** AI wording for this slide, which your first change to it makes yours. */
+  const aiWording = savedWording?.origin === 'ai' ? savedWording : undefined;
+  const ownWording = !!savedWording && !savedWording.origin && slideHintHasWording(savedWording);
+  const setSlideWording = (patch: { headline?: string; points?: string[] }) => {
+    if (!section || !beat) return;
     if (
       patch.points &&
       (patch.points.length > PRESENTATION_LIMITS.points ||
@@ -648,15 +688,42 @@ export function SummaryDesigner({
       );
       return;
     }
+    const shownPoints = beat.points;
     commit((design) => {
-      const existing =
-        design.blocks
-          .find((block) => block.blockId === section.blockId)
-          ?.slides?.find((slide) => !slide.passage && !slide.origin) ?? {};
+      const block = design.blocks.find((item) => item.blockId === section.blockId);
+      const saved = wordingIn(block?.slides);
+      // AI wording becomes yours whole, so the slide changes only where you
+      // changed it, and suggesting again keeps it. Its layout comes too, unless
+      // the section prefers one: that preference wins over AI, and must keep
+      // winning once the wording is yours.
+      const { passage: _passage, origin, ...existing } = saved ?? {};
+      void _passage;
+      if (origin === 'ai' && isSummaryPresentationLayout(block?.layout)) delete existing.layout;
       const next: PresentationSlideHint = { ...existing, ...patch };
       if ('headline' in patch && patch.headline === undefined) delete next.headline;
-      const keep = next.headline !== undefined || next.points !== undefined || next.hidden;
-      return withSlideHint(design, section.blockId, undefined, keep ? next : null);
+      const keep = slideHintHasWording(next) || next.hidden;
+      return withSlideHint(
+        design,
+        section.blockId,
+        wordingPassage,
+        keep ? keepingHeadline(next, shownPoints) : null,
+      );
+    });
+  };
+  /** Back to the automatic wording. A hidden slide stays hidden. */
+  const restoreAutomaticWording = () => {
+    if (!section || !beat) return;
+    const headline = beat.headline;
+    commit((design) => {
+      const saved = wordingIn(
+        design.blocks.find((block) => block.blockId === section.blockId)?.slides,
+      );
+      return withSlideHint(
+        design,
+        section.blockId,
+        wordingPassage,
+        saved?.hidden ? { hidden: true, label: saved.label ?? headline } : null,
+      );
     });
   };
   const hiddenCount = plan?.beats.filter((item) => item.hidden).length ?? 0;
@@ -668,16 +735,18 @@ export function SummaryDesigner({
   const setHidden = (hide: boolean) => {
     if (!plan || !beat || !section) return;
     const key = passageKeyOf(beat, plan.sourceText);
-    const headline = beat.headline;
+    const { headline, points } = beat;
     commit((design) => {
       const existing = design.blocks
         .find((block) => block.blockId === section.blockId)
         ?.slides?.find((slide) => slide.passage === key);
       if (hide)
-        return withSlideHint(design, section.blockId, key, {
-          ...(existing ?? { label: headline }),
-          hidden: true,
-        });
+        return withSlideHint(
+          design,
+          section.blockId,
+          key,
+          keepingHeadline({ ...(existing ?? { label: headline }), hidden: true }, points),
+        );
       if (!existing) return design;
       // A summary that only hid the slide goes; one with wording stays, shown.
       const { hidden: _hidden, label: _label, passage: _passage, ...rest } = existing;
@@ -1206,65 +1275,61 @@ export function SummaryDesigner({
                   )}
                 </p>
               )}
-              {beat.sourceStart === section.sourceStart &&
-                isSummaryPresentationLayout(beat.layout) && (
-                  <details
-                    className="squisq-summary-designer-wording"
-                    open={wordingOpen}
-                    onToggle={(event) => setWordingOpen(event.currentTarget.open)}
-                  >
-                    <summary>Customize slide wording (slides only)</summary>
-                    <p>
-                      This section’s opening slide can use your wording. It is saved in the
-                      document, under the section, and stays when you change the section’s text.
-                    </p>
-                    <label>
-                      Slide headline
-                      <input
-                        key={beat.headline}
-                        defaultValue={beat.headline}
-                        maxLength={PRESENTATION_LIMITS.headline}
-                        disabled={locked}
-                        onBlur={(event) => {
-                          // Leaving the field unchanged saves nothing.
-                          const value = event.target.value.trim();
-                          if (value === beat.headline.trim()) return;
-                          setOpeningWording({ headline: value || undefined });
-                        }}
-                      />
-                    </label>
-                    <label>
-                      Slide highlights, one per line
-                      <textarea
-                        rows={3}
-                        key={beat.points.join('\n')}
-                        defaultValue={beat.points.join('\n')}
-                        disabled={locked}
-                        onBlur={(event) => {
-                          const points = event.target.value
-                            .split('\n')
-                            .map((point) => point.trim())
-                            .filter(Boolean);
-                          if (points.join('\n') === beat.points.join('\n')) return;
-                          setOpeningWording({ points });
-                        }}
-                      />
-                    </label>
-                    {openingWording && (
-                      <button
-                        type="button"
-                        disabled={locked}
-                        onClick={() => {
-                          commit((design) =>
-                            withSlideHint(design, section.blockId, undefined, null),
-                          );
-                        }}
-                      >
-                        Use automatic wording
-                      </button>
-                    )}
-                  </details>
-                )}
+              {isSummaryPresentationLayout(beat.layout) && (
+                <details
+                  className="squisq-summary-designer-wording"
+                  open={wordingOpen}
+                  onToggle={(event) => setWordingOpen(event.currentTarget.open)}
+                >
+                  <summary>Customize slide wording (slides only)</summary>
+                  <p>
+                    {wordingPassage === undefined
+                      ? 'This section’s opening slide can use your wording. It is saved in the document, under the section, and stays when you change the section’s text.'
+                      : 'This slide can use your wording. It is saved in the document, under the section, with the passage it summarizes. If that passage changes, or the density divides the section differently, the slide goes back to automatic wording and the summary is listed as not in use.'}
+                    {aiWording &&
+                      ' This wording was suggested by AI. Change it and it is yours: suggesting again keeps it.'}
+                  </p>
+                  {/* Keyed by slide as well: a section's slides often share
+                      their headline, and each field shows its own slide. */}
+                  <label>
+                    Slide headline
+                    <input
+                      key={`${beat.id}\u0000${beat.headline}`}
+                      defaultValue={beat.headline}
+                      maxLength={PRESENTATION_LIMITS.headline}
+                      disabled={locked}
+                      onBlur={(event) => {
+                        // Leaving the field unchanged saves nothing.
+                        const value = event.target.value.trim();
+                        if (value === beat.headline.trim()) return;
+                        setSlideWording({ headline: value || undefined });
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Slide highlights, one per line
+                    <textarea
+                      rows={3}
+                      key={`${beat.id}\u0000${beat.points.join('\n')}`}
+                      defaultValue={beat.points.join('\n')}
+                      disabled={locked}
+                      onBlur={(event) => {
+                        const points = event.target.value
+                          .split('\n')
+                          .map((point) => point.trim())
+                          .filter(Boolean);
+                        if (points.join('\n') === beat.points.join('\n')) return;
+                        setSlideWording({ points });
+                      }}
+                    />
+                  </label>
+                  {ownWording && (
+                    <button type="button" disabled={locked} onClick={restoreAutomaticWording}>
+                      Use automatic wording
+                    </button>
+                  )}
+                </details>
+              )}
               <section className="squisq-summary-designer-source" aria-labelledby={originalTextId}>
                 <div className="squisq-summary-designer-source-label">
                   <h3 id={originalTextId}>Original document text</h3>
