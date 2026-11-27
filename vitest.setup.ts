@@ -6,6 +6,7 @@
 
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { afterAll, vi } from 'vitest';
 import { configurePdfWorker } from './packages/formats/src/pdf/import';
 
 const require = createRequire(import.meta.url);
@@ -26,3 +27,14 @@ if (typeof HTMLMediaElement !== 'undefined') {
     load: { configurable: true, writable: true, value: () => undefined },
   });
 }
+
+// Tiptap's useEditor destroys an unmounted editor on a 1 ms timer, so a test
+// file that ends right after unmounting can tear jsdom down first, and the
+// editor's teardown then runs against missing globals (`window is not
+// defined`) as an unhandled error that fails the whole run. Let those
+// deferred destroys run while jsdom is still here.
+afterAll(async () => {
+  if (typeof window === 'undefined') return;
+  vi.useRealTimers();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+});

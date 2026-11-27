@@ -29,6 +29,11 @@ export function wikiSuggestionPlugin(editor: Editor, getSupport: () => WikiLinkS
     props: { handleKeyDown: (_view, event) => keyDown?.(event) ?? false },
     view(view) {
       const id = `squisq-wiki-options-${++nextListId}`;
+      // The editor's own document and window, not the globals: a pop-out or
+      // iframe host has its own, and Tiptap's deferred destroy can run after a
+      // test's jsdom globals are gone.
+      const ownerDocument = view.dom.ownerDocument;
+      const ownerWindow = ownerDocument.defaultView ?? window;
       let list: HTMLDivElement | null = null;
       let current: ReturnType<typeof matchAt> = null;
       let items: WikiLinkSuggestion[] = [];
@@ -55,9 +60,9 @@ export function wikiSuggestionPlugin(editor: Editor, getSupport: () => WikiLinkS
         if (!list || !current) return;
         const rect = view.coordsAtPos(current.to);
         const width = list.offsetWidth;
-        list.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
+        list.style.left = `${Math.max(8, Math.min(rect.left, ownerWindow.innerWidth - width - 8))}px`;
         const height = list.offsetHeight;
-        list.style.top = `${rect.bottom + height + 8 < window.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4)}px`;
+        list.style.top = `${rect.bottom + height + 8 < ownerWindow.innerHeight ? rect.bottom + 4 : Math.max(8, rect.top - height - 4)}px`;
       };
       const choose = (index: number) => {
         const item = items[index];
@@ -83,13 +88,13 @@ export function wikiSuggestionPlugin(editor: Editor, getSupport: () => WikiLinkS
       const render = () => {
         hide();
         if (!current || !items.length || dismissed === key || disposed) return;
-        list = document.createElement('div');
+        list = ownerDocument.createElement('div');
         list.id = id;
         list.className = 'squisq-wiki-suggestions';
         list.setAttribute('role', 'listbox');
         list.setAttribute('aria-label', 'Wiki articles and folders');
         items.forEach((item, index) => {
-          const option = document.createElement('button');
+          const option = ownerDocument.createElement('button');
           option.type = 'button';
           option.tabIndex = -1;
           option.id = `${id}-${index}`;
@@ -104,7 +109,7 @@ export function wikiSuggestionPlugin(editor: Editor, getSupport: () => WikiLinkS
           });
           list!.appendChild(option);
         });
-        view.dom.ownerDocument.body.appendChild(list);
+        ownerDocument.body.appendChild(list);
         view.dom.setAttribute('aria-autocomplete', 'list');
         view.dom.setAttribute('aria-controls', id);
         view.dom.setAttribute('aria-expanded', 'true');
@@ -161,8 +166,8 @@ export function wikiSuggestionPlugin(editor: Editor, getSupport: () => WikiLinkS
       };
       view.dom.addEventListener('blur', blur);
       view.dom.addEventListener('focus', update);
-      window.addEventListener('resize', position);
-      window.addEventListener('scroll', position, true);
+      ownerWindow.addEventListener('resize', position);
+      ownerWindow.addEventListener('scroll', position, true);
       return {
         update,
         destroy() {
@@ -172,8 +177,8 @@ export function wikiSuggestionPlugin(editor: Editor, getSupport: () => WikiLinkS
           keyDown = undefined;
           view.dom.removeEventListener('blur', blur);
           view.dom.removeEventListener('focus', update);
-          window.removeEventListener('resize', position);
-          window.removeEventListener('scroll', position, true);
+          ownerWindow.removeEventListener('resize', position);
+          ownerWindow.removeEventListener('scroll', position, true);
         },
       };
     },
