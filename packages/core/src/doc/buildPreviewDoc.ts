@@ -369,6 +369,7 @@ function blockToSlide(
     // Summary settings shape the Custom summary planner, never a slide.
     slideLayout: _sl,
     supportingSlides: _ss,
+    slideCount: _sc,
     featureBlocks: _fb,
     ...extraFields
   } = block as unknown as Record<string, unknown>;

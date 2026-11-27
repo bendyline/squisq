@@ -32,6 +32,7 @@ import {
   type PresentationPlan,
 } from '../transform/presentationPlan.js';
 import {
+  defaultPresentationHints,
   parsePresentationHints,
   presentationPassageKey,
   type PresentationHints,
@@ -134,6 +135,13 @@ const LONG_RESULTS = REPORT.replace(
   'Revenue grew 40% last year. Most of it came from new customers.',
   'Each slide should carry one idea that the narration explains in more depth. '.repeat(8),
 );
+/** A document whose slides follow the text: a long section makes several, and a picture one of its own. */
+const FOLLOWS = '---\nsquisq-summary-density: balanced\n---\n\n';
+const follows = (text: string) =>
+  createPresentationPlan(parse(FOLLOWS + text), {
+    ...defaultPresentationHints(),
+    density: 'balanced',
+  });
 
 describe('a block shown on the slide before it', () => {
   it('rides on the slide of the section before it and makes no slide of its own', () => {
@@ -160,14 +168,14 @@ describe('a block shown on the slide before it', () => {
 
   it('goes on the last slide only, leaving the section’s other slides as they are', () => {
     const { plan } = report(
-      LONG_RESULTS.replace('{[barChart]}', '{[barChart slideLayout=feature]}'),
+      FOLLOWS + LONG_RESULTS.replace('{[barChart]}', '{[barChart slideLayout=feature]}'),
     );
     const owner = plan.beats.filter((beat) => beat.layout !== 'feature');
     const chartIndex = plan.beats.findIndex((beat) => beat.layout === 'feature');
     const carriers = plan.beats.filter((beat) => beat.media?.includes('results#block-0'));
     expect(carriers).toEqual([plan.beats[chartIndex - 1]]);
     expect(owner.length).toBeGreaterThan(3);
-    const without = createPresentationPlan(parse(LONG_RESULTS));
+    const without = follows(LONG_RESULTS);
     for (const [index, beat] of without.beats.slice(0, chartIndex - 1).entries())
       expect(plan.beats[index], `slide ${index + 1}`).toEqual(beat);
   });
@@ -201,9 +209,9 @@ describe('a block shown on the slide before it', () => {
       '| --- | --- |',
       '| North | 40 |',
     ].join('\n');
-    const before = createPresentationPlan(parse(withPicture.replace(' slideLayout=feature', '')));
+    const before = follows(withPicture.replace(' slideLayout=feature', ''));
     expect(before.beats[1]!.layout).toBe('image');
-    const { plan } = report(withPicture);
+    const { plan } = report(FOLLOWS + withPicture);
     expect(plan.beats[1]!.layout).not.toBe('image');
     expect(plan.beats[1]!.imageSrc).toBeUndefined();
     expect(plan.beats[1]!.media).toEqual(['results#block-0', 'results#image-0']);

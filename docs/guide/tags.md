@@ -209,13 +209,14 @@ Three more parameters work with every built-in template:
 
 ### Summary settings
 
-Two settings shape a section's slides in a **Custom** summary. The summary designer writes them,
+Three settings shape a section's slides in a **Custom** summary. The summary designer writes them,
 and they never change the block's own slide:
 
-| Parameter          | What it does                                                                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `slideLayout`      | The layout this section's summary slides prefer, such as `cards` or `steps`; `authored` shows the block as written; `feature` is described below |
-| `supportingSlides` | `false` keeps the summary from adding supporting slides to this section; `true` allows them                                                      |
+| Parameter          | What it does                                                                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `slideLayout`      | The layout this section's summary slides prefer, such as `cards` or `steps`; `authored` shows the block as written; `feature` is described below    |
+| `supportingSlides` | `false` keeps the summary from adding supporting slides to this section; `true` allows them                                                         |
+| `slideCount`       | How many slides tell this section (1 to 12), whatever the document's summary length; its text is divided evenly and each slide shows its key points |
 
 `slideLayout=feature` is for a block that draws a picture: a chart, a data table, a diagram, a
 drawing, a layout, a map, a tree or a timeline. The block makes no slide of its own. It is drawn

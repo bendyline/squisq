@@ -127,6 +127,31 @@ describe('the status bar view region', () => {
     expect(within(statusBar().children[2] as HTMLElement).getByText('Host status')).toBeTruthy();
   });
 
+  it('tells its stylesheet while a view has content in the region', async () => {
+    // The layout keys off this attribute, not `:has(:not(:empty))`, which
+    // WebKit can leave matching the empty region after the portal fills it.
+    function Harness({ showing }: { showing: boolean }) {
+      return (
+        <EditorProvider initialMarkdown="# Doc" articleId="view-content">
+          {showing && (
+            <StatusBarViewContent>
+              <span>View status</span>
+            </StatusBarViewContent>
+          )}
+          <StatusBar />
+        </EditorProvider>
+      );
+    }
+    const { rerender } = render(<Harness showing={false} />);
+    expect(statusBar().hasAttribute('data-view-content')).toBe(false);
+
+    rerender(<Harness showing />);
+    await waitFor(() => expect(statusBar().hasAttribute('data-view-content')).toBe(true));
+
+    rerender(<Harness showing={false} />);
+    await waitFor(() => expect(statusBar().hasAttribute('data-view-content')).toBe(false));
+  });
+
   it('gives a view nowhere to draw without a status bar', () => {
     function Probe() {
       return <output data-testid="target">{String(useStatusBarViewTarget())}</output>;

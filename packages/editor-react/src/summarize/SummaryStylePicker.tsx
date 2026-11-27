@@ -2,9 +2,10 @@
  * SummaryStylePicker — the Summary style field in Edit › Summaries.
  *
  * A dropdown rather than a panel of every style: the trigger names the chosen
- * style and says what it does, and the list it opens shows each style with its
- * description, so the choice reads as richly as the old cards did in a single
- * row of the view. Behaves like the other Squisq pickers (`ThemePicker`): a
+ * style, and the list it opens shows each style with its description, so the
+ * choice reads as richly as the old cards did. What the chosen style does is
+ * said beside the trigger — or, where the field shares its row with other
+ * controls (the Custom designer's), in the trigger's tooltip instead. Behaves like the other Squisq pickers (`ThemePicker`): a
  * listbox portaled to the body, arrow keys and Home/End between styles, Enter
  * to choose, Escape or Tab to close.
  */
@@ -21,6 +22,12 @@ export interface SummaryStylePickerProps {
   options: readonly SummaryStyleOption[];
   onChange: (id: string) => void;
   disabled?: boolean;
+  /**
+   * Says what the chosen style does beside the dropdown (the default). Off
+   * where the field shares a row with other controls: the description is then
+   * the trigger's tooltip, and still describes it to assistive technology.
+   */
+  showDescription?: boolean;
 }
 
 /** Narrowest the list opens, so descriptions stay readable under a small trigger. */
@@ -35,6 +42,7 @@ export function SummaryStylePicker({
   options,
   onChange,
   disabled = false,
+  showDescription = true,
 }: SummaryStylePickerProps) {
   const { colorScheme } = useEditorContext();
   const [open, setOpen] = useState(false);
@@ -200,48 +208,52 @@ export function SummaryStylePicker({
       <span id={labelId} className="squisq-summarize-legend">
         Summary style
       </span>
-      <button
-        ref={triggerRef}
-        type="button"
-        className={`squisq-summarize-style-trigger${open ? ' squisq-summarize-style-trigger--open' : ''}`}
-        data-style={selected?.id || 'none'}
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        aria-labelledby={`${labelId} ${valueId}`}
-        aria-describedby={descriptionId}
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-          event.preventDefault();
-          setOpen(true);
-        }}
-      >
-        <span className="squisq-summarize-style-copy">
+      <div className="squisq-summarize-style-row">
+        <button
+          ref={triggerRef}
+          type="button"
+          className={`squisq-summarize-style-trigger${open ? ' squisq-summarize-style-trigger--open' : ''}`}
+          data-style={selected?.id || 'none'}
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          aria-labelledby={`${labelId} ${valueId}`}
+          aria-describedby={descriptionId}
+          title={showDescription ? undefined : selected?.description}
+          onClick={() => setOpen((current) => !current)}
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+            event.preventDefault();
+            setOpen(true);
+          }}
+        >
           <span id={valueId} className="squisq-summarize-style-name">
             {selected?.name}
           </span>
-          <span id={descriptionId} className="squisq-summarize-style-description">
-            {selected?.description}
-          </span>
-        </span>
-        <svg
-          className="squisq-summarize-style-caret"
-          width="10"
-          height="10"
-          viewBox="0 0 10 10"
-          aria-hidden="true"
+          <svg
+            className="squisq-summarize-style-caret"
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            aria-hidden="true"
+          >
+            <path
+              d="M2 3.5l3 3 3-3"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              fill="none"
+            />
+          </svg>
+        </button>
+        <span
+          id={descriptionId}
+          className={showDescription ? 'squisq-summarize-style-note' : 'squisq-sr-only'}
         >
-          <path
-            d="M2 3.5l3 3 3-3"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-        </svg>
-      </button>
+          {selected?.description}
+        </span>
+      </div>
       {list}
     </div>
   );

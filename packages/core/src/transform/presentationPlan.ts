@@ -205,8 +205,8 @@ export const PRESENTATION_LIMITS = {
   sourceCharacters: 40_000,
   /**
    * The most slides a deck holds. Ordinary prose at the source limit makes
-   * 200–260 Concise slides, so every density fits a document the source limit
-   * allows. (At 80, a 3,500-word document already failed at Balanced.) A deck
+   * 200–260 sentence-by-sentence slides, so every length fits a document the source limit
+   * allows. (At 80, a 3,500-word document already failed at `balanced`.) A deck
    * of very short sentences or sections can still pass it; the planner then
    * names a density that fits.
    */

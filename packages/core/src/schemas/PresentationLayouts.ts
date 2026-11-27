@@ -49,6 +49,9 @@ export const PRESENTATION_BEAT_LAYOUTS = [
 ] as const;
 export type PresentationBeatLayout = (typeof PRESENTATION_BEAT_LAYOUTS)[number];
 
+/** The most slides a section can be asked to be told in (its heading's `slideCount=`). */
+export const PRESENTATION_SECTION_SLIDES = 12;
+
 /** True for a layout a section's summary slides can prefer, `authored` and `feature` included. */
 export function isPresentationBeatLayout(value: unknown): value is PresentationBeatLayout {
   return (

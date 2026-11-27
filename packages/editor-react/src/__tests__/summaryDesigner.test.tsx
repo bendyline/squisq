@@ -80,7 +80,7 @@ const statuses = () =>
     .getAllByRole('status')
     .map((item) => item.textContent ?? '')
     .join(' ');
-const density = () => screen.getByRole<HTMLSelectElement>('combobox', { name: 'Summary density' });
+const density = () => screen.getByRole<HTMLSelectElement>('combobox', { name: 'Summary length' });
 const hideSlide = () =>
   screen.getByRole<HTMLInputElement>('checkbox', { name: 'Hide this slide in the presentation' });
 const layout = () =>
@@ -150,7 +150,9 @@ const REPORT = [
   '| South | 25 |',
 ].join('\n');
 
-const LONG = [
+/** Says the slides follow the text, so a long section makes several. */
+const FOLLOWS = '---\nsquisq-summary-density: balanced\n---\n';
+const LONG_BODY = [
   '# Plan',
   '',
   'Each slide should carry one idea that the narration explains in more depth. '.repeat(8),
@@ -159,9 +161,11 @@ const LONG = [
   '',
   'Ship it soon.',
 ].join('\n');
+const LONG = FOLLOWS + LONG_BODY;
 
 /** One section long enough for several slides, each from a passage of its own. */
 const STORY = [
+  ...FOLLOWS.trimEnd().split('\n'),
   '# Plan',
   '',
   ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth']
@@ -234,11 +238,78 @@ describe('SummaryDesigner', () => {
     );
   });
 
+  it('offers each summary length with the slides it makes, key points by default', async () => {
+    renderDesigner(LONG_BODY);
+    // The title that opens the deck, the key points of its section, and the next section.
+    await waitFor(() => expect(slides()).toHaveLength(3));
+    expect(density().value).toBe('keypoints');
+    const options = Array.from(density().options);
+    // From the fewest slides to the most.
+    expect(options.map((option) => option.value)).toEqual([
+      'section',
+      'keypoints',
+      'detailed',
+      'balanced',
+      'concise',
+    ]);
+    // Each names the length and what it makes; its tooltip says how.
+    expect(options[0]!.textContent).toBe('One slide per section · 2 slides');
+    expect(options[1]!.textContent).toBe('Key points · 3 slides');
+    expect(options[1]!.title).toBe('Key points: one to three slides per section');
+    expect(density().title).toContain('Key points: one to three slides per section.');
+    const counts = options.map((option) =>
+      Number(/· (\d+) slides?$/u.exec(option.textContent!)![1]),
+    );
+    expect(counts).toEqual([...counts].sort((a, b) => a - b));
+    expect(counts[4]!).toBeGreaterThan(counts[1]!);
+    // Looking changes nothing.
+    expect(source.latest).toBe(LONG_BODY);
+
+    chooseOption(density(), 'balanced');
+    await waitFor(() => expect(slides()).toHaveLength(counts[3]!));
+    expect(source.latest).toContain('squisq-summary-density: balanced');
+    // Back at the default, a document with no other design says nothing.
+    chooseOption(density(), 'keypoints');
+    await waitFor(() => expect(source.latest).toBe(LONG_BODY));
+  });
+
+  it('tells a section in the number of slides you choose, saved on its heading', async () => {
+    renderDesigner(LONG_BODY);
+    await waitFor(() => expect(slides()).toHaveLength(3));
+    const count = () =>
+      screen.getByRole<HTMLSelectElement>('combobox', { name: 'Slides for this section' });
+    expect(count().value).toBe('');
+    expect(count().options[0]!.textContent).toBe('Automatic (2)');
+
+    chooseOption(count(), '4');
+    await waitFor(() => expect(slides()).toHaveLength(5));
+    expect(source.latest).toBe(LONG_BODY.replace('# Plan', '# Plan {[slideCount=4]}'));
+    expect(count().options[0]!.textContent).toBe('Automatic');
+    expect(designer().textContent).toContain('This section is told in 4 slides');
+    // One slide: the whole section, its key points.
+    chooseOption(count(), '1');
+    await waitFor(() => expect(slides()).toHaveLength(2));
+    expect(designer().textContent).toContain('This section is told in one slide');
+    // The choice holds at any summary length; the other section follows the document.
+    chooseOption(density(), 'concise');
+    await waitFor(() => expect(source.latest).toContain('squisq-summary-density: concise'));
+    expect(slides()).toHaveLength(2);
+    chooseOption(density(), 'keypoints');
+    // More than its text divides into makes as many as it does, and says so.
+    chooseOption(count(), '12');
+    await waitFor(() => expect(designer().textContent).toContain('Its text divides into only'));
+    expect(slides().length).toBeLessThan(13);
+
+    chooseOption(count(), '');
+    await waitFor(() => expect(source.latest).toBe(LONG_BODY));
+    expect(slides()).toHaveLength(3);
+  });
+
   it('collapses each section to one slide and rests the supporting-slide controls', async () => {
     renderDesigner(LONG);
     await waitFor(() => expect(slides().length).toBeGreaterThan(2));
     const supporting = screen.getByRole<HTMLInputElement>('checkbox', {
-      name: 'Add supporting visual slides where useful',
+      name: 'Add supporting slides',
     });
     expect(supporting.checked).toBe(true);
 
@@ -444,7 +515,7 @@ describe('SummaryDesigner', () => {
 
     chooseOption(density(), 'concise');
     await waitFor(() => expect(source.latest).toContain('squisq-summary-density: concise'));
-    expect(source.latest.endsWith(LONG)).toBe(true);
+    expect(source.latest.endsWith(LONG_BODY)).toBe(true);
 
     // An undo in Write puts the document back. The designer follows it, and
     // does not write its own design back over it.

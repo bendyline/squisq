@@ -438,6 +438,12 @@ export interface Block {
   supportingSlides?: boolean;
 
   /**
+   * How many summary slides tell this section, from the heading's
+   * `slideCount=` setting; the document's summary length decides when unset.
+   */
+  slideCount?: number;
+
+  /**
    * Other blocks this slide draws as features beside its words, each as its
    * own template draws it, scaled into the slide's feature area. A Custom
    * summary sets this on the slide that carries a block shown on the slide

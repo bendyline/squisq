@@ -265,6 +265,7 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
         buildSource: _buildSource,
         slideLayout: _slideLayout,
         supportingSlides: _supportingSlides,
+        slideCount: _slideCount,
         featureBlocks: _nested,
         ...own
       } = authoredBlock;

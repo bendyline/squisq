@@ -4,9 +4,10 @@
  *
  * Custom slides are generated from the document's current text on every
  * projection. What persists is the author's INTENT, in the document itself
- * where it can be read (core's `presentationHintsDoc.ts`): the density and
- * supporting-slides choice as frontmatter keys, a section's layout on its
- * heading's tag, and each designed slide as a `{[summary]}` block under its
+ * where it can be read (core's `presentationHintsDoc.ts`): the summary length
+ * and supporting-slides choice as frontmatter keys, a section's layout and
+ * slide count on its heading's tag, and each designed slide as a `{[summary]}`
+ * block under its
  * section — your wording for a section's opening slide (kept when the text
  * changes); your wording for any other slide, an AI suggestion or a hidden
  * slide keyed to the exact passage it was made for. Generated slides are
@@ -23,6 +24,7 @@
  * are saved in batches, each with the passage it summarizes.
  */
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { BlockRenderer, MediaContext } from '@bendyline/squisq-react';
 import {
   markdownToDoc,
@@ -46,6 +48,7 @@ import {
   defaultPresentationHints,
   parsePresentationHints,
   presentationSections,
+  presentationSlideCounts,
   presentationHintUsage,
   presentationHintsForPlan,
   readPresentationHints,
@@ -55,8 +58,11 @@ import {
   withBlockHint,
   withSlideHint,
   writePresentationHints,
+  PRESENTATION_DENSITIES,
+  PRESENTATION_DENSITY_LABELS,
   PRESENTATION_LAYOUTS,
   PRESENTATION_LIMITS,
+  PRESENTATION_SECTION_SLIDES,
   AUTHORED_PRESENTATION_LAYOUT,
   FEATURE_PRESENTATION_LAYOUT,
   isSummaryPresentationLayout,
@@ -238,12 +244,22 @@ export interface SummaryDesignerProps {
   readOnly?: boolean;
   /** Base path for resolving media URLs in the slide preview. */
   basePath?: string;
+  /**
+   * Where the designer's own controls go (the summary length, supporting
+   * slides, Reset design, Suggest with AI) when its host keeps a row for them
+   * — Summaries puts them beside the Summary style. The host then also names
+   * the region that holds both ("Summarization designer"), so the designer is
+   * not a region of its own. Null while that row is not there yet; left out,
+   * the designer heads itself with its controls.
+   */
+  controlsSlot?: HTMLElement | null;
 }
 
 export function SummaryDesigner({
   assistant,
   readOnly = false,
   basePath = '/',
+  controlsSlot,
 }: SummaryDesignerProps) {
   const { workspaceContainer, markdownSource, replaceAll, mediaProvider, mediaRevision } =
     useEditorContext();
@@ -253,6 +269,7 @@ export function SummaryDesigner({
   const layoutHelpId = useId();
   const slidePickerId = useId();
   const headingNoteId = useId();
+  const countHelpId = useId();
   const rollupNoteId = useId();
   const readiness = useAssistantReadiness(assistant);
 
@@ -373,6 +390,11 @@ export function SummaryDesigner({
     [generated],
   );
   const sections = useMemo(() => (doc ? presentationSections(doc) : []), [doc]);
+  // How many slides each summary length would make, shown beside each choice.
+  const lengthCounts = useMemo(
+    () => (doc ? presentationSlideCounts(doc, hints) : {}),
+    [doc, hints],
+  );
   const projection = useMemo(() => {
     if (!doc || !plan) return null;
     // A hidden slide still previews, so it can be judged and shown again; the
@@ -522,8 +544,15 @@ export function SummaryDesigner({
     section &&
     flattenContentBlocks(doc.blocks).find((block) => block.id === section.blockId)?.sourceHeading
   );
+  // How many slides the selected section has now.
+  const sectionSlides =
+    plan && section
+      ? plan.beats.filter(
+          (item) => sectionAt(sections, item.sourceStart)?.blockId === section.blockId,
+        ).length
+      : 0;
   // Summaries in the document that the deck does not use now, and why: their
-  // slide is gone (the text changed, or the density cuts it differently — it
+  // slide is gone (the text changed, or the summary length cuts it differently — it
   // comes back with the slide), or the summary cannot be read.
   const unused = useMemo((): PresentationHintIssue[] => {
     if (!plan || !current) return [];
@@ -646,7 +675,11 @@ export function SummaryDesigner({
     button?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   };
   /** Change the selected slide's section's settings (on its heading). */
-  const setSectionSetting = (patch: { layout?: PresentationBeatLayout; inbetweens?: boolean }) => {
+  const setSectionSetting = (patch: {
+    layout?: PresentationBeatLayout;
+    inbetweens?: boolean;
+    count?: number;
+  }) => {
     if (!section) return;
     commit((design) => withBlockHint(design, section.blockId, patch));
   };
@@ -840,88 +873,111 @@ export function SummaryDesigner({
       ? assistant.renderReport(suggestionsText(hints))
       : null;
 
+  // The designer's own controls: at its head, or on the row its host keeps
+  // for them (`controlsSlot`).
+  const embedded = controlsSlot !== undefined;
+  const controls = (
+    <>
+      <div className="squisq-summary-designer-fields squisq-summary-designer-preferences">
+        <label className="squisq-summary-designer-length">
+          Summary length
+          <select
+            value={hints.density}
+            disabled={locked}
+            title={`${PRESENTATION_DENSITY_LABELS[hints.density].label}: ${PRESENTATION_DENSITY_LABELS[hints.density].description}. The narration always tells the whole document.`}
+            onChange={(event) =>
+              commit((design) => ({
+                ...design,
+                density: event.target.value as PresentationHints['density'],
+              }))
+            }
+          >
+            {/* From the fewest slides to the most, each with what it makes. */}
+            {PRESENTATION_DENSITIES.map((density) => {
+              const { label, description } = PRESENTATION_DENSITY_LABELS[density];
+              const count = lengthCounts[density];
+              return (
+                <option key={density} value={density} title={`${label}: ${description}`}>
+                  {`${label}${
+                    count === undefined ? '' : ` · ${count} ${count === 1 ? 'slide' : 'slides'}`
+                  }${
+                    // Choosing it says so, and names a length that fits.
+                    count !== undefined && count > PRESENTATION_LIMITS.beats ? ' (too many)' : ''
+                  }`}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+        <label
+          className="squisq-summary-designer-toggle"
+          title="Adds a slide where it shows something different: an introduction before its steps diagram, or the opening of a passage before the picture that illustrates the rest."
+        >
+          <input
+            type="checkbox"
+            checked={hints.inbetweens && !perSection}
+            disabled={locked || perSection}
+            onChange={(event) =>
+              commit((design) => ({ ...design, inbetweens: event.target.checked }))
+            }
+          />{' '}
+          Add supporting slides
+        </label>
+      </div>
+      <div className="squisq-summary-designer-actions">
+        <button
+          type="button"
+          disabled={locked}
+          title="Return every slide to its automatic summary."
+          onClick={() => {
+            // Every summary, setting and key, including ones not in use.
+            replaceSource(resetPresentationHints(sourceRef.current));
+            batch.clear();
+            setSelectedSourceStart(0);
+            setError(null);
+            setNotice('');
+          }}
+        >
+          Reset design
+        </button>
+        {assistant && (
+          <AssistantRunControls
+            label="Suggest with AI"
+            title="Suggest layouts and shorter slide wording from the current text."
+            readiness={readiness}
+            disabled={!plan}
+            readOnly={readOnly}
+            progress={
+              progress && {
+                label: progress.planning
+                  ? 'Planning the slides…'
+                  : `Suggesting slide ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`,
+                done: progress.done,
+                // While planning the bar shows activity, not an amount.
+                total: progress.planning ? 0 : progress.total,
+                measure: 'Slides suggested so far',
+              }
+            }
+            stopTitle="Stop suggesting. Slides already suggested keep their new wording."
+            onStart={() => void suggest()}
+            onStop={() => controller.current?.abort()}
+          />
+        )}
+      </div>
+    </>
+  );
+  // Its host names the region when the controls sit on the host's row.
+  const Root = embedded ? 'div' : 'section';
+
   return (
-    <section
+    <Root
       className="squisq-summary-designer"
-      aria-label="Summarization designer"
+      aria-label={embedded ? undefined : 'Summarization designer'}
       onKeyDown={handleSlideKeyDown}
     >
+      {controlsSlot && createPortal(controls, controlsSlot)}
       <div className="squisq-summary-designer-inner">
-        <div className="squisq-summary-designer-header">
-          <div className="squisq-summary-designer-fields squisq-summary-designer-preferences">
-            <label>
-              Summary density
-              <select
-                value={hints.density}
-                disabled={locked}
-                onChange={(event) =>
-                  commit((design) => ({
-                    ...design,
-                    density: event.target.value as PresentationHints['density'],
-                  }))
-                }
-              >
-                <option value="concise">Concise — shorter passages per slide</option>
-                <option value="balanced">Balanced</option>
-                <option value="detailed">Detailed — longer passages per slide</option>
-                <option value="section">
-                  One slide per section — no splits or supporting slides
-                </option>
-              </select>
-            </label>
-            <label className="squisq-summary-designer-toggle">
-              <input
-                type="checkbox"
-                checked={hints.inbetweens && !perSection}
-                disabled={locked || perSection}
-                onChange={(event) =>
-                  commit((design) => ({ ...design, inbetweens: event.target.checked }))
-                }
-              />{' '}
-              Add supporting visual slides where useful
-            </label>
-          </div>
-          <div className="squisq-summary-designer-actions">
-            <button
-              type="button"
-              disabled={locked}
-              title="Return every slide to its automatic summary."
-              onClick={() => {
-                // Every summary, setting and key, including ones not in use.
-                replaceSource(resetPresentationHints(sourceRef.current));
-                batch.clear();
-                setSelectedSourceStart(0);
-                setError(null);
-                setNotice('');
-              }}
-            >
-              Reset design
-            </button>
-            {assistant && (
-              <AssistantRunControls
-                label="Suggest with AI"
-                title="Suggest layouts and shorter slide wording from the current text."
-                readiness={readiness}
-                disabled={!plan}
-                readOnly={readOnly}
-                progress={
-                  progress && {
-                    label: progress.planning
-                      ? 'Planning the slides…'
-                      : `Suggesting slide ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`,
-                    done: progress.done,
-                    // While planning the bar shows activity, not an amount.
-                    total: progress.planning ? 0 : progress.total,
-                    measure: 'Slides suggested so far',
-                  }
-                }
-                stopTitle="Stop suggesting. Slides already suggested keep their new wording."
-                onStart={() => void suggest()}
-                onStop={() => controller.current?.abort()}
-              />
-            )}
-          </div>
-        </div>
+        {!embedded && <div className="squisq-summary-designer-header">{controls}</div>}
         <p className="squisq-summary-designer-status" role="status" aria-live="polite">
           {plan && projection?.doc
             ? `${slideCount} · ${projection.doc.duration.toFixed(1)} seconds · ${doc?.presentationNarration ? 'Follows narration' : 'Estimated pacing — add narration to synchronize'}`
@@ -1186,6 +1242,35 @@ export function SummaryDesigner({
                 </label>
               )}
               <div className="squisq-summary-designer-fields">
+                {/* A section shown as authored, or on another slide, is one beat. */}
+                {isSummaryPresentationLayout(beat.layout) && (
+                  <label>
+                    Slides for this section
+                    <select
+                      value={hint?.count ?? ''}
+                      disabled={locked || !headed}
+                      aria-describedby={
+                        !headed ? headingNoteId : hint?.count ? countHelpId : undefined
+                      }
+                      onChange={(event) =>
+                        setSectionSetting({
+                          count: event.target.value ? Number(event.target.value) : undefined,
+                        })
+                      }
+                    >
+                      <option value="">
+                        {hint?.count === undefined ? `Automatic (${sectionSlides})` : 'Automatic'}
+                      </option>
+                      {Array.from({ length: PRESENTATION_SECTION_SLIDES }, (_, at) => at + 1).map(
+                        (count) => (
+                          <option key={count} value={count}>
+                            {count === 1 ? '1 slide' : `${count} slides`}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+                )}
                 <label>
                   Layout preference for this section
                   <select
@@ -1250,7 +1335,14 @@ export function SummaryDesigner({
               {!headed && (
                 <p id={headingNoteId} className="squisq-summary-designer-layout-help">
                   This part of the document has no heading to hold section settings. Add a heading
-                  above it to choose its layout.
+                  above it to choose its layout or how many slides it has.
+                </p>
+              )}
+              {headed && hint?.count !== undefined && isSummaryPresentationLayout(beat.layout) && (
+                <p id={countHelpId} className="squisq-summary-designer-layout-help">
+                  {`This section is told in ${hint.count === 1 ? 'one slide' : `${hint.count} slides`}, whatever the summary length: its text is divided evenly, and each slide shows the key points of its part.`}
+                  {sectionSlides < hint.count &&
+                    ` Its text divides into only ${sectionSlides === 1 ? 'one' : sectionSlides}.`}
                 </p>
               )}
               {hint?.layout && (
@@ -1285,7 +1377,7 @@ export function SummaryDesigner({
                   <p>
                     {wordingPassage === undefined
                       ? 'This section’s opening slide can use your wording. It is saved in the document, under the section, and stays when you change the section’s text.'
-                      : 'This slide can use your wording. It is saved in the document, under the section, with the passage it summarizes. If that passage changes, or the density divides the section differently, the slide goes back to automatic wording and the summary is listed as not in use.'}
+                      : 'This slide can use your wording. It is saved in the document, under the section, with the passage it summarizes. If that passage changes, or the summary length or the section’s slide count divides the section differently, the slide goes back to automatic wording and the summary is listed as not in use.'}
                     {aiWording &&
                       ' This wording was suggested by AI. Change it and it is yours: suggesting again keeps it.'}
                   </p>
@@ -1341,6 +1433,6 @@ export function SummaryDesigner({
           </div>
         )}
       </div>
-    </section>
+    </Root>
   );
 }

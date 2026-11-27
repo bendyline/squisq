@@ -139,10 +139,13 @@ describe('Edit › Summaries', () => {
     const { latest } = renderShell();
     const view = openSummarize();
 
-    // The trigger says what the chosen style does, as the list does for each.
-    expect(styleTrigger(view, /None/).textContent).toContain(
-      'Each section is one slide, shown as you wrote it',
-    );
+    // The trigger names the chosen style; beside it is what that style does,
+    // as the list says for each.
+    const trigger = styleTrigger(view, /None/);
+    expect(trigger.textContent).toBe('None');
+    const described = document.getElementById(trigger.getAttribute('aria-describedby')!)!;
+    expect(described.textContent).toBe('Each section is one slide, shown as you wrote it');
+    expect(described.className).toBe('squisq-summarize-style-note');
     const list = openStyles(view);
     const options = within(list).getAllByRole('option');
     const names = options.map(nameOf);
@@ -252,6 +255,58 @@ describe('Edit › Summaries', () => {
     expect(within(view).queryByRole('group', { name: 'Slides' })).toBeNull();
     // With no assistant there is no AI to offer.
     expect(within(designer).queryByRole('button', { name: 'Suggest with AI' })).toBeNull();
+    // One designer: the view names it, and the designer inside is not a second one.
+    expect(within(view).getAllByRole('region', { name: 'Summarization designer' })).toHaveLength(1);
+  });
+
+  it('puts the designer’s controls on the Summary style’s row', async () => {
+    const { latest } = renderShell({
+      initialMarkdown: `---\nsquisq-transform: dynamic-slides\n---\n\n${TWO_SECTIONS}`,
+      summarizationAssistant: { readiness: () => null, suggestSlides: async () => undefined },
+    });
+    const view = openSummarize();
+    const designer = await within(view).findByRole('region', { name: 'Summarization designer' });
+    const length = await within(designer).findByRole<HTMLSelectElement>('combobox', {
+      name: 'Summary length',
+    });
+    const style = styleTrigger(view, /Custom/);
+    const row = style.closest('.squisq-summarize-controls')!;
+    // The style, the length, supporting slides, and the actions, in that order.
+    const controls = [
+      style,
+      length,
+      within(designer).getByRole('checkbox', { name: 'Add supporting slides' }),
+      within(designer).getByRole('button', { name: 'Reset design' }),
+      await within(designer).findByRole('button', { name: 'Suggest with AI' }),
+    ];
+    for (const control of controls) expect(row.contains(control)).toBe(true);
+    for (let at = 1; at < controls.length; at++)
+      expect(
+        controls[at - 1]!.compareDocumentPosition(controls[at]!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    // On a shared row the style is one line: what it does is its tooltip, and
+    // still describes it.
+    expect(style.textContent).toBe('Custom');
+    expect(style.title).toMatch(/^Concise slides and diagrams/);
+    expect(document.getElementById(style.getAttribute('aria-describedby')!)!.textContent).toBe(
+      style.title,
+    );
+    // They are still the designer's controls: a choice there changes the design.
+    fireEvent.change(length, { target: { value: 'section' } });
+    await waitFor(() => expect(latest()).toMatch(/^squisq-summary-density: section$/m));
+
+    // Another style has the row to itself, with what it does beside it, and
+    // focus stays on the dropdown that chose it.
+    style.focus();
+    chooseStyle(view, 'Minimal');
+    await waitFor(() =>
+      expect(within(view).queryByRole('combobox', { name: 'Summary length' })).toBeNull(),
+    );
+    const minimal = styleTrigger(view, /Minimal/);
+    expect(minimal).toBe(style);
+    expect(document.activeElement).toBe(minimal);
+    expect(minimal.title).toBe('');
+    expect(within(view).queryByRole('region', { name: 'Summarization designer' })).toBeNull();
   });
 
   it('lends the host’s assistant to the built-in designer', async () => {

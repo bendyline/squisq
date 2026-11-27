@@ -147,7 +147,7 @@ section in Write, a folded block in Source. Their tag settings are:
 | `hidden=true`   | Leaves the slide out of the presentation. With nothing else set, the heading only names the slide  |
 | `of=<id>`       | The section it is about, where it cannot sit under it (a level-6 heading, a section made by a tag) |
 
-A section's own summary settings go on its heading: `slideLayout=` and `supportingSlides=` (see
+A section's own summary settings go on its heading: `slideLayout=`, `supportingSlides=` and `slideCount=` (see
 [Summary settings](tags.md#summary-settings)). `slideLayout=feature` on a chart, table, diagram
 or other picture block draws it on the last slide of the section before it instead of a slide of
 its own.

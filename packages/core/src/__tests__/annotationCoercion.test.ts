@@ -210,6 +210,7 @@ describe('KNOWN_BLOCK_META_KEYS', () => {
       'buildPrevious',
       'connectsTo',
       'duration',
+      'slideCount',
       'slideLayout',
       'startTime',
       'supportingSlides',

@@ -90,7 +90,13 @@ there is a hierarchy, that the two share something. When it does not,
 
 ## Wording a deck with a model
 
-`createPresentationPlan` makes a deck from prose on its own. A host with a model can improve it:
+`createPresentationPlan` makes a deck from prose on its own. By default it tells each section in
+one to three slides (`keypoints`): it cuts a section evenly at sentences, at a paragraph when one
+is near, and shows on each slide the points chosen from its passage — an author's list when the
+passage has one, otherwise the sentences that carry it (`transform/keyPoints.ts`). The narration
+tells the rest. `presentationSlideCounts` says how many slides each summary length would make.
+
+A host with a model can improve it:
 the model plans every slide's layout together, then words each slide. Everything about that
 exchange except the transport is in `@bendyline/squisq/transform`, so every host asks the same
 questions and holds the answers to the same standard. `wordPresentationPlan`
@@ -126,6 +132,12 @@ The pieces it runs are exported too, for a host that needs a different loop:
   Squisq reaches them. `PRESENTATION_SLIDE_FORMAT` and `PRESENTATION_STORYBOARD_FORMAT` are JSON
   schemas for a host that can enforce structured output; `PRESENTATION_AUTHOR_LIMITS` holds the
   sizes the prompts assume.
+- A slide whose passage is long (`presentationSlideSummarizes`: 450 characters or more, as every
+  key-points slide of a long section is) is asked about differently. Its request carries
+  `"summarize": true` and the prompt asks for the two to four ideas worth remembering from the
+  whole passage, as short phrases; the request leaves out the automatic slide's points, which are
+  sentences of the passage a small model would hand back; and a point longer than 140 characters
+  is refused, with a correction that says to shorten it.
 - `presentationSlidesToWord` leaves out slides a model should not word: an authored section, a
   hidden slide, a passage too long for a small model, and a passage that addresses the model
   ("ignore all previous instructions"), which keeps its automatic slide.

@@ -100,7 +100,7 @@ function usage(): string {
 
   --doc <file|dir>[,…]   documents to render (default: the deck-review corpora)
   --theme <id>[,…]       themes (default: ${DEFAULT_THEMES.join(',')})
-  --density <d>          concise | balanced | detailed | section (default: each doc's own)
+  --density <d>          section | keypoints | detailed | balanced | concise (default: each doc's own)
   --hints <dir>          read <doc>.hints.json from this folder (e.g. AI suggestions)
   --out <dir>            output folder (default: ${DEFAULT_OUT_DIR})
   --film                 also write film-NN.png: each slide's motion, frame by frame

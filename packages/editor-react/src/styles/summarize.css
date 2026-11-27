@@ -48,33 +48,93 @@
   color: var(--squisq-text-soft);
 }
 
-/* The Summary style field: a dropdown whose trigger names the chosen style and
-   says what it does. The list it opens shows every style the same way; it is
-   portaled to <body>, so it themes from its own data-theme and its tokens. */
+/* The choice and what it makes. With the built-in Custom designer this is the
+   designer's region: its controls on the row, its slides in the body. */
+.squisq-summarize-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+/* One row of controls: the Summary style, then (for Custom) the designer's
+   own — the summary length, supporting slides, and its actions at the far
+   end. Each is as wide as what it says, so they share a line on a desktop
+   and wrap, one under another, in a narrow panel. */
+.squisq-summarize-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 16px;
+}
+
+/* The designer fills this with its controls, which join the row as items of
+   it (the slot itself takes no box). */
+.squisq-summarize-controls-slot {
+  display: contents;
+}
+
+.squisq-summarize-controls .squisq-summary-designer-actions {
+  margin-left: auto;
+}
+
+/* The designer's controls, shown outside its own box: the type it sets. */
+.squisq-summary-designer-bar {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--squisq-text-soft);
+}
+
+/* The Summary style field: a dropdown whose trigger names the chosen style.
+   The list it opens shows every style with what it does; it is portaled to
+   <body>, so it themes from its own data-theme and its tokens. */
 .squisq-summarize-style-field {
   display: flex;
   flex-direction: column;
   gap: 5px;
   min-width: 0;
+  max-width: 100%;
 }
 
-/* Set like the designer's field labels (Summary density) just below it. */
+/* The trigger, and beside it what the chosen style does (when the field has
+   the row to itself). */
+.squisq-summarize-style-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.squisq-summarize-style-note {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--squisq-text-soft);
+}
+
+/* Set like the designer's field labels (Summary length) beside it. */
 .squisq-summarize-legend {
   font-size: 13px;
   font-weight: 600;
+  /* The designer's line height, so the labels along the row share a baseline. */
+  line-height: 1.6;
   color: var(--squisq-text);
 }
 
+/* As tall as the selects it shares the row with. */
 .squisq-summarize-style-trigger {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   box-sizing: border-box;
-  width: min(100%, 560px);
-  min-height: 44px;
-  padding: 8px 12px;
+  min-width: 150px;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
   border: 1px solid var(--squisq-border-strong);
-  border-radius: 6px;
+  border-radius: 5px;
   background: var(--squisq-input-bg);
   color: var(--squisq-text);
   font: inherit;
@@ -98,10 +158,6 @@
 .squisq-summarize-style-trigger:disabled {
   cursor: default;
   opacity: 0.6;
-}
-
-.squisq-summarize-style-trigger .squisq-summarize-style-copy {
-  flex: 1 1 auto;
 }
 
 .squisq-summarize-style-caret {
@@ -358,7 +414,7 @@
   height: 100%;
 }
 
-.squisq-summary-designer p {
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) p {
   margin: 0;
 }
 
@@ -386,7 +442,7 @@
   align-items: flex-end;
 }
 
-.squisq-summary-designer label {
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) label {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -398,7 +454,20 @@
   width: min(100%, 320px);
 }
 
-.squisq-summary-designer label.squisq-summary-designer-toggle {
+/* The summary length is as wide as its longest choice ("Follow the text
+   closely · 85 slides"), so the chosen one is never clipped and the field
+   takes no more of the row than it needs. */
+.squisq-summary-designer-fields label.squisq-summary-designer-length {
+  width: auto;
+  max-width: 100%;
+}
+
+.squisq-summary-designer-fields label.squisq-summary-designer-length select {
+  width: auto;
+  max-width: 100%;
+}
+
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) label.squisq-summary-designer-toggle {
   flex-direction: row;
   align-items: center;
   gap: 0.6rem;
@@ -409,9 +478,9 @@
   padding: 6px 0;
 }
 
-.squisq-summary-designer input,
-.squisq-summary-designer select,
-.squisq-summary-designer textarea {
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) input,
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) select,
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) textarea {
   box-sizing: border-box;
   width: 100%;
   min-height: 34px;
@@ -424,7 +493,7 @@
   font-weight: 400;
 }
 
-.squisq-summary-designer input[type='checkbox'] {
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) input[type='checkbox'] {
   width: 1.1rem;
   height: 1.1rem;
   min-height: 0;
@@ -434,18 +503,19 @@
   accent-color: var(--squisq-accent);
 }
 
-.squisq-summary-designer :is(input, select, textarea):focus-visible {
+:is(.squisq-summary-designer, .squisq-summary-designer-bar)
+  :is(input, select, textarea):focus-visible {
   outline: 2px solid var(--squisq-focus-ring);
   outline-offset: 1px;
 }
 
-.squisq-summary-designer :is(input, select, textarea):disabled {
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) :is(input, select, textarea):disabled {
   opacity: 0.6;
 }
 
 /* Below 16px, iOS zooms the page when a field takes focus. */
 @media (pointer: coarse) {
-  .squisq-summary-designer :is(input, select, textarea) {
+  :is(.squisq-summary-designer, .squisq-summary-designer-bar) :is(input, select, textarea) {
     font-size: 16px;
   }
 }
@@ -457,7 +527,7 @@
   gap: 8px;
 }
 
-.squisq-summary-designer button {
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) button {
   min-height: 34px;
   padding: 6px 10px;
   border: 1px solid var(--squisq-border-strong);
@@ -468,18 +538,18 @@
   cursor: pointer;
 }
 
-.squisq-summary-designer button:hover:not(:disabled) {
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) button:hover:not(:disabled) {
   border-color: var(--squisq-accent-border);
   background: var(--squisq-surface-hover);
   color: var(--squisq-text-strong);
 }
 
-.squisq-summary-designer button:focus-visible {
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) button:focus-visible {
   outline: 2px solid var(--squisq-focus-ring);
   outline-offset: 2px;
 }
 
-.squisq-summary-designer button:disabled {
+:is(.squisq-summary-designer, .squisq-summary-designer-bar) button:disabled {
   opacity: 0.5;
   cursor: default;
 }

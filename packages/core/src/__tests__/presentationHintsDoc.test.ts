@@ -228,7 +228,10 @@ describe('reading the design from the document', () => {
       '',
       'Each slide should carry one idea that the narration explains in more depth. '.repeat(8),
     ].join('\n');
-    const balancedPlan = createPresentationPlan(parse(long));
+    const balancedPlan = createPresentationPlan(parse(long), {
+      ...defaultPresentationHints(),
+      density: 'balanced',
+    });
     expect(balancedPlan.beats.length).toBeGreaterThan(2);
     const doc = parse(
       `${long}\n\n## Later {[summary passage=${keyOf(balancedPlan, 2)} hidden=true]}`,

@@ -72,7 +72,27 @@ export const PRESENTATION_AUTHOR_LIMITS = {
   storyboardLimit: 16,
   /** How much of each passage the storyboard sees: enough to recognize its shape. */
   storyboardGist: 240,
+  /**
+   * A passage at least this long is summarized, not condensed: its slide
+   * stands for a third of a section or more, so it shows what an audience
+   * should keep while the narration tells the rest.
+   */
+  summarizeCharacters: 450,
+  /** The longest point of a slide that summarizes; such a slide shows phrases, not sentences. */
+  summaryPointCharacters: 140,
 } as const;
+
+/**
+ * Whether the slide at `index` summarizes a long passage (a slide of a deck
+ * told as key points, or one slide for a section). The model is then asked
+ * for what matters in the whole passage, and held to short points.
+ */
+export function presentationSlideSummarizes(plan: PresentationPlan, index: number): boolean {
+  const beat = plan.beats[index];
+  return (
+    !!beat && beat.sourceEnd - beat.sourceStart >= PRESENTATION_AUTHOR_LIMITS.summarizeCharacters
+  );
+}
 
 /** Output tokens that hold a storyboard of `slides` layouts. */
 export function presentationStoryboardTokens(slides: number): number {
@@ -134,6 +154,8 @@ export function presentationSlidePrompt(): string {
     `The layout value is one of ${layoutList()}.`,
     // The shared craft for summary authors: numbers as numbers, ideas as pictures.
     ...authoringTricks({ surface: 'summary' }),
+    // A slide that stands for a long passage must not retype it.
+    'When "summarize" is true the passage is long and is read aloud over the slide: give the two to four ideas worth remembering from all of it, not only its opening, each a phrase of at most twelve words and never a copied sentence.',
     'When "planned" is given, a designer chose that layout for this slide while planning the whole deck: use it unless the passage cannot fill it. Otherwise use varied layouts only when the content fits; "previous" lists the layouts of the slides just before, so when another layout fits this passage as well, avoid repeating the last one, and give a striking figure "stat" or a memorable sentence "quote". When "feature" is true the slide also shows a table, picture, video or diagram from the passage, which needs the room: give at most 2 points of at most 60 characters, and summarize the prose rather than repeating figures the feature shows.',
   ].join(' ');
 }
@@ -275,6 +297,7 @@ export function presentationSlideRequest(
   context: PresentationSlideContext = {},
 ): string {
   const beat = plan.beats[index]!;
+  const summarize = presentationSlideSummarizes(plan, index);
   return JSON.stringify({
     position: `${index + 1} of ${plan.beats.length}`,
     ...(context.planned
@@ -282,10 +305,16 @@ export function presentationSlideRequest(
       : context.previous?.length
         ? { previous: context.previous }
         : {}),
+    ...(summarize ? { summarize: true } : {}),
     passage: plan.sourceText.slice(beat.sourceStart, beat.sourceEnd),
     // The section's features are placed beside this slide's words.
     ...(beat.media?.length ? { feature: true } : {}),
-    current: { layout: beat.layout, headline: beat.headline, points: beat.points },
+    // The automatic points of a long passage are sentences of it. Shown them,
+    // a small model answers with the same sentences; it is shown the layout
+    // and headline only, and writes the points itself.
+    current: summarize
+      ? { layout: beat.layout, headline: beat.headline }
+      : { layout: beat.layout, headline: beat.headline, points: beat.points },
     ...(context.correction ? { correction: context.correction } : {}),
   });
 }
@@ -644,6 +673,16 @@ export function readPresentationSlideReply(
     );
   const long = points.find((point) => point.length > 180);
   if (long !== undefined) return refuse(`the point ${quoted(long)} is longer than 180 characters`);
+  // A slide that summarizes a long passage shows phrases. A point as long as
+  // a sentence of the passage is that sentence, and the automatic slide
+  // already shows those.
+  const wordy = presentationSlideSummarizes(plan, index)
+    ? points.find((point) => point.length > PRESENTATION_AUTHOR_LIMITS.summaryPointCharacters)
+    : undefined;
+  if (wordy !== undefined)
+    return refuse(
+      `the point ${quoted(wordy)} is longer than ${PRESENTATION_AUTHOR_LIMITS.summaryPointCharacters} characters; say it as a short phrase`,
+    );
   const unfit = presentationLayoutProblem(layout as PresentationLayout, headline, points, passage);
   if (unfit) return refuse(unfit, 'layout');
 
