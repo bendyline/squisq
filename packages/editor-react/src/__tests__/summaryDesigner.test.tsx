@@ -80,7 +80,7 @@ const statuses = () =>
     .getAllByRole('status')
     .map((item) => item.textContent ?? '')
     .join(' ');
-const density = () => screen.getByRole<HTMLSelectElement>('combobox', { name: 'Summary density' });
+const density = () => screen.getByRole<HTMLSelectElement>('combobox', { name: 'Summary length' });
 const hideSlide = () =>
   screen.getByRole<HTMLInputElement>('checkbox', { name: 'Hide this slide in the presentation' });
 const layout = () =>
@@ -150,10 +150,27 @@ const REPORT = [
   '| South | 25 |',
 ].join('\n');
 
-const LONG = [
+/** Says the slides follow the text, so a long section makes several. */
+const FOLLOWS = '---\nsquisq-summary-density: balanced\n---\n';
+const LONG_BODY = [
   '# Plan',
   '',
   'Each slide should carry one idea that the narration explains in more depth. '.repeat(8),
+  '',
+  '## Next',
+  '',
+  'Ship it soon.',
+].join('\n');
+const LONG = FOLLOWS + LONG_BODY;
+
+/** One section long enough for several slides, each from a passage of its own. */
+const STORY = [
+  ...FOLLOWS.trimEnd().split('\n'),
+  '# Plan',
+  '',
+  ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth']
+    .map((nth) => `The ${nth} slide should carry one idea that the narration explains in depth.`)
+    .join(' '),
   '',
   '## Next',
   '',
@@ -221,11 +238,78 @@ describe('SummaryDesigner', () => {
     );
   });
 
+  it('offers each summary length with the slides it makes, key points by default', async () => {
+    renderDesigner(LONG_BODY);
+    // The title that opens the deck, the key points of its section, and the next section.
+    await waitFor(() => expect(slides()).toHaveLength(3));
+    expect(density().value).toBe('keypoints');
+    const options = Array.from(density().options);
+    // From the fewest slides to the most.
+    expect(options.map((option) => option.value)).toEqual([
+      'section',
+      'keypoints',
+      'detailed',
+      'balanced',
+      'concise',
+    ]);
+    // Each names the length and what it makes; its tooltip says how.
+    expect(options[0]!.textContent).toBe('One slide per section · 2 slides');
+    expect(options[1]!.textContent).toBe('Key points · 3 slides');
+    expect(options[1]!.title).toBe('Key points: one to three slides per section');
+    expect(density().title).toContain('Key points: one to three slides per section.');
+    const counts = options.map((option) =>
+      Number(/· (\d+) slides?$/u.exec(option.textContent!)![1]),
+    );
+    expect(counts).toEqual([...counts].sort((a, b) => a - b));
+    expect(counts[4]!).toBeGreaterThan(counts[1]!);
+    // Looking changes nothing.
+    expect(source.latest).toBe(LONG_BODY);
+
+    chooseOption(density(), 'balanced');
+    await waitFor(() => expect(slides()).toHaveLength(counts[3]!));
+    expect(source.latest).toContain('squisq-summary-density: balanced');
+    // Back at the default, a document with no other design says nothing.
+    chooseOption(density(), 'keypoints');
+    await waitFor(() => expect(source.latest).toBe(LONG_BODY));
+  });
+
+  it('tells a section in the number of slides you choose, saved on its heading', async () => {
+    renderDesigner(LONG_BODY);
+    await waitFor(() => expect(slides()).toHaveLength(3));
+    const count = () =>
+      screen.getByRole<HTMLSelectElement>('combobox', { name: 'Slides for this section' });
+    expect(count().value).toBe('');
+    expect(count().options[0]!.textContent).toBe('Automatic (2)');
+
+    chooseOption(count(), '4');
+    await waitFor(() => expect(slides()).toHaveLength(5));
+    expect(source.latest).toBe(LONG_BODY.replace('# Plan', '# Plan {[slideCount=4]}'));
+    expect(count().options[0]!.textContent).toBe('Automatic');
+    expect(designer().textContent).toContain('This section is told in 4 slides');
+    // One slide: the whole section, its key points.
+    chooseOption(count(), '1');
+    await waitFor(() => expect(slides()).toHaveLength(2));
+    expect(designer().textContent).toContain('This section is told in one slide');
+    // The choice holds at any summary length; the other section follows the document.
+    chooseOption(density(), 'concise');
+    await waitFor(() => expect(source.latest).toContain('squisq-summary-density: concise'));
+    expect(slides()).toHaveLength(2);
+    chooseOption(density(), 'keypoints');
+    // More than its text divides into makes as many as it does, and says so.
+    chooseOption(count(), '12');
+    await waitFor(() => expect(designer().textContent).toContain('Its text divides into only'));
+    expect(slides().length).toBeLessThan(13);
+
+    chooseOption(count(), '');
+    await waitFor(() => expect(source.latest).toBe(LONG_BODY));
+    expect(slides()).toHaveLength(3);
+  });
+
   it('collapses each section to one slide and rests the supporting-slide controls', async () => {
     renderDesigner(LONG);
     await waitFor(() => expect(slides().length).toBeGreaterThan(2));
     const supporting = screen.getByRole<HTMLInputElement>('checkbox', {
-      name: 'Add supporting visual slides where useful',
+      name: 'Add supporting slides',
     });
     expect(supporting.checked).toBe(true);
 
@@ -324,11 +408,80 @@ describe('SummaryDesigner', () => {
 
     wording()!.open = false;
     fireEvent(wording()!, new Event('toggle'));
-    // Only a section's opening slide has wording to change.
+    // Every summary slide has wording to change, and it stays closed from slide to slide.
     fireEvent.click(slides()[1]!);
-    expect(wording()).toBeNull();
+    expect(wording()?.open).toBe(false);
     fireEvent.click(slides()[0]!);
     expect(wording()?.open).toBe(false);
+  });
+
+  it('words any slide by its passage, until that passage changes', async () => {
+    renderDesigner(STORY);
+    await waitFor(() => expect(slides().length).toBeGreaterThan(2));
+    const help = () =>
+      screen.getByText('Customize slide wording (slides only)').closest('details')!.textContent;
+    expect(help()).toContain('This section’s opening slide can use your wording.');
+    fireEvent.click(slides()[1]!);
+    expect(help()).toContain('with the passage it summarizes');
+    expect(screen.queryByRole('button', { name: 'Use automatic wording' })).toBeNull();
+
+    const headline = screen.getByRole<HTMLInputElement>('textbox', { name: 'Slide headline' });
+    fireEvent.change(headline, { target: { value: 'The middle of the plan' } });
+    fireEvent.blur(headline);
+    await waitFor(() =>
+      expect(source.latest).toMatch(
+        /^## The middle of the plan \{\[summary passage=[0-9a-z]+-[0-9a-z]+\]\}$/m,
+      ),
+    );
+    expect(preview().getAttribute('aria-label')).toBe('Slide 2: The middle of the plan');
+    expect(slides()[0]!.textContent).not.toContain('The middle of the plan');
+    expect(screen.getByRole('button', { name: 'Use automatic wording' })).toBeTruthy();
+
+    // Another passage is another slide: it goes back to automatic wording, and
+    // the summary stays in the document, listed as not in use.
+    act(() => source.set(source.latest.replace(/should carry/g, 'must carry')));
+    await waitFor(() =>
+      expect(within(designer()).getByText('1 summary in the document is not in use')).toBeTruthy(),
+    );
+    for (const slide of slides()) expect(slide.textContent).not.toContain('The middle of the plan');
+  });
+
+  it('keeps a slide’s headline while it is hidden, and takes it off keeping the slide hidden', async () => {
+    renderDesigner(STORY);
+    await waitFor(() => expect(slides().length).toBeGreaterThan(2));
+    fireEvent.click(slides()[1]!);
+    const automatic = preview().getAttribute('aria-label')!;
+    const headline = screen.getByRole<HTMLInputElement>('textbox', { name: 'Slide headline' });
+    fireEvent.change(headline, { target: { value: 'Worded by hand' } });
+    fireEvent.blur(headline);
+    await waitFor(() => expect(source.latest).toContain('## Worded by hand {[summary passage='));
+
+    // A hidden summary's lone heading only names its slide, so hiding a slide
+    // worded by its headline alone saves its points too, and the headline stays.
+    fireEvent.click(hideSlide());
+    await waitFor(() =>
+      expect(preview().getAttribute('aria-label')).toBe('Slide 2 (hidden): Worded by hand'),
+    );
+    expect(source.latest).toMatch(
+      /^## Worded by hand \{\[summary passage=[0-9a-z]+-[0-9a-z]+ hidden=true\]\}\n\n- The fourth slide/m,
+    );
+    fireEvent.click(hideSlide());
+    await waitFor(() =>
+      expect(preview().getAttribute('aria-label')).toBe('Slide 2: Worded by hand'),
+    );
+    fireEvent.click(hideSlide());
+    await waitFor(() => expect(statuses()).toContain('1 hidden'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use automatic wording' }));
+    await waitFor(() =>
+      expect(preview().getAttribute('aria-label')).toBe(
+        automatic.replace(/^Slide 2:/, 'Slide 2 (hidden):'),
+      ),
+    );
+    expect(statuses()).toContain('1 hidden');
+    expect(source.latest.match(/\{\[summary/g)).toHaveLength(1);
+    expect(source.latest).toMatch(/\{\[summary passage=[0-9a-z]+-[0-9a-z]+ hidden=true\]\}$/m);
+    expect(screen.queryByRole('button', { name: 'Use automatic wording' })).toBeNull();
   });
 
   it('offers the same slides in the picker, with Previous and Next', async () => {
@@ -362,7 +515,7 @@ describe('SummaryDesigner', () => {
 
     chooseOption(density(), 'concise');
     await waitFor(() => expect(source.latest).toContain('squisq-summary-density: concise'));
-    expect(source.latest.endsWith(LONG)).toBe(true);
+    expect(source.latest.endsWith(LONG_BODY)).toBe(true);
 
     // An undo in Write puts the document back. The designer follows it, and
     // does not write its own design back over it.
@@ -612,6 +765,80 @@ describe('SummaryDesigner with an assistant', () => {
     expect(report).toHaveBeenCalled();
     expect(report.mock.calls[report.mock.calls.length - 1]?.[0]).toContain('A plan for March');
     expect(screen.getByRole('button', { name: /^Report \d+$/ })).toBeTruthy();
+  });
+
+  /** An assistant that suggests a Statement for the second slide, headlined `wording.text`. */
+  const middleAssistant = (wording: { text: string }): SummarizationAssistant => ({
+    readiness: () => null,
+    suggestSlides: async (plan: PresentationPlan, options: SuggestSlidesOptions) => {
+      options.onBeat(1, {
+        ...plan.beats[1]!,
+        layout: 'statement',
+        headline: wording.text,
+        points: ['An AI point'],
+      });
+      options.onProgress(plan.beats.length, plan.beats.length);
+    },
+  });
+  const suggest = async () => {
+    const button = await screen.findByRole<HTMLButtonElement>('button', {
+      name: 'Suggest with AI',
+    });
+    await waitFor(() => expect(button.disabled).toBe(false));
+    fireEvent.click(button);
+    await waitFor(() => expect(statuses()).toContain('AI summaries are ready to review.'));
+  };
+  const typePoints = (value: string) => {
+    const points = screen.getByRole('textbox', { name: 'Slide highlights, one per line' });
+    fireEvent.change(points, { target: { value } });
+    fireEvent.blur(points);
+  };
+
+  it('makes AI wording on any slide yours when you change it, and suggesting again keeps it', async () => {
+    const wording = { text: 'Suggested middle' };
+    renderDesigner(STORY, { assistant: middleAssistant(wording) });
+    await suggest();
+    await waitFor(() => expect(slides()[1]!.textContent).toContain('Suggested by AI'));
+
+    fireEvent.click(slides()[1]!);
+    const details = screen.getByText('Customize slide wording (slides only)').closest('details')!;
+    expect(details.textContent).toContain('This wording was suggested by AI.');
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Slide headline' }).value).toBe(
+      'Suggested middle',
+    );
+    typePoints('My first point\nMy second point');
+
+    // The whole slide is yours now: the AI's headline and layout, your points.
+    await waitFor(() =>
+      expect(source.latest).toMatch(
+        /^## Suggested middle \{\[summary passage=[0-9a-z]+-[0-9a-z]+ layout=statement\]\}\n\n- My first point\n- My second point$/m,
+      ),
+    );
+    expect(source.latest).not.toContain('origin=ai');
+    expect(slides()[1]!.textContent).not.toContain('Suggested by AI');
+    expect(screen.getByRole('button', { name: 'Use automatic wording' })).toBeTruthy();
+
+    wording.text = 'Suggested again';
+    await suggest();
+    expect(source.latest).toContain('## Suggested middle {[summary passage=');
+    expect(source.latest).not.toContain('Suggested again');
+  });
+
+  it('keeps a section’s layout preference in charge of AI wording you make yours', async () => {
+    renderDesigner(STORY, { assistant: middleAssistant({ text: 'Suggested middle' }) });
+    await waitFor(() => expect(slides().length).toBeGreaterThan(2));
+    chooseOption(layout(), 'cards');
+    await waitFor(() => expect(source.latest).toContain('# Plan {[slideLayout=cards]}'));
+    await suggest();
+
+    fireEvent.click(slides()[1]!);
+    typePoints('My first point\nMy second point');
+    await waitFor(() =>
+      expect(source.latest).toMatch(
+        /^## Suggested middle \{\[summary passage=[0-9a-z]+-[0-9a-z]+\]\}\n\n- My first point\n- My second point$/m,
+      ),
+    );
+    expect(slides()[1]!.textContent).toContain('Cards');
   });
 });
 

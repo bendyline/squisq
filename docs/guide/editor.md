@@ -96,25 +96,33 @@ you were on, and switching back opens Write on the block holding the Source curs
   **Summary style** dropdown, which says what each one does:
   - **None** — each section is one slide, as you wrote it. The default.
   - **Custom** — concise slides and diagrams generated from your text, which you adjust slide by
-    slide in the designer below the choice. Set the **Summary density** and whether to **Add
-    supporting visual slides**, then pick a slide from the list, where each section of your
+    slide in the designer below the choice. Set the **Summary length**, which lists each choice
+    with the number of slides it makes — **Key points** (one to three slides per section, showing
+    what an audience should keep while the narration tells the rest; the default), **One slide
+    per section**, or one of three lengths that **follow the text** with a slide every paragraph,
+    every few sentences, or nearly every sentence — and whether to **Add
+    supporting slides**; these sit on one row with the style and the designer's actions, and wrap
+    in a narrow panel. Then pick a slide from the list, where each section of your
     document sits beside the slides made from it (in a narrow window, from the **Slide** menu
     with **Previous** and **Next**, or with ← and →). For the slide you picked, you
-    can hide it, choose its section's **Layout preference** — including **As authored**, which
+    can hide it, set the **Slides for this section** (how many slides tell that section,
+    whatever the summary length), choose its section's **Layout preference** — including **As authored**, which
     shows the section as you wrote it, and, for a chart, table, diagram or other picture,
     **On the last slide of** the section before it, which draws it there instead of on a slide
     of its own (it stays in the list without a number, tagged with the slide carrying it, and
     says why when it cannot be carried) — and, under **Customize slide wording**, rewrite the
-    headline and highlights of a section's first slide (**Use automatic wording** takes yours
-    away). **Reset design** returns every slide to its automatic summary. Apps that connect an AI
-    add **Suggest with AI**, which proposes a layout and shorter wording for each slide. Each
-    change is saved as you make it, in the document itself: a section's slide wording, AI
-    suggestions and hidden slides as `{[summary]}` blocks under it (see
+    slide's headline and highlights (**Use automatic wording** takes yours away). Changing the
+    wording of a slide the AI suggested makes all of that slide's wording yours, and suggesting
+    again keeps it. **Reset design** returns every slide to its automatic summary. Apps that
+    connect an AI add **Suggest with AI**, which proposes a layout and shorter wording for each
+    slide. Each change is saved as you make it, in the document itself: a section's slide
+    wording, AI suggestions and hidden slides as `{[summary]}` blocks under it (see
     [Accessory blocks](markup.md#accessory-blocks)), its layout on its heading. Write folds a
     section's summaries into one **Slide summaries** row you can open; Source folds each. Ctrl+Z
-    in Write undoes a change. Your wording stays when you edit the section's text; an AI
-    suggestion or a hidden slide applies only while its passage is unchanged, and a list of
-    summaries **not in use** lets you remove the ones that no longer apply.
+    in Write undoes a change. Your wording for a section's first slide stays when you edit the
+    section's text; your wording for its other slides, an AI suggestion or a hidden slide applies
+    only while its passage is unchanged, and a list of summaries **not in use** lets you remove
+    the ones that no longer apply.
   - **Documentary**, **Magazine**, **Data-Driven**, **Narrative**, **Minimal**, or **Headings and
     features** — the document re-cut into a presentation in that style. Below the choice are the
     slides it makes, each beside the section it came from; slides a style adds around your text,

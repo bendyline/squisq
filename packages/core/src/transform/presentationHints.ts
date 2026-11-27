@@ -3,6 +3,7 @@ import { parseBuildSpec, type BuildSpec } from '../schemas/Build.js';
 import type { Doc } from '../schemas/Doc.js';
 import { buildNarrationScript } from '../narration/script.js';
 import { isPassageKey, passageKey } from '../doc/sectionPassages.js';
+import { PRESENTATION_SECTION_SLIDES } from '../schemas/PresentationLayouts.js';
 import {
   PRESENTATION_LAYOUTS,
   PRESENTATION_LIMITS,
@@ -21,8 +22,74 @@ import {
  */
 export const PRESENTATION_HINTS_KEY = 'squisq-presentation-hints';
 export const DYNAMIC_PRESENTATION_STYLE = 'dynamic-slides';
-/** Frontmatter: how much of a section each summary slide covers. Omitted at `balanced`. */
+/**
+ * Frontmatter: how long the summary is (`PRESENTATION_DENSITIES`). Without it
+ * a document is summarized as key points, unless it holds summaries keyed to
+ * a passage: those are written with the key, so ones without it were made
+ * when `balanced` was the default, and the document is read that way.
+ */
 export const SUMMARY_DENSITY_KEY = 'squisq-summary-density';
+/**
+ * How long a summary is, from the fewest slides to the most:
+ *
+ * - `section`: one slide for each section, however long it is;
+ * - `keypoints`: one to three slides for each section, showing the points an
+ *   audience should keep while the narration tells the rest (the default);
+ * - `detailed`, `balanced`, `concise`: slides that follow the text, a new one
+ *   every 64, 42 or 28 words, showing the sentences they are made from.
+ */
+export const PRESENTATION_DENSITIES = [
+  'section',
+  'keypoints',
+  'detailed',
+  'balanced',
+  'concise',
+] as const;
+export type PresentationDensity = (typeof PRESENTATION_DENSITIES)[number];
+/**
+ * What each summary length is called and what it makes, as a designer offers
+ * it: "Key points — one to three slides per section".
+ */
+export const PRESENTATION_DENSITY_LABELS: Readonly<
+  Record<PresentationDensity, { label: string; description: string }>
+> = {
+  section: {
+    label: 'One slide per section',
+    description: 'the key points of each section',
+  },
+  keypoints: {
+    label: 'Key points',
+    description: 'one to three slides per section',
+  },
+  detailed: {
+    label: 'Follow the text',
+    description: 'a slide for each paragraph or so',
+  },
+  balanced: {
+    label: 'Follow the text closely',
+    description: 'a slide every few sentences',
+  },
+  concise: {
+    label: 'Sentence by sentence',
+    description: 'a slide for nearly every sentence',
+  },
+};
+/** The length a document with no design is summarized at. */
+export const DEFAULT_PRESENTATION_DENSITY: PresentationDensity = 'keypoints';
+/** The length passage-keyed summaries without a density key were made at: the default then. */
+export const LEGACY_PRESENTATION_DENSITY: PresentationDensity = 'balanced';
+/** True for one of `PRESENTATION_DENSITIES`. */
+export function isPresentationDensity(value: unknown): value is PresentationDensity {
+  return typeof value === 'string' && (PRESENTATION_DENSITIES as readonly string[]).includes(value);
+}
+/**
+ * Whether slides at this length stand for long passages, so each shows the
+ * points chosen from its passage (`keyPoints.ts`) instead of its sentences.
+ */
+export function presentationDensityDistills(density: PresentationDensity): boolean {
+  return density === 'keypoints' || density === 'section';
+}
+export { PRESENTATION_SECTION_SLIDES };
 /** Frontmatter: whether summaries may add supporting slides. Omitted at `true`. */
 export const SUMMARY_SUPPORTING_SLIDES_KEY = 'squisq-summary-supporting-slides';
 /** The accessory block type that holds one slide's summary. */
@@ -74,6 +141,13 @@ export interface PresentationBlockHint {
   /** A summary layout to prefer, or `authored` to show the section's own block. */
   layout?: PresentationBeatLayout;
   inbetweens?: boolean;
+  /**
+   * How many slides tell this section, whatever the document's length setting
+   * (its heading's `slideCount=`). The section is cut evenly at sentences and
+   * each slide shows its passage's key points. Absent: the document's setting
+   * decides.
+   */
+  count?: number;
   /** Each designed slide of this section: its `{[summary]}` blocks. */
   slides?: PresentationSlideHint[];
   /** Slides left out of the deck, by `presentationPassageKey` of their passage.
@@ -89,14 +163,14 @@ export interface PresentationBlockHint {
 }
 export interface PresentationHints {
   version: 1;
-  /** How much of a section each slide covers; `section` is one slide per section,
-   * with no supporting slides. */
-  density: 'concise' | 'balanced' | 'detailed' | 'section';
+  /** How long the summary is (`PRESENTATION_DENSITIES`); `section` is one slide
+   * per section, with no supporting slides. */
+  density: PresentationDensity;
   inbetweens: boolean;
   blocks: PresentationBlockHint[];
 }
 export function defaultPresentationHints(): PresentationHints {
-  return { version: 1, density: 'balanced', inbetweens: true, blocks: [] };
+  return { version: 1, density: DEFAULT_PRESENTATION_DENSITY, inbetweens: true, blocks: [] };
 }
 function record(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -133,7 +207,7 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
     !record(value) ||
     !exact(value, ['version', 'density', 'inbetweens', 'blocks']) ||
     value.version !== 1 ||
-    !['concise', 'balanced', 'detailed', 'section'].includes(String(value.density)) ||
+    !isPresentationDensity(value.density) ||
     typeof value.inbetweens !== 'boolean' ||
     !Array.isArray(value.blocks) ||
     // Every section with a hint has a slide, so a deck's limits bound its design.
@@ -148,12 +222,13 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
       !exact(
         entry,
         ['blockId'],
-        ['layout', 'inbetweens', 'wording', 'ai', 'build', 'hidden', 'slides'],
+        ['layout', 'inbetweens', 'count', 'wording', 'ai', 'build', 'hidden', 'slides'],
       ) ||
       !text(entry.blockId, 1024) ||
       ids.has(entry.blockId) ||
       (entry.layout !== undefined && !isPresentationBeatLayout(entry.layout)) ||
       (entry.inbetweens !== undefined && typeof entry.inbetweens !== 'boolean') ||
+      (entry.count !== undefined && !isSectionSlideCount(entry.count)) ||
       (entry.hidden !== undefined &&
         (!Array.isArray(entry.hidden) ||
           !entry.hidden.length ||
@@ -170,6 +245,7 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
     }
     if (entry.layout !== undefined) hint.layout = entry.layout as PresentationBeatLayout;
     if (entry.inbetweens !== undefined) hint.inbetweens = entry.inbetweens as boolean;
+    if (entry.count !== undefined) hint.count = entry.count as number;
     if (entry.hidden !== undefined) hint.hidden = [...(entry.hidden as string[])];
     if (entry.ai !== undefined) {
       if (!Array.isArray(entry.ai) || entry.ai.length > PRESENTATION_LIMITS.beats) return null;
@@ -236,10 +312,19 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
   }
   return {
     version: 1,
-    density: value.density as PresentationHints['density'],
+    density: value.density as PresentationDensity,
     inbetweens: value.inbetweens,
     blocks,
   };
+}
+/** True for a number of slides a section can be asked to be told in. */
+export function isSectionSlideCount(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= PRESENTATION_SECTION_SLIDES
+  );
 }
 const SLIDE_HINT_KEYS = [
   'passage',
@@ -306,6 +391,7 @@ export function canonicalPresentationHints(hints: PresentationHints): Presentati
       const out: PresentationBlockHint = { blockId: block.blockId };
       if (block.layout !== undefined) out.layout = block.layout;
       if (block.inbetweens !== undefined) out.inbetweens = block.inbetweens;
+      if (block.count !== undefined) out.count = block.count;
       const slides = (block.slides ?? [])
         .map(canonicalSlide)
         .sort((a, b) => (a.passage ?? '').localeCompare(b.passage ?? ''));
@@ -354,7 +440,7 @@ export function slideHintHasWording(slide: PresentationSlideHint): boolean {
 export function withBlockHint(
   hints: PresentationHints,
   blockId: string,
-  patch: { layout?: PresentationBeatLayout; inbetweens?: boolean },
+  patch: { layout?: PresentationBeatLayout; inbetweens?: boolean; count?: number },
 ): PresentationHints {
   return updateBlock(hints, blockId, (block) => {
     const next: PresentationBlockHint = { ...block };
@@ -365,6 +451,10 @@ export function withBlockHint(
     if ('inbetweens' in patch) {
       if (patch.inbetweens === undefined) delete next.inbetweens;
       else next.inbetweens = patch.inbetweens;
+    }
+    if ('count' in patch) {
+      if (patch.count === undefined) delete next.count;
+      else next.count = patch.count;
     }
     return next;
   });

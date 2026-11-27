@@ -19,6 +19,7 @@ import {
   type PresentationHints,
 } from '../transform/presentationHints.js';
 import {
+  PRESENTATION_AUTHOR_LIMITS,
   PRESENTATION_SLIDE_FORMAT,
   PRESENTATION_STORYBOARD_FORMAT,
   addressesAModel,
@@ -27,6 +28,7 @@ import {
   presentationRetryContext,
   presentationSlidePrompt,
   presentationSlideRequest,
+  presentationSlideSummarizes,
   presentationSlidesToWord,
   presentationStoryboardPrompt,
   presentationStoryboardRequest,
@@ -54,8 +56,12 @@ The trench is 3 to 7 miles deep along most of its length. Sunlight reaches only 
 Requirements keep changing after work has started. Teams have too few senior engineers. Funding is often released two months late.
 `;
 
+/** Slides that follow the text: each passage a model is shown is a few sentences. */
 const planOf = (markdown = DECK): PresentationPlan =>
-  createPresentationPlan(markdownToDoc(parseMarkdown(markdown), { generateCoverBlock: false }));
+  createPresentationPlan(markdownToDoc(parseMarkdown(markdown), { generateCoverBlock: false }), {
+    ...defaultPresentationHints(),
+    density: 'balanced',
+  });
 const slideAbout = (plan: PresentationPlan, words: string) =>
   plan.beats.findIndex((beat) =>
     plan.sourceText.slice(beat.sourceStart, beat.sourceEnd).includes(words),
@@ -768,5 +774,96 @@ describe('grounding a beat directly', () => {
     expect(groundPresentationBeat(beat, passage)).toEqual({ beat, notes: [] });
     const authored = { ...beat, layout: 'authored' as const, points: [] };
     expect(groundPresentationBeat(authored, passage).beat).toBe(authored);
+  });
+});
+
+describe('a slide that summarizes a long passage', () => {
+  const LONG = [
+    '# Notes',
+    '',
+    '## Where small models work',
+    '',
+    'Local models have a lower ceiling than frontier models, but they are private, cheap and always available. ' +
+      'That trade is worth making for routine work such as reviewing documents and summarizing notes. ' +
+      'Giving a small model a recipe of careful steps made its results worse, because every step is another chance to lose the thread. ' +
+      'What helped instead was a contract that states the goal, the deliverables and the checks the result must pass. ' +
+      'Small models passed 59 of 90 tasks this way, against 39 of 90 when walked through the steps.',
+  ].join('\n');
+  /** The deck as key points: one slide stands for the whole section. */
+  const keyPoints = () =>
+    createPresentationPlan(markdownToDoc(parseMarkdown(LONG), { generateCoverBlock: false }));
+
+  it('is one whose passage is a third of a section or more', () => {
+    const plan = keyPoints();
+    const index = slideAbout(plan, 'What helped instead');
+    expect(presentationSlideSummarizes(plan, index)).toBe(true);
+    // A slide that follows the text is a few sentences: it is condensed, as before.
+    const following = planOf(LONG);
+    expect(following.beats.length).toBeGreaterThan(plan.beats.length);
+    for (const at of following.beats.keys())
+      expect(presentationSlideSummarizes(following, at)).toBe(false);
+    expect(presentationSlideSummarizes(plan, 99)).toBe(false);
+  });
+
+  it('asks for the ideas worth keeping, and does not show the model the sentences it would copy', () => {
+    const plan = keyPoints();
+    const index = slideAbout(plan, 'What helped instead');
+    const request = JSON.parse(presentationSlideRequest(plan, index)) as Record<string, unknown>;
+    expect(request.summarize).toBe(true);
+    expect(request.passage).toContain('59 of 90');
+    // The automatic points are sentences of the passage; only the layout and headline go.
+    expect(plan.beats[index]!.points.length).toBeGreaterThan(0);
+    expect(request.current).toEqual({
+      layout: plan.beats[index]!.layout,
+      headline: plan.beats[index]!.headline,
+    });
+    expect(presentationSlidePrompt()).toContain('When "summarize" is true');
+    // A short passage is asked about as it always was.
+    const following = planOf(LONG);
+    const short = JSON.parse(presentationSlideRequest(following, 1)) as Record<string, unknown>;
+    expect(short.summarize).toBeUndefined();
+    expect(short.current).toHaveProperty('points');
+  });
+
+  it('takes short phrases and refuses a point as long as a sentence', () => {
+    const plan = keyPoints();
+    const index = slideAbout(plan, 'What helped instead');
+    const phrases = readPresentationSlideReply(
+      reply({
+        layout: 'cards',
+        headline: 'Contracts beat recipes for small models',
+        points: [
+          'Private, cheap and always available',
+          'A recipe of careful steps made results worse',
+          'A contract states the goal and the checks',
+        ],
+      }),
+      plan,
+      index,
+    );
+    expect(phrases.problem).toBeUndefined();
+    expect(phrases.beat?.points).toHaveLength(3);
+
+    const sentence =
+      'Giving a small model a recipe of careful steps made its results worse, because every step is another chance to lose the thread, which a small model loses.';
+    expect(sentence.length).toBeGreaterThan(PRESENTATION_AUTHOR_LIMITS.summaryPointCharacters);
+    expect(sentence.length).toBeLessThan(PRESENTATION_LIMITS.point);
+    const copied = readPresentationSlideReply(
+      reply({
+        layout: 'cards',
+        headline: 'Contracts beat recipes',
+        points: [sentence, 'A contract states the goal'],
+      }),
+      plan,
+      index,
+    );
+    expect(copied.beat).toBeNull();
+    expect(copied.problem).toContain(
+      `is longer than ${PRESENTATION_AUTHOR_LIMITS.summaryPointCharacters} characters; say it as a short phrase`,
+    );
+    // The correction quotes it, so the second request says what to change.
+    expect(presentationCorrection(copied.problem!, copied.kind)).toContain(
+      'say it as a short phrase',
+    );
   });
 });

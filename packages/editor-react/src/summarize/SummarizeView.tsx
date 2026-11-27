@@ -7,7 +7,13 @@
  * written through the preview settings exactly as the Use toolbar's old
  * Summarize dropdown wrote it.
  *
- * Below the choice sits what that choice makes. For a built-in style, that is
+ * The choice heads one row of controls. For Custom, the built-in designer's
+ * own controls (the summary length, supporting slides, Reset design, Suggest
+ * with AI) join it there, through a slot the designer fills, so the choices
+ * that shape the deck sit on one line above it. The row wraps in a narrow
+ * panel.
+ *
+ * Below the row sits what the choice makes. For a built-in style, that is
  * the deck the style produces, drawn through the same projection the slideshow
  * plays. For Custom, it is the designer, where the author picks a slide and
  * changes its layout and wording, hides it, or — when the host lends an AI
@@ -17,7 +23,15 @@
  * The shell keeps this view mounted, hidden, while Use is open — as it keeps
  * the editors — so a designer's work in progress survives a look at the deck.
  */
-import { lazy, Suspense, useId, useMemo, type CSSProperties, type ReactNode } from 'react';
+import {
+  lazy,
+  Suspense,
+  useId,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import type { ContentContainer } from '@bendyline/squisq/storage';
 import type { Block, Doc } from '@bendyline/squisq/schemas';
 import { expandDocBlocks } from '@bendyline/squisq/doc';
@@ -59,6 +73,10 @@ export function SummarizeView({
 }: SummarizeViewProps) {
   const { activeTransformStyle, setSelectedTransformStyle } = usePreviewSettings();
   const designing = activeTransformStyle === CUSTOM_SUMMARY_STYLE;
+  // The built-in designer puts its controls on the style's row; a host's own
+  // designer keeps to the body, under a row that holds the style alone.
+  const builtIn = designing && !designer;
+  const [controlsSlot, setControlsSlot] = useState<HTMLElement | null>(null);
   return (
     <section
       className="squisq-summarize"
@@ -75,33 +93,54 @@ export function SummarizeView({
             text and narration are not changed.
           </p>
         </header>
-        <SummaryStylePicker
-          value={activeTransformStyle}
-          options={SUMMARY_STYLE_OPTIONS}
-          onChange={setSelectedTransformStyle}
-          disabled={readOnly}
-        />
-        <div className="squisq-summarize-body">
-          {designing ? (
-            (designer ?? (
-              <Suspense
-                fallback={
-                  <p className="squisq-summarize-empty" role="status">
-                    Preparing slides…
-                  </p>
-                }
-              >
-                <SummaryDesigner assistant={assistant} readOnly={readOnly} basePath={basePath} />
-              </Suspense>
-            ))
-          ) : (
-            <SummarySlides
-              transformStyle={activeTransformStyle}
-              basePath={basePath}
-              workspaceContainer={workspaceContainer}
-              active={!hidden}
+        {/* With the built-in designer, the row and the body are the designer:
+            its controls are on the row, its slides in the body. */}
+        <div
+          className="squisq-summarize-main"
+          {...(builtIn ? { role: 'region', 'aria-label': 'Summarization designer' } : {})}
+        >
+          <div className="squisq-summarize-controls">
+            <SummaryStylePicker
+              value={activeTransformStyle}
+              options={SUMMARY_STYLE_OPTIONS}
+              onChange={setSelectedTransformStyle}
+              disabled={readOnly}
+              showDescription={!builtIn}
             />
-          )}
+            {builtIn && (
+              <div
+                ref={setControlsSlot}
+                className="squisq-summarize-controls-slot squisq-summary-designer-bar"
+              />
+            )}
+          </div>
+          <div className="squisq-summarize-body">
+            {designing ? (
+              (designer ?? (
+                <Suspense
+                  fallback={
+                    <p className="squisq-summarize-empty" role="status">
+                      Preparing slides…
+                    </p>
+                  }
+                >
+                  <SummaryDesigner
+                    assistant={assistant}
+                    readOnly={readOnly}
+                    basePath={basePath}
+                    controlsSlot={controlsSlot}
+                  />
+                </Suspense>
+              ))
+            ) : (
+              <SummarySlides
+                transformStyle={activeTransformStyle}
+                basePath={basePath}
+                workspaceContainer={workspaceContainer}
+                active={!hidden}
+              />
+            )}
+          </div>
         </div>
       </div>
     </section>

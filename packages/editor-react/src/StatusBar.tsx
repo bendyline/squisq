@@ -14,7 +14,7 @@
  * what is on screen (styles/status-bar.css).
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { countBlocks } from '@bendyline/squisq/doc';
 import { useEditorContext } from './EditorContext';
@@ -30,6 +30,13 @@ export interface StatusBarProps {
   slotRight?: ReactNode;
 }
 
+/** Whether `region` has content, by the same rule as CSS `:empty` (comments don't count). */
+function hasViewContent(region: HTMLElement): boolean {
+  return Array.from(region.childNodes).some(
+    (node) => node.nodeType === Node.ELEMENT_NODE || node.nodeType === Node.TEXT_NODE,
+  );
+}
+
 /** `1 line`, `2 lines`: an empty document used to read "1 lines". */
 function countLabel(count: number, noun: string): string {
   return `${count} ${count === 1 ? noun : `${noun}s`}`;
@@ -42,8 +49,35 @@ function countLabel(count: number, noun: string): string {
 export function StatusBar({ className, slotRight }: StatusBarProps) {
   const { markdownSource, doc, parseError, activeView } = useEditorContext();
   const proofingState = useProofingState();
-  const viewRegionRef = useStatusBarViewRegionRef();
+  const shareViewRegion = useStatusBarViewRegionRef();
+  const barRef = useRef<HTMLDivElement>(null);
+  const viewRegion = useRef<HTMLDivElement | null>(null);
+  const viewRegionRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      viewRegion.current = element;
+      shareViewRegion?.(element);
+    },
+    [shareViewRegion],
+  );
   const [statsSource, setStatsSource] = useState(markdownSource);
+
+  // The stylesheet lays the bar out around the view region only while a view
+  // has portalled content into it, and reads that from `data-view-content`
+  // rather than `:has(> .squisq-status-view:not(:empty))`: WebKit (Safari, the
+  // iOS app) can miss the portal's children arriving and keep matching the
+  // empty region, leaving a phone's playback row pushed off the end of the bar
+  // until something else restyles it. Set from the observer, outside React,
+  // so it lands before the frame that first paints the content.
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    const region = viewRegion.current;
+    if (!bar || !region) return;
+    const sync = () => bar.toggleAttribute('data-view-content', hasViewContent(region));
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(region, { childList: true });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (statsSource === markdownSource) return;
@@ -64,6 +98,7 @@ export function StatusBar({ className, slotRight }: StatusBarProps) {
 
   return (
     <div
+      ref={barRef}
       className={`squisq-status-bar ${className || ''}`}
       data-view-kind={activeView === 'preview' ? 'use' : 'edit'}
     >

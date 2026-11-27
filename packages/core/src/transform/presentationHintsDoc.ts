@@ -4,9 +4,14 @@
  * The design lives in the markdown where people can see it:
  *
  * - **Document settings** are two frontmatter keys,
- *   `squisq-summary-density` and `squisq-summary-supporting-slides`.
+ *   `squisq-summary-density` (how long the summary is) and
+ *   `squisq-summary-supporting-slides`. Without the first, a document is
+ *   summarized as key points — unless it holds a summary keyed to a passage
+ *   (`passage=`). Those are written with their density, so one without the
+ *   key was made when `balanced` was the default and is read that way, which
+ *   keeps the slides its summaries were made for.
  * - **Section settings** are on the section's heading tag:
- *   `## Results {[slideLayout=cards supportingSlides=false]}`.
+ *   `## Results {[slideLayout=cards supportingSlides=false slideCount=2]}`.
  * - **Slide designs** are `{[summary]}` accessory blocks under the section.
  *   The heading is the slide's headline and the first list its points:
  *
@@ -51,12 +56,17 @@ import {
   type PresentationPlan,
 } from './presentationPlan.js';
 import {
+  LEGACY_PRESENTATION_DENSITY,
+  PRESENTATION_DENSITIES,
   PRESENTATION_HINTS_KEY,
   SUMMARY_ACCESSORY_TYPE,
   SUMMARY_DENSITY_KEY,
   SUMMARY_SUPPORTING_SLIDES_KEY,
   defaultPresentationHints,
+  PRESENTATION_SECTION_SLIDES,
+  isPresentationDensity,
   isPresentationPassageKey,
+  isSectionSlideCount,
   parsePresentationHints,
   presentationPassageKey,
   slideHintHasWording,
@@ -117,13 +127,6 @@ export interface PresentationHintsRead {
   issues: PresentationHintIssue[];
 }
 
-const DENSITIES: ReadonlyArray<PresentationHints['density']> = [
-  'concise',
-  'balanced',
-  'detailed',
-  'section',
-];
-
 /** Whether the document holds its design in the new form (blocks, settings, keys). */
 function hasBlockDesign(doc: Doc, summaries: Block[]): boolean {
   const fm = doc.frontmatter ?? {};
@@ -132,7 +135,10 @@ function hasBlockDesign(doc: Doc, summaries: Block[]): boolean {
     Object.prototype.hasOwnProperty.call(fm, SUMMARY_DENSITY_KEY) ||
     Object.prototype.hasOwnProperty.call(fm, SUMMARY_SUPPORTING_SLIDES_KEY) ||
     flattenContentBlocks(doc.blocks).some(
-      (block) => block.slideLayout !== undefined || block.supportingSlides !== undefined,
+      (block) =>
+        block.slideLayout !== undefined ||
+        block.supportingSlides !== undefined ||
+        block.slideCount !== undefined,
     )
   );
 }
@@ -175,15 +181,20 @@ export function readPresentationHints(doc: Doc): PresentationHintsRead {
     });
   }
 
+  // Summaries keyed to a passage are written with their density; ones
+  // without the key were made when `balanced` was the default, and only that
+  // length makes the slides they are keyed to.
   const hints = defaultPresentationHints();
+  if (summaries.some((summary) => summary.templateOverrides?.passage !== undefined))
+    hints.density = LEGACY_PRESENTATION_DENSITY;
   const density = fm[SUMMARY_DENSITY_KEY];
   if (density !== undefined) {
-    if (DENSITIES.includes(density as PresentationHints['density'])) {
-      hints.density = density as PresentationHints['density'];
+    if (isPresentationDensity(density)) {
+      hints.density = density;
     } else {
       issues.push({
         code: 'setting-invalid',
-        message: `The summary density "${String(density)}" is not one of concise, balanced, detailed or section.`,
+        message: `The summary density "${String(density)}" is not one of ${PRESENTATION_DENSITIES.slice(0, -1).join(', ')} or ${PRESENTATION_DENSITIES[PRESENTATION_DENSITIES.length - 1]}.`,
       });
     }
   }
@@ -209,6 +220,15 @@ export function readPresentationHints(doc: Doc): PresentationHintsRead {
   for (const block of flattenContentBlocks(doc.blocks)) {
     if (block.slideLayout !== undefined) section(block.id).layout = block.slideLayout;
     if (block.supportingSlides !== undefined) section(block.id).inbetweens = block.supportingSlides;
+    if (block.slideCount !== undefined) {
+      if (isSectionSlideCount(block.slideCount)) section(block.id).count = block.slideCount;
+      else
+        issues.push({
+          code: 'setting-invalid',
+          message: `A section is told in 1 to ${PRESENTATION_SECTION_SLIDES} slides; slideCount=${block.slideCount} is not used.`,
+          blockId: block.id,
+        });
+    }
   }
 
   const entries: PresentationHintEntry[] = [];
@@ -335,7 +355,7 @@ const spaced = (text: string) => text.replace(/\s+/gu, ' ').trim();
 
 /**
  * The summaries the plan cannot use: one keyed to a passage no slide is made
- * from now (the text changed, or the density cuts the section differently —
+ * from now (the text changed, or the summary length cuts the section differently —
  * it comes back into use if the slide does), an AI picture slide on a slide
  * without a picture, or a summary whose section is not narrated.
  */
@@ -375,7 +395,7 @@ export function presentationHintUsage(
       issues.push({
         code: 'summary-not-in-use',
         message:
-          'No slide is made from this summary’s passage now: the text changed, or the density cuts the section differently.',
+          'No slide is made from this summary’s passage now: the text changed, or the summary length or the section’s slide count divides the section differently.',
         ...where,
       });
       continue;
@@ -413,6 +433,7 @@ export function presentationHintsForPlan(
     const out: PresentationBlockHint = { blockId: hint.blockId };
     if (hint.layout !== undefined) out.layout = hint.layout;
     if (hint.inbetweens !== undefined) out.inbetweens = hint.inbetweens;
+    if (hint.count !== undefined) out.count = hint.count;
     // A legacy section build becomes the section heading's own `build=` setting.
     if (hint.build !== undefined) out.build = hint.build;
     const keys = new Map<string, { headline: string }>();

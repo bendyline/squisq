@@ -111,6 +111,7 @@ function validateBlocks(values: unknown[], path: string, issues: DocSchemaIssue[
     optionalArray(block, 'contents', `${blockPath}.contents`, issues);
     optionalString(block, 'slideLayout', `${blockPath}.slideLayout`, issues);
     optionalBoolean(block, 'supportingSlides', `${blockPath}.supportingSlides`, issues);
+    optionalFiniteNumber(block, 'slideCount', `${blockPath}.slideCount`, issues);
     if (block.accessoryBlock !== undefined) {
       const accessoryPath = `${blockPath}.accessoryBlock`;
       if (isRecord(block.accessoryBlock)) {

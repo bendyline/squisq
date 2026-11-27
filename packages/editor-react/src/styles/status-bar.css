@@ -59,22 +59,25 @@
 
 /* A view's controls sit in the CENTER of the bar, not at an end: a phone's
    rounded screen corners cut into both ends of a bar along the bottom edge.
-   Equal side columns keep the middle centered whatever the sides hold. */
-.squisq-status-bar:has(> .squisq-status-view:not(:empty)) {
+   Equal side columns keep the middle centered whatever the sides hold.
+   StatusBar sets `data-view-content` while the region holds a view's content.
+   Not `:has(> .squisq-status-view:not(:empty))`: WebKit can keep matching the
+   empty region after a portal fills it. */
+.squisq-status-bar[data-view-content] {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
 }
 
-.squisq-status-bar:has(> .squisq-status-view:not(:empty)) > .squisq-status-doc {
+.squisq-status-bar[data-view-content] > .squisq-status-doc {
   grid-column: 1;
   overflow: hidden;
 }
 
-.squisq-status-bar:has(> .squisq-status-view:not(:empty)) > .squisq-status-view {
+.squisq-status-bar[data-view-content] > .squisq-status-view {
   grid-column: 2;
 }
 
-.squisq-status-bar:has(> .squisq-status-view:not(:empty)) > .squisq-status-end {
+.squisq-status-bar[data-view-content] > .squisq-status-end {
   grid-column: 3;
   justify-content: flex-end;
   margin-left: 0;
@@ -82,8 +85,7 @@
 
 /* In a Use view that has its own status, the counts give way: they describe
    the source text, which is not what is on screen. */
-.squisq-status-bar[data-view-kind='use']:has(> .squisq-status-view:not(:empty))
-  > .squisq-status-doc {
+.squisq-status-bar[data-view-kind='use'][data-view-content] > .squisq-status-doc {
   display: none;
 }
 
@@ -97,7 +99,7 @@
     display: none;
   }
 
-  .squisq-status-bar:has(> .squisq-status-view:not(:empty)) > .squisq-status-doc {
+  .squisq-status-bar[data-view-content] > .squisq-status-doc {
     display: none;
   }
 }

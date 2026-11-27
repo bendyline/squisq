@@ -23,6 +23,7 @@ import {
 } from '../schemas/Transitions.js';
 import {
   PRESENTATION_BEAT_LAYOUTS,
+  PRESENTATION_SECTION_SLIDES,
   isPresentationBeatLayout,
   type PresentationBeatLayout,
 } from '../schemas/PresentationLayouts.js';
@@ -49,6 +50,7 @@ export const KNOWN_BLOCK_META_KEYS = {
   transitionDirection: 'transitionDirection',
   slideLayout: 'presentationLayout',
   supportingSlides: 'boolean',
+  slideCount: 'slideCount',
 } as const;
 
 export type KnownBlockMetaKey = keyof typeof KNOWN_BLOCK_META_KEYS;
@@ -141,6 +143,12 @@ export const BLOCK_META_KEY_DESCRIPTORS: readonly BlockMetaKeyDescriptor[] = [
     description: 'Whether its summary may add supporting slides',
     values: ['true', 'false'],
   },
+  {
+    key: 'slideCount',
+    description:
+      'How many summary slides tell this section, whatever the document’s summary length',
+    valueHint: `whole number from 1 to ${PRESENTATION_SECTION_SLIDES} — e.g. 2`,
+  },
 ];
 
 /**
@@ -163,6 +171,8 @@ export interface CoercedBlockMeta {
   slideLayout?: PresentationBeatLayout;
   /** Whether this section's summary may add supporting slides (`supportingSlides=`). */
   supportingSlides?: boolean;
+  /** How many summary slides tell this section (`slideCount=`). */
+  slideCount?: number;
 }
 
 export interface CoerceResult {
@@ -237,6 +247,13 @@ export function coerceAnnotationValues(params: Record<string, string>): CoerceRe
     } else if (kind === 'boolean') {
       if (raw === 'true' || raw === 'false') blockMeta.supportingSlides = raw === 'true';
       else warnings.push(`Invalid value for "${key}": ${JSON.stringify(raw)} (true or false)`);
+    } else if (kind === 'slideCount') {
+      const count = /^\d{1,2}$/u.test(raw.trim()) ? Number(raw) : NaN;
+      if (count >= 1 && count <= PRESENTATION_SECTION_SLIDES) blockMeta.slideCount = count;
+      else
+        warnings.push(
+          `Invalid slide count for "${key}": ${JSON.stringify(raw)} (a whole number from 1 to ${PRESENTATION_SECTION_SLIDES})`,
+        );
     } else if (kind === 'transitionDirection') {
       const direction = normalizeTransitionDirection(raw);
       if (direction == null) {

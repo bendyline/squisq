@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   defaultPresentationHints,
   parsePresentationHints,
+  PRESENTATION_DENSITIES,
   serializePresentationHints,
   presentationSections,
   usesDynamicPresentation,
@@ -355,7 +356,11 @@ describe('dynamic slide summarization', () => {
         '<img alt="Editor screenshot" src="images/editor.png" width="246" height="280">',
       ].join('\n\n'),
     );
-    const plan = createPresentationPlan(doc);
+    // Slides that follow the text show its sentences.
+    const plan = createPresentationPlan(doc, {
+      ...defaultPresentationHints(),
+      density: 'balanced',
+    });
     const sections = presentationSections(doc);
     // A section heading may title a sentence that names it; a sentence-length
     // headline must not reappear as the body underneath it.
@@ -363,11 +368,15 @@ describe('dynamic slide summarization', () => {
     const echoes = (point: string, headline: string) =>
       stem(headline).length > 20 &&
       (stem(point).startsWith(stem(headline)) || stem(headline).startsWith(stem(point)));
-    for (const beat of plan.beats)
-      for (const point of beat.points) expect(echoes(point, beat.headline)).toBe(false);
-    for (const [index, beat] of plan.beats.entries()) {
-      const next = plan.beats[index + 1];
-      if (next) expect([next.headline, next.points]).not.toEqual([beat.headline, beat.points]);
+    // At every length, key points included.
+    for (const density of PRESENTATION_DENSITIES) {
+      const deck = createPresentationPlan(doc, { ...defaultPresentationHints(), density });
+      for (const beat of deck.beats)
+        for (const point of beat.points) expect(echoes(point, beat.headline)).toBe(false);
+      for (const [index, beat] of deck.beats.entries()) {
+        const next = deck.beats[index + 1];
+        if (next) expect([next.headline, next.points]).not.toEqual([beat.headline, beat.points]);
+      }
     }
     // A complete sentence that fits on a slide is not cut off mid-thought.
     expect(plan.beats.flatMap((beat) => beat.points)).toContain(
@@ -1169,22 +1178,24 @@ describe('long presentations', () => {
       ),
     );
     expect(buildNarrationScript(doc).sourceText.length).toBeGreaterThan(36_000);
-    for (const density of ['concise', 'balanced', 'detailed', 'section'] as const) {
+    for (const density of PRESENTATION_DENSITIES) {
       const plan = createPresentationPlan(doc, { ...defaultPresentationHints(), density });
       if (density === 'balanced') expect(plan.beats.length).toBeGreaterThan(80);
+      // Sixteen sentences a section: three slides each as key points.
+      if (density === 'keypoints') expect(plan.beats.length).toBeLessThanOrEqual(30 * 3);
       expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
       expect(compilePresentationPlan(doc, plan).blocks).toHaveLength(plan.beats.length);
     }
   });
 
-  it('counts the slides and names only the densities that would fit', () => {
-    // Three-letter words: Concise passes the limit, Balanced does not.
+  it('counts the slides and names only the shorter lengths that would fit', () => {
+    // Three-letter words: sentence by sentence passes the limit, the rest do not.
     const doc = parse(sections(12, 'A cat sat on a mat. '.repeat(150)));
     const hints = { ...defaultPresentationHints(), density: 'concise' as const };
     expect(() => createPresentationPlan(doc, hints)).toThrow(
       new RegExp(
-        `^With Concise density this document makes \\d+ slides, and a presentation holds at most ${limit}\\. ` +
-          'Choose Balanced, Detailed, or One slide per section to put more on each slide, or split the document\\.$',
+        `^At “Sentence by sentence” this document makes \\d+ slides, and a presentation holds at most ${limit}\\. ` +
+          'Choose “Follow the text closely”, “Follow the text”, “Key points”, or “One slide per section” for a shorter summary, or split the document\\.$',
       ),
     );
     expect(
@@ -1195,7 +1206,7 @@ describe('long presentations', () => {
   it('asks for a split when even one slide per section is too many', () => {
     const doc = parse(sections(limit + 10, 'Short line.'));
     expect(() => createPresentationPlan(doc)).toThrow(
-      `With Balanced density this document makes ${limit + 10} slides, and a presentation holds at most ${limit}. Split it into shorter documents.`,
+      `At “Key points” this document makes ${limit + 10} slides, and a presentation holds at most ${limit}. Split it into shorter documents.`,
     );
     expect(() =>
       createPresentationPlan(doc, { ...defaultPresentationHints(), density: 'section' }),

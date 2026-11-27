@@ -129,7 +129,7 @@ itself starts from `pruneAccessoryBlocks` / `withoutAccessoryBlocks` (`withoutAc
 a `MarkdownDocument`). Prune rather than skip: a section whose only child is a summary must still
 read as a section without children. Their ids (`<owner>~summary`) never use the slug counter, so
 adding one never renumbers a real block. A section's summary settings are typed fields too:
-`slideLayout` and `supportingSlides`. `readPresentationHints` / `writePresentationHints`
+`slideLayout`, `supportingSlides` and `slideCount`. `readPresentationHints` / `writePresentationHints`
 (`transform/presentationHintsDoc.ts`, `presentationHintsSource.ts`) read and write the Custom
 summary design they hold.
 

@@ -225,9 +225,10 @@ describe('where summaries go', () => {
       'Each slide should carry one idea that the narration explains in more depth. '.repeat(8),
       '',
     ].join('\n');
-    const longPlan = createPresentationPlan(parse(long));
+    const follows = { ...defaultPresentationHints(), density: 'balanced' as const };
+    const longPlan = createPresentationPlan(parse(long), follows);
     const first = writePresentationHints(long, {
-      ...defaultPresentationHints(),
+      ...follows,
       blocks: [{ blockId: 'plan', slides: [{ passage: keyOf(longPlan, 2), hidden: true }] }],
     });
     const second = writePresentationHints(first.result, {

@@ -54,6 +54,7 @@ function applyBlockMeta(block: Block, m: CoercedBlockMeta): void {
   if (m.transition) block.transition = m.transition;
   if (m.slideLayout) block.slideLayout = m.slideLayout;
   if (m.supportingSlides != null) block.supportingSlides = m.supportingSlides;
+  if (m.slideCount != null) block.slideCount = m.slideCount;
 }
 
 /** Build a heading-less block from a parsed standalone template annotation. */

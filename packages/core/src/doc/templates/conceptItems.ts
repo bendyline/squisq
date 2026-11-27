@@ -29,10 +29,29 @@ export function splitConceptItem(text: string): ConceptItem {
   // A dash between numbers is a range ("1.1 – 1.3 degrees"), not a label; a
   // date before a colon is ("July 16, 1969: launch").
   const range = !!match && !match[2]!.startsWith(':') && /\d$/u.test(match[1]!);
-  // A label is a phrase, never the end of a sentence and the start of another.
-  if (match && !range && !/[.!?]\s/u.test(match[1]!) && match[1]!.split(' ').length <= LABEL_WORDS)
+  // A label is a phrase, never the end of a sentence and the start of another,
+  // and never half of an aside: in "It is (spoilers: was) the plan" the colon
+  // sits inside the brackets.
+  if (
+    match &&
+    !range &&
+    !/[.!?]\s/u.test(match[1]!) &&
+    match[1]!.split(' ').length <= LABEL_WORDS &&
+    closesWhatItOpens(match[1]!)
+  )
     return { label: match[1]!.trim(), detail: match[3]!.trim() };
   return { label: '', detail: clean };
+}
+
+/** Whether every bracket and quotation mark `text` opens is closed in it. */
+function closesWhatItOpens(text: string): boolean {
+  const count = (pattern: RegExp) => text.match(pattern)?.length ?? 0;
+  return (
+    count(/\(/gu) === count(/\)/gu) &&
+    count(/\[/gu) === count(/\]/gu) &&
+    count(/“/gu) === count(/”/gu) &&
+    count(/"/gu) % 2 === 0
+  );
 }
 
 /** One key number: the figure, and the words that say what it measures. */

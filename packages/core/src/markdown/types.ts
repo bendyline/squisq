@@ -183,6 +183,7 @@ export interface HeadingAttributes {
     transition?: import('../schemas/Transitions.js').Transition;
     slideLayout?: import('../schemas/PresentationLayouts.js').PresentationBeatLayout;
     supportingSlides?: boolean;
+    slideCount?: number;
   };
   /** Subset of `params` whose keys are NOT in the known-key registry. */
   metadata?: Record<string, string>;

@@ -2,8 +2,11 @@
  * Write a Custom summary design into a document's markdown.
  *
  * The design lives where people can see it (see `presentationHintsDoc.ts`):
- * two frontmatter keys, `slideLayout=` / `supportingSlides=` on section
- * headings, and a `{[summary]}` accessory block for each designed slide.
+ * two frontmatter keys, `slideLayout=` / `supportingSlides=` / `slideCount=`
+ * on section headings, and a `{[summary]}` accessory block for each designed
+ * slide. The density key is left out at the default length, unless the
+ * document would then be read at another (it keeps summaries keyed to a
+ * passage, which say how long the summary was when they were made).
  * {@link writePresentationHints} makes the document hold a given design with
  * targeted edits:
  *
@@ -40,6 +43,7 @@ import {
 } from '../doc/accessoryBlockSource.js';
 import { presentationBeatExtras } from './presentationPlan.js';
 import {
+  DEFAULT_PRESENTATION_DENSITY,
   PRESENTATION_HINTS_KEY,
   SUMMARY_ACCESSORY_TYPE,
   SUMMARY_DENSITY_KEY,
@@ -96,6 +100,8 @@ export function removeSummaryBlocks(
 
 interface WriteOptions {
   removeEverySummary: boolean;
+  /** Write the density key even at the default (see `writeVerified`). */
+  densityKey?: boolean;
   /** Identities (`slideIdentity`) and section ids left out after a failed first try. */
   skipSlides?: ReadonlySet<string>;
   skipSettings?: ReadonlySet<string>;
@@ -104,9 +110,20 @@ interface WriteOptions {
 function writeVerified(
   source: string,
   hints: PresentationHints,
-  options: WriteOptions,
+  given: WriteOptions,
 ): PresentationHintsWrite {
-  const first = writeOnce(source, hints, options);
+  // The default length needs no key, unless the document would then be read
+  // at another: one that keeps a summary keyed to a passage — even one the
+  // design cannot use — is read at the older default without it.
+  let options: WriteOptions = {
+    ...given,
+    densityKey: hints.density !== DEFAULT_PRESENTATION_DENSITY,
+  };
+  let first = writeOnce(source, hints, options);
+  if (!options.densityKey && readBack(first.result).density !== hints.density) {
+    options = { ...options, densityKey: true };
+    first = writeOnce(source, hints, options);
+  }
   const failed = verify(hints, first, options);
   if (!failed.slides.size && !failed.settings.size) return finish(first);
   const second = writeOnce(source, hints, {
@@ -131,11 +148,11 @@ interface WriteAttempt {
   rejected: PresentationHintIssue[];
 }
 
+const readBack = (source: string): PresentationHints =>
+  readPresentationHints(markdownToDoc(parseMarkdown(source))).hints;
+
 function finish(attempt: WriteAttempt): PresentationHintsWrite {
-  return {
-    ...attempt,
-    hints: readPresentationHints(markdownToDoc(parseMarkdown(attempt.result))).hints,
-  };
+  return { ...attempt, hints: readBack(attempt.result) };
 }
 
 const slideIdentity = (blockId: string, passage: string | undefined) =>
@@ -165,7 +182,7 @@ function verify(
   attempt: WriteAttempt,
   options: WriteOptions,
 ): { slides: Set<string>; settings: Set<string>; issues: PresentationHintIssue[] } {
-  const back = readPresentationHints(markdownToDoc(parseMarkdown(attempt.result))).hints;
+  const back = readBack(attempt.result);
   const slides = new Set<string>();
   const settings = new Set<string>();
   const issues: PresentationHintIssue[] = [];
@@ -174,7 +191,9 @@ function verify(
     const read = backBlock(block.blockId);
     if (
       !options.skipSettings?.has(block.blockId) &&
-      (read?.layout !== block.layout || read?.inbetweens !== block.inbetweens) &&
+      (read?.layout !== block.layout ||
+        read?.inbetweens !== block.inbetweens ||
+        read?.count !== block.count) &&
       !attempt.rejected.some((issue) => issue.blockId === block.blockId && !issue.passage)
     ) {
       settings.add(block.blockId);
@@ -218,12 +237,22 @@ function writeOnce(source: string, hints: PresentationHints, options: WriteOptio
 
   // Document settings: plain frontmatter keys, the legacy JSON key removed.
   const withKeys = setFrontmatterValues(source, {
-    [SUMMARY_DENSITY_KEY]: hints.density === 'balanced' ? null : hints.density,
+    [SUMMARY_DENSITY_KEY]: options.densityKey ? hints.density : null,
     [SUMMARY_SUPPORTING_SLIDES_KEY]: hints.inbetweens ? null : false,
     [PRESENTATION_HINTS_KEY]: null,
   });
   const frontmatter = minimalSourceTextEdit(source, withKeys);
-  if (frontmatter) edits.push({ ...frontmatter, text: context.toEol(frontmatter.text) });
+  if (frontmatter) {
+    const text = context.toEol(frontmatter.text);
+    // Keys are written with "\n". In a "\r\n" document the edit can end on the
+    // "\r" of a line ending whose "\n" was unchanged; that "\r" stays.
+    const swallowed =
+      frontmatter.end > frontmatter.start &&
+      source[frontmatter.end - 1] === '\r' &&
+      source[frontmatter.end] === '\n' &&
+      !text.endsWith('\r');
+    edits.push({ ...frontmatter, end: frontmatter.end - (swallowed ? 1 : 0), text });
+  }
 
   // Section settings, on each section's heading tag.
   const wanted = new Map(
@@ -241,6 +270,8 @@ function writeOnce(source: string, hints: PresentationHints, options: WriteOptio
     if (hint?.layout !== block.slideLayout) updates.slideLayout = hint?.layout ?? null;
     if (hint?.inbetweens !== block.supportingSlides)
       updates.supportingSlides = hint?.inbetweens === undefined ? null : String(hint.inbetweens);
+    if (hint?.count !== block.slideCount)
+      updates.slideCount = hint?.count === undefined ? null : String(hint.count);
     if (hint?.build && !sameBuild(hint.build, block.build)) {
       for (const key of BUILD_PARAM_KEYS) updates[key] = null;
       Object.assign(updates, buildSpecParams(hint.build));
@@ -261,7 +292,7 @@ function writeOnce(source: string, hints: PresentationHints, options: WriteOptio
   }
   for (const hint of wanted.values()) {
     if (
-      (hint.layout !== undefined || hint.inbetweens !== undefined) &&
+      (hint.layout !== undefined || hint.inbetweens !== undefined || hint.count !== undefined) &&
       !contentIds.has(hint.blockId)
     )
       rejected.push({

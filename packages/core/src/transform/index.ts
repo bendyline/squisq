@@ -34,6 +34,7 @@ export * from './presentationPlan.js';
 export {
   createPresentationPlan,
   createPresentationPlanReport,
+  presentationSlideCounts,
   type PresentationPlanReport,
   type PresentationRollup,
   type PresentationRollupProblem,
@@ -58,3 +59,14 @@ export * from './presentationWording.js';
 // The model transport the authoring protocols share (study cards are `@bendyline/squisq/study`).
 export * from './authorModel.js';
 export * from './conceptReveal.js';
+// What a slide shows of a long passage: its key points, chosen without a model.
+export {
+  KEY_POINT_CHARACTERS,
+  divideSection,
+  keyPointText,
+  keySentences,
+  sectionSlideCount,
+  type KeySentence,
+  type KeySentenceContext,
+  type SlideStart,
+} from './keyPoints.js';
