@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.14.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.14.2...@bendyline/squisq@2.14.3) (2026-11-27)
+
+### Bug Fixes
+
+* Allow wording edits on summary slides ([#138](https://github.com/bendyline/squisq/issues/138)) ([36117d2](https://github.com/bendyline/squisq/commit/36117d2ec6f85e24486abc621672ddd06c2eab9a))
+
 ## @bendyline/squisq [2.14.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.14.1...@bendyline/squisq@2.14.2) (2026-11-25)
 
 ### Bug Fixes

@@ -1,3 +1,19 @@
+## @bendyline/squisq-editor-react [2.14.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.14.2...@bendyline/squisq-editor-react@2.14.3) (2026-11-27)
+
+### Bug Fixes
+
+* Allow wording edits on summary slides ([#138](https://github.com/bendyline/squisq/issues/138)) ([36117d2](https://github.com/bendyline/squisq/commit/36117d2ec6f85e24486abc621672ddd06c2eab9a))
+* Wiki suggestion teardown globals ([#139](https://github.com/bendyline/squisq/issues/139)) ([49f9a5c](https://github.com/bendyline/squisq/commit/49f9a5c28ec38a331d90779de079842584bf3d09))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.14.3
+* **@bendyline/squisq-formats:** upgraded to 2.8.26
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.53
+* **@bendyline/squisq-react:** upgraded to 2.12.37
+* **@bendyline/squisq-video-react:** upgraded to 2.5.40
+
 ## @bendyline/squisq-editor-react [2.14.2](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.14.1...@bendyline/squisq-editor-react@2.14.2) (2026-11-25)
 
 ### Bug Fixes
