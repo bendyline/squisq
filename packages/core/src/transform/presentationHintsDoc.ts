@@ -3,9 +3,10 @@
  *
  * The design lives in the markdown where people can see it:
  *
- * - **Document settings** are two frontmatter keys,
- *   `squisq-summary-density` (how long the summary is) and
- *   `squisq-summary-supporting-slides`. Without the first, a document is
+ * - **Document settings** are frontmatter keys: `squisq-summary-density`
+ *   (how long the summary is), `squisq-summary-supporting-slides`, and
+ *   `squisq-summary-section-titles` (each section opens on a slide of its
+ *   heading). Without the first, a document is
  *   summarized as key points — unless it holds a summary keyed to a passage
  *   (`passage=`). Those are written with their density, so one without the
  *   key was made when `balanced` was the default and is read that way, which
@@ -55,20 +56,26 @@ import {
   type PresentationLayout,
   type PresentationPlan,
 } from './presentationPlan.js';
+import { bindPresentationDesigns, presentationSlideStarts } from './presentationPlanner.js';
 import {
   LEGACY_PRESENTATION_DENSITY,
   PRESENTATION_DENSITIES,
+  PRESENTATION_DENSITY_LABELS,
   PRESENTATION_HINTS_KEY,
   SUMMARY_ACCESSORY_TYPE,
   SUMMARY_DENSITY_KEY,
+  SUMMARY_SECTION_TITLES_KEY,
   SUMMARY_SUPPORTING_SLIDES_KEY,
   defaultPresentationHints,
   PRESENTATION_SECTION_SLIDES,
   isPresentationDensity,
   isPresentationPassageKey,
   isSectionSlideCount,
+  isSlideStart,
   parsePresentationHints,
   presentationPassageKey,
+  presentationSections,
+  presentationSlideKey,
   slideHintHasWording,
   type PresentationBlockHint,
   type PresentationHints,
@@ -82,6 +89,7 @@ export interface PresentationHintIssue {
     | 'summary-duplicate'
     | 'summary-invalid'
     | 'summary-not-in-use'
+    | 'summary-other-length'
     | 'summary-needs-picture'
     | 'summary-no-section'
     | 'setting-invalid'
@@ -134,6 +142,7 @@ function hasBlockDesign(doc: Doc, summaries: Block[]): boolean {
     summaries.length > 0 ||
     Object.prototype.hasOwnProperty.call(fm, SUMMARY_DENSITY_KEY) ||
     Object.prototype.hasOwnProperty.call(fm, SUMMARY_SUPPORTING_SLIDES_KEY) ||
+    Object.prototype.hasOwnProperty.call(fm, SUMMARY_SECTION_TITLES_KEY) ||
     flattenContentBlocks(doc.blocks).some(
       (block) =>
         block.slideLayout !== undefined ||
@@ -205,6 +214,15 @@ export function readPresentationHints(doc: Doc): PresentationHintsRead {
       issues.push({
         code: 'setting-invalid',
         message: `Supporting slides is "${String(supporting)}"; use true or false.`,
+      });
+  }
+  const titles = fm[SUMMARY_SECTION_TITLES_KEY];
+  if (titles !== undefined) {
+    if (titles === true || titles === 'true') hints.sectionTitles = true;
+    else if (titles !== false && titles !== 'false')
+      issues.push({
+        code: 'setting-invalid',
+        message: `Section title slides is "${String(titles)}"; use true or false.`,
       });
   }
 
@@ -304,6 +322,17 @@ function readSlideHint(block: Block): PresentationSlideHint | string {
       return `"${params.passage}" is not a slide's passage key, so this summary matches no slide.`;
     slide.passage = params.passage;
   }
+  if (params.at !== undefined) {
+    const at = /^\d+$/u.test(params.at) ? Number(params.at) : NaN;
+    if (!isSlideStart(at))
+      return `at=${params.at} is not a sentence of the section; use a whole number.`;
+    if (slide.passage !== undefined) slide.at = at;
+  }
+  if (params.length !== undefined) {
+    if (!isPresentationDensity(params.length))
+      return `length=${params.length} is not one of ${PRESENTATION_DENSITIES.join(', ')}.`;
+    if (slide.passage !== undefined) slide.length = params.length;
+  }
   if (params.origin !== undefined && params.origin !== 'ai')
     return `The origin "${params.origin}" is not known; use origin=ai or leave it out.`;
   if (params.origin === 'ai') slide.origin = 'ai';
@@ -354,10 +383,11 @@ function readSlideHint(block: Block): PresentationSlideHint | string {
 const spaced = (text: string) => text.replace(/\s+/gu, ' ').trim();
 
 /**
- * The summaries the plan cannot use: one keyed to a passage no slide is made
- * from now (the text changed, or the summary length cuts the section differently —
- * it comes back into use if the slide does), an AI picture slide on a slide
- * without a picture, or a summary whose section is not narrated.
+ * The summaries the plan cannot use. A slide summary keeps its slide when the
+ * text changes (`bindPresentationDesigns`), so these are only: one whose
+ * section makes fewer slides now than it has summaries, one made at another
+ * summary length (it applies again at that length), an AI picture slide on a
+ * slide without a picture, and a summary whose section is not narrated.
  */
 export function presentationHintUsage(
   doc: Doc,
@@ -366,6 +396,8 @@ export function presentationHintUsage(
 ): PresentationHintIssue[] {
   const script = buildNarrationScript(doc);
   const sections = new Map(script.blocks.map((block) => [block.blockId, block]));
+  const binding = bindPresentationDesigns(plan, presentationSections(doc), read.hints);
+  const boundTo = new Map([...binding.slides].map(([index, slide]) => [slide, index]));
   const issues: PresentationHintIssue[] = [];
   for (const entry of read.entries) {
     const section = sections.get(entry.blockId);
@@ -384,26 +416,36 @@ export function presentationHintUsage(
       continue;
     }
     if (!entry.passage) continue;
-    const beat = plan.beats.find(
-      (item) =>
-        item.sourceStart >= section.charStart &&
-        item.sourceStart < section.charEnd &&
-        presentationPassageKey(plan.sourceText.slice(item.sourceStart, item.sourceEnd)) ===
-          entry.passage,
-    );
-    if (!beat) {
+    const slide = read.hints.blocks
+      .find((hint) => hint.blockId === entry.blockId)
+      ?.slides?.find((item) => item.passage === entry.passage);
+    if (!slide) continue;
+    const waiting = binding.waiting.find((item) => item.slide === slide);
+    if (waiting) {
+      // A hidden title slide while there are none hides nothing, and says so to no one.
+      if (waiting.reason === 'length' && slide.length)
+        issues.push({
+          code: 'summary-other-length',
+          message: `Made for the “${PRESENTATION_DENSITY_LABELS[slide.length].label}” summary length; it applies again when the document is summarized at that length.`,
+          ...where,
+        });
+      continue;
+    }
+    const index = boundTo.get(slide);
+    if (index === undefined) {
+      const fewer = binding.leftover.some(
+        (item) => item.slide === slide && item.reason === 'fewer',
+      );
       issues.push({
         code: 'summary-not-in-use',
-        message:
-          'No slide is made from this summary’s passage now: the text changed, or the summary length or the section’s slide count divides the section differently.',
+        message: fewer
+          ? 'Its section makes fewer slides now than it has summaries, so this one has no slide. It applies again if the section makes more.'
+          : 'No slide is made from this summary’s passage now, and it was saved before summaries recorded where their slide begins.',
         ...where,
       });
       continue;
     }
-    const slide = read.hints.blocks
-      .find((hint) => hint.blockId === entry.blockId)
-      ?.slides?.find((item) => item.passage === entry.passage);
-    if (slide?.layout === 'image' && !beat.imageSrc) {
+    if (slide.layout === 'image' && !plan.beats[index]!.imageSrc) {
       issues.push({
         code: 'summary-needs-picture',
         message: 'This summary shows a picture, and its slide has none now.',
@@ -427,6 +469,7 @@ export function presentationHintsForPlan(
   plan: PresentationPlan,
 ): PresentationHints {
   const script = buildNarrationScript(doc);
+  const starts = presentationSlideStarts(plan, presentationSections(doc));
   const blocks: PresentationBlockHint[] = [];
   for (const hint of hints.blocks) {
     const section = script.blocks.find((block) => block.blockId === hint.blockId);
@@ -436,14 +479,15 @@ export function presentationHintsForPlan(
     if (hint.count !== undefined) out.count = hint.count;
     // A legacy section build becomes the section heading's own `build=` setting.
     if (hint.build !== undefined) out.build = hint.build;
-    const keys = new Map<string, { headline: string }>();
+    const keys = new Map<string, { headline: string; at?: number }>();
     if (section) {
-      for (const beat of plan.beats) {
+      for (const [index, beat] of plan.beats.entries()) {
         if (beat.sourceStart < section.charStart || beat.sourceStart >= section.charEnd) continue;
-        keys.set(
-          presentationPassageKey(plan.sourceText.slice(beat.sourceStart, beat.sourceEnd)),
-          beat,
-        );
+        const at = starts[index];
+        keys.set(presentationSlideKey(plan, index), {
+          headline: beat.headline,
+          ...(at !== undefined ? { at } : {}),
+        });
       }
     }
     const slides = new Map<string, PresentationSlideHint>();
@@ -485,8 +529,20 @@ export function presentationHintsForPlan(
           : { passage: key, hidden: true, label: beat.headline },
       );
     }
-    if (slides.size) out.slides = [...slides.values()];
+    // Each keyed summary records where its slide begins, so it keeps it when
+    // the text changes.
+    if (slides.size)
+      out.slides = [...slides.values()].map((slide) => {
+        const at = slide.passage !== undefined ? keys.get(slide.passage)?.at : undefined;
+        return at !== undefined ? { ...slide, at } : slide;
+      });
     if (Object.keys(out).length > 1) blocks.push(out);
   }
-  return { version: 1, density: hints.density, inbetweens: hints.inbetweens, blocks };
+  return {
+    version: 1,
+    density: hints.density,
+    inbetweens: hints.inbetweens,
+    ...(hints.sectionTitles ? { sectionTitles: true } : {}),
+    blocks,
+  };
 }

@@ -5,7 +5,7 @@
  * Custom slides are generated from the document's current text on every
  * projection. What persists is the author's INTENT, in the document itself
  * where it can be read (core's `presentationHintsDoc.ts`): the summary length
- * and supporting-slides choice as frontmatter keys, a section's layout and
+ * and the supporting- and title-slide choices as frontmatter keys, a section's layout and
  * slide count on its heading's tag, and each designed slide as a `{[summary]}`
  * block under its
  * section — your wording for a section's opening slide (kept when the text
@@ -42,6 +42,7 @@ import {
 import { parseMarkdown } from '@bendyline/squisq/markdown';
 import { VIEWPORT_PRESETS, type Doc } from '@bendyline/squisq/schemas';
 import {
+  bindPresentationDesigns,
   compilePresentationPlan,
   createPresentationPlan,
   createPresentationPlanReport,
@@ -70,6 +71,10 @@ import {
   presentationBeatIsSlide,
   presentationLayoutNeeds,
   presentationPassageKey,
+  presentationSlideKey,
+  presentationSlideStarts,
+  withPresentationDensity,
+  withSlideStarts,
   type PresentationHints,
   type PresentationHintIssue,
   type PresentationRollup,
@@ -143,10 +148,6 @@ interface SuggestionProgress {
 function sectionAt(sections: Sections, offset: number) {
   return sections.find((item) => offset >= item.sourceStart && offset < item.sourceEnd);
 }
-/** A slide's passage key: how its summary block names the slide. */
-function passageKeyOf(item: PresentationBeat, sourceText: string): string {
-  return presentationPassageKey(sourceText.slice(item.sourceStart, item.sourceEnd));
-}
 /** One AI suggestion as a slide design, or null when the design could not hold it. */
 function suggestedSlide(item: PresentationBeat): PresentationSlideHint | null {
   if (!isSummaryPresentationLayout(item.layout)) return null;
@@ -167,24 +168,34 @@ function suggestedSlide(item: PresentationBeat): PresentationSlideHint | null {
 /** An accepted AI suggestion: the slide it is for, and its design. */
 interface Suggestion {
   blockId: string;
+  /** The slide's passage key now. */
   passage: string;
+  /** Where the slide begins in its section (`PresentationSlideHint.at`). */
+  at?: number;
+  /** The summary the slide has now, when it is keyed to an older passage. */
+  replaces?: string;
   slide: PresentationSlideHint;
 }
-/** Store accepted suggestions, each keyed to the exact passage it summarizes, so
- * Squisq applies it only while that passage is unchanged. A slide you worded
- * yourself keeps your wording; a hidden slide stays hidden. */
+/** Store accepted suggestions, each keyed to the passage it summarizes and the
+ * place its slide begins, so it stays with that slide when the text changes.
+ * A slide you worded yourself keeps your wording; a hidden slide stays hidden. */
 function withSuggestions(
   current: PresentationHints,
   suggestions: readonly Suggestion[],
 ): PresentationHints {
   let next = current;
-  for (const { blockId, passage, slide } of suggestions) {
-    const existing = next.blocks
-      .find((block) => block.blockId === blockId)
-      ?.slides?.find((entry) => entry.passage === passage);
+  for (const { blockId, passage, at, replaces, slide } of suggestions) {
+    const slides = next.blocks.find((block) => block.blockId === blockId)?.slides;
+    const existing =
+      slides?.find((entry) => entry.passage === passage) ??
+      (replaces ? slides?.find((entry) => entry.passage === replaces) : undefined);
     if (existing && !existing.origin && slideHintHasWording(existing)) continue;
+    // The slide's older summary gives way to the new one, keyed as it is now.
+    if (existing && existing.passage !== passage)
+      next = withSlideHint(next, blockId, existing.passage, null);
     next = withSlideHint(next, blockId, passage, {
       ...slide,
+      ...(at !== undefined ? { at } : {}),
       ...(existing?.hidden ? { hidden: true as const } : {}),
     });
   }
@@ -313,6 +324,13 @@ export function SummaryDesigner({
         };
       }
       setNotice('Slide summaries are now saved in the document, under each section.');
+    }
+    // Summaries saved before they recorded where their slide begins learn it
+    // now, while they still match their slide, so text edits keep them there.
+    try {
+      base = withSlideStarts(createPresentationPlan(doc, base), presentationSections(doc), base);
+    } catch {
+      // No deck to match them with (no text, or too many slides): they wait.
     }
     const written = writePresentationHints(source, change(base));
     if (written.result !== source) {
@@ -458,18 +476,27 @@ export function SummaryDesigner({
     }
     if (next !== markdownSource) replaceAll(next);
   };
-  // Stored AI wording per section, keyed by the passage it summarizes. Squisq
-  // applies an entry only while its passage is unchanged, so this is also what
-  // marks a slide in the list as AI-suggested.
-  const aiEntries = useMemo(() => {
+  // Each slide's summary keyed to a passage, matched with its slide however
+  // the text has changed since (Squisq's `bindPresentationDesigns`), and where
+  // each slide begins in its section, which a summary saved for it records.
+  const designs = useMemo(
+    () =>
+      plan
+        ? bindPresentationDesigns(plan, sections, hints).slides
+        : new Map<number, PresentationSlideHint>(),
+    [plan, sections, hints],
+  );
+  const slideStarts = useMemo(
+    () => (plan ? presentationSlideStarts(plan, sections) : []),
+    [plan, sections],
+  );
+  // AI wording a legacy design keeps, keyed by the passage it summarizes.
+  const legacyAi = useMemo(() => {
     const entries = new Map<string, Map<string, PresentationBeat['layout']>>();
     for (const block of hints.blocks) {
       const layouts = new Map<string, PresentationBeat['layout']>();
       for (const entry of block.ai ?? [])
         layouts.set(presentationPassageKey(entry.source), entry.layout);
-      for (const slide of block.slides ?? [])
-        if (slide.origin === 'ai' && slide.passage && slide.layout)
-          layouts.set(slide.passage, slide.layout);
       entries.set(block.blockId, layouts);
     }
     return entries;
@@ -544,13 +571,18 @@ export function SummaryDesigner({
     section &&
     flattenContentBlocks(doc.blocks).find((block) => block.id === section.blockId)?.sourceHeading
   );
-  // How many slides the selected section has now.
+  // How many slides tell the selected section now (its title slide shows only
+  // its heading, and is not one of them).
   const sectionSlides =
     plan && section
       ? plan.beats.filter(
-          (item) => sectionAt(sections, item.sourceStart)?.blockId === section.blockId,
+          (item) =>
+            !item.sectionTitle &&
+            sectionAt(sections, item.sourceStart)?.blockId === section.blockId,
         ).length
       : 0;
+  /** The selected slide is its section's title slide: the heading alone. */
+  const titleSlide = !!beat?.sectionTitle;
   // Summaries in the document that the deck does not use now, and why: their
   // slide is gone (the text changed, or the summary length cuts it differently — it
   // comes back with the slide), or the summary cannot be read.
@@ -586,8 +618,11 @@ export function SummaryDesigner({
     ? []
     : plan.beats.map((item, index) => {
         const owner = sectionAt(sections, item.sourceStart);
+        const design = designs.get(index);
         const layout =
-          owner && aiEntries.get(owner.blockId)?.get(passageKeyOf(item, plan.sourceText));
+          design?.origin === 'ai' && design.layout
+            ? design.layout
+            : owner && legacyAi.get(owner.blockId)?.get(presentationSlideKey(plan, index));
         const active = progress?.active;
         const onto =
           item.layout === FEATURE_PRESENTATION_LAYOUT
@@ -600,8 +635,9 @@ export function SummaryDesigner({
           number: slideNumbers[index] ?? null,
           label: slideLabel(item, plan.sourceText, owner?.heading),
           // A section on another slide is tagged with its type and that slide.
-          layout:
-            item.layout === FEATURE_PRESENTATION_LAYOUT
+          layout: item.sectionTitle
+            ? 'Section title'
+            : item.layout === FEATURE_PRESENTATION_LAYOUT
               ? typeLabel(owner?.blockId)
               : layoutLabel(item.layout, owner?.blockId),
           onSlide: onto >= 0 ? (slideNumbers[onto] ?? null) : null,
@@ -683,28 +719,68 @@ export function SummaryDesigner({
     if (!section) return;
     commit((design) => withBlockHint(design, section.blockId, patch));
   };
-  // Where your wording for the selected slide is saved. A section's opening
-  // slide keeps it in the section's keyless summary, which stays when the
-  // section's text changes; any other slide in a summary keyed to its exact
-  // passage, which applies while that passage reads the same. Your wording
-  // already keyed to the opening slide's passage wins there, so it is changed
-  // where it is.
-  const beatKey = plan && beat ? passageKeyOf(beat, plan.sourceText) : undefined;
+  // Where your wording for the selected slide is saved. A slide summary stays
+  // with its slide however the text changes (Squisq's `bindPresentationDesigns`),
+  // so the summary the slide has now is the one changed, keyed again to the
+  // slide's passage as it reads now and the place the slide begins. A
+  // section's opening slide without one keeps your wording in the section's
+  // keyless summary, which applies at every summary length.
+  const beatKey = plan && beat ? presentationSlideKey(plan, selectedIndex) : undefined;
+  const beatAt = slideStarts[selectedIndex];
+  // After a title slide, the slide that follows it opens the section.
   const opening =
     !!plan &&
     !!section &&
     plan.beats.find(
-      (item) => sectionAt(sections, item.sourceStart)?.blockId === section.blockId,
+      (item) =>
+        !item.sectionTitle && sectionAt(sections, item.sourceStart)?.blockId === section.blockId,
     ) === beat;
-  const keyed = hint?.slides?.find((slide) => slide.passage === beatKey);
-  const keyedOwn = !!keyed && !keyed.origin && slideHintHasWording(keyed);
-  const wordingPassage = opening && !keyedOwn ? undefined : beatKey;
+  /** The summary keyed to a passage that the selected slide has now. */
+  const bound = designs.get(selectedIndex);
+  const keylessOwn = opening
+    ? hint?.slides?.find((slide) => slide.passage === undefined && !slide.origin)
+    : undefined;
+  // Your wording goes in the slide's summary when it is yours, or an AI's that
+  // your opening wording does not already override; on an opening slide
+  // without one, in the keyless summary.
+  const keyedWording =
+    !opening ||
+    (!!bound && !bound.origin && slideHintHasWording(bound)) ||
+    (!!bound && !(keylessOwn && slideHintHasWording(keylessOwn)));
+  const wordingPassage = keyedWording ? (bound?.passage ?? beatKey) : undefined;
   const wordingIn = (slides: readonly PresentationSlideHint[] | undefined) =>
     slides?.find((slide) =>
-      wordingPassage === undefined
-        ? slide.passage === undefined && !slide.origin
-        : slide.passage === wordingPassage,
+      keyedWording
+        ? slide.passage === wordingPassage
+        : slide.passage === undefined && !slide.origin,
     );
+  /**
+   * Save the selected slide's summary (`null` removes it). A keyed one is
+   * keyed again to the slide as it is now — its passage and where it begins —
+   * so it keeps matching the slide however the text changes after.
+   */
+  const saveSlideDesign = (
+    design: PresentationHints,
+    from: string | undefined,
+    keyed: boolean,
+    slide: Omit<PresentationSlideHint, 'passage'> | null,
+  ): PresentationHints => {
+    if (!section) return design;
+    if (!keyed) return withSlideHint(design, section.blockId, undefined, slide);
+    if (!beatKey) return design;
+    const next =
+      from !== undefined && from !== beatKey
+        ? withSlideHint(design, section.blockId, from, null)
+        : design;
+    if (!slide) return withSlideHint(next, section.blockId, beatKey, null);
+    const { at: _at, length: _length, ...rest } = slide;
+    void _at;
+    void _length;
+    return withSlideHint(next, section.blockId, beatKey, {
+      ...rest,
+      ...(beatAt !== undefined ? { at: beatAt } : {}),
+    });
+  };
   const savedWording = wordingIn(hint?.slides);
   /** AI wording for this slide, which your first change to it makes yours. */
   const aiWording = savedWording?.origin === 'ai' ? savedWording : undefined;
@@ -735,10 +811,10 @@ export function SummaryDesigner({
       const next: PresentationSlideHint = { ...existing, ...patch };
       if ('headline' in patch && patch.headline === undefined) delete next.headline;
       const keep = slideHintHasWording(next) || next.hidden;
-      return withSlideHint(
+      return saveSlideDesign(
         design,
-        section.blockId,
         wordingPassage,
+        keyedWording,
         keep ? keepingHeadline(next, shownPoints) : null,
       );
     });
@@ -751,10 +827,10 @@ export function SummaryDesigner({
       const saved = wordingIn(
         design.blocks.find((block) => block.blockId === section.blockId)?.slides,
       );
-      return withSlideHint(
+      return saveSlideDesign(
         design,
-        section.blockId,
         wordingPassage,
+        keyedWording,
         saved?.hidden ? { hidden: true, label: saved.label ?? headline } : null,
       );
     });
@@ -764,20 +840,20 @@ export function SummaryDesigner({
     plan?.beats.filter((item) => item.layout === FEATURE_PRESENTATION_LAYOUT).length ?? 0;
   const shownCount = plan?.beats.filter(presentationBeatIsSlide).length ?? 0;
   const slideCount = `${shownCount} ${shownCount === 1 ? 'slide' : 'slides'}${hiddenCount ? ` · ${hiddenCount} hidden` : ''}${rolledUpCount ? ` · ${rolledUpCount} on another slide` : ''}`;
-  /** Hide or show the selected slide, remembered by its exact source passage. */
+  /** Hide or show the selected slide, in the summary that stays with it. */
   const setHidden = (hide: boolean) => {
     if (!plan || !beat || !section) return;
-    const key = passageKeyOf(beat, plan.sourceText);
+    const from = bound?.passage ?? beatKey;
     const { headline, points } = beat;
     commit((design) => {
       const existing = design.blocks
         .find((block) => block.blockId === section.blockId)
-        ?.slides?.find((slide) => slide.passage === key);
+        ?.slides?.find((slide) => slide.passage === from);
       if (hide)
-        return withSlideHint(
+        return saveSlideDesign(
           design,
-          section.blockId,
-          key,
+          from,
+          true,
           keepingHeadline({ ...(existing ?? { label: headline }), hidden: true }, points),
         );
       if (!existing) return design;
@@ -786,7 +862,7 @@ export function SummaryDesigner({
       void _hidden;
       void _label;
       void _passage;
-      return withSlideHint(design, section.blockId, key, slideHintHasWording(rest) ? rest : null);
+      return saveSlideDesign(design, from, true, slideHintHasWording(rest) ? rest : null);
     });
   };
   const suggest = async () => {
@@ -818,7 +894,7 @@ export function SummaryDesigner({
         },
         // Each accepted slide reaches the list, the preview and the document as
         // soon as it resolves, so stopping early keeps everything so far.
-        onBeat: (_index, item) => {
+        onBeat: (index, item) => {
           // A suggestion the design could not hold (no section of its own, or
           // wording past the limits) keeps the automatic slide.
           const parent = item && sectionAt(sections, item.sourceStart);
@@ -828,9 +904,16 @@ export function SummaryDesigner({
             return;
           }
           outcome.refined++;
-          const suggestion = {
+          // Keyed to the slide as it is now; the summary it had, keyed to an
+          // older passage, gives way to it.
+          const passage = presentationSlideKey(plan, index);
+          const had = designs.get(index)?.passage;
+          const at = slideStarts[index];
+          const suggestion: Suggestion = {
             blockId: parent.blockId,
-            passage: passageKeyOf(item, plan.sourceText),
+            passage,
+            ...(at !== undefined ? { at } : {}),
+            ...(had !== undefined && had !== passage ? { replaces: had } : {}),
             slide,
           };
           // Saved in batches: each save rewrites the document and is an undo step.
@@ -886,10 +969,11 @@ export function SummaryDesigner({
             disabled={locked}
             title={`${PRESENTATION_DENSITY_LABELS[hints.density].label}: ${PRESENTATION_DENSITY_LABELS[hints.density].description}. The narration always tells the whole document.`}
             onChange={(event) =>
-              commit((design) => ({
-                ...design,
-                density: event.target.value as PresentationHints['density'],
-              }))
+              // Each section is cut again: slide summaries made at this length
+              // wait for it, and ones made at the chosen length apply again.
+              commit((design) =>
+                withPresentationDensity(design, event.target.value as PresentationHints['density']),
+              )
             }
           >
             {/* From the fewest slides to the most, each with what it makes. */}
@@ -922,6 +1006,20 @@ export function SummaryDesigner({
             }
           />{' '}
           Add supporting slides
+        </label>
+        <label
+          className="squisq-summary-designer-toggle"
+          title="Opens each section after the first with a slide that shows only its heading, on screen while the heading is read. The section's other slides then each take a headline of their own."
+        >
+          <input
+            type="checkbox"
+            checked={!!hints.sectionTitles}
+            disabled={locked}
+            onChange={(event) =>
+              commit((design) => ({ ...design, sectionTitles: event.target.checked }))
+            }
+          />{' '}
+          Add section title slides
         </label>
       </div>
       <div className="squisq-summary-designer-actions">
@@ -1011,9 +1109,15 @@ export function SummaryDesigner({
         {unused.length > 0 && (
           <details className="squisq-summary-designer-unused">
             <summary>
-              {unused.length === 1
-                ? '1 summary in the document is not in use'
-                : `${unused.length} summaries in the document are not in use`}
+              {/* Summaries made at another length wait for it; say so rather
+                  than call them unused. */}
+              {unused.every((issue) => issue.code === 'summary-other-length')
+                ? unused.length === 1
+                  ? '1 slide summary is for another summary length'
+                  : `${unused.length} slide summaries are for another summary length`
+                : unused.length === 1
+                  ? '1 summary in the document is not in use'
+                  : `${unused.length} summaries in the document are not in use`}
             </summary>
             <ul>
               {unused.map((issue) => (
@@ -1367,7 +1471,13 @@ export function SummaryDesigner({
                   )}
                 </p>
               )}
-              {isSummaryPresentationLayout(beat.layout) && (
+              {titleSlide && (
+                <p className="squisq-summary-designer-layout-help">
+                  This slide shows the section’s heading while it is read. To change what it says,
+                  edit the heading; to leave it out, hide it.
+                </p>
+              )}
+              {isSummaryPresentationLayout(beat.layout) && !titleSlide && (
                 <details
                   className="squisq-summary-designer-wording"
                   open={wordingOpen}
@@ -1375,9 +1485,9 @@ export function SummaryDesigner({
                 >
                   <summary>Customize slide wording (slides only)</summary>
                   <p>
-                    {wordingPassage === undefined
-                      ? 'This section’s opening slide can use your wording. It is saved in the document, under the section, and stays when you change the section’s text.'
-                      : 'This slide can use your wording. It is saved in the document, under the section, with the passage it summarizes. If that passage changes, or the summary length or the section’s slide count divides the section differently, the slide goes back to automatic wording and the summary is listed as not in use.'}
+                    {keyedWording
+                      ? 'This slide can use your wording. It is saved in the document, under the section, and stays with this slide when you change the text. A different summary length makes different slides; your wording waits for this one.'
+                      : 'This section’s opening slide can use your wording. It is saved in the document, under the section, and stays when you change the section’s text or the summary length.'}
                     {aiWording &&
                       ' This wording was suggested by AI. Change it and it is yours: suggesting again keeps it.'}
                   </p>
@@ -1424,7 +1534,7 @@ export function SummaryDesigner({
               )}
               <section className="squisq-summary-designer-source" aria-labelledby={originalTextId}>
                 <div className="squisq-summary-designer-source-label">
-                  <h3 id={originalTextId}>Original document text</h3>
+                  <h3 id={originalTextId}>Original block text</h3>
                   <span>Read only</span>
                 </div>
                 <p>{section.text}</p>

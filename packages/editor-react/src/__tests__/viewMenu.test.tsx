@@ -381,12 +381,18 @@ describe('View menu block-tag visibility', () => {
     return within(group)
       .getAllByRole('menuitemradio')
       .find((item) => item.getAttribute('aria-checked') === 'true')
-      ?.textContent?.replace('●', '')
-      .trim();
+      ?.textContent?.trim();
   }
 
   it('defaults to the selected/hovered block', () => {
     expect(checked(renderMenu({}))).toBe('Selected/hovered block');
+  });
+
+  it('draws the selected dot in CSS rather than as a text glyph', () => {
+    // A glyph renders on the text baseline, off-center in the ring.
+    const indicators = renderMenu({}).querySelectorAll('.squisq-view-menu-radio');
+    expect(indicators).toHaveLength(3);
+    indicators.forEach((indicator) => expect(indicator.textContent).toBe(''));
   });
 
   it('maps the legacy blockTags prop', () => {

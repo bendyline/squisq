@@ -37,6 +37,9 @@ import {
   type PresentationPlan,
 } from './presentationPlan.js';
 
+/** The least time a section's title slide is on screen, when the deck has it to give. */
+const SECTION_TITLE_SECONDS = 2;
+
 export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
   const checked = parsePresentationPlan(plan);
   if (!checked) throw new Error('The saved presentation is invalid. Make the presentation again.');
@@ -169,6 +172,20 @@ export function compilePresentationPlan(doc: Doc, plan: PresentationPlan): Doc {
     if (!index) return 0;
     previous = Math.min(duration, Math.max(previous, timeAt(beat.sourceStart)));
     return previous;
+  });
+  // A section's title slide is on screen while its heading is read, which
+  // can take a fraction of a second ("Summary"). It stays up long enough to
+  // read: the slide after it starts a little into its own passage, never past
+  // the middle of it, and never other than where the presenter showed it.
+  checked.beats.forEach((beat, index) => {
+    const next = checked.beats[index + 1];
+    if (!beat.sectionTitle || beat.hidden || !next) return;
+    if (marks.some((mark) => mark.charOffset === next.sourceStart)) return;
+    const after = starts[index + 2] ?? duration;
+    starts[index + 1] = Math.max(
+      starts[index + 1]!,
+      Math.min(starts[index]! + SECTION_TITLE_SECONDS, (starts[index + 1]! + after) / 2),
+    );
   });
   const authoredBlocks = flattenRenderableBlocks(contentBlocks);
   // A legacy design could set a section's builds; a section's own `build=`

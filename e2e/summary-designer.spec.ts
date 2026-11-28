@@ -34,7 +34,7 @@ test.describe('Custom summary designer', () => {
 
     await list.getByRole('button').nth(1).click();
     await expect(designer.getByRole('img', { name: /^Slide 2/ })).toBeVisible();
-    await expect(designer.getByRole('region', { name: 'Original document text' })).toBeVisible();
+    await expect(designer.getByRole('region', { name: 'Original block text' })).toBeVisible();
 
     // A section's opening slide takes the author's wording, saved as it is left.
     // The wording fields start open, so there is nothing to click to reach them.

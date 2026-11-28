@@ -20,7 +20,11 @@ import {
   PRESENTATION_LIMITS,
   createPresentationPlan,
   defaultPresentationHints,
+  presentationSections,
+  presentationSlideKey,
   serializePresentationHints,
+  withSlideHint,
+  writePresentationHints,
   type PresentationBeat,
   type PresentationPlan,
 } from '@bendyline/squisq/transform';
@@ -320,6 +324,77 @@ describe('SummaryDesigner', () => {
     expect(source.latest).toContain('squisq-summary-density: section');
   });
 
+  it('opens each later section on a title slide when asked, saved as a document setting', async () => {
+    renderDesigner(DECK);
+    await waitFor(() => expect(slides()).toHaveLength(3));
+    const titles = screen.getByRole<HTMLInputElement>('checkbox', {
+      name: 'Add section title slides',
+    });
+    expect(titles.checked).toBe(false);
+
+    fireEvent.click(titles);
+    await waitFor(() => expect(slides()).toHaveLength(5));
+    expect(titles.checked).toBe(true);
+    expect(source.latest).toBe(`---\nsquisq-summary-section-titles: true\n---\n${DECK}`);
+    // Each is named by the heading it shows, before the slide that tells the section.
+    const list = screen.getByRole('navigation', { name: 'Presentation slides' });
+    const ships = within(list).getByRole('group', { name: 'What ships 2 slides' });
+    const [title, opening] = within(ships).getAllByRole('button') as [HTMLElement, HTMLElement];
+    expect(title.textContent).toBe('2. What shipsSection title');
+    expect(opening.textContent).not.toContain('Section title');
+
+    // Its heading is its wording: it says so instead of offering fields, and
+    // the slide after it opens the section.
+    fireEvent.click(title);
+    expect(screen.queryByRole('textbox', { name: 'Slide headline' })).toBeNull();
+    expect(designer().textContent).toContain(
+      'This slide shows the section’s heading while it is read.',
+    );
+    const count = screen.getByRole<HTMLSelectElement>('combobox', {
+      name: 'Slides for this section',
+    });
+    expect(count.options[0]!.textContent).toBe('Automatic (1)');
+    expect(hideSlide().disabled).toBe(false);
+    fireEvent.click(opening);
+    expect(screen.getByRole('textbox', { name: 'Slide headline' })).toBeTruthy();
+    expect(designer().textContent).toContain('This section’s opening slide can use your wording.');
+
+    fireEvent.click(titles);
+    await waitFor(() => expect(slides()).toHaveLength(3));
+    expect(source.latest).toBe(DECK);
+  });
+
+  it('keeps AI wording made without title slides when they are added', async () => {
+    const doc = markdownToDoc(parseMarkdown(DECK));
+    const plan = createPresentationPlan(doc);
+    const ships = presentationSections(doc).find((item) => item.heading === 'What ships')!;
+    const opening = plan.beats.findIndex((beat) => beat.sourceStart === ships.sourceStart);
+    const designed = writePresentationHints(
+      DECK,
+      withSlideHint(
+        defaultPresentationHints(),
+        ships.blockId,
+        presentationSlideKey(plan, opening),
+        {
+          origin: 'ai',
+          layout: 'statement',
+          headline: 'Three tools ship at once',
+          points: [],
+        },
+      ),
+    ).result;
+    renderDesigner(designed);
+    await waitFor(() => expect(slides()).toHaveLength(3));
+    expect(slides()[1]!.textContent).toMatch(/^2\. Three tools ship at once.*AI$/u);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Add section title slides' }));
+    await waitFor(() => expect(slides()).toHaveLength(5));
+    // The slide after the title slide is the one the wording was made for.
+    expect(slides()[1]!.textContent).toBe('2. What shipsSection title');
+    expect(slides()[2]!.textContent).toMatch(/^3\. Three tools ship at once.*AI$/u);
+    expect(designer().textContent).not.toContain('not in use');
+  });
+
   it('says why it cannot make the slides instead of still preparing them', async () => {
     const sections = PRESENTATION_LIMITS.beats + 1;
     renderDesigner(
@@ -352,16 +427,35 @@ describe('SummaryDesigner', () => {
     fireEvent.click(slides()[1]!);
     expect(hideSlide().disabled).toBe(true);
     // Both are kept, so returning to Balanced hides its slide again. Each is a
-    // summary that only hides its slide: a heading naming it, no points.
+    // summary that only hides its slide: a heading naming it, no points, and
+    // the sentence its slide begins at. The section's only slide is named by
+    // the section heading; Balanced's later slide by its own headline, one of
+    // its sentences, and it says it was made at Balanced.
     await waitFor(() =>
       expect(
-        source.latest.match(/^## Plan \{\[summary passage=[0-9a-z]+-[0-9a-z]+ hidden=true\]\}$/gm),
+        source.latest.match(
+          /^## .+ \{\[summary passage=[0-9a-z]+-[0-9a-z]+ at=\d+(?: length=balanced)? hidden=true\]\}$/gm,
+        ),
       ).toHaveLength(2),
     );
+    expect(source.latest).toMatch(
+      /^## Plan \{\[summary passage=[0-9a-z]+-[0-9a-z]+ at=1 hidden=true\]\}$/m,
+    );
+    expect(source.latest).toMatch(
+      /^## Each slide should carry one idea that the narration explains in more depth \{\[summary passage=[0-9a-z]+-[0-9a-z]+ at=\d+ length=balanced hidden=true\]\}$/m,
+    );
     expect(source.latest).not.toMatch(/hidden=true\]\}\n\n- /);
-    expect(source.latest.match(/Each slide should carry/g)).toHaveLength(8);
-    // The one Balanced made is not in use at One slide per section, and says so.
-    expect(within(designer()).getByText('1 summary in the document is not in use')).toBeTruthy();
+    // The body's eight sentences, and the summary naming Balanced's hidden slide.
+    expect(source.latest.match(/Each slide should carry/g)).toHaveLength(9);
+    // The one Balanced made waits for Balanced, and says so.
+    expect(
+      within(designer()).getByText('1 slide summary is for another summary length'),
+    ).toBeTruthy();
+    // Back at Balanced it hides its slide again, and the other waits instead.
+    chooseOption(density(), 'balanced');
+    await waitFor(() => expect(statuses()).toMatch(/1 hidden/));
+    expect(source.latest).toMatch(/^## Plan \{\[summary passage=\S+ at=1 length=section hidden/m);
+    expect(source.latest).not.toContain('length=balanced');
   });
 
   it('groups the slides under the block of the document each was made from', async () => {
@@ -399,7 +493,7 @@ describe('SummaryDesigner', () => {
     await waitFor(() => expect(slides().length).toBeGreaterThan(2));
     const wording = () =>
       screen.queryByText('Customize slide wording (slides only)')?.closest('details') ?? null;
-    const original = () => screen.getByRole('region', { name: 'Original document text' });
+    const original = () => screen.getByRole('region', { name: 'Original block text' });
     expect(wording()?.open).toBe(true);
     expect(screen.getByRole('textbox', { name: 'Slide headline' })).toBeTruthy();
     expect(
@@ -415,35 +509,43 @@ describe('SummaryDesigner', () => {
     expect(wording()?.open).toBe(false);
   });
 
-  it('words any slide by its passage, until that passage changes', async () => {
+  it('words any slide, and keeps your wording on it when its text changes', async () => {
     renderDesigner(STORY);
     await waitFor(() => expect(slides().length).toBeGreaterThan(2));
     const help = () =>
       screen.getByText('Customize slide wording (slides only)').closest('details')!.textContent;
     expect(help()).toContain('This section’s opening slide can use your wording.');
     fireEvent.click(slides()[1]!);
-    expect(help()).toContain('with the passage it summarizes');
+    expect(help()).toContain('stays with this slide when you change the text');
     expect(screen.queryByRole('button', { name: 'Use automatic wording' })).toBeNull();
 
     const headline = screen.getByRole<HTMLInputElement>('textbox', { name: 'Slide headline' });
     fireEvent.change(headline, { target: { value: 'The middle of the plan' } });
     fireEvent.blur(headline);
+    // Saved with the sentence its slide begins at.
     await waitFor(() =>
       expect(source.latest).toMatch(
-        /^## The middle of the plan \{\[summary passage=[0-9a-z]+-[0-9a-z]+\]\}$/m,
+        /^## The middle of the plan \{\[summary passage=[0-9a-z]+-[0-9a-z]+ at=\d+\]\}$/m,
       ),
     );
     expect(preview().getAttribute('aria-label')).toBe('Slide 2: The middle of the plan');
     expect(slides()[0]!.textContent).not.toContain('The middle of the plan');
     expect(screen.getByRole('button', { name: 'Use automatic wording' })).toBeTruthy();
 
-    // Another passage is another slide: it goes back to automatic wording, and
-    // the summary stays in the document, listed as not in use.
+    // Every sentence of the section edited: the wording stays on its slide,
+    // and nothing is listed as not in use.
     act(() => source.set(source.latest.replace(/should carry/g, 'must carry')));
-    await waitFor(() =>
-      expect(within(designer()).getByText('1 summary in the document is not in use')).toBeTruthy(),
-    );
-    for (const slide of slides()) expect(slide.textContent).not.toContain('The middle of the plan');
+    await waitFor(() => expect(slides()[0]!.textContent).toContain('must carry'));
+    expect(slides()[1]!.textContent).toContain('The middle of the plan');
+    expect(designer().textContent).not.toContain('not in use');
+    // Changing it again keys it to the slide as it reads now.
+    fireEvent.click(slides()[1]!);
+    const again = screen.getByRole<HTMLInputElement>('textbox', { name: 'Slide headline' });
+    fireEvent.change(again, { target: { value: 'The heart of the plan' } });
+    fireEvent.blur(again);
+    await waitFor(() => expect(source.latest).toContain('## The heart of the plan {[summary'));
+    expect(source.latest).not.toContain('The middle of the plan');
+    expect(source.latest.match(/\{\[summary /g)).toHaveLength(1);
   });
 
   it('keeps a slide’s headline while it is hidden, and takes it off keeping the slide hidden', async () => {
@@ -463,7 +565,7 @@ describe('SummaryDesigner', () => {
       expect(preview().getAttribute('aria-label')).toBe('Slide 2 (hidden): Worded by hand'),
     );
     expect(source.latest).toMatch(
-      /^## Worded by hand \{\[summary passage=[0-9a-z]+-[0-9a-z]+ hidden=true\]\}\n\n- The fourth slide/m,
+      /^## Worded by hand \{\[summary passage=[0-9a-z]+-[0-9a-z]+ at=\d+ hidden=true\]\}\n\n- The fourth slide/m,
     );
     fireEvent.click(hideSlide());
     await waitFor(() =>
@@ -480,7 +582,9 @@ describe('SummaryDesigner', () => {
     );
     expect(statuses()).toContain('1 hidden');
     expect(source.latest.match(/\{\[summary/g)).toHaveLength(1);
-    expect(source.latest).toMatch(/\{\[summary passage=[0-9a-z]+-[0-9a-z]+ hidden=true\]\}$/m);
+    expect(source.latest).toMatch(
+      /\{\[summary passage=[0-9a-z]+-[0-9a-z]+ at=\d+ hidden=true\]\}$/m,
+    );
     expect(screen.queryByRole('button', { name: 'Use automatic wording' })).toBeNull();
   });
 
@@ -586,7 +690,7 @@ describe('SummaryDesigner', () => {
     await waitFor(() => expect(source.latest).not.toContain(PRESENTATION_HINTS_KEY));
     expect(source.latest).toContain('squisq-summary-density: detailed');
     expect(source.latest).toMatch(
-      /### Everything ships together \{\[summary passage=[0-9a-z]+-[0-9a-z]+ origin=ai layout=statement points=none\]\}/,
+      /### Everything ships together \{\[summary passage=[0-9a-z]+-[0-9a-z]+ at=1 length=keypoints origin=ai layout=statement points=none\]\}/,
     );
     expect(statuses()).toContain('Slide summaries are now saved in the document');
   });
@@ -757,7 +861,7 @@ describe('SummaryDesigner with an assistant', () => {
     await waitFor(() => expect(statuses()).toContain('AI summaries are ready to review.'));
     await waitFor(() =>
       expect(source.latest).toMatch(
-        /^## A plan for March \{\[summary passage=[0-9a-z]+-[0-9a-z]+ origin=ai layout=\w+/m,
+        /^## A plan for March \{\[summary passage=[0-9a-z]+-[0-9a-z]+ at=1 origin=ai layout=\w+/m,
       ),
     );
     expect(slides()[0]!.textContent).toContain('A plan for March');
@@ -811,7 +915,7 @@ describe('SummaryDesigner with an assistant', () => {
     // The whole slide is yours now: the AI's headline and layout, your points.
     await waitFor(() =>
       expect(source.latest).toMatch(
-        /^## Suggested middle \{\[summary passage=[0-9a-z]+-[0-9a-z]+ layout=statement\]\}\n\n- My first point\n- My second point$/m,
+        /^## Suggested middle \{\[summary passage=[0-9a-z]+-[0-9a-z]+ at=\d+ layout=statement\]\}\n\n- My first point\n- My second point$/m,
       ),
     );
     expect(source.latest).not.toContain('origin=ai');
@@ -835,7 +939,7 @@ describe('SummaryDesigner with an assistant', () => {
     typePoints('My first point\nMy second point');
     await waitFor(() =>
       expect(source.latest).toMatch(
-        /^## Suggested middle \{\[summary passage=[0-9a-z]+-[0-9a-z]+\]\}\n\n- My first point\n- My second point$/m,
+        /^## Suggested middle \{\[summary passage=[0-9a-z]+-[0-9a-z]+ at=\d+\]\}\n\n- My first point\n- My second point$/m,
       ),
     );
     expect(slides()[1]!.textContent).toContain('Cards');

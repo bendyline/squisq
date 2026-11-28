@@ -10,6 +10,8 @@ import {
   isPresentationBeatLayout,
   presentationBeatExtras,
   presentationLayoutFits,
+  presentationSlidePassage,
+  type PresentationPlan,
   type PresentationBeatExtras,
   type PresentationBeatLayout,
   type PresentationLayout,
@@ -92,6 +94,11 @@ export function presentationDensityDistills(density: PresentationDensity): boole
 export { PRESENTATION_SECTION_SLIDES };
 /** Frontmatter: whether summaries may add supporting slides. Omitted at `true`. */
 export const SUMMARY_SUPPORTING_SLIDES_KEY = 'squisq-summary-supporting-slides';
+/**
+ * Frontmatter: whether each section opens on a title slide of its own
+ * (`PresentationHints.sectionTitles`). Written `true`; omitted when off.
+ */
+export const SUMMARY_SECTION_TITLES_KEY = 'squisq-summary-section-titles';
 /** The accessory block type that holds one slide's summary. */
 export const SUMMARY_ACCESSORY_TYPE = 'summary';
 /** True for a well-formed `presentationPassageKey`. */
@@ -99,6 +106,16 @@ export const isPresentationPassageKey = isPassageKey;
 /** A short, stable name for one slide's exact source passage. Saving it rather
  * than the passage keeps the document text out of the hints. */
 export const presentationPassageKey = passageKey;
+/**
+ * The key the summary block for the slide at `index` names it by: the
+ * `presentationPassageKey` of its `presentationSlidePassage`.
+ */
+export function presentationSlideKey(
+  plan: Pick<PresentationPlan, 'sourceText' | 'beats'>,
+  index: number,
+): string {
+  return passageKey(presentationSlidePassage(plan, index));
+}
 /** One slide's AI wording: a layout, a headline, points, and what the layout
  * draws beyond them (a hub's centre, a matrix's axes). */
 export interface PresentationAiSuggestion extends PresentationBeatExtras {
@@ -133,6 +150,20 @@ export interface PresentationSlideHint extends PresentationBeatExtras {
    * when it was hidden, so the block reads sensibly. Never shown.
    */
   label?: string;
+  /**
+   * Where the slide begins in its section: the number of the section's
+   * sentence it opens with (1 for its first), or 0 for the section's title
+   * slide. When the text changes and no slide is made from `passage`
+   * exactly, the summary goes to the slide that begins there now (or the
+   * nearest one free), so editing the text never leaves it without a slide.
+   */
+  at?: number;
+  /**
+   * The summary length it was made at, set while the document is summarized
+   * at another: its slides are not this length's, so it waits, and applies
+   * again when the document is summarized at that length.
+   */
+  length?: PresentationDensity;
 }
 export interface PresentationBlockHint {
   /** @deprecated Legacy JSON only; a section's builds are its heading's `build=` setting. */
@@ -167,6 +198,12 @@ export interface PresentationHints {
    * per section, with no supporting slides. */
   density: PresentationDensity;
   inbetweens: boolean;
+  /**
+   * Each headed section after the first opens on a slide that shows only its
+   * heading, on screen while the heading is read. Its other slides then all
+   * take headlines of their own. Absent or false: no title slides.
+   */
+  sectionTitles?: boolean;
   blocks: PresentationBlockHint[];
 }
 export function defaultPresentationHints(): PresentationHints {
@@ -205,10 +242,11 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
   }
   if (
     !record(value) ||
-    !exact(value, ['version', 'density', 'inbetweens', 'blocks']) ||
+    !exact(value, ['version', 'density', 'inbetweens', 'blocks'], ['sectionTitles']) ||
     value.version !== 1 ||
     !isPresentationDensity(value.density) ||
     typeof value.inbetweens !== 'boolean' ||
+    (value.sectionTitles !== undefined && typeof value.sectionTitles !== 'boolean') ||
     !Array.isArray(value.blocks) ||
     // Every section with a hint has a slide, so a deck's limits bound its design.
     value.blocks.length > PRESENTATION_LIMITS.beats
@@ -314,6 +352,7 @@ export function parsePresentationHints(input: unknown): PresentationHints | null
     version: 1,
     density: value.density as PresentationDensity,
     inbetweens: value.inbetweens,
+    ...(value.sectionTitles === true ? { sectionTitles: true } : {}),
     blocks,
   };
 }
@@ -337,7 +376,18 @@ const SLIDE_HINT_KEYS = [
   'center',
   'xAxis',
   'yAxis',
+  'at',
+  'length',
 ];
+/** True for a slide's place in its section (`PresentationSlideHint.at`). */
+export function isSlideStart(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= PRESENTATION_LIMITS.sourceCharacters
+  );
+}
 /** A section's slide designs, or null when any is malformed. */
 function parseSlideHints(input: unknown): PresentationSlideHint[] | null {
   if (!Array.isArray(input) || input.length > PRESENTATION_LIMITS.beats) return null;
@@ -362,7 +412,11 @@ function parseSlideHints(input: unknown): PresentationSlideHint[] | null {
       (['center', 'xAxis', 'yAxis'] as const).some(
         (key) =>
           key in item && item[key] !== presentationBeatExtras(String(item.layout), item)[key],
-      )
+      ) ||
+      // A place and a length belong to a slide keyed to its passage.
+      (item.at !== undefined && (item.passage === undefined || !isSlideStart(item.at))) ||
+      (item.length !== undefined &&
+        (item.passage === undefined || !isPresentationDensity(item.length)))
     )
       return null;
     seen.add(String(identity));
@@ -375,6 +429,8 @@ function parseSlideHints(input: unknown): PresentationSlideHint[] | null {
       ...(item.layout !== undefined ? { layout: item.layout as PresentationLayout } : {}),
       ...(item.layout !== undefined ? presentationBeatExtras(String(item.layout), item) : {}),
       ...(item.label !== undefined ? { label: item.label as string } : {}),
+      ...(item.at !== undefined ? { at: item.at as number } : {}),
+      ...(item.length !== undefined ? { length: item.length as PresentationDensity } : {}),
     });
   }
   return slides;
@@ -404,7 +460,13 @@ export function canonicalPresentationHints(hints: PresentationHints): Presentati
     })
     .filter((block) => Object.keys(block).length > 1)
     .sort((a, b) => a.blockId.localeCompare(b.blockId));
-  return { version: 1, density: hints.density, inbetweens: hints.inbetweens, blocks };
+  return {
+    version: 1,
+    density: hints.density,
+    inbetweens: hints.inbetweens,
+    ...(hints.sectionTitles ? { sectionTitles: true } : {}),
+    blocks,
+  };
 }
 function canonicalSlide(slide: PresentationSlideHint): PresentationSlideHint {
   return {
@@ -416,6 +478,8 @@ function canonicalSlide(slide: PresentationSlideHint): PresentationSlideHint {
     ...(slide.layout !== undefined ? { layout: slide.layout } : {}),
     ...(slide.layout !== undefined ? presentationBeatExtras(slide.layout, slide) : {}),
     ...(slide.label !== undefined ? { label: slide.label } : {}),
+    ...(slide.passage !== undefined && slide.at !== undefined ? { at: slide.at } : {}),
+    ...(slide.passage !== undefined && slide.length !== undefined ? { length: slide.length } : {}),
   };
 }
 /** Whether two designs say the same thing (see `canonicalPresentationHints`). */
@@ -480,6 +544,34 @@ export function withSlideHint(
     else delete next.slides;
     return next;
   });
+}
+/**
+ * The design at another summary length. Every section is cut again, so a
+ * slide summary made at the old length is marked with it (`length`) and
+ * waits; one made at the new length applies again. A section's opening
+ * wording (its keyless summary) applies at every length.
+ */
+export function withPresentationDensity(
+  hints: PresentationHints,
+  density: PresentationDensity,
+): PresentationHints {
+  if (density === hints.density) return hints;
+  const relength = (slide: PresentationSlideHint): PresentationSlideHint => {
+    if (slide.passage === undefined) return slide;
+    if (slide.length === density) {
+      const { length: _length, ...rest } = slide;
+      void _length;
+      return rest;
+    }
+    return slide.length ? slide : { ...slide, length: hints.density };
+  };
+  return {
+    ...hints,
+    density,
+    blocks: hints.blocks.map((block) =>
+      block.slides ? { ...block, slides: block.slides.map(relength) } : block,
+    ),
+  };
 }
 function updateBlock(
   hints: PresentationHints,

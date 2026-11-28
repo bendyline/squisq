@@ -670,9 +670,10 @@ function MenuRadio({
       aria-checked={checked}
       onClick={onChange}
     >
-      <span className="squisq-view-menu-radio" aria-hidden="true">
-        {checked ? '●' : ''}
-      </span>
+      {/* The selected dot is drawn by CSS (keyed off aria-checked), not a
+          "●" glyph — a glyph sits on the font's baseline, so it renders
+          off-center and at whatever size the fallback font gives it. */}
+      <span className="squisq-view-menu-radio" aria-hidden="true" />
       <span className="squisq-view-menu-radio-label">{label}</span>
     </button>
   );

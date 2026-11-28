@@ -101,8 +101,11 @@ you were on, and switching back opens Write on the block holding the Source curs
     what an audience should keep while the narration tells the rest; the default), **One slide
     per section**, or one of three lengths that **follow the text** with a slide every paragraph,
     every few sentences, or nearly every sentence — and whether to **Add
-    supporting slides**; these sit on one row with the style and the designer's actions, and wrap
-    in a narrow panel. Then pick a slide from the list, where each section of your
+    supporting slides** and **Add section title slides** (each section after the first opens on
+    a slide that shows only its heading, while the heading is read, and its other slides each get
+    a headline of their own; pick one to hide it, or edit the heading to change it); these sit on
+    one row with the style and the designer's actions, and wrap in a narrow panel. Then pick a
+    slide from the list, where each section of your
     document sits beside the slides made from it (in a narrow window, from the **Slide** menu
     with **Previous** and **Next**, or with ← and →). For the slide you picked, you
     can hide it, set the **Slides for this section** (how many slides tell that section,
@@ -119,10 +122,11 @@ you were on, and switching back opens Write on the block holding the Source curs
     wording, AI suggestions and hidden slides as `{[summary]}` blocks under it (see
     [Accessory blocks](markup.md#accessory-blocks)), its layout on its heading. Write folds a
     section's summaries into one **Slide summaries** row you can open; Source folds each. Ctrl+Z
-    in Write undoes a change. Your wording for a section's first slide stays when you edit the
-    section's text; your wording for its other slides, an AI suggestion or a hidden slide applies
-    only while its passage is unchanged, and a list of summaries **not in use** lets you remove
-    the ones that no longer apply.
+    in Write undoes a change. Your wording, an AI suggestion or a hidden slide stays with its
+    slide when you edit the text, and changing a slide's wording never changes which slides there
+    are. Summaries made at another summary length wait for it and apply again when you switch
+    back; a section that now makes fewer slides than it has summaries lists the extra ones as
+    **not in use**, where you can remove them.
   - **Documentary**, **Magazine**, **Data-Driven**, **Narrative**, **Minimal**, or **Headings and
     features** — the document re-cut into a presentation in that style. Below the choice are the
     slides it makes, each beside the section it came from; slides a style adds around your text,
