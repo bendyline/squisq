@@ -1,3 +1,9 @@
+## @bendyline/squisq [2.14.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.14.3...@bendyline/squisq@2.14.4) (2026-11-28)
+
+### Bug Fixes
+
+* Improve summary slide binding and section titles ([#140](https://github.com/bendyline/squisq/issues/140)) ([8eb1ced](https://github.com/bendyline/squisq/commit/8eb1ced9035b7ac8636f8631aac3280fd32e810a))
+
 ## @bendyline/squisq [2.14.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq@2.14.2...@bendyline/squisq@2.14.3) (2026-11-27)
 
 ### Bug Fixes

@@ -1,3 +1,18 @@
+## @bendyline/squisq-editor-react [2.14.4](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.14.3...@bendyline/squisq-editor-react@2.14.4) (2026-11-28)
+
+### Bug Fixes
+
+* Improve summary slide binding and section titles ([#140](https://github.com/bendyline/squisq/issues/140)) ([8eb1ced](https://github.com/bendyline/squisq/commit/8eb1ced9035b7ac8636f8631aac3280fd32e810a))
+
+
+### Dependencies
+
+* **@bendyline/squisq:** upgraded to 2.14.4
+* **@bendyline/squisq-formats:** upgraded to 2.8.27
+* **@bendyline/squisq-grid-react:** upgraded to 2.11.54
+* **@bendyline/squisq-react:** upgraded to 2.12.38
+* **@bendyline/squisq-video-react:** upgraded to 2.5.41
+
 ## @bendyline/squisq-editor-react [2.14.3](https://github.com/bendyline/squisq/compare/@bendyline/squisq-editor-react@2.14.2...@bendyline/squisq-editor-react@2.14.3) (2026-11-27)
 
 ### Bug Fixes
