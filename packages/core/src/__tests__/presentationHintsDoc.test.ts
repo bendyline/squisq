@@ -303,6 +303,8 @@ describe('the legacy JSON design', () => {
     const before = createPresentationPlan(doc, legacy);
     const converted = presentationHintsForPlan(doc, legacy, before);
     expect(createPresentationPlan(doc, converted)).toEqual(before);
+    // Each slide summary records where its slide begins: each section's first
+    // sentence here.
     expect(converted.blocks).toEqual([
       { blockId: sections[0]!.blockId, slides: [{ headline: 'A legacy headline' }] },
       {
@@ -311,6 +313,7 @@ describe('the legacy JSON design', () => {
         slides: [
           {
             passage: keyOf(plan, 1),
+            at: 1,
             origin: 'ai',
             layout: 'statement',
             headline: 'An AI headline',
@@ -320,7 +323,9 @@ describe('the legacy JSON design', () => {
       },
       {
         blockId: sections[2]!.blockId,
-        slides: [{ passage: keyOf(plan, 2), hidden: true, label: before.beats[2]!.headline }],
+        slides: [
+          { passage: keyOf(plan, 2), at: 1, hidden: true, label: before.beats[2]!.headline },
+        ],
       },
     ]);
   });

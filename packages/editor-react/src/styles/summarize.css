@@ -880,8 +880,11 @@
   cursor: pointer;
 }
 
+/* "Use automatic wording" follows the highlights field: with no room between
+   them, the field's focus ring drew across the button's top edge. */
 .squisq-summary-designer-wording label + label,
-.squisq-summary-designer-wording p + label {
+.squisq-summary-designer-wording p + label,
+.squisq-summary-designer-wording label + button {
   margin-top: 12px;
 }
 

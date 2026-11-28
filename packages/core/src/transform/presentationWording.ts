@@ -20,6 +20,7 @@ import {
   PRESENTATION_SLIDE_FORMAT,
   PRESENTATION_STORYBOARD_FORMAT,
   presentationRetryContext,
+  presentationSlideNeedsOwnHeadline,
   presentationSlidePrompt,
   presentationSlideRequest,
   presentationSlidesToWord,
@@ -183,7 +184,7 @@ export async function wordPresentationPlan(
       : {
           previous: beats
             .slice(0, index)
-            .filter((beat) => isSummaryPresentationLayout(beat.layout))
+            .filter((beat) => isSummaryPresentationLayout(beat.layout) && !beat.sectionTitle)
             .slice(-3)
             .map((beat) => beat.layout),
         };
@@ -193,7 +194,9 @@ export async function wordPresentationPlan(
         {
           kind: 'slide',
           index,
-          system: presentationSlidePrompt(),
+          system: presentationSlidePrompt({
+            laterInSection: presentationSlideNeedsOwnHeadline(plan, index),
+          }),
           user: presentationSlideRequest(plan, index, context),
           responseFormat: PRESENTATION_SLIDE_FORMAT,
           maxTokens: PRESENTATION_AUTHOR_LIMITS.slideTokens,
@@ -208,7 +211,7 @@ export async function wordPresentationPlan(
             kind: 'reply',
             notes: [],
           }
-        : readPresentationSlideReply(reply.text, plan, index);
+        : readPresentationSlideReply(reply.text, plan, index, { lastAttempt: attempt === 1 });
       replacement = read.beat;
       options.onAttempt?.(index, attempt, {
         text: reply.text,

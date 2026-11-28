@@ -38,6 +38,7 @@ import {
   PRESENTATION_KEY,
   PRESENTATION_LIMITS,
   type PresentationBeatLayout,
+  type PresentationPlan,
 } from '../transform/presentationPlan.js';
 import { extractEmbeddedVideos } from '../doc/templateInputs.js';
 import { resolveMediaSchedule } from '../schemas/Media.js';
@@ -47,6 +48,8 @@ import type { Doc } from '../schemas/Doc.js';
 const source =
   '# Start with an idea\n\nWrite a few bullet points. Build a document with a clear story.\n\n## Make it visual\n\nFirst organize your points. Then add diagrams. Finally share your presentation.\n\n## Keep your voice\n\nNarration runs locally. Turn the same document into a narrated video.';
 const parse = (text = source) => markdownToDoc(parseMarkdown(text));
+/** A plan as it is saved: its sections are context for wording it, and are left out. */
+const saved = ({ sections: _sections, ...plan }: PresentationPlan): PresentationPlan => plan;
 async function narrated(text = source, times = [0, 20, 40, 60]) {
   const md = `{[audio src=audio/take.webm anchor=document]}\n\n${text}`;
   const doc = parse(md);
@@ -98,7 +101,7 @@ describe('source-preserving presentations', () => {
     const reopened = parse(
       setFrontmatterValues(source, { [PRESENTATION_KEY]: serializePresentationPlan(plan) }),
     );
-    expect(parsePresentationPlan(reopened.frontmatter?.[PRESENTATION_KEY])).toEqual(plan);
+    expect(parsePresentationPlan(reopened.frontmatter?.[PRESENTATION_KEY])).toEqual(saved(plan));
     expect(buildNarrationScript(reopened).sourceText).toBe(plan.sourceText);
     expect(buildPreviewDoc(reopened).blocks).toHaveLength(plan.beats.length);
   });
@@ -500,7 +503,7 @@ describe('dynamic slides with embedded videos and diagrams', () => {
     // A steps diagram would leave the flowchart a small inset; a list pairs them.
     const fits = section('how-it-fits');
     expect(fits.map((beat) => [beat.layout, beat.media])).toEqual([['list', ['how-it-fits#0']]]);
-    expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+    expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(saved(plan));
 
     const compiled = compilePresentationPlan(doc, plan);
     const expanded = expandDocBlocks(compiled.blocks, { audioSegments: compiled.audio.segments });
@@ -674,7 +677,7 @@ describe('dynamic slides that feature a section’s tables and pictures', () => 
           expect(beat.sourceStart <= cellsStart || beat.sourceStart >= cellsEnd, label).toBe(true);
           expect(beat.sourceEnd <= cellsStart || beat.sourceEnd >= cellsEnd, label).toBe(true);
         }
-        expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+        expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(saved(plan));
       }
     // A long sentence beside the table is cut at its clause, not mid-phrase.
     const [speed] = createPresentationPlan(doc, prefer()).beats.filter(
@@ -788,7 +791,7 @@ describe('authored sections and summary layouts', () => {
     expect(plan.sourceText.slice(beat.sourceStart, beat.sourceEnd)).toBe(section.text.trim());
     expect(block).toMatchObject({ template: 'barChart', startTime: 20, duration: 20 });
     expect(block.sourceBlockId).toBe('by-region');
-    expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+    expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(saved(plan));
 
     // The deck draws it with the template the author picked, from its own table.
     const authored = flattenRenderableBlocks(doc.blocks).find((item) => item.id === 'by-region')!;
@@ -875,7 +878,7 @@ describe('authored sections and summary layouts', () => {
     // The slide is the drawing: its shapes, not a title on an empty page.
     expect(block.template).toBe('layout');
     expect(block.children?.map((child) => child.id)).toEqual(['glance-value', 'glance-label']);
-    expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+    expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(saved(plan));
     // A layout the designer chose for the section wins.
     expect(slide(doc, prefer('glance', 'divider'), 'glance').beat.layout).toBe('divider');
   });
@@ -1066,7 +1069,7 @@ describe('hidden slides', () => {
     const plan = createPresentationPlan(doc);
     const hidden = createPresentationPlan(doc, hiding(doc, [[1, [keyOf(plan, 1)]]]));
     expect(hidden.beats.map((beat) => beat.hidden)).toEqual([undefined, true, undefined]);
-    expect(parsePresentationPlan(serializePresentationPlan(hidden))).toEqual(hidden);
+    expect(parsePresentationPlan(serializePresentationPlan(hidden))).toEqual(saved(hidden));
     const deck = compilePresentationPlan(doc, hidden);
     expect(deck.duration).toBe(60);
     expect(deck.blocks.map((block) => [block.id, block.startTime, block.duration])).toEqual([
@@ -1183,7 +1186,7 @@ describe('long presentations', () => {
       if (density === 'balanced') expect(plan.beats.length).toBeGreaterThan(80);
       // Sixteen sentences a section: three slides each as key points.
       if (density === 'keypoints') expect(plan.beats.length).toBeLessThanOrEqual(30 * 3);
-      expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(plan);
+      expect(parsePresentationPlan(serializePresentationPlan(plan))).toEqual(saved(plan));
       expect(compilePresentationPlan(doc, plan).blocks).toHaveLength(plan.beats.length);
     }
   });

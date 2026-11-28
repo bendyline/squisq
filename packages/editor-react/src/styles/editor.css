@@ -3658,6 +3658,26 @@ button.squisq-view-menu-radio-row:focus-visible {
   cursor: pointer;
 }
 
+/* The selected dot is a box the ring's flex layout centers, so it stays
+   concentric at every zoom level — a typed "●" sat on the text baseline,
+   off-center and only as large as the fallback font drew it. 7px fills
+   about half the 13px ring, like a native radio. */
+.squisq-view-menu-radio-row[aria-checked='true'] .squisq-view-menu-radio::after {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Forced colors repaints backgrounds as Canvas, which would erase the dot. */
+@media (forced-colors: active) {
+  .squisq-view-menu-radio-row[aria-checked='true'] .squisq-view-menu-radio::after {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+}
+
 .squisq-view-menu-radio-label {
   flex: 1;
 }

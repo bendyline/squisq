@@ -137,15 +137,17 @@ The summary designer writes these for you (see the Summaries view in the
 [editor guide](editor.md)), and the editor folds them out of the way: one collapsed row per
 section in Write, a folded block in Source. Their tag settings are:
 
-| Setting         | Meaning                                                                                            |
-| --------------- | -------------------------------------------------------------------------------------------------- |
-| (none)          | The section's opening slide. Your wording stays when you change the section's text                 |
-| `passage=<key>` | The slide made from exactly that passage. When no slide is, the summary is kept but not in use     |
-| `origin=ai`     | Suggested by AI. A summary without it is your own wording, which wins over AI                      |
-| `layout=<name>` | The slide's layout, when it fits; `center`, `xAxis` and `yAxis` set what a hub or a matrix draws   |
-| `points=none`   | No points. Without it, and without a list, the slide's points are automatic                        |
-| `hidden=true`   | Leaves the slide out of the presentation. With nothing else set, the heading only names the slide  |
-| `of=<id>`       | The section it is about, where it cannot sit under it (a level-6 heading, a section made by a tag) |
+| Setting         | Meaning                                                                                             |
+| --------------- | --------------------------------------------------------------------------------------------------- |
+| (none)          | The section's opening slide. Your wording stays when you change the section's text                  |
+| `passage=<key>` | The slide made from that passage                                                                    |
+| `at=<n>`        | The sentence its slide begins at (0: a title slide); after a text edit the summary goes there       |
+| `length=<name>` | The summary length it was made at, while the document uses another; it applies again at that length |
+| `origin=ai`     | Suggested by AI. A summary without it is your own wording, which wins over AI                       |
+| `layout=<name>` | The slide's layout, when it fits; `center`, `xAxis` and `yAxis` set what a hub or a matrix draws    |
+| `points=none`   | No points. Without it, and without a list, the slide's points are automatic                         |
+| `hidden=true`   | Leaves the slide out of the presentation. With nothing else set, the heading only names the slide   |
+| `of=<id>`       | The section it is about, where it cannot sit under it (a level-6 heading, a section made by a tag)  |
 
 A section's own summary settings go on its heading: `slideLayout=`, `supportingSlides=` and `slideCount=` (see
 [Summary settings](tags.md#summary-settings)). `slideLayout=feature` on a chart, table, diagram

@@ -158,6 +158,14 @@ const ASKS = /[?？]\s*["”’')\]]?$/u;
 /** A sentence that opens as an example of the one before it. */
 const OPENS_AS_EXAMPLE =
   /^(?:for (?:an? )?(?:example|instance)|e\.g\.|as an example|to illustrate)\b/iu;
+/**
+ * Whether a sentence reads on its own, as a headline must: it neither leans
+ * on the sentence before it ("That trade…") nor opens as an example of it.
+ */
+export function standsAlone(text: string): boolean {
+  const trimmed = text.trim();
+  return !LEANS.test(trimmed) && !OPENS_AS_EXAMPLE.test(trimmed);
+}
 /** Whether a sentence serves another one rather than making a point of its own. */
 function isAside(text: string): boolean {
   return INTRODUCES.test(text) || ASKS.test(text) || OPENS_AS_EXAMPLE.test(text.trim());

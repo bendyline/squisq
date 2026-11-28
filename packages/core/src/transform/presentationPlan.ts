@@ -42,12 +42,30 @@ export function presentationBeatIsSlide(
 /**
  * Whether a beat is a shown summary — what the designer words and an AI is
  * asked about: a slide whose layout summarizes its passage (not a section
- * shown as authored, and not one shown on another slide).
+ * shown as authored, not one shown on another slide, and not a section's
+ * title slide, which shows its heading).
  */
 export function presentationBeatIsWorded(
-  beat: Pick<PresentationBeat, 'layout' | 'hidden'>,
+  beat: Pick<PresentationBeat, 'layout' | 'hidden' | 'sectionTitle'>,
 ): boolean {
-  return !beat.hidden && isSummaryPresentationLayout(beat.layout);
+  return !beat.hidden && !beat.sectionTitle && isSummaryPresentationLayout(beat.layout);
+}
+
+/**
+ * The passage a slide's design (a `{[summary passage=…]}` block) is keyed to:
+ * the slide's own passage, except for the slide after a section's title
+ * slide. That one stands for the heading too, as it does in a deck without
+ * title slides, so its wording, AI suggestion and hiding hold whether title
+ * slides are on or off.
+ */
+export function presentationSlidePassage(
+  plan: Pick<PresentationPlan, 'sourceText' | 'beats'>,
+  index: number,
+): string {
+  const beat = plan.beats[index]!;
+  const before = plan.beats[index - 1];
+  const start = before?.sectionTitle && !beat.sectionTitle ? before.sourceStart : beat.sourceStart;
+  return plan.sourceText.slice(start, beat.sourceEnd);
 }
 
 export const PRESENTATION_KEY = 'squisq-presentation';
@@ -167,6 +185,12 @@ export interface PresentationBeat {
   media?: string[];
   /** Left out of the deck; the slide shown before it stays on screen instead. */
   hidden?: true;
+  /**
+   * A section's title slide (`PresentationHints.sectionTitles`): a `divider`
+   * that shows the section's heading while it is read. Not a summary, so it
+   * is never worded, and it carries none of the section's features.
+   */
+  sectionTitle?: true;
   /** A hub only: the one to three words its ideas share, written inside it. */
   center?: string;
   /** A matrix only: what grows from left to right, named along the foot. */
@@ -195,11 +219,26 @@ export function presentationBeatExtras(layout: string, source: unknown): Present
   }
   return extras;
 }
+/** A section of the source as the planner divided it: where it lies, and its heading. */
+export interface PresentationPlanSection {
+  sourceStart: number;
+  sourceEnd: number;
+  heading?: string;
+}
 export interface PresentationPlan {
   version: 1;
   sourceText: string;
   origin: 'automatic' | 'ai';
   beats: PresentationBeat[];
+  /**
+   * The document's sections, when the plan was just made from it. A model
+   * wording a slide is told the heading of the section it belongs to and
+   * which of the section's slides it is, so a later slide gets a headline of
+   * its own rather than the section's title again. Context for wording only:
+   * a saved plan (`serializePresentationPlan`) leaves it out, and a plan
+   * without it is worded without section context.
+   */
+  sections?: PresentationPlanSection[];
 }
 export const PRESENTATION_LIMITS = {
   sourceCharacters: 40_000,
@@ -259,7 +298,7 @@ export function parsePresentationPlan(input: unknown): PresentationPlan | null {
   }
   if (
     !record(value) ||
-    !keys(value, ['version', 'sourceText', 'origin', 'beats']) ||
+    !keys(value, ['version', 'sourceText', 'origin', 'beats'], ['sections']) ||
     value.version !== 1 ||
     !text(value.sourceText, PRESENTATION_LIMITS.sourceCharacters) ||
     typeof value.origin !== 'string' ||
@@ -278,9 +317,16 @@ export function parsePresentationPlan(input: unknown): PresentationPlan | null {
       !keys(
         beat,
         ['id', 'sourceStart', 'sourceEnd', 'layout', 'headline', 'points'],
-        ['imageSrc', 'media', 'hidden', ...BEAT_EXTRAS],
+        ['imageSrc', 'media', 'hidden', 'sectionTitle', ...BEAT_EXTRAS],
       ) ||
       ('hidden' in beat && beat.hidden !== true) ||
+      // A title slide shows its heading alone, as a section break.
+      ('sectionTitle' in beat &&
+        (beat.sectionTitle !== true ||
+          beat.layout !== 'divider' ||
+          !Array.isArray(beat.points) ||
+          beat.points.length > 0 ||
+          'media' in beat)) ||
       !text(beat.id, 80) ||
       ids.has(beat.id) ||
       !Number.isInteger(beat.sourceStart) ||
@@ -339,21 +385,55 @@ export function parsePresentationPlan(input: unknown): PresentationPlan | null {
       ...(beat.layout === 'image' ? { imageSrc: beat.imageSrc as string } : {}),
       ...('media' in beat ? { media: [...(beat.media as string[])] } : {}),
       ...(beat.hidden === true ? { hidden: true as const } : {}),
+      ...(beat.sectionTitle === true ? { sectionTitle: true as const } : {}),
       ...extras,
     });
   }
   if (value.sourceText.slice(end).trim()) return null;
+  const sections = planSections(value.sections, value.sourceText.length);
   return {
     version: 1,
     sourceText: value.sourceText,
     origin: value.origin as PresentationPlan['origin'],
     beats,
+    ...(sections ? { sections } : {}),
   };
+}
+/**
+ * A plan's sections as given, or undefined when there are none or any is
+ * malformed: they are only context for wording, so a bad list is dropped
+ * rather than costing the plan.
+ */
+function planSections(input: unknown, length: number): PresentationPlanSection[] | undefined {
+  if (!Array.isArray(input) || !input.length) return undefined;
+  const sections: PresentationPlanSection[] = [];
+  for (const item of input) {
+    if (
+      !record(item) ||
+      !keys(item, ['sourceStart', 'sourceEnd'], ['heading']) ||
+      !Number.isInteger(item.sourceStart) ||
+      !Number.isInteger(item.sourceEnd) ||
+      (item.sourceStart as number) < 0 ||
+      (item.sourceEnd as number) <= (item.sourceStart as number) ||
+      (item.sourceEnd as number) > length ||
+      ('heading' in item && !text(item.heading, 1000))
+    )
+      return undefined;
+    sections.push({
+      sourceStart: item.sourceStart as number,
+      sourceEnd: item.sourceEnd as number,
+      ...('heading' in item ? { heading: item.heading as string } : {}),
+    });
+  }
+  return sections;
 }
 export function serializePresentationPlan(plan: PresentationPlan): string {
   const parsed = parsePresentationPlan(plan);
   if (!parsed) throw new Error('The presentation plan is invalid.');
-  const result = JSON.stringify(parsed);
+  // Sections are context for wording a plan just made; a saved plan leaves them out.
+  const { sections: _sections, ...saved } = parsed;
+  void _sections;
+  const result = JSON.stringify(saved);
   if (result.length > PRESENTATION_LIMITS.serializedCharacters)
     throw new Error('The presentation plan is too large.');
   return result;

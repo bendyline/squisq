@@ -2,7 +2,7 @@
  * Write a Custom summary design into a document's markdown.
  *
  * The design lives where people can see it (see `presentationHintsDoc.ts`):
- * two frontmatter keys, `slideLayout=` / `supportingSlides=` / `slideCount=`
+ * three frontmatter keys, `slideLayout=` / `supportingSlides=` / `slideCount=`
  * on section headings, and a `{[summary]}` accessory block for each designed
  * slide. The density key is left out at the default length, unless the
  * document would then be read at another (it keeps summaries keyed to a
@@ -47,6 +47,7 @@ import {
   PRESENTATION_HINTS_KEY,
   SUMMARY_ACCESSORY_TYPE,
   SUMMARY_DENSITY_KEY,
+  SUMMARY_SECTION_TITLES_KEY,
   SUMMARY_SUPPORTING_SLIDES_KEY,
   canonicalPresentationHints,
   defaultPresentationHints,
@@ -80,7 +81,7 @@ export function writePresentationHints(
 }
 
 /**
- * The automatic design: removes both summary keys, the legacy key, every
+ * The automatic design: removes the summary keys, the legacy key, every
  * section's summary settings, and every summary block — including ones the
  * design could not use.
  */
@@ -239,6 +240,7 @@ function writeOnce(source: string, hints: PresentationHints, options: WriteOptio
   const withKeys = setFrontmatterValues(source, {
     [SUMMARY_DENSITY_KEY]: options.densityKey ? hints.density : null,
     [SUMMARY_SUPPORTING_SLIDES_KEY]: hints.inbetweens ? null : false,
+    [SUMMARY_SECTION_TITLES_KEY]: hints.sectionTitles ? true : null,
     [PRESENTATION_HINTS_KEY]: null,
   });
   const frontmatter = minimalSourceTextEdit(source, withKeys);
@@ -478,7 +480,17 @@ function parseContext(source: string): ParseContext {
 
 // ── Building a block ───────────────────────────────────────────────────
 
-const PARAM_ORDER = ['passage', 'origin', 'layout', 'center', 'xAxis', 'yAxis', 'hidden'] as const;
+const PARAM_ORDER = [
+  'passage',
+  'at',
+  'length',
+  'origin',
+  'layout',
+  'center',
+  'xAxis',
+  'yAxis',
+  'hidden',
+] as const;
 
 /** A summary block's heading line and its list, as markdown. */
 function slideMarkdown(
@@ -490,6 +502,8 @@ function slideMarkdown(
   const extras = slide.layout ? presentationBeatExtras(slide.layout, slide) : {};
   const values: Record<(typeof PARAM_ORDER)[number], string | undefined> = {
     passage: slide.passage,
+    at: slide.passage !== undefined && slide.at !== undefined ? String(slide.at) : undefined,
+    length: slide.passage !== undefined ? slide.length : undefined,
     origin: slide.origin,
     layout: slide.layout,
     center: extras.center,

@@ -8,7 +8,7 @@ import {
   defaultPresentationHints,
   parsePresentationHints,
   presentationDensityDistills,
-  presentationPassageKey,
+  presentationSlideKey,
   slideHintHasWording,
   type PresentationBlockHint,
   type PresentationHints,
@@ -19,6 +19,8 @@ import {
   keyPointText,
   keySentences,
   sectionSlideCount,
+  standsAlone,
+  type KeySentenceContext,
   type SlideStart,
 } from './keyPoints.js';
 import type { MarkdownBlockNode } from '../markdown/types.js';
@@ -47,10 +49,12 @@ import {
   presentationBeatIsWorded,
   presentationBeatExtras,
   presentationLayoutFits,
+  presentationSlidePassage,
   type PresentationBeat,
   type PresentationLayout,
   type PresentationPlan,
 } from './presentationPlan.js';
+import { restatesHeadline } from './grounding.js';
 
 const SENTENCE_END = /[.!?][”"')\]]?$/u;
 /**
@@ -206,6 +210,62 @@ function repeats(sentence: string, headline: string): boolean {
   const body = comparable(sentence);
   const head = comparable(headline);
   return body === head || head.includes(body) || (head.length >= 24 && body.startsWith(head));
+}
+/** The longest a sentence may run to stand whole as a later slide's headline. */
+const SETUP_HEADLINE_CHARACTERS = 100;
+/** A line that sets up what follows it: a question, or a sentence ending in a colon. */
+const SETS_UP = /[?:][”"')\]]?$/u;
+/** The fewest words a line needs to title a slide; "What this shows:" says too little. */
+const SETUP_HEADLINE_WORDS = 4;
+/**
+ * A sentence as a headline: without the joining word or the closing full
+ * stop, the colon that introduced what follows, or, when it runs long, its
+ * asides and its end.
+ */
+function setupText(text: string): string {
+  return clip(keyPointText(text, SETUP_HEADLINE_CHARACTERS), Infinity, PRESENTATION_LIMITS.headline)
+    .replace(/(?<![.\s])[.:]([”"')\]]?)$/u, '$1')
+    .trim();
+}
+/** Whether a sentence can title a slide whole, without being cut short. */
+const titlesWhole = (text: string) =>
+  text.trim().split(/\s+/u).length >= SETUP_HEADLINE_WORDS &&
+  !keyPointText(text, SETUP_HEADLINE_CHARACTERS).endsWith('…');
+/**
+ * The sentence a slide after its section's first takes its headline from, so
+ * the headline sets up what that slide shows rather than repeating the
+ * section's title: a line that does so itself (a question the passage
+ * answers, or one that introduces what follows with a colon), else its
+ * opening sentence when that fits whole, else the sentence that best carries
+ * the passage — shortened only when `shorten` (a slide of chosen points, which
+ * are shortened too). `candidates` leaves out the list items and the steps of
+ * a sequence, which are what the slide shows beneath its headline.
+ */
+function setupHeadline(
+  candidates: readonly Sentence[],
+  context: KeySentenceContext,
+  shorten: boolean,
+): Sentence | undefined {
+  const usable = candidates.filter(
+    (sentence) => sentence.text.trim().split(/\s+/u).length >= SETUP_HEADLINE_WORDS,
+  );
+  // Shown whole, and readable without the sentence before it ("That trade…").
+  const whole = (sentence: Sentence) => titlesWhole(sentence.text) && standsAlone(sentence.text);
+  // Of the sentences that carry it, one that can be shown whole.
+  const key = keySentences(usable, 3, context);
+  return (
+    usable.find((sentence) => SETS_UP.test(sentence.text.trim()) && whole(sentence)) ??
+    (usable[0] && whole(usable[0]) ? usable[0] : undefined) ??
+    key.find(whole) ??
+    (shorten ? (key.find((sentence) => standsAlone(sentence.text)) ?? key[0]) : usable.find(whole))
+  );
+}
+/** Whether a sentence begins inside one of `lists`, optionally only an unordered one. */
+function inList(sentence: Sentence, lists: readonly ListSpan[], unordered = false): boolean {
+  return lists.some(
+    (list) =>
+      (!unordered || !list.ordered) && sentence.start >= list.start && sentence.start < list.end,
+  );
 }
 /** Word spans of one passage, preferring complete sentences so slides do not
  * open or close mid-sentence; a long sentence may stretch a slide a little. */
@@ -444,6 +504,169 @@ function openingWording(
     };
   return hint?.wording?.source === sectionText ? hint.wording : undefined;
 }
+/** A section of the document as slide summaries are matched within it. */
+export interface PresentationDesignSection {
+  blockId: string;
+  heading?: string;
+  sourceStart: number;
+  sourceEnd: number;
+}
+/**
+ * Where each slide of `plan` begins in its section, as a slide summary
+ * records it (`PresentationSlideHint.at`): the number of the section's
+ * sentence it opens with, counting from 1, or 0 for a title slide. Undefined
+ * for a section shown on another slide, which has no slide of its own.
+ */
+export function presentationSlideStarts(
+  plan: Pick<PresentationPlan, 'sourceText' | 'beats'>,
+  sections: readonly PresentationDesignSection[],
+): Array<number | undefined> {
+  const starts: Array<number | undefined> = plan.beats.map(() => undefined);
+  for (const section of sections) {
+    const headingEnd = section.sourceStart + (section.heading?.trim().length ?? 0);
+    const body = sentencesIn(plan.sourceText, section.sourceStart, section.sourceEnd).filter(
+      (sentence) => sentence.start >= headingEnd,
+    );
+    plan.beats.forEach((beat, index) => {
+      if (beat.sourceStart < section.sourceStart || beat.sourceStart >= section.sourceEnd) return;
+      if (beat.layout === FEATURE_PRESENTATION_LAYOUT) return;
+      starts[index] = beat.sectionTitle
+        ? 0
+        : 1 + body.filter((sentence) => sentence.start < beat.sourceStart).length;
+    });
+  }
+  return starts;
+}
+/** Which slide each of a design's slide summaries applies to. */
+export interface PresentationDesignBinding {
+  /** Each slide's summary keyed to a passage, by the slide's index in the plan. */
+  slides: Map<number, PresentationSlideHint>;
+  /**
+   * Summaries with no slide: their section makes fewer slides now than it
+   * has summaries (`fewer`), or one from before summaries recorded where
+   * their slide begins no longer matches a passage exactly (`passage`).
+   */
+  leftover: Array<{ blockId: string; slide: PresentationSlideHint; reason: 'fewer' | 'passage' }>;
+  /**
+   * Summaries for slides this design does not make: ones made at another
+   * summary length (`length`), and a hidden title slide while there are none.
+   */
+  waiting: Array<{ blockId: string; slide: PresentationSlideHint; reason: 'length' | 'title' }>;
+}
+/**
+ * Match each slide summary keyed to a passage with a slide of its section.
+ * A summary goes to the slide made from exactly its passage; when the text
+ * has changed and none is, to the slide that now begins where it began
+ * (`at`), or the nearest one of its section without a summary. So a summary
+ * keeps a slide however the text is edited, and is left over only when its
+ * section makes fewer slides than it has summaries. A summary from before
+ * summaries recorded `at` goes only to the slide made from its passage
+ * (`withSlideStarts` records it for those that still match).
+ */
+export function bindPresentationDesigns(
+  plan: Pick<PresentationPlan, 'sourceText' | 'beats'>,
+  sections: readonly PresentationDesignSection[],
+  hints: PresentationHints,
+): PresentationDesignBinding {
+  const starts = presentationSlideStarts(plan, sections);
+  const binding: PresentationDesignBinding = { slides: new Map(), leftover: [], waiting: [] };
+  for (const section of sections) {
+    const designs =
+      hints.blocks
+        .find((block) => block.blockId === section.blockId)
+        ?.slides?.filter((slide) => slide.passage !== undefined) ?? [];
+    if (!designs.length) continue;
+    const own = plan.beats.flatMap((beat, index) =>
+      starts[index] !== undefined &&
+      beat.sourceStart >= section.sourceStart &&
+      beat.sourceStart < section.sourceEnd
+        ? [index]
+        : [],
+    );
+    const content = own.filter((index) => starts[index]! > 0);
+    const claim = (index: number, slide: PresentationSlideHint) => binding.slides.set(index, slide);
+    const pending: Array<PresentationSlideHint & { at: number }> = [];
+    for (const slide of designs) {
+      const exact = own.find(
+        (index) =>
+          !binding.slides.has(index) && presentationSlideKey(plan, index) === slide.passage,
+      );
+      if (exact !== undefined) claim(exact, slide);
+      else if (slide.length && slide.length !== hints.density)
+        binding.waiting.push({ blockId: section.blockId, slide, reason: 'length' });
+      else if (slide.at === undefined)
+        binding.leftover.push({ blockId: section.blockId, slide, reason: 'passage' });
+      else pending.push(slide as PresentationSlideHint & { at: number });
+    }
+    pending.sort((a, b) => a.at - b.at);
+    for (const slide of pending) {
+      if (slide.at === 0) {
+        const title = own.find((index) => starts[index] === 0 && !binding.slides.has(index));
+        if (title !== undefined) claim(title, slide);
+        else binding.waiting.push({ blockId: section.blockId, slide, reason: 'title' });
+        continue;
+      }
+      // Its slide now: the one that holds the sentence it began at.
+      const home = Math.max(0, content.filter((index) => starts[index]! <= slide.at).length - 1);
+      let found: number | undefined;
+      for (let distance = 0; distance < content.length && found === undefined; distance++) {
+        for (const at of [home + distance, home - distance]) {
+          const index = content[at];
+          if (index !== undefined && !binding.slides.has(index)) {
+            found = index;
+            break;
+          }
+        }
+      }
+      if (found !== undefined) claim(found, slide);
+      else binding.leftover.push({ blockId: section.blockId, slide, reason: 'fewer' });
+    }
+  }
+  return binding;
+}
+/**
+ * The design with each slide summary that still matches a slide recording
+ * where that slide begins (`at`), so it keeps its slide when the text
+ * changes. A summary saved before summaries recorded it gets it this way the
+ * next time the design is saved.
+ */
+export function withSlideStarts(
+  plan: Pick<PresentationPlan, 'sourceText' | 'beats'>,
+  sections: readonly PresentationDesignSection[],
+  hints: PresentationHints,
+): PresentationHints {
+  const starts = presentationSlideStarts(plan, sections);
+  const found = new Map<PresentationSlideHint, number>();
+  for (const [index, slide] of bindPresentationDesigns(plan, sections, hints).slides) {
+    const at = starts[index];
+    if (slide.at === undefined && at !== undefined) found.set(slide, at);
+  }
+  if (!found.size) return hints;
+  return {
+    ...hints,
+    blocks: hints.blocks.map((block) =>
+      block.slides
+        ? {
+            ...block,
+            slides: block.slides.map((slide) =>
+              found.has(slide) ? { ...slide, at: found.get(slide)! } : slide,
+            ),
+          }
+        : block,
+    ),
+  };
+}
+/** The narration script's sections, as slide summaries are matched within them. */
+function designSections(
+  blocks: ReadonlyArray<{ blockId: string; heading?: string; charStart: number; charEnd: number }>,
+): PresentationDesignSection[] {
+  return blocks.map((block) => ({
+    blockId: block.blockId,
+    ...(block.heading !== undefined ? { heading: block.heading } : {}),
+    sourceStart: block.charStart,
+    sourceEnd: block.charEnd,
+  }));
+}
 /**
  * The deck for these hints, however many slides it makes. A section that
  * asked to be shown on the slide before it but cannot be carried there is
@@ -563,6 +786,12 @@ function planOnce(
   const spokenFeatures = new Map<string, number>();
   /** The whole sentence each slide would show as a quote. */
   const quotes = new Map<string, string>();
+  /**
+   * A later slide titled by one of its own sentences, which is then not among
+   * its points: that sentence as a point and as a card, shown again when the
+   * author gives the slide a headline of their own.
+   */
+  const headlineSentences = new Map<string, { point: string; card: string }>();
   // One slide per section covers the whole passage and adds no supporting slides.
   const perSection = hints.density === 'section';
   const wordLimit = {
@@ -725,6 +954,33 @@ function planOnce(
         }
       }
     }
+    // Asked for, a section opens on a title slide: its heading alone, on screen
+    // while the heading is read, and its first slide then starts at its first
+    // sentence. Not the section that opens the deck, whose title slide already
+    // shows its heading, and not one that is only a heading.
+    let sectionTitled = false;
+    if (hints.sectionTitles && heading && beats.length > 0) {
+      const firstBody = words.findIndex((word) => block.charStart + word.index >= headingEnd);
+      if (firstBody > 0) {
+        chunks = chunks
+          .filter(([, last]) => last > firstBody)
+          .map(([first, last], at): [number, number] => [
+            at === 0 ? Math.max(first, firstBody) : first,
+            last,
+          ]);
+        const closing = words[firstBody - 1]!;
+        beats.push({
+          id: `beat-${beats.length + 1}`,
+          sourceStart: block.charStart + words[0]!.index,
+          sourceEnd: block.charStart + closing.index + closing[0].length,
+          layout: 'divider',
+          headline: headlineText(heading),
+          points: [],
+          sectionTitle: true,
+        });
+        sectionTitled = true;
+      }
+    }
     // A section's images go on its closing slides, never on the deck's opening title.
     const images = media.filter((item): item is PresentationNodeMediaItem => item.kind === 'image');
     const opensDeck = beats.length === 0;
@@ -748,14 +1004,76 @@ function planOnce(
         (sentence) => !inFeature(sentence.start, sentence.end),
       );
       const body = sentences.filter((sentence) => sentence.start >= headingEnd);
-      // The section heading titles each of its slides, so every body sentence
-      // can be shown. Without a heading the headline comes from the passage,
-      // and the sentence it was taken from is not repeated underneath it.
+      // The section heading titles the section's first slide, so every body
+      // sentence there can be shown. A later slide, and every slide of a
+      // section without a heading, takes its headline from its own passage,
+      // so it sets up what that slide shows instead of repeating the title
+      // over each part of the section; the sentence it was taken from is not
+      // repeated underneath it. After a title slide, the first slide is one
+      // of those: the heading has just been shown.
+      const ownHeadline = !!heading && (chunk > 0 || sectionTitled);
       let headline: string;
       let shown: Sentence[];
-      if (heading) {
+      /** The body sentence a later slide's headline was taken from. */
+      let titledBy: Sentence | undefined;
+      if (heading && !ownHeadline) {
         headline = headlineText(heading);
         shown = body.filter((sentence) => comparable(sentence.text) !== comparable(heading));
+      } else if (heading) {
+        // Never an item of a list or a step of a sequence: those are what the
+        // slide shows beneath its headline.
+        const items = distilled
+          ? lists
+          : listSpans(
+              script.sourceText,
+              block.charStart,
+              block.charEnd,
+              blocksById.get(block.blockId)?.contents,
+            );
+        const isProse = (sentence: Sentence) =>
+          !inList(sentence, items) && !SEQUENCE_CUE.test(sentence.text);
+        const context = {
+          ...keyContext,
+          section: sectionSentences.length ? sectionSentences : undefined,
+        };
+        // A passage that is all items takes one of them when they are not in
+        // order (each says something of its own), and otherwise the line that
+        // introduced them, on the slide before. A slide that follows the text
+        // shows its sentences whole, so it is titled only by one that fits.
+        const lead =
+          setupHeadline(body.filter(isProse), context, distilled) ??
+          setupHeadline(
+            body.filter(
+              (sentence) => inList(sentence, items, true) && !SEQUENCE_CUE.test(sentence.text),
+            ),
+            context,
+            distilled,
+          );
+        const before = lead
+          ? undefined
+          : sentencesIn(script.sourceText, headingEnd, start).filter(isProse).pop();
+        const from = lead ?? (before && titlesWhole(before.text) ? before : undefined);
+        // Just after a title slide the heading again would only repeat it, so
+        // a sentence shortened to a headline sets the slide up instead; where
+        // slides show their sentences whole, that sentence stays among them.
+        const cut =
+          !from && sectionTitled && chunk === 0
+            ? (setupHeadline(body.filter(isProse), context, true) ??
+              setupHeadline(body, context, true))
+            : undefined;
+        if (from) {
+          headline = setupText(from.text);
+          titledBy = lead;
+          shown = body.filter((sentence) => sentence !== lead && !repeats(sentence.text, headline));
+        } else if (cut) {
+          headline = setupText(cut.text);
+          shown = body.filter((sentence) => sentence === cut || !repeats(sentence.text, headline));
+        } else {
+          // Nothing short enough to title it: the section's heading does,
+          // rather than a sentence cut short above the words it stood for.
+          headline = headlineText(heading);
+          shown = body.filter((sentence) => comparable(sentence.text) !== comparable(heading));
+        }
       } else {
         const suggested = transformNarratedSegment(
           {
@@ -844,11 +1162,12 @@ function planOnce(
           (inbetweens && body.length >= 2 && last - first >= 24))
           ? picture
           : undefined;
-      const custom = chunk === 0 ? wording : undefined;
-      if (custom?.headline) headline = custom.headline;
+      // How the section is cut, and each slide's layout, come from its text and
+      // settings alone. Wording — yours or an AI's — is applied to the slide
+      // afterwards, so changing a slide's words never changes which slides
+      // there are.
       const pointsFor = (layout: PresentationLayout): string[] =>
-        custom?.points ??
-        (['steps', 'process', 'cycle'].includes(layout)
+        ['steps', 'process', 'cycle'].includes(layout)
           ? stepPoints
           : layout === 'cards'
             ? cardPoints
@@ -856,11 +1175,9 @@ function planOnce(
               ? statPoints
               : layout === 'emphasis' && takeaway
                 ? []
-                : textPoints);
+                : textPoints;
       // A quote shows one of the passage's own sentences, whole.
-      const quote = custom?.headline
-        ? undefined
-        : body.find((sentence) => sentence.text.length <= 110)?.text;
+      const quote = body.find((sentence) => sentence.text.length <= 110)?.text;
       const headlineFor = (layout: PresentationLayout) =>
         layout === 'quote' && quote
           ? quote
@@ -887,7 +1204,7 @@ function planOnce(
       // passing is not what the slide is about.)
       const figureFrom = distilled ? picks : shown;
       const figureLine =
-        !sequence && !custom && index > 0 && index - lastStat >= STAT_SPACING
+        !sequence && index > 0 && index - lastStat >= STAT_SPACING
           ? figureFrom.find((sentence) => strikingFigure(sentence.text))
           : undefined;
       const statPoints = figureLine
@@ -906,15 +1223,14 @@ function planOnce(
       )
         layout = 'stat';
       // One short sentence left to itself, later in a section, is a takeaway:
-      // it sets as a big statement rather than small under the heading again.
+      // it sets as a big statement rather than small as a headline alone.
       const takeaway =
         layout === 'statement' &&
-        !!heading &&
-        chunk > 0 &&
+        ownHeadline &&
         index - lastEmphasis >= 2 &&
-        shown.length === 1 &&
-        shown[0]!.text.length <= EMPHASIS_SENTENCE_CHARACTERS
-          ? shown[0]!.text
+        body.length === 1 &&
+        body[0]!.text.length <= EMPHASIS_SENTENCE_CHARACTERS
+          ? body[0]!.text
           : undefined;
       if (takeaway) layout = 'emphasis';
       if (image) layout = 'image';
@@ -947,7 +1263,7 @@ function planOnce(
       // material: an introduction before its steps diagram, or the opening
       // sentences before the image that illustrates the rest.
       let split: number | undefined;
-      if (inbetweens && !custom?.points && layout === 'steps' && sequence) {
+      if (inbetweens && layout === 'steps' && sequence) {
         if (shown.some((sentence) => sentence.end <= steps[0]!.start)) split = steps[0]!.start;
       } else if (inbetweens && layout === 'image' && body.length >= 2 && last - first >= 24) {
         const middle = block.charStart + words[first + Math.floor((last - first) / 2)]!.index;
@@ -959,23 +1275,62 @@ function planOnce(
           );
       }
       if (split === undefined) {
+        if (titledBy && beat.headline === headline)
+          headlineSentences.set(beat.id, {
+            point: word(titledBy.text),
+            card: distilled ? labelledPoint(titledBy.text, word) : labelledPoint(titledBy.text),
+          });
         beats.push(beat);
         continue;
       }
-      const before = shown.filter((sentence) => sentence.end <= split);
+      let before = shown.filter((sentence) => sentence.end <= split);
       const after = shown.filter((sentence) => sentence.start >= split);
-      // An image's caption is the next sentence when it fits whole; a cut-off
-      // sentence reads badly under a picture, so the section title stands in.
-      const caption =
-        after[0] && after[0].text.length <= 110
-          ? after[0].text
-          : (heading ?? (after[0] ? captionText(after[0].text) : headline));
+      // The introduction keeps the slide's headline; what follows it is a
+      // later slide and is titled by what it shows. An image's caption is the
+      // next sentence when it fits whole. A cut-off sentence reads badly under
+      // a picture, so where slides follow the text and show it whole the
+      // section title stands in; a slide of chosen points shortens it, as it
+      // does its points.
+      let introHeadline = beat.headline;
+      let followingHeadline =
+        layout === 'image'
+          ? after[0] && after[0].text.length <= PRESENTATION_LIMITS.headline
+            ? after[0].text
+            : ((distilled ? undefined : heading) ??
+              (after[0] ? captionText(after[0].text) : headline))
+          : beat.headline;
+      if (layout === 'steps') {
+        // Steps take the line that introduces them, which sets them up. When
+        // that line already titles the slide (a later slide's own setup), the
+        // steps keep it and the introduction is titled by what else it says.
+        const lead = body.filter((sentence) => sentence.end <= split).pop();
+        if (
+          lead &&
+          (distilled || titlesWhole(lead.text)) &&
+          comparable(setupText(lead.text)) !== comparable(beat.headline)
+        ) {
+          followingHeadline = setupText(lead.text);
+          if (before.some((sentence) => sentence !== lead))
+            before = before.filter((sentence) => sentence !== lead);
+        } else if (
+          lead &&
+          ownHeadline &&
+          comparable(setupText(lead.text)) === comparable(beat.headline)
+        ) {
+          const other = setupHeadline(before, keyContext, distilled);
+          if (other) {
+            introHeadline = setupText(other.text);
+            if (before.length > 1) before = before.filter((sentence) => sentence !== other);
+          }
+        }
+      }
       const { imageSrc: _image, ...textBeat } = beat;
       supportingOpeners.add(`beat-${beats.length + 1}`);
       beats.push({
         ...textBeat,
         id: `beat-${beats.length + 1}`,
         layout: 'statement',
+        headline: introHeadline,
         sourceEnd: split,
         points: pointsOf(before, 3).map((item) => word(item.text)),
       });
@@ -983,11 +1338,11 @@ function planOnce(
         ...beat,
         id: `beat-${beats.length + 1}`,
         sourceStart: split,
+        headline: followingHeadline,
         ...(layout === 'image'
           ? {
-              headline: caption,
               points: pointsOf(
-                after.filter((sentence) => !repeats(sentence.text, caption)),
+                after.filter((sentence) => !repeats(sentence.text, followingHeadline)),
                 3,
               ).map((item) => word(item.text)),
             }
@@ -996,32 +1351,41 @@ function planOnce(
     }
   }
   // Each section's opening slide: where its keyless summary (your wording,
-  // whatever the passage now says) applies.
+  // whatever the passage now says) applies. A title slide shows the heading,
+  // so the slide after it opens the section.
   const openings = new Set<string>();
   for (const block of script.blocks) {
     const first = beats.find(
-      (beat) => beat.sourceStart >= block.charStart && beat.sourceStart < block.charEnd,
+      (beat) =>
+        !beat.sectionTitle &&
+        beat.sourceStart >= block.charStart &&
+        beat.sourceStart < block.charEnd,
     );
     if (first) openings.add(first.id);
   }
+  // Each slide summary keyed to a passage, matched with its slide however the
+  // text has changed since it was made.
+  const designs = bindPresentationDesigns(
+    { sourceText: script.sourceText, beats },
+    designSections(script.blocks),
+    hints,
+  ).slides;
   // A hidden slide stays in the plan so the designer can show it again; the
   // deck leaves it out, so it carries none of the section's visuals.
   for (const block of script.blocks) {
     const hint = hints.blocks.find((item) => item.blockId === block.blockId);
     const legacy = hint?.hidden;
-    const hidden = hint?.slides?.filter((slide) => slide.hidden);
-    if (!legacy?.length && !hidden?.length) continue;
-    for (const beat of beats) {
+    const keylessHidden = !!hint?.slides?.some(
+      (slide) => slide.passage === undefined && slide.hidden,
+    );
+    for (const [index, beat] of beats.entries()) {
       if (beat.sourceStart < block.charStart || beat.sourceStart >= block.charEnd) continue;
       // A section shown on another slide has no slide to hide.
       if (beat.layout === FEATURE_PRESENTATION_LAYOUT) continue;
-      const key = presentationPassageKey(script.sourceText.slice(beat.sourceStart, beat.sourceEnd));
       if (
-        legacy?.includes(key) ||
-        hidden?.some(
-          (slide) =>
-            slide.passage === key || (slide.passage === undefined && openings.has(beat.id)),
-        )
+        designs.get(index)?.hidden ||
+        (keylessHidden && openings.has(beat.id)) ||
+        legacy?.includes(presentationSlideKey({ sourceText: script.sourceText, beats }, index))
       )
         beat.hidden = true;
     }
@@ -1052,29 +1416,36 @@ function planOnce(
   const worded = new Set<string>();
   const suggested = new Set<string>();
   let origin: PresentationPlan['origin'] = 'automatic';
-  for (const beat of beats) {
-    // Only summaries are worded: not a section shown as authored or on another slide.
-    if (!isSummaryPresentationLayout(beat.layout)) continue;
+  for (const [index, beat] of beats.entries()) {
+    // Only summaries are worded: not a section shown as authored or on another
+    // slide, and not a title slide (its heading is its wording).
+    if (!isSummaryPresentationLayout(beat.layout) || beat.sectionTitle) continue;
     const section = sectionOf(beat);
     const hint = hintFor(beat);
     const passage = script.sourceText.slice(beat.sourceStart, beat.sourceEnd);
-    // This slide's summaries: the one keyed to its exact passage, and on a
-    // section's opening slide the keyless one.
-    const key = presentationPassageKey(passage);
-    const keyed = hint?.slides?.find((slide) => slide.passage === key);
+    // This slide's summaries: the one matched with it (`bindPresentationDesigns`),
+    // and on a section's opening slide the keyless one.
+    const designed = presentationSlidePassage({ sourceText: script.sourceText, beats }, index);
+    const keyed = designs.get(index);
     const keyless = openings.has(beat.id)
       ? hint?.slides?.find((slide) => slide.passage === undefined)
       : undefined;
     const cached =
       [keyed, keyless].find((slide) => slide?.origin === 'ai') ??
-      hint?.ai?.find((item) => item.source === passage);
+      hint?.ai?.find((item) => item.source === designed);
     if (cached && (cached.layout !== 'image' || beat.imageSrc)) {
+      const automatic = beat.headline;
       if (cached.headline !== undefined) beat.headline = cached.headline;
       if (cached.points !== undefined) beat.points = [...cached.points];
       if (cached.layout) {
         beat.layout = cached.layout;
         Object.assign(beat, presentationBeatExtras(cached.layout, cached));
       }
+      // Wording suggested for a deck without title slides may be titled by
+      // the section heading, which the title slide before this one has just
+      // shown; the slide keeps its own headline then, and the AI's points.
+      const title = beats[index - 1]?.sectionTitle ? beats[index - 1] : undefined;
+      if (title && restatesHeadline(beat.headline, title.headline)) beat.headline = automatic;
       suggested.add(beat.id);
       origin = 'ai';
     }
@@ -1102,12 +1473,16 @@ function planOnce(
     const legacyOpening =
       !manual.some((slide) => slide.passage === undefined) &&
       section &&
-      beat.sourceStart === section.charStart &&
+      openings.has(beat.id) &&
       hint?.wording?.source === script.sourceText.slice(section.charStart, section.charEnd)
         ? hint.wording
         : undefined;
+    let retitled = false;
     for (const wording of [...(legacyOpening ? [legacyOpening] : []), ...manual]) {
-      if (wording.headline !== undefined) beat.headline = wording.headline;
+      if (wording.headline !== undefined) {
+        beat.headline = wording.headline;
+        retitled = true;
+      }
       if (wording.points !== undefined) {
         beat.points = [...wording.points];
         worded.add(beat.id);
@@ -1118,13 +1493,27 @@ function planOnce(
         Object.assign(beat, presentationBeatExtras(layout, wording));
       }
     }
+    // A later slide's automatic headline is one of its sentences, kept off its
+    // points. Given a headline of the author's own and no points of theirs,
+    // the slide shows that sentence again rather than losing it.
+    const titledBy = headlineSentences.get(beat.id);
+    if (
+      retitled &&
+      titledBy &&
+      !worded.has(beat.id) &&
+      !suggested.has(beat.id) &&
+      beat.points.length < PRESENTATION_LIMITS.points &&
+      ['cards', 'list', 'statement', 'image'].includes(beat.layout)
+    )
+      beat.points = [beat.layout === 'cards' ? titledBy.card : titledBy.point, ...beat.points];
     // Custom wording can leave a layout without what it shows (two sides of a
-    // comparison, a number, the passage's exact words); say it plainly instead.
+    // comparison, a number, the passage's exact words); it then takes the
+    // plain layout its points make, as an automatic slide would.
     if (
       beat.layout !== 'image' &&
       !presentationLayoutFits(beat.layout, beat.headline, beat.points, passage)
     )
-      beat.layout = 'statement';
+      beat.layout = beat.points.length >= 2 ? 'cards' : 'statement';
     if (beat.layout !== 'image') delete beat.imageSrc;
   }
   // A section's features accompany its slides in source order. The slides are
@@ -1293,7 +1682,18 @@ function planOnce(
     if (beat) rollup.beatId = beat.id;
   }
   return {
-    plan: { version: 1, sourceText: script.sourceText, origin, beats },
+    plan: {
+      version: 1,
+      sourceText: script.sourceText,
+      origin,
+      beats,
+      // What a model wording the slides is told of the section each belongs to.
+      sections: script.blocks.map((block) => ({
+        sourceStart: block.charStart,
+        sourceEnd: block.charEnd,
+        ...(block.heading?.trim() ? { heading: block.heading.trim() } : {}),
+      })),
+    },
     rollups,
     refusals,
   };

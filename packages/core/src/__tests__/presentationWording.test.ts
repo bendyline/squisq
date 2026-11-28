@@ -448,6 +448,87 @@ describe('wordPresentationPlan', () => {
     expect(problems[0]).toBe('the reply was cut off before it finished');
   });
 
+  it('asks a later slide of a section for a headline of its own, and keeps its points either way', async () => {
+    const heading = 'Fewer steps';
+    const source = createPresentationPlan(
+      markdownToDoc(
+        parseMarkdown(
+          [
+            `# ${heading}`,
+            '',
+            'We gave small models two ways to do the same eighteen tasks. One way walked the model through a recipe of careful steps, each checked before the next began. The other way gave the model the goal and the checks its result had to pass, and left the route to the model. We expected the recipe to win, since small models lose the thread on long tasks. It did not. The goal-only runs passed more tasks on every small model we tried, and they finished in a third of the time.',
+            '',
+            'Why does less structure help a small model? The trial records point to three things:',
+            '',
+            '- Each step starts a fresh conversation that knows only what earlier steps wrote down',
+            '- Each step has its own check with a limited number of attempts',
+            '- Every hand-off reloads the whole prompt before any work begins',
+            '',
+            'A model that keeps everything in one conversation never has to rebuild what it already knew.',
+          ].join('\n'),
+        ),
+      ),
+    );
+    expect(source.beats).toHaveLength(3);
+    const pointsFor = (passage: string) =>
+      passage.includes('fresh conversation')
+        ? ['Each step starts a fresh conversation', 'Every hand-off reloads the whole prompt']
+        : ['The other way gave the model the goal', 'The goal-only runs passed more tasks'];
+    /** A model that titles every later slide with the section's heading, however often asked. */
+    const stubborn = fake((request) => {
+      if (request.kind === 'storyboard') return '{}';
+      const sent = JSON.parse(request.user) as {
+        section?: string;
+        passage: string;
+        current: Record<string, unknown>;
+      };
+      if (!sent.section) return JSON.stringify(sent.current);
+      return JSON.stringify({
+        layout: 'cards',
+        headline: sent.section,
+        points: pointsFor(sent.passage),
+      });
+    });
+    const result = await wordPresentationPlan(source, stubborn.model);
+    const asked = (index: number) =>
+      stubborn.requests.filter((request) => request.kind === 'slide' && request.index === index);
+    for (const index of [1, 2]) {
+      const [first, second] = asked(index);
+      expect(asked(index)).toHaveLength(2);
+      // Only a later slide's requests ask for a headline of its own.
+      expect(first!.system).toContain('Never repeat or shorten the section heading.');
+      expect(second!.user).toContain('repeats the section heading');
+      // Its points are the model's, under the automatic headline.
+      const beat = result.plan.beats[index]!;
+      expect(beat.headline).toBe(source.beats[index]!.headline);
+      expect(beat.headline).not.toBe(heading);
+      expect(beat.points).toEqual(
+        pointsFor(source.sourceText.slice(beat.sourceStart, beat.sourceEnd)),
+      );
+    }
+    expect(asked(0)[0]!.system).not.toContain('section heading');
+    expect(result.refined).toEqual([0, 1, 2]);
+
+    // A model that takes the correction is taken at its word.
+    const corrected = fake((request) => {
+      if (request.kind === 'storyboard') return '{}';
+      const sent = JSON.parse(request.user) as {
+        section?: string;
+        passage: string;
+        current: Record<string, unknown>;
+        correction?: string;
+      };
+      if (!sent.section) return JSON.stringify(sent.current);
+      return JSON.stringify({
+        layout: 'cards',
+        headline: sent.correction ? 'Fresh starts cost small models' : sent.section,
+        points: pointsFor(sent.passage),
+      });
+    });
+    const fixed = await wordPresentationPlan(source, corrected.model);
+    expect(fixed.plan.beats[2]!.headline).toBe('Fresh starts cost small models');
+  });
+
   it('does not send a passage that addresses the model', async () => {
     const source = createPresentationPlan(
       markdownToDoc(

@@ -18,8 +18,10 @@ import {
   PRESENTATION_SECTION_SLIDES,
   defaultPresentationHints,
   parsePresentationHints,
+  presentationPassageKey,
   presentationSections,
   withBlockHint,
+  withSlideHint,
   type PresentationHints,
 } from '../transform/presentationHints.js';
 import { readPresentationHints } from '../transform/presentationHintsDoc.js';
@@ -265,17 +267,100 @@ describe('a deck told as key points', () => {
   it('shows the sentences that carry each passage, not its opening ones', () => {
     const plan = createPresentationPlan(parse(ESSAY));
     const [, finding, contract] = plan.beats;
+    const shown = (beat: PresentationPlan['beats'][number]) =>
+      [beat.headline, ...beat.points].join(' ');
     // The example and the reload detail are left to the narration.
-    expect(finding!.points.join(' ')).not.toContain('renaming a file');
-    expect(finding!.points).toContain(
-      'Giving a small model a recipe of careful steps made its results worse, not better.',
+    expect(shown(finding!)).not.toContain('renaming a file');
+    // A later slide of the section is titled by the sentence that best
+    // carries its passage, not by the section heading again.
+    expect(finding!.headline).toBe(
+      'Giving a small model a recipe of careful steps made its results worse, not better',
     );
     expect(contract!.points.some((point) => point.startsWith('The important lesson'))).toBe(true);
-    expect(contract!.points.join(' ')).toContain('59 of 90');
+    expect(shown(contract!)).toContain('59 of 90');
     for (const beat of plan.beats) {
       expect(beat.points.length).toBeLessThanOrEqual(4);
       for (const point of beat.points)
         expect(point.length).toBeLessThanOrEqual(KEY_POINT_CHARACTERS);
+    }
+  });
+
+  it('titles only a section’s first slide with its heading; each later one sets up its own points', () => {
+    const essay = createPresentationPlan(parse(ESSAY));
+    expect(essay.beats.map((beat) => beat.headline)).toEqual([
+      'Where small models work',
+      'Giving a small model a recipe of careful steps made its results worse, not better',
+      'Small models passed 59 of 90 tasks this way, against 39 of 90 when walked through the steps',
+    ]);
+    // A line that sets up what follows titles its slide (a question here), and
+    // the list it introduces stays whole beneath it.
+    const text = [
+      '# Fewer steps',
+      '',
+      'We gave small models two ways to do the same eighteen tasks. One way walked the model through a recipe of careful steps, each checked before the next began. The other way gave the model the goal and the checks its result had to pass, and left the route to the model. We expected the recipe to win, since small models lose the thread on long tasks. It did not. The goal-only runs passed more tasks on every small model we tried, and they finished in a third of the time.',
+      '',
+      'Why does less structure help a small model? The trial records point to three things:',
+      '',
+      '- Each step starts a fresh conversation that knows only what earlier steps wrote down',
+      '- Each step has its own check with a limited number of attempts',
+      '- Every hand-off reloads the whole prompt before any work begins',
+      '',
+      'A model that keeps everything in one conversation never has to rebuild what it already knew.',
+    ].join('\n');
+    const slides = createPresentationPlan(parse(text)).beats;
+    expect(slides[0]!.headline).toBe('Fewer steps');
+    const why = slides.find(
+      (beat) => beat.headline === 'Why does less structure help a small model?',
+    );
+    expect(why?.points).toEqual([
+      'Each step starts a fresh conversation that knows only what earlier steps wrote down',
+      'Each step has its own check with a limited number of attempts',
+      'Every hand-off reloads the whole prompt before any work begins',
+    ]);
+    // No later slide carries the heading, and none repeats its headline below it.
+    for (const beat of slides.slice(1)) {
+      expect(beat.headline).not.toBe('Fewer steps');
+      expect(beat.points.map((point) => point.replace(/\.$/u, ''))).not.toContain(beat.headline);
+    }
+  });
+
+  it('titles a later slide that follows the text only with a sentence it can show whole', () => {
+    const short =
+      '# Northwind\n\nNorthwind builds careful software for people who plan their week. Our tools run on the hardware you own. They keep working offline for years. Nothing leaves your machine without asking. Updates arrive when you choose to install them.';
+    const plan = createPresentationPlan(parse(short), at('concise'));
+    expect(plan.beats.map((beat) => beat.headline)).toEqual([
+      'Northwind',
+      'Nothing leaves your machine without asking',
+    ]);
+    expect(plan.beats[1]!.points).toEqual(['Updates arrive when you choose to install them.']);
+    // Given a headline of the author's own, the slide shows that sentence again.
+    const [section] = presentationSections(parse(short));
+    const later = plan.beats[1]!;
+    const retitled = createPresentationPlan(
+      parse(short),
+      withSlideHint(
+        at('concise'),
+        section!.blockId,
+        presentationPassageKey(plan.sourceText.slice(later.sourceStart, later.sourceEnd)),
+        { headline: 'Private by default' },
+      ),
+    ).beats[1]!;
+    expect(retitled.headline).toBe('Private by default');
+    expect(retitled.points).toEqual([
+      'Nothing leaves your machine without asking.',
+      'Updates arrive when you choose to install them.',
+    ]);
+    // Every sentence too long to title a slide whole: the heading does, so no
+    // words the slide follows are cut short above it.
+    const long =
+      '# Northwind\n\nNorthwind builds careful software for people who plan their week, and it keeps every plan on the machine they already own. ' +
+      'While many products depend on remote services that change without notice, Northwind ships tools that keep working offline for years. ' +
+      'By relying on local storage and the steady growth of laptop processors, we think anyone can keep their planning private and fast.';
+    const following = createPresentationPlan(parse(long), at('concise')).beats;
+    expect(following.length).toBeGreaterThan(1);
+    for (const beat of following) {
+      expect(beat.headline).toBe('Northwind');
+      for (const point of beat.points) expect(point.endsWith('…')).toBe(false);
     }
   });
 
@@ -331,10 +416,13 @@ describe('a deck told as key points', () => {
     );
     // With supporting slides, the introduction has a slide and the steps a diagram.
     const supported = createPresentationPlan(parse(text), at('keypoints'));
-    expect(slidesOf(text, supported, 'Writing a report').map((beat) => beat.layout)).toEqual([
-      'statement',
-      'steps',
-    ]);
+    const [intro, steps] = slidesOf(text, supported, 'Writing a report');
+    expect([intro!.layout, steps!.layout]).toEqual(['statement', 'steps']);
+    // The heading titles the introduction; the line that introduces the steps
+    // titles them, and every step is still shown.
+    expect(intro!.headline).toBe('Writing a report');
+    expect(steps!.headline).toBe('A plan breaks the work into steps');
+    expect(steps!.points).toEqual(report!.points);
   });
 
   it('never cuts a short list from what introduces it', () => {
